@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **103** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **106** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -225,3 +225,22 @@ reputation evidence is first-hand and is never counted as transfer.
 `ProjectContributed` and `PublicGoodMaintained` are collective coverage, not
 dyadic contact cooperation. Intermarriage is unsupported; cross-community
 kinship is reported only from objective parent→child edges.
+
+## Symbolic composition families
+
+- `symbolic_composition@1` — owner-level composition inventory: candidate,
+  active, and retired counts; operator mix; strength bands; usage and
+  interpretation totals; unresolved interpretations; digest diversity; owner
+  coverage.
+- `symbolic_social_distribution@1` — candidate-community prevalence of surface
+  digests, reinforcement and cross-community borrowing from delivered messages,
+  pairwise divergence, and unassigned/singleton coverage. Missing communities
+  yield `absent`, never zeros.
+- `symbolic_message_flow@1` — composed-message counts, operator mix, arity, and
+  structural parse outcomes (`parsed`/`partial`/`unresolved`/`ignored`) with
+  speaker-listener pairs and declared-confidence bands. These are structural
+  facts, not semantic correctness.
+
+All three use opaque owner/composition ids and 16-character surface digests.
+Raw symbol tokens, message bodies, and referent entity labels never enter a
+metric document or log.

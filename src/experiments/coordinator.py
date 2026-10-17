@@ -131,6 +131,16 @@ class ExperimentCoordinator:
                             assignment.condition_id, assignment.runner_config
                         )
                     )
+                if assignment.experiment_id == "compositional_symbols@1":
+                    from experiments.symbolic_language_scenario import (
+                        symbolic_language_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        symbolic_language_arbiter(
+                            assignment.condition_id, assignment.runner_config
+                        )
+                    )
                 if assignment.experiment_id == "multiple_societies@1":
                     from experiments.multiple_societies_scenario import (
                         multiple_societies_arbiter,

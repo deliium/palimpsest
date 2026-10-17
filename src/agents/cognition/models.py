@@ -735,6 +735,7 @@ class SubjectiveSnapshot:
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
+    symbolic_language: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -973,6 +974,15 @@ class SubjectiveSnapshot:
             self.semantic_naming,
             self.owner_id,
             field_name="SubjectiveSnapshot.semantic_naming",
+        )
+        from agents.cognition.symbolic_language import (
+            require_owner_symbolic_language,
+        )
+
+        require_owner_symbolic_language(
+            self.symbolic_language,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.symbolic_language",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
@@ -3807,6 +3817,7 @@ class CognitiveLoopProposal:
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
+    symbolic_language: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -3956,6 +3967,15 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.semantic_naming",
         )
+        from agents.cognition.symbolic_language import (
+            require_owner_symbolic_language,
+        )
+
+        require_owner_symbolic_language(
+            self.symbolic_language,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.symbolic_language",
+        )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
         )
@@ -4091,6 +4111,7 @@ class CognitiveLoopResult:
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
+    symbolic_language: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -4216,6 +4237,15 @@ class CognitiveLoopResult:
             self.semantic_naming,
             self.agent_id,
             field_name="CognitiveLoopResult.semantic_naming",
+        )
+        from agents.cognition.symbolic_language import (
+            require_owner_symbolic_language,
+        )
+
+        require_owner_symbolic_language(
+            self.symbolic_language,
+            self.agent_id,
+            field_name="CognitiveLoopResult.symbolic_language",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,

@@ -16,10 +16,11 @@ Derivation version **v3** requires an explicit stochastic identity and fails clo
 
 ## Configuration
 
-`SimulationRunnerConfig` is frozen and versioned (`runner-config-v4` write default;
-`runner-config-v1` / `v2` / `v3` remain decodable). Strict canonical JSON codecs reject
-unknown fields, duplicate keys, non-finite numbers, credentials, and unsupported
-versions. Separate fingerprints cover:
+`SimulationRunnerConfig` is frozen and versioned (`runner-config-v4` write default
+when every V2/V3 flag and V3 root is inactive; `runner-config-v1`…`v46` remain
+decodable). Strict canonical JSON codecs reject unknown fields, duplicate keys,
+non-finite numbers, credentials, and unsupported versions. Separate fingerprints
+cover:
 
 - full runner specification (`runner_config_fingerprint`)
 - scenario/world
@@ -79,6 +80,20 @@ mode allowlists that ended at v21 widen through v22. Experiment AD
 (`experiment-ad-cognitive-budgets`) and analysis `cognitive_budget@1` stay off
 the V1 regression gate. Budgets never skip emitting one closed `AgentCommand`.
 
+`RegionsMigrationSpec` activates on `runner-config-v44` and requires the owned
+`multi_polity_migration` flag with an enabled regions/migration spec. It stays
+optional on later schemas. `runner-config-v45` is the v44 family root plus the
+required neutral `cultural_contact` sibling (`mode` only); contact requires both
+`regions_migration` and `multi_polity_migration`, and v45 is rejected without
+contact. `runner-config-v46` is mode-only: it reuses the active v44/v45 family
+root (no new root sibling) and adds per-agent `symbolic_language_mode`. A
+deterministic symbolic mode requires the same agent's deterministic
+`semantic_naming_mode` and v46, and v46 is rejected when every agent is
+disabled. Contact-active runs use the `(replay-v22, codec v20)` write pair;
+contact-off regional runs stay on `(replay-v21, codec v19)`. Absent contact or
+symbolic modes keep the prior highest-active schema, so the default write
+remains `runner-config-v4`.
+
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;
 when enabled it may change `config_fingerprint` but must not change
@@ -89,11 +104,16 @@ when enabled it may change `config_fingerprint` but must not change
 
 | Identity | Stable across schema bumps with flags-off / tracing-off? |
 | --- | --- |
-| `config_fingerprint` | **No** — may change when schema/key set grows (V2/V3 flags, `cognition_trace`, intentional `runner-config-v23` encode) |
+| `config_fingerprint` | **No** — may change when schema/key set grows (V2/V3 flags, `cognition_trace`, intentional `runner-config-v23+` encode) |
 | `exact_trajectory_hash` / objective commit identity | **Yes** — same seed, scenario, stochastic identity; V2/V3 flags off; tracing on or off |
 | `replica_normalized_trajectory_hash` | **Yes** under the same conditions (run-derived IDs stripped) |
 
-V3 scaffolding: default write stays `runner-config-v4` with all `V3CapabilityFlags` off. Enabling any V3 flag requires `runner-config-v23` and fails closed at `SimulationRunner.from_config` until an owning plan lands. Legacy `v1`…`v22` decode synthesizes default-off V3 flags without changing objective trajectory identity.
+V3 scaffolding: the default write stays `runner-config-v4` when every
+`V3CapabilityFlags` entry and V3 root is inactive. Enabling an owned flag/root
+emits its matching schema version (v23+); unowned or illegal combinations still
+fail closed at `SimulationRunner.from_config` with stable reason codes. Legacy
+`v1`…`v43` decode synthesizes default-off V3 flags and roots without changing
+objective trajectory identity.
 
 Golden `runner-config-v2` fixtures live under `tests/fixtures/runner_configs/`.
 

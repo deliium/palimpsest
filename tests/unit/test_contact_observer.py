@@ -8,13 +8,14 @@ from world.effects import SystemCause, SystemEffectFamily
 from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     ContactRecorded,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def _event() -> object:
+def _event() -> WorldEvent:
     details = ContactRecorded(
         relocation_kind="fled",
         location_id=EntityId("loc-b"),

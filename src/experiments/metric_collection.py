@@ -252,6 +252,7 @@ def inputs_with_opt_in_metric_rows(
     practical_knowledge_audits: Sequence[object] | None = None,
     death_ticks: Mapping[str, int] | None = None,
     contact_analysis: object | None = None,
+    symbolic_analysis: object | None = None,
     technique_lifecycle_spec: TechniqueLifecycleSpec | None = None,
     technique_node_rows: Sequence[object] | None = None,
     technique_item_rows: Sequence[object] | None = None,
@@ -271,6 +272,11 @@ def inputs_with_opt_in_metric_rows(
     )
 
     attached: dict[str, int] = {}
+    if symbolic_analysis is not None:
+        attached["symbolic_analysis"] = len(
+            getattr(symbolic_analysis, "compositions", ())
+        )
+        updated = replace(updated, symbolic_analysis=symbolic_analysis)
     presence = None
     control = None
     if updated.spatial_action_rows is not None:

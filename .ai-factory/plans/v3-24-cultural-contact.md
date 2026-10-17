@@ -22,6 +22,7 @@ INFO [aif-plan] ultra request treated as full-mode depth; this skill has no sepa
 INFO [aif-plan] RESEARCH.md absent and skill-context/aif-plan/SKILL.md contains context-budget rules only; research_influenced_plan=false
 INFO [aif-plan] baseline selectors to recheck before implementation: 97 metric families, 43 commands, 72 observer semantic types, replay-v21/codec v19, runner-config-v44, Alembic 0017, Experiment AZ
 INFO [aif-improve] refined v45 schema sweep, contact system-cause/transition contract, replay registration, contact memory/Godot presentation, collective-action attribution, pre/post window semantics, reputation channel filter, provenance wiring, and successful-Fled coverage; 18 tasks retained (Task 3a added)
+INFO [aif-improve] post-completion refinement added Task 18 for stale simulation-runner, persistence, and Godot documentation; 19 tasks total, Task 18 completed
 
 ## Goal
 
@@ -253,6 +254,14 @@ Commit messages are suggestions for implementation; this planning command create
   - Files: any fallout across tests, type annotations, fixtures, and docs indexes; no suppression or relaxed lint/type config.
   - Run and reconcile: full pytest; `tests/architecture`; `lint-imports`; Ruff and format; mypy; the required six-file V1/V2 compatibility gate; contact-specific config/replay/perception/memory/analysis tests including `test_contact_relocations.py`; registered Godot suite with `CONTACT_RECORDED` known-type coverage; disposable PostgreSQL/pgvector integration if persistence paths are exercised.
   - Acceptance: all required gates green or explicitly documented; command count 43; semantic count 73; metric family count 103; runner-config-v45; replay-v22/codec v20 contact-active and v21/v19 contact-off; Alembic head 0017; `/v1` and `observer-protocol-v1` unchanged; no new capability flag.
+  - Logging: N/A.
+  - Dependencies: 16.
+
+- [x] **Task 18: Finish schema and Godot documentation updates for cultural contact.**
+  - Files: `docs/simulation-runner.md`, `docs/persistence.md`, `docs/godot-observer.md`.
+  - Update the canonical runner and persistence reference pages for the v45 contract: accepted runner schemas and selector (v45 = v44 family root plus required `cultural_contact`; `multi_polity_migration` + `regions_migration` required), contact-active write pair `(EVENT_SCHEMA_REPLAY_V22, "v20")`, contact-off regional pair `(21, "v19")`, replayable `ContactRecorded`, and the default write remaining `runner-config-v4` when contact is absent. Replace stale claims such as V3 requiring only `runner-config-v23`/legacy decode through v22 in `docs/simulation-runner.md:96` and the runner-config table/write-pair priority ending at v25/replay-v10/codec v7 in `docs/persistence.md:78`.
+  - Add `CONTACT_RECORDED` to the Godot observer documentation's recognized semantic-type/log-routing list (`docs/godot-observer.md:41`) and note that it is presentation-only with no write authority or new layout.
+  - Acceptance: the three pages agree with `simulation.compatibility.COMPATIBILITY_MATRIX`, `SUPPORTED_RUNNER_SCHEMA_VERSIONS`, `ACCEPTED_EVENT_SCHEMA_VERSIONS`, and `ACCEPTED_PERSISTENCE_CODEC_VERSIONS`; no stale v23-only, v25-terminal, or replay-v8-terminal claims remain in the touched sections; `CONTACT_RECORDED` is documented as a recognized semantic type; links/anchors resolve.
   - Logging: N/A.
   - Dependencies: 16.
 

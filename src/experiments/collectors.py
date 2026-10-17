@@ -102,6 +102,7 @@ def assemble_arm_metric_bundle(
         possession_channel_active,
         structured_commitments_channel_active,
         subjective_valuation_channel_active,
+        symbolic_analysis_inputs_from_harvest,
     )
 
     ticks = int(arm.runner_result.ticks_committed)
@@ -501,6 +502,21 @@ def assemble_arm_metric_bundle(
             teaching_audits=teaching_audits,
         )
         inputs = replace(inputs, contact_analysis=contact)
+        symbolic_ledgers = getattr(arm, "symbolic_ledgers", None)
+        if symbolic_ledgers is None:
+            symbolic_ledgers = getattr(
+                arm.runner_result, "symbolic_ledgers", None
+            )
+        if symbolic_ledgers is not None:
+            inputs = replace(
+                inputs,
+                symbolic_analysis=symbolic_analysis_inputs_from_harvest(
+                    ledgers=symbolic_ledgers,
+                    events=events,
+                    communities=society.emission.communities,
+                    expected_owner_count=len(living),
+                ),
+            )
     return assemble_metric_documents(inputs)
 
 

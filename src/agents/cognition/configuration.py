@@ -66,6 +66,10 @@ from agents.cognition.social_norms import (
     SocialNormPolicy,
     default_social_norm_policy,
 )
+from agents.cognition.symbolic_language import (
+    SymbolicLanguagePolicy,
+    default_symbolic_language_policy,
+)
 from agents.cognition.territorial import (
     TerritorialClaimPolicy,
     default_territorial_claim_policy,
@@ -298,6 +302,17 @@ class CognitionSemanticNamingMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionSymbolicLanguageMode(StrEnum):
+    """Owner-scoped bounded compositional symbols. Disabled leaves field unset.
+
+    Lockstep with ``simulation.SymbolicLanguageMode``. This is not a
+    ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -421,6 +436,10 @@ class CognitionLoopConfig:
         CognitionSemanticNamingMode.DISABLED
     )
     semantic_naming_policy: SemanticNamingPolicy | None = None
+    symbolic_language_mode: CognitionSymbolicLanguageMode = (
+        CognitionSymbolicLanguageMode.DISABLED
+    )
+    symbolic_language_policy: SymbolicLanguagePolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -721,6 +740,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "semantic_naming_policy must be SemanticNamingPolicy or None"
             )
+        if type(self.symbolic_language_mode) is not CognitionSymbolicLanguageMode:
+            _LOG.error(
+                "invalid_enum path=symbolic_language_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "symbolic_language_mode must be CognitionSymbolicLanguageMode"
+            )
+        if self.symbolic_language_mode is CognitionSymbolicLanguageMode.DISABLED:
+            object.__setattr__(self, "symbolic_language_policy", None)
+        elif self.symbolic_language_policy is None:
+            object.__setattr__(
+                self,
+                "symbolic_language_policy",
+                default_symbolic_language_policy(),
+            )
+        elif type(self.symbolic_language_policy) is not SymbolicLanguagePolicy:
+            _LOG.error(
+                "invalid_enum path=symbolic_language_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "symbolic_language_policy must be SymbolicLanguagePolicy or None"
+            )
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -926,6 +967,12 @@ class CognitionLoopConfig:
                 None
                 if self.semantic_naming_policy is None
                 else self.semantic_naming_policy.version
+            ),
+            "symbolic_language_mode": self.symbolic_language_mode.value,
+            "symbolic_language_policy_version": (
+                None
+                if self.symbolic_language_policy is None
+                else self.symbolic_language_policy.version
             ),
             "cultural_narrative_mode": self.cultural_narrative_mode.value,
             "cultural_narrative_policy_version": (
@@ -1205,6 +1252,8 @@ def build_cognitive_loop(
         artifact_interpretation_mode=resolved.artifact_interpretation_mode,
         semantic_naming_mode=resolved.semantic_naming_mode,
         semantic_naming_policy=resolved.semantic_naming_policy,
+        symbolic_language_mode=resolved.symbolic_language_mode,
+        symbolic_language_policy=resolved.symbolic_language_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

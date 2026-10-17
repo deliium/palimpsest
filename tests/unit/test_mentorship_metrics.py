@@ -50,7 +50,7 @@ def _audit(
 
 def test_metric_family_count_includes_mentorship() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 103
+    assert len(specs) == METRIC_FAMILY_COUNT == 106
     ids = {spec.family_id.value for spec in specs}
     assert {
         "mentorship_fidelity",

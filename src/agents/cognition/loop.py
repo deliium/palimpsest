@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
     from agents.cognition.semantic_naming import NamingCueSummary
     from agents.cognition.subjective_value import SubjectiveValuationLedger
+    from agents.cognition.symbolic_language import SymbolicCueSummary
     from agents.cognition.territorial import TerritorialClaimPolicy
     from agents.cognition.theory_of_mind import MindCue, TheoryOfMind
     from agents.cognition.world_model import CausalWorldModel
@@ -333,6 +334,8 @@ class CognitiveLoop:
         "_subjective_valuation_active",
         "_subjective_valuation_horizon",
         "_subjective_valuation_max_bundle",
+        "_symbolic_language_mode",
+        "_symbolic_language_policy",
         "_teaching_mode",
         "_teaching_policy",
         "_territorial_claim_mode",
@@ -416,6 +419,8 @@ class CognitiveLoop:
         artifact_interpretation_mode: object | None = None,
         semantic_naming_mode: object | None = None,
         semantic_naming_policy: object | None = None,
+        symbolic_language_mode: object | None = None,
+        symbolic_language_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -718,6 +723,34 @@ class CognitiveLoop:
             naming_policy = semantic_naming_policy
         self._semantic_naming_mode = naming_mode
         self._semantic_naming_policy = naming_policy
+        from agents.cognition.configuration import CognitionSymbolicLanguageMode
+        from agents.cognition.symbolic_language import SymbolicLanguagePolicy
+
+        symbolic_mode = (
+            CognitionSymbolicLanguageMode.DISABLED
+            if symbolic_language_mode is None
+            else symbolic_language_mode
+        )
+        if type(symbolic_mode) is not CognitionSymbolicLanguageMode:
+            raise TypeError(
+                "symbolic_language_mode must be CognitionSymbolicLanguageMode"
+            )
+        if symbolic_mode is CognitionSymbolicLanguageMode.DISABLED:
+            symbolic_policy = None
+        elif symbolic_language_policy is None:
+            from agents.cognition.symbolic_language import (
+                default_symbolic_language_policy,
+            )
+
+            symbolic_policy = default_symbolic_language_policy()
+        elif type(symbolic_language_policy) is not SymbolicLanguagePolicy:
+            raise TypeError(
+                "symbolic_language_policy must be SymbolicLanguagePolicy"
+            )
+        else:
+            symbolic_policy = symbolic_language_policy
+        self._symbolic_language_mode = symbolic_mode
+        self._symbolic_language_policy = symbolic_policy
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -1646,6 +1679,77 @@ class CognitiveLoop:
             "semantic_naming_carried owner_id=%s binding_count=%s",
             owner_id,
             0 if updated is None else len(updated.bindings),
+        )
+        return updated
+
+    def _build_symbolic_cue_summary(
+        self, observation: object
+    ) -> SymbolicCueSummary | None:
+        """Closed cue bag of opaque observed entity keys only."""
+        from agents.cognition.symbolic_language import SymbolicCueSummary
+
+        keys: list[str] = []
+        self_body = getattr(observation, "self_body", None)
+        location = getattr(self_body, "location_id", None)
+        if location is not None:
+            keys.append(str(location.value))
+        for body in getattr(observation, "visible_bodies", ()) or ():
+            entity = getattr(body, "entity_id", None)
+            if entity is not None:
+                keys.append(str(entity.value))
+        return SymbolicCueSummary(observed_entity_keys=tuple(keys))
+
+    def _prepare_symbolic_language(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        semantic_naming: object | None,
+    ) -> object | None:
+        """Refresh one owner's composition ledger from active terminology."""
+        from agents.cognition.configuration import CognitionSymbolicLanguageMode
+        from agents.cognition.semantic_naming import TerminologyLedger
+        from agents.cognition.symbolic_language import (
+            SymbolicLedger,
+            apply_symbolic_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if (
+            self._symbolic_language_mode
+            is not CognitionSymbolicLanguageMode.DETERMINISTIC
+        ):
+            return None
+        if type(semantic_naming) is not TerminologyLedger:
+            _LOG.warning(
+                "symbolic_carry_rejected reason=%s",
+                "constituent_missing",
+            )
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.symbolic_language
+        ledger = carried if type(carried) is SymbolicLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "symbolic_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        cues = self._build_symbolic_cue_summary(loop_input.observation)
+        memories = () if snapshot is None else snapshot.memories
+        updated = apply_symbolic_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            semantic_naming,
+            memories=memories,
+            cues=cues,
+            policy=self._symbolic_language_policy,
+        )
+        _LOG.debug(
+            "symbolic_language_carried owner_id=%s composition_count=%s",
+            owner_id,
+            0 if updated is None else len(updated.compositions),
         )
         return updated
 
@@ -3320,6 +3424,9 @@ class CognitiveLoop:
             social_norms=social_norms,
             social_conventions=social_conventions,
         )
+        symbolic_language = self._prepare_symbolic_language(
+            loop_input, semantic_naming=semantic_naming
+        )
         cultural_narratives = self._prepare_cultural_narratives(
             loop_input,
             artifact_interpretations=artifact_interpretations,
@@ -3593,6 +3700,8 @@ class CognitiveLoop:
                     public_goods_active=self._public_goods_active,
                     semantic_naming=semantic_naming,
                     semantic_naming_mode=self._semantic_naming_mode,
+                    symbolic_language=symbolic_language,
+                    symbolic_language_mode=self._symbolic_language_mode,
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -3610,6 +3719,21 @@ class CognitiveLoop:
             )
             raise  # pragma: no cover
 
+        from agents.cognition.configuration import CognitionSymbolicLanguageMode
+
+        if (
+            self._symbolic_language_mode
+            is CognitionSymbolicLanguageMode.DETERMINISTIC
+            and symbolic_language is not None
+        ):
+            from agents.cognition.symbolic_language import symbolic_usage_update
+
+            symbolic_language = symbolic_usage_update(
+                symbolic_language,
+                command,
+                tick=loop_input.observation.tick,
+                policy=self._symbolic_language_policy,
+            )
         proposal = CognitiveLoopProposal(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -3641,6 +3765,7 @@ class CognitiveLoop:
             social_conventions=social_conventions,
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
+            symbolic_language=symbolic_language,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -3822,6 +3947,7 @@ class CognitiveLoop:
             social_conventions=proposal.social_conventions,
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,
+            symbolic_language=proposal.symbolic_language,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,

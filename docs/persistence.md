@@ -69,16 +69,34 @@ Contributor summary:
 | Event schema replay v6–v8 | Production / dynamics / artifacts write pairs (see priority below) |
 | Event schema replay v9 | Lifecycle channel write (`AgentCreated`, `AgentEnteredWorld`, `LifecycleStageChanged`); accepts lower-channel detail kinds |
 | Event schema replay v10 | New-agent provenance write (`AgentInitializationRecorded` after `AgentCreated`, before `AgentEnteredWorld`); accepts lower-channel kinds |
+| Event schema replay v11–v20 | Kinship, care, durable-record, repository, experimentation, succession, commitment, valuation, exchange, collective-project, and public-good write pairs (see priority below) |
+| Event schema replay v21 | Regions/migration channel (`JourneyStarted`/`JourneyArrived`/`JourneyEnded`) |
+| Event schema replay v22 | Cultural contact channel (`ContactRecorded`, replayable no-op) on the regions substrate |
 | `PROJECTOR_VERSION` | Private world projector compatibility (`v2` write; accept `v1`/`v2`) |
-| `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits (`v2` default write; accept `v1`…`v7`) |
+| `PERSISTENCE_CODEC_VERSION` | Canonical JSON codec for manifests/snapshots/commits (`v2` default write; accept `v1`…`v20`) |
 | Persistence codec v6 | Pairs with event schema 9 when lifecycle channel is active without new-agent provenance; restores `lifecycle_records` |
 | Persistence codec v7 | Pairs with event schema 10 when `new_agent_provenance_active`; restores `lifecycle_records` |
+| Persistence codec v19 | Pairs with event schema 21 when regions/migration is active |
+| Persistence codec v20 | Pairs with event schema 22 when cultural contact is active; carries v19 snapshot payloads plus contact event details |
 | Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
-| Runner config | Write `runner-config-v4` when all V3 flags are off; accept `v1`…`v25` decode; `v24` = v23 ∪ `population_lifecycle`; `v25` = v24 ∪ exact `new_agent_initialization` (synthesized default on v24 decode for lifecycle restore) |
+| Runner config | Write `runner-config-v4` when all V3 flags and roots are off; accept `v1`…`v46` decode; `v44` = regions/migration root; `v45` = v44 root ∪ required `cultural_contact`; `v46` = active v44/v45 root with per-agent `symbolic_language_mode` only (no new root sibling) |
 | Alembic head | Pin **`0017`** — hybrid memory retrieve shortlist readiness (HNSW deferred: untyped `vector` column); prior `0016` event filter indexes and `0015` branch lineage remain; V2/V3 capability flags, lifecycle, and new-agent init stay runner JSON / event+snapshot payloads (no `0018` in v3-03) |
 
-**Checkpoint write-pair priority:** `new_agent_provenance_active` → `(replay-v10, codec v7)`; else lifecycle on → `(replay-v9, codec v6)`; else artifacts → `(v8, v5)`; else dynamics → `(v7, v4)`; else production → `(v6, v3)`; else → `(replay-v5, v2)`.
+`runner-config-v46` adds only per-agent `symbolic_language_mode`; it does not
+change replay, the codec, Alembic head `0017`, or the authoritative tables.
+
+**Checkpoint write-pair priority:** `cultural_contact_active` →
+`(replay-v22, codec v20)`; else `regions_migration_active` →
+`(replay-v21, codec v19)`; else public goods → `(v20, v18)`; else collective
+projects → `(v19, v17)`; else resource exchange → `(v18, v16)`; else subjective
+valuation → `(v18, v15)`; else structured commitments → `(v17, v14)`; else
+possession succession → `(v16, v13)`; else bounded experimentation → `(v15,
+v12)`; else knowledge repositories → `(v14, v11)`; else durable records →
+`(v13, v10)`; else dependency care → `(v12, v9)`; else kinship → `(v11, v8)`;
+else `new_agent_provenance_active` → `(v10, v7)`; else lifecycle on → `(v9,
+v6)`; else artifacts → `(v8, v5)`; else dynamics → `(v7, v4)`; else production
+→ `(v6, v3)`; else → `(replay-v5, v2)`.
 
 Runs never mix replay schema versions. Legacy schema-v1 audit events remain decodable for export but must not enter the authoritative log. Alembic revision `0004` persists SQL cause/occurrence columns so restored engines reproduce the same next observation as live engines (eventful and eventless prior windows). Revision `0005` adds owner-scoped episodic memory tables. Revision `0006` adds reconstruction/derivation provenance with selective immutability. Revision `0007` adds semantic belief and directed relationship tables. Revision `0008` adds communicated transmission metadata and testimony-factor columns. Observation codecs round-trip every field and provenance type with exact keys.
 

@@ -86,6 +86,12 @@ from analysis.sources import (
     reconstruction_evidence_from_durable,
 )
 from analysis.spatial_control_metrics import SpatialActionRow, SpatialClaimRow
+from analysis.symbolic_language_metrics import (
+    SymbolicAnalysisInputs,
+    SymbolicCompositionRow,
+    SymbolicInterpretationRow,
+    SymbolicMessageRow,
+)
 from analysis.territorial_concentration_metrics import TerritorialConcentrationRow
 from experiments.persistence import (
     AnalysisEvidenceSnapshotReader,
@@ -2621,7 +2627,7 @@ def contact_episode_rows_from_events(
                 present_ids=tuple(
                     item.value for item in getattr(details, "present_ids", ())
                 ),
-                location_id=details.location_id.value,
+                location_id=getattr(details, "location_id").value,  # noqa: B009
                 tick=tick,
             )
         )
@@ -2818,7 +2824,10 @@ def contact_onset_by_person(
     """Earliest pair onset for each person in a community pair."""
     onsets: dict[str, int] = {}
     members: dict[str, tuple[str, ...]] = {
-        community.community_id: tuple(community.person_ids) for community in communities
+        getattr(community, "community_id"): tuple(  # noqa: B009
+            getattr(community, "person_ids")  # noqa: B009
+        )
+        for community in communities
     }
     for pair in pairs:
         for community_id in (pair.community_a_id, pair.community_b_id):
@@ -3390,3 +3399,169 @@ def historical_memory_harvest_from_run(
         as_of_tick,
     )
     return harvest
+
+
+def symbolic_composition_rows_from_ledgers(
+    ledgers: object,
+) -> tuple[SymbolicCompositionRow, ...]:
+    """Export digest-only composition rows from detached symbolic ledgers."""
+    from analysis.symbolic_language_metrics import (
+        SymbolicCompositionRow,
+        symbolic_surface_digest,
+    )
+
+    if ledgers is None:
+        return ()
+    if isinstance(ledgers, Mapping):
+        values = tuple(ledgers.values())
+    elif isinstance(ledgers, Sequence):
+        values = tuple(ledgers)
+    else:
+        values = ()
+    rows: list[SymbolicCompositionRow] = []
+    for ledger in values or ():
+        for composition in getattr(ledger, "compositions", ()):
+            first_tick = getattr(composition, "first_tick", None)
+            last_tick = getattr(composition, "last_tick", None)
+            if first_tick is None:
+                first_tick = 0
+            if last_tick is None:
+                last_tick = first_tick
+            hypothesis = getattr(composition, "referent_hypothesis", None)
+            rows.append(
+                SymbolicCompositionRow(
+                    owner_id=composition.owner_id.value,
+                    composition_id=composition.composition_id,
+                    kind=composition.kind.value,
+                    part_digests=(
+                        symbolic_surface_digest(composition.parts[0]),
+                        symbolic_surface_digest(composition.parts[1]),
+                    ),
+                    referent_kind=(
+                        None
+                        if hypothesis is None
+                        else hypothesis.referent_kind.value
+                    ),
+                    status=composition.status.value,
+                    strength_band=_symbolic_band(
+                        composition.status.value, composition.strength
+                    ),
+                    usage_count=composition.usage_count,
+                    tick_range=(first_tick, last_tick),
+                )
+            )
+    _LOG.debug("symbolic_composition_rows_built rows=%s", len(rows))
+    return tuple(rows)
+
+
+def _symbolic_band(status: str, strength: float) -> str:
+    if status == "candidate":
+        return "candidate"
+    if strength < 0.40:
+        return "low"
+    if strength < 0.70:
+        return "mid"
+    return "high"
+
+
+def symbolic_interpretation_rows_from_ledgers(
+    ledgers: object,
+) -> tuple[SymbolicInterpretationRow, ...]:
+    """Export listener-side structural parse outcomes from detached ledgers."""
+    from analysis.symbolic_language_metrics import SymbolicInterpretationRow
+
+    if ledgers is None:
+        return ()
+    values = (
+        tuple(ledgers.values())
+        if isinstance(ledgers, Mapping)
+        else tuple(ledgers)
+        if isinstance(ledgers, Sequence)
+        else ()
+    )
+    rows: list[SymbolicInterpretationRow] = []
+    for ledger in values or ():
+        for item in getattr(ledger, "interpretations", ()):
+            rows.append(
+                SymbolicInterpretationRow(
+                    owner_id=item.owner_id.value,
+                    message_id=item.message_id,
+                    outcome=item.outcome.value,
+                    composition_id=item.composition_id,
+                    tick=item.tick,
+                )
+            )
+    return tuple(rows)
+
+
+def symbolic_message_rows_from_events(
+    events: Sequence[object],
+    interpretations: Sequence[SymbolicInterpretationRow] = (),
+) -> tuple[SymbolicMessageRow, ...]:
+    """Export digest-only composed-message rows from delivered events."""
+    from analysis.symbolic_language_metrics import (
+        SymbolicMessageRow,
+        symbolic_surface_digest,
+    )
+    from world.communications import confidence_band
+    from world.events import Asked, Talked, Told
+
+    outcome_by_message = {
+        item.message_id: item.outcome for item in interpretations
+    }
+    rows: list[SymbolicMessageRow] = []
+    for event in events:
+        details = getattr(event, "details", None)
+        if type(details) not in (Talked, Asked, Told):
+            continue
+        utterance = getattr(details, "utterance", None)
+        if utterance is None:
+            continue
+        operators = []
+        for relation in utterance.content.relations:
+            if relation.predicate in {"attributive", "relational"}:
+                operators.append(relation)
+        if not operators:
+            continue
+        event_id = getattr(getattr(event, "event_id", None), "value", None)
+        message_id = event_id or str(utterance.declared.communication_id.value)
+        for relation in operators:
+            rows.append(
+                SymbolicMessageRow(
+                    message_id=message_id,
+                    speaker_id=getattr(event, "actor_id").value,  # noqa: B009
+                    listener_id=getattr(details, "recipient_id").value,  # noqa: B009
+                    tick=int(getattr(event, "tick")),  # noqa: B009
+                    kind=relation.predicate,
+                    part_digests=(
+                        symbolic_surface_digest(relation.subject),
+                        symbolic_surface_digest(relation.object),
+                    ),
+                    parse_outcome=outcome_by_message.get(message_id, "parsed"),
+                    declared_confidence_band=confidence_band(
+                        utterance.declared.sender_confidence
+                    ),
+                )
+            )
+    _LOG.debug("symbolic_message_rows_built rows=%s", len(rows))
+    return tuple(rows)
+
+
+def symbolic_analysis_inputs_from_harvest(
+    *,
+    ledgers: object,
+    events: Sequence[object] = (),
+    communities: Sequence[object] = (),
+    expected_owner_count: int = 0,
+) -> SymbolicAnalysisInputs:
+    """Compose detached symbolic inputs without importing persistence."""
+    from analysis.symbolic_language_metrics import SymbolicAnalysisInputs
+
+    interpretations = symbolic_interpretation_rows_from_ledgers(ledgers)
+    return SymbolicAnalysisInputs(
+        compositions=symbolic_composition_rows_from_ledgers(ledgers),
+        messages=symbolic_message_rows_from_events(events, interpretations),
+        interpretations=interpretations,
+        communities=communities,
+        expected_owner_count=expected_owner_count,
+    )

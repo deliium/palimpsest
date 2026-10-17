@@ -841,6 +841,8 @@ class CommandPlanner:
         public_goods_active: bool = False,
         semantic_naming: object | None = None,
         semantic_naming_mode: object | None = None,
+        symbolic_language: object | None = None,
+        symbolic_language_mode: object | None = None,
         cultural_narratives: object | None = None,
         cultural_narrative_mode: object | None = None,
     ) -> ActionPlan:
@@ -1056,6 +1058,23 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_naming,
             mode=semantic_naming_mode,
+        )
+        from agents.cognition.symbolic_language import (
+            symbolic_communicate_utterance,
+        )
+
+        prepared_symbols = symbolic_language
+        if prepared_symbols is None and snapshot is not None:
+            prepared_symbols = snapshot.symbolic_language
+        command = symbolic_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_symbols,
+            terminology=prepared_naming,
+            mode=symbolic_language_mode,
         )
         from agents.cognition.cultural_narratives import (
             narrative_communicate_utterance,

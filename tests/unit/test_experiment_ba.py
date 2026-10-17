@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import cast
+
 import pytest
 
 from experiments.catalog import OFF_GATE_MATRIX_EXPERIMENT_IDS
+from experiments.collectors import CollectorMetricDocument
 from experiments.cultural_contact_scenario import (
     cultural_contact_arbiter,
     cultural_contact_scenario,
 )
 from simulation.runner_models import RUNNER_SCHEMA_VERSION_V4, RUNNER_SCHEMA_VERSION_V45
+from world.events import WorldEvent
 
 
 def test_ba_is_off_gate_and_has_six_arms() -> None:
@@ -81,16 +86,23 @@ async def test_contact_arm_records_contact_and_isolated_does_not() -> None:
     }
     contact_arm = await run_one_assignment(assignments["ba-contact-trade"])
     isolated_arm = await run_one_assignment(assignments["ba-isolated"])
+    contact_events = contact_arm.committed_events
+    isolated_events = isolated_arm.committed_events
+    assert contact_events is not None
+    assert isolated_events is not None
     contact_facts = assert_cultural_contact_structure(
-        "ba-contact-trade", contact_arm.committed_events
+        "ba-contact-trade", cast(Sequence[WorldEvent], contact_events)
     )
     assert contact_facts["contact_event_count"] >= 1
     isolated_facts = assert_cultural_contact_structure(
-        "ba-isolated", isolated_arm.committed_events
+        "ba-isolated", cast(Sequence[WorldEvent], isolated_events)
     )
     assert isolated_facts["contact_event_count"] == 0
     catalog = next(
-        item for item in contact_arm.metrics if item.family == "catalog_metrics"
+        item
+        for item in contact_arm.metrics
+        if isinstance(item, CollectorMetricDocument)
+        and item.family == "catalog_metrics"
     )
     fields = dict(catalog.fields)
     assert fields["society_contact_availability"] in {"present", "partial"}

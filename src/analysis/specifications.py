@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 103
+METRIC_FAMILY_COUNT: Final[int] = 106
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -178,6 +178,9 @@ class MetricFamilyId(StrEnum):
     CONTACT_KNOWLEDGE_TRANSFER = "contact_knowledge_transfer"
     CONTACT_LEXICAL_BORROWING = "contact_lexical_borrowing"
     CONTACT_REPUTATION_TRANSFER = "contact_reputation_transfer"
+    SYMBOLIC_COMPOSITION = "symbolic_composition"
+    SYMBOLIC_SOCIAL_DISTRIBUTION = "symbolic_social_distribution"
+    SYMBOLIC_MESSAGE_FLOW = "symbolic_message_flow"
 
 
 class DenominatorKind(StrEnum):
@@ -4571,6 +4574,114 @@ def _spec_contact_reputation_transfer() -> MetricSpecification:
     )
 
 
+def _spec_symbolic_composition() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SYMBOLIC_COMPOSITION,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_symbolic_composition_rows",
+        denominator="observed_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="owner-scoped composition lifecycle",
+        deceased_policy="owner-scoped compositions remain after death",
+        zero_holding_policy="no composition rows -> availability=absent",
+        opportunity_vs_occurrence="usage and interpretation are counted once",
+        self_edge_policy="parts are two distinct owner-scoped labels",
+        censoring_policy="missing owner rows are coverage gaps, not zeros",
+        formulas={
+            "usage_count": "sum of composition usage counts",
+            "composition_count": "sum of candidate, active, and retired rows",
+        },
+        value_keys=(
+            "active_count",
+            "attributive_count",
+            "candidate_count",
+            "composition_count",
+            "distinct_surface_digest_count",
+            "interpretation_count",
+            "relational_count",
+            "retired_count",
+            "strength_band_candidate_count",
+            "strength_band_high_count",
+            "strength_band_low_count",
+            "strength_band_mid_count",
+            "unresolved_interpretation_count",
+            "usage_count",
+        ),
+        empty_case="no symbolic composition rows -> availability=absent",
+        one_case="one owner composition is reported normally",
+        unknown_case="missing owners are unknown coverage gaps, never inferred zeros",
+    )
+
+
+def _spec_symbolic_social_distribution() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SYMBOLIC_SOCIAL_DISTRIBUTION,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_symbolic_and_candidate_community_rows",
+        denominator="assigned_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="owner composition strata by candidate community",
+        deceased_policy="owner rows remain after death",
+        zero_holding_policy="no communities -> availability=absent",
+        opportunity_vs_occurrence="cross-community delivery is borrowing evidence",
+        self_edge_policy="same-community delivery is reinforcement only",
+        censoring_policy="unassigned owners are coverage gaps",
+        formulas={
+            "pairwise_divergence": "mean 1 - Jaccard over community digest sets",
+        },
+        value_keys=(
+            "adopted_digest_count",
+            "borrowed_digest_count",
+            "community_count",
+            "pairwise_divergence",
+            "reinforced_digest_count",
+            "singleton_owner_count",
+            "surface_digest_count",
+            "unassigned_owner_count",
+        ),
+        empty_case="no candidate communities -> availability=absent",
+        one_case="one community reports no pairwise divergence",
+        unknown_case="missing communities are unknown/absent, never zero",
+    )
+
+
+def _spec_symbolic_message_flow() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SYMBOLIC_MESSAGE_FLOW,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_symbolic_message_rows",
+        denominator="delivered_composed_message_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="delivered composed messages ordered by logical tick",
+        deceased_policy="message rows remain after death",
+        zero_holding_policy="no composed messages -> availability=absent",
+        opportunity_vs_occurrence="parse outcomes are structural, not semantic",
+        self_edge_policy="speaker equal to listener is a valid delivery",
+        censoring_policy="missing listener is a coverage gap",
+        formulas={
+            "composition_arity": "two label digests per operator atom",
+        },
+        value_keys=(
+            "arity_two_count",
+            "attributive_count",
+            "composed_message_count",
+            "confidence_band_high_count",
+            "confidence_band_low_count",
+            "confidence_band_mid_count",
+            "ignored_count",
+            "parsed_count",
+            "partial_count",
+            "relational_count",
+            "speaker_listener_pair_count",
+            "unresolved_constituent_count",
+            "unresolved_count",
+        ),
+        empty_case="no composed messages -> availability=absent",
+        one_case="one message reports its structural outcome",
+        unknown_case="unsupported predicates are unknown/ignored, never coerced",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -4675,6 +4786,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_contact_knowledge_transfer,
     _spec_contact_lexical_borrowing,
     _spec_contact_reputation_transfer,
+    _spec_symbolic_composition,
+    _spec_symbolic_social_distribution,
+    _spec_symbolic_message_flow,
 )
 
 

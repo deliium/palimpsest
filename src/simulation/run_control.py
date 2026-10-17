@@ -601,6 +601,7 @@ class AgentRuntimeCheckpoint:
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
+    symbolic_language: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -710,6 +711,15 @@ class AgentRuntimeCheckpoint:
             self.semantic_naming,
             self.agent_id,
             field_name="semantic_naming",
+        )
+        from agents.cognition.symbolic_language import (
+            require_owner_symbolic_language,
+        )
+
+        require_owner_symbolic_language(
+            self.symbolic_language,
+            self.agent_id,
+            field_name="symbolic_language",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,

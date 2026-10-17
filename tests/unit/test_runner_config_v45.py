@@ -19,6 +19,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V44,
     RUNNER_SCHEMA_VERSION_V45,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
 )
 from simulation.runner_serialization import (
@@ -32,7 +33,7 @@ from world.regions import CognitionMode
 _OFF_ARM = regional_migration_scenario().conditions[0].runner_config
 
 
-def _v45(**overrides: object):
+def _v45(**overrides: object) -> SimulationRunnerConfig:
     values: dict[str, object] = {
         "schema_version": RUNNER_SCHEMA_VERSION_V45,
         "v3_capability_flags": V3CapabilityFlags(multi_polity_migration=True),

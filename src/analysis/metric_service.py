@@ -146,6 +146,15 @@ from analysis.structured_commitments_metrics import (
     assemble_structured_commitment_metrics,
 )
 from analysis.subjective_value_metrics import assemble_subjective_value_metrics
+from analysis.symbolic_language_metrics import (
+    SymbolicAnalysisInputs,
+    compute_symbolic_composition,
+    compute_symbolic_composition_metric,
+    compute_symbolic_message_flow,
+    compute_symbolic_message_flow_metric,
+    compute_symbolic_social_distribution,
+    compute_symbolic_social_distribution_metric,
+)
 from analysis.technique_lifecycle_metrics import assemble_technique_lifecycle_metrics
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
 from analysis.transmission_metrics import (
@@ -259,6 +268,7 @@ class MetricComputationInputs:
     society_isolation: SocietyIsolationResult | None = None
     society_community_count: int = 0
     contact_analysis: object | None = None
+    symbolic_analysis: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1326,6 +1336,43 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 "contact_reputation_transfer",
                 lambda: compute_contact_reputation_transfer_metric(
                     contact.reputation_transfer,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+
+    if inputs.symbolic_analysis is not None:
+        if type(inputs.symbolic_analysis) is SymbolicAnalysisInputs:
+            symbolic = inputs.symbolic_analysis
+            composition = compute_symbolic_composition(
+                symbolic.compositions,
+                symbolic.interpretations,
+                expected_owner_count=(
+                    symbolic.expected_owner_count or None
+                ),
+            )
+            _safe(
+                "symbolic_composition",
+                lambda: compute_symbolic_composition_metric(
+                    composition,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            distribution = compute_symbolic_social_distribution(symbolic)
+            _safe(
+                "symbolic_social_distribution",
+                lambda: compute_symbolic_social_distribution_metric(
+                    distribution,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            flow = compute_symbolic_message_flow(symbolic.messages)
+            _safe(
+                "symbolic_message_flow",
+                lambda: compute_symbolic_message_flow_metric(
+                    flow,
                     run_id=run_id,
                     input_revision=revision,
                 ),

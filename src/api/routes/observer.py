@@ -19,6 +19,8 @@ from api.observer_schemas import (
     ObserverManifestOut,
     ObserverRelationshipPageOut,
     ObserverRunOut,
+    ObserverSymbolicCompositionOut,
+    ObserverSymbolicOverlayOut,
     ObserverTickPageOut,
     StrategyAuditEntryOut,
     StrategyAuditOverlayOut,
@@ -27,7 +29,10 @@ from api.observer_service import ObserverReadService
 from api.security import ApiCapability, require_http_capability
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
-from observer.labels import project_subjective_label_overlay
+from observer.labels import (
+    project_subjective_label_overlay,
+    project_symbolic_overlay,
+)
 from observer.narrative_hops import project_narrative_hop_overlay
 from observer.version import DEFAULT_LAYOUT_ID
 
@@ -472,5 +477,73 @@ async def get_observer_labels(
                 label_source=reading.label_source,
             )
             for reading in overlay.readings
+        ),
+    )
+
+
+@router.get(
+    "/{run_id}/observer/agents/{agent_id}/symbolic-language",
+    response_model=ObserverSymbolicOverlayOut,
+)
+async def get_observer_symbolic_language(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    tick: int | None = Query(default=None, ge=0),
+) -> ObserverSymbolicOverlayOut:
+    started = time.perf_counter()
+    manager = getattr(request.app.state, "simulation_manager", None)
+    checkpoint = None
+    if manager is not None and hasattr(manager, "owner_runtime_checkpoint"):
+        checkpoint = manager.owner_runtime_checkpoint(run_id, agent_id)
+    if tick is not None:
+        key = (
+            None
+            if checkpoint is None
+            else getattr(checkpoint, "last_observation_key", None)
+        )
+        live_tick = None if not isinstance(key, tuple) or not key else key[0]
+        if live_tick != tick:
+            _LOGGER.warning(
+                "symbolic_unavailable_at_tick run_id=%s agent_id=%s tick=%s",
+                run_id,
+                agent_id,
+                tick,
+            )
+            raise not_found(code="symbolic_unavailable_at_tick", run_id=run_id)
+    ledger = (
+        None if checkpoint is None else getattr(checkpoint, "symbolic_language", None)
+    )
+    overlay = project_symbolic_overlay(agent_id, ledger)
+    _LOGGER.info(
+        "route_observer_symbolic_language",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/"
+            "symbolic-language"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=len(overlay.compositions),
+    )
+    return ObserverSymbolicOverlayOut(
+        run_id=run_id,
+        agent_id=overlay.agent_id,
+        layer=overlay.layer,
+        protocol_version=overlay.protocol_version,
+        count=len(overlay.compositions),
+        compositions=tuple(
+            ObserverSymbolicCompositionOut(
+                composition_id=item.composition_id,
+                kind=item.kind,  # type: ignore[arg-type]
+                part_digests=item.part_digests,
+                referent_kind=item.referent_kind,
+                status=item.status,  # type: ignore[arg-type]
+                strength_band=item.strength_band,  # type: ignore[arg-type]
+                usage_count=item.usage_count,
+                sense_revision=item.sense_revision,
+            )
+            for item in overlay.compositions
         ),
     )

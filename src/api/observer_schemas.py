@@ -375,6 +375,26 @@ class ObserverLabelOverlayOut(StrictModel):
     readings: tuple[ObserverLabelReadingOut, ...]
 
 
+class ObserverSymbolicCompositionOut(StrictModel):
+    composition_id: str
+    kind: Literal["attributive", "relational"]
+    part_digests: tuple[str, str]
+    referent_kind: str | None = None
+    status: Literal["candidate", "active", "retired"]
+    strength_band: Literal["candidate", "low", "mid", "high"]
+    usage_count: int = Field(ge=0)
+    sense_revision: int = Field(ge=0)
+
+
+class ObserverSymbolicOverlayOut(StrictModel):
+    run_id: str
+    agent_id: str
+    layer: Literal["subjective_symbolic_language"] = "subjective_symbolic_language"
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+    count: int
+    compositions: tuple[ObserverSymbolicCompositionOut, ...]
+
+
 class StrategyAuditEntryOut(StrictModel):
     event_id: str
     category: str

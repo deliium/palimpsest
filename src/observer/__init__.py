@@ -30,7 +30,10 @@ from observer.debugger_state import (
 from observer.labels import (
     SubjectiveLabelOverlay,
     SubjectiveLabelReading,
+    SymbolicCompositionReading,
+    SymbolicOverlay,
     project_subjective_label_overlay,
+    project_symbolic_overlay,
 )
 from observer.research_ui_state import (
     EPISTEMIC_CLASSES,
@@ -93,6 +96,8 @@ __all__ = [
     "StrategyAuditOverlay",
     "SubjectiveLabelOverlay",
     "SubjectiveLabelReading",
+    "SymbolicCompositionReading",
+    "SymbolicOverlay",
     "VisualBounds",
     "build_research_ui_query",
     "epistemic_from_debugger_artifact",
@@ -102,4 +107,5 @@ __all__ = [
     "parse_research_ui_query",
     "project_strategy_audit_overlay",
     "project_subjective_label_overlay",
+    "project_symbolic_overlay",
 ]

@@ -990,8 +990,14 @@ def _cognition_config_for(
         None if convention_policy is None else convention_policy.version,
     )
     from agents.cognition.artifacts import ArtifactInterpretationMode
-    from agents.cognition.configuration import CognitionSemanticNamingMode
+    from agents.cognition.configuration import (
+        CognitionSemanticNamingMode,
+        CognitionSymbolicLanguageMode,
+    )
     from agents.cognition.semantic_naming import default_semantic_naming_policy
+    from agents.cognition.symbolic_language import (
+        default_symbolic_language_policy,
+    )
 
     artifact_mode = ArtifactInterpretationMode(spec.artifact_interpretation_mode.value)
     _LOG.debug(
@@ -1006,6 +1012,15 @@ def _cognition_config_for(
         "cognition_config_semantic_naming_mode mode=%s policy_version=%s",
         naming_mode.value,
         None if naming_policy is None else naming_policy.version,
+    )
+    symbolic_mode = CognitionSymbolicLanguageMode(spec.symbolic_language_mode.value)
+    symbolic_policy = None
+    if symbolic_mode is CognitionSymbolicLanguageMode.DETERMINISTIC:
+        symbolic_policy = default_symbolic_language_policy()
+    _LOG.debug(
+        "cognition_config_symbolic_language_mode mode=%s policy_version=%s",
+        symbolic_mode.value,
+        None if symbolic_policy is None else symbolic_policy.version,
     )
     from agents.cognition.budget import policy_from_limits
     from agents.cognition.configuration import (
@@ -1088,6 +1103,8 @@ def _cognition_config_for(
         artifact_interpretation_mode=artifact_mode,
         semantic_naming_mode=naming_mode,
         semantic_naming_policy=naming_policy,
+        symbolic_language_mode=symbolic_mode,
+        symbolic_language_policy=symbolic_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         cognitive_budget_mode=budget_mode,

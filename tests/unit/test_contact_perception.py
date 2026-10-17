@@ -7,6 +7,7 @@ from world.effects import SystemCause, SystemEffectFamily
 from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     ContactRecorded,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
@@ -14,7 +15,7 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 from world.observations import ObservationAudienceRole
 
 
-def _event(*, location: str = "loc-b") -> object:
+def _event(*, location: str = "loc-b") -> WorldEvent:
     details = ContactRecorded(
         relocation_kind="journey_arrived",
         journey_id="journey-1",

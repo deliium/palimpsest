@@ -40,7 +40,10 @@ def test_contact_memory_contains_sorted_contact_entities_only() -> None:
         occurrence=_occurrence(),
         location_id=EntityId("loc-b"),
     )
-    entity_ids = [mention.entity_id.value for mention in trace.entities]
+    entity_ids = []
+    for mention in trace.entities:
+        assert mention.entity_id is not None
+        entity_ids.append(mention.entity_id.value)
     assert entity_ids == ["body-1", "body-2", "body-3"]
     assert all("north" not in value for value in entity_ids)
     assert any(item.concept == "contact_recorded" for item in trace.concepts)

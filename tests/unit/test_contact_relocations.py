@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import cast
+
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world._operations import (
     OperationAccepted,
+    ValidatedWorldOperation,
     prepare_action_batch,
     validate_action_request,
 )
@@ -14,6 +18,7 @@ from world.actions import ActionRequest, Flee, require_agent_command
 from world.effects import ResolvedActionEffects, ResolvedFleeEffect
 from world.events import ContactRecorded, Fled
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
+from world.models import AgentBody, Location
 from world.regions import (
     CognitionMode,
     LocationRegion,
@@ -40,7 +45,12 @@ def _spec(*, same_region: bool = False) -> RegionsMigrationSpec:
     )
 
 
-def _state(*, spec: RegionsMigrationSpec, bodies, locations=None) -> WorldState:
+def _state(
+    *,
+    spec: RegionsMigrationSpec,
+    bodies: Sequence[AgentBody],
+    locations: tuple[Location, ...] | None = None,
+) -> WorldState:
     locations = locations or (
         make_location("loc-1", adjacent=("loc-2",), body_capacity=4),
         make_location("loc-2", adjacent=("loc-1",), body_capacity=4),
@@ -54,7 +64,7 @@ def _state(*, spec: RegionsMigrationSpec, bodies, locations=None) -> WorldState:
     )
 
 
-def _operation(state: WorldState):
+def _operation(state: WorldState) -> ValidatedWorldOperation:
     outcome = validate_action_request(
         world_id=WorldId("world-contact-flee"),
         state=state,
@@ -71,7 +81,9 @@ def _operation(state: WorldState):
     return outcome.operation
 
 
-def _effects(*, destination: str = "loc-2", success: bool = True):
+def _effects(
+    *, destination: str = "loc-2", success: bool = True
+) -> ResolvedActionEffects:
     return ResolvedActionEffects(
         by_request={
             RequestId("request-1"): ResolvedFleeEffect(
@@ -189,9 +201,9 @@ def test_batch_preserves_action_cause_for_contact_event() -> None:
         requests=(request,),
         resolved_effects=_effects(),
         contact_enabled=True,
-        deferred_regional_flee_effect=lambda _request, _working: _effects().by_request[
-            RequestId("request-1")
-        ],
+        deferred_regional_flee_effect=lambda _request, _working: cast(
+            ResolvedFleeEffect, _effects().by_request[RequestId("request-1")]
+        ),
     )
     contacts = [
         event

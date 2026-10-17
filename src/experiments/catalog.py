@@ -2769,6 +2769,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "regional_migration@1",
         "multiple_societies@1",
         "cultural_contact@1",
+        "compositional_symbols@1",
     }
 )
 
@@ -5279,6 +5280,27 @@ def experiment_ba_cultural_contact(
     )
     _LOG.info(
         "experiment_registered experiment_id=cultural_contact@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bb_symbolic_language(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BB: bounded owner-scoped compositional symbols."""
+    from experiments.symbolic_language_scenario import symbolic_language_scenario
+
+    definition = symbolic_language_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=compositional_symbols@1 arms=%s",
         len(definition.conditions),
     )
     return definition

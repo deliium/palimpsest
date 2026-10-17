@@ -265,6 +265,23 @@ cognition, memory, prompts, admission, or observations. `unexplained > 0` is a
 finding, not an auto-remediation.
 
 
+## Experiment BB: Bounded compositional symbols
+
+`compositional_symbols@1` exercises the owner-scoped composition layer off the
+V1 gate. Arms: `bb-off` (v4 baseline, symbolic disabled), `bb-single` (one
+population, naming plus symbolic deterministic), `bb-isolated` (two
+region-separated populations without contact), and `bb-contact` (two
+region-separated populations with owned contact). The non-run
+`bb-unsupported` fixture asserts that symbolic mode without semantic naming
+fails closed. The arbiter asserts structural facts only: off emits no
+compositions, isolated populations cannot exchange composed messages, and
+contact borrowing requires delivered communication. It never asserts
+convergence, agreement, or a "better language".
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_bb.py -q
+```
+
 ## Experiment BA: Cultural contact
 
 `cultural_contact@1` composes the owned regions/migration substrate with a

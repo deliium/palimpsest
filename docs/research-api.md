@@ -113,3 +113,12 @@ uv run --frozen --python 3.12.14 pytest -m integration \
   tests/integration/test_api_stream_backpressure.py \
   tests/integration/test_v1_api_e2e.py -q
 ```
+
+## Researcher symbolic-language overlay
+
+`GET /v1/simulations/{run_id}/observer/agents/{agent_id}/symbolic-language`
+returns an additive researcher-only overlay from the owner runtime checkpoint.
+It exposes composition ids, part digests, operator, status, strength band, usage
+count, and meaning revision. It never returns raw symbol tokens, referent entity
+labels, message bodies, or objective-frame fields. Objective observer frames
+still reject symbolic fields; no Godot protocol or semantic type changes.

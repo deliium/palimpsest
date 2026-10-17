@@ -284,6 +284,16 @@ Contact adds one neutral objective event, `ContactRecorded`, emitted by the
 engine after a qualifying cross-region relocation. It records co-presence only:
 not a relationship, trust update, reputation claim, group identity, migration
 label, or policy. Command count stays **43**, observer semantic types are **73**,
-and metric families are **103**. Contact-active runs use `(replay-v22, codec v20)`;
+and metric families are **106**. Contact-active runs use `(replay-v22, codec v20)`;
 contact-off regional runs keep `(replay-v21, codec v19)`. No Alembic migration is
 required and intermarriage is unsupported.
+
+## Symbolic-language boundary
+
+Bounded composition adds no command, event, perception field, RNG stream, or
+identifier namespace. It reuses existing `Talk`/`Ask`/`Tell` relations and the
+owner-scoped terminology ledger. The closed command count stays **43**, observer
+semantic types stay **73**, replay stays `v22`, and the codec stays `v20`. Only
+`runner-config-v46` advances, and only as a per-agent mode increment with no new
+root sibling. Composition ids are owner-scoped; surface digests are analysis-only
+and never fed back to agents.

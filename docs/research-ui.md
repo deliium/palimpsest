@@ -108,3 +108,12 @@ The run-scoped `contact` view lists `society_contact`, `contact_cultural_change`
 `contact_lexical_borrowing`, and `contact_reputation_transfer` from the generic
 metric endpoints under `research_inference` chrome. It never presents analytical
 results as agent-visible facts and adds no backend route or content payload.
+
+## Symbolic-language view
+
+A researcher-only `SymbolicLanguagePanel` may read
+`GET /v1/simulations/{run_id}/observer/agents/{agent_id}/symbolic-language`
+under the existing `research_inference` / `analytical_inference` chrome. It
+renders digests, bands, counts, and operator mix only; it never displays raw
+tokens, message bodies, or prompts, and it does not claim semantic correctness
+or convergence.

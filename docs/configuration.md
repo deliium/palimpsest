@@ -132,3 +132,22 @@ migration flag reject with stable safe reason codes. Absent contact keeps the
 prior highest-active schema. `mode=disabled` is accepted but emits no contact
 behaviour. Contact-active runs use the `(replay-v22, codec v20)` write pair;
 contact-off regional runs stay on `(replay-v21, codec v19)`.
+
+## Optional bounded symbolic language (`runner-config-v46`)
+
+`symbolic_language_mode` is a per-agent cognition mode with values `disabled`
+and `deterministic` (default `disabled`). It is not a `V2CapabilityFlags` or
+`V3CapabilityFlags` slot and adds no new root sibling. A deterministic symbolic
+mode requires the same agent's `semantic_naming_mode=deterministic`; symbolic
+mode on any schema below v46 rejects with `symbolic_language_requires_v46`, and
+symbolic mode without naming rejects with
+`symbolic_language_requires_semantic_naming`. `runner-config-v46` is emitted
+only when at least one agent is deterministic, and it requires at least one such
+agent (`v46_requires_symbolic_language`).
+
+v46 reuses the active family root: with contact absent it carries the v44
+regions root; with contact present it carries the exact v45 root including
+`cultural_contact`. It never implies contact, regions, public goods, or cultural
+memory by itself. Disabled mode keeps the prior highest-active schema and the
+default write remains `runner-config-v4`. Replay stays `replay-v22`, the
+persistence codec stays `v20`, and `communication.v1` is unchanged.

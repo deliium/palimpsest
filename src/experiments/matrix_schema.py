@@ -41,12 +41,14 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V43,
     RUNNER_SCHEMA_VERSION_V44,
     RUNNER_SCHEMA_VERSION_V45,
+    RUNNER_SCHEMA_VERSION_V46,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
     ReflectionMode,
     SemanticNamingMode,
     SimulationRunnerConfig,
+    SymbolicLanguageMode,
     example_population_lifecycle_spec,
 )
 
@@ -72,6 +74,10 @@ def finalize_matrix_cell_config(
     )
     naming_on = any(
         agent.cognition.semantic_naming_mode is SemanticNamingMode.DETERMINISTIC
+        for agent in agents
+    )
+    symbolic_language_on = any(
+        agent.cognition.symbolic_language_mode is SymbolicLanguageMode.DETERMINISTIC
         for agent in agents
     )
     artifacts_on = any(
@@ -110,7 +116,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if cultural_contact_on:
+    if symbolic_language_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V46,
+            "symbolic_language_on",
+        )
+    elif cultural_contact_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V45,
             "cultural_contact_on",

@@ -7,6 +7,7 @@ from world._state import WorldState
 from world._travel import advance_due_journeys
 from world.events import ContactRecorded, JourneyArrived, JourneyEnded
 from world.identifiers import EntityId, WorldRevision
+from world.models import Location
 from world.regions import (
     CognitionMode,
     Journey,
@@ -63,7 +64,7 @@ def _journey(
     )
 
 
-def _locations(capacity: int = 8):
+def _locations(capacity: int = 8) -> tuple[Location, ...]:
     return (
         make_location("loc-a", name="A", adjacent=("loc-d",), body_capacity=2),
         make_location("loc-b", name="B", adjacent=("loc-d",), body_capacity=2),

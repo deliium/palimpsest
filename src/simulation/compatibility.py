@@ -91,6 +91,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V44,
     RUNNER_SCHEMA_VERSION_V45,
+    RUNNER_SCHEMA_VERSION_V46,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -460,6 +461,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "the multi_polity_migration substrate flag; "
             f"{RUNNER_SCHEMA_VERSION_V45} adds the required neutral "
             "cultural_contact sibling on the same regions substrate; "
+            f"{RUNNER_SCHEMA_VERSION_V46} adds only a per-agent "
+            "symbolic_language_mode and reuses the active v44/v45 family "
+            "roots (no new root sibling; no new write-pair); "
             f"(write-pair EVENT_SCHEMA_REPLAY_V16={EVENT_SCHEMA_REPLAY_V16}, "
             "codec v13 when the channel is active; no heir table); "
             "mode allowlists that top out at v34 widen to accept v35; "
@@ -754,6 +758,7 @@ _LOG.debug(
         "runner_v40": RUNNER_SCHEMA_VERSION_V40,
         "runner_v44": RUNNER_SCHEMA_VERSION_V44,
         "runner_v45": RUNNER_SCHEMA_VERSION_V45,
+        "runner_v46": RUNNER_SCHEMA_VERSION_V46,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

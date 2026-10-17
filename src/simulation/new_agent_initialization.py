@@ -113,6 +113,8 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "relationship_profiles",
         "semantic_naming",
         "naming_ledger",
+        "symbolic_language",
+        "symbolic_ledger",
         "social_norms",
         "social_conventions",
         "skill_ledger",
@@ -164,6 +166,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "cognition_trace",
     "relationships",
     "semantic_naming",
+    "symbolic_language",
     "social_norms",
     "social_conventions",
     "skill_ledger",
@@ -827,6 +830,7 @@ class BlankSlateStoreCounts:
     cognition_trace: int = 0
     relationships: int = 0
     semantic_naming: int = 0
+    symbolic_language: int = 0
     social_norms: int = 0
     social_conventions: int = 0
     skill_ledger: int = 0

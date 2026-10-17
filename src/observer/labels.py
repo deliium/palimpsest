@@ -170,8 +170,118 @@ def project_subjective_label_overlay(
     return overlay
 
 
+@dataclass(frozen=True, slots=True)
+class SymbolicCompositionReading:
+    """One researcher-only composition row: digests and bands, never tokens."""
+
+    composition_id: str
+    kind: str
+    part_digests: tuple[str, str]
+    referent_kind: str | None
+    status: str
+    strength_band: str
+    usage_count: int
+    sense_revision: int
+
+    def __post_init__(self) -> None:
+        if type(self.composition_id) is not str or not self.composition_id:
+            raise TypeError("composition_id must be non-empty str")
+        if self.kind not in {"attributive", "relational"}:
+            raise ValueError("kind must be a closed operator")
+        parts = tuple(self.part_digests)
+        if len(parts) != 2 or any(type(item) is not str or not item for item in parts):
+            raise TypeError("part_digests must be two non-empty digests")
+        object.__setattr__(self, "part_digests", (parts[0], parts[1]))
+        if self.status not in {"candidate", "active", "retired"}:
+            raise ValueError("status must be a closed status")
+        if self.strength_band not in _STRENGTH_BANDS:
+            raise ValueError("strength_band must be a closed band")
+        if isinstance(self.usage_count, bool) or type(self.usage_count) is not int:
+            raise TypeError("usage_count must be int")
+        if self.usage_count < 0:
+            raise ValueError("usage_count must be non-negative")
+        if (
+            isinstance(self.sense_revision, bool)
+            or type(self.sense_revision) is not int
+        ):
+            raise TypeError("sense_revision must be int")
+        if self.sense_revision < 0:
+            raise ValueError("sense_revision must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
+class SymbolicOverlay:
+    """Additive researcher-only symbolic layer over one owner checkpoint."""
+
+    agent_id: str
+    compositions: tuple[SymbolicCompositionReading, ...]
+    layer: Literal["subjective_symbolic_language"] = "subjective_symbolic_language"
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+
+    def __post_init__(self) -> None:
+        if type(self.agent_id) is not str or not self.agent_id:
+            raise TypeError("agent_id must be non-empty str")
+        if self.layer != "subjective_symbolic_language":
+            raise ValueError("layer must be subjective_symbolic_language")
+        if self.protocol_version != OBSERVER_PROTOCOL_VERSION:
+            raise ValueError("unsupported_observer_protocol")
+        object.__setattr__(self, "compositions", tuple(self.compositions))
+        for item in self.compositions:
+            if type(item) is not SymbolicCompositionReading:
+                raise TypeError(
+                    "compositions entries must be SymbolicCompositionReading"
+                )
+
+
+def _surface_digest(part: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(part.encode("utf-8")).hexdigest()[:16]
+
+
+def project_symbolic_overlay(agent_id: str, ledger: object | None) -> SymbolicOverlay:
+    """Project duck-typed owner compositions without exposing symbol text."""
+    if type(agent_id) is not str or not agent_id:
+        raise TypeError("agent_id must be non-empty str")
+    readings: list[SymbolicCompositionReading] = []
+    for composition in getattr(ledger, "compositions", ()) or ():
+        parts = tuple(getattr(composition, "parts", ()) or ())
+        if len(parts) != 2 or any(type(item) is not str or not item for item in parts):
+            continue
+        hypothesis = getattr(composition, "referent_hypothesis", None)
+        referent = getattr(hypothesis, "referent_kind", None)
+        readings.append(
+            SymbolicCompositionReading(
+                composition_id=str(getattr(composition, "composition_id", "")),
+                kind=_enum_value(getattr(composition, "kind", None)),
+                part_digests=(
+                    _surface_digest(parts[0]),
+                    _surface_digest(parts[1]),
+                ),
+                referent_kind=(None if referent is None else _enum_value(referent)),
+                status=_enum_value(getattr(composition, "status", "candidate")),
+                strength_band=_strength_band(
+                    _enum_value(getattr(composition, "status", "candidate")),
+                    float(getattr(composition, "strength", 0.0)),
+                ),
+                usage_count=int(getattr(composition, "usage_count", 0)),
+                sense_revision=int(getattr(composition, "sense_revision", 0)),
+            )
+        )
+    overlay = SymbolicOverlay(agent_id=agent_id, compositions=tuple(readings))
+    _LOGGER.debug(
+        "symbolic_overlay_projected agent_id=%s row_count=%s",
+        agent_id,
+        len(overlay.compositions),
+    )
+    return overlay
+
+
 __all__ = [
     "SubjectiveLabelOverlay",
     "SubjectiveLabelReading",
+    "SymbolicCompositionReading",
+    "SymbolicOverlay",
     "project_subjective_label_overlay",
+    "project_symbolic_overlay",
 ]

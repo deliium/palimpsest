@@ -167,6 +167,7 @@ class Perspective:
     social_conventions: object | None = None
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
+    symbolic_language: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -357,6 +358,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.semantic_naming",
         )
+        from agents.cognition.symbolic_language import (
+            require_owner_symbolic_language,
+        )
+
+        require_owner_symbolic_language(
+            self.symbolic_language,
+            self.agent_id,
+            field_name="Perspective.symbolic_language",
+        )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
         )
@@ -488,6 +498,7 @@ class Perspective:
             social_conventions=self.social_conventions,
             artifact_interpretations=self.artifact_interpretations,
             semantic_naming=self.semantic_naming,
+            symbolic_language=self.symbolic_language,
             cultural_narratives=self.cultural_narratives,
             developmental_knowledge=self.developmental_knowledge,
             mentorship=self.mentorship,

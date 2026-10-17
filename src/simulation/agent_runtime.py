@@ -474,6 +474,7 @@ class AgentRuntime:
         "_structured_commitments",
         "_subjective_state",
         "_subjective_valuations",
+        "_symbolic_language",
         "_territorial_claims",
         "_theory_of_mind",
         "_translator",
@@ -586,6 +587,7 @@ class AgentRuntime:
         self._social_conventions: object | None = None
         self._artifact_interpretations: object | None = None
         self._semantic_naming: object | None = None
+        self._symbolic_language: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
@@ -1046,6 +1048,35 @@ class AgentRuntime:
             "artifact_interpretations_carried owner_id=%s entry_count=%s tick=%s",
             owner.value,
             len(ledger.interpretations),
+            tick,
+        )
+
+    def _commit_symbolic_language(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionSymbolicLanguageMode
+        from agents.cognition.symbolic_language import SymbolicLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_symbolic_language_mode",
+            CognitionSymbolicLanguageMode.DISABLED,
+        )
+        if mode is not CognitionSymbolicLanguageMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionSymbolicLanguageMode.DETERMINISTIC:
+                self._symbolic_language = None
+            return
+        if type(ledger) is not SymbolicLedger:
+            raise TypeError("symbolic_language must be SymbolicLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._symbolic_language = ledger
+        _LOG.debug(
+            "symbolic_language_carried owner_id=%s composition_count=%s tick=%s",
+            owner.value,
+            len(ledger.compositions),
             tick,
         )
 
@@ -1837,6 +1868,7 @@ class AgentRuntime:
                 social_conventions=self._social_conventions,
                 artifact_interpretations=self._artifact_interpretations,
                 semantic_naming=self._semantic_naming,
+                symbolic_language=self._symbolic_language,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
@@ -2290,6 +2322,9 @@ class AgentRuntime:
         self._commit_semantic_naming(
             getattr(pending.loop_result, "semantic_naming", None), pending.tick
         )
+        self._commit_symbolic_language(
+            getattr(pending.loop_result, "symbolic_language", None), pending.tick
+        )
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick
         )
@@ -2723,6 +2758,7 @@ class AgentRuntime:
             checkpoint, "artifact_interpretations", None
         )
         self._semantic_naming = getattr(checkpoint, "semantic_naming", None)
+        self._symbolic_language = getattr(checkpoint, "symbolic_language", None)
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -2797,6 +2833,7 @@ class AgentRuntime:
             social_conventions=self._social_conventions,
             artifact_interpretations=self._artifact_interpretations,
             semantic_naming=self._semantic_naming,
+            symbolic_language=self._symbolic_language,
             cultural_narratives=self._cultural_narratives,
             developmental_knowledge=self._developmental_knowledge,
             mentorship=self._mentorship,

@@ -191,3 +191,21 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_contact_reputation_transfer.py \
   tests/unit/test_experiment_ba.py -q
 ```
+
+## Symbolic-language verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_symbolic_language.py \
+  tests/unit/test_symbolic_language_learning.py \
+  tests/unit/test_symbolic_language_transmission.py \
+  tests/unit/test_symbolic_language_runtime.py \
+  tests/unit/test_symbolic_language_checkpoint.py \
+  tests/unit/test_symbolic_language_rows.py \
+  tests/unit/test_symbolic_composition_metrics.py \
+  tests/unit/test_symbolic_distribution_metrics.py \
+  tests/unit/test_symbolic_message_flow_metrics.py \
+  tests/unit/test_runner_config_v46.py \
+  tests/unit/test_symbolic_language_observer.py \
+  tests/unit/test_experiment_bb.py -q
+```

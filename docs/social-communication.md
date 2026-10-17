@@ -86,3 +86,23 @@ Lexical borrowing requires communicated evidence whose actor belongs to another
 community; labels remain owner-scoped. Reputation transfer counts only
 `communication` and `third_party_story` evidence from a different community and
 never aggregates a group reputation or writes a mean back to an owner.
+
+## Bounded compositional symbols
+
+`SymbolicLanguageMode` is an optional per-agent treatment over the existing
+private terminology ledger. A composition combines exactly two already-active
+label tokens with one closed operator: `attributive` (head plus modifier) or
+`relational` (subject plus relatum). Parts must be label tokens, never nested
+composition ids. At most two compositions ride on one existing `Talk`; the
+message carries one `call` atom per constituent and one operator atom per
+composition. `communication.v1`, command kinds, and event kinds are unchanged.
+
+Composition meaning stays owner-scoped. A speaker sends tokens and an operator
+only — never its referent hypothesis or confidence. A listener learns only when
+both constituents resolve to its own active bindings; otherwise it records
+`partial`/`unresolved` and mints nothing. Two owners using the same surface form
+therefore hold two different composition ids. Different populations may diverge,
+and contact borrowing requires ordinary delivered communication. There is no
+global lexicon, no grammar induction, no free-form text, and no convergence
+success condition. Analysis is detached and digest-only. The policy version is
+`symbolic-language.v1`.
