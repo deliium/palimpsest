@@ -128,7 +128,7 @@ def test_default_write_stays_replay_v5_and_v7_is_accepted() -> None:
         "exposure",
         "production",
     ]
-    assert names[-6:] == [
+    assert names[5:11] == [
         "season",
         "temperature_band",
         "hazard",
@@ -136,6 +136,7 @@ def test_default_write_stays_replay_v5_and_v7_is_accepted() -> None:
         "lifecycle",
         "knowledge_repository",
     ]
+    assert names[11:] == ["collective_project", "travel"]
 
 
 def test_lower_schemas_reject_environment_details(
@@ -314,9 +315,7 @@ def test_checkpoint_pair_follows_the_spec(
             world_id=WorldId("world-1"),
             seed=7,
             config=SimulationRunConfig(seed=7),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
             locations=(make_location("loc-1"),),
             bodies=(alive_body(),),
             items=(),
@@ -361,9 +360,7 @@ def test_checkpoint_pair_follows_the_spec(
             persistence_codec_version="v2",
         )
     caplog.set_level(logging.DEBUG, logger="simulation.engine")
-    selected = select_checkpoint_schema(
-        production_active=False, dynamics_active=True
-    )
+    selected = select_checkpoint_schema(production_active=False, dynamics_active=True)
     assert selected == (EVENT_SCHEMA_REPLAY_V7, "v4")
     assert any(
         "environment_schema_selected schema_version=7 codec=v4" in record.getMessage()
@@ -373,7 +370,7 @@ def test_checkpoint_pair_follows_the_spec(
         "simulation.persistence.checkpoint_schema_for_production",
         lambda **_kwargs: (EVENT_SCHEMA_REPLAY_V7, "v2"),
     )
-    with pytest.raises(ValueError, match="unsupported_schema_version"):
+    with pytest.raises(ValueError, match="unsupported checkpoint schema pair"):
         select_checkpoint_schema(production_active=False, dynamics_active=True)
     assert any(
         record.levelno == logging.ERROR

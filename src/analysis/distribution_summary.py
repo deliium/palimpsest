@@ -17,8 +17,8 @@ from analysis.numerical import quantize_float, require_finite
 __all__ = [
     "DistributionSummary",
     "IntervalMethod",
-    "summarize_distribution",
     "proportion_confidence_interval",
+    "summarize_distribution",
 ]
 
 IntervalMethod = str  # "percentile" | "binomial_exact"
@@ -103,7 +103,7 @@ def proportion_confidence_interval(
     *,
     confidence: float = 0.95,
 ) -> tuple[float, float, IntervalMethod]:
-    """SciPy exact Clopper–Pearson binomial interval for rate-like keys."""
+    """SciPy exact Clopper-Pearson binomial interval for rate-like keys."""
     if type(successes) is not int or type(trials) is not int:
         raise TypeError("proportion_ci: invalid_counts")
     if successes < 0 or trials <= 0 or successes > trials:

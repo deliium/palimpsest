@@ -75,6 +75,7 @@ def detect_lineage_cycle(
 def _hop_from_event(event: WorldEvent) -> TransmissionHopRecord:
     details = event.details
     assert type(details) in _COMM_DETAILS
+    assert isinstance(details, (Talked, Asked, Told))
     declared = details.utterance.declared
     content = details.utterance.content
     root = declared.root_communication_id.value
@@ -216,7 +217,10 @@ def _distortions(
         current = by_id.get(edge.child_communication_id)
         if prior is None or current is None:
             continue
-        if prior.speaker_id == current.speaker_id and prior.listener_id == current.listener_id:
+        if (
+            prior.speaker_id == current.speaker_id
+            and prior.listener_id == current.listener_id
+        ):
             # Ignore self-retell distortion edges.
             if prior.communication_id == current.communication_id:
                 continue

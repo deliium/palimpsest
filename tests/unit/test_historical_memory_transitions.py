@@ -110,8 +110,7 @@ def test_communicative_to_cultural_on_chain_expiry() -> None:
     assert comm_to_cult
     assert comm_to_cult[0].at_tick == 6
     assert (
-        comm_to_cult[0].cause
-        is HistoricalMemoryTransitionCause.WITNESS_CHAIN_EXPIRED
+        comm_to_cult[0].cause is HistoricalMemoryTransitionCause.WITNESS_CHAIN_EXPIRED
     )
 
 

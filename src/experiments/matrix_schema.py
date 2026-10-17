@@ -39,6 +39,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
     RUNNER_SCHEMA_VERSION_V43,
+    RUNNER_SCHEMA_VERSION_V44,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
@@ -88,6 +89,7 @@ def finalize_matrix_cell_config(
     durable_records_on = config.durable_records is not None
     knowledge_repositories_on = config.knowledge_repositories is not None
     public_goods_on = config.public_goods is not None
+    regions_migration_on = config.regions_migration is not None
     collective_projects_on = config.collective_projects is not None
     resource_exchange_profile_on = config.resource_exchange_profile is not None
     subjective_valuation_on = config.subjective_valuation is not None
@@ -106,7 +108,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if public_goods_on:
+    if regions_migration_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V44,
+            "regions_migration_on",
+        )
+    elif public_goods_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V43,
             "public_goods_on",

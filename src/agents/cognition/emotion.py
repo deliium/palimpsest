@@ -576,8 +576,8 @@ def _mean_salience(memory: RetrievedMemoryContext) -> float | None:
         values.append(hit.trace.emotional_salience)
     for item in memory.reconstructions:
         values.append(item.emotional_salience)
-    for item in memory.reference_episodes:
-        values.append(item.emotional_salience)
+    for reference in memory.reference_episodes:
+        values.append(reference.emotional_salience)
     if not values:
         return None
     return quantize_score(sum(values) / len(values))

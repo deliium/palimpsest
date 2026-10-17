@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -16,6 +14,7 @@ from world.actions import (
     TransitionOutcome,
     Wait,
 )
+from world.communications import origin_utterance
 from world.events import Waited, make_replayable_event
 from world.identifiers import (
     EntityId,
@@ -160,7 +159,14 @@ def test_visible_body_omits_inventory_and_exact_physiology_fields() -> None:
     from world.observations import VisibleBody
 
     fields = set(VisibleBody.__dataclass_fields__)
-    assert fields == {"entity_id", "life_status", "coarse_health"}
+    assert fields == {
+        "entity_id",
+        "life_status",
+        "coarse_health",
+        "lifecycle",
+        "dependency_needs",
+        "kinship_visible",
+    }
     for forbidden in (
         "inventory",
         "hunger",

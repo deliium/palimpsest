@@ -350,7 +350,7 @@ def build_perspective(
     emotion_kind_count = (
         0
         if perspective.emotional_state is None
-        else len(perspective.emotional_state.intensities)  # type: ignore[union-attr]
+        else len(getattr(perspective.emotional_state, "intensities", ()))
     )
     mentorship_bond_count = 0
     mentorship_lineage_count = 0

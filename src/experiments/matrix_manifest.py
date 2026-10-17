@@ -9,7 +9,7 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, Protocol, cast
 
 from experiments.matrix_models import (
     DEFAULT_SUCCESS_STOP_REASONS,
@@ -229,10 +229,10 @@ def _decode_cell(data: Mapping[str, object]) -> MatrixCellRecord:
         cell_fingerprint=str(data["cell_fingerprint"]),
         config_fingerprint=str(data["config_fingerprint"]),
         state=MatrixCellState(str(data["state"])),
-        seed=int(data["seed"]),  # type: ignore[arg-type]
-        seed_ordinal=int(data["seed_ordinal"]),  # type: ignore[arg-type]
-        replicate_index=int(data["replicate_index"]),  # type: ignore[arg-type]
-        attempt_count=int(data.get("attempt_count", 0)),  # type: ignore[arg-type]
+        seed=int(cast(int, data["seed"])),
+        seed_ordinal=int(cast(int, data["seed_ordinal"])),
+        replicate_index=int(cast(int, data["replicate_index"])),
+        attempt_count=int(cast(int, data.get("attempt_count", 0))),
         last_error_code=str(data.get("last_error_code", "")),
         run_id=str(data.get("run_id", "")),
         stop_reason=str(data.get("stop_reason", "")),

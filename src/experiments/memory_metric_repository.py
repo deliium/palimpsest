@@ -52,9 +52,7 @@ class InMemoryTruthSpecRepository:
     ) -> TruthSpecRecord | None:
         return self._rows.get((run_id, claim_id))
 
-    async def list_truth_specs(
-        self, *, run_id: str
-    ) -> tuple[TruthSpecRecord, ...]:
+    async def list_truth_specs(self, *, run_id: str) -> tuple[TruthSpecRecord, ...]:
         items = [item for item in self._rows.values() if item.run_id == run_id]
         items.sort(key=lambda item: item.claim_id)
         return tuple(items)
@@ -113,9 +111,7 @@ class InMemoryMetricSetRepository:
 class InMemoryMetricDocumentRepository:
     __slots__ = ("_rows", "_sets")
 
-    def __init__(
-        self, metric_sets: InMemoryMetricSetRepository | None = None
-    ) -> None:
+    def __init__(self, metric_sets: InMemoryMetricSetRepository | None = None) -> None:
         self._rows: dict[tuple[str, str, str], MetricDocumentRecord] = {}
         self._sets = metric_sets
 

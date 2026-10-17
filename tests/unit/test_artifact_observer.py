@@ -22,8 +22,8 @@ from simulation.bootstrap import WorldBootstrap
 from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission
 from simulation.observer_facts import ObjectiveFacts, scene_from_facts
-from tests.physical_helpers import physical_config, two_location_fixture
 from simulation.runner_models import example_durable_records_spec
+from tests.physical_helpers import physical_config, two_location_fixture
 from world.actions import Amend, CopyRecord, Erase, Inscribe, TransferArtifact
 from world.artifacts import (
     ArtifactContent,
@@ -32,6 +32,7 @@ from world.artifacts import (
     InformationArtifact,
     RecordIntegrity,
 )
+from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V8,
     EVENT_SCHEMA_REPLAY_V13,
@@ -47,7 +48,6 @@ from world.events import (
     WorldEvent,
     make_physical_replayable_event,
 )
-from world.effects import ActionCause
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 pytestmark = pytest.mark.unit
@@ -125,13 +125,13 @@ def _world_event(
 
 def test_semantic_catalog_appends_four_artifact_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 69
-    assert SEMANTIC_EVENT_TYPES[-37:-33] == _ARTIFACT_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-33:-29] == _DURABLE_ARTIFACT_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-29:-25] == _LIFECYCLE_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-25:-24] == _KINSHIP_SEMANTIC
-    assert SEMANTIC_EVENT_TYPES[-24:-22] == ("AGENT_FED", "AGENT_TRANSPORTED")
-    assert SEMANTIC_EVENT_TYPES[-22:-16] == (
+    assert len(SEMANTIC_EVENT_TYPES) == 72
+    assert SEMANTIC_EVENT_TYPES[32:36] == _ARTIFACT_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[36:40] == _DURABLE_ARTIFACT_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[40:44] == _LIFECYCLE_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[44:45] == _KINSHIP_SEMANTIC
+    assert SEMANTIC_EVENT_TYPES[45:47] == ("AGENT_FED", "AGENT_TRANSPORTED")
+    assert SEMANTIC_EVENT_TYPES[47:53] == (
         "REPOSITORY_ESTABLISHED",
         "REPOSITORY_MEMBER_DEPOSITED",
         "REPOSITORY_MEMBER_RETRIEVED",
@@ -269,7 +269,10 @@ def test_adapt_event_maps_artifact_kinds(
         sequence=0,
     )
     assert "artifact_id" not in wait.public_mapping()
-    assert any("artifacts_projected count=1" in record.getMessage() for record in caplog.records)
+    assert any(
+        "artifacts_projected count=1" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_project_frame_orders_artifacts_without_readings(
@@ -355,7 +358,8 @@ def test_project_frame_orders_artifacts_without_readings(
     assert not hasattr(frame.world, "artifact_interpretations")
     assert "reading" not in frame.world.__dataclass_fields__
     assert any(
-        "artifacts_projected count=1" in record.getMessage() for record in caplog.records
+        "artifacts_projected count=1" in record.getMessage()
+        for record in caplog.records
     )
     empty = ObserverWorldState(tick=0, revision=0)
     assert empty.artifacts == ()

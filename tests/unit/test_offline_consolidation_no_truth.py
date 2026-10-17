@@ -90,9 +90,7 @@ def _disagreeing_world() -> WorldState:
 
 
 def _concepts(traces: tuple[MemoryTrace, ...]) -> set[str]:
-    return {
-        mention.concept for trace in traces for mention in trace.concepts
-    }
+    return {mention.concept for trace in traces for mention in trace.concepts}
 
 
 def test_false_communicated_trace_survives_against_world_fact() -> None:

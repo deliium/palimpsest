@@ -705,9 +705,7 @@ class CognitionLoopConfig:
             _LOG.error(
                 "invalid_enum path=semantic_naming_mode reason_code=invalid_mode"
             )
-            raise TypeError(
-                "semantic_naming_mode must be CognitionSemanticNamingMode"
-            )
+            raise TypeError("semantic_naming_mode must be CognitionSemanticNamingMode")
         if self.semantic_naming_mode is CognitionSemanticNamingMode.DISABLED:
             object.__setattr__(self, "semantic_naming_policy", None)
         elif self.semantic_naming_policy is None:
@@ -1005,6 +1003,8 @@ def build_cognitive_loop(
     knowledge_genealogy_spec: object | None = None,
     knowledge_genealogy_seed_material: object | None = None,
     bounded_experimentation_spec: object | None = None,
+    regional_migration_cognition_mode: str | None = None,
+    regional_migration_hop_limit: int = 1,
 ) -> CognitiveLoop:
     """Assemble a ``CognitiveLoop`` from explicit policies.
 
@@ -1210,4 +1210,6 @@ def build_cognitive_loop(
         cognitive_budget_mode=resolved.cognitive_budget_mode,
         cognitive_budget_policy=resolved.cognitive_budget_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
+        regional_migration_cognition_mode=regional_migration_cognition_mode,
+        regional_migration_hop_limit=regional_migration_hop_limit,
     )

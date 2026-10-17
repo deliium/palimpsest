@@ -14,7 +14,7 @@ import hashlib
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 
 from api.errors import (
     ApiError,
@@ -120,7 +120,7 @@ class SimulationManager:
             agent = getattr(state, "agent_id", None)
             value = getattr(agent, "value", None)
             if value == owner_id:
-                return state
+                return cast(object, state)
         return None
 
     def export_communication_intent_audits(self, run_id: str) -> tuple[object, ...]:
@@ -174,9 +174,7 @@ class SimulationManager:
             run_id=record.run_id.value,
             lifecycle_state=LifecycleStateOut(record.lifecycle_state.value),
             lifecycle_version=record.lifecycle_version,
-            config_availability=ConfigAvailabilityOut(
-                record.config_availability.value
-            ),
+            config_availability=ConfigAvailabilityOut(record.config_availability.value),
             ticks_committed=record.ticks_committed,
             progress_cursor=record.progress_cursor,
             config_schema_version=record.config_schema_version,

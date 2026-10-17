@@ -12,7 +12,30 @@ from asyncio import CancelledError
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from inspect import Parameter, signature
-from typing import Any, Final, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Final, Never, Protocol, TypeVar, cast
+
+if TYPE_CHECKING:
+    from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
+    from agents.cognition.competence import CompetenceBeliefPolicy, CompetenceSelfModel
+    from agents.cognition.consolidation import OfflineConsolidationPlan
+    from agents.cognition.counterfactual import CounterfactualScenario
+    from agents.cognition.cultural_narratives import NarrativeCueSummary
+    from agents.cognition.experimentation import ExperimentLedger
+    from agents.cognition.identity import IdentityDissonanceNotice
+    from agents.cognition.production import RecipeBeliefSet
+    from agents.cognition.reflection import ReflectionPlan, ReflectionPolicy
+    from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+    from agents.cognition.semantic_naming import NamingCueSummary
+    from agents.cognition.subjective_value import SubjectiveValuationLedger
+    from agents.cognition.territorial import TerritorialClaimPolicy
+    from agents.cognition.theory_of_mind import MindCue, TheoryOfMind
+    from agents.cognition.world_model import CausalWorldModel
+    from agents.models import AgentId
+    from memory.beliefs import BeliefRevisionRequest
+    from memory.models import MemoryTrace
+    from world.identifiers import EntityId
+    from world.observations import Observation
+    from world.values import ItemKind
 
 from agents.cognition.contracts import (
     EmotionalStateAppraiser,
@@ -80,6 +103,18 @@ _STAGE_ORDER: Final[tuple[ComponentKind, ...]] = (
 T = TypeVar("T")
 
 
+class _StageRunner(Protocol):
+    async def __call__[ResultT](
+        self,
+        *,
+        kind: ComponentKind,
+        ordinal: int,
+        input_artifact: object,
+        awaitable: Awaitable[ResultT],
+        expected_type: type[ResultT],
+    ) -> ResultT: ...
+
+
 class CognitiveLoopError(Exception):
     """Terminal loop failure with a safe receipt of completed boundaries."""
 
@@ -145,7 +180,7 @@ class CognitiveLoopFailure:
 
 def _tick_memories(
     proposal: CognitiveLoopProposal, updates: tuple[object, ...]
-) -> tuple[object, ...]:
+) -> tuple[MemoryTrace, ...]:
     from memory.models import MemoryTrace
 
     snapshot = proposal.loop_input.snapshot
@@ -164,14 +199,14 @@ def _tick_memories(
     return tuple(memories)
 
 
-def _item_kinds_named(text: str) -> frozenset[object]:
+def _item_kinds_named(text: str) -> frozenset[ItemKind]:
     from world.values import ItemKind
 
     tokens = {part.lower() for part in text.replace("-", " ").replace("_", " ").split()}
     return frozenset(kind for kind in ItemKind if kind.value in tokens)
 
 
-def _resource_loss_kinds(world_model: object | None) -> frozenset[object]:
+def _resource_loss_kinds(world_model: object | None) -> frozenset[ItemKind]:
     from world.values import ItemKind
 
     if world_model is None:
@@ -189,7 +224,7 @@ def _resource_loss_kinds(world_model: object | None) -> frozenset[object]:
     return frozenset(found)
 
 
-def _answered_proposal(observation: object) -> tuple[object | None, object | None]:
+def _answered_proposal(observation: object) -> tuple[ItemKind | None, EntityId | None]:
     from world.observations import ObservationAudienceRole
     from world.values import ItemKind
 
@@ -213,6 +248,8 @@ def _answered_proposal(observation: object) -> tuple[object | None, object | Non
 
 class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
+
+    _experiment_ledger: ExperimentLedger | None
 
     __slots__ = (
         "_acceptance_window_ticks",
@@ -278,6 +315,8 @@ class CognitiveLoop:
         "_reflection_mode",
         "_reflection_policy",
         "_reflection_selector",
+        "_regional_migration_cognition_mode",
+        "_regional_migration_hop_limit",
         "_reputation_mode",
         "_reputation_policy",
         "_resource_exchange_profile_active",
@@ -383,6 +422,8 @@ class CognitiveLoop:
         cognitive_budget_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
+        regional_migration_cognition_mode: str | None = None,
+        regional_migration_hop_limit: int = 1,
     ) -> None:
         self._perception = perception
         self._memory = memory
@@ -417,7 +458,7 @@ class CognitiveLoop:
         if type(reflection) is not CognitionReflectionMode:
             raise TypeError("reflection_mode must be CognitionReflectionMode")
         self._reflection_mode = reflection
-        self._reflection_policy = reflection_policy
+        self._reflection_policy = cast("ReflectionPolicy | None", reflection_policy)
         self._reflection_selector = reflection_selector
         from agents.cognition.configuration import CognitionIdentityMode
 
@@ -638,9 +679,7 @@ class CognitiveLoop:
 
             convention_policy = default_social_convention_policy()
         elif type(social_convention_policy) is not SocialConventionPolicy:
-            raise TypeError(
-                "social_convention_policy must be SocialConventionPolicy"
-            )
+            raise TypeError("social_convention_policy must be SocialConventionPolicy")
         else:
             convention_policy = social_convention_policy
         self._social_convention_mode = conventioned
@@ -666,9 +705,7 @@ class CognitiveLoop:
             else semantic_naming_mode
         )
         if type(naming_mode) is not CognitionSemanticNamingMode:
-            raise TypeError(
-                "semantic_naming_mode must be CognitionSemanticNamingMode"
-            )
+            raise TypeError("semantic_naming_mode must be CognitionSemanticNamingMode")
         if naming_mode is CognitionSemanticNamingMode.DISABLED:
             naming_policy = None
         elif semantic_naming_policy is None:
@@ -702,9 +739,7 @@ class CognitiveLoop:
 
             narrative_policy = default_cultural_narrative_policy()
         elif type(cultural_narrative_policy) is not CulturalNarrativePolicy:
-            raise TypeError(
-                "cultural_narrative_policy must be CulturalNarrativePolicy"
-            )
+            raise TypeError("cultural_narrative_policy must be CulturalNarrativePolicy")
         else:
             narrative_policy = cultural_narrative_policy
         self._cultural_narrative_mode = narrative_mode
@@ -802,9 +837,7 @@ class CognitiveLoop:
                 for stage, rate in developmental_stage_learning_rates.items()
             }
         else:
-            raise TypeError(
-                "developmental_stage_learning_rates must be a dict or None"
-            )
+            raise TypeError("developmental_stage_learning_rates must be a dict or None")
         if developmental_learning_spec is None:
             self._developmental_learning_spec = None
             _LOG.info(
@@ -972,9 +1005,7 @@ class CognitiveLoop:
             )
         else:
             kinds = getattr(knowledge_genealogy_spec, "enabled_kinds", None)
-            mode = getattr(
-                knowledge_genealogy_spec, "knowledge_genealogy_mode", None
-            )
+            mode = getattr(knowledge_genealogy_spec, "knowledge_genealogy_mode", None)
             lineage = getattr(knowledge_genealogy_spec, "lineage_policy", None)
             if (
                 not isinstance(kinds, tuple)
@@ -986,9 +1017,7 @@ class CognitiveLoop:
                     "knowledge_genealogy_mode=deterministic, and lineage_policy"
                 )
             self._knowledge_genealogy_spec = knowledge_genealogy_spec
-            self._knowledge_genealogy_seed_material = (
-                knowledge_genealogy_seed_material
-            )
+            self._knowledge_genealogy_seed_material = knowledge_genealogy_seed_material
             _LOG.info(
                 "knowledge_genealogy_bind knowledge_genealogy_active=%s "
                 "kind_count=%s max_entries=%s max_hop_depth=%s",
@@ -1008,6 +1037,19 @@ class CognitiveLoop:
         if type(production_mode) is not ProductionKnowledgeMode:
             raise TypeError("production_knowledge_mode must be ProductionKnowledgeMode")
         self._production_knowledge_mode = production_mode
+        if regional_migration_cognition_mode is None:
+            regional_mode = "disabled"
+        elif regional_migration_cognition_mode not in {"disabled", "deterministic"}:
+            raise ValueError("regional_migration_cognition_mode is invalid")
+        else:
+            regional_mode = regional_migration_cognition_mode
+        if (
+            type(regional_migration_hop_limit) is not int
+            or regional_migration_hop_limit < 1
+        ):
+            raise ValueError("regional_migration_hop_limit must be positive")
+        self._regional_migration_cognition_mode = regional_mode
+        self._regional_migration_hop_limit = regional_migration_hop_limit
         if type(production_allow_provider) is not bool:
             raise TypeError("production_allow_provider must be bool")
         self._production_allow_provider = (
@@ -1131,15 +1173,13 @@ class CognitiveLoop:
             observation=loop_input.observation,
             social_identity=identity,
             ledger=ledger,
-            policy=self._territorial_claim_policy,
+            policy=cast("TerritorialClaimPolicy", self._territorial_claim_policy),
             memories=() if snapshot is None else snapshot.memories,
             source_trust_by_speaker=trust_by_speaker,
             inbox=() if snapshot is None else snapshot.inbox,
         )
 
-    def _prepare_group_formation(
-        self, loop_input: CognitiveLoopInput
-    ) -> object | None:
+    def _prepare_group_formation(self, loop_input: CognitiveLoopInput) -> object | None:
         """Refresh one owner's ledger. Disabled mode does not call the updater."""
         from agents.cognition.configuration import CognitionGroupFormationMode
         from agents.cognition.group_formation import GroupLedger, apply_group_update
@@ -1395,7 +1435,11 @@ class CognitiveLoop:
         *,
         world_model: object | None,
         emotional_evaluation: object | None,
-    ) -> tuple[object | None, object | None]:
+    ) -> tuple[
+        SubjectiveValuationLedger | None,
+        ScarcityBeliefLedger | None,
+        AcceptanceMemoryLedger | None,
+    ]:
         """Appraise this owner after observation and before deliberation."""
         from agents.cognition.configuration import CognitionWorldModelMode
         from agents.cognition.models import EmotionKind
@@ -1480,11 +1524,11 @@ class CognitiveLoop:
 
     def _fold_acceptance_memory(
         self,
-        observation: object,
+        observation: Observation,
         snapshot: object | None,
         *,
         owner_id: object,
-    ) -> object | None:
+    ) -> AcceptanceMemoryLedger | None:
         """Update this owner's acceptance rows from observed completions."""
         from agents.cognition.acceptance_memory import (
             AcceptanceMemoryLedger,
@@ -1500,9 +1544,7 @@ class CognitiveLoop:
         if type(owner_id) is not AgentId:
             return None
         carried = (
-            None
-            if snapshot is None
-            else getattr(snapshot, "acceptance_memories", None)
+            None if snapshot is None else getattr(snapshot, "acceptance_memories", None)
         )
         if type(carried) is AcceptanceMemoryLedger and carried.owner_id == owner_id:
             ledger = carried
@@ -1630,7 +1672,7 @@ class CognitiveLoop:
             binding.allow_provider,
         )
 
-    def experiment_ledger_for(self, owner_id: object) -> object | None:
+    def experiment_ledger_for(self, owner_id: object) -> ExperimentLedger | None:
         """Return this owner's ledger, or None when the channel is off."""
         if self._bounded_experimentation_caps is None:
             return None
@@ -1647,9 +1689,7 @@ class CognitiveLoop:
             if current.owner_id != owner_id:
                 raise ValueError("experiment_ledger owner_id mismatch")
             return current
-        ledger = empty_experiment_ledger(
-            owner_id, self._bounded_experimentation_caps
-        )
+        ledger = empty_experiment_ledger(owner_id, self._bounded_experimentation_caps)
         self._experiment_ledger = ledger
         return ledger
 
@@ -1671,9 +1711,7 @@ class CognitiveLoop:
         tick_value = tick if type(tick) is int and tick >= 0 else 0
         updated = ledger
         for occurrence in getattr(observation, "occurrences", ()):
-            updated = score_remembered_experiment(
-                updated, occurrence, tick=tick_value
-            )
+            updated = score_remembered_experiment(updated, occurrence, tick=tick_value)
         self._experiment_ledger = updated
 
     def mark_developmental_mid_run_admit(self) -> None:
@@ -1692,9 +1730,7 @@ class CognitiveLoop:
             self._developmental_entity_learning_rates = {}
             return
         if not isinstance(rates_by_entity, dict):
-            raise TypeError(
-                "rates_by_entity must be a dict[str, float] or None"
-            )
+            raise TypeError("rates_by_entity must be a dict[str, float] or None")
         cleaned: dict[str, float] = {}
         for key, value in rates_by_entity.items():
             cleaned[str(key)] = float(value)
@@ -1863,6 +1899,10 @@ class CognitiveLoop:
         if owner_id is None:
             observation = getattr(loop_input, "observation", None)
             owner_id = getattr(observation, "agent_id", None)
+        from agents.models import AgentId
+
+        if not isinstance(owner_id, AgentId):
+            raise TypeError("mentorship owner_id must be AgentId")
         if carried is None:
             max_bonds = int(getattr(self._mentorship_spec, "max_bonds_per_owner", 64))
             max_lineage = int(
@@ -1910,9 +1950,7 @@ class CognitiveLoop:
         tick = int(getattr(observation, "tick", 0))
         bond_policy = getattr(self._mentorship_spec, "bond_policy", None)
         lineage_policy = getattr(self._mentorship_spec, "lineage_policy", None)
-        enabled = tuple(
-            getattr(self._mentorship_spec, "enabled_content_kinds", ())
-        )
+        enabled = tuple(getattr(self._mentorship_spec, "enabled_content_kinds", ()))
         audits: list[object] = []
         if advice_delta and bond_policy is not None and lineage_policy is not None:
             ledger, teaching_audits = apply_mentorship_from_teaching(
@@ -1928,8 +1966,7 @@ class CognitiveLoop:
             self._semantic_naming_mode is CognitionSemanticNamingMode.DETERMINISTIC
         )
         convention_on = (
-            self._social_convention_mode
-            is CognitionSocialConventionMode.DETERMINISTIC
+            self._social_convention_mode is CognitionSocialConventionMode.DETERMINISTIC
         )
         narrative_on = (
             self._cultural_narrative_mode
@@ -1961,14 +1998,10 @@ class CognitiveLoop:
         )
         audits.extend(adapter_audits)
         decay = (
-            float(getattr(bond_policy, "decay_per_tick", 0.0))
-            if bond_policy
-            else 0.0
+            float(getattr(bond_policy, "decay_per_tick", 0.0)) if bond_policy else 0.0
         )
         if decay > 0.0:
-            ledger = decay_mentorship_bonds(
-                ledger, tick=tick, decay_per_tick=decay
-            )
+            ledger = decay_mentorship_bonds(ledger, tick=tick, decay_per_tick=decay)
         self._last_mentorship_audits = tuple(audits)
         _LOG.debug(
             "mentorship_carried owner_id=%s bond_count=%s lineage_count=%s",
@@ -2065,8 +2098,7 @@ class CognitiveLoop:
             self._semantic_naming_mode is CognitionSemanticNamingMode.DETERMINISTIC
         )
         convention_on = (
-            self._social_convention_mode
-            is CognitionSocialConventionMode.DETERMINISTIC
+            self._social_convention_mode is CognitionSocialConventionMode.DETERMINISTIC
         )
         narrative_on = (
             self._cultural_narrative_mode
@@ -2077,9 +2109,7 @@ class CognitiveLoop:
             self._artifact_interpretation_mode
             is ArtifactInterpretationMode.DETERMINISTIC
         )
-        repositories_on = (
-            artifacts_on and self._knowledge_repositories_active
-        )
+        repositories_on = artifacts_on and self._knowledge_repositories_active
         teaching_on = (
             self._teaching_mode is CognitionTeachingInteractionMode.DETERMINISTIC
         )
@@ -2160,7 +2190,6 @@ class CognitiveLoop:
         )
         return ledger
 
-
     def _prepare_practical_knowledge(
         self,
         loop_input: object,
@@ -2187,9 +2216,7 @@ class CognitiveLoop:
             return None
         snapshot = getattr(loop_input, "snapshot", None)
         carried = (
-            None
-            if snapshot is None
-            else getattr(snapshot, "practical_knowledge", None)
+            None if snapshot is None else getattr(snapshot, "practical_knowledge", None)
         )
         owner_id = getattr(loop_input, "agent_id", None)
         if type(owner_id) is not AgentId:
@@ -2200,9 +2227,7 @@ class CognitiveLoop:
         max_entries = int(getattr(lineage, "max_entries_per_owner", 64))
         max_parent_ids = int(getattr(lineage, "max_parent_ids", 4))
         max_hop_depth = int(getattr(lineage, "max_hop_depth", 16))
-        max_refs = int(
-            getattr(self._knowledge_genealogy_spec, "max_evidence_refs", 8)
-        )
+        max_refs = int(getattr(self._knowledge_genealogy_spec, "max_evidence_refs", 8))
         if carried is None:
             ledger = empty_practical_knowledge_ledger(
                 owner_id,
@@ -2227,8 +2252,7 @@ class CognitiveLoop:
                 raise TypeError("practical_knowledge must be PracticalKnowledgeLedger")
             ledger = carried
             _LOG.debug(
-                "practical_knowledge_prepare owner_id=%s entry_count=%s "
-                "reason=carry",
+                "practical_knowledge_prepare owner_id=%s entry_count=%s reason=carry",
                 owner_id.value,
                 len(ledger.entries),
             )
@@ -2381,8 +2405,7 @@ class CognitiveLoop:
         from agents.cognition.semantic_naming import naming_communicate_penalties
 
         if (
-            self._semantic_naming_mode
-            is not CognitionSemanticNamingMode.DETERMINISTIC
+            self._semantic_naming_mode is not CognitionSemanticNamingMode.DETERMINISTIC
             or ledger is None
         ):
             return None
@@ -2569,9 +2592,7 @@ class CognitiveLoop:
         snapshot = loop_input.snapshot
         carried = None if snapshot is None else snapshot.structured_commitments
         before = carried if type(carried) is StructuredCommitmentLedger else None
-        reputation_on = (
-            self._reputation_mode is CognitionReputationMode.DETERMINISTIC
-        )
+        reputation_on = self._reputation_mode is CognitionReputationMode.DETERMINISTIC
         norms_on = self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
         requests = commitment_social_requests(
             loop_input.observation.observer_id.value,
@@ -2598,9 +2619,7 @@ class CognitiveLoop:
                     reputation,
                     target_id=target,
                     delta=request.reliability_delta,
-                    lineage=(
-                        f"commitment:{request.local_id}:{request.signal}:{tick}"
-                    ),
+                    lineage=(f"commitment:{request.local_id}:{request.signal}:{tick}"),
                     tick=tick,
                 )
             elif request.channel == "norm":
@@ -2612,14 +2631,12 @@ class CognitiveLoop:
                     norms,
                     loop_input.agent_id,
                     target,
-                    lineage=(
-                        f"commitment:{request.local_id}:{request.signal}:{tick}"
-                    ),
+                    lineage=(f"commitment:{request.local_id}:{request.signal}:{tick}"),
                     tick=tick,
                 )
         return ledger, reputation, norms
 
-    def _commitment_agent(self, entity_id: str):
+    def _commitment_agent(self, entity_id: str) -> AgentId | None:
         from agents.models import AgentId
         from world.identifiers import EntityId
 
@@ -2666,9 +2683,7 @@ class CognitiveLoop:
             reputation_on=(
                 self._reputation_mode is CognitionReputationMode.DETERMINISTIC
             ),
-            norms_on=(
-                self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
-            ),
+            norms_on=(self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC),
         )
         owner = proposal.agent_id
         tick = proposal.loop_input.observation.tick
@@ -2732,7 +2747,7 @@ class CognitiveLoop:
         if type(ledger) is not TerritorialClaimLedger:
             return updates
         observation = proposal.loop_input.observation
-        by_event: dict[str, list[object]] = {}
+        by_event: dict[str, list[EntityId]] = {}
         for claim in ledger.claims:
             for item in claim.evidence:
                 if (
@@ -2784,8 +2799,9 @@ class CognitiveLoop:
 
     def _prepare_competence(
         self, loop_input: CognitiveLoopInput, memory: object
-    ) -> object | None:
+    ) -> CompetenceSelfModel | None:
         from agents.cognition.competence import (
+            CompetenceSelfModel,
             empty_competence_model,
             update_competence,
         )
@@ -2797,7 +2813,7 @@ class CognitiveLoop:
         carried = None if snapshot is None else snapshot.competence_model
         model = (
             carried
-            if type(carried).__name__ == "CompetenceSelfModel"
+            if isinstance(carried, CompetenceSelfModel)
             else empty_competence_model(loop_input.agent_id)
         )
         reconstructions = tuple(getattr(memory, "reconstructions", ()))
@@ -2805,10 +2821,12 @@ class CognitiveLoop:
             model,
             loop_input.observation,
             reconstructions,
-            self._competence_policy,
+            cast("CompetenceBeliefPolicy", self._competence_policy),
         )
 
-    def _prepare_recipe_beliefs(self, loop_input: CognitiveLoopInput) -> object | None:
+    def _prepare_recipe_beliefs(
+        self, loop_input: CognitiveLoopInput
+    ) -> RecipeBeliefSet | None:
         from agents.cognition.production import (
             ProductionKnowledgeMode,
             update_recipe_beliefs,
@@ -2827,8 +2845,8 @@ class CognitiveLoop:
         )
 
     def _prepare_teaching(
-        self, loop_input: CognitiveLoopInput, competence: object | None
-    ) -> tuple[object | None, object | None]:
+        self, loop_input: CognitiveLoopInput, competence: CompetenceSelfModel | None
+    ) -> tuple[CompetenceSelfModel | None, object | None]:
         from agents.cognition.competence import empty_competence_model
         from agents.cognition.configuration import CognitionTeachingInteractionMode
         from agents.cognition.teaching import (
@@ -2868,14 +2886,14 @@ class CognitiveLoop:
             self._teaching_policy,
             relationships,
         )
-        return updated_model, updated_advice
+        return cast("CompetenceSelfModel", updated_model), updated_advice
 
     def _prepare_world_model(
         self,
         loop_input: CognitiveLoopInput,
         emotional_evaluation: EmotionalStateEvaluation,
         memory: RetrievedMemoryContext,
-    ) -> object | None:
+    ) -> CausalWorldModel | None:
         from agents.cognition.configuration import CognitionWorldModelMode
         from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
         from agents.cognition.world_model import (
@@ -2965,12 +2983,8 @@ class CognitiveLoop:
         branch_cap = budget_ledger.effective_cap(
             BudgetDimension.BRANCHES, policy.max_branches
         )
-        depth_cap = budget_ledger.effective_cap(
-            BudgetDimension.DEPTH, policy.max_depth
-        )
-        llm_cap = budget_ledger.effective_cap(
-            BudgetDimension.LLM, policy.max_llm_calls
-        )
+        depth_cap = budget_ledger.effective_cap(BudgetDimension.DEPTH, policy.max_depth)
+        llm_cap = budget_ledger.effective_cap(BudgetDimension.LLM, policy.max_llm_calls)
         token_cap = budget_ledger.effective_cap(
             BudgetDimension.TOKENS, policy.max_tokens
         )
@@ -2998,7 +3012,7 @@ class CognitiveLoop:
         memory: RetrievedMemoryContext,
         *,
         budget_ledger: object | None = None,
-    ) -> object | None:
+    ) -> TheoryOfMind | None:
         from agents.cognition.configuration import CognitionTheoryOfMindMode
         from agents.cognition.theory_of_mind import (
             TheoryOfMind,
@@ -3067,7 +3081,7 @@ class CognitiveLoop:
 
             if type(budget_ledger) is TickBudgetLedger:
                 allowed_subjects: set[object] = set()
-                filtered: list[object] = []
+                filtered: list[MindCue] = []
                 for cue in cues:
                     subject = getattr(cue, "subject_id", None)
                     if subject is None:
@@ -3080,10 +3094,10 @@ class CognitiveLoop:
                         allowed_subjects.add(subject)
                         filtered.append(cue)
                     # else: refuse further distinct ToM targets
-                cues = tuple(filtered)  # type: ignore[assignment]
+                cues = tuple(filtered)
         updated = update_theory_of_mind(
             prior,
-            cues,  # type: ignore[arg-type]
+            cues,
             policy,
             owner_entity_id=loop_input.observation.observer_id,
         )
@@ -3485,7 +3499,9 @@ class CognitiveLoop:
             kind=ComponentKind.INTENTION,
             ordinal=8,
             input_artifact=motivation,
-            awaitable=self._intention.select(
+            awaitable=cast(
+                Callable[..., Awaitable[SelectedIntention]], self._intention.select
+            )(
                 loop_input,
                 motivation,
                 futures,
@@ -3521,6 +3537,11 @@ class CognitiveLoop:
                     care_action_policy=self._care_action_policy,
                     mentorship_spec=self._mentorship_spec,
                     cultural_features_spec=self._cultural_features_spec,
+                    regional_migration_cognition_mode=(
+                        self._regional_migration_cognition_mode
+                    ),
+                    regional_migration_hop_limit=self._regional_migration_hop_limit,
+                    regional_memory=memory,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -3752,6 +3773,7 @@ class CognitiveLoop:
         if consolidation is not None:
             from memory.models import MemoryAccessReceipt
 
+            assert proposal.loop_input.snapshot is not None
             stored_ids = {
                 trace.memory_id for trace in proposal.loop_input.snapshot.memories
             }
@@ -3772,7 +3794,7 @@ class CognitiveLoop:
             agent_id=loop_input.agent_id,
             command=command,
             boundary_records=tuple(records),
-            memory_update_intents=updates,
+            memory_update_intents=cast(tuple[MemoryUpdateIntent, ...], updates),
             final_confidence=proposal.final_confidence,
             internal_state=next_state,
             pending_accesses=pending_accesses,
@@ -3780,8 +3802,12 @@ class CognitiveLoop:
             pending_semanticization=proposal.memory.pending_semanticization,
             offline_consolidation=consolidation,
             reflection=reflection,
-            identity_revisions=identity_revisions,
-            identity_dissonance=identity_dissonance,
+            identity_revisions=cast(
+                "tuple[BeliefRevisionRequest, ...]", identity_revisions
+            ),
+            identity_dissonance=cast(
+                "tuple[IdentityDissonanceNotice, ...]", identity_dissonance
+            ),
             causal_world_model=proposal.causal_world_model,
             theory_of_mind=proposal.theory_of_mind,
             reputation=proposal.reputation,
@@ -3923,7 +3949,7 @@ class CognitiveLoop:
         consolidation: object | None,
         reflection_cursor: object | None,
         decision_journal: tuple[object, ...] | None,
-    ) -> object | None:
+    ) -> ReflectionPlan | None:
         from agents.cognition.configuration import CognitionReflectionMode
         from agents.cognition.models import EmotionDriverCode, MemoryUpdateKind
         from agents.cognition.reflection import (
@@ -4164,7 +4190,7 @@ class CognitiveLoop:
         proposal: CognitiveLoopProposal,
         command: AgentCommand,
         updates: tuple[object, ...],
-    ) -> object | None:
+    ) -> OfflineConsolidationPlan | None:
         from agents.cognition.configuration import CognitionConsolidationMode
         from agents.cognition.consolidation import orchestrate_offline_consolidation
         from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
@@ -4407,7 +4433,7 @@ class CognitiveLoop:
             skipped_out=skipped,
         )
         if type(budget_ledger) is TickBudgetLedger and scenarios:
-            kept: list[object] = []
+            kept: list[CounterfactualScenario] = []
             for scenario in scenarios:
                 if budget_ledger.check_timeout():
                     break
@@ -4451,7 +4477,11 @@ class CognitiveLoop:
         if result.fallback_used:
             return scenarios
         chosen = set(result.selected_ids)
-        return tuple(item for item in scenarios if item.scenario_id in chosen)
+        return tuple(
+            item
+            for item in scenarios
+            if cast("CounterfactualScenario", item).scenario_id in chosen
+        )
 
     def last_counterfactual_audit(
         self, *, owner_id: object, tick: int
@@ -4500,7 +4530,7 @@ class CognitiveLoop:
         records: list[ComponentBoundaryRecord],
         invocation_id: str,
         agent_id: str,
-    ):
+    ) -> Callable[..., Never]:
         def fail(
             *,
             reason: CognitionFailureReason,
@@ -4508,7 +4538,7 @@ class CognitiveLoop:
             ordinal: int,
             input_artifact: object,
             status: ComponentStatus = ComponentStatus.FAILED,
-        ) -> None:
+        ) -> Never:
             failure_reason = (
                 CognitionFailureReason.CANCELLED
                 if status is ComponentStatus.CANCELLED
@@ -4552,7 +4582,7 @@ class CognitiveLoop:
         invocation_id: str,
         agent_id: str,
         fail: object,
-    ):
+    ) -> _StageRunner:
         async def run_stage(
             *,
             kind: ComponentKind,
@@ -4687,7 +4717,7 @@ class CognitiveLoop:
         return run_stage
 
 
-def _reputation_agent(identity: object, entity_id: object) -> object | None:
+def _reputation_agent(identity: object, entity_id: object) -> AgentId | None:
     from agents.models import AgentId
 
     owner_entity = getattr(identity, "owner_entity_id", None)
@@ -4702,13 +4732,12 @@ def _reputation_agent(identity: object, entity_id: object) -> object | None:
     return None
 
 
-
 def _build_naming_cue_summary(
     *,
     group_formation: object | None,
     social_norms: object | None,
     social_conventions: object | None,
-) -> object:
+) -> NamingCueSummary:
     """Duck-typed cue bag from already-updated group/norm/convention fields."""
     from agents.cognition.semantic_naming import NamingCueSummary
 
@@ -4742,8 +4771,10 @@ def _build_naming_cue_summary(
             action = getattr(pattern, "expected_action", None)
         if isinstance(action, str) and action:
             practice_actions.append(action)
-        elif hasattr(action, "value") and isinstance(action.value, str):
-            practice_actions.append(action.value)
+        else:
+            action_value = getattr(action, "value", None)
+            if isinstance(action_value, str):
+                practice_actions.append(action_value)
     return NamingCueSummary(
         group_concept_ids=tuple(group_ids),
         practice_action_kinds=tuple(practice_actions),
@@ -4754,15 +4785,14 @@ def _build_narrative_cue_summary(
     *,
     artifact_interpretations: object | None,
     retrieve_context: object | None,
-) -> object:
+) -> NarrativeCueSummary:
     """Duck-typed cue bag from prepared artifacts and retrieve reconstructions."""
     from agents.cognition.cultural_narratives import NarrativeCueSummary
 
     distorted: list[tuple[str, bool, int, int]] = []
     for entry in getattr(artifact_interpretations, "interpretations", ()) or ():
         artifact_id = getattr(entry, "artifact_id", None)
-        if hasattr(artifact_id, "value"):
-            artifact_id = artifact_id.value
+        artifact_id = getattr(artifact_id, "value", artifact_id)
         if not isinstance(artifact_id, str) or not artifact_id:
             continue
         distorted_flag = bool(getattr(entry, "distorted", False))
@@ -4783,8 +4813,7 @@ def _build_narrative_cue_summary(
     ] = []
     for item in getattr(retrieve_context, "reconstructions", ()) or ():
         reconstruction_id = getattr(item, "reconstruction_id", None)
-        if hasattr(reconstruction_id, "value"):
-            reconstruction_id = reconstruction_id.value
+        reconstruction_id = getattr(reconstruction_id, "value", reconstruction_id)
         if not isinstance(reconstruction_id, str) or not reconstruction_id:
             continue
         source_ids: list[str] = []

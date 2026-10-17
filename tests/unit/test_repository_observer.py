@@ -50,8 +50,8 @@ _EMPTY_LAYOUT = catalog_from_mapping(
 
 def test_semantic_catalog_appends_six_repository_types() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
-    assert len(SEMANTIC_EVENT_TYPES) == 69
-    assert SEMANTIC_EVENT_TYPES[-22:-16] == _REPOSITORY_SEMANTIC
+    assert len(SEMANTIC_EVENT_TYPES) == 72
+    assert SEMANTIC_EVENT_TYPES[47:53] == _REPOSITORY_SEMANTIC
     for name in _REPOSITORY_SEMANTIC:
         assert name in SEMANTIC_EVENT_TYPES
 
@@ -96,9 +96,7 @@ def test_adapt_repository_established_and_neglected() -> None:
             2,
         ),
         resulting_revision=WorldRevision(2),
-        details=RepositoryNeglected(
-            EntityId("repo-1"), 1, "intact", "neglected", 0
-        ),
+        details=RepositoryNeglected(EntityId("repo-1"), 1, "intact", "neglected", 0),
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
         schema_version=EVENT_SCHEMA_REPLAY_V14,
     )

@@ -133,6 +133,32 @@ uv run --frozen --python 3.12.14 pytest -m compose
 ./scripts/down.sh
 ```
 
+## Regional migration verification
+
+Focused reproduction and contract checks:
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_ay.py tests/unit/test_regional_migration_observer.py tests/unit/test_regional_demographics.py tests/unit/test_runner_config_v44.py -q
+uv run --frozen --python 3.12.14 pytest -m integration tests/integration/test_regional_travel_persistence.py tests/integration/test_episodic_memory_pgvector.py -q
+```
+
+The integration command requires `PALIMPSEST_TEST_DATABASE_URL` targeting a
+validated disposable `palimpsest_test` database; a skipped database gate is not
+a passing durability check. Use the checksum-pinned **Godot 4.7.2** editor from
+`clients/godot-observer/export/pins.env`, as in the observer-image workflow:
+
+```bash
+"${GODOT_BIN}" --headless --editor --path clients/godot-observer --quit
+"${GODOT_BIN}" --headless --path clients/godot-observer --script res://tests/run_protocol.gd
+```
+
+Set `GODOT_BIN` to that executable. The editor pass registers global classes on
+a fresh checkout. The registered regional suite checks parsing, reduction,
+origin-anchored rendering, capacity wait, arrival/end, and backward frame seek.
+Full Ruff, mypy, import-linter, architecture, V1/V2 compatibility, and pytest
+gates are still required before declaring the feature verified. Run status and
+unresolved failures belong to the active implementation plan.
+
 ## See also
 
 - [Architecture](architecture.md)

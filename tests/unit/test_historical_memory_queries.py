@@ -26,9 +26,7 @@ def test_any_direct_witnesses_alive_true() -> None:
     graph = _graph(
         as_of_tick=3,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         death_ticks={},
     )
@@ -38,9 +36,7 @@ def test_any_direct_witnesses_alive_true() -> None:
         death_ticks={},
     )
     answers = {
-        a.query_id: a
-        for a in report.answers
-        if a.source_ref.source_event_id == "evt-1"
+        a.query_id: a for a in report.answers if a.source_ref.source_event_id == "evt-1"
     }
     q1 = answers[HistoricalMemoryQueryId.ANY_DIRECT_WITNESSES_ALIVE]
     assert q1.answer is True
@@ -53,9 +49,7 @@ def test_anyone_remembers_speaking_after_witness_death() -> None:
     graph = _graph(
         as_of_tick=4,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=2),
@@ -69,9 +63,7 @@ def test_anyone_remembers_speaking_after_witness_death() -> None:
         layers_spec=SimpleNamespace(max_communicative_hops=2),
     )
     answers = {a.query_id: a for a in report.answers}
-    assert answers[HistoricalMemoryQueryId.ANY_DIRECT_WITNESSES_ALIVE].answer is (
-        False
-    )
+    assert answers[HistoricalMemoryQueryId.ANY_DIRECT_WITNESSES_ALIVE].answer is (False)
     q2 = answers[HistoricalMemoryQueryId.ANYONE_REMEMBERS_SPEAKING_TO_WITNESS]
     assert q2.answer is True
     assert q2.carrier_ids == ("c1",)
@@ -82,9 +74,7 @@ def test_event_known_only_from_stories_or_artifacts() -> None:
     graph = _graph(
         as_of_tick=5,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         artifact_rows=(
             SimpleNamespace(
@@ -102,17 +92,14 @@ def test_event_known_only_from_stories_or_artifacts() -> None:
         death_ticks={"w1": 2},
     )
     answers = {a.query_id: a for a in report.answers}
-    q3 = answers[
-        HistoricalMemoryQueryId.EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS
-    ]
+    q3 = answers[HistoricalMemoryQueryId.EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS]
     assert q3.answer is True
     assert q3.layer is HistoricalMemoryLayerId.CULTURAL
-    assert answers[HistoricalMemoryQueryId.ANY_DIRECT_WITNESSES_ALIVE].answer is (
-        False
+    assert answers[HistoricalMemoryQueryId.ANY_DIRECT_WITNESSES_ALIVE].answer is (False)
+    assert (
+        answers[HistoricalMemoryQueryId.ANYONE_REMEMBERS_SPEAKING_TO_WITNESS].answer
+        is False
     )
-    assert answers[
-        HistoricalMemoryQueryId.ANYONE_REMEMBERS_SPEAKING_TO_WITNESS
-    ].answer is False
 
 
 def test_empty_sources_report_shape() -> None:

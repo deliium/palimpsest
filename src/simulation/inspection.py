@@ -38,6 +38,9 @@ __all__ = [
     "DEFAULT_INSPECTION_PAGE_SIZE",
     "MAX_INSPECTION_PAGE_SIZE",
     "AgentVisibleProjection",
+    "DependencyCareActRow",
+    "DependencyCareInspectionDocument",
+    "DependencyCareNeedRow",
     "DetachedInspectionProjector",
     "EventKeysetCursor",
     "InspectionAvailability",
@@ -47,9 +50,6 @@ __all__ = [
     "InspectionSurface",
     "KinshipInspectionDocument",
     "KinshipInspectionEdge",
-    "DependencyCareInspectionDocument",
-    "DependencyCareNeedRow",
-    "DependencyCareActRow",
     "KnowledgeRepositoryInspectionDocument",
     "KnowledgeRepositoryInspectionRow",
     "MemoryKeysetCursor",
@@ -491,10 +491,8 @@ class KinshipInspectionDocument:
     channel_active: bool
     max_query_depth: int
     edges: tuple[KinshipInspectionEdge, ...]
-    # Scaffolding note for later Research UI / Godot family-tree consumers.
-    ui_scaffold_note: str = (
-        "Consume via objective_inspection; not a cognition input"
-    )
+    # Scaffolding note for later family-tree presentation consumers.
+    ui_scaffold_note: str = "Consume via objective_inspection; not a cognition input"
 
 
 @dataclass(frozen=True, slots=True)
@@ -530,9 +528,7 @@ class DependencyCareInspectionDocument:
     caregiving_cognition_mode: str
     need_rows: tuple[DependencyCareNeedRow, ...]
     recent_care_acts: tuple[DependencyCareActRow, ...]
-    ui_scaffold_note: str = (
-        "Consume via objective_inspection; not a cognition input"
-    )
+    ui_scaffold_note: str = "Consume via objective_inspection; not a cognition input"
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,9 +558,7 @@ class KnowledgeRepositoryInspectionDocument:
     channel_active: bool
     perception_mode: str
     repositories: tuple[KnowledgeRepositoryInspectionRow, ...]
-    ui_scaffold_note: str = (
-        "Consume via objective_inspection; not a cognition input"
-    )
+    ui_scaffold_note: str = "Consume via objective_inspection; not a cognition input"
 
 
 @dataclass(frozen=True, slots=True)
@@ -740,9 +734,7 @@ class DetachedInspectionProjector:
         cognition_mode = "disabled"
         if spec is not None:
             perception_mode = str(getattr(spec, "perception_mode", "none"))
-            cognition_mode = str(
-                getattr(spec, "caregiving_cognition_mode", "disabled")
-            )
+            cognition_mode = str(getattr(spec, "caregiving_cognition_mode", "disabled"))
         need_rows: list[DependencyCareNeedRow] = []
         registers = getattr(engine, "_dependency_need_registers", {})
         if isinstance(registers, dict):
@@ -786,7 +778,9 @@ class DetachedInspectionProjector:
                     kind=str(kind),
                     actor_entity_id=getattr(actor, "value", str(actor)),
                     target_entity_id=getattr(target, "value", str(target)),
-                    event_id=str(getattr(getattr(event, "event_id", None), "value", "")),
+                    event_id=str(
+                        getattr(getattr(event, "event_id", None), "value", "")
+                    ),
                 )
             )
         care_acts.sort(key=lambda row: (row.tick, row.event_id, row.kind))
@@ -849,9 +843,7 @@ class DetachedInspectionProjector:
         from simulation.runner_models import KinshipSpec
 
         spec = getattr(engine, "_kinship_spec", None)
-        config_cap = (
-            spec.max_query_depth if type(spec) is KinshipSpec else 8
-        )
+        config_cap = spec.max_query_depth if type(spec) is KinshipSpec else 8
         depth = config_cap if max_depth is None else max_depth
         if relation_id == "parents":
             result = parents_of(graph, agent_id)
@@ -960,7 +952,7 @@ class DetachedInspectionProjector:
         owner_id = checkpoint.agent_id.value
         ledger = checkpoint.territorial_claims
         heads: list[SubjectiveClaimHead] = []
-        claims = () if ledger is None else ledger.claims
+        claims = () if ledger is None else getattr(ledger, "claims", ())
         if not isinstance(claims, tuple):
             raise TypeError("territorial_claims.claims must be a tuple")
         for head in claims:
@@ -1162,9 +1154,7 @@ def constrain_ordered_rows_to_high_water[T](
     source_label: str,
 ) -> tuple[T, ...]:
     """Reuse Task 3 clamp helper for subjective source sequences."""
-    return clamp_sequence_to_high_water(
-        items, high_water, source_label=source_label
-    )
+    return clamp_sequence_to_high_water(items, high_water, source_label=source_label)
 
 
 def require_run_id(value: str | RunId) -> str:

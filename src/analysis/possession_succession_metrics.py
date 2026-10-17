@@ -16,6 +16,7 @@ from analysis.models import (
 )
 from analysis.numerical import library_versions
 from analysis.possession_succession import (
+    PossessionEpisode,
     PossessionLedgerSnapshot,
     classify_possession_episodes,
 )
@@ -33,9 +34,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
 _LAYER: Final[str] = "research_inference"
 _CORPSE: Final[str] = "corpse"
 
-POSSESSION_CUSTODY_OUTCOMES_METRIC_VERSION: Final[str] = (
-    "possession_custody_outcomes@1"
-)
+POSSESSION_CUSTODY_OUTCOMES_METRIC_VERSION: Final[str] = "possession_custody_outcomes@1"
 POSSESSION_CLAIM_CONFLICT_METRIC_VERSION: Final[str] = "possession_claim_conflict@1"
 INHERITANCE_CONVENTION_DISTRIBUTION_METRIC_VERSION: Final[str] = (
     "inheritance_convention_distribution@1"
@@ -110,7 +109,9 @@ def _document(
     )
 
 
-def _custody(episodes, run_id: str, revision: str) -> MetricDocument:
+def _custody(
+    episodes: Sequence[PossessionEpisode], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.POSSESSION_CUSTODY_OUTCOMES)
     if spec.version_identifier != POSSESSION_CUSTODY_OUTCOMES_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
@@ -140,7 +141,9 @@ def _custody(episodes, run_id: str, revision: str) -> MetricDocument:
     )
 
 
-def _conflict(episodes, run_id: str, revision: str) -> MetricDocument:
+def _conflict(
+    episodes: Sequence[PossessionEpisode], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.POSSESSION_CLAIM_CONFLICT)
     if spec.version_identifier != POSSESSION_CLAIM_CONFLICT_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
@@ -158,14 +161,14 @@ def _conflict(episodes, run_id: str, revision: str) -> MetricDocument:
     )
 
 
-def _conventions(episodes, run_id: str, revision: str) -> MetricDocument:
+def _conventions(
+    episodes: Sequence[PossessionEpisode], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.INHERITANCE_CONVENTION_DISTRIBUTION)
     if spec.version_identifier != INHERITANCE_CONVENTION_DISTRIBUTION_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
     counts = Counter(episode.convention_token for episode in episodes)
-    histogram = ",".join(
-        f"{token}:{count}" for token, count in sorted(counts.items())
-    )
+    histogram = ",".join(f"{token}:{count}" for token, count in sorted(counts.items()))
     return _document(
         spec,
         run_id,

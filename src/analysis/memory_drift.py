@@ -255,7 +255,9 @@ def dedupe_traces_by_lineage_root(
     )
 
 
-def concept_jaccard_loss(before: StructuredFactSet, after: StructuredFactSet) -> float | None:
+def concept_jaccard_loss(
+    before: StructuredFactSet, after: StructuredFactSet
+) -> float | None:
     """1 - Jaccard(concepts) when both sides PRESENT; else None (unknown)."""
     if (
         before.availability is not FactAvailability.PRESENT
@@ -879,7 +881,7 @@ def compute_memory_drift(
 
     # Prefer cumulative endpoint losses when step reconstruction is messy.
     if not losses:
-        for index, chain in enumerate(report.chains):
+        for chain in report.chains:
             if len(chain.nodes) < 2:
                 unknown_pairs += 1
                 continue

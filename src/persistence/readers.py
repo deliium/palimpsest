@@ -8,17 +8,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
 from persistence.errors import PersistenceCorruptionError
 from persistence.orm import SimulationRunOrm, TickCommitOrm, WorldEventOrm
+from simulation.inspection import EventKeysetCursor
 from simulation.journal import decode_persistence, encode_persistence, hash_snapshot
 from simulation.models import RunId
 from simulation.persistence import (
     PERSISTENCE_CODEC_VERSION,
     RunManifest,
     TickCommit,
+    WorldEvent,
     WorldSnapshot,
 )
 
@@ -132,7 +135,7 @@ def _event_envelope_data(event: object) -> dict[str, Any]:
     return data
 
 
-def event_from_orm(row: WorldEventOrm) -> object:
+def event_from_orm(row: WorldEventOrm) -> WorldEvent:
     """Rebuild a detached WorldEvent from a stored row via the journal codec."""
     data: dict[str, Any] = {
         "actor_id": row.actor_id,
@@ -154,7 +157,10 @@ def event_from_orm(row: WorldEventOrm) -> object:
         data["cause"] = dict(row.cause)
     if row.occurrence is not None:
         data["occurrence"] = dict(row.occurrence)
-    return _decode_envelope(_TYPE_WORLD_EVENT, data, _TYPE_WORLD_EVENT)
+    decoded = _decode_envelope(_TYPE_WORLD_EVENT, data, _TYPE_WORLD_EVENT)
+    if not isinstance(decoded, WorldEvent):
+        raise PersistenceCorruptionError("invalid_event", operation="event_from_orm")
+    return decoded
 
 
 def tick_commit_from_orm(row: TickCommitOrm) -> TickCommit:
@@ -297,13 +303,13 @@ def keyset_after_tuple(after: object | None) -> tuple[int, int]:
     return (tick, sequence)
 
 
-def next_event_keyset_cursor(events: object) -> object | None:
+def next_event_keyset_cursor(events: Sequence[WorldEvent]) -> EventKeysetCursor | None:
     """Build the next event keyset cursor from the last page event, if any."""
     from simulation.inspection import EventKeysetCursor
 
     if not events:
         return None
-    sequence = tuple(events)  # type: ignore[arg-type]
+    sequence = tuple(events)
     last = sequence[-1]
     tick = getattr(last, "tick", None)
     seq = getattr(last, "sequence", None)

@@ -130,9 +130,7 @@ def test_ae_ah_schemas_unchanged_when_dependency_care_absent() -> None:
     ae = experiment_ae_generational_population(_base(agents=2), max_ticks=4)
     assert ae.experiment_id == "experiment-ae-generational-population"
     on = next(
-        item
-        for item in ae.conditions
-        if item.condition_id == "ae-generational-on"
+        item for item in ae.conditions if item.condition_id == "ae-generational-on"
     ).runner_config
     assert on.schema_version == RUNNER_SCHEMA_VERSION_V24
     assert on.dependency_care is None
@@ -140,9 +138,7 @@ def test_ae_ah_schemas_unchanged_when_dependency_care_absent() -> None:
     ah = experiment_ah_kinship_genealogy(_base(agents=3), max_ticks=4)
     assert ah.experiment_id == "experiment-ah-kinship-genealogy"
     kinship_only = next(
-        item
-        for item in ah.conditions
-        if item.condition_id == "ah-kinship-only-none"
+        item for item in ah.conditions if item.condition_id == "ah-kinship-only-none"
     ).runner_config
     assert kinship_only.schema_version == RUNNER_SCHEMA_VERSION_V27
     assert kinship_only.dependency_care is None
@@ -162,8 +158,7 @@ def test_v28_dependency_care_round_trip() -> None:
     assert restored.schema_version == RUNNER_SCHEMA_VERSION_V28
     assert restored.dependency_care is not None
     assert (
-        restored.dependency_care.enabled_needs
-        == config.dependency_care.enabled_needs
+        restored.dependency_care.enabled_needs == config.dependency_care.enabled_needs
     )
 
 
@@ -186,7 +181,7 @@ async def test_unowned_v3_flags_still_fail_closed() -> None:
         mortality_mode=MortalityMode.DISABLED,
         v3_capability_flags=V3CapabilityFlags(
             generational_population=True,
-            multi_polity_migration=True,
+            institutional_economy=True,
         ),
         population_lifecycle=example_population_lifecycle_spec(),
         new_agent_initialization=default_new_agent_initialization_spec(),

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import pytest
 
 from tests.simulation_helpers import (
@@ -42,6 +40,7 @@ from world.actions import (
     Tell,
     Wait,
 )
+from world.communications import origin_utterance
 from world.identifiers import (
     EntityId,
     ProposalId,

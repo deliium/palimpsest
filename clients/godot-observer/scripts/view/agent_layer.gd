@@ -50,6 +50,8 @@ func show_world(world: Variant, zone_centers: Dictionary = {}, activity: Diction
 			token.position = Scale.to_pixels(float(placed["x"]), float(placed["y"]))
 			token.setup(agent, Identity.label_for(agent))
 			token.set_activity(str(activity.get(str(agent.entity_id), "")))
+			if agent.journey != null:
+				token.set_activity("Travel: %s (at origin)" % str(agent.journey.phase))
 			add_child(token)
 			_tokens[str(agent.entity_id)] = token
 	ObserverLog.debug("agents", "tokens_built agent_count=%s" % _tokens.size())

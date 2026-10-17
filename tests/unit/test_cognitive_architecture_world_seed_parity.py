@@ -8,9 +8,7 @@ from experiments import experiment_ac_cognitive_architectures
 from simulation.runner_serialization import scenario_fingerprint
 from tests.unit.test_runner_models import _config
 
-_V1_GATE = (
-    Path(__file__).resolve().parents[1] / "unit" / "test_v1_regression_gate.py"
-)
+_V1_GATE = Path(__file__).resolve().parents[1] / "unit" / "test_v1_regression_gate.py"
 
 
 def test_architecture_arms_share_scenario_and_seed_identity() -> None:

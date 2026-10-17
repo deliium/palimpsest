@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SUITES: Array[String] = [
+	"res://tests/test_regional_travel.gd",
 	"res://tests/test_models.gd",
 	"res://tests/test_cursor.gd",
 	"res://tests/test_urls.gd",
@@ -42,6 +43,8 @@ func _init() -> void:
 func _run() -> void:
 	var failed := 0
 	for path in SUITES:
+		var existing_orphans := Node.get_orphan_node_ids()
+		var existing_children := root.get_children()
 		var script: Script = load(path)
 		if script == null:
 			print("FAIL %s load" % path)
@@ -60,5 +63,19 @@ func _run() -> void:
 			failed += failures.size()
 			for item in failures:
 				print("FAIL %s %s" % [path, item])
+		# Each suite owns its fixtures, including detached view/session nodes.
+		# Free fixture roots rather than leaking their children and rendering RIDs
+		# until engine shutdown. Preserve nodes that predate this suite.
+		for child in root.get_children():
+			if child not in existing_children:
+				child.free()
+		for instance_id in Node.get_orphan_node_ids():
+			if instance_id in existing_orphans:
+				continue
+			var orphan := instance_from_id(instance_id) as Node
+			if is_instance_valid(orphan) and orphan.get_parent() == null:
+				orphan.free()
+		suite = null
+		await process_frame
 	print("godot_protocol_tests failed=%s" % failed)
 	quit(1 if failed > 0 else 0)

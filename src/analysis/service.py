@@ -85,7 +85,9 @@ class MemoryDriftAnalysisService:
                 "projector_version": EVENT_FACT_PROJECTOR_VERSION,
                 "agent_visible_projector_version": AGENT_VISIBLE_PROJECTOR_VERSION,
                 "metric_version": DRIFT_METRIC_VERSION,
-                "agent_visible_count": 0 if agent_visible is None else len(agent_visible),
+                "agent_visible_count": 0
+                if agent_visible is None
+                else len(agent_visible),
             },
         )
 

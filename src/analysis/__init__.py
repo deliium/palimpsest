@@ -311,6 +311,11 @@ from analysis.phenomenon_specifications import (
     resolve_support_band,
     validate_phenomenon_mappings,
 )
+from analysis.possession_succession import (
+    PossessionEpisode,
+    PossessionLedgerSnapshot,
+    classify_possession_episodes,
+)
 from analysis.prediction_calibration_metrics import (
     CALIBRATION_BIN_EDGES,
     PREDICTION_CALIBRATION_METRIC_VERSION,
@@ -324,6 +329,27 @@ from analysis.prospective_imagination_metrics import (
 from analysis.reflection_metrics import (
     REFLECTION_METRIC_VERSION,
     compute_reflection,
+)
+from analysis.regional_destination_beliefs import (
+    REGIONAL_DESTINATION_BELIEFS_METRIC_VERSION,
+    RegionalDestinationEvidenceRow,
+    compute_regional_destination_beliefs,
+)
+from analysis.regional_migration_metrics import (
+    REGIONAL_MIGRATION_METRIC_VERSION,
+    compute_regional_migration_metrics,
+)
+from analysis.regional_population import (
+    REGIONAL_POPULATION_METRIC_VERSION,
+    QualifiedMigrationRow,
+    RegionalEventRow,
+    RegionalHistory,
+    RegionalInitialPlacementRow,
+    RegionalLocationRow,
+    RegionalPopulationError,
+    RegionalPopulationInput,
+    compute_regional_population,
+    fold_regional_history,
 )
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.reputation_metrics import (
@@ -390,11 +416,6 @@ from analysis.specifications import (
     validate_metric_catalog,
     validate_metric_specification,
 )
-from analysis.possession_succession import (
-    PossessionEpisode,
-    PossessionLedgerSnapshot,
-    classify_possession_episodes,
-)
 from analysis.structured_commitments import (
     CommitmentInterpretationView,
     CommitmentItemMove,
@@ -455,10 +476,6 @@ __all__ = [
     "CLAIM_TRUTH_SCHEMA_VERSION",
     "COGNITIVE_BUDGET_METRIC_VERSION",
     "COMMUNICATION_STRATEGY_METRIC_VERSION",
-    "CommitmentInterpretationView",
-    "CommitmentItemMove",
-    "CommitmentLedgerSnapshot",
-    "CommitmentSpeechView",
     "COUNTERFACTUAL_REASONING_METRIC_VERSION",
     "CULTURAL_FEATURE_MUTATION_METRIC_VERSION",
     "CULTURAL_FEATURE_PROVENANCE_METRIC_VERSION",
@@ -511,6 +528,9 @@ __all__ = [
     "PREDICTION_CALIBRATION_METRIC_VERSION",
     "PROSPECTIVE_IMAGINATION_METRIC_VERSION",
     "REFLECTION_METRIC_VERSION",
+    "REGIONAL_DESTINATION_BELIEFS_METRIC_VERSION",
+    "REGIONAL_MIGRATION_METRIC_VERSION",
+    "REGIONAL_POPULATION_METRIC_VERSION",
     "SCIPY_DEGENERATE_POLICY",
     "SKILL_LEARNING_METRIC_VERSION",
     "SOCIAL_TRANSMISSION_METRIC_VERSION",
@@ -532,6 +552,10 @@ __all__ = [
     "ClaimExpectedValue",
     "ClaimTruthSpec",
     "ClaimValueKind",
+    "CommitmentInterpretationView",
+    "CommitmentItemMove",
+    "CommitmentLedgerSnapshot",
+    "CommitmentSpeechView",
     "ComparisonStatus",
     "CopyFidelitySummary",
     "DenominatorKind",
@@ -540,11 +564,11 @@ __all__ = [
     "DriftDelta",
     "DriftStep",
     "DurableRecordLineageSummary",
+    "EventSource",
+    "EvidenceStage",
     "ExchangeLedgerSnapshot",
     "ExchangeReservation",
     "ExchangeView",
-    "EventSource",
-    "EvidenceStage",
     "ExportSource",
     "FactAvailability",
     "GoalTransitionRow",
@@ -578,10 +602,20 @@ __all__ = [
     "PhenomenonIndicatorPanel",
     "PhenomenonIndicatorReading",
     "PhenomenonIndicatorRef",
+    "PossessionEpisode",
+    "PossessionLedgerSnapshot",
+    "QualifiedMigrationRow",
     "ReconstructionChain",
     "ReconstructionChainNode",
     "ReconstructionEvidence",
     "RecordSurvivalSummary",
+    "RegionalDestinationEvidenceRow",
+    "RegionalEventRow",
+    "RegionalHistory",
+    "RegionalInitialPlacementRow",
+    "RegionalLocationRow",
+    "RegionalPopulationError",
+    "RegionalPopulationInput",
     "RelationshipEdgeRow",
     "RepositoryAccessSummary",
     "RepositoryOrganizationSummary",
@@ -600,8 +634,6 @@ __all__ = [
     "SupportBand",
     "SupportDirection",
     "SurvivalAgentRow",
-    "PossessionEpisode",
-    "PossessionLedgerSnapshot",
     "TechniqueLifecycleSnapshot",
     "TechniqueLifecycleState",
     "TechniqueLossCause",
@@ -697,6 +729,9 @@ __all__ = [
     "compute_prediction_calibration",
     "compute_prospective_imagination_metrics",
     "compute_reflection",
+    "compute_regional_destination_beliefs",
+    "compute_regional_migration_metrics",
+    "compute_regional_population",
     "compute_relationship_stability",
     "compute_repeated_conventions",
     "compute_resource_inequality",
@@ -718,6 +753,7 @@ __all__ = [
     "evaluate_claim_against_truth",
     "evidence_from_reconstructed_memory",
     "evidence_stage_for_trace",
+    "fold_regional_history",
     "knowledge_provenance_for_experiment",
     "library_versions",
     "living_agent_ticks",

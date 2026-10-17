@@ -748,10 +748,7 @@ def test_communication_strategy_mode_round_trips_only_on_v9() -> None:
     disabled = _config()
     disabled_doc = json.loads(encode_runner_config(disabled).decode("utf-8"))
     assert disabled_doc["schema_version"] == RUNNER_SCHEMA_VERSION
-    assert (
-        "communication_strategy_mode"
-        not in disabled_doc["agents"][0]["cognition"]
-    )
+    assert "communication_strategy_mode" not in disabled_doc["agents"][0]["cognition"]
     with pytest.raises(ValueError, match="communication_strategy_mode_requires_v9"):
         _configured(
             schema_version=RUNNER_SCHEMA_VERSION_V8,

@@ -63,10 +63,14 @@ def test_smoke_unknown_scenario_fails_closed() -> None:
     with pytest.raises(Exception) as exc:
         asyncio.run(run_benchmark_smoke("bench-99-missing", _base()))
     # Suite lookup fails closed before/while smoke starts.
-    assert getattr(exc.value, "code", "") in {
-        "unknown_scenario_id",
-        "builder_not_implemented",
-    } or "unknown" in str(exc.value).lower()
+    assert (
+        getattr(exc.value, "code", "")
+        in {
+            "unknown_scenario_id",
+            "builder_not_implemented",
+        }
+        or "unknown" in str(exc.value).lower()
+    )
 
 
 @pytest.mark.asyncio

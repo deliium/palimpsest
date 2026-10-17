@@ -138,8 +138,7 @@ async def test_reference_scenario_short_horizon_flags_off() -> None:
     v1_regression_profile(bundle.config)
     assert bundle.config.schema_version == RUNNER_SCHEMA_VERSION_V4
     _LOG.info(
-        "v1_regression_gate_reference_start max_ticks=%s "
-        "config_fingerprint_prefix=%s",
+        "v1_regression_gate_reference_start max_ticks=%s config_fingerprint_prefix=%s",
         bundle.config.stop_policy.max_ticks,
         runner_config_fingerprint(bundle.config)[:12],
     )

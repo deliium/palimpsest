@@ -21,13 +21,13 @@ from analysis.models import (
     TransmissionHopRecord,
 )
 from analysis.numerical import library_versions, quantize_float, require_finite
+from analysis.social_transmission import build_lineage_edges
 from analysis.specifications import (
     ADOPTION_STAGES_V1,
     AdoptionStage,
     MetricFamilyId,
     metric_specification,
 )
-from analysis.social_transmission import build_lineage_edges
 from world.identifiers import require_stable_id
 
 __all__ = [
@@ -88,7 +88,9 @@ def compute_knowledge_diffusion(
     input_revision = require_stable_id("input_revision", input_revision)
     deaths = dict(death_ticks or {})
     spec = metric_specification(MetricFamilyId.KNOWLEDGE_DIFFUSION)
-    eligible = sorted({require_stable_id("agent_id", item) for item in eligible_agent_ids})
+    eligible = sorted(
+        {require_stable_id("agent_id", item) for item in eligible_agent_ids}
+    )
 
     roots = sorted({hop.transmission_root_id for hop in hops})
     if not roots:
@@ -217,7 +219,9 @@ def compute_knowledge_diffusion(
         coverage=MetricCoverage(
             observed=len(hops) - unresolved,
             expected=len(hops),
-            ratio=None if not hops else float(len(hops) - unresolved) / float(len(hops)),
+            ratio=None
+            if not hops
+            else float(len(hops) - unresolved) / float(len(hops)),
         ),
         notes_code="ok" if availability is MetricAvailability.PRESENT else "unresolved",
     )
@@ -245,9 +249,7 @@ def compute_rumor_distortion(
         run_id = report.run_id
     distortions = tuple(distortions or ())
     hops = tuple(hops or ())
-    unresolved = (
-        0 if unresolved_link_count is None else int(unresolved_link_count)
-    )
+    unresolved = 0 if unresolved_link_count is None else int(unresolved_link_count)
 
     if not distortions:
         return _document(
@@ -281,7 +283,10 @@ def compute_rumor_distortion(
             and current.receiver_confidence is not None
         ):
             attenuations.append(
-                max(0.0, float(prior.sender_confidence) - float(current.receiver_confidence))
+                max(
+                    0.0,
+                    float(prior.sender_confidence) - float(current.receiver_confidence),
+                )
             )
 
     hop_count = max(len(hops), 1)

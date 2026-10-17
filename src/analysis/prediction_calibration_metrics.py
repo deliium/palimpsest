@@ -20,7 +20,11 @@ from analysis.models import (
     MetricProvenance,
 )
 from analysis.numerical import library_versions, quantize_float, require_finite
-from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.specifications import (
+    MetricFamilyId,
+    MetricSpecification,
+    metric_specification,
+)
 from world.identifiers import require_stable_id
 
 __all__ = [
@@ -81,17 +85,13 @@ def compute_prediction_calibration(
     squared = [
         (row.predicted_confidence - row.empirical_outcome) ** 2 for row in parsed
     ]
-    brier = quantize_float(
-        require_finite(float(sum(squared) / float(len(squared))))
-    )
+    brier = quantize_float(require_finite(float(sum(squared) / float(len(squared)))))
     bin_errors, bins_used = _bin_absolute_errors(parsed)
     mace: float | None
     if bins_used == 0:
         mace = None
     else:
-        mace = quantize_float(
-            require_finite(float(sum(bin_errors) / float(bins_used)))
-        )
+        mace = quantize_float(require_finite(float(sum(bin_errors) / float(bins_used))))
     values: dict[str, object] = {
         "brier_score": brier,
         "mean_absolute_calibration_error": mace,
@@ -128,6 +128,8 @@ def _parse_rows(rows: Sequence[object]) -> tuple[CalibrationRow, ...]:
         raise TypeError("rows: not_ordered")
     parsed: list[CalibrationRow] = []
     for index, row in enumerate(rows):
+        pred: object
+        outcome: object
         if type(row) is CalibrationRow:
             pred = row.predicted_confidence
             outcome = row.empirical_outcome
@@ -186,7 +188,7 @@ def _bin_absolute_errors(
 
 
 def _document(
-    spec: object,
+    spec: MetricSpecification,
     run_id: str,
     revision: str,
     availability: MetricAvailability,
@@ -196,11 +198,11 @@ def _document(
     observed: int = 0,
     expected: int = 0,
 ) -> MetricDocument:
-    family = getattr(spec, "family_id")
-    algorithm_version = getattr(spec, "algorithm_version")
-    evidence_inputs = getattr(spec, "evidence_inputs")
-    population = getattr(spec, "population")
-    denominator = getattr(spec, "denominator")
+    family = spec.family_id
+    algorithm_version = spec.algorithm_version
+    evidence_inputs = spec.evidence_inputs
+    population = spec.population
+    denominator = spec.denominator
     coverage = None
     if availability is MetricAvailability.PRESENT:
         coverage = MetricCoverage(observed=observed, expected=expected)

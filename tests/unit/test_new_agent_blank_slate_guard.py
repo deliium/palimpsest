@@ -77,14 +77,13 @@ def test_deny_list_covers_locked_stores() -> None:
         "structured_commitments",
         "subjective_valuations",
         "scarcity_beliefs",
+        "acceptance_memories",
     )
 
 
 def test_assert_blank_slate_passes_when_empty() -> None:
     _LOG.debug("case_id=assert_blank_slate_passes_when_empty")
-    assert_blank_slate_subjective_state(
-        AgentId("entrant-1"), BlankSlateStoreCounts()
-    )
+    assert_blank_slate_subjective_state(AgentId("entrant-1"), BlankSlateStoreCounts())
 
 
 def test_assert_blank_slate_fails_on_content() -> None:

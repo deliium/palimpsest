@@ -17,6 +17,7 @@ from experiments.models import (
     ExperimentSeedMatrix,
     require_stochastic,
 )
+from simulation.models import StochasticIdentity
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V19,
     AgentCognitionSpec,
@@ -174,7 +175,7 @@ def _scenario(*, seed_record: bool) -> WorldScenarioSpec:
 def _config(
     *,
     seed: int,
-    identity: str,
+    identity: StochasticIdentity,
     scenario: WorldScenarioSpec,
     max_ticks: int,
     artifacts_enabled: bool,

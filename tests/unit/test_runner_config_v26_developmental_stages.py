@@ -116,9 +116,7 @@ def test_v24_decode_synthesizes_developmental_passthrough() -> None:
     decoded = decode_runner_config(encode_runner_config(config))
     assert decoded.population_lifecycle is not None
     assert decoded.population_lifecycle.gradual_aging.intra_stage_interpolation is False
-    assert (
-        decoded.population_lifecycle.lifespan_distribution.distribution_id == "fixed"
-    )
+    assert decoded.population_lifecycle.lifespan_distribution.distribution_id == "fixed"
     assert decoded.population_lifecycle.stage_capability_effects == ()
     assert not decoded.population_lifecycle.has_developmental_extensions()
 
@@ -138,9 +136,7 @@ def test_v26_round_trip_developmental_extensions() -> None:
     assert decoded.schema_version == RUNNER_SCHEMA_VERSION_V26
     assert decoded.population_lifecycle is not None
     assert decoded.population_lifecycle.has_developmental_extensions()
-    assert (
-        decoded.population_lifecycle.gradual_aging.intra_stage_interpolation is True
-    )
+    assert decoded.population_lifecycle.gradual_aging.intra_stage_interpolation is True
     assert (
         decoded.population_lifecycle.lifespan_distribution.distribution_id
         == "uniform_int"

@@ -440,15 +440,17 @@ class ConventionBelief:
         if quantized < 0.0 or quantized > 1.0:
             raise _fail("strength", "out_of_range")
         object.__setattr__(self, "strength", quantized)
-        if isinstance(self.repetition_count, bool) or type(
-            self.repetition_count
-        ) is not int:
+        if (
+            isinstance(self.repetition_count, bool)
+            or type(self.repetition_count) is not int
+        ):
             raise _fail("repetition_count", "invalid_type")
         if self.repetition_count < 0:
             raise _fail("repetition_count", "out_of_range")
-        if isinstance(self.explanation_cue_absent_ticks, bool) or type(
-            self.explanation_cue_absent_ticks
-        ) is not int:
+        if (
+            isinstance(self.explanation_cue_absent_ticks, bool)
+            or type(self.explanation_cue_absent_ticks) is not int
+        ):
             raise _fail("explanation_cue_absent_ticks", "invalid_type")
         if self.explanation_cue_absent_ticks < 0:
             raise _fail("explanation_cue_absent_ticks", "out_of_range")
@@ -479,9 +481,7 @@ class ConventionBelief:
             object.__setattr__(
                 self,
                 "last_tick",
-                require_exact_nonneg_int(
-                    "ConventionBelief.last_tick", self.last_tick
-                ),
+                require_exact_nonneg_int("ConventionBelief.last_tick", self.last_tick),
             )
         if (
             self.first_tick is not None
@@ -771,9 +771,7 @@ def _situation_key(content: ConventionContent) -> str:
     return f"{content.situation.value}|{location}|{phase}"
 
 
-def _delta_for(
-    situation: ConventionSituation, policy: SocialConventionPolicy
-) -> float:
+def _delta_for(situation: ConventionSituation, policy: SocialConventionPolicy) -> float:
     if situation is ConventionSituation.COLOCATED_MEETING:
         return policy.conforming_colocated_meeting
     if situation is ConventionSituation.TIMED_GATHERING:
@@ -1166,9 +1164,9 @@ def _apply_give_evidence(
                 _log_drop("unresolved_entity")
             continue
         involved = owner in {actor, other}
-        witnessed = observation.self_body is not None and len(
-            observation.visible_bodies
-        ) >= 0
+        witnessed = (
+            observation.self_body is not None and len(observation.visible_bodies) >= 0
+        )
         if not involved and not witnessed:
             continue
         if actor == owner:
@@ -1310,9 +1308,7 @@ def _apply_memory_reinforcement(
     if not memories or not drafts:
         return
     remembered_seen: set[tuple[str, str]] = set()
-    content_keys = {
-        convention_content_key(draft.content): draft for draft in drafts
-    }
+    content_keys = {convention_content_key(draft.content): draft for draft in drafts}
     situation_tokens = {draft.content.situation.value for draft in drafts}
     action_tokens = {draft.content.usual_action for draft in drafts}
     matched_any = False
@@ -1471,8 +1467,7 @@ def _apply_transmission(
                 draft.conceptualization = ConventionConceptualization.NAMED_CUSTOM
                 draft.touched = True
                 _LOG.debug(
-                    "convention_transmission_applied owner_id=%s tick=%s "
-                    "channel=%s",
+                    "convention_transmission_applied owner_id=%s tick=%s channel=%s",
                     identity.owner_id.value,
                     tick,
                     "custom",
@@ -1521,9 +1516,7 @@ def _practical_cue_present(draft: _BeliefDraft, observation: Observation) -> boo
     if explanation is ConventionExplanation.SOCIAL_CONTACT:
         return len(observation.visible_bodies) >= 1
     if explanation is ConventionExplanation.FATIGUE_REST:
-        return any(
-            occurrence.kind == "sleep" for occurrence in observation.occurrences
-        )
+        return any(occurrence.kind == "sleep" for occurrence in observation.occurrences)
     if explanation is ConventionExplanation.HUNGER_RELIEF:
         return any(occurrence.kind == "eat" for occurrence in observation.occurrences)
     if explanation is ConventionExplanation.UNKNOWN:
@@ -1571,9 +1564,11 @@ def _promote(
         if draft.status is not ConventionStatus.CANDIDATE:
             continue
         participants = len(draft.participant_ids)
-        min_participants = 1 if (
-            draft.content.situation is ConventionSituation.HABITUAL_EXCHANGE
-        ) else 2
+        min_participants = (
+            1
+            if (draft.content.situation is ConventionSituation.HABITUAL_EXCHANGE)
+            else 2
+        )
         if draft.repetition_count < policy.promotion_count:
             _notice(notices, "below_count")
             _LOG.warning("convention_belief_withheld reason=%s", "below_count")
@@ -1852,9 +1847,7 @@ def convention_habit_penalties(
         if belief.status is not ConventionStatus.ACTIVE:
             if belief.status is ConventionStatus.CANDIDATE:
                 _notice(notices, "candidate_only")
-                _LOG.warning(
-                    "convention_response_withheld reason=%s", "candidate_only"
-                )
+                _LOG.warning("convention_response_withheld reason=%s", "candidate_only")
             continue
         if belief.strength < active_policy.active_strength:
             continue
@@ -1936,9 +1929,7 @@ def convention_communicate_utterance(
         if belief.last_utterance_tick is not None and (
             tick - belief.last_utterance_tick < policy.utterance_interval
         ):
-            _LOG.warning(
-                "convention_response_withheld reason=%s", "utterance_interval"
-            )
+            _LOG.warning("convention_response_withheld reason=%s", "utterance_interval")
             continue
         chosen = belief
         break

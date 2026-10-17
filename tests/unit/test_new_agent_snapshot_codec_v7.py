@@ -58,9 +58,7 @@ def test_codec_v7_round_trip_preserves_lifecycle_records() -> None:
     )
     init = default_new_agent_initialization_spec()
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=17, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=17, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-nai-codec"),
         population_lifecycle=spec,

@@ -94,8 +94,6 @@ def test_collective_waits_from_two_bodies_still_commit() -> None:
     _admitted(first)
     second = apply_operation(
         first.next_state,
-        _accept_on(
-            first.next_state, Wait(), actor="body-2", request_id="r-w2"
-        ),
+        _accept_on(first.next_state, Wait(), actor="body-2", request_id="r-w2"),
     )
     _admitted(second)

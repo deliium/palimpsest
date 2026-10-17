@@ -1,0 +1,22 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "JOURNEY_STARTED",
+  "domain_kind": "journey_started",
+  "event_id": "event-journey-started",
+  "tick": 0,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "origin_location_id": "loc-camp",
+  "destination_location_id": "loc-grove",
+  "participant_body_ids": ["body-ada"],
+  "journey": {
+    "journey_id": "journey-ada",
+    "origin_location_id": "loc-camp",
+    "destination_location_id": "loc-grove",
+    "participant_body_ids": ["body-ada"],
+    "start_tick": 0,
+    "due_tick": 2,
+    "arrival_wait_deadline_tick": 3,
+    "phase": "preparing"
+  }
+}

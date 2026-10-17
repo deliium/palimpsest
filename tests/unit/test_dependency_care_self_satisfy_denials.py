@@ -65,9 +65,7 @@ def _engine(*, dependency_care: bool = True) -> WorldEngine:
     records = (records[0], adult_record)
     care = example_dependency_care_spec() if dependency_care else None
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=40, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=40, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=records,
@@ -93,9 +91,7 @@ def test_dependent_eat_denied_by_dependency_care(
             )
         )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert (
-        result.resolutions[0].reason is ActionResolutionReason.STRUCTURAL_REJECTION
-    )
+    assert result.resolutions[0].reason is ActionResolutionReason.STRUCTURAL_REJECTION
     assert "dependency_care_self_satisfy_denied" in caplog.text
 
 

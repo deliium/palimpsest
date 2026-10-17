@@ -91,21 +91,15 @@ def test_repository_detail_round_trip() -> None:
         RepositoryMemberRetrieved(
             EntityId("repo-1"), EntityId("art-1"), 0, EntityId("body-1"), True
         ),
-        RepositoryMaintained(
-            EntityId("repo-1"), "maintain", "neglected", "intact", 4
-        ),
+        RepositoryMaintained(EntityId("repo-1"), "maintain", "neglected", "intact", 4),
         RepositoryIndexed(EntityId("repo-1"), 2, 1),
         RepositoryNeglected(EntityId("repo-1"), 1, "intact", "neglected", 1),
     )
     for details in samples:
         cause = (
-            _system_cause()
-            if type(details) is RepositoryNeglected
-            else _action_cause()
+            _system_cause() if type(details) is RepositoryNeglected else _action_cause()
         )
-        event = _event(
-            details, schema_version=EVENT_SCHEMA_REPLAY_V14, cause=cause
-        )
+        event = _event(details, schema_version=EVENT_SCHEMA_REPLAY_V14, cause=cause)
         encoded = encode_domain(event)
         decoded = decode_domain(encoded)
         assert type(decoded.details) is type(details)

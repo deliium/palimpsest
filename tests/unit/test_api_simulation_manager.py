@@ -108,9 +108,7 @@ async def test_create_builds_runner_before_control_row_and_tick_uses_it() -> Non
 
 @pytest.mark.asyncio
 async def test_create_start_tick_ready_transitions() -> None:
-    manager, repo, executed = _manager(
-        ticks=[TickExecutionResult(ticks_committed=1)]
-    )
+    manager, repo, executed = _manager(ticks=[TickExecutionResult(ticks_committed=1)])
     created = await manager.create(
         run_id="run-1",
         config_schema_version="runner-config-v2",

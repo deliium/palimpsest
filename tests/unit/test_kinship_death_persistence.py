@@ -77,16 +77,12 @@ def _act(engine: WorldEngine, agent_id: str, command: object) -> None:
 def test_edges_survive_parent_death() -> None:
     _LOG.debug("case_id=edges_survive_died")
     engine = _engine()
-    assert parents_of(engine.kinship_graph, AgentId("agent-b")) == (
-        AgentId("agent-a"),
-    )
+    assert parents_of(engine.kinship_graph, AgentId("agent-b")) == (AgentId("agent-a"),)
     parent_body_id = EntityId("body-a")
     _act(engine, "agent-b", Attack(parent_body_id))
     body = engine._snapshot.world.state.bodies[parent_body_id]
     assert body.life_status is LifeStatus.DEAD
-    assert parents_of(engine.kinship_graph, AgentId("agent-b")) == (
-        AgentId("agent-a"),
-    )
+    assert parents_of(engine.kinship_graph, AgentId("agent-b")) == (AgentId("agent-a"),)
     assert ancestors_of(
         engine.kinship_graph,
         AgentId("agent-b"),
@@ -95,8 +91,7 @@ def test_edges_survive_parent_death() -> None:
     ) == (AgentId("agent-a"),)
     assert engine.last_tick_result is not None
     assert any(
-        type(record.event.details) is Died
-        for record in engine.last_tick_result.events
+        type(record.event.details) is Died for record in engine.last_tick_result.events
     )
 
 

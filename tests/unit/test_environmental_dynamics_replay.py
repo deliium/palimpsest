@@ -147,6 +147,7 @@ def test_prefix_matches_the_live_scene_at_three_ticks(
     )
     _again, groups_again = _trace(4, spec)
     _other, groups_other = _trace(11, spec)
+
     def _season_ticks(
         groups: list[tuple[object, tuple[object, ...], object]],
     ) -> list[int]:

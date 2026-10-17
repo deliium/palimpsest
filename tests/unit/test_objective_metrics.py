@@ -90,9 +90,7 @@ def test_resource_inequality_unknown_holdings_not_zero() -> None:
         ResourceHoldingRow(agent_id="a", value=1.0),
         ResourceHoldingRow(agent_id="b", value=None),
     ]
-    doc = compute_resource_inequality(
-        holdings, run_id="run-ri", input_revision="rev-1"
-    )
+    doc = compute_resource_inequality(holdings, run_id="run-ri", input_revision="rev-1")
     assert doc.availability is MetricAvailability.PARTIAL
     assert doc.values["population_size"] == 1
     assert "wealth" not in repr(doc).lower()
@@ -181,9 +179,7 @@ def test_cooperation_no_events_unknown() -> None:
 
 
 def test_action_resolution_rates_never_infer_from_absence() -> None:
-    empty = compute_action_resolution_rates(
-        [], run_id="run-ar", input_revision="rev-1"
-    )
+    empty = compute_action_resolution_rates([], run_id="run-ar", input_revision="rev-1")
     assert empty.metric_family == ACTION_RESOLUTION_RATES_FAMILY
     assert empty.availability is MetricAvailability.ABSENT
 
@@ -314,9 +310,7 @@ def test_goal_completion_rates_and_legacy() -> None:
             to_status="active",
         ),
     ]
-    doc = compute_goal_completion(
-        transitions, run_id="run-g", input_revision="rev-1"
-    )
+    doc = compute_goal_completion(transitions, run_id="run-g", input_revision="rev-1")
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["completion_rate"] == _q(0.25)
     assert doc.values["abandonment_rate"] == _q(0.25)
@@ -349,9 +343,7 @@ def test_objective_documents_round_trip_and_are_finite() -> None:
         ResourceHoldingRow(agent_id="a", value=0.0),
         ResourceHoldingRow(agent_id="b", value=10.0),
     ]
-    doc = compute_resource_inequality(
-        holdings, run_id="run-rt", input_revision="rev-1"
-    )
+    doc = compute_resource_inequality(holdings, run_id="run-rt", input_revision="rev-1")
     encoded = encode_metric_document(doc)
     decoded = decode_metric_document(encoded)
     assert decoded.values == doc.values

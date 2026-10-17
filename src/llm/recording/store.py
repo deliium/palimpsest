@@ -75,9 +75,7 @@ class RecordingStore(Protocol):
         """Load by content-addressed key within ``cache_namespace``."""
         ...
 
-    def get_by_correlation(
-        self, key: CorrelationKey
-    ) -> LLMExchangeRecord | None:
+    def get_by_correlation(self, key: CorrelationKey) -> LLMExchangeRecord | None:
         """Load by exact correlation tuple."""
         ...
 
@@ -243,8 +241,7 @@ class FilesystemRecordingStore:
                 )
         _atomic_write(corr_path, payload)
         _LOG.debug(
-            "recording_store_put reason=correlation_written "
-            "namespace_prefix=%s",
+            "recording_store_put reason=correlation_written namespace_prefix=%s",
             _namespace_dir_name(namespace)[:_DIGEST_PREFIX],
         )
 

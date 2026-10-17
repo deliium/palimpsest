@@ -23,6 +23,7 @@ from infrastructure.settings import Settings, redact_secrets
 
 _LOGGER = get_logger("infrastructure.database")
 READINESS_SQL = text("SELECT 1")
+SQLAlchemySessionFactory = async_sessionmaker[AsyncSession]
 
 
 class SessionLike(Protocol):

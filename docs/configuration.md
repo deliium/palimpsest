@@ -64,6 +64,56 @@ Copy `.env.example` to `.env` for local overrides. Do not commit `.env`.
 - `LogicalClock` uses explicit `Tick` values. Domain contracts do not default to wall-clock or UUID factories.
 - Exact LLM replay needs recorded responses or stubs (`LLM_REPLAY_REQUIREMENT = recorded_or_stub`). Satisfied by `deterministic_fake` or a `replay` recording store — see [LLM providers](llm-providers.md).
 
+## Optional regions and migration (`runner-config-v44`)
+
+Enable `v3_capability_flags.multi_polity_migration` together with the exact
+`regions_migration` sibling. Both are required on v44. An object with the flag
+off, a flag without the object, or the object on an older schema rejects. With
+the channel absent, ordinary configurations still write v4 unless another
+active feature selects a higher version.
+
+| Required key | Shape and constraint |
+| --- | --- |
+| `regions` | Nonempty list of `{region_id, label}`; nonempty strings, unique IDs |
+| `location_regions` | List of `{location_id, region_id}`; one membership per existing location; partial assignment allowed |
+| `routes` | List of `{endpoint_a, endpoint_b, duration_ticks, fatigue_cost}`; existing undirected adjacent edges, no reverse duplicates |
+| `max_arrival_wait_ticks` | Exact integer ≥ 0 |
+| `residence_min_ticks` | Exact integer ≥ 1; analytical dwell threshold |
+| `destination_memory_limit` | Exact integer ≥ 1; cap on the remaining recall budget |
+| `destination_hop_limit` | Exact integer ≥ 1; bounded subjective route search |
+| `cognition_mode` | `disabled` or `deterministic`; physics does not require cognitive bias |
+
+Route duration is an exact integer ≥ 1; fatigue is finite and nonnegative.
+Booleans do not count as integers. Memberships and routes may be empty. All
+nested shapes reject unknown fields and null values; the wire supplies every
+key explicitly. Encoding sorts regions/memberships by ID and edges by their
+canonical endpoint pair. Absent optional sibling channels are omitted. Public
+goods still require collective projects when composed with migration.
+
+This executable example obtains a complete configuration with valid topology
+and checks it through the real codec:
+
+```python
+from experiments.regional_migration_scenario import regional_migration_scenario
+from simulation.runner_serialization import decode_runner_config, encode_runner_config
+
+definition = regional_migration_scenario(seed=11, max_ticks=8)
+config = definition.conditions[2].runner_config  # production-cognition arm
+assert config.schema_version == "runner-config-v44"
+assert decode_runner_config(encode_runner_config(config)) == config
+```
+
+Enabled objective writes use replay schema 21 / codec `v19`; otherwise the
+existing highest-active-channel selector applies. No new database migration,
+environment variable, command, or HTTP prefix is introduced. For movement
+semantics see [Physical simulation](physical-simulation.md#discrete-regional-journeys).
+
+Regional DEBUG logs contain IDs, counts, versions, and safe admission/recall
+reason codes. Committed travel logs identify start/arrival/end only after commit;
+prepared candidates are not reported as committed. `PALIMPSEST_LOG_LEVEL`
+controls application verbosity. Never log destination beliefs, testimony,
+observations, seeds, or whole configurations.
+
 ## See also
 
 - [Architecture](architecture.md)

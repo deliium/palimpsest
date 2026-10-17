@@ -212,6 +212,34 @@ Later V3 generational plans plug into these seams only. They must not re-open Wo
 
 The closed command count is **43**, including `UsePublicGood`, `MaintainPublicGood`, and `OpposePublicGood`. The observer semantic count is **69**, with `PUBLIC_GOOD_BENEFIT`, `PUBLIC_GOOD_MAINTAINED`, and `PUBLIC_GOOD_OPPOSED` appended after the project semantics. The protocol id remains `observer-protocol-v1`, and Alembic head remains `0017`. A benefit event is not an access grant and not a moral role. Experiment AX (`public_goods@1`) stays off the V1 gate.
 
+### V3-22 regions and migration contract
+
+`multi_polity_migration` owns the optional location/region migration substrate
+on `runner-config-v44`. It does not create polities, citizenship, border
+enforcement, or dynamic settlements. `institutional_economy` and
+`multi_hop_testimony_tracking` remain fail-closed.
+
+`world.regions` holds immutable region/route/journey contracts; private world
+travel processing is composed by `WorldEngine`. Enabled writes select replay 21
+/ codec v19, carrying older active channels. Disabled runs retain their previous
+write selector, perception, IDs, draws, and ordinary travel behavior. The closed
+command count stays **43**; observer semantics extend **69 → 72** with journey
+start/arrival/end. Observer protocol v1, `/v1`, and Alembic `0017` remain stable.
+
+Owner-scoped recall uses local selection first and a bounded destination lane
+from the remainder of shared selection/provider/reconstruction budgets. Lane
+identifiers are namespaced; overlapping memories are accessed once. Known
+routes are rebuilt from persisted owner evidence, never an objective atlas.
+Wrong, contradictory, and old testimony is subjective evidence, not admission
+authority. Hidden-world changes alone cannot supply destination knowledge.
+
+Read-only regional metrics reconstruct crossings, living populations, and
+dwell-qualified migrations from detached events and evidence. They never add a
+world `is_migrant` field or feed truth into agents. AY stays off the V1 gate.
+See [Physical simulation](physical-simulation.md#discrete-regional-journeys),
+[Configuration](configuration.md#optional-regions-and-migration-runner-config-v44),
+and [Experiments](experiments.md#experiment-ay-regional-migration).
+
 ### Downstream V3 plan contract
 
 Every later V3 feature plan must satisfy this checklist before merge:

@@ -48,7 +48,7 @@ def _event(details: object, *, tick: int, sequence: int, actor: str | None):
 
 
 def test_family_count_is_74() -> None:
-    assert METRIC_FAMILY_COUNT == 91
+    assert METRIC_FAMILY_COUNT == 94
     assert MetricFamilyId.POSSESSION_CUSTODY_OUTCOMES.value == (
         "possession_custody_outcomes"
     )
@@ -91,9 +91,7 @@ def test_take_conflict_and_contested_convention() -> None:
         actor="body-b",
     )
     take = _event(
-        TakenFromCorpse(
-            EntityId("item-1"), EntityId("body-dead"), EntityId("body-a")
-        ),
+        TakenFromCorpse(EntityId("item-1"), EntityId("body-dead"), EntityId("body-a")),
         tick=3,
         sequence=0,
         actor="body-a",

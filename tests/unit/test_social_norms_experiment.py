@@ -71,12 +71,12 @@ def test_experiment_x_pairs_v4_and_v17(caplog: pytest.LogCaptureFixture) -> None
     assert all(
         body.location_id == EntityId("clearing") for body in disabled.scenario.bodies
     )
-    assert {
-        agent.cognition.social_norm_mode for agent in disabled.agents
-    } == {SocialNormMode.DISABLED}
-    assert {
-        agent.cognition.social_norm_mode for agent in enabled.agents
-    } == {SocialNormMode.DETERMINISTIC}
+    assert {agent.cognition.social_norm_mode for agent in disabled.agents} == {
+        SocialNormMode.DISABLED
+    }
+    assert {agent.cognition.social_norm_mode for agent in enabled.agents} == {
+        SocialNormMode.DETERMINISTIC
+    }
     assert any("experiment_x_built" in record.getMessage() for record in caplog.records)
     text = "".join(record.getMessage() for record in caplog.records)
     assert "return_transfer" not in text
@@ -95,9 +95,7 @@ def test_experiment_metric_harvest_includes_both_blocks() -> None:
                     "confidence": 0.5,
                     "supporters": ("ben",),
                     "consequences": (),
-                    "response": type(
-                        "Response", (), {"value": "follow"}
-                    )(),
+                    "response": type("Response", (), {"value": "follow"})(),
                 },
             )(),
         )

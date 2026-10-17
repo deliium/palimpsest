@@ -82,9 +82,7 @@ def _engine(
     profile_active: bool,
 ) -> WorldEngine:
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=19, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=19, physical_rules=non_lethal_physical_rules()),
         bootstrap=WorldBootstrap(
             world_id=WorldId("world-av-run"),
             revision=WorldRevision(0),
@@ -280,9 +278,7 @@ def test_inert_item_is_unused_and_scripted_arms_stay_numeric(caplog) -> None:
         AgentRegistration(AgentId("agent-2"), EntityId("body-b")),
         AgentRegistration(AgentId("agent-3"), EntityId("body-c")),
     )
-    later_engine = _engine(
-        (pebble_a, bread, axe), bodies, regs, profile_active=True
-    )
+    later_engine = _engine((pebble_a, bread, axe), bodies, regs, profile_active=True)
     _step(
         later_engine,
         {
@@ -407,9 +403,7 @@ def test_inert_item_is_unused_and_scripted_arms_stay_numeric(caplog) -> None:
     generic_quote = next(
         row for row in quote.quote_homogeneity if row.item_kind == "generic"
     )
-    food_quote = next(
-        row for row in quote.quote_homogeneity if row.item_kind == "food"
-    )
+    food_quote = next(row for row in quote.quote_homogeneity if row.item_kind == "food")
     assert generic_quote.homogeneous_side_count >= 1
     assert food_quote.homogeneous_side_count >= 1
     assert "is_money" not in caplog.text

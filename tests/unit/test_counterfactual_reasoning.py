@@ -436,11 +436,14 @@ def test_search_without_progress_moves_toward_another_exit() -> None:
         memory_id=None,
         goal_ids=(),
     )
-    assert consider_counterfactuals(
-        _input(tick=4, exits=exits),
-        (blocked,),
-        policy=default_counterfactual_policy(),
-    ) == ()
+    assert (
+        consider_counterfactuals(
+            _input(tick=4, exits=exits),
+            (blocked,),
+            policy=default_counterfactual_policy(),
+        )
+        == ()
+    )
 
 
 def test_wait_with_stored_counterpart_imagines_communication() -> None:
@@ -507,9 +510,7 @@ def test_missing_decision_and_objective_model_fail_closed(
 ) -> None:
     with caplog.at_level(logging.WARNING, logger="agents.cognition.counterfactual"):
         assert (
-            consider_counterfactuals(
-                _input(), policy=default_counterfactual_policy()
-            )
+            consider_counterfactuals(_input(), policy=default_counterfactual_policy())
             == ()
         )
     assert any(
@@ -778,9 +779,7 @@ async def test_loop_identity_mode_gates_the_self_belief() -> None:
     enabled_proposal = await enabled.prepare(
         loop_input, invocation_id="inv-on", remembered_decisions=(decision,)
     )
-    quiet = await passthrough.complete(
-        quiet_proposal, effective_command=Wait()
-    )
+    quiet = await passthrough.complete(quiet_proposal, effective_command=Wait())
     loud = await enabled.complete(enabled_proposal, effective_command=Wait())
     quiet_predicates = _revision_predicates(quiet.identity_revisions)
     loud_predicates = _revision_predicates(loud.identity_revisions)
@@ -819,14 +818,11 @@ def test_identity_passthrough_is_quiet_and_enabled_records_regret(
 
     scenario = _help_scenario()
     with caplog.at_level(logging.DEBUG, logger="agents.cognition.identity"):
-        request = counterfactual_regret_request(
-            scenario, owner_id=_OWNER, tick=3
-        )
+        request = counterfactual_regret_request(scenario, owner_id=_OWNER, tick=3)
     assert CognitionIdentityMode.PASSTHROUGH.value == "passthrough"
     assert request is not None
     assert (
-        request.claim.predicate
-        == "identity.weakness.own_choice.counterfactual_regret"
+        request.claim.predicate == "identity.weakness.own_choice.counterfactual_regret"
     )
     assert request.claim.value.bool_value is True
     assert request.evidence.supporting[0].memory_id.value == "memory-help"

@@ -93,9 +93,9 @@ def log_physical_config_validated(config: SimulationRunConfig) -> None:
     fingerprint = fingerprint_physical_rules(config.physical_rules)
     stochastic_prefix = "-"
     if config.stochastic_identity is not None:
-        stochastic_prefix = stochastic_identity_fingerprint(
-            config.stochastic_identity
-        )[:12]
+        stochastic_prefix = stochastic_identity_fingerprint(config.stochastic_identity)[
+            :12
+        ]
     _LOGGER.debug(
         "physical_config_validated derivation_version=%s rules_version=%s "
         "fingerprint_prefix=%s stochastic_fingerprint_prefix=%s",
@@ -201,8 +201,7 @@ def log_goal_transition_boundary(
 ) -> None:
     """DEBUG goal evaluation boundary (IDs/counts/codes only)."""
     _LOGGER.debug(
-        "goal_transition_boundary run_id=%s tick=%s transition_count=%s "
-        "reason_code=%s",
+        "goal_transition_boundary run_id=%s tick=%s transition_count=%s reason_code=%s",
         run_id,
         tick,
         transition_count,

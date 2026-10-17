@@ -80,12 +80,9 @@ def test_expand_cartesian_and_group_roles() -> None:
     assert "memory_type-reference__mortality-disabled" in ids
     # Any treatment level → treatment
     roles = {cell.condition_id: cell.group_role for cell in cells}
+    assert roles["memory_type-reference__mortality-disabled"] is GroupRole.CONTROL
     assert (
-        roles["memory_type-reference__mortality-disabled"] is GroupRole.CONTROL
-    )
-    assert (
-        roles["memory_type-reconstructive__mortality-disabled"]
-        is GroupRole.TREATMENT
+        roles["memory_type-reconstructive__mortality-disabled"] is GroupRole.TREATMENT
     )
     modes = {
         (
@@ -112,9 +109,7 @@ def test_exclude_combos_and_min_two_conditions() -> None:
     spec = _spec(
         constraints=MatrixConstraints(
             exclude_combos=(
-                MatrixExcludeCombo(
-                    levels=(("memory_type", "reconstructive"),)
-                ),
+                MatrixExcludeCombo(levels=(("memory_type", "reconstructive"),)),
                 MatrixExcludeCombo(levels=(("mortality", "enabled"),)),
             )
         )
@@ -171,9 +166,7 @@ def test_seasonality_factor_finalize_and_scarcity_layout() -> None:
     assert len(definition.conditions) == 4
     assert len(cells) == 4
     seasonal = [
-        cond
-        for cond in definition.conditions
-        if "seasonality-on" in cond.condition_id
+        cond for cond in definition.conditions if "seasonality-on" in cond.condition_id
     ]
     assert all(
         cond.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V14

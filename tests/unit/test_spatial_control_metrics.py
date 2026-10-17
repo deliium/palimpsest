@@ -159,9 +159,7 @@ def test_assemble_omits_spatial_control_when_rows_are_absent() -> None:
         )
     )
     spatial = [
-        doc
-        for doc in present.documents
-        if doc.metric_family == "spatial_control"
+        doc for doc in present.documents if doc.metric_family == "spatial_control"
     ]
     assert len(spatial) == 1
     assert spatial[0].availability is MetricAvailability.ABSENT

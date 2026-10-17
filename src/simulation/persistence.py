@@ -13,7 +13,10 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol, TypedDict
+
+if TYPE_CHECKING:
+    from simulation.branching import BranchLineage
 
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.clock import Tick, require_exact_nonneg_int
@@ -37,8 +40,8 @@ from simulation.run_control import (
     StreamRecordDraft,
 )
 from world.artifacts import InformationArtifact
+from world.collective_projects import CollectiveProject
 from world.environment import ActiveHazard
-from world.repositories import KnowledgeRepository
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
@@ -52,12 +55,14 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V11,
     EVENT_SCHEMA_REPLAY_V12,
     EVENT_SCHEMA_REPLAY_V13,
-    EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+    EVENT_SCHEMA_REPLAY_V14,
+    EVENT_SCHEMA_REPLAY_V15,
     EVENT_SCHEMA_REPLAY_V16,
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
     EVENT_SCHEMA_REPLAY_V19,
     EVENT_SCHEMA_REPLAY_V20,
+    EVENT_SCHEMA_REPLAY_V21,
     WorldEvent,
     normalize_events,
 )
@@ -70,8 +75,31 @@ from world.identifiers import (
 )
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
+from world.regions import Journey, RegionsMigrationSpec
+from world.repositories import KnowledgeRepository
+from world.subjective_value import ExchangeOffer
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.persistence")
+
+
+class SnapshotExtensions(TypedDict, total=False):
+    """Typed optional channel rows used by canonical snapshot construction."""
+
+    structures: Sequence[Structure]
+    production_jobs: Sequence[ProductionJob]
+    tool_marks: Sequence[ToolMark]
+    active_hazards: Sequence[ActiveHazard]
+    artifacts: Sequence[InformationArtifact]
+    lifecycle_records: Sequence[object]
+    kinship_edges: Sequence[object]
+    dependency_need_registers: Sequence[object]
+    repositories: Sequence[KnowledgeRepository]
+    corpse_custody_item_ids: Sequence[EntityId]
+    exchange_offers: Sequence[ExchangeOffer]
+    collective_projects: Sequence[CollectiveProject]
+    regions_migration: RegionsMigrationSpec | None
+    journeys: Sequence[Journey] | None
+
 
 # New-write versions for physical replay-v5 runs (structured communication).
 # Taxonomy / accepted-set policy: see simulation.compatibility.COMPATIBILITY_MATRIX.
@@ -94,12 +122,14 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
@@ -123,6 +153,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v16",
         "v17",
         "v18",
+        "v19",
     }
 )
 
@@ -229,6 +260,7 @@ def checkpoint_schema_for_production(
     resource_exchange_profile_active: bool = False,
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
+    regions_migration_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
@@ -239,6 +271,15 @@ def checkpoint_schema_for_production(
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
+    if regions_migration_active:
+        pair = EVENT_SCHEMA_REPLAY_V21, "v19"
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=regions_migration_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if public_goods_active:
         _LOG.info(
             "checkpoint_schema_selected schema_version=%s codec=%s "
@@ -393,12 +434,14 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }:
         return projector_version == "v2"
     return False
@@ -575,8 +618,10 @@ class WorldSnapshot:
     dependency_need_registers: Sequence[object] = ()
     repositories: Sequence[KnowledgeRepository] = ()
     corpse_custody_item_ids: Sequence[EntityId] = ()
-    exchange_offers: Sequence[object] = ()
-    collective_projects: Sequence[object] = ()
+    exchange_offers: Sequence[ExchangeOffer] = ()
+    collective_projects: Sequence[CollectiveProject] = ()
+    regions_migration: RegionsMigrationSpec | None = None
+    journeys: Sequence[Journey] | None = None
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -639,6 +684,31 @@ class WorldSnapshot:
             raise TypeError(
                 "WorldSnapshot.predecessor_commit_hash must be CommitHash or None"
             )
+        if (
+            self.regions_migration is not None
+            and type(self.regions_migration) is not RegionsMigrationSpec
+        ):
+            raise TypeError("regions_migration must be RegionsMigrationSpec or None")
+        journey_rows: tuple[Journey, ...] | None
+        if self.journeys is None and self.regions_migration is None:
+            journey_rows = None
+        else:
+            raw_journeys = () if self.journeys is None else self.journeys
+            if isinstance(raw_journeys, (str, bytes, Mapping)) or not isinstance(
+                raw_journeys, Sequence
+            ):
+                raise TypeError("journeys must be an ordered sequence")
+            journey_rows = tuple(raw_journeys)
+            if any(type(item) is not Journey for item in journey_rows):
+                raise TypeError("journeys entries must be Journey")
+        if self.persistence_codec_version == "v19":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V21:
+                raise ValueError("codec v19 requires event schema 21")
+            if self.regions_migration is None or journey_rows is None:
+                raise ValueError("codec v19 requires regions_migration")
+        elif self.regions_migration is not None or journey_rows is not None:
+            raise ValueError("regional migration checkpoint fields require codec v19")
+        object.__setattr__(self, "journeys", journey_rows)
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
         bootstrap = WorldBootstrap(
@@ -652,7 +722,10 @@ class WorldSnapshot:
             registrations=self.registrations,
             artifacts=self.artifacts,
             repositories=self.repositories,
+            regions_migration=self.regions_migration,
+            journeys=journey_rows,
         )
+        bootstrap.validate_finalized_boundary(max(0, self.next_tick.value - 1))
         object.__setattr__(self, "locations", bootstrap.locations)
         object.__setattr__(self, "items", bootstrap.items)
         object.__setattr__(self, "resources", bootstrap.resources)
@@ -661,6 +734,15 @@ class WorldSnapshot:
         object.__setattr__(self, "registrations", bootstrap.registrations)
         object.__setattr__(self, "artifacts", bootstrap.artifacts)
         object.__setattr__(self, "repositories", bootstrap.repositories)
+        object.__setattr__(
+            self,
+            "journeys",
+            None
+            if bootstrap.journeys is None
+            else tuple(
+                sorted(bootstrap.journeys, key=lambda journey: journey.journey_id)
+            ),
+        )
         object.__setattr__(
             self, "structures", _copy_production_rows(self.structures, Structure)
         )
@@ -759,6 +841,12 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v18_requires_schema_20"
                 )
                 raise ValueError("codec v18 requires event schema 20")
+        elif self.persistence_codec_version == "v19":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V21:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v19_requires_schema_21"
+                )
+                raise ValueError("codec v19 requires event schema 21")
         elif self.persistence_codec_version == "v17":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V19:
                 _LOG.error(
@@ -775,18 +863,49 @@ class WorldSnapshot:
             raise ValueError("production checkpoint fields require codec v3")
         if (
             self.persistence_codec_version
-            not in {"v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
+            not in {
+                "v4",
+                "v5",
+                "v6",
+                "v7",
+                "v8",
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
             and self.active_hazards
         ):
             raise ValueError("active_hazards require codec v4")
         if (
             self.persistence_codec_version
-            not in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
+            not in {
+                "v5",
+                "v6",
+                "v7",
+                "v8",
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
             and self.artifacts
         ):
-            _LOG.error(
-                "codec_schema_mismatch reason_code=artifacts_require_codec_v5"
-            )
+            _LOG.error("codec_schema_mismatch reason_code=artifacts_require_codec_v5")
             raise ValueError("artifacts require codec v5")
         from world.lifecycle import AgentLifecycleRecord
 
@@ -799,16 +918,29 @@ class WorldSnapshot:
             records.append(raw)
         object.__setattr__(self, "lifecycle_records", tuple(records))
         if (
-            self.persistence_codec_version not in {"v6", "v7", "v8", "v9", "v10", "v11",
-                "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
+            self.persistence_codec_version
+            not in {
+                "v6",
+                "v7",
+                "v8",
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
             and records
         ):
             _LOG.error(
                 "codec_schema_mismatch reason_code=lifecycle_records_require_codec_v6"
             )
-            raise ValueError(
-                "lifecycle_records require codec v6, v7, v8, v9, or v10"
-            )
+            raise ValueError("lifecycle_records require codec v6, v7, v8, v9, or v10")
         from world.kinship import KinshipEdge
 
         kinship_rows: list[KinshipEdge] = []
@@ -818,7 +950,21 @@ class WorldSnapshot:
             kinship_rows.append(raw)
         object.__setattr__(self, "kinship_edges", tuple(kinship_rows))
         if (
-            self.persistence_codec_version not in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
+            self.persistence_codec_version
+            not in {
+                "v8",
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
             and kinship_rows
         ):
             _LOG.error(
@@ -835,25 +981,51 @@ class WorldSnapshot:
                 )
             need_rows.append(raw)
         object.__setattr__(self, "dependency_need_registers", tuple(need_rows))
-        if self.persistence_codec_version not in {"v9", "v10", "v11",
-            "v12", "v13", "v14", "v15", "v16", "v17", "v18"} and need_rows:
+        if (
+            self.persistence_codec_version
+            not in {
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
+            and need_rows
+        ):
             _LOG.error(
                 "codec_schema_mismatch "
                 "reason_code=dependency_need_registers_require_codec_v9"
             )
-            raise ValueError(
-                "dependency_need_registers require codec v9, v10, or v11"
-            )
+            raise ValueError("dependency_need_registers require codec v9, v10, or v11")
         repo_rows: list[KnowledgeRepository] = []
         for raw in self.repositories:
             if type(raw) is not KnowledgeRepository:
                 raise TypeError("repositories entries must be KnowledgeRepository")
             repo_rows.append(raw)
         object.__setattr__(self, "repositories", tuple(repo_rows))
-        if self.persistence_codec_version not in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"} and repo_rows:
+        if (
+            self.persistence_codec_version
+            not in {
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
+            and repo_rows
+        ):
             _LOG.error(
-                "codec_schema_mismatch "
-                "reason_code=repositories_require_codec_v11"
+                "codec_schema_mismatch reason_code=repositories_require_codec_v11"
             )
             raise ValueError("repositories require codec v11")
         custody_ids: list[EntityId] = []
@@ -864,10 +1036,13 @@ class WorldSnapshot:
         if len(custody_ids) != len(set(custody_ids)):
             raise ValueError("corpse_custody_item_ids must be unique")
         object.__setattr__(self, "corpse_custody_item_ids", tuple(custody_ids))
-        if self.persistence_codec_version not in {"v13", "v14", "v15", "v16", "v17", "v18"} and custody_ids:
+        if (
+            self.persistence_codec_version
+            not in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}
+            and custody_ids
+        ):
             _LOG.error(
-                "codec_schema_mismatch "
-                "reason_code=corpse_custody_requires_codec_v13"
+                "codec_schema_mismatch reason_code=corpse_custody_requires_codec_v13"
             )
             raise ValueError("corpse_custody_item_ids require codec v13")
         from world.subjective_value import ExchangeOffer
@@ -878,7 +1053,10 @@ class WorldSnapshot:
                 raise TypeError("exchange_offers entries must be ExchangeOffer")
             offer_rows.append(raw)
         object.__setattr__(self, "exchange_offers", tuple(offer_rows))
-        if self.persistence_codec_version not in {"v15", "v16", "v17", "v18"} and offer_rows:
+        if (
+            self.persistence_codec_version not in {"v15", "v16", "v17", "v18", "v19"}
+            and offer_rows
+        ):
             _LOG.error(
                 "codec_schema_mismatch reason_code=exchange_offers_require_codec_v15"
             )
@@ -892,7 +1070,7 @@ class WorldSnapshot:
                 raise TypeError("collective_projects entries must be CollectiveProject")
             project_rows.append(raw)
         object.__setattr__(self, "collective_projects", tuple(project_rows))
-        if self.persistence_codec_version not in {"v17", "v18"} and project_rows:
+        if self.persistence_codec_version not in {"v17", "v18", "v19"} and project_rows:
             _LOG.warning(
                 "collective_projects present on pre-v17 payload codec=%s "
                 "project_count=%s",
@@ -900,7 +1078,7 @@ class WorldSnapshot:
                 len(project_rows),
             )
             raise ValueError("collective_projects require codec v17")
-        if self.persistence_codec_version not in {"v17", "v18"}:
+        if self.persistence_codec_version not in {"v17", "v18", "v19"}:
             for structure in self.structures:
                 if structure.kind in {StructureKind.BRIDGE, StructureKind.RECORD_SITE}:
                     _LOG.warning(
@@ -909,7 +1087,7 @@ class WorldSnapshot:
                         structure.kind.value,
                     )
                     raise ValueError("bridge and record_site require codec v17")
-        if self.persistence_codec_version != "v18":
+        if self.persistence_codec_version not in {"v18", "v19"}:
             for structure in self.structures:
                 if structure.kind in {StructureKind.WELL, StructureKind.WARNING_POST}:
                     _LOG.warning(
@@ -918,8 +1096,22 @@ class WorldSnapshot:
                         structure.kind.value,
                     )
                     raise ValueError("well and warning_post require codec v18")
-        if self.persistence_codec_version in {"v6", "v7", "v8", "v9", "v10", "v11",
-            "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+        if self.persistence_codec_version in {
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             custody_count = sum(
                 1
                 for artifact in self.artifacts
@@ -1027,6 +1219,10 @@ class RunCreateRequest:
                 "RunCreateRequest.derivation_version", self.derivation_version
             ),
         )
+        regions_migration_checkpoint = (
+            self.event_schema_version == EVENT_SCHEMA_REPLAY_V21
+            and self.persistence_codec_version == "v19"
+        )
         production_checkpoint = (
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V6
             and self.persistence_codec_version == "v3"
@@ -1051,7 +1247,9 @@ class RunCreateRequest:
             self,
             "event_schema_version",
             (
-                EVENT_SCHEMA_REPLAY_V10
+                EVENT_SCHEMA_REPLAY_V21
+                if regions_migration_checkpoint
+                else EVENT_SCHEMA_REPLAY_V10
                 if new_agent_checkpoint
                 else EVENT_SCHEMA_REPLAY_V9
                 if lifecycle_checkpoint
@@ -1077,7 +1275,9 @@ class RunCreateRequest:
             self,
             "persistence_codec_version",
             (
-                "v7"
+                "v19"
+                if regions_migration_checkpoint
+                else "v7"
                 if new_agent_checkpoint
                 else "v6"
                 if lifecycle_checkpoint
@@ -1751,9 +1951,9 @@ class BranchLineageRepository(Protocol):
     Concrete adapters accept/return ``simulation.branching.BranchLineage``.
     """
 
-    async def put_lineage(self, lineage: object) -> object: ...
+    async def put_lineage(self, lineage: BranchLineage) -> BranchLineage: ...
 
-    async def get_lineage(self, *, child_run_id: RunId) -> object | None: ...
+    async def get_lineage(self, *, child_run_id: RunId) -> BranchLineage | None: ...
 
     async def list_children(
         self,

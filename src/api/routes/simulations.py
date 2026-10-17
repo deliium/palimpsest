@@ -24,9 +24,7 @@ router = APIRouter(prefix="/v1/simulations", tags=["simulations"])
 _LOGGER = get_logger("api.routes.simulations")
 
 
-def _control(
-    request: Request, settings: Settings = Depends(get_settings)
-) -> None:
+def _control(request: Request, settings: Settings = Depends(get_settings)) -> None:
     require_http_capability(
         request, settings, capability=ApiCapability.SIMULATION_CONTROL
     )

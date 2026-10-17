@@ -118,6 +118,4 @@ def test_admit_rejects_bootstrap_provenance() -> None:
     _LOG.debug("case_id=admit_bootstrap_forbidden")
     engine = _engine(channel_on=True)
     with pytest.raises(ValueError, match="lifecycle_bootstrap_no_created_event"):
-        engine.admit_population_entry(
-            _candidate(provenance=OriginProvenance.BOOTSTRAP)
-        )
+        engine.admit_population_entry(_candidate(provenance=OriginProvenance.BOOTSTRAP))

@@ -48,9 +48,7 @@ def _metric_doc(family: str = "cooperation") -> MetricDocument:
         coverage=None,
         availability=MetricAvailability.PRESENT,
         values={"coop_occurrence_rate": 0.25},
-        provenance=MetricProvenance(
-            source_kind="test", source_ids=(), notes_code="ok"
-        ),
+        provenance=MetricProvenance(source_kind="test", source_ids=(), notes_code="ok"),
     )
 
 

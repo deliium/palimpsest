@@ -216,8 +216,9 @@ def test_survival_author_death_and_false_persist() -> None:
 
 
 def test_module_avoids_cognition_and_private_world_imports() -> None:
-    import analysis.durable_record_metrics as mod
     from pathlib import Path
+
+    import analysis.durable_record_metrics as mod
 
     source = Path(mod.__file__).read_text(encoding="utf-8")
     assert "import agents" not in source

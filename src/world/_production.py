@@ -15,6 +15,7 @@ from world.actions import Build, Craft, Harvest, Repair, Store
 from world.effects import ResolvedProductionEffect
 from world.events import (
     CraftStarted,
+    EventDetails,
     ItemCrafted,
     ItemStored,
     ResourceHarvested,
@@ -110,6 +111,7 @@ def apply_resolved(
     witness_resource_nodes: bool = False,
 ) -> tuple[WorldState, object | None, str | None, object | None]:
     """Apply one resolved attempt. Returns state, details, reject code, witness."""
+    code: str | None
     recipe = effect.recipe
     if effect.reason_code is not None or recipe is None:
         code = effect.reason_code or "production_disabled"
@@ -120,6 +122,7 @@ def apply_resolved(
         _warn(actor_id, recipe.recipe_id, blocked)
         return state, None, blocked, None
     duration = effective_duration(state, actor_id, recipe)
+    details: EventDetails | None
     if recipe.action is ProductionAction.HARVEST:
         return _apply_harvest(
             state,
@@ -240,7 +243,7 @@ def shelter_factor_for(state: WorldState, location_id: EntityId, base: float) ->
     return base
 
 
-def _warn(actor_id: EntityId, recipe_id: object, code: str) -> None:
+def _warn(actor_id: EntityId, recipe_id: RecipeId | None, code: str) -> None:
     if code not in {
         "actor_busy",
         "materials_unavailable",

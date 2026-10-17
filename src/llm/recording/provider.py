@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from enum import StrEnum
-from typing import Final
+from typing import Final, cast
 
+from llm.contracts import LLMProvider
 from llm.errors import LLMError, LLMErrorCode
 from llm.models import (
     EffectiveOptions,
@@ -123,7 +124,7 @@ class RecordingLLMProvider:
                 )
                 raise LLMError(LLMErrorCode.CONFIGURATION, retryable=False)
 
-        self._inner = inner
+        self._inner = cast(LLMProvider, inner)
         self._mode = mode
         self._store = store
         self._cache_namespace = cache_namespace.strip() if cache_namespace else ""
@@ -175,7 +176,7 @@ class RecordingLLMProvider:
                 "recording_generate mode=live llm_request_id=%s",
                 request.context.llm_request_id,
             )
-            return await self._inner.generate(request)  # type: ignore[no-any-return]
+            return await self._inner.generate(request)
 
         self._require_component(request)
         started = self._monotonic()
@@ -195,8 +196,7 @@ class RecordingLLMProvider:
             component=request.context.component or "",
         )
         _LOG.debug(
-            "recording_generate mode=%s llm_request_id=%s key_prefix=%s "
-            "lookup_mode=%s",
+            "recording_generate mode=%s llm_request_id=%s key_prefix=%s lookup_mode=%s",
             self._mode.value,
             request.context.llm_request_id,
             cache_key[:_DIGEST_PREFIX],
@@ -233,7 +233,7 @@ class RecordingLLMProvider:
                 cache_key[:_DIGEST_PREFIX],
             )
 
-        result = await self._inner.generate(request)  # type: ignore[misc]
+        result = await self._inner.generate(request)
         latency_ms = self._latency_ms(started)
         self._persist_success(
             request,
@@ -245,8 +245,7 @@ class RecordingLLMProvider:
             latency_ms=latency_ms,
         )
         _LOG.info(
-            "recording_generate mode=%s outcome=persisted key_prefix=%s "
-            "latency_ms=%s",
+            "recording_generate mode=%s outcome=persisted key_prefix=%s latency_ms=%s",
             self._mode.value,
             cache_key[:_DIGEST_PREFIX],
             latency_ms,
@@ -394,9 +393,7 @@ class RecordingLLMProvider:
             )
             raise LLMError(LLMErrorCode.CONFIGURATION, retryable=False)
         try:
-            output = validate_structured_output(
-                request.response_model, record.response
-            )
+            output = validate_structured_output(request.response_model, record.response)
         except (TypeError, ValueError):
             _LOG.error(
                 "recording_generate_failed reason=stored_response_invalid mode=%s",

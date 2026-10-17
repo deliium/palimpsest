@@ -43,6 +43,7 @@ def build_phenomenon_indicator_panel(
     revision = require_stable_id("input_revision", input_revision)
     validate_phenomenon_mappings()
     by_family: dict[str, MetricDocument] = {}
+    doc: MetricDocument | None
     for doc in documents:
         if type(doc) is not MetricDocument:
             raise TypeError("documents: invalid_type")
@@ -68,7 +69,7 @@ def build_phenomenon_indicator_panel(
                 value = None
             else:
                 raw = doc.values.get(ref.value_key)
-                if raw is None or type(raw) is not float and type(raw) is not int:
+                if raw is None or (type(raw) is not float and type(raw) is not int):
                     availability = MetricAvailability.ABSENT
                     value = None
                 else:
@@ -81,7 +82,9 @@ def build_phenomenon_indicator_panel(
                         float(raw), ref.moderate_floor, ref.direction
                     ):
                         meets_moderate += 1
-                    if indicator_meets_floor(float(raw), ref.strong_floor, ref.direction):
+                    if indicator_meets_floor(
+                        float(raw), ref.strong_floor, ref.direction
+                    ):
                         meets_strong += 1
             indicator_values.append(
                 (ref.metric_family, ref.value_key, value, availability)

@@ -82,8 +82,6 @@ def test_channel_off_does_not_fold() -> None:
         occurrences=(_occurrence(tick=4, give="pebble", take="bread"),),
     )
     assert (
-        loop._fold_acceptance_memory(
-            observation, None, owner_id=AgentId("agent-a")
-        )
+        loop._fold_acceptance_memory(observation, None, owner_id=AgentId("agent-a"))
         is None
     )

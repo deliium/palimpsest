@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import io
 import logging
 from collections.abc import Iterator
@@ -23,6 +21,7 @@ from simulation.lifecycle import (
 from simulation.models import SimulationRunConfig
 from tests.simulation_helpers import make_item, make_location, weather_for_locations
 from world.actions import Sleep, Take, Wait
+from world.communications import origin_utterance
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus
 from world.values import (
@@ -143,7 +142,10 @@ def test_prior_tick_events_appear_only_on_next_observe() -> None:
             ActionSubmission(
                 batch0.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), origin_utterance(text="hello-agent", speaker_id=EntityId("body-1"))),
+                Talk(
+                    EntityId("body-2"),
+                    origin_utterance(text="hello-agent", speaker_id=EntityId("body-1")),
+                ),
             ),
         )
     )

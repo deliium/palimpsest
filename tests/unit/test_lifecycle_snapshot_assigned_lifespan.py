@@ -51,9 +51,7 @@ def test_new_snapshot_round_trips_assigned_lifespan() -> None:
     )
     assert records[0].assigned_lifespan_ticks == 20
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=13, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=13, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-assigned-lifespan"),
         population_lifecycle=spec,
@@ -106,9 +104,7 @@ def test_new_snapshot_round_trips_assigned_lifespan() -> None:
     decoded = decode_persistence(encode_persistence(snap), WorldSnapshot)
     assert type(decoded) is WorldSnapshot
     assert decoded.lifecycle_records[0].assigned_lifespan_ticks == 20
-    restored = WorldEngine.restore_from_snapshot(
-        decoded, population_lifecycle=spec
-    )
+    restored = WorldEngine.restore_from_snapshot(decoded, population_lifecycle=spec)
     assert restored.lifecycle_records[0].assigned_lifespan_ticks == 20
 
 
@@ -147,9 +143,7 @@ def test_legacy_keyset_synthesizes_run_lifespan_on_restore() -> None:
     )
     spec = example_population_lifecycle_spec(lifespan_ticks=20)
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=5, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=5, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-legacy-assigned"),
         population_lifecycle=spec,
@@ -212,7 +206,5 @@ def test_legacy_keyset_synthesizes_run_lifespan_on_restore() -> None:
         "utf-8"
     )
     decoded = decode_persistence(legacy_bytes, WorldSnapshot)
-    restored = WorldEngine.restore_from_snapshot(
-        decoded, population_lifecycle=spec
-    )
+    restored = WorldEngine.restore_from_snapshot(decoded, population_lifecycle=spec)
     assert restored.lifecycle_records[0].assigned_lifespan_ticks == 20

@@ -426,9 +426,7 @@ class MemoryDriftReport:
                 if type(value) is not int or value < 0:
                     raise ValueError("MemoryDriftReport.evidence_stage_counts: invalid")
                 cleaned[require_stable_id("evidence_stage_counts.key", key)] = value
-            object.__setattr__(
-                self, "evidence_stage_counts", MappingProxyType(cleaned)
-            )
+            object.__setattr__(self, "evidence_stage_counts", MappingProxyType(cleaned))
 
     def __repr__(self) -> str:
         return (
@@ -1504,4 +1502,3 @@ class MemoryDynamicsReport:
             f"run_id={self.run_id!r}, condition_id={self.condition_id!r}, "
             f"audit_count={len(self.audits)}, memory_mode={self.memory_mode!r})"
         )
-

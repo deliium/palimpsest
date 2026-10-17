@@ -78,9 +78,7 @@ def test_survival_founder_death_and_status_counts(
             "index_entry_count": 0,
         },
     )
-    with caplog.at_level(
-        logging.DEBUG, logger="analysis.knowledge_repository_metrics"
-    ):
+    with caplog.at_level(logging.DEBUG, logger="analysis.knowledge_repository_metrics"):
         document = compute_knowledge_repository_survival(
             rows,
             run_id="run-1",

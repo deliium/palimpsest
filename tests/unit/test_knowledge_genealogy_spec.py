@@ -52,9 +52,7 @@ def test_kinds_empty_rejected() -> None:
 
 def test_kind_duplicate_rejected() -> None:
     with pytest.raises(ValueError, match="knowledge_genealogy_kind_duplicate"):
-        KnowledgeGenealogySpec(
-            enabled_kinds=("foraging_method", "foraging_method")
-        )
+        KnowledgeGenealogySpec(enabled_kinds=("foraging_method", "foraging_method"))
 
 
 def test_kind_invalid_rejected() -> None:
@@ -70,9 +68,7 @@ def test_mutation_threshold_rejected() -> None:
 
 
 def test_query_depth_ceiling_rejected() -> None:
-    with pytest.raises(
-        ValueError, match="knowledge_genealogy_max_query_depth_invalid"
-    ):
+    with pytest.raises(ValueError, match="knowledge_genealogy_max_query_depth_invalid"):
         KnowledgeGenealogyQueryPolicy(max_query_depth=64)
 
 

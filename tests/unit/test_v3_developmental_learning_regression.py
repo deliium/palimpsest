@@ -15,6 +15,7 @@ from experiments.catalog import (
 )
 from observer.contracts import SEMANTIC_EVENT_TYPES
 from simulation.models import RunId
+from simulation.new_agent_initialization import default_new_agent_initialization_spec
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
@@ -28,7 +29,6 @@ from simulation.runner_models import (
     example_population_lifecycle_spec,
 )
 from simulation.runner_serialization import build_runner_result_document
-from simulation.new_agent_initialization import default_new_agent_initialization_spec
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import WorldId, WorldRevision
 from world.models import non_lethal_physical_rules
@@ -120,4 +120,4 @@ async def test_lifecycle_on_without_developmental_learning_runs() -> None:
 
 
 def test_semantic_event_count_stays_43() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 69
+    assert len(SEMANTIC_EVENT_TYPES) == 72

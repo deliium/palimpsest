@@ -123,10 +123,7 @@ def compute_communication_strategy_metrics(
         return CommunicationStrategyMetricResult(
             document=document, categories=(), cascade_count=0
         )
-    values = {
-        name: quantize_float(float(counts[name]))
-        for name in _CATEGORIES
-    }
+    values = {name: quantize_float(float(counts[name])) for name in _CATEGORIES}
     values["cascade_count"] = quantize_float(float(cascade))
     document = MetricDocument(
         schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
@@ -160,26 +157,9 @@ def classify_communication_audit(
 
 
 def _category(audit: object, events: Mapping[str, WorldEvent]) -> str:
-    stance = _value(getattr(audit, "stance", None))
-    strategy = _value(getattr(audit, "strategy", None))
-    if stance in {"refuse", "withhold"}:
-        return "not_asserted"
-    if stance == "hedge":
-        return "uncertain_inference"
-    if strategy in _DECEPTION:
-        return "deliberate_deception"
-    if stance != "assert_match":
-        return "unmatched"
-    cited = getattr(audit, "cited_event_id", None)
-    if type(cited) is not str:
-        return "unmatched"
-    event = events.get(cited)
-    if event is None:
-        return "unmatched"
-    source = _tokens(getattr(audit, "source_atom_tokens", ()))
-    if source <= _public_tokens(event):
-        return "veridical"
-    return "memory_error"
+    from simulation.communication_audit import classify_communication_audit
+
+    return classify_communication_audit(audit, events)
 
 
 def _cascade_count(audits: Sequence[object], events: Sequence[WorldEvent]) -> int:

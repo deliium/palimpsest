@@ -19,7 +19,11 @@ from analysis.specifications import (
     MetricSpecification,
     metric_specification,
 )
-from analysis.subjective_value import ExchangeLedgerSnapshot, classify_exchange
+from analysis.subjective_value import (
+    ExchangeLedgerSnapshot,
+    ExchangeView,
+    classify_exchange,
+)
 from world.events import WorldEvent
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
@@ -102,7 +106,9 @@ def _document(
     )
 
 
-def _divergence(views, run_id: str, revision: str) -> MetricDocument:
+def _divergence(
+    views: Sequence[ExchangeView], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.EXCHANGE_RESERVATION_DIVERGENCE)
     if spec.version_identifier != EXCHANGE_RESERVATION_DIVERGENCE_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
@@ -113,10 +119,7 @@ def _divergence(views, run_id: str, revision: str) -> MetricDocument:
         if row.status == "formed" and row.reservation is not None
     ]
     unformed = sum(
-        1
-        for view in views
-        for row in view.reservations
-        if row.status == "unformed"
+        1 for view in views for row in view.reservations if row.status == "unformed"
     )
     return _document(
         spec,
@@ -132,7 +135,7 @@ def _divergence(views, run_id: str, revision: str) -> MetricDocument:
     )
 
 
-def _path(views, run_id: str, revision: str) -> MetricDocument:
+def _path(views: Sequence[ExchangeView], run_id: str, revision: str) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.EXCHANGE_NEGOTIATION_PATH)
     if spec.version_identifier != EXCHANGE_NEGOTIATION_PATH_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
@@ -152,7 +155,9 @@ def _path(views, run_id: str, revision: str) -> MetricDocument:
     )
 
 
-def _bundles(views, run_id: str, revision: str) -> MetricDocument:
+def _bundles(
+    views: Sequence[ExchangeView], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.EXCHANGE_REALIZED_BUNDLES)
     if spec.version_identifier != EXCHANGE_REALIZED_BUNDLES_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")

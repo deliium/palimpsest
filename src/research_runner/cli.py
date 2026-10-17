@@ -19,7 +19,7 @@ from experiments.matrix_metric_summary import (
     encode_matrix_metric_summary,
     load_matrix_metric_summary_from_store,
 )
-from experiments.matrix_models import matrix_spec_fingerprint
+from experiments.matrix_models import ExperimentMatrixSpec, matrix_spec_fingerprint
 from experiments.matrix_runner import MatrixBatchRunner
 from experiments.matrix_serialization import decode_matrix_spec
 from research_runner.composition import (
@@ -38,7 +38,7 @@ def _configure_logging(verbose: bool) -> None:
     )
 
 
-def _load_spec(path: Path):
+def _load_spec(path: Path) -> ExperimentMatrixSpec:
     payload = path.read_bytes()
     return decode_matrix_spec(payload)
 

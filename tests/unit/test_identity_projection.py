@@ -356,9 +356,7 @@ async def test_projector_fills_identity_only_when_enabled(
         )
     assert passthrough.identity is None
     projected = [
-        record
-        for record in caplog.records
-        if record.message == "self_model_projected"
+        record for record in caplog.records if record.message == "self_model_projected"
     ]
     assert projected[-1].identity_mode == "passthrough"
     assert projected[-1].identity_belief_count == 0

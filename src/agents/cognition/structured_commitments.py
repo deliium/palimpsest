@@ -10,7 +10,11 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Final
+from typing import TYPE_CHECKING, Final, cast
+
+if TYPE_CHECKING:
+    from world.actions import DeclareCommitment
+    from world.identifiers import EventId
 
 from agents.models import AgentId
 from world.identifiers import EntityId, require_exact_nonneg_int
@@ -491,7 +495,7 @@ def _open_row(
             status = "proposed"
     debtor, creditor = _roles(terms)
     event_id = terms["event_id"]
-    source = () if event_id is None else (event_id.value,)
+    source = () if event_id is None else (cast("EventId", event_id).value,)
     local_id = 1 + max((row.local_id for row in ledger.interpretations), default=0)
     row = CommitmentInterpretation(
         local_id,
@@ -503,7 +507,7 @@ def _open_row(
         str(terms["owed_by"]),
         str(terms["item_kind"]),
         str(terms["service"]),
-        int(terms["quantity"]),  # type: ignore[arg-type]
+        cast(int, terms["quantity"]),
         str(terms["now_item_kind"]),
         str(terms["due_kind"]),
         terms["due_tick"] if type(terms["due_tick"]) is int else None,
@@ -533,7 +537,7 @@ def _dispute(
         str(terms["owed_by"]),
         str(terms["item_kind"]),
         str(terms["service"]),
-        int(terms["quantity"]),  # type: ignore[arg-type]
+        cast(int, terms["quantity"]),
         str(terms["now_item_kind"]),
         str(terms["due_kind"]),
         terms["due_tick"] if type(terms["due_tick"]) is int else None,
@@ -790,6 +794,10 @@ def commitment_memory_intents(
     if not needed:
         return ()
     revision = getattr(observation, "revision", None)
+    from world.identifiers import WorldRevision
+
+    if not isinstance(revision, WorldRevision):
+        raise TypeError("observation revision must be WorldRevision")
     tick = getattr(observation, "tick", 0)
     locations = getattr(observation, "locations", ()) or ()
     location_id = None if not locations else getattr(locations[0], "entity_id", None)
@@ -1009,7 +1017,7 @@ def propose_commitment_command(
 
 def _declaration_from_facts(
     counterparty: EntityId, facts: Mapping[str, object], *, act: str
-):
+) -> DeclareCommitment:
     from world.actions import DeclareCommitment
     from world.values import ItemKind
 
@@ -1023,13 +1031,14 @@ def _declaration_from_facts(
             return None
 
     due = facts.get("due_tick")
+    quantity = facts.get("quantity")
     return DeclareCommitment(
         counterparty,
         str(facts.get("kind", "promise")),
         act,
         str(facts.get("owed_by", "counterparty")),
         str(facts.get("service", "none")),
-        int(facts["quantity"]) if type(facts.get("quantity")) is int else 1,
+        quantity if type(quantity) is int else 1,
         str(facts.get("due_kind", "none")),
         kind_of("item_kind"),
         due if type(due) is int else None,

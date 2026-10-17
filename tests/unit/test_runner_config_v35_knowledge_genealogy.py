@@ -18,9 +18,9 @@ from simulation.runner_models import (
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
     example_durable_records_spec,
+    example_kinship_spec,
     example_knowledge_genealogy_spec,
     example_knowledge_repositories_spec,
-    example_kinship_spec,
 )
 from simulation.runner_serialization import (
     RunnerSerializationError,
@@ -103,9 +103,7 @@ def test_v35_genealogy_plus_durable_and_repositories_round_trip() -> None:
 
 def test_genealogy_without_cultural_flag_rejected() -> None:
     base = _plain_base()
-    with pytest.raises(
-        ValueError, match="knowledge_genealogy_without_cultural_flag"
-    ):
+    with pytest.raises(ValueError, match="knowledge_genealogy_without_cultural_flag"):
         replace(
             base,
             schema_version=RUNNER_SCHEMA_VERSION_V35,

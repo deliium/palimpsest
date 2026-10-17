@@ -153,6 +153,53 @@ Resource depletion and tombstones stay physical facts. The analysis-only techniq
 
 When `possession_succession` is present on `runner-config-v38`, every existing `Died` also opens corpse custody. The items stay on the dead body at the death location. They are not deleted, dropped, or given to a child, caregiver, or group. A colocated living agent may `Take` one on a later tick: commands in the death tick run before that system step. The take changes the physical holder only. `AssertPossessionClaim` records a doctrine and does not move the item. `Give` to a dead body stays rejected. Channel off leaves the inventory on the body and still rejects a take of a held item. Experiment harm that sets health to zero does not emit `Died` and does not open custody.
 
+## Discrete regional journeys
+
+Optional regions group existing locations. Unassigned locations remain explicitly
+unassigned. Regions are not agents, governments, admission rights, coordinates,
+or a second environment simulator. Resources, regeneration, shelter, weather,
+and temperature remain location-owned. Enablement and exact configuration are
+described in [Configuration](configuration.md#optional-regions-and-migration-runner-config-v44).
+
+- `Move` names one adjacent location. There is no remote teleport or `Migrate`
+  command. The command set remains 43 variants.
+- An explicit route supplies duration and base fatigue. An unlisted edge keeps
+  duration 1 and the normal move cost. Skill/development adjustments apply once.
+- Starting at tick `t` with duration `d` first attempts arrival at `t + d - 1`.
+  Duration 1 starts and arrives during the action; longer journeys advance even
+  on ticks with no submissions. Fatigue is charged once at departure.
+- **Preparation is origin-anchored:** every participant remains physically at
+  the origin until atomic arrival. Origin capacity, visibility, attacks, hazards,
+  weather, and physiology apply. A traveller may submit `Wait` only. Production
+  participation and a second transport cannot overlap the journey.
+- Long departures do not reserve destination slots. Whole groups retry in
+  `(due_tick, journey_id)` order through `due_tick + max_arrival_wait_ticks`
+  inclusive. A final failed attempt ends at origin. Duration-1 movement retains
+  immediate capacity rejection. Dead bodies still occupy physical slots.
+- `Transport` keeps caregiver/dependent together. Its base cost is
+  `transport_fatigue + max(0, route.fatigue_cost - move_fatigue)` for explicit
+  routes; only the caregiver is charged. Held possessions follow existing custody.
+- Any participant death ends the pending group journey. Fleeing uses only legal
+  duration-1 routes and the ordinary flee cost. It cannot bypass a long edge;
+  busy/no-short-route actors consume no flee draw.
+
+Due journeys resolve after ordered actions and before physical evolution.
+Action deaths cancel before arrival; physical/lifecycle deaths are cleaned up
+in the same completed candidate. Arrivals receive destination exposure that
+tick; blocked travellers receive origin exposure.
+
+`JourneyStarted` records pending state and fatigue; `JourneyArrived` records
+placement/removal; `JourneyEnded` records removal with `participant_dead` or
+`arrival_timeout`. No duplicate `Moved` is emitted. Every event prefix can be
+projected, including start-before-arrival and death-before-cleanup. Durable
+checkpoints require finalized-boundary validity and preserve pending journeys
+with replay 21 / codec v19. Prefix inspection is read-only.
+
+Perception exposes local region identity, visible exit cost/duration, and the
+owner's journey only. Departure/end witnesses are origin-local; arrival
+witnesses are destination-local. No regional inventories, hidden continuation,
+remote weather, or population reaches cognition.
+
 ## See also
 
 - [Architecture](architecture.md)

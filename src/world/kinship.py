@@ -13,8 +13,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final
 
-from agents.models import AgentId
-from world.identifiers import require_exact_nonneg_int, require_stable_id
+from world.identifiers import AgentId, require_exact_nonneg_int, require_stable_id
 
 _LOGGER: Final[logging.Logger] = logging.getLogger("world.kinship")
 
@@ -67,9 +66,7 @@ class KinshipEdge:
                 "kinship_self_parent code=kinship_self_parent parent=%s",
                 self.parent_agent_id.value,
             )
-            raise ValueError(
-                "parent and child must differ (code=kinship_self_parent)"
-            )
+            raise ValueError("parent and child must differ (code=kinship_self_parent)")
         object.__setattr__(
             self,
             "established_tick",
@@ -95,8 +92,7 @@ class KinshipEdge:
                 self.edge_id,
             )
             raise ValueError(
-                "edge_id must match stable kinship hash "
-                "(code=kinship_edge_id_mismatch)"
+                "edge_id must match stable kinship hash (code=kinship_edge_id_mismatch)"
             )
 
 
@@ -125,9 +121,7 @@ class KinshipGraph:
         )
         if self.max_parents_per_child < 1:
             raise ValueError("max_parents_per_child must be positive")
-        if isinstance(self.edges, (str, bytes)) or not isinstance(
-            self.edges, Sequence
-        ):
+        if isinstance(self.edges, (str, bytes)) or not isinstance(self.edges, Sequence):
             raise TypeError("edges must be a sequence")
         edge_list = tuple(self.edges)
         for edge in edge_list:
@@ -149,12 +143,8 @@ class KinshipGraph:
                     "duplicate parent→child edge (code=kinship_duplicate_edge)"
                 )
             seen_pairs.add(pair)
-            children.setdefault(edge.parent_agent_id, []).append(
-                edge.child_agent_id
-            )
-            parents.setdefault(edge.child_agent_id, []).append(
-                edge.parent_agent_id
-            )
+            children.setdefault(edge.parent_agent_id, []).append(edge.child_agent_id)
+            parents.setdefault(edge.child_agent_id, []).append(edge.parent_agent_id)
         for child_id, parent_list in parents.items():
             if len(parent_list) > self.max_parents_per_child:
                 _LOGGER.error(
@@ -164,8 +154,7 @@ class KinshipGraph:
                     len(parent_list),
                 )
                 raise ValueError(
-                    "too many parents for child "
-                    "(code=kinship_too_many_parents)"
+                    "too many parents for child (code=kinship_too_many_parents)"
                 )
         object.__setattr__(self, "edges", edge_list)
         object.__setattr__(
@@ -211,18 +200,14 @@ class KinshipGraph:
                     "role=parent agent=%s",
                     edge.parent_agent_id.value,
                 )
-                raise ValueError(
-                    "unknown parent agent id (code=kinship_unknown_agent)"
-                )
+                raise ValueError("unknown parent agent id (code=kinship_unknown_agent)")
             if edge.child_agent_id.value not in known:
                 _LOGGER.error(
                     "kinship_unknown_agent code=kinship_unknown_agent "
                     "role=child agent=%s",
                     edge.child_agent_id.value,
                 )
-                raise ValueError(
-                    "unknown child agent id (code=kinship_unknown_agent)"
-                )
+                raise ValueError("unknown child agent id (code=kinship_unknown_agent)")
         return KinshipGraph(
             edges=(*self.edges, edge),
             max_parents_per_child=self.max_parents_per_child,
@@ -319,8 +304,7 @@ def establish_edge(
             existing.child_agent_id.value,
         ) == pair:
             _LOGGER.error(
-                "kinship_duplicate_edge code=kinship_duplicate_edge "
-                "parent=%s child=%s",
+                "kinship_duplicate_edge code=kinship_duplicate_edge parent=%s child=%s",
                 pair[0],
                 pair[1],
             )
@@ -329,8 +313,7 @@ def establish_edge(
             )
     if _would_create_cycle(graph, edge):
         _LOGGER.error(
-            "kinship_cycle_rejected code=kinship_cycle_rejected "
-            "parent=%s child=%s",
+            "kinship_cycle_rejected code=kinship_cycle_rejected parent=%s child=%s",
             parent_agent_id.value,
             child_agent_id.value,
         )
@@ -483,18 +466,26 @@ def related(
     if agent_a == agent_b:
         return True
     limit = _normalize_depth(max_depth, config_cap=config_max_depth)
-    ancestors_a = {agent_a.value, *(
-        item.value for item in ancestors_of(
-            graph, agent_a, max_depth=limit, config_max_depth=limit
-        )
-    )}
+    ancestors_a = {
+        agent_a.value,
+        *(
+            item.value
+            for item in ancestors_of(
+                graph, agent_a, max_depth=limit, config_max_depth=limit
+            )
+        ),
+    }
     if agent_b.value in ancestors_a:
         return True
-    ancestors_b = {agent_b.value, *(
-        item.value for item in ancestors_of(
-            graph, agent_b, max_depth=limit, config_max_depth=limit
-        )
-    )}
+    ancestors_b = {
+        agent_b.value,
+        *(
+            item.value
+            for item in ancestors_of(
+                graph, agent_b, max_depth=limit, config_max_depth=limit
+            )
+        ),
+    }
     return bool(ancestors_a & ancestors_b)
 
 

@@ -175,9 +175,7 @@ def compute_caregiver_diversity(
         sorted((len(caregivers) for caregivers in by_dependent.values()), reverse=True)
     )
     mean_unique = (
-        0.0
-        if not diversity
-        else require_finite(sum(diversity) / len(diversity))
+        0.0 if not diversity else require_finite(sum(diversity) / len(diversity))
     )
     entropy = _normalized_entropy(tuple(caregiver_counts.values()))
     values = {

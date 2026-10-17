@@ -440,9 +440,8 @@ def test_encode_domain_rejects_persistence_types() -> None:
 
 
 def test_derivation_v3_config_round_trips_stochastic_identity() -> None:
-    from world.models import default_physical_rules
-
     from simulation.models import StochasticIdentity
+    from world.models import default_physical_rules
 
     seed = 99
     config = SimulationRunConfig(

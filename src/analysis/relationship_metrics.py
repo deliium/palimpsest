@@ -216,9 +216,7 @@ def compute_relationship_stability(
             else None
         )
         sign_rate = (
-            quantize_float(
-                require_finite(float(sign_changes) / float(sign_intervals))
-            )
+            quantize_float(require_finite(float(sign_changes) / float(sign_intervals)))
             if sign_intervals > 0
             else None
         )

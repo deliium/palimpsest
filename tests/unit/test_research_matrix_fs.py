@@ -119,7 +119,9 @@ async def test_matrix_list_and_allowlisted_files(tmp_path: Path) -> None:
 
 @pytest.mark.usefixtures("logging_sandbox")
 @pytest.mark.asyncio
-async def test_matrix_path_traversal_rejected(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_matrix_path_traversal_rejected(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     root = tmp_path / "matrices"
     root.mkdir()
     _write_matrix(root)

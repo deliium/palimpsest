@@ -78,9 +78,7 @@ def test_resolve_rate_hints_from_observation_and_stage_table() -> None:
         self_body=SimpleNamespace(
             lifecycle=SimpleNamespace(stage="juvenile"),
             dependency_needs=SimpleNamespace(
-                needs=(
-                    SimpleNamespace(need_id="learning", critical=True),
-                )
+                needs=(SimpleNamespace(need_id="learning", critical=True),)
             ),
         )
     )

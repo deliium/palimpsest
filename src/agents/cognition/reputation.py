@@ -612,14 +612,10 @@ def _with_dimension(
         ),
         harm=state if dimension is ReputationDimension.HARM else profile.harm,
         generosity=(
-            state
-            if dimension is ReputationDimension.GENEROSITY
-            else profile.generosity
+            state if dimension is ReputationDimension.GENEROSITY else profile.generosity
         ),
         competence=(
-            state
-            if dimension is ReputationDimension.COMPETENCE
-            else profile.competence
+            state if dimension is ReputationDimension.COMPETENCE else profile.competence
         ),
         evidence=evidence,
     )
@@ -714,9 +710,7 @@ def _resolve_social_agent(
     return _counterpart_agent(identity, entity_id)
 
 
-def _reject_testimony(
-    owner_id: AgentId, tick: int, reason: str
-) -> None:
+def _reject_testimony(owner_id: AgentId, tick: int, reason: str) -> None:
     _LOG.warning(
         "reputation_testimony_rejected owner_id=%s tick=%s reason=%s",
         owner_id.value,
@@ -855,9 +849,7 @@ def _trust_for_speaker(
     fallback: float | None,
 ) -> tuple[float, bool]:
     if by_speaker is not None and speaker_id.value in by_speaker:
-        resolved = _bounded_trust(
-            "source_trust", by_speaker[speaker_id.value]
-        )
+        resolved = _bounded_trust("source_trust", by_speaker[speaker_id.value])
         if resolved is None:
             return 0.5, True
         return resolved, False
@@ -1214,10 +1206,7 @@ def apply_reputation_update(
                 if profile is None and len(profiles) >= active.max_profiles:
                     _drop(owner_id, resolved_tick, "cap_exceeded")
                     continue
-                if (
-                    profile is not None
-                    and len(profile.evidence) >= active.max_evidence
-                ):
+                if profile is not None and len(profile.evidence) >= active.max_evidence:
                     _drop(owner_id, resolved_tick, "cap_exceeded")
                     continue
                 if profile is None:

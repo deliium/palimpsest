@@ -80,6 +80,5 @@ async def test_bench_07_smoke_availability() -> None:
     assert smoke.ticks <= 4
     assert smoke.arm_count == 4
     assert any(
-        "skill_learning@1" in item.measurable_output
-        for item in smoke.metrics_available
+        "skill_learning@1" in item.measurable_output for item in smoke.metrics_available
     )

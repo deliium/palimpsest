@@ -11,7 +11,7 @@ import logging
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, cast
 
 from agents.cognition.epistemic import EpistemicJudgment
 from agents.cognition.models import (
@@ -695,7 +695,7 @@ def _select_belief_utterance(
     observation: Observation,
     beliefs: Sequence[object],
     mind: object | None,
-    act_pref: str,
+    act_pref: str | None,
     selected_ids: frozenset[object],
     candidate_count: int,
     retain_secret: bool = False,
@@ -1007,9 +1007,7 @@ class DeterministicSocialMessagePolicy:
             else strategy_mode
         )
         if type(mode) is not CognitionCommunicationStrategyMode:
-            raise TypeError(
-                "strategy_mode must be CognitionCommunicationStrategyMode"
-            )
+            raise TypeError("strategy_mode must be CognitionCommunicationStrategyMode")
         retain_secret = mode is CognitionCommunicationStrategyMode.DETERMINISTIC
         if emotional_state is not None:
             if type(emotional_state) is not EmotionalStateEvaluation:
@@ -1206,9 +1204,7 @@ def _present_selection(
     from agents.cognition.theory_of_mind import TheoryOfMind
     from social.relationships import DirectedRelationshipProfile
 
-    kind = (
-        decision.action_kind if decision.command is not None else "wait"
-    )
+    kind = decision.action_kind if decision.command is not None else "wait"
     if mode is not CognitionCommunicationStrategyMode.DETERMINISTIC:
         _LOG.debug(
             "communication_strategy_message",
@@ -1276,12 +1272,12 @@ def _present_selection(
     if relationships is None:
         profile_rows = None
     else:
-        profile_rows = tuple(relationships)
+        profile_rows = tuple(cast(Sequence[DirectedRelationshipProfile], relationships))
     risk_rows: tuple[SubjectiveRisk, ...] | None
     if risks is None:
         risk_rows = None
     else:
-        risk_rows = tuple(risks)
+        risk_rows = tuple(cast(Sequence[SubjectiveRisk], risks))
     command, intent, audit = apply_communication_strategy(
         owner_id=owner_id,
         recipient_id=AgentId(recipient.value),
@@ -1339,7 +1335,7 @@ def _present_selection(
 
 def _cited_event_for_concepts(
     snapshot_memories: Sequence[MemoryTrace],
-    atoms: tuple[str, ...],
+    atoms: Sequence[str],
 ) -> str | None:
     if not atoms:
         return None
@@ -1378,9 +1374,7 @@ def _judgment_for_candidate(
             break
     if not token:
         return None
-    matched = any(
-        belief.belief_id.value == token for belief in memory.semantic_beliefs
-    )
+    matched = any(belief.belief_id.value == token for belief in memory.semantic_beliefs)
     if not matched:
         return None
     disclosure = epistemic_disclosure(

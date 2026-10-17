@@ -111,10 +111,7 @@ async def test_v24_lifecycle_on_emits_no_initialization_recorded() -> None:
     ) as runner:
         await runner.run()
         assert runner.engine.new_agent_provenance_active is False
-        kinds = {
-            type(event.details)
-            for event in runner.engine._snapshot.event_history
-        }
+        kinds = {type(event.details) for event in runner.engine._snapshot.event_history}
     assert AgentInitializationRecorded not in kinds
     # v24 may still emit Created/Entered without init provenance.
     _ = (AgentCreated, AgentEnteredWorld)

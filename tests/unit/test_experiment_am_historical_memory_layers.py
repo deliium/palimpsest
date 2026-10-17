@@ -127,9 +127,7 @@ def test_am_profile_gates_and_arms() -> None:
 
     narrative = _arm(definition, "am-narrative-join")
     assert narrative.historical_memory_layers.include_narrative_lineage is True
-    modes = {
-        agent.cognition.cultural_narrative_mode for agent in narrative.agents
-    }
+    modes = {agent.cognition.cultural_narrative_mode for agent in narrative.agents}
     assert CulturalNarrativeMode.DETERMINISTIC in modes
 
     flags_off = _arm(definition, "am-flags-off")
@@ -147,7 +145,7 @@ def test_am_profile_rejects_unowned_flags_and_missing_objects() -> None:
         living,
         v3_capability_flags=V3CapabilityFlags(
             cultural_historical_memory=True,
-            multi_polity_migration=True,
+            institutional_economy=True,
         ),
     )
     with pytest.raises(ValueError, match="historical_memory_profile_extra_flags"):
@@ -188,9 +186,7 @@ def test_arm_living_query_and_layer() -> None:
         as_of_tick=3,
         sources=(HistoricalSourceRef(source_event_id="evt-1"),),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         death_ticks={},
         layers_spec=example_historical_memory_layers_spec(),
@@ -226,18 +222,14 @@ def test_arm_witness_death_query_flip() -> None:
         as_of_tick=2,
         sources=(source,),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=1),
         ),
         death_ticks={},
     )
-    before = answer_historical_memory_queries(
-        living_graph, (source,), death_ticks={}
-    )
+    before = answer_historical_memory_queries(living_graph, (source,), death_ticks={})
     q_alive_before = next(
         a
         for a in before.answers
@@ -251,9 +243,7 @@ def test_arm_witness_death_query_flip() -> None:
         as_of_tick=4,
         sources=(source,),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=1),
@@ -271,8 +261,7 @@ def test_arm_witness_death_query_flip() -> None:
     q_speak = next(
         a
         for a in after.answers
-        if a.query_id
-        is HistoricalMemoryQueryId.ANYONE_REMEMBERS_SPEAKING_TO_WITNESS
+        if a.query_id is HistoricalMemoryQueryId.ANYONE_REMEMBERS_SPEAKING_TO_WITNESS
     )
     assignment = classify_historical_memory_layer(
         dead_graph, source, death_ticks={"w1": 3}
@@ -297,18 +286,14 @@ def test_arm_communicative_and_cultural_only() -> None:
         as_of_tick=4,
         sources=(source,),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=1),
         ),
         death_ticks={"w1": 2},
     )
-    assignment = classify_historical_memory_layer(
-        graph, source, death_ticks={"w1": 2}
-    )
+    assignment = classify_historical_memory_layer(graph, source, death_ticks={"w1": 2})
     assert assignment is not None
     assert assignment.layer is HistoricalMemoryLayerId.COMMUNICATIVE, (
         f"{arm_comm}: expected layer=communicative got={assignment.layer}"
@@ -319,9 +304,7 @@ def test_arm_communicative_and_cultural_only() -> None:
         as_of_tick=5,
         sources=(source,),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         artifact_rows=(
             SimpleNamespace(
@@ -350,8 +333,7 @@ def test_arm_communicative_and_cultural_only() -> None:
         is HistoricalMemoryQueryId.EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS
     )
     assert q3.answer is True, (
-        f"{arm_cult}: query_id=event_known_only_from_stories_or_artifacts "
-        "expected=true"
+        f"{arm_cult}: query_id=event_known_only_from_stories_or_artifacts expected=true"
     )
 
 
@@ -406,13 +388,9 @@ async def test_am_flags_off_hash_stability() -> None:
     v3_scaffolding_profile(flags_off)
     v3_scaffolding_profile(plain_v4)
     run_id = RunId("run-am-flags-off")
-    async with await SimulationRunner.from_config(
-        plain_v4, run_id=run_id
-    ) as runner:
+    async with await SimulationRunner.from_config(plain_v4, run_id=run_id) as runner:
         result_v4 = await runner.run()
-    async with await SimulationRunner.from_config(
-        flags_off, run_id=run_id
-    ) as runner:
+    async with await SimulationRunner.from_config(flags_off, run_id=run_id) as runner:
         result_off = await runner.run()
     doc_v4 = build_runner_result_document(result=result_v4, config=plain_v4)
     doc_off = build_runner_result_document(result=result_off, config=flags_off)

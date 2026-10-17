@@ -209,9 +209,7 @@ def test_as_custody_take_waits_until_the_tick_after_death() -> None:
     assert opened
     taken = _tick(engine, {"agent-2": Take(EntityId("item-1"))})
     assert _status(taken, "take") is ActionResolutionStatus.APPLIED
-    assert any(
-        type(record.event.details) is TakenFromCorpse for record in taken.events
-    )
+    assert any(type(record.event.details) is TakenFromCorpse for record in taken.events)
     item = engine._snapshot.world.state.items[EntityId("item-1")]
     assert item.holder_id == EntityId("body-child")
     parent = engine._snapshot.world.state.bodies[EntityId("body-parent")]

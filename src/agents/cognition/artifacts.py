@@ -585,8 +585,10 @@ class ArtifactInterpretationMemoryUpdateHook:
         if type(owner) is not AgentId or type(observation) is not Observation:
             return ()
         snapshot = getattr(loop_input, "snapshot", None)
-        prior = None if snapshot is None else getattr(
-            snapshot, "artifact_interpretations", None
+        prior = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "artifact_interpretations", None)
         )
         if prior is not None and type(prior) is not ArtifactInterpretationLedger:
             prior = None

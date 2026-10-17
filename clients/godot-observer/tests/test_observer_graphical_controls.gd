@@ -12,6 +12,14 @@ const ORIGIN := "https://observer.example"
 const FIXTURE := "res://fixtures/smoke/observer_graphical_v2.json"
 
 
+class HttpStub:
+	extends Node
+	func close_stream(_clear: bool = false) -> void:
+		pass
+	func get_json(_url: String, _request_id: String, _token: String) -> void:
+		pass
+
+
 func run() -> Array:
 	var failures: Array = []
 	_row01_start_from_initial_state(failures)
@@ -33,7 +41,8 @@ func run() -> Array:
 func _session() -> SessionScript:
 	var session: SessionScript = SessionScript.new()
 	session.origin = ORIGIN
-	session._http = null
+	session._http = HttpStub.new()
+	session._stream = HttpStub.new()
 	session.run_id = "run-observer-graphical-v2"
 	return session
 
@@ -68,7 +77,6 @@ func _row02_consume_live_events(failures: Array) -> void:
 		"event": {"type": "AGENT_MOVED", "tick": 1, "sequence": 0},
 	})
 	# Presentation-only: envelope handling must not raise; apply/buffer is best-effort.
-	del applied
 	Log.info("main", "observer_graphical_row02_ok")
 
 
@@ -176,6 +184,7 @@ func _row10_filter_event_log(failures: Array) -> void:
 func _row11_follow_agent(failures: Array) -> void:
 	# Row 11: select/follow agent
 	var session := _session()
+	session.focus_agent_id = "body-a"
 	session.set_follow("agent", true)
 	if session.follow_mode != "agent":
 		failures.append("row11 follow agent failed")

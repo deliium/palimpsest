@@ -83,9 +83,7 @@ def test_world_package_kinship_has_no_social_imports() -> None:
             continue
         imported = _imported_modules(path)
         social_hits = {
-            name
-            for name in imported
-            if name == "social" or name.startswith("social.")
+            name for name in imported if name == "social" or name.startswith("social.")
         }
         assert social_hits == set(), (
             f"{path.relative_to(_REPO_ROOT)} imports {sorted(social_hits)}"
@@ -111,9 +109,7 @@ def test_establish_kinship_does_not_revise_relationships() -> None:
     from simulation.runner_models import KinshipSpec
 
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=19, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=19, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-kinship-isolation"),
         kinship_spec=KinshipSpec(),

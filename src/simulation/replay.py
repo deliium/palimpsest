@@ -782,10 +782,10 @@ class ReplayService:
                     run_id,
                     actor_id=actor_id,
                     event_type=event_type,
-                    **kwargs,  # type: ignore[arg-type]
+                    **kwargs,
                 )
             except TypeError:
-                filtered = await list_events_keyset(run_id, **kwargs)  # type: ignore[arg-type]
+                filtered = await list_events_keyset(run_id, **kwargs)
                 filtered = tuple(
                     event
                     for event in filtered

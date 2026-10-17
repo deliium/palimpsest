@@ -57,12 +57,12 @@ def test_experiment_ab_pairs_disabled_v4_and_deterministic_v21(
         "cy": "body-cy",
         "dia": "body-dia",
     }
-    assert {
-        agent.cognition.cultural_narrative_mode for agent in disabled.agents
-    } == {CulturalNarrativeMode.DISABLED}
-    assert {
-        agent.cognition.cultural_narrative_mode for agent in enabled.agents
-    } == {CulturalNarrativeMode.DETERMINISTIC}
+    assert {agent.cognition.cultural_narrative_mode for agent in disabled.agents} == {
+        CulturalNarrativeMode.DISABLED
+    }
+    assert {agent.cognition.cultural_narrative_mode for agent in enabled.agents} == {
+        CulturalNarrativeMode.DETERMINISTIC
+    }
     assert any(
         "experiment_ab_built" in record.getMessage() for record in caplog.records
     )

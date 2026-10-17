@@ -1330,13 +1330,13 @@ def _decay(
     for concept in concepts:
         if concept.status is not GroupStatus.ACTIVE:
             continue
-        belief = _find_belief(beliefs, concept.stance, concept.members)
-        if belief is None:
+        found_belief = _find_belief(beliefs, concept.stance, concept.members)
+        if found_belief is None:
             continue
-        concept.support = belief.support
+        concept.support = found_belief.support
         if (
-            belief.status is GroupStatus.RETIRED
-            or belief.support < policy.retire_threshold
+            found_belief.status is GroupStatus.RETIRED
+            or found_belief.support < policy.retire_threshold
         ):
             concept.status = GroupStatus.RETIRED
             _log_retired(owner_id, tick, concept.stance, concept.status)
@@ -1545,7 +1545,8 @@ def _shared_harm_pairs(
                 if left == right:
                     continue
                 lineage = "~".join(sorted((left_line, right_line)))
-                pairs.append((*_sorted_members((left, right)), lineage))
+                members = _sorted_members((left, right))
+                pairs.append((members[0], members[1], lineage))
     for attackers in by_target.values():
         ordered = sorted(attackers, key=lambda item: (item[0].value, item[1]))
         for index, (left, left_line) in enumerate(ordered):
@@ -1553,7 +1554,8 @@ def _shared_harm_pairs(
                 if left == right:
                     continue
                 lineage = "~".join(sorted((left_line, right_line)))
-                pairs.append((*_sorted_members((left, right)), lineage))
+                members = _sorted_members((left, right))
+                pairs.append((members[0], members[1], lineage))
     return pairs
 
 

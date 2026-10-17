@@ -28,9 +28,7 @@ def test_living_when_direct_witness_alive() -> None:
     graph = _graph(
         as_of_tick=3,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         death_ticks={},
     )
@@ -50,9 +48,7 @@ def test_communicative_after_witness_death_with_short_hop() -> None:
     graph = _graph(
         as_of_tick=4,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=2),
@@ -77,9 +73,7 @@ def test_cultural_via_artifact_only() -> None:
     graph = _graph(
         as_of_tick=5,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         artifact_rows=(
             SimpleNamespace(
@@ -107,9 +101,7 @@ def test_cultural_via_over_cap_hops() -> None:
     graph = _graph(
         as_of_tick=6,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=1),
@@ -145,9 +137,7 @@ def test_generation_distance_weight_does_not_override_living(
     graph = _graph(
         as_of_tick=2,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
     )
     spec = SimpleNamespace(
@@ -170,13 +160,9 @@ def test_taught_edge_counts_as_communicative() -> None:
     graph = _graph(
         as_of_tick=4,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
-        teaching_edges=(
-            SimpleNamespace(teacher_id="w1", learner_id="l1", at_tick=2),
-        ),
+        teaching_edges=(SimpleNamespace(teacher_id="w1", learner_id="l1", at_tick=2),),
         death_ticks={"w1": 3},
         include_teaching_edges=True,
     )

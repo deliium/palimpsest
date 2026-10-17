@@ -24,9 +24,7 @@ _WORLD = WorldId("world-perception")
 
 
 def _state():
-    food = make_item(
-        "food-1", kind=ItemKind.FOOD, location_id=None, holder_id="body-a"
-    )
+    food = make_item("food-1", kind=ItemKind.FOOD, location_id=None, holder_id="body-a")
     giver = alive_body("body-a", inventory=(food.entity_id,))
     other = alive_body("body-b")
     witness = alive_body("body-c")

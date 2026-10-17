@@ -15,6 +15,7 @@ _RECIPE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _PRODUCTION_LOG = logging.getLogger("world.production")
 
 __all__ = [
+    "AgentId",
     "EntityId",
     "EventId",
     "ProposalId",
@@ -58,6 +59,20 @@ def require_stable_id(name: str, value: object) -> str:
     if any(category(char) == "Cc" for char in value):
         raise ValueError(f"{name} must not contain control characters")
     return value
+
+
+@dataclass(frozen=True, slots=True)
+class AgentId:
+    """Opaque participant identity, distinct from physical EntityId.
+
+    Defined below the agent layer so objective genealogy and care contracts
+    can correlate participants without importing agent policy.
+    """
+
+    value: str
+
+    def __post_init__(self) -> None:
+        require_stable_id("AgentId.value", self.value)
 
 
 @dataclass(frozen=True, slots=True)

@@ -85,9 +85,7 @@ def _search_bits(runner: SimulationRunner) -> tuple[bool, ...]:
     )
 
 
-def _level(
-    runner: SimulationRunner, side: SkillAuditSide, domain: str
-) -> float | None:
+def _level(runner: SimulationRunner, side: SkillAuditSide, domain: str) -> float | None:
     matches = [
         row
         for row in runner.export_skill_audits()

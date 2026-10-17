@@ -90,7 +90,9 @@ class PhenomenonIndicatorRef:
         object.__setattr__(
             self,
             "metric_family",
-            require_stable_id("PhenomenonIndicatorRef.metric_family", self.metric_family),
+            require_stable_id(
+                "PhenomenonIndicatorRef.metric_family", self.metric_family
+            ),
         )
         object.__setattr__(
             self,
@@ -122,8 +124,13 @@ class PhenomenonIndicatorReading:
             raise TypeError("PhenomenonIndicatorReading.phenomenon_id: invalid_type")
         if type(self.support_band) is not SupportBand:
             raise TypeError("PhenomenonIndicatorReading.support_band: invalid_type")
-        if type(self.present_indicator_count) is not int or self.present_indicator_count < 0:
-            raise ValueError("PhenomenonIndicatorReading.present_indicator_count: invalid")
+        if (
+            type(self.present_indicator_count) is not int
+            or self.present_indicator_count < 0
+        ):
+            raise ValueError(
+                "PhenomenonIndicatorReading.present_indicator_count: invalid"
+            )
         for name in _FORBIDDEN_FIELD_NAMES:
             if hasattr(self, name):
                 raise ValueError(f"PhenomenonIndicatorReading: forbidden_field:{name}")

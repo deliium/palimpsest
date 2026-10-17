@@ -270,9 +270,7 @@ def summarize_record_survival(
                 "destroyed"
             ):
                 persisted += 1
-        false_rate = (
-            quantize_float(persisted / matched) if matched else _ABSENT
-        )
+        false_rate = quantize_float(persisted / matched) if matched else _ABSENT
     return RecordSurvivalSummary(
         record_count=len(rows),
         intact_count=intact,

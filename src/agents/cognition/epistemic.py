@@ -310,10 +310,7 @@ class EpistemicAttribution:
         if self.owner_id.value in agents:
             raise _fail("modeled_agents", "self_subject")
         object.__setattr__(self, "modeled_agents", agents)
-        if (
-            self.nesting_level == 1
-            and self.attitude is EpistemicAttitude.DOES_NOT_KNOW
-        ):
+        if self.nesting_level == 1 and self.attitude is EpistemicAttitude.DOES_NOT_KNOW:
             raise _fail("attitude", "epistemic_attitude_rejected")
         belief_id = self.belief_id
         if proposition.startswith("belief:"):
@@ -685,9 +682,7 @@ def _replace(
     return created
 
 
-def _evict(
-    rows: list[EpistemicAttribution], limit: int
-) -> int:
+def _evict(rows: list[EpistemicAttribution], limit: int) -> int:
     dropped = 0
     while len(rows) > limit:
         lowest = min(item.confidence for item in rows)
@@ -710,9 +705,7 @@ def _apply_beliefs(
 ) -> tuple[int, int]:
     created = 0
     dropped = 0
-    witnesses = (
-        _visible_ids(observation, owner) if observation.occurrences else ()
-    )
+    witnesses = _visible_ids(observation, owner) if observation.occurrences else ()
     for belief in beliefs:
         if belief.owner_id != owner:
             _LOG.error(
@@ -892,7 +885,7 @@ def _derive_ignorance(
                 nesting_level=2,
                 proposition_ref=parent.proposition_ref,
                 modeled_agents=(subject,),
-                attitudes=positive,
+                attitudes=frozenset(positive),
             )
             if existing is not None and existing.confidence >= policy.action_threshold:
                 continue
@@ -1044,8 +1037,7 @@ def update_epistemic_state(
             raise _fail("owner_id", "owner_mismatch")
     if policy.max_depth == 0:
         _LOG.info(
-            "epistemic_updated input_belief_count=%s created_count=%s "
-            "dropped_count=%s",
+            "epistemic_updated input_belief_count=%s created_count=%s dropped_count=%s",
             len(resolved_beliefs),
             0,
             0,
@@ -1176,9 +1168,8 @@ def epistemic_disclosure(
         proposition_ref=proposition,
         policy=policy,
     )
-    if (
-        level1.contradiction_mass >= policy.contradiction_threshold
-        or (knows and ignorant)
+    if level1.contradiction_mass >= policy.contradiction_threshold or (
+        knows and ignorant
     ):
         judgment = EpistemicJudgment.CONTRADICTORY
     elif level1.attitude is EpistemicAttitude.UNCERTAIN:

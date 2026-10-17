@@ -102,9 +102,7 @@ class SqlAlchemyBranchLineageRepository:
                         intervention_fingerprint=document["intervention_fingerprint"],
                         intervention_canonical=document["intervention_canonical"],
                         branch_id=document["branch_id"],
-                        created_as_of_parent_head=document[
-                            "created_as_of_parent_head"
-                        ],
+                        created_as_of_parent_head=document["created_as_of_parent_head"],
                     )
                 )
         except PersistenceConflictError:
@@ -163,9 +161,7 @@ class SqlAlchemyBranchLineageRepository:
                 .limit(page_limit)
             )
             if after_child_run_id is not None:
-                stmt = stmt.where(
-                    SimulationBranchOrm.child_run_id > after_child_run_id
-                )
+                stmt = stmt.where(SimulationBranchOrm.child_run_id > after_child_run_id)
             rows = (await session.execute(stmt)).scalars().all()
             result = tuple(_row_to_lineage(row) for row in rows)
             _LOGGER.debug(

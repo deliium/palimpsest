@@ -235,9 +235,7 @@ class LedgerItemSummaryOut(StrictModel):
 
 
 class TheoryOfMindProjectionOut(StrictModel):
-    schema_version: Literal["research-theory-of-mind-v1"] = (
-        "research-theory-of-mind-v1"
-    )
+    schema_version: Literal["research-theory-of-mind-v1"] = "research-theory-of-mind-v1"
     owner_id: str
     availability: AvailabilityOut
     head_count: int = Field(ge=0)

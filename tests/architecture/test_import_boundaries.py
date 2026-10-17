@@ -27,6 +27,7 @@ PACKAGES = (
     "llm",
     "simulation",
     "experiments",
+    "research_runner",
     "api",
     "analysis",
     "infrastructure",

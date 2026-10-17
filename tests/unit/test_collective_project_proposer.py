@@ -211,9 +211,7 @@ async def test_open_project_mints_one_private_intention() -> None:
 async def test_full_focus_list_skips_project_mint(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    seeded = tuple(
-        _goal(f"goal-{index}", f"keep-watch-{index}") for index in range(8)
-    )
+    seeded = tuple(_goal(f"goal-{index}", f"keep-watch-{index}") for index in range(8))
     observation = _observation(projects=(_project("project-9"),))
     snapshot_goals = seeded
     from agents.cognition.models import SubjectiveSnapshot

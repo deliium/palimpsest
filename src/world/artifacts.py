@@ -346,9 +346,7 @@ class InformationArtifact:
             raise _fail("InformationArtifact.created_tick", "artifact_content_invalid")
         if self.created_tick < 0:
             raise _fail("InformationArtifact.created_tick", "artifact_content_invalid")
-        require_artifact_content(
-            self.content, field_name="InformationArtifact.content"
-        )
+        require_artifact_content(self.content, field_name="InformationArtifact.content")
         if (
             isinstance(self.content_revision, bool)
             or type(self.content_revision) is not int
@@ -397,18 +395,16 @@ class InformationArtifact:
                     "InformationArtifact.record_genre",
                     "durable_genre_kind_mismatch",
                 )
-        if self.parent_artifact_id is not None and type(
-            self.parent_artifact_id
-        ) is not EntityId:
-            raise _fail(
-                "InformationArtifact.parent_artifact_id", "unknown_artifact"
-            )
-        if self.source_artifact_id is not None and type(
-            self.source_artifact_id
-        ) is not EntityId:
-            raise _fail(
-                "InformationArtifact.source_artifact_id", "unknown_artifact"
-            )
+        if (
+            self.parent_artifact_id is not None
+            and type(self.parent_artifact_id) is not EntityId
+        ):
+            raise _fail("InformationArtifact.parent_artifact_id", "unknown_artifact")
+        if (
+            self.source_artifact_id is not None
+            and type(self.source_artifact_id) is not EntityId
+        ):
+            raise _fail("InformationArtifact.source_artifact_id", "unknown_artifact")
         if isinstance(self.copy_generation, bool) or (
             type(self.copy_generation) is not int
         ):

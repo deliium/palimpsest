@@ -185,15 +185,15 @@ def test_v23_flag_true_encode_decode_golden() -> None:
         persistence=legacy.persistence,
         experiment=legacy.experiment,
         capability_flags=V2CapabilityFlags(),
-        v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+        v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
         schema_version=RUNNER_SCHEMA_VERSION_V23,
     )
     encoded = encode_runner_config(flagged)
     document = json.loads(encoded.decode("utf-8"))
     assert document["schema_version"] == RUNNER_SCHEMA_VERSION_V23
-    assert document["v3_capability_flags"]["cultural_historical_memory"] is True
+    assert document["v3_capability_flags"]["institutional_economy"] is True
     decoded = decode_runner_config(encoded)
-    assert decoded.v3_capability_flags.cultural_historical_memory is True
+    assert decoded.v3_capability_flags.institutional_economy is True
     assert runner_config_fingerprint(decoded) == runner_config_fingerprint(flagged)
 
     import asyncio
@@ -202,8 +202,7 @@ def test_v23_flag_true_encode_decode_golden() -> None:
         with pytest.raises(RunnerConstructionError) as exc_info:
             await SimulationRunner.from_config(flagged, run_id=RunId("run-v3-golden"))
         assert (
-            exc_info.value.code
-            is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+            exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
         )
 
     asyncio.run(_fail_closed())

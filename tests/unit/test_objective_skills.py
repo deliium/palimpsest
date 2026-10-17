@@ -59,20 +59,14 @@ def test_success_and_failure_bundles_quantize_once() -> None:
     policy = default_objective_skill_policy()
     entity = EntityId("body-1")
     ledger = Ledger.bootstrap((entity,))
-    success = (
-        growth_delta(SkillGrowthChannel.PRACTICE, policy)
-        + growth_delta(SkillGrowthChannel.SUCCESS, policy)
+    success = growth_delta(SkillGrowthChannel.PRACTICE, policy) + growth_delta(
+        SkillGrowthChannel.SUCCESS, policy
     )
-    failure = (
-        growth_delta(SkillGrowthChannel.PRACTICE, policy)
-        + growth_delta(SkillGrowthChannel.FAILURE, policy)
+    failure = growth_delta(SkillGrowthChannel.PRACTICE, policy) + growth_delta(
+        SkillGrowthChannel.FAILURE, policy
     )
-    grown = ledger.apply_summed_deltas(
-        {entity: {SkillDomain.FORAGING: success}}
-    )
-    missed = ledger.apply_summed_deltas(
-        {entity: {SkillDomain.FORAGING: failure}}
-    )
+    grown = ledger.apply_summed_deltas({entity: {SkillDomain.FORAGING: success}})
+    missed = ledger.apply_summed_deltas({entity: {SkillDomain.FORAGING: failure}})
     assert grown.level(entity, SkillDomain.FORAGING) == _quantize(0.02 + 0.05)
     assert grown.level(entity, SkillDomain.FORAGING) == _quantize(0.07)
     assert missed.level(entity, SkillDomain.FORAGING) == _quantize(0.03)

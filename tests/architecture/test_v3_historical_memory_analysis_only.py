@@ -35,9 +35,7 @@ def test_cognition_does_not_import_historical_memory() -> None:
     hits: list[str] = []
     for path in (SRC / "agents").rglob("*.py"):
         hits.extend(
-            _module_imports_forbidden(
-                path, ("analysis.historical_memory", "analysis")
-            )
+            _module_imports_forbidden(path, ("analysis.historical_memory", "analysis"))
         )
         text = path.read_text(encoding="utf-8")
         assert "HistoricalMemoryLayerId" not in text

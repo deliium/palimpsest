@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol, cast
 
 from memory.beliefs import AppliedTestimonyFactors, CommunicatedEvidenceDecision
 from memory.models import CommunicatedTransmissionMeta, EntityId
@@ -13,6 +13,31 @@ __all__ = [
     "transmission_from_row",
     "transmission_to_columns",
 ]
+
+
+class _TransmissionRow(Protocol):
+    transmission_action_kind: str
+    transmission_hop_count: int
+    transmission_sender_confidence: float
+    transmission_receiver_confidence: float
+    transmission_content_fingerprint: str
+    transmission_parent_communication_id: str | None
+    transmission_root_id: str | None
+    transmission_policy_version: str
+
+
+class _TestimonyRow(Protocol):
+    testimony_hop_count: int
+    testimony_trust: float
+    testimony_trust_confidence: float
+    testimony_sender_confidence: float
+    testimony_receiver_confidence: float
+    testimony_context_relevance: float
+    testimony_hop_attenuation: float
+    testimony_base_contribution: float
+    testimony_adjusted_contribution: float
+    testimony_confidence_delta: float
+    testimony_policy_version: str
 
 
 def transmission_to_columns(
@@ -52,21 +77,22 @@ def transmission_from_row(row: object) -> CommunicatedTransmissionMeta | None:
     if communication_id is None:
         return None
     chain_raw = getattr(row, "transmission_source_agent_chain", None) or ()
+    fields = cast(_TransmissionRow, row)
     return CommunicatedTransmissionMeta(
         communication_id=str(communication_id),
-        action_kind=str(row.transmission_action_kind),
-        hop_count=int(row.transmission_hop_count),
-        sender_confidence=float(row.transmission_sender_confidence),
-        receiver_confidence=float(row.transmission_receiver_confidence),
-        content_fingerprint=str(row.transmission_content_fingerprint),
+        action_kind=str(fields.transmission_action_kind),
+        hop_count=int(fields.transmission_hop_count),
+        sender_confidence=float(fields.transmission_sender_confidence),
+        receiver_confidence=float(fields.transmission_receiver_confidence),
+        content_fingerprint=str(fields.transmission_content_fingerprint),
         parent_communication_id=(
             None
             if getattr(row, "transmission_parent_communication_id", None) is None
-            else str(row.transmission_parent_communication_id)
+            else str(fields.transmission_parent_communication_id)
         ),
         source_agent_chain=tuple(EntityId(str(item)) for item in chain_raw),
-        transmission_root_id=str(row.transmission_root_id or ""),
-        policy_version=str(row.transmission_policy_version),
+        transmission_root_id=str(fields.transmission_root_id or ""),
+        policy_version=str(fields.transmission_policy_version),
     )
 
 
@@ -108,17 +134,18 @@ def applied_factors_from_row(row: object) -> AppliedTestimonyFactors | None:
     decision = getattr(row, "testimony_decision", None)
     if decision is None:
         return None
+    fields = cast(_TestimonyRow, row)
     return AppliedTestimonyFactors(
         decision=CommunicatedEvidenceDecision(str(decision)),
-        hop_count=int(row.testimony_hop_count),
-        trust=float(row.testimony_trust),
-        trust_confidence=float(row.testimony_trust_confidence),
-        sender_confidence=float(row.testimony_sender_confidence),
-        receiver_confidence=float(row.testimony_receiver_confidence),
-        context_relevance=float(row.testimony_context_relevance),
-        hop_attenuation=float(row.testimony_hop_attenuation),
-        base_contribution=float(row.testimony_base_contribution),
-        adjusted_contribution=float(row.testimony_adjusted_contribution),
-        confidence_delta=float(row.testimony_confidence_delta),
-        policy_version=str(row.testimony_policy_version),
+        hop_count=int(fields.testimony_hop_count),
+        trust=float(fields.testimony_trust),
+        trust_confidence=float(fields.testimony_trust_confidence),
+        sender_confidence=float(fields.testimony_sender_confidence),
+        receiver_confidence=float(fields.testimony_receiver_confidence),
+        context_relevance=float(fields.testimony_context_relevance),
+        hop_attenuation=float(fields.testimony_hop_attenuation),
+        base_contribution=float(fields.testimony_base_contribution),
+        adjusted_contribution=float(fields.testimony_adjusted_contribution),
+        confidence_delta=float(fields.testimony_confidence_delta),
+        policy_version=str(fields.testimony_policy_version),
     )

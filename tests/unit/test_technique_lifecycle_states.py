@@ -117,9 +117,7 @@ def test_rare_after_peak() -> None:
     row = _global(
         audits,
         as_of_tick=6,
-        spec=example_technique_lifecycle_spec(
-            diffusion_window_ticks=1, rare_max=1
-        ),
+        spec=example_technique_lifecycle_spec(diffusion_window_ticks=1, rare_max=1),
         death_ticks={"agent-b": 4},
         applied_actions=(
             _move("agent-a", 1, "loc-1"),
@@ -132,9 +130,7 @@ def test_rare_after_peak() -> None:
 
 def test_record_only_rare_and_discovered() -> None:
     rare = _global(
-        (
-            _audit(evidence_refs=("artifact:mark-1",)),
-        ),
+        (_audit(evidence_refs=("artifact:mark-1",)),),
         as_of_tick=6,
         death_ticks={"agent-a": 3},
         artifact_rows=(
@@ -219,9 +215,7 @@ def test_materials_absent_does_not_erase_living_holder() -> None:
 
 def test_teaching_chain_failed_and_lone_root() -> None:
     failed = _global(
-        (
-            _audit(origin="teaching", hop_index=1, acquired_tick=1),
-        ),
+        (_audit(origin="teaching", hop_index=1, acquired_tick=1),),
         as_of_tick=5,
         death_ticks={"agent-a": 3},
         applied_actions=(_move("agent-a", 1, "loc-1"),),

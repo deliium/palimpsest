@@ -146,9 +146,7 @@ async def rank_counterfactual_scenarios(
             fallback_used=True,
             reason_code="missing_provider",
         )
-        return CounterfactualSelectionResult(
-            candidates, True, 0, 0, "missing_provider"
-        )
+        return CounterfactualSelectionResult(candidates, True, 0, 0, "missing_provider")
     tokens = policy.max_tokens
     try:
         selected = await _generate(

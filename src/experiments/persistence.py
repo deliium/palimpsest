@@ -153,6 +153,24 @@ class PersistedAnalysisSnapshot:
     reconstructions: tuple[PersistedReconstructionRow, ...]
     derivation_edges: tuple[PersistedDerivationEdge, ...]
     events: tuple[object, ...]
+    regional_context: PersistedRegionalContext | None = None
+    objective_complete_through_boundary: int | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.regional_context is not None
+            and type(self.regional_context) is not PersistedRegionalContext
+        ):
+            raise TypeError("regional_context must be PersistedRegionalContext or None")
+        if self.objective_complete_through_boundary is not None:
+            object.__setattr__(
+                self,
+                "objective_complete_through_boundary",
+                require_exact_nonneg_int(
+                    "objective_complete_through_boundary",
+                    self.objective_complete_through_boundary,
+                ),
+            )
 
     def __repr__(self) -> str:
         return (
@@ -161,8 +179,149 @@ class PersistedAnalysisSnapshot:
             f"trace_count={len(self.traces)}, "
             f"reconstruction_count={len(self.reconstructions)}, "
             f"edge_count={len(self.derivation_edges)}, "
-            f"event_count={len(self.events)})"
+            f"event_count={len(self.events)}, "
+            f"has_regional_context={self.regional_context is not None}, "
+            f"complete_boundary={self.objective_complete_through_boundary})"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedRegionalLocation:
+    """Detached location-to-region assignment from the bootstrap snapshot."""
+
+    location_id: str
+    region_id: str
+
+    def __post_init__(self) -> None:
+        require_stable_id("location_id", self.location_id)
+        require_stable_id("region_id", self.region_id)
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedRegionalInitialPlacement:
+    """Detached bootstrap placement and optional lifecycle cohort facts."""
+
+    body_id: str
+    location_id: str
+    alive: bool
+    stage_id: str | None = None
+    cohort_id: str | None = None
+
+    def __post_init__(self) -> None:
+        require_stable_id("body_id", self.body_id)
+        require_stable_id("location_id", self.location_id)
+        if type(self.alive) is not bool:
+            raise TypeError("alive must be bool")
+        for name in ("stage_id", "cohort_id"):
+            value = getattr(self, name)
+            if value is not None:
+                require_stable_id(name, value)
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedRegionalContext:
+    """Neutral analysis-only region memberships and initial population state."""
+
+    region_ids: tuple[str, ...]
+    known_location_ids: tuple[str, ...]
+    locations: tuple[PersistedRegionalLocation, ...]
+    initial_placements: tuple[PersistedRegionalInitialPlacement, ...]
+    owner_ids: tuple[str, ...]
+    residence_min_ticks: int
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "region_ids",
+            "known_location_ids",
+            "locations",
+            "initial_placements",
+            "owner_ids",
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, (str, bytes)) or not isinstance(value, tuple):
+                raise TypeError(f"{field_name} must be a tuple")
+        regions = tuple(
+            require_stable_id("region_id", item) for item in self.region_ids
+        )
+        if not regions or len(regions) != len(set(regions)):
+            raise ValueError("invalid_regional_context_regions")
+        object.__setattr__(self, "region_ids", tuple(sorted(regions)))
+        known_locations = tuple(
+            require_stable_id("location_id", item) for item in self.known_location_ids
+        )
+        if not known_locations or len(set(known_locations)) != len(known_locations):
+            raise ValueError("invalid_regional_context_locations")
+        object.__setattr__(self, "known_location_ids", tuple(sorted(known_locations)))
+        if any(type(item) is not PersistedRegionalLocation for item in self.locations):
+            raise TypeError("locations entries must be PersistedRegionalLocation")
+        if any(
+            type(item) is not PersistedRegionalInitialPlacement
+            for item in self.initial_placements
+        ):
+            raise TypeError(
+                "initial_placements entries must be PersistedRegionalInitialPlacement"
+            )
+        if len({item.location_id for item in self.locations}) != len(self.locations):
+            raise ValueError("duplicate_regional_location")
+        if any(item.location_id not in known_locations for item in self.locations):
+            raise ValueError("regional_membership_location_unknown")
+        if len({item.body_id for item in self.initial_placements}) != len(
+            self.initial_placements
+        ):
+            raise ValueError("duplicate_regional_body")
+        if any(item.region_id not in regions for item in self.locations):
+            raise ValueError("unknown_regional_membership")
+        object.__setattr__(
+            self,
+            "owner_ids",
+            tuple(
+                sorted({require_stable_id("owner_id", item) for item in self.owner_ids})
+            ),
+        )
+        residence_min = require_exact_nonneg_int(
+            "residence_min_ticks", self.residence_min_ticks
+        )
+        if residence_min < 1:
+            raise ValueError("residence_min_ticks_must_be_positive")
+        object.__setattr__(self, "residence_min_ticks", residence_min)
+
+
+def regional_context_from_snapshot(snapshot: object) -> PersistedRegionalContext | None:
+    """Detach bootstrap population evidence at the experiment contract boundary."""
+    from simulation.persistence import WorldSnapshot
+    from world.lifecycle import AgentLifecycleRecord
+    from world.models import LifeStatus
+
+    if type(snapshot) is not WorldSnapshot:
+        raise TypeError("regional bootstrap must be WorldSnapshot")
+    spec = snapshot.regions_migration
+    if spec is None:
+        return None
+    lifecycle: dict[str, tuple[str | None, str | None]] = {}
+    for row in snapshot.lifecycle_records:
+        if type(row) is not AgentLifecycleRecord:
+            raise TypeError("bootstrap lifecycle records must be AgentLifecycleRecord")
+        lifecycle[row.body_id.value] = (row.stage.value, row.cohort_id)
+    return PersistedRegionalContext(
+        region_ids=tuple(row.region_id for row in spec.regions),
+        known_location_ids=tuple(item.entity_id.value for item in snapshot.locations),
+        locations=tuple(
+            PersistedRegionalLocation(row.location_id.value, row.region_id)
+            for row in spec.location_regions
+        ),
+        initial_placements=tuple(
+            PersistedRegionalInitialPlacement(
+                body_id=body.entity_id.value,
+                location_id=body.location_id.value,
+                alive=body.life_status is LifeStatus.ALIVE,
+                stage_id=lifecycle.get(body.entity_id.value, (None, None))[0],
+                cohort_id=lifecycle.get(body.entity_id.value, (None, None))[1],
+            )
+            for body in snapshot.bodies
+        ),
+        owner_ids=tuple(row.agent_id.value for row in snapshot.registrations),
+        residence_min_ticks=spec.residence_min_ticks,
+    )
 
 
 class AnalysisEvidenceSnapshotReader(Protocol):
@@ -191,9 +350,7 @@ class EvidenceManifestRepository(Protocol):
 
     async def append_manifest(self, manifest: EvidenceManifest) -> None: ...
 
-    async def list_manifests(
-        self, *, run_id: str
-    ) -> tuple[EvidenceManifest, ...]: ...
+    async def list_manifests(self, *, run_id: str) -> tuple[EvidenceManifest, ...]: ...
 
 
 class EvidenceAvailability(StrEnum):
@@ -230,9 +387,7 @@ class TruthSpecRecord:
                 raise TypeError("envelope must be OpaqueCanonicalEnvelope")
 
     def __repr__(self) -> str:
-        hash_prefix = (
-            None if self.envelope is None else self.envelope.content_hash[:12]
-        )
+        hash_prefix = None if self.envelope is None else self.envelope.content_hash[:12]
         return (
             f"TruthSpecRecord(run_id={self.run_id!r}, claim_id={self.claim_id!r}, "
             f"availability={self.availability.value!r}, hash_prefix={hash_prefix!r})"
@@ -248,9 +403,7 @@ class TruthSpecRepository(Protocol):
         self, *, run_id: str, claim_id: str
     ) -> TruthSpecRecord | None: ...
 
-    async def list_truth_specs(
-        self, *, run_id: str
-    ) -> tuple[TruthSpecRecord, ...]: ...
+    async def list_truth_specs(self, *, run_id: str) -> tuple[TruthSpecRecord, ...]: ...
 
 
 class MetricSetLifecycle(StrEnum):

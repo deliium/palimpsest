@@ -56,13 +56,25 @@ def test_relationship_stability_empty_absent() -> None:
 def test_relationship_stability_permutation() -> None:
     rows = [
         RelationshipEdgeRow(
-            source_id="a", target_id="b", logical_tick=0, activation_state="active", trust=0.2
+            source_id="a",
+            target_id="b",
+            logical_tick=0,
+            activation_state="active",
+            trust=0.2,
         ),
         RelationshipEdgeRow(
-            source_id="a", target_id="b", logical_tick=3, activation_state="active", trust=0.8
+            source_id="a",
+            target_id="b",
+            logical_tick=3,
+            activation_state="active",
+            trust=0.8,
         ),
         RelationshipEdgeRow(
-            source_id="b", target_id="a", logical_tick=1, activation_state="active", trust=-0.1
+            source_id="b",
+            target_id="a",
+            logical_tick=1,
+            activation_state="active",
+            trust=-0.1,
         ),
     ]
     first = compute_relationship_stability(

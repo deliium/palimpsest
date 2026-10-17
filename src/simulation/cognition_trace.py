@@ -84,9 +84,7 @@ class CognitionTraceStageRecord:
         object.__setattr__(
             self,
             "ordinal",
-            require_exact_nonneg_int(
-                "CognitionTraceStageRecord.ordinal", self.ordinal
-            ),
+            require_exact_nonneg_int("CognitionTraceStageRecord.ordinal", self.ordinal),
         )
         if type(self.summary) is not CognitionTraceStageSummary:
             raise TypeError(
@@ -138,9 +136,7 @@ class CognitionTraceInvocation:
             raise TypeError("CognitionTraceInvocation.stages must be a tuple")
         for stage in self.stages:
             if type(stage) is not CognitionTraceStageRecord:
-                raise TypeError(
-                    "stages entries must be CognitionTraceStageRecord"
-                )
+                raise TypeError("stages entries must be CognitionTraceStageRecord")
             if stage.run_id != self.run_id:
                 raise ValueError("stage run_id mismatch")
             if stage.agent_id != self.agent_id:
@@ -311,9 +307,7 @@ class InMemoryCognitionTraceRepository:
     __slots__ = ("_items",)
 
     def __init__(self) -> None:
-        self._items: dict[
-            tuple[str, str, int, str], CognitionTraceInvocation
-        ] = {}
+        self._items: dict[tuple[str, str, int, str], CognitionTraceInvocation] = {}
 
     async def append_invocation(self, invocation: CognitionTraceInvocation) -> None:
         if type(invocation) is not CognitionTraceInvocation:
@@ -382,9 +376,7 @@ class InMemoryCognitionTraceRepository:
         tick: int,
         invocation_id: str,
     ) -> CognitionTraceInvocation | None:
-        return self._items.get(
-            (run_id.value, agent_id.value, tick, invocation_id)
-        )
+        return self._items.get((run_id.value, agent_id.value, tick, invocation_id))
 
     async def list_invocations(
         self,
@@ -416,11 +408,7 @@ class InMemoryCognitionTraceRepository:
         )
         if after_cursor is not None:
             cursor = after_cursor
-            items = [
-                item
-                for item in items
-                if _cursor_for(item) > cursor
-            ]
+            items = [item for item in items if _cursor_for(item) > cursor]
         page_items = items[:limit]
         next_cursor = None
         if len(items) > limit:

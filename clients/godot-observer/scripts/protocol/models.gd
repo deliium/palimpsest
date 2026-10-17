@@ -50,6 +50,9 @@ const KNOWN_TYPES: Array[String] = [
 	"KINSHIP_EDGE_RECORDED",
 	"AGENT_FED",
 	"AGENT_TRANSPORTED",
+	"JOURNEY_STARTED",
+	"JOURNEY_ARRIVED",
+	"JOURNEY_ENDED",
 ]
 
 const BODY_FROM_TARGET: Array[String] = [
@@ -122,6 +125,8 @@ class LocationModel:
 	var display_name: String = ""
 	var neighbor_ids: Array[String] = []
 	var presentation: PresentationModel = null
+	var region_id: Variant = null
+	var region_label: Variant = null
 
 
 class MeasuresModel:
@@ -135,6 +140,7 @@ class MeasuresModel:
 
 class AgentModel:
 	extends RefCounted
+	var journey: Variant = null
 	var entity_id: String = ""
 	var location_id: String = ""
 	var life_status: String = ""
@@ -252,6 +258,8 @@ class CursorModel:
 
 class EventModel:
 	extends RefCounted
+	var journey: Variant = null
+	var participant_body_ids: Array[String] = []
 	var known: bool = false
 	var protocol_version: String = ""
 	var type: String = ""
@@ -449,6 +457,11 @@ static func parse_event(data: Variant) -> ParseResult:
 	event.temperature_band = _optional_text(data, "temperature_band")
 	event.hazard_kind = _optional_text(data, "hazard_kind")
 	event.declared_confidence_band = _optional_text(data, "declared_confidence_band")
+	event.journey = _journey(data.get("journey", null))
+	if event.journey is String:
+		return ParseResult.failure(event.journey)
+	for participant in _array(data, "participant_body_ids"):
+		event.participant_body_ids.append(str(participant))
 	return ParseResult.success(event, "event", 1)
 
 
@@ -587,6 +600,8 @@ static func _location(data: Variant) -> Variant:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "invalid_location"
 	var location := LocationModel.new()
+	location.region_id = _optional_text(data, "region_id")
+	location.region_label = _optional_text(data, "region_label")
 	location.location_id = str(data.get("location_id", ""))
 	location.name = str(data.get("name", ""))
 	location.display_name = str(data.get("display_name", ""))
@@ -658,6 +673,11 @@ static func _agent(data: Variant) -> Variant:
 	agent.location_id = str(data.get("location_id", ""))
 	agent.life_status = str(data.get("life_status", ""))
 	agent.agent_id = _optional_text(data, "agent_id")
+	agent.journey = _journey(data.get("journey", null))
+	if agent.journey is String:
+		return agent.journey
+	if agent.journey != null and (agent.location_id != agent.journey.origin_location_id or not agent.entity_id in agent.journey.participant_body_ids):
+		return "invalid_journey_placement"
 	for item_id in _array(data, "inventory_ids"):
 		agent.inventory_ids.append(str(item_id))
 	var measures = _measures(data.get("measures", null))
@@ -686,6 +706,30 @@ static func _measures(data: Variant) -> Variant:
 	measures.fatigue = float(data.get("fatigue", 0.0))
 	measures.temperature = float(data.get("temperature", 0.0))
 	return measures
+
+
+static func _journey(data: Variant) -> Variant:
+	if data == null:
+		return null
+	if not data is Dictionary:
+		return "invalid_journey"
+	var keys := ["journey_id", "origin_location_id", "destination_location_id", "participant_body_ids", "start_tick", "due_tick", "arrival_wait_deadline_tick", "phase"]
+	if data.size() != keys.size():
+		return "invalid_journey_fields"
+	for key in keys:
+		if not data.has(key):
+			return "invalid_journey_fields"
+	for key in ["journey_id", "origin_location_id", "destination_location_id"]:
+		if not data[key] is String or data[key].is_empty():
+			return "invalid_journey_id"
+	for key in ["start_tick", "due_tick", "arrival_wait_deadline_tick"]:
+		if typeof(data[key]) not in [TYPE_INT, TYPE_FLOAT] or float(data[key]) != floor(float(data[key])) or float(data[key]) < 0:
+			return "invalid_journey_tick"
+	if data.start_tick > data.due_tick or data.due_tick > data.arrival_wait_deadline_tick:
+		return "invalid_journey_tick"
+	if not data.phase in ["preparing", "capacity_wait"] or not data.participant_body_ids is Array or data.participant_body_ids.is_empty():
+		return "invalid_journey_phase"
+	return data.duplicate(true)
 
 
 static func _item(data: Dictionary) -> ItemModel:

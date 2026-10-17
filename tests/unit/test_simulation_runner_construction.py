@@ -232,7 +232,7 @@ async def test_from_config_default_reconstructive_and_imagination() -> None:
         assert agent_bundle.bundle.scope.owner_id.value == "agent-1"
         snap = await agent_bundle.bundle.snapshot()
         assert snap.memories == ()
-        assert isinstance(runner._provider, DeterministicFakeLLMProvider)
+        assert isinstance(runner._provider._inner, DeterministicFakeLLMProvider)
         assert loop._memory._dynamics_policy is None
 
 
@@ -257,7 +257,7 @@ async def test_from_config_uses_deterministic_fake_provider() -> None:
     async with await SimulationRunner.from_config(
         config, run_id=RunId("run-det-fake")
     ) as runner:
-        assert type(runner._provider) is DeterministicFakeLLMProvider
+        assert type(runner._provider._inner) is DeterministicFakeLLMProvider
         await runner._provider.close()
 
 
@@ -296,8 +296,8 @@ async def test_replay_without_store_fails_closed(tmp_path: object) -> None:
     async with await SimulationRunner.from_config(
         config, run_id=RunId("run-replay-ok"), factories=factories
     ) as runner:
-        assert type(runner._provider) is RecordingLLMProvider
-        assert runner._provider.mode.value == "replay"
+        assert type(runner._provider._inner) is RecordingLLMProvider
+        assert runner._provider._inner.mode.value == "replay"
 
 
 def test_recording_store_settings_absent_from_provider_json() -> None:
@@ -814,11 +814,11 @@ async def test_from_config_fails_closed_when_v3_capability_flag_enabled() -> Non
     config = replace(
         base,
         schema_version=RUNNER_SCHEMA_VERSION_V23,
-        v3_capability_flags=V3CapabilityFlags(multi_polity_migration=True),
+        v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
     )
     # Encode/decode of flag-true v23 remains allowed.
     round_trip = decode_runner_config(encode_runner_config(config))
-    assert round_trip.v3_capability_flags.multi_polity_migration is True
+    assert round_trip.v3_capability_flags.institutional_economy is True
 
     with pytest.raises(RunnerConstructionError) as exc_info:
         await SimulationRunner.from_config(config, run_id=RunId("run-v3-cap-on"))

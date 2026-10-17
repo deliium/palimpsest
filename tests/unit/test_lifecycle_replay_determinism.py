@@ -271,6 +271,4 @@ async def test_restored_observation_parity_after_mid_run_snapshot() -> None:
     )
     assert restored_payload == live_payload
     assert len(restored.lifecycle_records) == len(live.engine.lifecycle_records)
-    assert len(restored.ordered_registrations) == len(
-        live.engine.ordered_registrations
-    )
+    assert len(restored.ordered_registrations) == len(live.engine.ordered_registrations)

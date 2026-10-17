@@ -121,7 +121,7 @@ def test_other_v3_flag_still_requires_v23() -> None:
         replace(
             _base(),
             schema_version=RUNNER_SCHEMA_VERSION_V4,
-            v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+            v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
         )
 
 
@@ -144,9 +144,7 @@ def test_fixed_interval_policy_params_round_trip() -> None:
     decoded = decode_runner_config(encode_runner_config(config))
     assert decoded.v3_capability_flags.generational_population is True
     assert decoded.population_lifecycle is not None
-    assert (
-        decoded.population_lifecycle.demographic_policy_params["interval_ticks"] == 5
-    )
+    assert decoded.population_lifecycle.demographic_policy_params["interval_ticks"] == 5
 
 
 def test_unknown_policy_id_fails_closed() -> None:
@@ -204,12 +202,10 @@ async def test_unowned_v3_flag_still_fails_closed() -> None:
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V23,
-        v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+        v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
     )
     with pytest.raises(RunnerConstructionError) as exc_info:
-        await SimulationRunner.from_config(
-            config, run_id=RunId("run-v23-kinship")
-        )
+        await SimulationRunner.from_config(config, run_id=RunId("run-v23-kinship"))
     assert exc_info.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
 
 

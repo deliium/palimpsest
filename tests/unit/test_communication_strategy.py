@@ -47,8 +47,8 @@ _RECIPIENT = AgentId("agent-listener")
 _SPEAKER = EntityId("body-speaker")
 _LISTENER = EntityId("body-listener")
 _LOGGER = "agents.cognition.communication_strategy"
-_SOURCE = (
-    Path("src/agents/cognition/communication_strategy.py").read_text(encoding="utf-8")
+_SOURCE = Path("src/agents/cognition/communication_strategy.py").read_text(
+    encoding="utf-8"
 )
 
 

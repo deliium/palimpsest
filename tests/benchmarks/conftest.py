@@ -2,4 +2,10 @@
 
 from __future__ import annotations
 
-pytest_plugins = ["tests.integration.conftest"]
+from tests.integration.conftest import (
+    database_resources,
+    migrated_test_database,
+    test_database_settings,
+)
+
+__all__ = ["database_resources", "migrated_test_database", "test_database_settings"]

@@ -12,28 +12,20 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final, cast
+
+if TYPE_CHECKING:
+    from world._state import WorldState
+    from world.events import WorldEvent
 
 from world.identifiers import EntityId
+from world.skill_contracts import SkillDomain as SkillDomain
 from world.values import clamp_unit_interval
 
 _LOG: Final[logging.Logger] = logging.getLogger("world._skills")
 
 OBJECTIVE_SKILL_POLICY_VERSION: Final[str] = "objective-skill-v1"
 _SKILL_QUANTUM: Final[float] = 1e-6
-
-
-class SkillDomain(StrEnum):
-    """Closed skill tokens. There is no profession, role, or culture label."""
-
-    FORAGING = "foraging"
-    NAVIGATION = "navigation"
-    RESOURCE_DETECTION = "resource_detection"
-    CRAFTING = "crafting"
-    BUILDING = "building"
-    HEALING = "healing"
-    COMMUNICATION = "communication"
-    TEACHING = "teaching"
 
 
 class SkillGrowthChannel(StrEnum):
@@ -95,12 +87,12 @@ def _require_domain(value: object) -> SkillDomain:
     return value
 
 
-def _require_world_state(value: object) -> object:
+def _require_world_state(value: object) -> WorldState:
     """Accept a world state without importing the private state module."""
     kind = type(value)
     if kind.__module__ != "world._state" or kind.__name__ != "WorldState":
         raise TypeError("world_state must be WorldState")
-    return value
+    return cast("WorldState", value)
 
 
 def _clamp_quantized(value: float) -> float:
@@ -119,6 +111,18 @@ class SkillEfficiencyOverride:
     move_fatigue: float
     flee_fatigue: float
     help_health_gain: float
+    # Regional routes have their own base cost, including when move_fatigue=0.
+    # Keep the multiplier separately rather than recovering it from a zero cost.
+    movement_fatigue_multiplier: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.movement_fatigue_multiplier is not None:
+            multiplier = _finite_number(
+                "movement_fatigue_multiplier", self.movement_fatigue_multiplier
+            )
+            if multiplier < 0:
+                raise _fail("movement_fatigue_multiplier", "negative")
+            object.__setattr__(self, "movement_fatigue_multiplier", multiplier)
 
 
 @dataclass(frozen=True, slots=True)
@@ -494,6 +498,7 @@ def _fold_one(
         Attacked,
         Fled,
         Helped,
+        JourneyStarted,
         Moved,
         Searched,
         Talked,
@@ -598,6 +603,18 @@ def _fold_one(
             world_state=world_state,
             tick=tick,
             rules=rules,
+            sums=sums,
+        )
+        return
+    if type(details) is JourneyStarted:
+        _add_channel(
+            action.actor_id,
+            SkillDomain.NAVIGATION,
+            SkillGrowthChannel.PRACTICE,
+            policy.practice_rate,
+            ledger=ledger,
+            world_state=world_state,
+            tick=tick,
             sums=sums,
         )
         return
@@ -755,7 +772,7 @@ def _observe_public(
     from world.models import LifeStatus, PhysicalRules
     from world.values import WeatherCondition
 
-    _require_world_state(world_state)
+    world_state = _require_world_state(world_state)
     assert type(rules) is PhysicalRules
     origin = action.origin_location_id
     if origin is None or origin not in world_state.locations:
@@ -801,7 +818,7 @@ def _add_channel(
 ) -> None:
     from world.models import LifeStatus
 
-    _require_world_state(world_state)
+    world_state = _require_world_state(world_state)
     if entity_id not in ledger.entity_ids():
         _drop(tick, entity_id, "actor_disabled")
         return
@@ -872,7 +889,7 @@ def refold_objective_ledger(
     is the only signal that the domain is foraging.
     """
     from world.effects import ActionCause
-    from world.events import Searched, WorldEvent
+    from world.events import Searched
     from world.identifiers import WorldId
     from world.models import PhysicalRules
 
@@ -904,6 +921,7 @@ def refold_objective_ledger(
             origin = None if occurrence is None else occurrence.origin_location_id
             untargeted = None
             if type(event.details) is Searched:
+                assert event.request_id is not None
                 request_id = event.request_id.value
                 if request_id in untargeted_ids:
                     untargeted = True
@@ -939,10 +957,10 @@ def refold_objective_ledger(
 
 def _event_groups(
     events: Sequence[object],
-) -> tuple[tuple[int, tuple[object, ...]], ...]:
+) -> tuple[tuple[int, tuple[WorldEvent, ...]], ...]:
     from world.events import WorldEvent
 
-    groups: list[tuple[int, tuple[object, ...]]] = []
+    groups: list[tuple[int, tuple[WorldEvent, ...]]] = []
     current_tick: int | None = None
     bucket: list[WorldEvent] = []
     for event in events:

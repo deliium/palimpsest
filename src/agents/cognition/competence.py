@@ -146,9 +146,7 @@ class CompetenceBeliefPolicy:
         object.__setattr__(
             self,
             "belief_observation_rate",
-            _nonnegative_rate(
-                "belief_observation_rate", self.belief_observation_rate
-            ),
+            _nonnegative_rate("belief_observation_rate", self.belief_observation_rate),
         )
         object.__setattr__(
             self, "belief_prior", _nonnegative_rate("belief_prior", self.belief_prior)
@@ -531,9 +529,7 @@ def _apply_communication(
                 CompetenceUpdateChannel.SUCCESS,
                 policy,
             )
-            updated = _remember(
-                updated, CompetenceDomain.COMMUNICATION, occurrence_id
-            )
+            updated = _remember(updated, CompetenceDomain.COMMUNICATION, occurrence_id)
         instructed = _instructed_domain(communication.utterance)
         if instructed is not None and not _cursor_has(
             updated, CompetenceDomain.TEACHING, occurrence_id

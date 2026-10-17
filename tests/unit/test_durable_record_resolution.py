@@ -115,12 +115,8 @@ def test_inscribe_durable_capable_requires_genre(
             Inscribe(kind=ArtifactKind.NOTE, content=_content("memo")),
         )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert (
-        result.resolutions[0].reason is ActionResolutionReason.STRUCTURAL_REJECTION
-    )
-    assert any(
-        "durable_genre_required" in r.getMessage() for r in caplog.records
-    )
+    assert result.resolutions[0].reason is ActionResolutionReason.STRUCTURAL_REJECTION
+    assert any("durable_genre_required" in r.getMessage() for r in caplog.records)
 
 
 def test_copy_annotate_damage_partial_loss_destroy_tombstone() -> None:
@@ -225,9 +221,7 @@ def test_channel_off_rejects_durable_commands(
                 result.resolutions[0].reason
                 is ActionResolutionReason.STRUCTURAL_REJECTION
             )
-    assert any(
-        "durable_records_inactive" in r.getMessage() for r in caplog.records
-    )
+    assert any("durable_records_inactive" in r.getMessage() for r in caplog.records)
 
 
 def test_destroyed_parent_blocks_copy(
@@ -239,9 +233,7 @@ def test_destroyed_parent_blocks_copy(
     with caplog.at_level(logging.WARNING, logger="world._operations"):
         result = _act(engine, "agent-1", CopyRecord(parent_id))
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert any(
-        "durable_parent_destroyed" in r.getMessage() for r in caplog.records
-    )
+    assert any("durable_parent_destroyed" in r.getMessage() for r in caplog.records)
 
 
 def test_annotation_cap_rejects(
@@ -270,9 +262,7 @@ def test_annotation_cap_rejects(
     with caplog.at_level(logging.WARNING, logger="world._operations"):
         second = _act(engine, "agent-1", AnnotateRecord(artifact_id, _content("b")))
     assert second.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert any(
-        "durable_annotation_cap" in r.getMessage() for r in caplog.records
-    )
+    assert any("durable_annotation_cap" in r.getMessage() for r in caplog.records)
 
 
 def test_copy_generation_cap_rejects(
@@ -299,13 +289,9 @@ def test_copy_generation_cap_rejects(
     first = _act(engine, "agent-1", CopyRecord(parent_id))
     assert first.resolutions[0].status is ActionResolutionStatus.APPLIED
     child_id = next(
-        aid
-        for aid in engine._snapshot.world.state.artifacts
-        if aid != parent_id
+        aid for aid in engine._snapshot.world.state.artifacts if aid != parent_id
     )
     with caplog.at_level(logging.WARNING, logger="world._operations"):
         second = _act(engine, "agent-1", CopyRecord(child_id))
     assert second.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert any(
-        "durable_copy_generation_cap" in r.getMessage() for r in caplog.records
-    )
+    assert any("durable_copy_generation_cap" in r.getMessage() for r in caplog.records)

@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from starlette.types import Scope
+from structlog.testing import capture_logs
 
 from api.app import DisposableEngine, create_app
 from api.observer_service import ObserverReadService
@@ -124,9 +125,7 @@ def _app(settings: Settings | None = None) -> Any:
 
 
 @pytest.mark.asyncio
-async def test_journal_tail_is_exclusive_and_ordered(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+async def test_journal_tail_is_exclusive_and_ordered() -> None:
     service, events = observer_replay_service()
     replay = service
 
@@ -161,7 +160,8 @@ async def test_journal_tail_is_exclusive_and_ordered(
         hello={"kind": "hello"},
         head_tick=1,
     )
-    envelopes = [item async for item in session.subscribe(config)]
+    with capture_logs() as logs:
+        envelopes = [item async for item in session.subscribe(config)]
     kinds = [item["kind"] for item in envelopes]
     assert kinds[0] == "hello"
     assert kinds[-1] == "completion"
@@ -188,9 +188,8 @@ async def test_journal_tail_is_exclusive_and_ordered(
         after_sequence=0,
     )
     assert [item.event_id for item in gap] == ["evt-wait"]
-    captured = capsys.readouterr()
-    assert "observer_stream_open" in captured.out
-    assert "observer_stream_disconnect" in captured.out
+    assert "observer_stream_open" in {row["event"] for row in logs}
+    assert "observer_stream_disconnect" in {row["event"] for row in logs}
 
 
 def test_stream_route_does_not_subscribe_to_fanout() -> None:
@@ -241,9 +240,7 @@ async def test_slow_consumer_disconnects_without_waiting() -> None:
 
 
 @pytest.mark.asyncio
-async def test_slow_observer_does_not_block_sibling_subscriber(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+async def test_slow_observer_does_not_block_sibling_subscriber() -> None:
     """One slow queue disconnects; a healthy sibling still drains to completion."""
     shared: list[dict[str, object]] = [
         {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
@@ -317,14 +314,14 @@ async def test_slow_observer_does_not_block_sibling_subscriber(
                 break
         return kinds
 
-    slow_count, healthy_kinds = await asyncio.gather(drain_slow(), drain_healthy())
+    with capture_logs() as logs:
+        slow_count, healthy_kinds = await asyncio.gather(drain_slow(), drain_healthy())
     assert slow_count < 20
     assert healthy_kinds[0] == "hello"
     assert healthy_kinds.count("event") == 20
     assert 10 in read_limits
-    captured = capsys.readouterr()
-    assert "observer_stream_slow_consumer" in captured.out
-    assert "catchup_batch" in captured.out
+    assert "observer_stream_slow_consumer" in {row["event"] for row in logs}
+    assert "catchup_batch" in {row["event"] for row in logs}
 
 
 @pytest.mark.asyncio

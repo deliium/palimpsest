@@ -50,6 +50,7 @@ class _MemoryServiceReader:
     def snapshot(self) -> tuple[MemoryTrace, ...]:
         return self._service.sync_snapshot()
 
+
 _LOG: Final[logging.Logger] = logging.getLogger("memory.service")
 
 
@@ -429,9 +430,7 @@ class InMemoryMemoryService:
                 continue
             if resolved_tick < trace.created_tick:
                 raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
-            self._records[memory_id] = replace(
-                trace, forgotten_at_tick=resolved_tick
-            )
+            self._records[memory_id] = replace(trace, forgotten_at_tick=resolved_tick)
             forgotten += 1
         _LOG.info(
             "memory_forget_selected",

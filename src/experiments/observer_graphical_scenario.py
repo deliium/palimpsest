@@ -1,9 +1,9 @@
-"""Deterministic observer-graphical-v2 world for Godot validation.
+"""Deterministic observer-graphical-v2 world for presentation validation.
 
 Composes the five-agent reference scenario with environmental dynamics and an
 external artifact channel. Off the V1 regression gate. Short CI arms use a
 small ``max_ticks``; seek-jump tests may use a synthetic high-water cursor in
-the Godot fixture (≥ 1000) without generating that many live ticks.
+the client fixture (≥ 1000) without generating that many live ticks.
 """
 
 from __future__ import annotations
@@ -134,8 +134,7 @@ def build_observer_graphical_scenario(
         missing.append("external_artifact")
     if missing:
         _LOG.error(
-            "observer_graphical_incomplete reason_code=missing_features "
-            "missing=%s",
+            "observer_graphical_incomplete reason_code=missing_features missing=%s",
             ",".join(missing),
         )
         raise ValueError(f"observer_graphical_incomplete:{','.join(missing)}")

@@ -100,9 +100,7 @@ class MetricReadService:
 class ReplayApiService:
     """Injectable replay facade (never returns live engines)."""
 
-    async def replay_to_tick(
-        self, run_id: str, body: ReplayRequest
-    ) -> ReplayResultOut:
+    async def replay_to_tick(self, run_id: str, body: ReplayRequest) -> ReplayResultOut:
         raise not_found(code="run_not_found", run_id=run_id)
 
 

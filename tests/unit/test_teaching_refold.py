@@ -191,14 +191,22 @@ def test_disabled_restore_skips_the_refold(caplog: pytest.LogCaptureFixture) -> 
     live = WorldEngine(config=physical_config(4), bootstrap=fixture.as_bootstrap())
     snapshot = _snapshot_at_start(live)
     batch = live.observe()
-    live.resolve_tick((ActionSubmission(batch.token, AgentId("agent-1"), Talk(
-        EntityId("body-2"),
-        origin_utterance(
-            text="hello",
-            speaker_id=EntityId("body-1"),
-            communication_id="comm-plain",
-        ),
-    )),))
+    live.resolve_tick(
+        (
+            ActionSubmission(
+                batch.token,
+                AgentId("agent-1"),
+                Talk(
+                    EntityId("body-2"),
+                    origin_utterance(
+                        text="hello",
+                        speaker_id=EntityId("body-1"),
+                        communication_id="comm-plain",
+                    ),
+                ),
+            ),
+        )
+    )
     WorldEngine.restore_from_snapshot(
         snapshot,
         events=live._snapshot.event_history,

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
-from pydantic import Field, model_serializer, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from api.schemas import StrictModel
 from observer.version import OBSERVER_PROTOCOL_VERSION
@@ -61,6 +66,18 @@ class ObserverLocationOut(StrictModel):
     display_name: str
     neighbor_ids: tuple[str, ...]
     presentation: ObserverPresentationOut | None = None
+    region_id: str | None = None
+    region_label: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_region(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        payload = cast(dict[str, object], handler(self))
+        if self.region_id is None:
+            payload.pop("region_id", None)
+            payload.pop("region_label", None)
+        return payload
 
 
 class ObserverBodyMeasuresOut(StrictModel):
@@ -71,6 +88,17 @@ class ObserverBodyMeasuresOut(StrictModel):
     temperature: float
 
 
+class ObserverJourneyOut(StrictModel):
+    journey_id: str
+    origin_location_id: str
+    destination_location_id: str
+    participant_body_ids: tuple[str, ...]
+    start_tick: int = Field(ge=0)
+    due_tick: int = Field(ge=0)
+    arrival_wait_deadline_tick: int = Field(ge=0)
+    phase: Literal["preparing", "capacity_wait"]
+
+
 class ObserverAgentOut(StrictModel):
     entity_id: str
     location_id: str
@@ -79,6 +107,16 @@ class ObserverAgentOut(StrictModel):
     measures: ObserverBodyMeasuresOut
     agent_id: str | None = None
     presentation_slot: PresentationSlotOut | None = None
+    journey: ObserverJourneyOut | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_journey(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        payload = cast(dict[str, object], handler(self))
+        if self.journey is None:
+            payload.pop("journey", None)
+        return payload
 
 
 class EntityPresentationOut(StrictModel):
@@ -169,7 +207,9 @@ class ObserverWorldStateOut(StrictModel):
         return data
 
     @model_serializer(mode="wrap")
-    def _omit_absent_environment(self, handler: object) -> dict[str, object]:
+    def _omit_absent_environment(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
         payload = handler(self)
         if not isinstance(payload, dict):
             raise TypeError("observer world serializer requires a mapping")
@@ -200,12 +240,20 @@ class ObserverEventOut(StrictModel):
     temperature_band: str | None = None
     hazard_kind: str | None = None
     declared_confidence_band: str | None = None
+    journey: ObserverJourneyOut | None = None
+    participant_body_ids: tuple[str, ...] = ()
 
     @model_serializer(mode="wrap")
-    def _omit_absent_environment(self, handler: object) -> dict[str, object]:
+    def _omit_absent_environment(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
         payload = handler(self)
         if not isinstance(payload, dict):
             raise TypeError("observer event serializer requires a mapping")
+        if self.journey is None:
+            payload.pop("journey", None)
+        if not self.participant_body_ids:
+            payload.pop("participant_body_ids", None)
         for key in (
             "season",
             "temperature_band",

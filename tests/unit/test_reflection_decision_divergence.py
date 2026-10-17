@@ -95,9 +95,7 @@ def _danger_trace(memory_id: str) -> MemoryTrace:
             EntityMention(
                 mention_id=subject, label="subject", entity_id=EntityId("body-2")
             ),
-            EntityMention(
-                mention_id=obj, label="object", entity_id=EntityId("body-1")
-            ),
+            EntityMention(mention_id=obj, label="object", entity_id=EntityId("body-1")),
         ),
         relations=(
             MemoryRelation(

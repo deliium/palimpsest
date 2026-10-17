@@ -32,10 +32,7 @@ def build_bench_07_skill_specialization(
     """Wrap Experiments R + T enabled/disabled peers on a shared world/seed."""
     r_def = experiment_r_skill_learning(base, seed_matrix=seed_matrix)
     t_def = experiment_t_skill_specialization(base, seed_matrix=seed_matrix)
-    by_id = {
-        item.condition_id: item
-        for item in (*r_def.conditions, *t_def.conditions)
-    }
+    by_id = {item.condition_id: item for item in (*r_def.conditions, *t_def.conditions)}
     ordered_ids = ("r-enabled", "t-enabled", "r-disabled", "t-disabled")
     missing = [item for item in ordered_ids if item not in by_id]
     if missing:
@@ -54,7 +51,9 @@ def build_bench_07_skill_specialization(
     _LOG.debug(
         "bench_07_modes skill=%s teaching=%s",
         by_id["r-enabled"].runner_config.agents[0].cognition.skill_learning_mode.value,
-        by_id["t-enabled"].runner_config.agents[0].cognition.teaching_interaction_mode.value,
+        by_id["t-enabled"]
+        .runner_config.agents[0]
+        .cognition.teaching_interaction_mode.value,
     )
     return BenchmarkBuildResult(
         scenario_id=BENCH_07_SKILL_SPECIALIZATION,

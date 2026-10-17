@@ -50,6 +50,7 @@ from world.actions import (
     Tell,
     Transport,
     Wait,
+    require_agent_command,
 )
 from world.communications import (
     observation_allows_communication_target,
@@ -163,9 +164,23 @@ class MultiCriteriaIntentionSelector:
         care_action_policy: object | None = None,
         mentorship_spec: object | None = None,
         cultural_features_spec: object | None = None,
+        regional_migration_cognition_mode: str | None = None,
+        regional_migration_hop_limit: int = 1,
+        regional_memory: RetrievedMemoryContext | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
+        if regional_migration_cognition_mode not in {
+            None,
+            "disabled",
+            "deterministic",
+        }:
+            raise ValueError("regional_migration_cognition_mode is invalid")
+        if (
+            type(regional_migration_hop_limit) is not int
+            or regional_migration_hop_limit < 1
+        ):
+            raise ValueError("regional_migration_hop_limit must be positive")
         appraisals = motivation.appraisals
         _LOG.debug(
             "deliberation_start",
@@ -499,6 +514,30 @@ class MultiCriteriaIntentionSelector:
                 if item.future_id in futures_by_id
             ),
         )
+        regional_migration_bias: Mapping[str, float] | None = None
+        if regional_migration_cognition_mode == "deterministic":
+            from agents.cognition.regional_migration import destination_action_biases
+
+            regional_memories = (
+                () if loop_input.snapshot is None else loop_input.snapshot.memories
+            )
+            if regional_memory is not None:
+                if type(regional_memory) is not RetrievedMemoryContext:
+                    raise TypeError("regional_memory must be RetrievedMemoryContext")
+                regional_memories = tuple(
+                    hit.trace for hit in regional_memory.ranked_hits
+                )
+            regional_migration_bias = destination_action_biases(
+                owner_id=owner,
+                observation=loop_input.observation,
+                memories=regional_memories,
+                futures=tuple(
+                    futures_by_id[item.future_id]
+                    for item in undominated
+                    if item.future_id in futures_by_id
+                ),
+                hop_limit=regional_migration_hop_limit,
+            )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -520,6 +559,7 @@ class MultiCriteriaIntentionSelector:
             caregiving_bias or None,
             mentorship_bias or None,
             cultural_bias or None,
+            regional_migration_bias,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -807,7 +847,7 @@ class CommandPlanner:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
         future = _resolve_future(intention, futures)
-        command: AgentCommand = Wait()
+        command: object = Wait()
         command_type = "Wait"
         used_fallback = False
         communication_intent: object | None = None
@@ -908,8 +948,7 @@ class CommandPlanner:
                 allowed_commands.update(durable_command_types)
             elif type(command) in durable_command_types:
                 _LOG.info(
-                    "compile_skip reason_code=durable_records_inactive "
-                    "command_type=%s",
+                    "compile_skip reason_code=durable_records_inactive command_type=%s",
                     type(command).__name__,
                 )
             if knowledge_repositories_active:
@@ -946,7 +985,7 @@ class CommandPlanner:
             communication_intent_audit = None
 
         command = _reputation_testimony_command(
-            command,
+            require_agent_command(command),
             owner_id=owner,
             observation=loop_input.observation,
             snapshot=loop_input.snapshot,
@@ -1067,7 +1106,8 @@ class CommandPlanner:
             IndexRepository,
         }
         genre_inscribe = (
-            type(command) is Inscribe and getattr(command, "record_genre", None) is not None
+            type(command) is Inscribe
+            and getattr(command, "record_genre", None) is not None
         )
         if type(command) in durable_types or genre_inscribe:
             allowed = (
@@ -1182,7 +1222,7 @@ class CommandPlanner:
         confidence = intention.confidence if not used_fallback else 1.0
         plan = ActionPlan(
             owner_id=owner,
-            command=command,
+            command=require_agent_command(command),
             confidence=require_confidence("ActionPlan.confidence", confidence),
             decision_metadata=DecisionMetadata(
                 selection_codes=(command_type.lower(), PLANNER_POLICY_VERSION),
@@ -1729,6 +1769,7 @@ def _pairwise_select(
     caregiving_bias: Mapping[str, float] | None = None,
     mentorship_bias: Mapping[str, float] | None = None,
     cultural_feature_bias: Mapping[str, float] | None = None,
+    regional_migration_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -1758,6 +1799,7 @@ def _pairwise_select(
                 caregiving_bias,
                 mentorship_bias,
                 cultural_feature_bias,
+                regional_migration_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -1807,6 +1849,7 @@ def _pairwise_compare(
     caregiving_bias: Mapping[str, float] | None = None,
     mentorship_bias: Mapping[str, float] | None = None,
     cultural_feature_bias: Mapping[str, float] | None = None,
+    regional_migration_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -1901,7 +1944,7 @@ def _pairwise_compare(
             counterfactual_vote = 1
         elif right_bias > left_bias:
             counterfactual_vote = -1
-    total = (
+    total: float = (
         drive_votes
         + goal_votes
         + social_votes
@@ -1979,6 +2022,9 @@ def _pairwise_compare(
     if cultural_feature_bias is not None:
         total += cultural_feature_bias.get(left.future_id, 0.0)
         total -= cultural_feature_bias.get(right.future_id, 0.0)
+    if regional_migration_bias is not None:
+        total += regional_migration_bias.get(left.future_id, 0.0)
+        total -= regional_migration_bias.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:
@@ -2098,11 +2144,9 @@ def _preferred_search_target(
         if competence_model is None and snapshot is not None
         else competence_model
     )
-    if (
-        model is None
-        or type(model).__name__ != "CompetenceSelfModel"
-        or futures is None
-    ):
+    from agents.cognition.competence import CompetenceSelfModel
+
+    if model is None or not isinstance(model, CompetenceSelfModel) or futures is None:
         return chosen
     from agents.cognition.competence import CompetenceDomain
 
@@ -2288,10 +2332,10 @@ def _compile_command(
         carried = _resolve_social_entity(target, observation)
         if carried is None:
             return None
-        destination = _resolve_first_exit(observation)
-        if destination is None:
+        transport_destination = _resolve_first_exit(observation)
+        if transport_destination is None:
             return None
-        return Transport(target_id=carried, destination_id=destination)
+        return Transport(target_id=carried, destination_id=transport_destination)
     return None
 
 
@@ -2327,7 +2371,7 @@ def _with_teaching_act(
     observation: object,
     mode: object | None,
     selection: tuple[object, object] | None,
-) -> object | None:
+) -> AgentCommand | None:
     if command is None:
         return None
     from agents.cognition.teaching import AdviceAct, AdviceDomain, attach_teaching_act
@@ -2337,13 +2381,15 @@ def _with_teaching_act(
         act, domain = selection
         if type(act) is AdviceAct and type(domain) is AdviceDomain:
             chosen = (act, domain)
-    return attach_teaching_act(
-        command,
-        model=model,
-        policy=policy,
-        observation=observation,
-        mode=mode,
-        selection=chosen,
+    return require_agent_command(
+        attach_teaching_act(
+            command,
+            model=model,
+            policy=policy,
+            observation=observation,
+            mode=mode,
+            selection=chosen,
+        )
     )
 
 

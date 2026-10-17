@@ -435,9 +435,7 @@ async def get_observer_labels(
     except Exception:
         display_index = {}
     ledger = (
-        None
-        if checkpoint is None
-        else getattr(checkpoint, "semantic_naming", None)
+        None if checkpoint is None else getattr(checkpoint, "semantic_naming", None)
     )
     rows = () if ledger is None else getattr(ledger, "bindings", ()) or ()
     overlay = project_subjective_label_overlay(agent_id, rows, display_index)

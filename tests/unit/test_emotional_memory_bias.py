@@ -91,9 +91,7 @@ def _fear_prior(*, intensity: float = 0.8) -> AgentEmotionalState:
     return AgentEmotionalState(
         owner_id=AgentId("agent-1"),
         tick=1,
-        intensities=(
-            EmotionIntensity(kind=EmotionKind.FEAR, intensity=intensity),
-        ),
+        intensities=(EmotionIntensity(kind=EmotionKind.FEAR, intensity=intensity),),
         last_update_tick=1,
         policy_version="emotion.v1",
     )
@@ -152,9 +150,7 @@ def test_retrieval_bias_promotes_salient_threat_under_fear() -> None:
     assert applied_off is False
     assert off[0].trace.memory_id.value == "m-social"
 
-    on, applied_on = apply_retrieval_emotion_bias(
-        (social, threat), prior, enabled=True
-    )
+    on, applied_on = apply_retrieval_emotion_bias((social, threat), prior, enabled=True)
     assert applied_on is True
     assert on[0].trace.memory_id.value == "m-threat"
     assert on[0].rank == 1
@@ -175,9 +171,7 @@ def test_situation_focus_bias_surfaces_threat_under_fear() -> None:
     assert off == claims
     assert counts_off == {}
 
-    on, counts_on, applied_on = apply_situation_focus_bias(
-        claims, prior, enabled=True
-    )
+    on, counts_on, applied_on = apply_situation_focus_bias(claims, prior, enabled=True)
     assert applied_on is True
     assert on[0] is SituationClaimCode.THREAT_SIGNAL
     assert counts_on.get("threat_focus") == 1
@@ -294,9 +288,7 @@ async def test_emotion_bias_does_not_rewrite_v2_audit_selected_ids() -> None:
                     owner_id=AgentId("agent-1"),
                     world_revision=WorldRevision(0),
                     concepts=(
-                        ConceptMention(
-                            mention_id=MentionId("c-t"), concept="alarm"
-                        ),
+                        ConceptMention(mention_id=MentionId("c-t"), concept="alarm"),
                     ),
                     entities=(),
                     relations=(),
@@ -317,9 +309,7 @@ async def test_emotion_bias_does_not_rewrite_v2_audit_selected_ids() -> None:
                     owner_id=AgentId("agent-1"),
                     world_revision=WorldRevision(0),
                     concepts=(
-                        ConceptMention(
-                            mention_id=MentionId("c-s"), concept="chat"
-                        ),
+                        ConceptMention(mention_id=MentionId("c-s"), concept="chat"),
                     ),
                     entities=(),
                     relations=(),
@@ -366,4 +356,3 @@ async def test_emotion_bias_does_not_rewrite_v2_audit_selected_ids() -> None:
     assert result.audits[0].selected_ids == selected_before
     # Bias may or may not reorder a single reconstruction; audits stay frozen.
     assert applied in {True, False}
-

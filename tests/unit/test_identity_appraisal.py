@@ -215,9 +215,7 @@ def test_failure_and_repeat_and_second_tick_keeps_the_claim() -> None:
     assert revised.claim.value.bool_value is True
     assert revised.belief_id == BeliefId("belief-weak")
     assert revised.expected_revision_ordinal == 0
-    assert {item.memory_id.value for item in revised.evidence.supporting} >= {
-        "mem-2"
-    }
+    assert {item.memory_id.value for item in revised.evidence.supporting} >= {"mem-2"}
 
 
 def test_forbidden_token_is_not_requested() -> None:

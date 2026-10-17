@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -73,12 +73,12 @@ class MatrixMetricSummary:
 def build_matrix_metric_summary(
     cells: Sequence[MatrixMetricCellRef],
 ) -> MatrixMetricSummary:
-    """Group numeric values across seed×replicate cells and summarize."""
+    """Group numeric values across seed/replicate cells and summarize."""
     buckets: dict[
         tuple[str, str, str, str, str],
         list[tuple[str, object]],
     ] = defaultdict(list)
-    versions: dict[tuple[str, str, str, str], str] = {}
+    versions: dict[tuple[str, str, str], str] = {}
     for cell in cells:
         if type(cell) is not MatrixMetricCellRef:
             raise TypeError("cells: invalid_type")

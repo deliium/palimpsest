@@ -60,9 +60,7 @@ def _engine(*, channel_on: bool = True) -> WorldEngine:
         dependency_status=DependencyStatus.INDEPENDENT,
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=21, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=21, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-dep-inspect"),
         population_lifecycle=spec,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import pytest
 
 from tests.simulation_helpers import (
@@ -14,6 +12,7 @@ from tests.simulation_helpers import (
 )
 from world._perception import project_observations
 from world._state import WorldState
+from world.communications import origin_utterance
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus
 from world.observations import (
@@ -248,9 +247,15 @@ def test_perception_service_projects_prior_events_by_audience() -> None:
         sequence=1,
         cause=ActionCause(RequestId("r-talk"), EntityId("body-1")),
         resulting_revision=WorldRevision(1),
-        details=Talked(EntityId("body-dead"), origin_utterance(text="psst", speaker_id=EntityId("body-1"))),
+        details=Talked(
+            EntityId("body-dead"),
+            origin_utterance(text="psst", speaker_id=EntityId("body-1")),
+        ),
         occurrence=build_occurrence_context(
-            Talked(EntityId("body-dead"), origin_utterance(text="psst", speaker_id=EntityId("body-1"))),
+            Talked(
+                EntityId("body-dead"),
+                origin_utterance(text="psst", speaker_id=EntityId("body-1")),
+            ),
             origin_location_id=EntityId("loc-1"),
         ),
     )

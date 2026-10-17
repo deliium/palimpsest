@@ -41,6 +41,8 @@ class ExperimentArmResult:
     runner_result: SimulationRunnerResult
     config_fingerprint: str
     metrics: tuple[object, ...] = ()
+    committed_events: tuple[object, ...] | None = None
+    regional_destination_evidence: tuple[object, ...] | None = None
 
 
 def materialize_assignments(
@@ -109,16 +111,44 @@ class ExperimentCoordinator:
                 assignment.runner_config,
                 run_id=assignment.run_id,
             ) as runner:
+                if assignment.experiment_id == "regional_migration@1":
+                    from experiments.regional_migration_scenario import (
+                        regional_migration_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        regional_migration_arbiter(
+                            assignment.condition_id, assignment.runner_config
+                        )
+                    )
                 if self._intervention is not None and assignment.condition_id.endswith(
                     "intervention"
                 ):
                     runner.set_intervention_arbiter(self._intervention)
                 runner_result = await runner.run()
+                committed_events = tuple(runner.engine.export_events().events)
+                regional_destination_traces = (
+                    await runner.export_regional_destination_traces()
+                )
+                if regional_destination_traces is None:
+                    regional_destination_evidence = None
+                else:
+                    from experiments.composition import (
+                        regional_destination_evidence_rows_from_traces,
+                    )
+
+                    regional_destination_evidence = (
+                        regional_destination_evidence_rows_from_traces(
+                            regional_destination_traces
+                        )
+                    )
             fingerprint = runner_config_fingerprint(assignment.runner_config)
             arm = ExperimentArmResult(
                 assignment=assignment,
                 runner_result=runner_result,
                 config_fingerprint=fingerprint,
+                committed_events=committed_events,
+                regional_destination_evidence=regional_destination_evidence,
             )
             from experiments.collectors import collect_for_experiment
 
@@ -128,6 +158,8 @@ class ExperimentCoordinator:
                 runner_result=runner_result,
                 config_fingerprint=fingerprint,
                 metrics=metrics,
+                committed_events=committed_events,
+                regional_destination_evidence=regional_destination_evidence,
             )
             results.append(arm)
             _LOG.info(
@@ -137,6 +169,12 @@ class ExperimentCoordinator:
                         "run_id": assignment.run_id.value,
                         "stop_reason": runner_result.stop_reason.value,
                         "ticks_committed": runner_result.ticks_committed,
+                        "committed_event_count": len(committed_events),
+                        "regional_destination_trace_count": (
+                            None
+                            if regional_destination_evidence is None
+                            else len(regional_destination_evidence)
+                        ),
                         "config_fingerprint_prefix": fingerprint[:12],
                         "metric_families": tuple(
                             getattr(item, "family", "unknown") for item in metrics

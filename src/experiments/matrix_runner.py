@@ -66,12 +66,35 @@ async def run_one_assignment(
         assignment.runner_config,
         run_id=assignment.run_id,
     ) as runner:
+        if assignment.experiment_id == "regional_migration@1":
+            from experiments.regional_migration_scenario import (
+                regional_migration_arbiter,
+            )
+
+            runner.set_intervention_arbiter(
+                regional_migration_arbiter(
+                    assignment.condition_id, assignment.runner_config
+                )
+            )
         runner_result = await runner.run()
+        committed_events = tuple(runner.engine.export_events().events)
+        traces = await runner.export_regional_destination_traces()
+        from experiments.composition import (
+            regional_destination_evidence_rows_from_traces,
+        )
+
+        evidence = (
+            None
+            if traces is None
+            else regional_destination_evidence_rows_from_traces(traces)
+        )
     fingerprint = runner_config_fingerprint(assignment.runner_config)
     arm = ExperimentArmResult(
         assignment=assignment,
         runner_result=runner_result,
         config_fingerprint=fingerprint,
+        committed_events=committed_events,
+        regional_destination_evidence=evidence,
     )
     metrics = collect_for_experiment(arm)
     return ExperimentArmResult(
@@ -79,6 +102,8 @@ async def run_one_assignment(
         runner_result=runner_result,
         config_fingerprint=fingerprint,
         metrics=metrics,
+        committed_events=committed_events,
+        regional_destination_evidence=evidence,
     )
 
 
@@ -140,8 +165,9 @@ class MatrixBatchRunner:
 
         # Durable cells force serial execution.
         durable = any(
-            definition.conditions[condition_ordinals[cell.condition_id]]
-            .runner_config.persistence.durable
+            definition.conditions[
+                condition_ordinals[cell.condition_id]
+            ].runner_config.persistence.durable
             for cell in cells
         )
         max_concurrency = spec.execution.max_concurrency
@@ -234,8 +260,7 @@ class MatrixBatchRunner:
                     except Exception as exc:
                         reason = type(exc).__name__
                         retryable = (
-                            reason
-                            in spec.execution.retry_policy.transient_reason_codes
+                            reason in spec.execution.retry_policy.transient_reason_codes
                         )
                         if (
                             retryable
@@ -285,9 +310,7 @@ class MatrixBatchRunner:
 
                     identity = RunVersionIdentity(
                         package_version=self._deps.package_version,
-                        runner_schema_version=(
-                            assignment.runner_config.schema_version
-                        ),
+                        runner_schema_version=(assignment.runner_config.schema_version),
                         experiment_schema_version=EXPERIMENT_SCHEMA_VERSION,
                         matrix_schema_version=EXPERIMENT_MATRIX_SCHEMA_VERSION,
                         derivation_version=(

@@ -56,9 +56,7 @@ def assemble_collective_project_metrics(
 ) -> tuple[MetricDocument, ...]:
     """Three families. An absent spec writes no rows."""
     if spec is None:
-        _LOG.info(
-            "collective_project_metrics_empty reason=collective_projects_absent"
-        )
+        _LOG.info("collective_project_metrics_empty reason=collective_projects_absent")
         return ()
     document_run = require_stable_id("run_id", run_id)
     revision = require_stable_id("input_revision", input_revision)

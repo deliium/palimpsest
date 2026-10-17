@@ -122,9 +122,7 @@ def test_judgment_cap_drops_the_oldest_and_keeps_kind_rows() -> None:
     owner = AgentId("alice")
     ledger = SubjectiveValuationLedger(owner, max_judgments=1)
     kind = appraise_reservation(item_kind=ItemKind.TOOL, others_visible_count=0)
-    ledger = remember_judgment(
-        ledger, replace(kind, counterparty_id=EntityId("bob"))
-    )
+    ledger = remember_judgment(ledger, replace(kind, counterparty_id=EntityId("bob")))
     ledger = remember_judgment(
         ledger, replace(kind, counterparty_id=EntityId("cara"), tick=4)
     )

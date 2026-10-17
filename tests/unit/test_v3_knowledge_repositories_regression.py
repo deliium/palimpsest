@@ -8,7 +8,10 @@ from typing import get_args
 import pytest
 
 from analysis.specifications import METRIC_FAMILY_COUNT, MetricFamilyId
-from experiments import OFF_GATE_MATRIX_EXPERIMENT_IDS, experiment_ao_knowledge_repositories
+from experiments import (
+    OFF_GATE_MATRIX_EXPERIMENT_IDS,
+    experiment_ao_knowledge_repositories,
+)
 from observer.version import SEMANTIC_EVENT_TYPES
 from simulation.runner_models import RUNNER_SCHEMA_VERSION_V34
 from world.actions import (
@@ -27,7 +30,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_semantic_event_count_is_54() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 69
+    assert len(SEMANTIC_EVENT_TYPES) == 72
     assert "REPOSITORY_ESTABLISHED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_MEMBER_DEPOSITED" in SEMANTIC_EVENT_TYPES
     assert "REPOSITORY_MEMBER_RETRIEVED" in SEMANTIC_EVENT_TYPES
@@ -48,7 +51,7 @@ def test_agent_command_count_is_35() -> None:
 
 
 def test_metric_family_count_is_62() -> None:
-    assert METRIC_FAMILY_COUNT == 91
+    assert METRIC_FAMILY_COUNT == 94
     assert MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL.value == (
         "knowledge_repository_survival"
     )

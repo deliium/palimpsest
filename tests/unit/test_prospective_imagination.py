@@ -71,9 +71,7 @@ from world.values import (
 )
 
 _OWNER = AgentId("agent-1")
-_SOURCE = (
-    Path(__file__).resolve().parents[2] / "src/agents/cognition/prospective.py"
-)
+_SOURCE = Path(__file__).resolve().parents[2] / "src/agents/cognition/prospective.py"
 
 
 def _self() -> ObservedSelf:
@@ -374,9 +372,7 @@ async def test_imagine_keeps_one_step_search_and_collapses_deeper_move() -> None
     self_state = _self_model()
     memory = _memory()
     board = _board()
-    shallow = await engine.imagine(
-        loop_input, situation, self_state, memory, board
-    )
+    shallow = await engine.imagine(loop_input, situation, self_state, memory, board)
     assert engine.last_prospective_audit() is None
     assert len(shallow.futures) > 1
     assert all(item.horizon_ticks == 1 for item in shallow.futures)
@@ -556,9 +552,7 @@ async def test_each_budget_still_yields_one_command(caplog) -> None:
             board,
             self_state=self_state,
         )
-        plan = await CommandPlanner().plan(
-            loop_input, choice, futures, memory, board
-        )
+        plan = await CommandPlanner().plan(loop_input, choice, futures, memory, board)
         assert type(plan.command) in {Move, Search, Wait}
         audit = engine.last_prospective_audit()
         assert audit is not None

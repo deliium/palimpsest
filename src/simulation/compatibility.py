@@ -89,6 +89,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V38,
     RUNNER_SCHEMA_VERSION_V39,
     RUNNER_SCHEMA_VERSION_V40,
+    RUNNER_SCHEMA_VERSION_V44,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -127,6 +128,7 @@ V3_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "generational_population",
         "kinship_inheritance",
         "cultural_historical_memory",
+        "multi_polity_migration",
     }
 )
 V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
@@ -212,7 +214,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "Wire shape change for WorldEvent / occurrence details; "
             "requires new ACCEPTED_* member and replay fixtures. "
             "Lifecycle channel writes replay-v9; scaffolding write stays "
-            "replay-v5 when lifecycle off."
+            "replay-v5 when lifecycle off. Regional migration writes replay-v21."
         ),
         owner_package="world.events / simulation.persistence",
         v1_fixture_impact=(
@@ -234,7 +236,8 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         bump_trigger=(
             "Canonical JSON codec for manifests/snapshots/commits changes. "
             "Write stays v2. Codec v3 is an accepted restore written only when "
-            "the production catalog is non-empty."
+            "the production catalog is non-empty. Codec v19 carries optional "
+            "regions, routes, and pending journeys with replay-v21."
         ),
         owner_package="simulation.persistence / simulation.journal",
         v1_fixture_impact="Codec v1 and v2 restores remain accepted",
@@ -451,6 +454,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "subjective_valuation is present "
             "(v40 does not store a world price; structured_commitments stays "
             "optional); "
+            f"writers emit {RUNNER_SCHEMA_VERSION_V44} when regions_migration "
+            "is active; this composes optional v43 family channels and owns "
+            "the multi_polity_migration substrate flag; "
             f"(write-pair EVENT_SCHEMA_REPLAY_V16={EVENT_SCHEMA_REPLAY_V16}, "
             "codec v13 when the channel is active; no heir table); "
             "mode allowlists that top out at v34 widen to accept v35; "
@@ -637,7 +643,7 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         ),
         owner_package="observer.version",
         v1_fixture_impact=(
-            "Godot and HTTP clients stay on observer-protocol-v1; "
+            "Presentation and HTTP clients stay on observer-protocol-v1; "
             "no V3 fields on GET /version"
         ),
     ),
@@ -743,6 +749,7 @@ _LOG.debug(
         "runner_v38": RUNNER_SCHEMA_VERSION_V38,
         "runner_v39": RUNNER_SCHEMA_VERSION_V39,
         "runner_v40": RUNNER_SCHEMA_VERSION_V40,
+        "runner_v44": RUNNER_SCHEMA_VERSION_V44,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

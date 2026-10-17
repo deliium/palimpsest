@@ -9,7 +9,8 @@ from agents.cognition.developmental_learning import (
 )
 from agents.models import AgentId
 from simulation.runner_models import example_developmental_learning_spec
-from world.artifacts import ArtifactContent, ArtifactKind as WorldArtifactKind, ArtifactRelation
+from world.artifacts import ArtifactContent, ArtifactRelation
+from world.artifacts import ArtifactKind as WorldArtifactKind
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import LifeStatus
 from world.observations import (
@@ -133,9 +134,5 @@ def test_isolated_arm_cannot_acquire_teacher_only_concepts() -> None:
             advice_delta=(advice,),
         ),
     )
-    assert all(
-        row.source_id.value != "instruction" for row in result.ledger.entries
-    )
-    assert not any(
-        "instr:" in row.concept_key for row in result.ledger.entries
-    )
+    assert all(row.source_id.value != "instruction" for row in result.ledger.entries)
+    assert not any("instr:" in row.concept_key for row in result.ledger.entries)

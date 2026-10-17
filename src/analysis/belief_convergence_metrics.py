@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from typing import Final
+from typing import Final, cast
 
 from analysis.models import (
     METRIC_DOCUMENT_SCHEMA_VERSION,
@@ -20,7 +20,11 @@ from analysis.models import (
     MetricProvenance,
 )
 from analysis.numerical import library_versions, quantize_float, require_finite
-from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.specifications import (
+    MetricFamilyId,
+    MetricSpecification,
+    metric_specification,
+)
 from world.identifiers import require_stable_id
 
 __all__ = [
@@ -67,9 +71,7 @@ def compute_belief_convergence(
     by_tick = _sets_by_tick(ordered)
     owner_count = len({row.owner_id for row in ordered})
     universe = {
-        token
-        for row in ordered
-        if (token := claim_overlap_token(row)) is not None
+        token for row in ordered if (token := claim_overlap_token(row)) is not None
     }
     _LOG.debug(
         "belief_convergence_compute",
@@ -141,16 +143,17 @@ def _ordered_rows(claims: Sequence[object]) -> tuple[BeliefClaimRow, ...]:
             parsed.append(row)
             continue
         # Duck-typed construction into BeliefClaimRow for validation.
+        row = cast(BeliefClaimRow, row)
         try:
             parsed.append(
                 BeliefClaimRow(
-                    owner_id=str(getattr(row, "owner_id")),
+                    owner_id=str(row.owner_id),
                     belief_id=str(getattr(row, "belief_id", "belief")),
-                    claim_id=str(getattr(row, "claim_id")),
-                    logical_tick=int(getattr(row, "logical_tick")),
-                    activation_state=str(getattr(row, "activation_state")),
+                    claim_id=str(row.claim_id),
+                    logical_tick=int(row.logical_tick),
+                    activation_state=str(row.activation_state),
                     confidence=getattr(row, "confidence", None),
-                    value_kind=str(getattr(row, "value_kind")),
+                    value_kind=str(row.value_kind),
                     bool_value=getattr(row, "bool_value", None),
                     categorical_value=getattr(row, "categorical_value", None),
                     numeric_value=getattr(row, "numeric_value", None),
@@ -249,7 +252,7 @@ def _mean_pairwise_jaccard(
 
 
 def _document(
-    spec: object,
+    spec: MetricSpecification,
     run_id: str,
     revision: str,
     availability: MetricAvailability,
@@ -259,20 +262,20 @@ def _document(
     observed: int = 0,
     expected: int = 0,
 ) -> MetricDocument:
-    family = getattr(spec, "family_id")
+    family = spec.family_id
     coverage = None
     if availability is MetricAvailability.PRESENT:
         coverage = MetricCoverage(observed=observed, expected=expected)
     return MetricDocument(
         schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
         metric_family=family.value,
-        algorithm_version=getattr(spec, "algorithm_version"),
+        algorithm_version=spec.algorithm_version,
         library_versions=library_versions(),
         run_id=run_id,
         input_revision=revision,
-        evidence_stages=frozenset(getattr(spec, "evidence_inputs")),
-        population=getattr(spec, "population"),
-        denominator=getattr(spec, "denominator"),
+        evidence_stages=frozenset(spec.evidence_inputs),
+        population=spec.population,
+        denominator=spec.denominator,
         coverage=coverage,
         availability=availability,
         values=dict(values),

@@ -168,9 +168,7 @@ def test_oldest_surviving_lineage_origin() -> None:
     graph = build_knowledge_genealogy_graph(
         audits, as_of_tick=10, death_ticks={"carol": 6}
     )
-    result = query_oldest_surviving_lineage_origin(
-        graph, content_key="tech:foraging"
-    )
+    result = query_oldest_surviving_lineage_origin(graph, content_key="tech:foraging")
     assert result.count == 1
     assert result.items[0][1] == "root:alice:foraging_method:tech:foraging"
     assert result.items[0][0] == 1

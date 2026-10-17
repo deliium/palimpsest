@@ -30,10 +30,10 @@ __all__ = [
     "ResolvedActionEffects",
     "ResolvedArtifactCopyEffect",
     "ResolvedArtifactInscribeEffect",
-    "ResolvedRepositoryEstablishEffect",
     "ResolvedAttackEffect",
     "ResolvedFleeEffect",
     "ResolvedProductionEffect",
+    "ResolvedRepositoryEstablishEffect",
     "ResolvedSearchEffect",
     "ResolvedSystemEffects",
     "ResolvedWeatherEffect",
@@ -68,6 +68,7 @@ class SystemEffectFamily(StrEnum):
     LIFECYCLE = "lifecycle"
     KNOWLEDGE_REPOSITORY = "knowledge_repository"
     COLLECTIVE_PROJECT = "collective_project"
+    TRAVEL = "travel"
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +189,7 @@ class ResolvedFleeEffect:
     request_id: RequestId
     success: bool
     destination_index: int | None = None
+    destination_id: EntityId | None = None
     kind: Literal["flee"] = field(default="flee", init=False)
 
     def __post_init__(self) -> None:
@@ -204,10 +206,19 @@ class ResolvedFleeEffect:
                     self.destination_index,
                 ),
             )
+            if (
+                self.destination_id is not None
+                and type(self.destination_id) is not EntityId
+            ):
+                raise TypeError(
+                    "ResolvedFleeEffect.destination_id must be EntityId or None"
+                )
         elif self.destination_index is not None:
             raise ValueError(
                 "failed ResolvedFleeEffect must not carry destination_index"
             )
+        elif self.destination_id is not None:
+            raise ValueError("failed ResolvedFleeEffect must not carry destination_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,9 +281,7 @@ class ResolvedArtifactInscribeEffect:
 
     request_id: RequestId
     created_artifact_id: EntityId
-    kind: Literal["artifact_inscribe"] = field(
-        default="artifact_inscribe", init=False
-    )
+    kind: Literal["artifact_inscribe"] = field(default="artifact_inscribe", init=False)
 
     def __post_init__(self) -> None:
         if type(self.request_id) is not RequestId:
@@ -299,9 +308,7 @@ class ResolvedArtifactCopyEffect:
 
     def __post_init__(self) -> None:
         if type(self.request_id) is not RequestId:
-            raise TypeError(
-                "ResolvedArtifactCopyEffect.request_id must be RequestId"
-            )
+            raise TypeError("ResolvedArtifactCopyEffect.request_id must be RequestId")
         if type(self.created_artifact_id) is not EntityId:
             raise TypeError(
                 "ResolvedArtifactCopyEffect.created_artifact_id must be EntityId"
@@ -325,8 +332,6 @@ class ResolvedArtifactCopyEffect:
             raise TypeError("relation_edit_count must be a non-negative int")
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class ResolvedRepositoryEstablishEffect:
     """Pre-derived repository identity for a successful EstablishRepository."""
@@ -347,6 +352,7 @@ class ResolvedRepositoryEstablishEffect:
                 "ResolvedRepositoryEstablishEffect.created_repository_id "
                 "must be EntityId"
             )
+
 
 ResolvedActionEffect = (
     ResolvedSearchEffect

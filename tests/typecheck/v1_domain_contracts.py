@@ -8,25 +8,48 @@ from world.actions import (
     ActionProposal,
     ActionRequest,
     AgentCommand,
+    Amend,
+    AnnotateRecord,
     Ask,
+    AssertPossessionClaim,
     Attack,
     Build,
+    ContributeCollectiveProject,
+    CopyRecord,
     Craft,
+    DamageRecord,
+    DeclareCommitment,
+    DepositRecord,
     Drink,
     Drop,
     Eat,
+    Erase,
+    EstablishRepository,
+    Experiment,
+    Feed,
     Flee,
     Give,
     Harvest,
     Help,
+    IndexRepository,
+    Inscribe,
+    MaintainPublicGood,
+    MaintainRepository,
     Move,
+    NegotiateExchange,
+    OpposePublicGood,
     Repair,
+    RetrieveRecord,
     Search,
     Sleep,
+    StartCollectiveProject,
     Store,
     Take,
     Talk,
     Tell,
+    TransferArtifact,
+    Transport,
+    UsePublicGood,
     Wait,
     require_agent_command,
 )
@@ -124,6 +147,52 @@ def _exhaust_agent_command(command: AgentCommand) -> str:
             return "repair"
         case Store():
             return "store"
+        case Feed():
+            return "feed"
+        case Transport():
+            return "transport"
+        case Inscribe():
+            return "inscribe"
+        case Amend():
+            return "amend"
+        case Erase():
+            return "erase"
+        case TransferArtifact():
+            return "transfer_artifact"
+        case CopyRecord():
+            return "copy_record"
+        case AnnotateRecord():
+            return "annotate_record"
+        case DamageRecord():
+            return "damage_record"
+        case EstablishRepository():
+            return "establish_repository"
+        case DepositRecord():
+            return "deposit_record"
+        case RetrieveRecord():
+            return "retrieve_record"
+        case MaintainRepository():
+            return "maintain_repository"
+        case IndexRepository():
+            return "index_repository"
+        case Experiment():
+            return "experiment"
+        case AssertPossessionClaim():
+            return "assert_possession_claim"
+        case DeclareCommitment():
+            return "declare_commitment"
+        case NegotiateExchange():
+            return "negotiate_exchange"
+        case StartCollectiveProject():
+            return "start_collective_project"
+        case ContributeCollectiveProject():
+            return "contribute_collective_project"
+        case UsePublicGood():
+            return "use_public_good"
+        case MaintainPublicGood():
+            return "maintain_public_good"
+        case OpposePublicGood():
+            return "oppose_public_good"
         case _:
             assert_never(command)
 

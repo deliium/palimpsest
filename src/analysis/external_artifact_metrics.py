@@ -54,9 +54,7 @@ def compute_external_artifact_memory(
         payload.get("memory_rows", ()) if isinstance(rows, Mapping) else ()
     )
     interpretations = _as_rows(
-        payload.get("interpretation_rows", ())
-        if isinstance(rows, Mapping)
-        else ()
+        payload.get("interpretation_rows", ()) if isinstance(rows, Mapping) else ()
     )
     if not objective and not memory and not interpretations:
         _LOG.warning(

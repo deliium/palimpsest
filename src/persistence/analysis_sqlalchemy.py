@@ -22,6 +22,7 @@ from experiments.persistence import (
     PersistedAnalysisSnapshot,
     PersistedDerivationEdge,
     PersistedReconstructionRow,
+    regional_context_from_snapshot,
 )
 from infrastructure.database import session_scope
 from memory.models import (
@@ -58,9 +59,11 @@ from persistence.orm import (
     ExperimentAssignmentOrm,
     ExperimentRunOrm,
     SimulationRunOrm,
+    TickCommitOrm,
     WorldEventOrm,
+    WorldSnapshotOrm,
 )
-from persistence.readers import event_from_orm
+from persistence.readers import event_from_orm, snapshot_from_canonical_payload
 from persistence.transmission_mapping import transmission_from_row
 from simulation.evidence import (
     EvidenceManifest,
@@ -144,6 +147,62 @@ class SqlAlchemyAnalysisEvidenceLoader:
                 )
                 raise PersistenceNotFoundError("run_not_found", operation="load")
 
+            bootstrap_row = await session.get(
+                WorldSnapshotOrm, run_row.bootstrap_snapshot_id
+            )
+            if bootstrap_row is None:
+                _LOG.error(
+                    "analysis_evidence_bootstrap_missing",
+                    extra={
+                        "operation": "load",
+                        "run_id": run_id,
+                        "reason_code": "bootstrap_snapshot_not_found",
+                    },
+                )
+                raise PersistenceNotFoundError(
+                    "bootstrap_snapshot_not_found", operation="load"
+                )
+            bootstrap = snapshot_from_canonical_payload(
+                bootstrap_row.canonical_payload,
+                expected_integrity_hash=bootstrap_row.integrity_hash,
+            )
+            regional_context = regional_context_from_snapshot(bootstrap)
+
+            if manifest is None:
+                latest_commit = (
+                    await session.execute(
+                        select(TickCommitOrm)
+                        .where(TickCommitOrm.run_id == run_id)
+                        .order_by(TickCommitOrm.tick.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                complete_boundary = (
+                    0 if latest_commit is None else latest_commit.resulting_tick
+                )
+                events = await _load_events(session, run_id=run_id)
+            else:
+                high_water_commit = (
+                    await session.execute(
+                        select(TickCommitOrm).where(
+                            TickCommitOrm.run_id == run_id,
+                            TickCommitOrm.commit_hash == manifest.objective_commit_hash,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if high_water_commit is not None:
+                    complete_boundary = high_water_commit.resulting_tick
+                    events = await _load_events(
+                        session, run_id=run_id, through_tick=high_water_commit.tick
+                    )
+                elif manifest.objective_commit_hash == bootstrap.integrity_hash.value:
+                    complete_boundary = 0
+                    events = ()
+                else:
+                    raise PersistenceAdapterError(
+                        "manifest_objective_commit_not_found", operation="load"
+                    )
+
             if experiment_id is not None:
                 membership = await _has_canonical_membership(
                     session, experiment_id=experiment_id, run_id=run_id
@@ -169,8 +228,6 @@ class SqlAlchemyAnalysisEvidenceLoader:
             edges = await _load_derivation_edges(
                 session, run_id=run_id, owner_id=owner_id
             )
-            events = await _load_events(session, run_id=run_id)
-
             if manifest is not None:
                 traces, reconstructions, edges = _clamp_to_manifest(
                     traces=traces,
@@ -187,6 +244,8 @@ class SqlAlchemyAnalysisEvidenceLoader:
             reconstructions=reconstructions,
             derivation_edges=edges,
             events=events,
+            regional_context=regional_context,
+            objective_complete_through_boundary=complete_boundary,
         )
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
         _LOG.debug(
@@ -200,6 +259,7 @@ class SqlAlchemyAnalysisEvidenceLoader:
                 "reconstruction_count": len(reconstructions),
                 "edge_count": len(edges),
                 "event_count": len(events),
+                "regions_enabled": regional_context is not None,
                 "availability": "available",
                 "duration_ms": duration_ms,
             },
@@ -272,9 +332,7 @@ def _clamp_to_manifest(
         reconstructions, marks.reconstructions, source_label="reconstructions"
     )
     kept_memory_ids = {trace.memory_id.value for trace in clamped_traces}
-    kept_reconstruction_ids = {
-        row.reconstruction_id for row in clamped_reconstructions
-    }
+    kept_reconstruction_ids = {row.reconstruction_id for row in clamped_reconstructions}
     filtered_edges = tuple(
         edge
         for edge in edges
@@ -318,13 +376,16 @@ def create_analysis_evidence_loader(
     return SqlAlchemyAnalysisEvidenceLoader(session_factory)
 
 
-async def _load_events(session: AsyncSession, *, run_id: str) -> tuple[object, ...]:
+async def _load_events(
+    session: AsyncSession, *, run_id: str, through_tick: int | None = None
+) -> tuple[object, ...]:
+    statement = select(WorldEventOrm).where(WorldEventOrm.run_id == run_id)
+    if through_tick is not None:
+        statement = statement.where(WorldEventOrm.tick <= through_tick)
     rows = list(
         (
             await session.execute(
-                select(WorldEventOrm)
-                .where(WorldEventOrm.run_id == run_id)
-                .order_by(WorldEventOrm.tick, WorldEventOrm.sequence)
+                statement.order_by(WorldEventOrm.tick, WorldEventOrm.sequence)
             )
         )
         .scalars()

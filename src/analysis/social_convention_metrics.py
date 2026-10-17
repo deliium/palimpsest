@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from itertools import pairwise
 from typing import Final
 
@@ -243,18 +243,18 @@ def _rate_value(rate: float | None) -> object:
 
 
 def _mean_number(active: Sequence[object], name: str) -> object:
-    scores = [
-        score for row in active if (score := _number(row, name)) is not None
-    ]
+    scores = [score for row in active if (score := _number(row, name)) is not None]
     if not scores:
         return _ABSENT
     return quantize_float(sum(scores) / len(scores))
 
 
-def _active_fraction(active: Sequence[object], predicate: object) -> object:
+def _active_fraction(
+    active: Sequence[object], predicate: Callable[[object], bool]
+) -> object:
     if not active:
         return _ABSENT
-    hits = sum(1 for row in active if predicate(row))  # type: ignore[operator]
+    hits = sum(1 for row in active if predicate(row))
     return quantize_float(hits / len(active))
 
 

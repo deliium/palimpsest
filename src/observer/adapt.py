@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-from observer.contracts import ObserverEvent
+from observer.contracts import ObserverEvent, ObserverJourney
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
 from world.communications import confidence_band
 from world.events import (
@@ -33,6 +33,9 @@ from world.events import (
     Given,
     ItemCrafted,
     ItemStored,
+    JourneyArrived,
+    JourneyEnded,
+    JourneyStarted,
     LifecycleStageChanged,
     Moved,
     NeedsApplied,
@@ -116,6 +119,26 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
     hazard_kind: str | None = None
     declared_confidence_band: str | None = None
     details = event.details
+    journey_view = None
+    participant_body_ids: tuple[str, ...] = ()
+    if isinstance(details, (JourneyStarted, JourneyArrived, JourneyEnded)):
+        travel = details.journey if isinstance(details, JourneyStarted) else details
+        participant_body_ids = tuple(item.value for item in travel.participant_body_ids)
+        actor_id = actor_id or participant_body_ids[0]
+        origin = travel.origin_location_id.value
+        destination = travel.destination_location_id.value
+        if isinstance(details, JourneyStarted):
+            journey = details.journey
+            journey_view = ObserverJourney(
+                journey_id=journey.journey_id,
+                participant_body_ids=participant_body_ids,
+                origin_location_id=origin,
+                destination_location_id=destination,
+                start_tick=journey.start_tick,
+                due_tick=journey.due_tick,
+                arrival_wait_deadline_tick=journey.arrival_wait_deadline_tick,
+                phase="preparing",
+            )
     if isinstance(details, Moved):
         destination = _text(details.destination_id)
     elif isinstance(details, Fled):
@@ -169,9 +192,10 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         details, (ArtifactCreated, ArtifactModified, ArtifactMoved, ArtifactDestroyed)
     ):
         artifact_id = _text(details.artifact_id)
-        if isinstance(
-            details, (ArtifactCreated, ArtifactModified, ArtifactMoved)
-        ) and details.resulting_location_id is not None:
+        if (
+            isinstance(details, (ArtifactCreated, ArtifactModified, ArtifactMoved))
+            and details.resulting_location_id is not None
+        ):
             destination = _text(details.resulting_location_id)
     elif isinstance(details, ArtifactCopied):
         artifact_id = _text(details.child_artifact_id)
@@ -191,9 +215,7 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         ),
     ):
         repository_id = _text(details.repository_id)
-        if isinstance(
-            details, (RepositoryMemberDeposited, RepositoryMemberRetrieved)
-        ):
+        if isinstance(details, (RepositoryMemberDeposited, RepositoryMemberRetrieved)):
             artifact_id = _text(details.artifact_id)
         if isinstance(details, RepositoryEstablished):
             origin = _text(details.location_id)
@@ -216,6 +238,8 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         ):
             declared_confidence_band = confidence_band(float(sender_confidence))
     adapted = ObserverEvent(
+        journey=journey_view,
+        participant_body_ids=participant_body_ids,
         protocol_version=OBSERVER_PROTOCOL_VERSION,
         type=semantic,
         domain_kind=kind,

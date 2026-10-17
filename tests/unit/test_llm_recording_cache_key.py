@@ -117,9 +117,7 @@ def test_message_normalization_crlf() -> None:
     crlf = digest_request_messages(
         (LLMMessage(role=MessageRole.USER, content="a\r\nb"),)
     )
-    lf = digest_request_messages(
-        (LLMMessage(role=MessageRole.USER, content="a\nb"),)
-    )
+    lf = digest_request_messages((LLMMessage(role=MessageRole.USER, content="a\nb"),))
     assert crlf == lf
 
 

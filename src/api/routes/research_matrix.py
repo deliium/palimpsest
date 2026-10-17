@@ -13,6 +13,7 @@ from typing import Any, Final
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from pydantic import Field
 
 from api.dependencies import get_settings
 from api.errors import bad_request, not_found, service_unavailable
@@ -20,7 +21,6 @@ from api.schemas import AvailabilityOut, StrictModel
 from api.security import ApiCapability, require_http_capability
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
-from pydantic import Field
 
 router = APIRouter(prefix="/v1/research", tags=["research-matrix"])
 _LOGGER = get_logger("api.routes.research_matrix")

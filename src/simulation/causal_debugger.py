@@ -468,9 +468,7 @@ STAGE_KIND_TO_RESEARCHER: Final[
     CognitionTraceStageKind.EMOTIONAL_STATE: ResearcherChainStage.EMOTIONAL_STATE,
     CognitionTraceStageKind.GOALS: ResearcherChainStage.GOALS,
     CognitionTraceStageKind.THEORY_OF_MIND: ResearcherChainStage.THEORY_OF_MIND,
-    CognitionTraceStageKind.IMAGINED_FUTURES: (
-        ResearcherChainStage.IMAGINED_FUTURES
-    ),
+    CognitionTraceStageKind.IMAGINED_FUTURES: (ResearcherChainStage.IMAGINED_FUTURES),
     CognitionTraceStageKind.SELECTED_INTENTION: (
         ResearcherChainStage.SELECTED_INTENTION
     ),
@@ -534,9 +532,7 @@ class DebuggerEventAddress:
             )
         if self.agent_id is not None and type(self.agent_id) is not AgentId:
             raise TypeError("DebuggerEventAddress.agent_id must be AgentId or None")
-        reject_forbidden_debugger_attributes(
-            self, type_name="DebuggerEventAddress"
-        )
+        reject_forbidden_debugger_attributes(self, type_name="DebuggerEventAddress")
         _LOG.debug(
             "debugger_address_constructed run_id=%s tick=%s event_id=%s "
             "sequence=%s agent_id=%s",
@@ -573,9 +569,7 @@ class DebuggerFocusHandle:
             object.__setattr__(
                 self,
                 "sequence",
-                require_exact_nonneg_int(
-                    "DebuggerFocusHandle.sequence", self.sequence
-                ),
+                require_exact_nonneg_int("DebuggerFocusHandle.sequence", self.sequence),
             )
         if self.event_id is not None:
             object.__setattr__(
@@ -697,9 +691,7 @@ class CausalTrace:
         if type(self.address) is not DebuggerEventAddress:
             raise TypeError("CausalTrace.address must be DebuggerEventAddress")
         if type(self.availability) is not CausalTraceAvailability:
-            raise TypeError(
-                "CausalTrace.availability must be CausalTraceAvailability"
-            )
+            raise TypeError("CausalTrace.availability must be CausalTraceAvailability")
         if type(self.ambiguity) is not bool:
             raise TypeError("CausalTrace.ambiguity must be bool")
         if self.invocation_id is not None:
@@ -725,9 +717,7 @@ class CausalTrace:
                 raise TypeError("CausalTrace.nodes must be CausalTraceNode")
         for node in self.supporting_nodes:
             if type(node) is not CausalTraceNode:
-                raise TypeError(
-                    "CausalTrace.supporting_nodes must be CausalTraceNode"
-                )
+                raise TypeError("CausalTrace.supporting_nodes must be CausalTraceNode")
         reject_forbidden_debugger_attributes(self, type_name="CausalTrace")
         _LOG.debug(
             "causal_trace_constructed run_id=%s tick=%s event_id=%s "
@@ -759,17 +749,13 @@ class CommandKindMapping:
             object.__setattr__(
                 self,
                 "command_kind",
-                require_stable_id(
-                    "CommandKindMapping.command_kind", self.command_kind
-                ),
+                require_stable_id("CommandKindMapping.command_kind", self.command_kind),
             )
         if self.reason_code is not None:
             object.__setattr__(
                 self,
                 "reason_code",
-                require_stable_id(
-                    "CommandKindMapping.reason_code", self.reason_code
-                ),
+                require_stable_id("CommandKindMapping.reason_code", self.reason_code),
             )
         object.__setattr__(
             self,
@@ -1110,8 +1096,7 @@ class InvocationResolveResult:
     def __post_init__(self) -> None:
         if type(self.availability) is not CausalTraceAvailability:
             raise TypeError(
-                "InvocationResolveResult.availability must be "
-                "CausalTraceAvailability"
+                "InvocationResolveResult.availability must be CausalTraceAvailability"
             )
         if type(self.address) is not DebuggerEventAddress:
             raise TypeError(
@@ -1150,9 +1135,7 @@ class InvocationResolveResult:
                     "InvocationResolveResult.command_kind", self.command_kind
                 ),
             )
-        reject_forbidden_debugger_attributes(
-            self, type_name="InvocationResolveResult"
-        )
+        reject_forbidden_debugger_attributes(self, type_name="InvocationResolveResult")
 
 
 def _address_from_record(
@@ -1495,8 +1478,7 @@ def select_counterfactual_material(
                 reason_code="counterfactual_result_harvest_incomplete",
             )
         _LOG.debug(
-            "counterfactual_source_chosen source=%s owner=%s tick=%s "
-            "scenario_count=%s",
+            "counterfactual_source_chosen source=%s owner=%s tick=%s scenario_count=%s",
             CounterfactualSourceKind.RESULT.value,
             invocation.agent_id.value,
             invocation.tick,

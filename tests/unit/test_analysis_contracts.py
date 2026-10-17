@@ -235,9 +235,7 @@ def test_metric_document_requires_scope_versions_and_rejects_non_finite() -> Non
             coverage=None,
             availability=MetricAvailability.UNKNOWN,
             values={},
-            provenance=MetricProvenance(
-                source_kind="objective_events", source_ids=()
-            ),
+            provenance=MetricProvenance(source_kind="objective_events", source_ids=()),
         )
 
 

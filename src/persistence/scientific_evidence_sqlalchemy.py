@@ -128,9 +128,7 @@ class SqlAlchemyScientificEvidenceRepository:
                 existing = await session.get(ActionResolutionOrm, key)
                 if existing is not None:
                     if _resolution_matches(existing, record):
-                        _LOGGER.warning(
-                            "action_resolution_identical_retry", **fields
-                        )
+                        _LOGGER.warning("action_resolution_identical_retry", **fields)
                         return
                     _LOGGER.error(
                         "action_resolution_divergent_conflict",
@@ -189,9 +187,7 @@ class SqlAlchemyScientificEvidenceRepository:
     ) -> EvidenceManifest | None:
         async with session_scope(self._session_factory) as session:
             if manifest_hash is not None:
-                row = await session.get(
-                    EvidenceManifestOrm, (run_id, manifest_hash)
-                )
+                row = await session.get(EvidenceManifestOrm, (run_id, manifest_hash))
                 if row is None:
                     return None
                 return _manifest_from_orm(row)
@@ -230,9 +226,7 @@ class SqlAlchemyScientificEvidenceRepository:
             )
             if tick is not None:
                 stmt = stmt.where(ActionResolutionOrm.tick == tick)
-            stmt = stmt.order_by(
-                ActionResolutionOrm.tick, ActionResolutionOrm.ordinal
-            )
+            stmt = stmt.order_by(ActionResolutionOrm.tick, ActionResolutionOrm.ordinal)
             rows = (await session.execute(stmt)).scalars().all()
             return tuple(_resolution_to_record(row) for row in rows)
 
@@ -410,9 +404,7 @@ async def _append_manifest_in_session(
             **fields,
             reason_code="manifest_conflict",
         )
-        raise PersistenceConflictError(
-            "manifest_conflict", operation="append_manifest"
-        )
+        raise PersistenceConflictError("manifest_conflict", operation="append_manifest")
     session.add(
         EvidenceManifestOrm(
             run_id=manifest.run_id,

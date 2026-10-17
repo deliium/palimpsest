@@ -11,7 +11,7 @@ import hashlib
 import logging
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
 from enum import StrEnum
 from typing import Final
@@ -139,6 +139,8 @@ def _reject_objective(value: object, name: str) -> None:
 
 
 def _reject_fields(value: object) -> None:
+    if not is_dataclass(value):
+        raise TypeError("counterfactual input must be a dataclass")
     for field in fields(value):
         _reject_objective(getattr(value, field.name), field.name)
 
@@ -556,9 +558,7 @@ def _confidence_band(confidence: float) -> str:
     return "low"
 
 
-def _ordered(
-    field_name: str, value: object
-) -> tuple[object, ...]:
+def _ordered(field_name: str, value: object) -> tuple[object, ...]:
     _reject_objective(value, field_name)
     if isinstance(value, (str, bytes, set, frozenset)) or not isinstance(
         value, Sequence
@@ -804,9 +804,7 @@ def counterfactual_direction_bias(
         if not isinstance(future_id, str):
             continue
         direction = getattr(future, "direction", None)
-        bias[future_id] = (
-            bonus if direction is best.alternative_direction else 0.0
-        )
+        bias[future_id] = bonus if direction is best.alternative_direction else 0.0
     _LOG.debug(
         "counterfactual_effect owner_id=%s tick=%s effect_code=plan "
         "reason_code=applied",
@@ -816,9 +814,7 @@ def counterfactual_direction_bias(
     return bias
 
 
-def _effect(
-    owner_id: AgentId, tick: int, effect_code: str, reason_code: str
-) -> None:
+def _effect(owner_id: AgentId, tick: int, effect_code: str, reason_code: str) -> None:
     _LOG.debug(
         "counterfactual_effect owner_id=%s tick=%s effect_code=%s reason_code=%s",
         owner_id.value,
@@ -956,9 +952,7 @@ def counterfactual_relationship_requests(
                 )
             continue
         counterpart = scenario.decision.counterpart_id
-        resolved = _resolved_counterpart(
-            resolve_counterpart, counterpart, owner_id
-        )
+        resolved = _resolved_counterpart(resolve_counterpart, counterpart, owner_id)
         if resolved is None:
             _RUNTIME_LOG.debug(
                 "counterfactual_effect owner_id=%s tick=%s effect_code=relationship "

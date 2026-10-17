@@ -91,9 +91,7 @@ def _care_engine(
         allow_feed=allow_feed, allow_transport=allow_transport
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=61, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=61, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=(care_record, dep_record),
@@ -195,9 +193,7 @@ def test_feed_rejects_when_channel_off(
         ),
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=62, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=62, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
     )
     batch = engine.observe()

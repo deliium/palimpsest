@@ -9,7 +9,16 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Awaitable, Callable
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
+
+if TYPE_CHECKING:
+    from simulation.causal_debugger import (
+        CausalTrace,
+        CausalTraceNode,
+        DebuggerEventLookupPort,
+    )
+    from simulation.cognition_trace import CognitionTraceRepository
+    from simulation.evidence import EvidenceManifest
 
 from api.errors import bad_request, forbidden, gone, not_found, unprocessable
 from api.schemas import (
@@ -75,7 +84,7 @@ class ObjectiveEvidenceLoaderPort(Protocol):
         run_id: str,
         after: EventKeysetCursor | None = None,
         limit: int = 100,
-        manifest: object | None = None,
+        manifest: EvidenceManifest | None = None,
     ) -> object: ...
 
 
@@ -87,7 +96,7 @@ class SubjectiveEvidenceLoaderPort(Protocol):
         owner_id: str,
         after: MemoryKeysetCursor | None = None,
         limit: int = 100,
-        manifest: object | None = None,
+        manifest: EvidenceManifest | None = None,
     ) -> object: ...
 
     async def load_beliefs_page(
@@ -97,7 +106,7 @@ class SubjectiveEvidenceLoaderPort(Protocol):
         owner_id: str,
         after: MemoryKeysetCursor | None = None,
         limit: int = 100,
-        manifest: object | None = None,
+        manifest: EvidenceManifest | None = None,
     ) -> object: ...
 
     async def load_relationships_page(
@@ -107,7 +116,7 @@ class SubjectiveEvidenceLoaderPort(Protocol):
         owner_id: str,
         after: MemoryKeysetCursor | None = None,
         limit: int = 100,
-        manifest: object | None = None,
+        manifest: EvidenceManifest | None = None,
     ) -> object: ...
 
     async def load_graph_summary_page(
@@ -480,7 +489,9 @@ class PersistenceInspectionService(InspectionService):
             _translate_inspection_error(exc, run_id=run_id)
             raise
         if type(page) is not SubjectiveGraphSummaryPage:
-            raise TypeError("load_graph_summary_page must return SubjectiveGraphSummaryPage")
+            raise TypeError(
+                "load_graph_summary_page must return SubjectiveGraphSummaryPage"
+            )
         next_raw = page.next_cursor
         next_cursor = (
             _encode_memory_cursor(next_raw)
@@ -604,9 +615,7 @@ class PersistenceMetricReadService(MetricReadService):
             run_id=run_id,
             metric_set_id=metric_set_id,
             metric_family=metric_family,
-            evidence_manifest_hash=str(
-                getattr(record, "evidence_manifest_hash", "")
-            ),
+            evidence_manifest_hash=str(getattr(record, "evidence_manifest_hash", "")),
             schema_version=str(getattr(envelope, "schema_version", "") or ""),
             content_hash=content_hash,
             payload_b64=base64.b64encode(payload).decode("ascii"),
@@ -620,9 +629,7 @@ class PersistenceReplayApiService(ReplayApiService):
     def __init__(self, *, replay: ReplayService) -> None:
         self._replay = replay
 
-    async def replay_to_tick(
-        self, run_id: str, body: ReplayRequest
-    ) -> ReplayResultOut:
+    async def replay_to_tick(self, run_id: str, body: ReplayRequest) -> ReplayResultOut:
         _LOGGER.info(
             "[FIX] replay_to_tick",
             run_id=run_id,
@@ -690,7 +697,7 @@ def _focus_out(handle: object) -> DebuggerFocusOut:
     )
 
 
-def _node_out(node: object) -> CausalTraceNodeOut:
+def _node_out(node: CausalTraceNode) -> CausalTraceNodeOut:
     status_raw = getattr(getattr(node, "status", None), "value", "unavailable")
     return CausalTraceNodeOut(
         stage_code=str(getattr(node, "stage_code", "")),
@@ -700,11 +707,7 @@ def _node_out(node: object) -> CausalTraceNodeOut:
         uncertainty_band=getattr(node, "uncertainty_band", None),
         selection_codes=tuple(getattr(node, "selection_codes", ()) or ()),
         id_refs=tuple(getattr(node, "id_refs", ()) or ()),
-        counts=(
-            None
-            if getattr(node, "counts", None) is None
-            else dict(node.counts)
-        ),
+        counts=(None if node.counts is None else dict(node.counts)),
         command_kind=getattr(node, "command_kind", None),
         intention_code=getattr(node, "intention_code", None),
         observer_focus=tuple(
@@ -725,7 +728,7 @@ def _address_out(address: object) -> DebuggerAddressOut:
     )
 
 
-def _causal_trace_out(trace: object) -> CausalTraceOut:
+def _causal_trace_out(trace: CausalTrace) -> CausalTraceOut:
     availability = DebuggerAvailabilityOut(
         getattr(getattr(trace, "availability", None), "value", "unavailable")
     )
@@ -749,8 +752,8 @@ class PersistenceCausalDebuggerService(CausalDebuggerApiService):
     def __init__(
         self,
         *,
-        traces: object,
-        events: object,
+        traces: CognitionTraceRepository,
+        events: DebuggerEventLookupPort,
         lineage_ports: dict[str, object],
         runs: SimulationRunRepository,
     ) -> None:

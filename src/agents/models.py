@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import Final
 
 from world.identifiers import (
+    AgentId,
     require_bounded_text,
     require_exact_nonneg_int,
     require_stable_id,
@@ -59,16 +60,6 @@ _MAX_TEMPLATE_CODE_CHARS: Final[int] = 64
 _MAX_GOAL_REFS: Final[int] = 32
 _MAX_GOAL_RELATIONS: Final[int] = 32
 _MAX_GOAL_CONDITIONS: Final[int] = 8
-
-
-@dataclass(frozen=True, slots=True)
-class AgentId:
-    """Opaque agent identity. Distinct from world EntityId."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        require_stable_id("AgentId.value", self.value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,10 +522,7 @@ class GoalProvenance:
             )
         if self.source_goal_id is not None and type(self.source_goal_id) is not GoalId:
             raise TypeError("GoalProvenance.source_goal_id: invalid_type")
-        if (
-            self.origin_kind is GoalOriginKind.DECOMPOSED
-            and self.template_code is None
-        ):
+        if self.origin_kind is GoalOriginKind.DECOMPOSED and self.template_code is None:
             raise ValueError("GoalProvenance.template_code: required")
 
     def __repr__(self) -> str:

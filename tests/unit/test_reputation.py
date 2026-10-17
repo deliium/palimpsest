@@ -231,9 +231,7 @@ def test_dimension_heads_stay_independent() -> None:
                 source_trust_band=ReputationSourceTrustBand.MID,
                 tick=1,
                 policy_version=REPUTATION_POLICY_VERSION,
-                profile_id=reputation_profile_id(
-                    _agent("owner-a"), _agent("target-a")
-                ),
+                profile_id=reputation_profile_id(_agent("owner-a"), _agent("target-a")),
                 ordinal=0,
             ),
             "unknown_dimension",
@@ -266,9 +264,7 @@ def test_duplicate_targets_owner_mismatch_and_caps() -> None:
         ReputationLedger(owner_id=owner, profiles=(profile, profile))
     with pytest.raises(ValueError, match="owner_mismatch"):
         ReputationLedger(owner_id=other, profiles=(profile,))
-    profiles = tuple(
-        _profile(owner, _agent(f"target-{index}")) for index in range(33)
-    )
+    profiles = tuple(_profile(owner, _agent(f"target-{index}")) for index in range(33))
     with pytest.raises(ValueError, match="cap_exceeded"):
         ReputationLedger(owner_id=owner, profiles=profiles)
     evidence = tuple(
@@ -294,9 +290,7 @@ def test_duplicate_targets_owner_mismatch_and_caps() -> None:
 def _identity(
     owner: str, owner_entity: str, *bindings: tuple[str, str]
 ) -> OwnerSafeSocialIdentity:
-    ordered = tuple(
-        sorted(bindings, key=lambda item: item[1])
-    )
+    ordered = tuple(sorted(bindings, key=lambda item: item[1]))
     return OwnerSafeSocialIdentity(
         owner_id=_agent(owner),
         owner_entity_id=EntityId(owner_entity),
@@ -755,9 +749,7 @@ def test_source_trust_scales_third_party_testimony(
 
 def test_self_report_is_communication_and_hop_two_is_dropped() -> None:
     owner = _agent("west-b")
-    identity = _identity(
-        "west-b", "body-west-b", ("west-a", "body-west-a")
-    )
+    identity = _identity("west-b", "body-west-b", ("west-a", "body-west-a"))
     self_report = _tell(
         speaker="body-west-a",
         text="reliability",

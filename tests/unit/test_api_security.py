@@ -9,10 +9,10 @@ from starlette.datastructures import Headers
 
 from api.errors import ApiError
 from api.security import (
-    ApiCapability,
     AUTH_HEADER,
     WS_PROTOCOL_VERSION,
     WS_TOKEN_PREFIX,
+    ApiCapability,
     extract_http_credential,
     extract_websocket_credential,
     reject_query_string_secrets,

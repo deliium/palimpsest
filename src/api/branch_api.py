@@ -84,8 +84,7 @@ def _lineage_out(lineage: BranchLineage) -> BranchLineageOut:
         intervention_kind=lineage.intervention_kind.value,
         intervention_fingerprint=lineage.intervention_fingerprint,
         intervention_summary=(
-            f"{lineage.intervention_kind.value}:"
-            f"{lineage.intervention_fingerprint[:12]}"
+            f"{lineage.intervention_kind.value}:{lineage.intervention_fingerprint[:12]}"
         ),
         branch_id=lineage.branch_id,
         created_as_of_parent_head=lineage.created_as_of_parent_head,
@@ -126,9 +125,7 @@ def intervention_from_request(body: ResearchInterventionIn) -> ResearchIntervent
         )
 
     memory_mode = MemoryMode(body.memory_mode) if body.memory_mode else None
-    mortality_mode = (
-        MortalityMode(body.mortality_mode) if body.mortality_mode else None
-    )
+    mortality_mode = MortalityMode(body.mortality_mode) if body.mortality_mode else None
     budget_mode = (
         CognitiveBudgetMode(body.cognitive_budget_mode)
         if body.cognitive_budget_mode

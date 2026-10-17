@@ -96,9 +96,7 @@ def test_new_already_known_and_secret_change_the_tell(
         belief,
         _watch(
             tick=4,
-            occurrences=(
-                _occurrence(kind="eat", tick=4, actor=_BOB, event="evt-bob"),
-            ),
+            occurrences=(_occurrence(kind="eat", tick=4, actor=_BOB, event="evt-bob"),),
             bodies=(_BOB,),
         ),
     )
@@ -253,9 +251,7 @@ def test_inactive_heads_depth_cap_and_multi_hop(
     assert all(item.nesting_level <= 2 for item in capped.attributions)
     assert "reason_code=epistemic_depth_exceeded" in caplog.text
     held = TheoryOfMind(owner_id=_OWNER, attributions=(_row(),))
-    frozen = update_epistemic_state(
-        held, observation, (), EpistemicPolicy(max_depth=0)
-    )
+    frozen = update_epistemic_state(held, observation, (), EpistemicPolicy(max_depth=0))
     assert frozen is held
     multi = update_epistemic_state(
         TheoryOfMind(owner_id=_OWNER),

@@ -84,9 +84,7 @@ async def rank_prospective_transitions(
     if type(policy) is not ProspectivePolicy:
         raise TypeError("policy must be ProspectivePolicy")
     candidates = tuple(
-        item.transition_id
-        for item in rollout.transitions
-        if item.prune_reason is None
+        item.transition_id for item in rollout.transitions if item.prune_reason is None
     )
     if not policy.allow_provider or not candidates:
         return ProspectiveSelectionResult((), False, 0, 0, "skipped")

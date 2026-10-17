@@ -258,9 +258,7 @@ async def measure_seek_ms(
     snapshots = create_snapshot_repository(session_factory)
     replay = ReplayService(runs, journal, snapshots)
     started = time.perf_counter()
-    history = await scene_at_tick(
-        replay, run_id, target_tick=Tick(target_tick)
-    )
+    history = await scene_at_tick(replay, run_id, target_tick=Tick(target_tick))
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     _LOG.debug(
         "[scale.bench] phase=seek duration_ms=%.3f target_tick=%s event_count=%s",
@@ -332,14 +330,10 @@ async def run_durable_scale_scenario(
     )
     catchup_ms = await measure_observer_catchup_ms(session_factory, run_id)
     seek_target = max(max_ticks // 2, 1)
-    seek_ms = await measure_seek_ms(
-        session_factory, run_id, target_tick=seek_target
-    )
+    seek_ms = await measure_seek_ms(session_factory, run_id, target_tick=seek_target)
     total_ms = (time.perf_counter() - started) * 1000.0
     rss_peak = peak_rss_kb()
-    events_per_sec = (
-        (events / (run_elapsed_ms / 1000.0)) if run_elapsed_ms > 0 else 0.0
-    )
+    events_per_sec = (events / (run_elapsed_ms / 1000.0)) if run_elapsed_ms > 0 else 0.0
     metrics = ScaleBenchMetrics(
         scenario=scenario,
         ticks=result.ticks_committed,
@@ -353,8 +347,7 @@ async def run_durable_scale_scenario(
         snapshot_write_proxy_ms=snapshot_write_proxy_ms,
     )
     _LOG.info(
-        "[scale.bench] scenario=%s ticks=%s elapsed_ms=%.3f events=%s "
-        "snapshots=%s",
+        "[scale.bench] scenario=%s ticks=%s elapsed_ms=%.3f events=%s snapshots=%s",
         metrics.scenario,
         metrics.ticks,
         metrics.elapsed_ms,

@@ -1,7 +1,7 @@
 """Serve the built Research UI SPA from the API origin at ``/research/``.
 
 The tree is a directory of static files (Vite ``dist/``). This module does not
-build it. Mount before the Godot presentation catch-all at ``/``.
+build it. Mount before the presentation catch-all at ``/``.
 """
 
 from __future__ import annotations

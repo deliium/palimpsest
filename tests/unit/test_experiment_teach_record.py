@@ -67,9 +67,7 @@ def test_resolver_does_not_emit_tell_or_inscribe() -> None:
     assert "Tell(" not in source
     assert "Inscribe(" not in source
     assert "class ExperimentResolved" not in source
-    apply_slice = rules.split("def _apply_experiment", 1)[1].split(
-        "\ndef ", 1
-    )[0]
+    apply_slice = rules.split("def _apply_experiment", 1)[1].split("\ndef ", 1)[0]
     assert "Tell(" not in apply_slice
     assert "Inscribe(" not in apply_slice
 
@@ -123,9 +121,12 @@ def test_later_tell_and_inscribe_cite_the_remembered_event(
     assert taught.event_ref in updated.entries[0].evidence_refs
     assert "experiment_teach_cited event_id=evt-exp-1" in caplog.text
     assert "experiment_record_cited event_id=evt-exp-1" in caplog.text
-    assert cite_experiment_event(
-        _OWNER, traces, "evt-peer", "tech:combine_items", channel="teach"
-    ) is None
+    assert (
+        cite_experiment_event(
+            _OWNER, traces, "evt-peer", "tech:combine_items", channel="teach"
+        )
+        is None
+    )
 
 
 def test_empty_technique_token_skips_the_label_and_keeps_the_trace(

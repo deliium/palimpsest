@@ -106,12 +106,8 @@ def _loop_input() -> CognitiveLoopInput:
             owner_id=owner,
             revision=0,
             memories=(
-                _trace(
-                    "m-a", concepts=("path", "water", "night", "only-a")
-                ),
-                _trace(
-                    "m-b", concepts=("path", "water", "night", "only-b")
-                ),
+                _trace("m-a", concepts=("path", "water", "night", "only-a")),
+                _trace("m-b", concepts=("path", "water", "night", "only-b")),
                 faint,
             ),
             legacy_beliefs=(),
@@ -141,7 +137,8 @@ def _loop(*, mode: CognitionConsolidationMode) -> CognitiveLoop:
 
 def _stage_kinds(result: object) -> tuple[str, ...]:
     return tuple(
-        record.component_kind.value for record in result.boundary_records  # type: ignore[attr-defined]
+        record.component_kind.value
+        for record in result.boundary_records  # type: ignore[attr-defined]
     )
 
 
@@ -154,12 +151,8 @@ async def test_disabled_sleep_adds_no_consolidation_plan() -> None:
     disabled_stages = _stage_kinds(result)
 
     enabled = _loop(mode=CognitionConsolidationMode.DETERMINISTIC)
-    enabled_proposal = await enabled.prepare(
-        _loop_input(), invocation_id="inv-enabled"
-    )
-    enabled_result = await enabled.complete(
-        enabled_proposal, effective_command=Sleep()
-    )
+    enabled_proposal = await enabled.prepare(_loop_input(), invocation_id="inv-enabled")
+    enabled_result = await enabled.complete(enabled_proposal, effective_command=Sleep())
     assert enabled_result.offline_consolidation is not None
     assert _stage_kinds(enabled_result) == disabled_stages
     plan = enabled_result.offline_consolidation
@@ -172,8 +165,7 @@ async def test_disabled_sleep_adds_no_consolidation_plan() -> None:
     ]
     assert receipts
     assert all(
-        receipt.operation_id
-        == f"offline-consolidation:4:{receipt.memory_id.value}"
+        receipt.operation_id == f"offline-consolidation:4:{receipt.memory_id.value}"
         for receipt in receipts
     )
 
@@ -203,9 +195,7 @@ async def test_selected_forget_and_access_receipts_are_idempotent() -> None:
         access_count=0,
     )
     await service.apply(MemoryMutationBatch(writes=(kept, dropped)))
-    forgotten = await service.forget_selected_ids(
-        (MemoryId("m-faint"),), tick=4
-    )
+    forgotten = await service.forget_selected_ids((MemoryId("m-faint"),), tick=4)
     assert forgotten == 1
     again = await service.forget_selected_ids((MemoryId("m-faint"),), tick=5)
     assert again == 0
@@ -244,9 +234,7 @@ async def test_abort_drops_pending_and_finalize_commits_selected_ids() -> None:
 
     memories = MemoryStore(AgentId("agent-1"))
     beliefs = BeliefStore(AgentId("agent-1"))
-    scope = MemoryScope(
-        run_id=MemoryRunId("run-1"), owner_id=AgentId("agent-1")
-    )
+    scope = MemoryScope(run_id=MemoryRunId("run-1"), owner_id=AgentId("agent-1"))
     service = InMemoryMemoryService(scope)
     traces = (
         _trace("m-a", concepts=("path", "water", "night", "only-a")),
@@ -276,18 +264,14 @@ async def test_abort_drops_pending_and_finalize_commits_selected_ids() -> None:
     )
     runtime.start()
     prepared = await runtime.prepare_observation(_self(tick=4), token=_token(4))
-    pending = await runtime.bind_effective_command(
-        prepared, effective_command=Sleep()
-    )
+    pending = await runtime.bind_effective_command(prepared, effective_command=Sleep())
     assert pending.loop_result.offline_consolidation is not None
     runtime.abort_pending(pending)
     assert runtime.export_offline_consolidation_audits() == ()
     active = {trace.memory_id.value for trace in await service.snapshot()}
     assert active == {"m-a", "m-b", "m-faint"}
 
-    prepared_again = await runtime.prepare_observation(
-        _self(tick=5), token=_token(5)
-    )
+    prepared_again = await runtime.prepare_observation(_self(tick=5), token=_token(5))
     committed = await runtime.bind_effective_command(
         prepared_again, effective_command=Sleep()
     )

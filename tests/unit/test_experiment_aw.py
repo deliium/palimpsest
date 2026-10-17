@@ -118,9 +118,7 @@ def _engine(
     skill: dict[str, object] | None = None,
 ) -> WorldEngine:
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=20, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=20, physical_rules=non_lethal_physical_rules()),
         bootstrap=WorldBootstrap(
             world_id=WorldId("world-aw-run"),
             revision=WorldRevision(0),

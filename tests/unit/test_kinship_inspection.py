@@ -28,9 +28,7 @@ def _engine() -> WorldEngine:
         ),
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=17, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=17, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-kinship-inspect"),
         kinship_spec=example_kinship_spec(

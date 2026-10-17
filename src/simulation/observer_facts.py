@@ -5,22 +5,68 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
-from simulation.bootstrap import AgentRegistration
-from simulation.persistence import WorldSnapshot
+from simulation.clock import Tick
+from simulation.registrations import AgentRegistration
 from world.artifacts import InformationArtifact
+from world.collective_projects import CollectiveProject
 from world.environment import (
     ActiveHazard,
     EnvironmentalDynamicsSpec,
     temperature_band,
 )
 from world.events import WorldEvent
+from world.identifiers import WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, PhysicalRules, Resource, Weather
 from world.production import Structure
+from world.regions import Journey, RegionsMigrationSpec
 from world.repositories import KnowledgeRepository
 from world.values import round_physical
 
 _LOGGER = logging.getLogger("simulation.observer_facts")
+
+
+class SnapshotFacts(Protocol):
+    """Read-only snapshot fields consumed by the detached scene adapter."""
+
+    @property
+    def run_id(self) -> _RunIdentity: ...
+    @property
+    def world_id(self) -> WorldId: ...
+    @property
+    def revision(self) -> WorldRevision: ...
+    @property
+    def next_tick(self) -> Tick: ...
+    @property
+    def locations(self) -> Sequence[Location]: ...
+    @property
+    def bodies(self) -> Sequence[AgentBody]: ...
+    @property
+    def items(self) -> Sequence[Item]: ...
+    @property
+    def resources(self) -> Sequence[Resource]: ...
+    @property
+    def weather(self) -> Sequence[Weather]: ...
+    @property
+    def registrations(self) -> Sequence[AgentRegistration]: ...
+    @property
+    def structures(self) -> Sequence[Structure]: ...
+    @property
+    def artifacts(self) -> Sequence[InformationArtifact]: ...
+    @property
+    def repositories(self) -> Sequence[KnowledgeRepository]: ...
+    @property
+    def collective_projects(self) -> Sequence[CollectiveProject]: ...
+    @property
+    def regions_migration(self) -> RegionsMigrationSpec | None: ...
+    @property
+    def journeys(self) -> Sequence[Journey] | None: ...
+
+
+class _RunIdentity(Protocol):
+    @property
+    def value(self) -> str: ...
 
 
 class ObjectiveFactsError(ValueError):
@@ -53,10 +99,12 @@ class ObjectiveFacts:
     structures: tuple[Structure, ...] = ()
     artifacts: tuple[InformationArtifact, ...] = ()
     repositories: tuple[KnowledgeRepository, ...] = ()
-    collective_projects: tuple[object, ...] = ()
+    collective_projects: tuple[CollectiveProject, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
+    regions_migration: RegionsMigrationSpec | None = None
+    journeys: tuple[Journey, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,10 +124,12 @@ class ObjectiveScene:
     structures: tuple[Structure, ...] = ()
     artifacts: tuple[InformationArtifact, ...] = ()
     repositories: tuple[KnowledgeRepository, ...] = ()
-    collective_projects: tuple[object, ...] = ()
+    collective_projects: tuple[CollectiveProject, ...] = ()
     season: str | None = None
     temperature_bands: tuple[tuple[str, str], ...] = ()
     hazards: tuple[tuple[str, str, int], ...] = ()
+    regions_migration: RegionsMigrationSpec | None = None
+    journeys: tuple[Journey, ...] = ()
 
 
 def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
@@ -115,6 +165,8 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         season=facts.season,
         temperature_bands=tuple(facts.temperature_bands),
         hazards=tuple(facts.hazards),
+        regions_migration=facts.regions_migration,
+        journeys=tuple(facts.journeys),
     )
     _LOGGER.debug(
         "objective_scene_built run_id=%s tick=%s location_count=%s "
@@ -182,13 +234,16 @@ def scene_from_facts(facts: ObjectiveFacts) -> ObjectiveScene:
 
 
 def scene_from_snapshot(
-    snapshot: WorldSnapshot,
+    snapshot: SnapshotFacts,
     *,
     events: Sequence[WorldEvent] = (),
     requested_tick: int | None = None,
 ) -> ObjectiveScene:
     """Build a scene only when the snapshot cursor is already the request."""
-    if type(snapshot) is not WorldSnapshot:
+    if (type(snapshot).__module__, type(snapshot).__name__) != (
+        "simulation.persistence",
+        "WorldSnapshot",
+    ):
         _reject("invalid_snapshot")
     if isinstance(events, (set, frozenset)) or not isinstance(events, Sequence):
         _reject("invalid_events")
@@ -212,6 +267,8 @@ def scene_from_snapshot(
         artifacts=tuple(snapshot.artifacts),
         repositories=tuple(snapshot.repositories),
         collective_projects=tuple(snapshot.collective_projects),
+        regions_migration=snapshot.regions_migration,
+        journeys=tuple(snapshot.journeys or ()),
     )
     return scene_from_facts(facts)
 

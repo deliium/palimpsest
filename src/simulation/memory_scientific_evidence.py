@@ -64,9 +64,7 @@ class InMemoryScientificEvidenceRepository:
     ) -> EvidenceManifest | None:
         if manifest_hash is not None:
             return self._manifests.get((run_id, manifest_hash))
-        matches = [
-            item for (rid, _), item in self._manifests.items() if rid == run_id
-        ]
+        matches = [item for (rid, _), item in self._manifests.items() if rid == run_id]
         if not matches:
             return None
         return matches[-1]

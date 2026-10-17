@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import sysconfig
 import tomllib
 import zipfile
 from pathlib import Path
@@ -148,14 +149,16 @@ def test_wheel_contains_only_project_packages_and_imports_outside_repo(
         env=_offline_env(),
     )
     python = venv_dir / "bin" / "python"
-    # Full project import check needs runtime deps already present offline;
-    # never download interpreters/backends. Prompt packaging uses --no-deps.
+    # Reuse the test interpreter's dependencies without resolving newer,
+    # unpinned packages from the offline cache. PYTHONPATH directories do not
+    # execute editable-install .pth files; project imports must come from the wheel.
     subprocess.run(
         [
             "uv",
             "pip",
             "install",
             "--offline",
+            "--no-deps",
             "--python",
             str(python),
             str(wheels[0]),
@@ -175,6 +178,11 @@ def test_wheel_contains_only_project_packages_and_imports_outside_repo(
         "assert callable(encode_domain); assert callable(decode_domain); "
         "assert DomainSerializationError is not None; "
         + "; ".join(f"import {name}" for name in sorted(expected))
+        + "; from pathlib import Path; "
+        + "; ".join(
+            f"assert Path({name}.__file__).is_relative_to({str(venv_dir)!r})"
+            for name in sorted(expected)
+        )
     )
     completed = subprocess.run(
         [str(python), "-c", import_script],
@@ -186,6 +194,7 @@ def test_wheel_contains_only_project_packages_and_imports_outside_repo(
             **_offline_env(),
             "PATH": str(venv_dir / "bin"),
             "VIRTUAL_ENV": str(venv_dir),
+            "PYTHONPATH": sysconfig.get_path("purelib"),
         },
     )
     assert completed.returncode == 0

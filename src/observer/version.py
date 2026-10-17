@@ -78,6 +78,9 @@ SEMANTIC_EVENT_TYPES: Final[tuple[str, ...]] = (
     "PUBLIC_GOOD_BENEFIT",
     "PUBLIC_GOOD_MAINTAINED",
     "PUBLIC_GOOD_OPPOSED",
+    "JOURNEY_STARTED",
+    "JOURNEY_ARRIVED",
+    "JOURNEY_ENDED",
 )
 
 SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
@@ -150,6 +153,9 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "public_good_benefit": "PUBLIC_GOOD_BENEFIT",
     "public_good_maintained": "PUBLIC_GOOD_MAINTAINED",
     "public_good_opposed": "PUBLIC_GOOD_OPPOSED",
+    "journey_started": "JOURNEY_STARTED",
+    "journey_arrived": "JOURNEY_ARRIVED",
+    "journey_ended": "JOURNEY_ENDED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

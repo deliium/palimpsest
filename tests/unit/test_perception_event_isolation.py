@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import logging
 
 import pytest
@@ -31,6 +29,7 @@ from tests.simulation_helpers import (
 from world._perception import PerceptionService
 from world._state import WorldState, rebuild_world_state
 from world.actions import Attack, Help, Move, Take, Talk, Wait
+from world.communications import origin_utterance
 from world.effects import (
     ActionCause,
     DeathCause,
@@ -299,7 +298,10 @@ def test_communication_is_claim_only_and_private() -> None:
     talk = _action_event(
         event_id="evt-talk",
         sequence=0,
-        details=Talked(EntityId("body-2"), origin_utterance(text="secret-claim", speaker_id=EntityId("body-1"))),
+        details=Talked(
+            EntityId("body-2"),
+            origin_utterance(text="secret-claim", speaker_id=EntityId("body-1")),
+        ),
         actor="body-1",
     )
     speaker, listener, remote, dead = _project((talk,))
@@ -430,7 +432,12 @@ def test_next_tick_delivers_prior_talk_only() -> None:
             ActionSubmission(
                 batch.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), origin_utterance(text="next-tick-only", speaker_id=EntityId("body-1"))),
+                Talk(
+                    EntityId("body-2"),
+                    origin_utterance(
+                        text="next-tick-only", speaker_id=EntityId("body-1")
+                    ),
+                ),
             ),
         )
     )
@@ -443,7 +450,8 @@ def test_next_tick_delivers_prior_talk_only() -> None:
     engine.observe()
     later = engine.observation_for(AgentId("agent-2"))
     assert all(
-        communication.utterance.content.text != "next-tick-only" for communication in later.communications
+        communication.utterance.content.text != "next-tick-only"
+        for communication in later.communications
     )
 
 

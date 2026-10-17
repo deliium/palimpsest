@@ -212,7 +212,8 @@ def test_artifacts_plus_dynamics_select_v8_and_fold_hazards_structures(
         )
     live = engine._snapshot.world.state
     assert any(
-        structure.kind is StructureKind.SHELTER for structure in live.structures.values()
+        structure.kind is StructureKind.SHELTER
+        for structure in live.structures.values()
     )
     assert EntityId("art-record-1") in live.artifacts
     caplog.set_level(logging.DEBUG, logger="simulation.replay")
@@ -256,9 +257,7 @@ def test_v4_checkpoint_rejects_artifacts() -> None:
             world_id=WorldId("world-1"),
             seed=7,
             config=SimulationRunConfig(seed=7),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
             locations=(location,),
             bodies=(alive_body(),),
             items=(),
@@ -312,7 +311,9 @@ def test_v5_round_trip_and_resume_restores_artifacts() -> None:
             ActionSubmission(
                 batch.token,
                 AgentId("agent-1"),
-                Inscribe(kind=ArtifactKind.SIGN, content=ArtifactContent(marks=("path",))),
+                Inscribe(
+                    kind=ArtifactKind.SIGN, content=ArtifactContent(marks=("path",))
+                ),
             ),
         )
     )
@@ -381,7 +382,9 @@ def test_v5_round_trip_and_resume_restores_artifacts() -> None:
     assert len(restored_snap.artifacts) == len(snapshot.artifacts)
     restored = WorldEngine.restore_from_snapshot(restored_snap)
     assert restored._artifacts_enabled is True
-    assert restored._snapshot.world.state.artifacts[EntityId("art-record-1")].content.marks == (
+    assert restored._snapshot.world.state.artifacts[
+        EntityId("art-record-1")
+    ].content.marks == (
         "water",
         "north",
     )

@@ -61,9 +61,7 @@ ALLOWED_IMPORTS: Final[dict[str, frozenset[str]]] = {
     "simulation": frozenset(
         {"world", "agents", "agents.cognition", "memory", "social", "llm"}
     ),
-    "experiments": frozenset(
-        {"simulation", "analysis", "agents", "world", "memory"}
-    ),
+    "experiments": frozenset({"simulation", "analysis", "agents", "world", "memory"}),
     "research_runner": frozenset(
         {
             "experiments",
@@ -91,6 +89,13 @@ PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
         "world._rules",
         "world._replay",
         "world._physical",
+        "world._production",
+        "world._travel",
+        "world._collective_projects",
+        "world._skills",
+        "world._teaching",
+        "world._experiment_laws",
+        "world._experiment_apply",
     }
 )
 PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
@@ -810,7 +815,9 @@ def _private_world_target(imported: str) -> str | None:
 
 
 def _importer_may_use_private_world(module: str) -> bool:
-    if module in PRIVATE_WORLD_MODULES:
+    if module in PRIVATE_WORLD_MODULES or any(
+        module.startswith(f"{private}.") for private in PRIVATE_WORLD_MODULES
+    ):
         return True
     if (
         module.startswith("world._state.")

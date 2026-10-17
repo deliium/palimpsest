@@ -173,7 +173,9 @@ def _vocabulary_convergence(
         for owner, tokens in tokens_by_owner.items():
             for token in tokens:
                 token_owners[token].add(owner)
-        if any(len(owners_for_token) >= 2 for owners_for_token in token_owners.values()):
+        if any(
+            len(owners_for_token) >= 2 for owners_for_token in token_owners.values()
+        ):
             shared += 1
     preferred = _preferred_by_entity(active)
     agreement_hits = 0
@@ -218,30 +220,15 @@ def _vocabulary_convergence(
 def _semantic_drift(
     bindings: Sequence[object], active: Sequence[object]
 ) -> dict[str, object]:
-    revisions = [_number(row, "sense_revision") for row in active]
-    revisions = [value for value in revisions if value is not None]
+    revisions = [
+        value for row in active if (value := _number(row, "sense_revision")) is not None
+    ]
     retired = [row for row in bindings if _text(row, "status") == "retired"]
-    merged = [
-        row
-        for row in retired
-        if _text(row, "merged_into") is not None
-    ]
-    competing = [
-        row
-        for row in active
-        if _sequence(row, "competing_label_ids")
-    ]
-    shifted = [
-        row
-        for row in active
-        if (_number(row, "sense_revision") or 0.0) >= 1.0
-    ]
+    merged = [row for row in retired if _text(row, "merged_into") is not None]
+    competing = [row for row in active if _sequence(row, "competing_label_ids")]
+    shifted = [row for row in active if (_number(row, "sense_revision") or 0.0) >= 1.0]
     ticks = sorted(
-        {
-            int(tick)
-            for row in bindings
-            if (tick := _number(row, "tick")) is not None
-        }
+        {int(tick) for row in bindings if (tick := _number(row, "tick")) is not None}
     )
     turnover = _label_turnover_rate(bindings, ticks)
     extinction = _extinction_rate(bindings, ticks)
@@ -256,9 +243,7 @@ def _semantic_drift(
         "meaning_shift_rate": (
             _ABSENT if not active else quantize_float(len(shifted) / len(active))
         ),
-        "merge_rate": (
-            _ABSENT if pool == 0 else quantize_float(len(merged) / pool)
-        ),
+        "merge_rate": (_ABSENT if pool == 0 else quantize_float(len(merged) / pool)),
         "competition_rate": (
             _ABSENT if not active else quantize_float(len(competing) / len(active))
         ),
@@ -286,9 +271,7 @@ def _preferred_by_entity(
     }
 
 
-def _label_turnover_rate(
-    bindings: Sequence[object], ticks: Sequence[int]
-) -> object:
+def _label_turnover_rate(bindings: Sequence[object], ticks: Sequence[int]) -> object:
     if len(ticks) < 2:
         return _ABSENT
     by_tick: dict[int, list[object]] = defaultdict(list)
@@ -327,13 +310,15 @@ def _extinction_rate(bindings: Sequence[object], ticks: Sequence[int]) -> object
     start_active = {
         _identity(row)
         for row in bindings
-        if _number(row, "tick") == float(start) and _text(row, "status") == "active"
+        if _number(row, "tick") == float(start)
+        and _text(row, "status") == "active"
         and _identity(row) is not None
     }
     end_retired = {
         _identity(row)
         for row in bindings
-        if _number(row, "tick") == float(end) and _text(row, "status") == "retired"
+        if _number(row, "tick") == float(end)
+        and _text(row, "status") == "retired"
         and _identity(row) is not None
     }
     if not start_active:
@@ -400,7 +385,9 @@ def _binding_rows(rows: object | None) -> tuple[object, ...]:
 def _document_bindings(document: object) -> tuple[object, ...]:
     if isinstance(document, Mapping):
         return _as_rows(
-            document.get("bindings", document.get("binding_rows", document.get("rows", ())))
+            document.get(
+                "bindings", document.get("binding_rows", document.get("rows", ()))
+            )
         )
     return _as_rows(getattr(document, "bindings", ()))
 

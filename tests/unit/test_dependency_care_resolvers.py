@@ -41,22 +41,17 @@ def test_needs_requiring_assistance_dependent_only() -> None:
         CareNeedId.WATER: _policy(self_satisfy=True, consequence="accelerate_thirst"),
         CareNeedId.SAFETY: _policy(self_satisfy=False),
     }
-    assert needs_requiring_assistance(
-        DependencyStatus.INDEPENDENT, policies
-    ) == ()
-    assert needs_requiring_assistance(
-        DependencyStatus.DEPENDENT, policies
-    ) == (CareNeedId.FOOD, CareNeedId.SAFETY)
+    assert needs_requiring_assistance(DependencyStatus.INDEPENDENT, policies) == ()
+    assert needs_requiring_assistance(DependencyStatus.DEPENDENT, policies) == (
+        CareNeedId.FOOD,
+        CareNeedId.SAFETY,
+    )
 
 
 def test_self_satisfy_denied_kinds_union() -> None:
     policies = {
-        CareNeedId.FOOD: _policy(
-            self_satisfy=False, consequence="accelerate_hunger"
-        ),
-        CareNeedId.MOVEMENT: _policy(
-            self_satisfy=False, consequence="no_extra"
-        ),
+        CareNeedId.FOOD: _policy(self_satisfy=False, consequence="accelerate_hunger"),
+        CareNeedId.MOVEMENT: _policy(self_satisfy=False, consequence="no_extra"),
         CareNeedId.LEARNING: _policy(
             self_satisfy=False, consequence="learning_rate_zero"
         ),

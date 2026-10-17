@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, Never
 
 from simulation.clock import require_exact_nonneg_int
 from simulation.models import RunId, StochasticIdentity, require_stochastic_identity
@@ -258,9 +258,7 @@ class CommunicationRemoveTarget:
             object.__setattr__(
                 self,
                 "event_id",
-                require_stable_id(
-                    "CommunicationRemoveTarget.event_id", self.event_id
-                ),
+                require_stable_id("CommunicationRemoveTarget.event_id", self.event_id),
             )
             return
         tick = require_exact_nonneg_int("CommunicationRemoveTarget.tick", self.tick)
@@ -479,7 +477,7 @@ class BranchTimelineCompareResult:
             )
 
 
-def _reject(reason_code: str, detail: str | None = None) -> None:
+def _reject(reason_code: str, detail: str | None = None) -> Never:
     _LOG.error(
         "research_intervention_rejected reason_code=%s",
         reason_code,

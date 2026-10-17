@@ -168,9 +168,7 @@ def test_combination_disabled_rejected() -> None:
     ledger = _form_root(ledger, token="left", tick=0)
     ledger = _form_root(ledger, token="right", tick=1)
     parents = tuple(row.entry_id for row in ledger.entries if row.active)
-    with pytest.raises(
-        ValueError, match="knowledge_genealogy_combination_disabled"
-    ):
+    with pytest.raises(ValueError, match="knowledge_genealogy_combination_disabled"):
         combine_practical_knowledge(
             ledger,
             parent_entry_ids=parents,

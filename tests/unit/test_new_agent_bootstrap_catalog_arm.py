@@ -59,9 +59,7 @@ def test_af_profile_requires_v25_and_explicit_init() -> None:
     definition = experiment_af_new_agent_bootstrap(_base(), max_ticks=10)
     assert definition.experiment_id == "experiment-af-new-agent-bootstrap"
     on = next(
-        item
-        for item in definition.conditions
-        if item.condition_id == "af-new-agent-on"
+        item for item in definition.conditions if item.condition_id == "af-new-agent-on"
     )
     assert on.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V25
     assert new_agent_bootstrap_profile(on.runner_config) is on.runner_config
@@ -75,9 +73,7 @@ def test_af_profile_requires_v25_and_explicit_init() -> None:
 async def test_af_on_arm_emits_initialization_recorded() -> None:
     definition = experiment_af_new_agent_bootstrap(_base(), max_ticks=8)
     on = next(
-        item
-        for item in definition.conditions
-        if item.condition_id == "af-new-agent-on"
+        item for item in definition.conditions if item.condition_id == "af-new-agent-on"
     )
     _LOG.info(
         "case_id=af_on_arm experiment_id=%s schema_version=%s",

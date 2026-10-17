@@ -45,7 +45,7 @@ def _audit(**kwargs) -> SimpleNamespace:
 
 def test_catalog_includes_three_genealogy_families() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 91
+    assert len(specs) == METRIC_FAMILY_COUNT == 94
     ids = {spec.family_id.value for spec in specs}
     assert "knowledge_genealogy_holders" in ids
     assert "knowledge_genealogy_lineage" in ids
@@ -134,8 +134,7 @@ def test_mutation_mean_distance_and_histogram() -> None:
     )
     assert empty.availability is MetricAvailability.ABSENT
     assert (
-        KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION
-        == "knowledge_genealogy_mutation@1"
+        KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION == "knowledge_genealogy_mutation@1"
     )
     audits = (
         _audit(entry_id="e1", fingerprint_distance_q=0.0),

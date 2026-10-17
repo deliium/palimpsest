@@ -7,11 +7,12 @@ Missing rows are ``ABSENT``, never coerced to zero.
 from __future__ import annotations
 
 import logging
-from collections import Counter
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from analysis.evidence import EvidenceStage
 from analysis.models import (
     METRIC_DOCUMENT_SCHEMA_VERSION,
     MetricAvailability,
@@ -180,7 +181,7 @@ def _concentration(
 ) -> dict[str, object] | None:
     if not rows:
         return None
-    totals: Counter[str] = Counter()
+    totals: dict[str, float] = defaultdict(float)
     for row in rows:
         totals[row.location_id] += float(row.weight)
     mass = float(sum(totals.values()))
@@ -220,7 +221,7 @@ def _document(
     algorithm_version: str,
     run_id: str,
     revision: str,
-    evidence_stages: frozenset,
+    evidence_stages: frozenset[EvidenceStage],
     population: str,
     denominator: str,
     availability: MetricAvailability,

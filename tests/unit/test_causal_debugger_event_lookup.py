@@ -32,9 +32,7 @@ async def test_lookup_by_event_id_and_tick_sequence() -> None:
 async def test_lookup_not_found_returns_none() -> None:
     run_id = RunId("run-lookup")
     lookup = InMemoryDebuggerEventLookup()
-    assert (
-        await lookup.get_by_event_id(run_id=run_id, event_id="missing")
-    ) is None
+    assert (await lookup.get_by_event_id(run_id=run_id, event_id="missing")) is None
     assert (
         await lookup.get_by_tick_sequence(run_id=run_id, tick=1, sequence=0)
     ) is None

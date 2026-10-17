@@ -25,6 +25,7 @@ from world.actions import (
     Wait,
 )
 from world.identifiers import EntityId, RecipeId
+from world.observations import ObservedStructure
 from world.values import ItemKind
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.production")
@@ -147,10 +148,7 @@ def update_recipe_beliefs(
         _absorb_observation(observation, supported)
     updated = RecipeBeliefSet(
         owner_id,
-        tuple(
-            RecipeBelief(RecipeId(token), flag)
-            for token, flag in supported.items()
-        ),
+        tuple(RecipeBelief(RecipeId(token), flag) for token, flag in supported.items()),
     )
     _LOG.debug(
         "recipe_belief_updated owner_id=%s recipe_count=%s supported_count=%s",
@@ -351,8 +349,8 @@ def _held_item(observation: object, kind: ItemKind) -> EntityId | None:
     return sorted(matches, key=lambda item: item.value)[0]
 
 
-def _structure(observation: object, kind: str) -> object | None:
-    matches = []
+def _structure(observation: object, kind: str) -> ObservedStructure | None:
+    matches: list[ObservedStructure] = []
     for structure in getattr(observation, "structures", ()):
         structure_kind = getattr(structure, "kind", None)
         value = getattr(structure_kind, "value", structure_kind)

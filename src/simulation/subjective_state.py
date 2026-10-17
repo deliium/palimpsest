@@ -14,7 +14,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final, Protocol
+from typing import Final, Protocol, cast
 
 from agents.models import AgentId
 from memory.beliefs import BeliefRevisionRequest, SemanticBelief
@@ -816,21 +816,21 @@ class InMemorySubjectiveOwnerBundle:
         as_reader = getattr(self._memory, "as_reader", None)
         if as_reader is None:
             raise TypeError("memory service missing as_reader")
-        return as_reader()
+        return cast(MemoryReader, as_reader())
 
     @property
     def semantic_belief_reader(self) -> SemanticBeliefReader:
         as_reader = getattr(self._belief, "as_reader", None)
         if as_reader is None:
             raise TypeError("belief service missing as_reader")
-        return as_reader()
+        return cast(SemanticBeliefReader, as_reader())
 
     @property
     def relationship_reader(self) -> RelationshipReader:
         as_reader = getattr(self._relationship, "as_reader", None)
         if as_reader is None:
             raise TypeError("relationship service missing as_reader")
-        return as_reader()
+        return cast(RelationshipReader, as_reader())
 
     async def snapshot(self) -> SubjectiveOwnerSnapshot:
         memories = await self._memory.snapshot()
@@ -860,9 +860,7 @@ class InMemorySubjectiveOwnerBundle:
         )
         return snap
 
-    async def commit(
-        self, batch: SubjectiveMutationBatch
-    ) -> SubjectiveApplyReceipt:
+    async def commit(self, batch: SubjectiveMutationBatch) -> SubjectiveApplyReceipt:
         receipt = await self._subjective.commit(batch)
         _LOG.info(
             "subjective_bundle_commit",
@@ -880,4 +878,3 @@ class InMemorySubjectiveOwnerBundle:
             },
         )
         return receipt
-

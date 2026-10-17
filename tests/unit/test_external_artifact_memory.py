@@ -13,7 +13,7 @@ from analysis.external_artifact_metrics import (
     compute_external_artifact_memory,
 )
 from analysis.models import MetricAvailability
-from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.specifications import metric_specification
 from experiments.catalog import experiment_z_external_artifacts
 from experiments.composition import (
     artifact_interpretation_rows_from_ledgers,
@@ -218,17 +218,15 @@ def test_experiment_z_pairs_channel_and_memory_only(
     assert {
         agent.cognition.artifact_interpretation_mode for agent in channel.agents
     } == {ArtifactInterpretationMode.DETERMINISTIC}
-    assert {
-        agent.cognition.consolidation_mode for agent in channel.agents
-    } == {ConsolidationMode.DETERMINISTIC}
+    assert {agent.cognition.consolidation_mode for agent in channel.agents} == {
+        ConsolidationMode.DETERMINISTIC
+    }
     assert all(
         place.visibility_factor == UnitInterval(1.0)
         for place in channel.scenario.locations
     )
     assert all(body.fatigue == Fatigue(0.0) for body in channel.scenario.bodies)
-    bindings = {
-        agent.agent_id.value: agent.entity_id.value for agent in channel.agents
-    }
+    bindings = {agent.agent_id.value: agent.entity_id.value for agent in channel.agents}
     assert bindings == {"ada": "body-ada", "ben": "body-ben"}
     assert "experiment-z-external-artifacts" not in {
         "experiment-a-memory",

@@ -205,8 +205,7 @@ def build_benchmark_scenario(
     for agent in result.definition.conditions[0].runner_config.agents:
         cognition = agent.cognition
         _LOG.debug(
-            "benchmark_builder_modes scenario_id=%s memory_mode=%s "
-            "reflection_mode=%s",
+            "benchmark_builder_modes scenario_id=%s memory_mode=%s reflection_mode=%s",
             scenario_id,
             cognition.memory_mode.value,
             cognition.reflection_mode.value,

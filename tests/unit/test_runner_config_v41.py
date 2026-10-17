@@ -91,8 +91,7 @@ def test_v41_flags_off_round_trip() -> None:
     assert round_trip.subjective_valuation is not None
     assert round_trip.resource_exchange_profile is not None
     assert (
-        round_trip.resource_exchange_profile.policy_id
-        == "resource-exchange-profile-v1"
+        round_trip.resource_exchange_profile.policy_id == "resource-exchange-profile-v1"
     )
     assert round_trip.resource_exchange_profile.acceptance_window_ticks == 32
     assert round_trip.structured_commitments is None

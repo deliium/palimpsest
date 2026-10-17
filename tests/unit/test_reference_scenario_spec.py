@@ -50,7 +50,10 @@ def test_reference_scenario_map_resources_and_milestones() -> None:
     assert any(resource.quantity > 0.0 for resource in scenario.resources)
     # Connected: every location has at least one neighbor.
     assert all(location.adjacent for location in scenario.locations)
-    assert len(bundle.milestone_ids) == 8
+    assert len(bundle.milestone_ids) == 10
+    assert {"ms-colocate-tell-speaker", "ms-colocate-tell-recipient"} <= set(
+        bundle.milestone_ids
+    )
     assert len(bundle.milestone_ids) < 20
     assert bundle.arbiter.override_budget_remaining == bundle.override_budget
 

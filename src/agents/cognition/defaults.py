@@ -177,9 +177,7 @@ class DirectSituationModeler:
         if not claims:
             claims.append(SituationClaimCode.IDLE)
         prior = (
-            None
-            if loop_input.snapshot is None
-            else loop_input.snapshot.emotional_state
+            None if loop_input.snapshot is None else loop_input.snapshot.emotional_state
         )
         from agents.cognition.emotion_bias import (
             EMOTION_BIAS_POLICY_VERSION,
@@ -194,9 +192,7 @@ class DirectSituationModeler:
         selection = list(c.value for c in ordered)
         if bias_applied:
             selection.append(f"emotion_bias:{EMOTION_BIAS_POLICY_VERSION}")
-            selection.extend(
-                f"emotion_focus:{code}" for code in sorted(focus_counts)
-            )
+            selection.extend(f"emotion_focus:{code}" for code in sorted(focus_counts))
         return SituationModel(
             owner_id=loop_input.agent_id,
             tick=perception.tick,
@@ -410,7 +406,9 @@ class PresentStateImagination:
         _ = self_state, memory, goal_board, emotional_state, prospective_policy
         _ = llm_provider, budget_ledger
         if SituationClaimCode.TERMINAL_SELF in situation.claim_codes:
-            claim_codes = (SituationClaimCode.TERMINAL_SELF,)
+            claim_codes: tuple[SituationClaimCode, ...] = (
+                SituationClaimCode.TERMINAL_SELF,
+            )
             future_id = "present-terminal"
         else:
             claim_codes = tuple(situation.claim_codes) or (SituationClaimCode.IDLE,)
@@ -762,10 +760,12 @@ class SubjectiveRevisionHook:
             tuple[AgentId, RelationshipSignalKind, MemoryTrace]
         ] = []
         for candidate in candidates:
-            trace = index.get(candidate.memory_id)
+            if candidate.memory_id not in index:
+                adjusted.append(candidate)
+                continue
+            trace = index[candidate.memory_id]
             if (
-                trace is None
-                or candidate.provenance_kind is not MemorySourceKind.COMMUNICATED
+                candidate.provenance_kind is not MemorySourceKind.COMMUNICATED
                 or trace.provenance.transmission is None
             ):
                 adjusted.append(candidate)

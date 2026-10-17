@@ -204,9 +204,7 @@ async def test_monotonic_danger_confidence_on_wait_mortality_or_harm() -> None:
 
 @pytest.mark.asyncio
 async def test_owner_isolation_foreign_belief_ignored() -> None:
-    observation = build_observation(
-        with_water=True, with_threat=True, with_exit=True
-    )
+    observation = build_observation(with_water=True, with_threat=True, with_exit=True)
     owned = build_belief(
         predicate="is_dangerous",
         confidence=0.9,
@@ -245,9 +243,7 @@ async def test_irrelevant_evidence_neutrality() -> None:
     observation = build_observation(with_threat=True, with_exit=True)
     baseline = await run_deliberation(build_loop_input(observation))
     irrelevant = (
-        build_belief(
-            predicate="is_blue", confidence=0.99, belief_id="belief-color"
-        ),
+        build_belief(predicate="is_blue", confidence=0.99, belief_id="belief-color"),
         build_belief(
             predicate="likes_music", confidence=0.99, belief_id="belief-music"
         ),

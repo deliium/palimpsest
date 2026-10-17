@@ -23,6 +23,16 @@ func apply_event(world: Variant, event: Variant) -> Dictionary:
 	var origin := "" if agent == null else str(agent.location_id)
 	var destination := "" if event.destination_location_id == null else str(event.destination_location_id)
 	var moved := false
+	if event.known and event.type in ["JOURNEY_STARTED", "JOURNEY_ARRIVED", "JOURNEY_ENDED"]:
+		for participant in event.participant_body_ids:
+			var traveller = _agent(world, participant)
+			if traveller == null:
+				continue
+			traveller.journey = event.journey if event.type == "JOURNEY_STARTED" else null
+			if event.type == "JOURNEY_ARRIVED":
+				traveller.location_id = destination
+				moved = true
+			activity[str(participant)] = str(event.type)
 	if event.known and event.type in MOVE_TYPES and destination != "" and agent != null:
 		agent.location_id = destination
 		moved = true

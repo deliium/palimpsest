@@ -122,9 +122,7 @@ async def test_ability_rate_follows_the_success_intervention() -> None:
     assert swapped_states is not None
     higher = max(
         swapped_states,
-        key=lambda owner: _aspect_rate(
-            swapped_states[owner], IdentityAspect.ABILITY
-        ),
+        key=lambda owner: _aspect_rate(swapped_states[owner], IdentityAspect.ABILITY),
     )
     assert higher == swapped_bundle.success_agent_id.value
     assert higher == "agent-b"

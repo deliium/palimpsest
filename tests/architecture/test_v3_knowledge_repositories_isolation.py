@@ -18,9 +18,7 @@ def test_cognition_does_not_import_knowledge_repository_metrics() -> None:
     hits: list[str] = []
     for path in (SRC / "agents" / "cognition").rglob("*.py"):
         hits.extend(
-            _module_imports_forbidden(
-                path, ("analysis.knowledge_repository_metrics",)
-            )
+            _module_imports_forbidden(path, ("analysis.knowledge_repository_metrics",))
         )
     assert hits == []
 
@@ -43,9 +41,7 @@ def test_api_does_not_import_analysis_repository_metrics() -> None:
     hits: list[str] = []
     for path in (SRC / "api").rglob("*.py"):
         hits.extend(
-            _module_imports_forbidden(
-                path, ("analysis.knowledge_repository_metrics",)
-            )
+            _module_imports_forbidden(path, ("analysis.knowledge_repository_metrics",))
         )
     assert hits == []
 

@@ -1,4 +1,4 @@
-"""Custody × artifact command matrix for knowledge repositories."""
+"""Custody and artifact command matrix for knowledge repositories."""
 
 from __future__ import annotations
 
@@ -107,9 +107,7 @@ def test_retrieve_then_transfer_succeeds() -> None:
     retrieved = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert retrieved.resolutions[0].status is ActionResolutionStatus.APPLIED
     # Already held after retrieve — deposit to floor then claim.

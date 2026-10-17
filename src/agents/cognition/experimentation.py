@@ -518,9 +518,7 @@ def compile_experiment_command(
     tick_value = tick if type(tick) is int and tick >= 0 else 0
     used = sum(1 for row in ledger.trials if row.tick == tick_value)
     if used + proposals_this_tick >= ledger.max_trials_per_tick:
-        _LOG.warning(
-            "experiment_draft_rejected reason_code=%s", "experiment_trial_cap"
-        )
+        _LOG.warning("experiment_draft_rejected reason_code=%s", "experiment_trial_cap")
         return ExperimentCompile(ledger, reason="experiment_trial_cap")
     observed = frozenset(observed_experiment_operand_ids(observation))
     action: ExperimentAction | None
@@ -594,9 +592,7 @@ def compile_experiment_command(
         created_tick=created_tick,
     )
     updated = admit_hypothesis(ledger, hypothesis)
-    matches = [
-        row for row in updated.hypotheses if row.hypothesis_id == hypothesis_id
-    ]
+    matches = [row for row in updated.hypotheses if row.hypothesis_id == hypothesis_id]
     if not matches:
         return ExperimentCompile(updated, reason="experiment_hypothesis_evicted")
     stored = matches[0]
@@ -614,9 +610,7 @@ def compile_experiment_command(
         stored.operator.value,
         stored.hypothesis_id[:12],
     )
-    return ExperimentCompile(
-        updated, command=command, hypothesis=stored
-    )
+    return ExperimentCompile(updated, command=command, hypothesis=stored)
 
 
 @dataclass(frozen=True, slots=True)

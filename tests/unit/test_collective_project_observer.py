@@ -46,7 +46,7 @@ _PROJECT_TYPES = (
 
 
 def test_semantic_catalog_counts_sixty_six() -> None:
-    assert len(SEMANTIC_EVENT_TYPES) == 69
+    assert len(SEMANTIC_EVENT_TYPES) == 72
     for name in _PROJECT_TYPES:
         assert name in SEMANTIC_EVENT_TYPES
 
@@ -137,9 +137,7 @@ def test_scene_lists_sorted_contributors_without_a_leader() -> None:
         items=(),
         resources=(),
         weather=(make_weather(),),
-        registrations=(
-            AgentRegistration(AgentId("agent-1"), EntityId("body-a")),
-        ),
+        registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-a")),),
         collective_projects=(project,),
     )
     frame = project_frame(

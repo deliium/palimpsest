@@ -62,7 +62,7 @@ def test_forbidden_content_kind_aliases_rejected() -> None:
         "lineage_clone",
     ):
         with pytest.raises(
-            ValueError, match="forbidden_content_kind_alias|unknown_content_kind"
+            ValueError, match=r"forbidden_content_kind_alias|unknown_content_kind"
         ):
             parse_mentorship_content_kind(alias)
 
@@ -174,9 +174,7 @@ def test_blank_slate_includes_mentorship_counters() -> None:
     assert "taught_content_lineage" in SUBJECTIVE_COPY_DENY_LIST
     for alias in ("mentor_pack", "apprentice_download", "lineage_clone"):
         assert alias in SUBJECTIVE_COPY_DENY_LIST
-    assert_blank_slate_subjective_state(
-        AgentId("entrant-m"), BlankSlateStoreCounts()
-    )
+    assert_blank_slate_subjective_state(AgentId("entrant-m"), BlankSlateStoreCounts())
     with pytest.raises(ValueError, match="subjective_copy_forbidden"):
         assert_blank_slate_subjective_state(
             AgentId("entrant-m"),

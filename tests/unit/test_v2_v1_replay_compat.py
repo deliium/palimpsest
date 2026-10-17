@@ -44,7 +44,7 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "runner_configs"
 
 def test_accepted_event_schemas_2_through_5_remain() -> None:
     assert EVENT_SCHEMA_VERSION == EVENT_SCHEMA_REPLAY_V5
-    assert ACCEPTED_EVENT_SCHEMA_VERSIONS == frozenset(
+    assert ACCEPTED_EVENT_SCHEMA_VERSIONS >= frozenset(
         {
             EVENT_SCHEMA_REPLAY_V2,
             EVENT_SCHEMA_REPLAY_V3,
@@ -79,7 +79,7 @@ def test_replay_version_gate_accepts_legacy_and_current() -> None:
             derivation_version="v3",
         )
     assert not _versions_compatible(
-        event_schema_version=6,
+        event_schema_version=max(ACCEPTED_EVENT_SCHEMA_VERSIONS) + 1,
         projector_version=PROJECTOR_VERSION,
         persistence_codec_version=PERSISTENCE_CODEC_VERSION,
         derivation_version="v3",
@@ -132,8 +132,6 @@ async def test_flags_off_v2_v3_preserve_objective_trajectory_not_config_fp() -> 
 
 def test_subjective_divergence_gate_remains_present() -> None:
     """Point at the existing objective-fold isolation proof (do not duplicate)."""
-    path = (
-        Path(__file__).resolve().parent / "test_simulation_replay_determinism.py"
-    )
+    path = Path(__file__).resolve().parent / "test_simulation_replay_determinism.py"
     text = path.read_text(encoding="utf-8")
     assert "def test_subjective_recall_cannot_change_objective_fingerprint" in text

@@ -81,9 +81,7 @@ def test_v2_scientific_invariants_ok() -> None:
         assert OBSERVER_GRAPHICAL_SCENARIO_ID not in spec.scenario_id
 
     # Recording replay proof path remains importable (contract pointer).
-    recording_test = (
-        _ROOT / "tests" / "integration" / "test_llm_recording_replay.py"
-    )
+    recording_test = _ROOT / "tests" / "integration" / "test_llm_recording_replay.py"
     assert recording_test.is_file()
 
     # Branch compare + matrix CLI + Research UI mount helpers exist.

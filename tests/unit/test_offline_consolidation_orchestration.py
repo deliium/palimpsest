@@ -252,9 +252,7 @@ def test_deadline_goal_is_left_to_the_goal_manager() -> None:
         snapshot=_snapshot(
             memories=(stale,),
             relationships=(_profile(),),
-            goals=(
-                _goal(goal_id="goal-due", belief_ref="m-old", deadline_tick=0),
-            ),
+            goals=(_goal(goal_id="goal-due", belief_ref="m-old", deadline_tick=0),),
         ),
         self_model=project_self_model(
             owner_id=AgentId("agent-1"), life_status=None, beliefs=()
@@ -274,9 +272,7 @@ def test_write_memory_intents_join_the_snapshot(
     pending = MemoryUpdateIntent(
         owner_id=AgentId("agent-1"),
         kind=MemoryUpdateKind.WRITE_MEMORY,
-        memory=_trace(
-            memory_id="m-b", concepts=("path", "water", "night", "only-b")
-        ),
+        memory=_trace(memory_id="m-b", concepts=("path", "water", "night", "only-b")),
     )
     with caplog.at_level(logging.DEBUG, logger="agents.cognition.consolidation"):
         plan = orchestrate_offline_consolidation(

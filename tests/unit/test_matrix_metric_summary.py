@@ -33,9 +33,7 @@ def _doc(family: str, values: dict[str, object], *, algo: str = "1") -> MetricDo
         coverage=None,
         availability=MetricAvailability.PRESENT,
         values=values,
-        provenance=MetricProvenance(
-            source_kind="test", source_ids=(), notes_code="ok"
-        ),
+        provenance=MetricProvenance(source_kind="test", source_ids=(), notes_code="ok"),
     )
 
 

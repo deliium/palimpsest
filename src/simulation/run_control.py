@@ -743,7 +743,9 @@ class AgentRuntimeCheckpoint:
             self.agent_id,
             field_name="cultural_features",
         )
-        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+        from agents.cognition.practical_knowledge import (
+            require_owner_practical_knowledge,
+        )
 
         require_owner_practical_knowledge(
             self.practical_knowledge,
@@ -822,8 +824,10 @@ class AgentRuntimeCheckpoint:
             self.agent_id,
             field_name="structured_commitments",
         )
-        from agents.cognition.subjective_value import require_owner_subjective_valuations
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+        from agents.cognition.subjective_value import (
+            require_owner_subjective_valuations,
+        )
 
         require_owner_subjective_valuations(
             self.subjective_valuations,

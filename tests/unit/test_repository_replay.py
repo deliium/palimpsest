@@ -218,9 +218,7 @@ def test_project_maintain_destroy_clears_custody() -> None:
     repo = projected.repositories[EntityId("repo-1")]
     assert repo.status is RepositoryStatus.DESTROYED
     assert repo.member_artifact_ids == ()
-    assert (
-        projected.artifacts[EntityId("art-1")].custodian_repository_id is None
-    )
+    assert projected.artifacts[EntityId("art-1")].custodian_repository_id is None
 
 
 def test_project_neglect_drops_index_entries() -> None:
@@ -256,9 +254,7 @@ def test_project_neglect_drops_index_entries() -> None:
         weather=fixture.weather,
         repositories=(repo,),
     )
-    event = _event(
-        RepositoryNeglected(EntityId("repo-1"), 1, "intact", "neglected", 1)
-    )
+    event = _event(RepositoryNeglected(EntityId("repo-1"), 1, "intact", "neglected", 1))
     projected = project_events(
         state,
         (event,),

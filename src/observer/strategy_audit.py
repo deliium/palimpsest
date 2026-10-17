@@ -8,8 +8,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from analysis.communication_strategy_metrics import classify_communication_audit
 from observer.version import OBSERVER_PROTOCOL_VERSION
+from simulation.communication_audit import classify_communication_audit
 from world.events import WorldEvent
 
 _LOGGER = logging.getLogger("observer.strategy_audit")

@@ -707,21 +707,21 @@ def test_v3_capability_flags_default_off_and_require_v23() -> None:
     with pytest.raises(ValueError, match="v3_capability_requires_v23"):
         replace(
             config,
-            v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+            v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
         )
 
     flagged = replace(
         config,
         schema_version=RUNNER_SCHEMA_VERSION_V23,
-        v3_capability_flags=V3CapabilityFlags(kinship_inheritance=True),
+        v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
     )
-    assert flagged.v3_capability_flags.enabled_names() == ("kinship_inheritance",)
+    assert flagged.v3_capability_flags.enabled_names() == ("institutional_economy",)
     assert flagged.v3_capability_flags.unimplemented_enabled_names() == (
-        "kinship_inheritance",
+        "institutional_economy",
     )
     assert flagged.v3_capability_flags.owned_enabled_names() == ()
     digest = v3_capability_flags_digest(flagged.v3_capability_flags)
     assert len(digest) == 64
     diagnostics = build_runner_diagnostics(flagged)
-    assert diagnostics.enabled_v3_capability_flags == ("kinship_inheritance",)
+    assert diagnostics.enabled_v3_capability_flags == ("institutional_economy",)
     assert len(diagnostics.v3_capability_flags_digest_prefix) == 12

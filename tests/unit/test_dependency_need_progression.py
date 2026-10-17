@@ -66,9 +66,7 @@ def _engine() -> WorldEngine:
         registrations=bootstrap.registrations, spec=spec
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=55, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=55, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=records,

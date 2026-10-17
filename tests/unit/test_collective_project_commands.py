@@ -75,9 +75,7 @@ def _run(state, requests, *, context=_CONTEXT, draw=None):
 
 def test_commands_round_trip() -> None:
     started = StartCollectiveProject("storage")
-    contributed = ContributeCollectiveProject(
-        EntityId("project-1"), EntityId("wood-1")
-    )
+    contributed = ContributeCollectiveProject(EntityId("project-1"), EntityId("wood-1"))
     bare = ContributeCollectiveProject(EntityId("project-1"))
     assert decode_domain(encode_domain(started)) == started
     assert decode_domain(encode_domain(contributed)) == contributed

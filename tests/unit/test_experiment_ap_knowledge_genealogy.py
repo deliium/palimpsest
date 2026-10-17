@@ -168,9 +168,9 @@ def test_arm_independent_discovery_holders_and_hop_zero() -> None:
     arm_id = "ap-independent-discovery"
     config = _arm(experiment_ap_knowledge_genealogy(_base()), arm_id)
     assert config.knowledge_genealogy is not None, arm_id
-    assert (
-        config.knowledge_genealogy.uptake_compose.independent_discovery is True
-    ), arm_id
+    assert config.knowledge_genealogy.uptake_compose.independent_discovery is True, (
+        arm_id
+    )
     owner = AgentId("agent-a")
     ledger = form_or_reinforce_practical_knowledge(
         empty_practical_knowledge_ledger(owner),
@@ -286,8 +286,7 @@ def test_arm_multi_parent_dag_direct_ledger() -> None:
         enabled_kinds=("foraging_method",),
     )
     audits = tuple(
-        entry_to_audit(row, tick=2, reason_code="combined")
-        for row in ledger.entries
+        entry_to_audit(row, tick=2, reason_code="combined") for row in ledger.entries
     )
     doc = compute_knowledge_genealogy_lineage(
         audits, run_id="run-ap", input_revision="rev-1", as_of_tick=2

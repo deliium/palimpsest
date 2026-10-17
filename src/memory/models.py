@@ -2554,6 +2554,7 @@ class MemoryRecallRequest:
     recall_context: MemoryRecallContext = MemoryRecallContext()
     derived_memory_id: MemoryId | None = None
     dynamics_policy: MemoryDynamicsPolicy | None = None
+    pre_retrieved: MemoryRetrieveResult | None = None
 
     def __post_init__(self) -> None:
         if type(self.retrieve) is not MemoryRetrieveRequest:
@@ -2599,6 +2600,15 @@ class MemoryRecallRequest:
             MemoryDynamicsPolicy
         ):
             raise TypeError("MemoryRecallRequest.dynamics_policy: invalid_type")
+        if self.pre_retrieved is not None:
+            if type(self.pre_retrieved) is not MemoryRetrieveResult:
+                raise TypeError("MemoryRecallRequest.pre_retrieved: invalid_type")
+            if (
+                self.pre_retrieved.retrieval_tick != self.retrieve.current_tick
+                or self.pre_retrieved.scoring_policy_version
+                != self.retrieve.scoring_policy.version
+            ):
+                raise ValueError("MemoryRecallRequest.pre_retrieved: request_mismatch")
 
     def __repr__(self) -> str:
         dynamics_version = (
@@ -3102,6 +3112,10 @@ def _memory_id_groups(
     seen: set[MemoryId] = set()
     copied: list[tuple[MemoryId, ...]] = []
     for index, group in enumerate(groups):
+        if isinstance(group, (str, bytes, bytearray)) or not isinstance(
+            group, Sequence
+        ):
+            raise TypeError(f"{name}[{index}]: not_ordered_sequence")
         members = _unique_memory_ids(
             f"{name}[{index}]",
             group,

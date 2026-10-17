@@ -73,9 +73,7 @@ def _ledger():
 
 
 def test_food_now_stays_open_and_material_later_fulfills() -> None:
-    opened = apply_structured_commitment_update(
-        _ledger(), _obs((_speech(),)), tick=1
-    )
+    opened = apply_structured_commitment_update(_ledger(), _obs((_speech(),)), tick=1)
     after_food = apply_structured_commitment_update(
         opened, _obs((_give("body-b", "body-a", "food", "evt-food"),)), tick=2
     )

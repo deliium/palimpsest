@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import logging
 
 import pytest
@@ -30,6 +28,7 @@ from tests.simulation_helpers import (
     weather_for_locations,
 )
 from world._state import World
+from world.communications import origin_utterance
 from world.events import Taken, Waited, make_replayable_event
 from world.identifiers import (
     EntityId,
@@ -162,7 +161,12 @@ def test_live_and_restored_observations_match_with_prior_events() -> None:
             ActionSubmission(
                 batch0.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), origin_utterance(text="parity-claim", speaker_id=EntityId("body-1"))),
+                Talk(
+                    EntityId("body-2"),
+                    origin_utterance(
+                        text="parity-claim", speaker_id=EntityId("body-1")
+                    ),
+                ),
             ),
         )
     )

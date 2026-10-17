@@ -13,7 +13,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from api.app import DatabaseResourcesLike, DisposableEngine, create_app
+from api.app import DisposableEngine, create_app
 from api.simulation_manager import SimulationManager, TickExecutionResult
 from infrastructure.logging import reset_logging_for_tests
 from infrastructure.settings import Settings, load_settings
@@ -131,9 +131,7 @@ async def test_auth_required_blocks_without_credential(logging_sandbox: None) ->
         assert response.status_code == 401
         assert response.headers["content-type"].startswith("application/problem+json")
         assert response.json()["code"] == "missing_credential"
-        ok = await client.get(
-            "/v1/simulations", headers={"x-palimpsest-token": strong}
-        )
+        ok = await client.get("/v1/simulations", headers={"x-palimpsest-token": strong})
         assert ok.status_code == 200
 
 

@@ -615,7 +615,7 @@ class RunnerPendingFinalizationOrm(Base):
     invocation_id: Mapped[str] = mapped_column(String(_STABLE_ID_LEN), nullable=False)
     integrity_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     codec_version: Mapped[str] = mapped_column(String(32), nullable=False)
-    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
         BigInteger, Identity(always=False), nullable=False
@@ -650,7 +650,7 @@ class RunnerAttemptStateOrm(Base):
     )
     integrity_hash: Mapped[str] = mapped_column(String(SHA256_HEX_LEN), nullable=False)
     codec_version: Mapped[str] = mapped_column(String(32), nullable=False)
-    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     created_ordinal: Mapped[int] = mapped_column(
         BigInteger, Identity(always=False), nullable=False
     )
@@ -1033,9 +1033,7 @@ class MetricSetOrm(Base):
             ondelete="RESTRICT",
         ),
         CheckConstraint(
-            "lifecycle_state IN ("
-            "'pending','running','complete','partial','failed'"
-            ")",
+            "lifecycle_state IN ('pending','running','complete','partial','failed')",
             name="ck_metric_sets_lifecycle",
         ),
         CheckConstraint("lifecycle_version >= 0", name="ck_metric_sets_version"),

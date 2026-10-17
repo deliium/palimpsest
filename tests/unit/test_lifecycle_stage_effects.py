@@ -8,8 +8,8 @@ import pytest
 
 from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 from world.lifecycle_effects import (
-    ContinuousLifecycleFactors,
     PASSTHROUGH_CONTINUOUS_FACTORS,
+    ContinuousLifecycleFactors,
     StageCapabilityEffect,
     interpolate_continuous_factors,
     resolve_stage_effect,
@@ -85,9 +85,7 @@ def test_resolve_stage_effect_lookup() -> None:
 
 def test_interpolate_disabled_holds_stage_constants() -> None:
     _LOG.debug("case_id=interpolate_disabled")
-    factors = interpolate_continuous_factors(
-        4, _THRESHOLDS, _EFFECTS, enabled=False
-    )
+    factors = interpolate_continuous_factors(4, _THRESHOLDS, _EFFECTS, enabled=False)
     assert factors == ContinuousLifecycleFactors(
         physical_capacity_factor=0.8,
         learning_rate_factor=1.5,
@@ -98,29 +96,19 @@ def test_interpolate_disabled_holds_stage_constants() -> None:
 def test_interpolate_enabled_lerps_within_band() -> None:
     _LOG.debug("case_id=interpolate_lerp")
     # learning band: ages 3..5; at age 3 (band_start) t=0 → learning factors
-    start = interpolate_continuous_factors(
-        3, _THRESHOLDS, _EFFECTS, enabled=True
-    )
+    start = interpolate_continuous_factors(3, _THRESHOLDS, _EFFECTS, enabled=True)
     assert start.physical_capacity_factor == pytest.approx(0.8)
     # at age 5 (band_end) t=1 → independent factors
-    end = interpolate_continuous_factors(
-        5, _THRESHOLDS, _EFFECTS, enabled=True
-    )
+    end = interpolate_continuous_factors(5, _THRESHOLDS, _EFFECTS, enabled=True)
     assert end.physical_capacity_factor == pytest.approx(1.0)
-    mid = interpolate_continuous_factors(
-        4, _THRESHOLDS, _EFFECTS, enabled=True
-    )
+    mid = interpolate_continuous_factors(4, _THRESHOLDS, _EFFECTS, enabled=True)
     assert mid.physical_capacity_factor == pytest.approx(0.9)
 
 
 def test_interpolate_final_stage_flat() -> None:
     _LOG.debug("case_id=interpolate_final_flat")
-    early = interpolate_continuous_factors(
-        11, _THRESHOLDS, _EFFECTS, enabled=True
-    )
-    late = interpolate_continuous_factors(
-        20, _THRESHOLDS, _EFFECTS, enabled=True
-    )
+    early = interpolate_continuous_factors(11, _THRESHOLDS, _EFFECTS, enabled=True)
+    late = interpolate_continuous_factors(20, _THRESHOLDS, _EFFECTS, enabled=True)
     assert early == late
     assert early.physical_capacity_factor == 0.7
 

@@ -59,7 +59,9 @@ def test_analytical_overlays_map_to_research_inference() -> None:
         epistemic_from_overlay_kind("emergent_group_formation")
         == EPISTEMIC_RESEARCH_INFERENCE
     )
-    assert epistemic_from_overlay_kind("spatial_control") == EPISTEMIC_RESEARCH_INFERENCE
+    assert (
+        epistemic_from_overlay_kind("spatial_control") == EPISTEMIC_RESEARCH_INFERENCE
+    )
     assert (
         epistemic_from_evidence_class("ANALYTICAL_INFERRED")
         == EPISTEMIC_RESEARCH_INFERENCE
@@ -67,10 +69,14 @@ def test_analytical_overlays_map_to_research_inference() -> None:
 
 
 def test_debugger_artifact_mapping() -> None:
-    assert epistemic_from_debugger_artifact("observation") == EPISTEMIC_AGENT_OBSERVATION
+    assert (
+        epistemic_from_debugger_artifact("observation") == EPISTEMIC_AGENT_OBSERVATION
+    )
     assert epistemic_from_debugger_artifact("memory") == EPISTEMIC_AGENT_MEMORY
     assert epistemic_from_debugger_artifact("belief") == EPISTEMIC_AGENT_BELIEF
-    assert epistemic_from_debugger_artifact("objective_event") == EPISTEMIC_OBJECTIVE_WORLD
+    assert (
+        epistemic_from_debugger_artifact("objective_event") == EPISTEMIC_OBJECTIVE_WORLD
+    )
 
 
 def test_build_query_omits_secrets_and_default_view() -> None:

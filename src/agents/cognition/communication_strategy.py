@@ -161,9 +161,7 @@ def communication_intent_id(
 ) -> str:
     """sha256 of owner, recipient, tick, strategy, and the source atom key."""
     key = canonical_source_atom_key(source_atom_tokens)
-    material = (
-        f"{owner_id.value}|{recipient_id.value}|{tick}|{strategy.value}|{key}"
-    )
+    material = f"{owner_id.value}|{recipient_id.value}|{tick}|{strategy.value}|{key}"
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
     return f"{_ID_PREFIX}{digest[:48]}"
 
@@ -401,9 +399,7 @@ def communication_intent(
         source_atom_tokens, Sequence
     ):
         raise _fail("source_atom_tokens", "invalid_type")
-    if isinstance(factor_codes, (str, bytes)) or not isinstance(
-        factor_codes, Sequence
-    ):
+    if isinstance(factor_codes, (str, bytes)) or not isinstance(factor_codes, Sequence):
         raise _fail("factor_codes", "invalid_type")
     tokens = tuple(source_atom_tokens)
     factors = tuple(factor_codes)
@@ -526,7 +522,7 @@ def _store_factors(
 def _anger_intensity(evaluation: EmotionalStateEvaluation) -> float:
     for entry in evaluation.state.intensities:
         if entry.kind is EmotionKind.ANGER:
-            return entry.value
+            return entry.intensity
     return 0.0
 
 
@@ -562,7 +558,8 @@ def _collect_factors(
         _owner_mismatch("goal_board", owner_id, goal_board.owner_id)
         by_id = {item.goal_id: item for item in goal_board.goals}
         for focus_id in goal_board.foci_ids:
-            outcome = by_id[focus_id].outcome.kind
+            goal_outcome = by_id[focus_id].outcome
+            outcome = None if goal_outcome is None else goal_outcome.kind
             if outcome is GoalOutcomeKind.PRESERVE_LIFE:
                 factors.add(CommunicationFactor.GOAL_PRESERVE_LIFE)
             else:
@@ -587,11 +584,7 @@ def _collect_factors(
         if type(mind) is not TheoryOfMind:
             raise TypeError("mind must be TheoryOfMind or None")
         _owner_mismatch("mind", owner_id, mind.owner_id)
-        active = (
-            default_theory_of_mind_policy()
-            if mind_policy is None
-            else mind_policy
-        )
+        active = default_theory_of_mind_policy() if mind_policy is None else mind_policy
         if type(active) is not TheoryOfMindPolicy:
             raise TypeError("mind_policy must be TheoryOfMindPolicy or None")
         _read_mind(
@@ -858,9 +851,7 @@ def choose_communication_strategy(
     )
     fallback_used = False
     if norms is not None:
-        _LOG.warning(
-            "communication_strategy_fallback reason_code=norms_unimplemented"
-        )
+        _LOG.warning("communication_strategy_fallback reason_code=norms_unimplemented")
         strategy = CommunicationStrategy.TRUTHFUL
         stance = SpeakerStance.ASSERT_MATCH
         divergence = CommunicationDivergence.NONE
@@ -870,7 +861,7 @@ def choose_communication_strategy(
         strategy, stance, divergence = _select_rule(
             factors, tokens=tokens, source_confidence=confidence
         )
-    stored = _store_factors(factors)
+    stored = _store_factors(tuple(factors))
     intent = communication_intent(
         owner_id=owner_id,
         recipient_id=recipient_id,
@@ -1022,10 +1013,12 @@ def render_communication_intent(
                 raise _fail("rendered_object_tokens", "empty_refusal_render")
     ask = kind == "ask"
     utterance = origin_utterance(
-        text=_utterance_text(tokens, ask=ask) if tokens else (
-            "decline" if intent.strategy is CommunicationStrategy.REFUSAL else (
-                _SAFE_ASK if ask else _SAFE_HELLO
-            )
+        text=_utterance_text(tokens, ask=ask)
+        if tokens
+        else (
+            "decline"
+            if intent.strategy is CommunicationStrategy.REFUSAL
+            else (_SAFE_ASK if ask else _SAFE_HELLO)
         ),
         speaker_id=speaker_id,
         communication_id=intent.intent_id,

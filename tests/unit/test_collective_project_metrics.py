@@ -22,8 +22,8 @@ from world.events import (
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def test_family_count_is_91() -> None:
-    assert METRIC_FAMILY_COUNT == 91
+def test_family_count_is_94() -> None:
+    assert METRIC_FAMILY_COUNT == 94
     assert MetricFamilyId.COLLECTIVE_PROJECT_OUTCOME.value == (
         "collective_project_outcome"
     )

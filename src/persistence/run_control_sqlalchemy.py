@@ -73,8 +73,7 @@ class SqlAlchemyRunControlRepository:
                     if (
                         existing.config_availability
                         == ConfigAvailability.UNAVAILABLE.value
-                        and record.config_availability
-                        is ConfigAvailability.AVAILABLE
+                        and record.config_availability is ConfigAvailability.AVAILABLE
                     ):
                         _apply_record(existing, record)
                         await session.commit()
@@ -154,7 +153,9 @@ class SqlAlchemyRunControlRepository:
             row.config_payload = record.config_payload
             result = _to_record(row)
             await session.commit()
-        _LOGGER.info("run_control_replaced", **fields, lifecycle_version=result.lifecycle_version)
+        _LOGGER.info(
+            "run_control_replaced", **fields, lifecycle_version=result.lifecycle_version
+        )
         return result
 
     async def transition(

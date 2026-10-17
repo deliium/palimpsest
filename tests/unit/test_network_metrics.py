@@ -16,19 +16,39 @@ from analysis.serialization import metric_document_fingerprint
 def _rows() -> list[RelationshipEdgeRow]:
     return [
         RelationshipEdgeRow(
-            source_id="a", target_id="b", logical_tick=1, activation_state="active", trust=0.8
+            source_id="a",
+            target_id="b",
+            logical_tick=1,
+            activation_state="active",
+            trust=0.8,
         ),
         RelationshipEdgeRow(
-            source_id="b", target_id="a", logical_tick=1, activation_state="active", trust=0.6
+            source_id="b",
+            target_id="a",
+            logical_tick=1,
+            activation_state="active",
+            trust=0.6,
         ),
         RelationshipEdgeRow(
-            source_id="b", target_id="c", logical_tick=2, activation_state="active", trust=0.4
+            source_id="b",
+            target_id="c",
+            logical_tick=2,
+            activation_state="active",
+            trust=0.4,
         ),
         RelationshipEdgeRow(
-            source_id="c", target_id="b", logical_tick=2, activation_state="active", trust=-0.9
+            source_id="c",
+            target_id="b",
+            logical_tick=2,
+            activation_state="active",
+            trust=-0.9,
         ),
         RelationshipEdgeRow(
-            source_id="d", target_id="a", logical_tick=3, activation_state="active", trust=0.0
+            source_id="d",
+            target_id="a",
+            logical_tick=3,
+            activation_state="active",
+            trust=0.0,
         ),
     ]
 

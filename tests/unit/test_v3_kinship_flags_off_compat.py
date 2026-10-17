@@ -116,7 +116,7 @@ async def test_unowned_v3_flags_still_fail_closed() -> None:
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V23,
         mortality_mode=MortalityMode.DISABLED,
-        v3_capability_flags=V3CapabilityFlags(multi_polity_migration=True),
+        v3_capability_flags=V3CapabilityFlags(institutional_economy=True),
     )
     with pytest.raises(Exception) as exc_info:
         await SimulationRunner.from_config(base, run_id=RunId("run-unowned"))

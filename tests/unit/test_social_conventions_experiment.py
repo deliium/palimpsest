@@ -67,12 +67,12 @@ def test_experiment_y_pairs_v4_and_v18(caplog: pytest.LogCaptureFixture) -> None
     assert all(
         body.location_id == EntityId("clearing") for body in disabled.scenario.bodies
     )
-    assert {
-        agent.cognition.social_convention_mode for agent in disabled.agents
-    } == {SocialConventionMode.DISABLED}
-    assert {
-        agent.cognition.social_convention_mode for agent in enabled.agents
-    } == {SocialConventionMode.DETERMINISTIC}
+    assert {agent.cognition.social_convention_mode for agent in disabled.agents} == {
+        SocialConventionMode.DISABLED
+    }
+    assert {agent.cognition.social_convention_mode for agent in enabled.agents} == {
+        SocialConventionMode.DETERMINISTIC
+    }
     assert any("experiment_y_built" in record.getMessage() for record in caplog.records)
     text = "".join(record.getMessage() for record in caplog.records)
     assert "ritual" not in text
@@ -95,9 +95,7 @@ def test_experiment_metric_harvest_includes_both_blocks() -> None:
                     "status": type("Status", (), {"value": "active"})(),
                     "strength": 0.5,
                     "participant_ids": ("ada", "ben"),
-                    "transmission": type(
-                        "Transmission", (), {"value": "observed"}
-                    )(),
+                    "transmission": type("Transmission", (), {"value": "observed"})(),
                     "remembered_explanation": type(
                         "Explanation", (), {"value": "social_contact"}
                     )(),

@@ -600,6 +600,7 @@ def _contribute(
                 contradiction_mass=current.contradiction_mass,
                 evidence=current.evidence,
             )
+            assert slot is not None
             heads[slot] = refreshed
         return
     if current is None and len(heads) >= policy.max_heads:

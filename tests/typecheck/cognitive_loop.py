@@ -26,6 +26,7 @@ from agents.cognition.contracts import (
 from agents.cognition.models import (
     ActionPlan,
     CognitiveLoopInput,
+    EmotionalStateEvaluation,
     GoalBoard,
     ImaginedFuture,
     IntentionCode,
@@ -156,7 +157,7 @@ class ScriptedEmotionalStateAppraiser:
         prior_state: object | None = None,
         *,
         counterfactual_scenarios: tuple[object, ...] = (),
-    ):
+    ) -> EmotionalStateEvaluation:
         from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
         from agents.cognition.models import AgentEmotionalState
 
@@ -289,6 +290,9 @@ class ScriptedPlanner:
         self_model: object | None = None,
         strategy_mode: object | None = None,
         strategy_policy: object | None = None,
+        reputation: object | None = None,
+        reputation_mode: object | None = None,
+        reputation_policy: object | None = None,
     ) -> ActionPlan:
         _ = (
             intention,

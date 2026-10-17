@@ -86,8 +86,9 @@ def _narrative_persistence(
     active: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
     active_count = len(active)
-    strengths = [_float(row, "strength") for row in active]
-    strengths = [value for value in strengths if value is not None]
+    strengths = [
+        value for row in active if (value := _float(row, "strength")) is not None
+    ]
     durations: list[float] = []
     for row in final_rows:
         if _text(row, "status") not in {"active", "merged"}:
@@ -150,22 +151,12 @@ def _mutation_rate(
     history: Sequence[Mapping[str, object]],
     active: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    founding = [
-        row
-        for row in history
-        if (_int(row, "mutation_generation") or 0) == 0
-    ]
-    children = [
-        row
-        for row in history
-        if (_int(row, "mutation_generation") or 0) >= 1
-    ]
+    founding = [row for row in history if (_int(row, "mutation_generation") or 0) == 0]
+    children = [row for row in history if (_int(row, "mutation_generation") or 0) >= 1]
     branch_rate: object = _ABSENT
     if founding:
         branch_rate = quantize_float(len(children) / len(founding))
-    generations = [
-        float(_int(row, "mutation_generation") or 0) for row in active
-    ]
+    generations = [float(_int(row, "mutation_generation") or 0) for row in active]
     # fingerprint churn: distinct fingerprints per transmission root
     by_root: dict[str, set[str]] = {}
     for row in history:
@@ -272,9 +263,7 @@ def _convergence(
     history: Sequence[Mapping[str, object]],
     active: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    merged_parents = [
-        row for row in history if _text(row, "status") == "merged"
-    ]
+    merged_parents = [row for row in history if _text(row, "status") == "merged"]
     ever_active = {
         _text(row, "variant_id")
         for row in history
@@ -287,14 +276,9 @@ def _convergence(
     parent_arities = [
         float(_int(row, "parent_count") or 0)
         for row in history
-        if (_int(row, "parent_count") or 0) >= 2
-        and _text(row, "status") == "active"
+        if (_int(row, "parent_count") or 0) >= 2 and _text(row, "status") == "active"
     ]
-    competing = [
-        row
-        for row in active
-        if (_int(row, "competing_count") or 0) >= 1
-    ]
+    competing = [row for row in active if (_int(row, "competing_count") or 0) >= 1]
     return {
         "merge_rate": merge_rate,
         "mean_parents_per_merge": (
@@ -311,10 +295,12 @@ def _convergence(
 def _geographic_social_spread(
     active: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    locations = [_float(row, "location_count") for row in active]
-    locations = [value for value in locations if value is not None]
-    carriers = [_float(row, "carrier_count") for row in active]
-    carriers = [value for value in carriers if value is not None]
+    locations = [
+        value for row in active if (value := _float(row, "location_count")) is not None
+    ]
+    carriers = [
+        value for row in active if (value := _float(row, "carrier_count")) is not None
+    ]
     multi = sum(1 for row in active if (_int(row, "location_count") or 0) >= 2)
     social = sum(1 for row in active if (_int(row, "carrier_count") or 0) >= 3)
     return {

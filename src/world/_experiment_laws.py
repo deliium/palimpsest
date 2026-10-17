@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Protocol, cast
 
 from world.experimentation import (
     ExperimentDeltaKind,
@@ -19,6 +19,18 @@ from world.production import ProductionCatalog, ToolMark
 from world.values import ItemKind, ResourceKind
 
 _LOG: Final[logging.Logger] = logging.getLogger("world._experiment_laws")
+
+
+class _LawRow(Protocol):
+    operator: str
+    operand_a_kind: str
+    operand_b_kind: str
+    process_token: str
+    outcome_class: str
+    delta: str
+    product_id: str
+    harm_band: str
+
 
 _EMIT: Final[frozenset[ExperimentDeltaKind]] = frozenset(
     {
@@ -71,9 +83,7 @@ class ExperimentLaw:
             raise _fail("experiment_law_delta_invalid")
         if type(self.harm_band) is not ExperimentHarmBand:
             raise _fail("experiment_law_harm_band_invalid")
-        object.__setattr__(
-            self, "operand_a_kind", _operand_token(self.operand_a_kind)
-        )
+        object.__setattr__(self, "operand_a_kind", _operand_token(self.operand_a_kind))
         allow_none = self.operator is ExperimentOperator.VARY_PROCESS
         if allow_none and self.operand_b_kind == "none":
             object.__setattr__(self, "operand_b_kind", "none")
@@ -183,9 +193,7 @@ class ExperimentLawCatalog:
     ) -> ExperimentLawResult:
         token_a = live_operand_token(operand_a)
         if operand_b is None:
-            token_b = (
-                "none" if operator is ExperimentOperator.VARY_PROCESS else None
-            )
+            token_b = "none" if operator is ExperimentOperator.VARY_PROCESS else None
         else:
             token_b = live_operand_token(operand_b)
         if token_a is None or token_b is None:
@@ -225,19 +233,18 @@ def catalog_from_rows(
     """Build a private catalog from closed string rows. Engine-only."""
     laws: list[ExperimentLaw] = []
     for row in rows:
+        fields = cast(_LawRow, row)
         laws.append(
             ExperimentLaw(
-                operator=ExperimentOperator(getattr(row, "operator")),
-                operand_a_kind=str(getattr(row, "operand_a_kind")),
-                operand_b_kind=str(getattr(row, "operand_b_kind")),
-                process_token=ExperimentProcessToken(getattr(row, "process_token")),
-                outcome_class=ExperimentOutcomeClass(getattr(row, "outcome_class")),
-                delta=ExperimentDeltaKind(getattr(row, "delta")),
-                product_id=str(getattr(row, "product_id")),
-                harm_band=ExperimentHarmBand(getattr(row, "harm_band")),
-                public_technique_token=str(
-                    getattr(row, "public_technique_token", "")
-                ),
+                operator=ExperimentOperator(fields.operator),
+                operand_a_kind=str(fields.operand_a_kind),
+                operand_b_kind=str(fields.operand_b_kind),
+                process_token=ExperimentProcessToken(fields.process_token),
+                outcome_class=ExperimentOutcomeClass(fields.outcome_class),
+                delta=ExperimentDeltaKind(fields.delta),
+                product_id=str(fields.product_id),
+                harm_band=ExperimentHarmBand(fields.harm_band),
+                public_technique_token=str(getattr(row, "public_technique_token", "")),
             )
         )
     return ExperimentLawCatalog(laws, production_catalog)

@@ -14,9 +14,15 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V6,
     RUNNER_SCHEMA_VERSION_V14,
     RUNNER_SCHEMA_VERSION_V22,
-    RUNNER_SCHEMA_VERSION_V23,
     RUNNER_SCHEMA_VERSION_V24,
+    RUNNER_SCHEMA_VERSION_V44,
     V3CapabilityFlags,
+)
+from world.regions import (
+    CognitionMode,
+    LocationRegion,
+    RegionDefinition,
+    RegionsMigrationSpec,
 )
 
 
@@ -61,16 +67,29 @@ def test_reflection_plus_budget_finalize_to_v22() -> None:
     assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V22
 
 
-def test_v3_flags_finalize_keeps_v23_as_highest_wins() -> None:
+def test_owned_migration_flag_finalizes_to_v44_highest_wins() -> None:
     base = matrix_reference_fixture_base()
-    # Unowned V3 scaffolding flag keeps finalize on v23.
+    regions = RegionsMigrationSpec(
+        regions=(RegionDefinition("matrix-region", "Matrix region"),),
+        location_regions=tuple(
+            LocationRegion(location.entity_id, "matrix-region")
+            for location in base.scenario.locations
+        ),
+        routes=(),
+        max_arrival_wait_ticks=0,
+        residence_min_ticks=1,
+        destination_memory_limit=1,
+        destination_hop_limit=1,
+        cognition_mode=CognitionMode.DISABLED,
+    )
     flagged = replace(
         base,
-        schema_version=RUNNER_SCHEMA_VERSION_V23,
+        schema_version=RUNNER_SCHEMA_VERSION_V44,
         v3_capability_flags=V3CapabilityFlags(multi_polity_migration=True),
+        regions_migration=regions,
     )
     finalized = finalize_matrix_cell_config(flagged)
-    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V23
+    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V44
     assert finalized.v3_capability_flags.multi_polity_migration is True
 
     with_budget = apply_factor_levels(
@@ -78,7 +97,7 @@ def test_v3_flags_finalize_keeps_v23_as_highest_wins() -> None:
         (("cognitive_budget", "high_cost"),),
     )
     finalized_budget = finalize_matrix_cell_config(with_budget)
-    assert finalized_budget.schema_version == RUNNER_SCHEMA_VERSION_V23
+    assert finalized_budget.schema_version == RUNNER_SCHEMA_VERSION_V44
 
 
 def test_generational_flag_finalize_to_v24() -> None:

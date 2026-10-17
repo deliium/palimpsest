@@ -26,9 +26,7 @@ def _fear_state() -> AgentEmotionalState:
     return AgentEmotionalState(
         owner_id=AgentId("agent-1"),
         tick=4,
-        intensities=(
-            EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.6),
-        ),
+        intensities=(EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.6),),
         last_update_tick=4,
         policy_version="emotion.v1",
     )

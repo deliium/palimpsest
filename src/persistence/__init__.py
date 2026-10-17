@@ -32,6 +32,32 @@ from simulation.persistence import (
 if TYPE_CHECKING:
     from memory.belief_formation import BeliefFormationPolicy
     from persistence.analysis_sqlalchemy import SqlAlchemyAnalysisEvidenceLoader
+    from persistence.branch_lineage_sqlalchemy import SqlAlchemyBranchLineageRepository
+    from persistence.cognition_trace_sqlalchemy import (
+        SqlAlchemyCognitionTraceRepository,
+    )
+    from persistence.debugger_sqlalchemy import CheckpointLookup
+    from persistence.experiment_sqlalchemy import SqlAlchemyExperimentRecordRepository
+    from persistence.inspection_sqlalchemy import (
+        SqlAlchemyInspectionEvidenceLoader,
+        SqlAlchemyObjectiveEvidenceLoader,
+        SqlAlchemySubjectiveEvidenceLoader,
+    )
+    from persistence.metric_sqlalchemy import (
+        SqlAlchemyMetricDocumentRepository,
+        SqlAlchemyMetricSetRepository,
+        SqlAlchemyTruthSpecRepository,
+    )
+    from persistence.run_control_sqlalchemy import SqlAlchemyRunControlRepository
+    from persistence.runner_sqlalchemy import (
+        SqlAlchemyPendingFinalizationRepository,
+        SqlAlchemyRunnerAttemptStateRepository,
+    )
+    from persistence.scientific_evidence_sqlalchemy import (
+        SqlAlchemyScientificEvidenceRepository,
+        SqlAlchemyStreamRepository,
+    )
+    from simulation.causal_debugger import DebuggerEventLookupPort
     from simulation.subjective_state import SubjectiveStateService
     from social.relationships import RelationshipFormationPolicy
 
@@ -120,7 +146,7 @@ def create_experiment_repository(
 
 def create_experiment_record_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyExperimentRecordRepository:
     """Build the append-only experiment definition/assignment/result repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -136,7 +162,7 @@ def create_experiment_record_repository(
 
 def create_pending_finalization_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyPendingFinalizationRepository:
     """Build the append-only pending finalization outbox repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -152,7 +178,7 @@ def create_pending_finalization_repository(
 
 def create_runner_attempt_state_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyRunnerAttemptStateRepository:
     """Build the append-only runner attempt recovery repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -168,7 +194,7 @@ def create_runner_attempt_state_repository(
 
 def create_run_control_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyRunControlRepository:
     """Build the durable run-control lifecycle/lease repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -184,7 +210,7 @@ def create_run_control_repository(
 
 def create_scientific_evidence_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyScientificEvidenceRepository:
     """Build the append-only scientific evidence repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -200,7 +226,7 @@ def create_scientific_evidence_repository(
 
 def create_stream_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyStreamRepository:
     """Build the unified durable stream/outbox repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -216,7 +242,7 @@ def create_stream_repository(
 
 def create_branch_lineage_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyBranchLineageRepository:
     """Build the control-plane research branch lineage repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -232,7 +258,7 @@ def create_branch_lineage_repository(
 
 def create_cognition_trace_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyCognitionTraceRepository:
     """Build the append-only cognition execution trace repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -248,7 +274,7 @@ def create_cognition_trace_repository(
 
 def create_debugger_event_lookup(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> DebuggerEventLookupPort:
     """Build indexed debugger event identity lookup (no Alembic bump)."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -263,8 +289,8 @@ def create_debugger_event_lookup(
 def create_debugger_lineage_ports(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     *,
-    checkpoint_lookup=None,
-):
+    checkpoint_lookup: CheckpointLookup | None = None,
+) -> dict[str, object]:
     """Build debugger lineage enrichment ports keyed by closed kind."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -278,7 +304,7 @@ def create_debugger_lineage_ports(
 
 def create_truth_spec_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyTruthSpecRepository:
     """Build the append-only claim truth-spec repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -292,7 +318,7 @@ def create_truth_spec_repository(
 
 def create_metric_set_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyMetricSetRepository:
     """Build the metric-set lifecycle repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -306,7 +332,7 @@ def create_metric_set_repository(
 
 def create_metric_document_repository(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyMetricDocumentRepository:
     """Build the append-only metric document repository."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -337,7 +363,7 @@ def create_analysis_evidence_loader(
 
 def create_objective_evidence_loader(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyObjectiveEvidenceLoader:
     """Build a run-scoped objective inspection event loader."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -352,7 +378,7 @@ def create_objective_evidence_loader(
 
 def create_subjective_evidence_loader(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemySubjectiveEvidenceLoader:
     """Build a run/owner-scoped subjective inspection loader (debug surface)."""
     if session_factory is None:
         raise PersistenceAdapterError(
@@ -367,7 +393,7 @@ def create_subjective_evidence_loader(
 
 def create_inspection_evidence_loader(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
-):
+) -> SqlAlchemyInspectionEvidenceLoader:
     """Build the combined objective/subjective inspection loader facade."""
     if session_factory is None:
         raise PersistenceAdapterError(

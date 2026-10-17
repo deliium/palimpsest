@@ -151,9 +151,7 @@ async def test_enabled_carry_does_not_change_the_command(
     assert enabled.group_formation.owner_id == owner
     assert enabled.group_formation.concepts == ()
 
-    carried_input, _carried = _snapshot(
-        owner, ledger=enabled.group_formation, tick=3
-    )
+    carried_input, _carried = _snapshot(owner, ledger=enabled.group_formation, tick=3)
     again = await enabled_loop.run(carried_input, invocation_id="inv-group-next")
     assert type(again.command) is Wait
     assert type(again.group_formation) is GroupLedger

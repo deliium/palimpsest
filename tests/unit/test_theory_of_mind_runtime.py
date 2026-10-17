@@ -109,9 +109,7 @@ async def test_flag_off_matches_passthrough_and_trace() -> None:
         loop_input, invocation_id="off"
     )
     passthrough = await build_cognitive_loop(
-        CognitionLoopConfig(
-            theory_of_mind_mode=CognitionTheoryOfMindMode.PASSTHROUGH
-        )
+        CognitionLoopConfig(theory_of_mind_mode=CognitionTheoryOfMindMode.PASSTHROUGH)
     ).run(loop_input, invocation_id="pass")
     assert off.theory_of_mind is None
     assert off.command == passthrough.command

@@ -329,9 +329,7 @@ def _member_status(
     return "aligned" if taker in members else "unaligned"
 
 
-def _convention(
-    ledgers: Sequence[PossessionLedgerSnapshot], location_id: str
-) -> str:
+def _convention(ledgers: Sequence[PossessionLedgerSnapshot], location_id: str) -> str:
     totals: dict[str, int] = {}
     for ledger in ledgers:
         if type(ledger) is not PossessionLedgerSnapshot:

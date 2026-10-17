@@ -45,8 +45,7 @@ def _base(*, max_ticks: int = 4, seed: int = 31):
 def test_bench_15_architecture_matrix_shared_world() -> None:
     result = build_benchmark_scenario(BENCH_15_ARCHITECTURE_MATRIX, _base())
     assert all(
-        item.condition_id.startswith("ac-")
-        for item in result.definition.conditions
+        item.condition_id.startswith("ac-") for item in result.definition.conditions
     )
     assert len(result.definition.conditions) >= 2
     fingerprints = {

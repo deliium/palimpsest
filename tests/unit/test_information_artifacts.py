@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.physical_helpers import two_location_fixture
+from world._state import WorldState
 from world.actions import (
     Amend,
     Erase,
@@ -22,7 +23,6 @@ from world.artifacts import (
     InformationArtifact,
 )
 from world.identifiers import EntityId, WorldRevision
-from world._state import WorldState
 
 pytestmark = pytest.mark.unit
 

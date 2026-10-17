@@ -56,9 +56,7 @@ def test_shared_upkeep_records_maintain_and_oppose_but_ignores_draw() -> None:
         OwnerSafeSocialIdentity(
             owner_id=owner,
             owner_entity_id=EntityId("body-ada"),
-            counterparts=(
-                CounterpartBinding(AgentId("ben"), EntityId("body-ben")),
-            ),
+            counterparts=(CounterpartBinding(AgentId("ben"), EntityId("body-ben")),),
         ),
     )
     belief = next(

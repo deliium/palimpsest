@@ -137,9 +137,7 @@ def test_early_death_n_plus_one_terminal_no_later_action(reference_outcome) -> N
     projection = result.final_objective_projection
     assert projection is not None
     nyx_body = next(
-        body
-        for body in projection.bodies
-        if body.entity_id == bundle.death_body_id
+        body for body in projection.bodies if body.entity_id == bundle.death_body_id
     )
     assert nyx_body.life_status is LifeStatus.DEAD
     assert reference_outcome.terminal_at_n_plus_one.get(AGENT_NYX) is True
@@ -199,13 +197,9 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
         if body.life_status is LifeStatus.DEAD:
             death_tick = reference_outcome.bundle.death_tick
             death_ticks[agent_id] = death_tick
-        survival.append(
-            SurvivalAgentRow(agent_id=agent_id, death_tick=death_tick)
-        )
+        survival.append(SurvivalAgentRow(agent_id=agent_id, death_tick=death_tick))
         holdings.append(
-            ResourceHoldingRow(
-                agent_id=agent_id, value=float(len(body.inventory))
-            )
+            ResourceHoldingRow(agent_id=agent_id, value=float(len(body.inventory)))
         )
     relationship_rows: list[RelationshipEdgeRow] = []
     for owner, profiles in reference_outcome.relationships.items():
@@ -250,27 +244,28 @@ def test_all_metric_families_assemble(reference_outcome) -> None:
     )
     bundle = assemble_metric_documents(inputs)
     produced = {doc.metric_family for doc in bundle.documents}
+    # This reference is V1/channel-off. Pin its ordinary metric contract;
+    # optional families need their own evidence and are verified by their arms.
     required = {
         family.value
-        for family in MetricFamilyId
-        if family
-        not in {
-            MetricFamilyId.MEMORY_DRIFT,
-            MetricFamilyId.MEMORY_DYNAMICS,
-            MetricFamilyId.OFFLINE_CONSOLIDATION,
-            MetricFamilyId.PROSPECTIVE_IMAGINATION,
-            MetricFamilyId.EMERGENT_GROUP_FORMATION,
-            MetricFamilyId.EMERGENT_SOCIAL_NORMS,
-            MetricFamilyId.PERSISTENT_SOCIAL_CONVENTIONS,
-            MetricFamilyId.EXTERNAL_ARTIFACT_MEMORY,
-            MetricFamilyId.PUBLIC_GOOD_CONTRIBUTION_INEQUALITY,
-            MetricFamilyId.PUBLIC_GOOD_BENEFIT_DISTRIBUTION,
-            MetricFamilyId.PUBLIC_GOOD_MAINTENANCE_BURDEN,
-            MetricFamilyId.PUBLIC_GOOD_FREE_RIDER_PATTERN,
-            MetricFamilyId.PUBLIC_GOOD_COOPERATION_STABILITY,
-        }
+        for family in (
+            MetricFamilyId.RESOURCE_INEQUALITY,
+            MetricFamilyId.COOPERATION,
+            MetricFamilyId.CONFLICT,
+            MetricFamilyId.SURVIVAL,
+            MetricFamilyId.GOAL_COMPLETION,
+            MetricFamilyId.REPEATED_CONVENTIONS,
+            MetricFamilyId.BEHAVIORAL_SPECIALIZATION,
+            MetricFamilyId.BELIEF_ACCURACY,
+            MetricFamilyId.FALSE_BELIEF_PERSISTENCE,
+            MetricFamilyId.RELATIONSHIP_STABILITY,
+            MetricFamilyId.TRUST_NETWORK_STRUCTURE,
+            MetricFamilyId.GROUP_COMMUNITY_STRUCTURE,
+            MetricFamilyId.KNOWLEDGE_DIFFUSION,
+            MetricFamilyId.RUMOR_DISTORTION,
+        )
     }
-    assert required.issubset(produced)
+    assert required.issubset(produced), sorted(required - produced)
     first = assemble_metric_documents(inputs)
     second = assemble_metric_documents(inputs)
     assert first.fingerprints == second.fingerprints

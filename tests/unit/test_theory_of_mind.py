@@ -634,9 +634,7 @@ def test_false_hunger_does_not_read_the_body() -> None:
     assert "Hunger" not in repr(hunger)
     assert "Goal" not in repr(hunger)
     assert all(atom.value != "12" for atom in hunger.atoms)
-    assert all(
-        atom.value not in {"weather", "rain"} for atom in hunger.atoms
-    )
+    assert all(atom.value not in {"weather", "rain"} for atom in hunger.atoms)
     assert not hasattr(model, "empirical_action")
 
 
@@ -941,9 +939,7 @@ def test_move_exit_and_false_attack_choose_direction() -> None:
     )
     rejected = cues_from_observation(nested_watch, owner_id=owner, policy=policy)
     assert any(cue.drop_code == "nested_mind_rejected" for cue in rejected)
-    stored_nested = update_theory_of_mind(
-        empty_theory_of_mind(owner), rejected, policy
-    )
+    stored_nested = update_theory_of_mind(empty_theory_of_mind(owner), rejected, policy)
     assert stored_nested.hypotheses == ()
     with pytest.raises(ValueError, match="nested_mind_rejected"):
         MindHypothesis(

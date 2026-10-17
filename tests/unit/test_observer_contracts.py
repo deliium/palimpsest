@@ -48,20 +48,20 @@ def _event(**overrides: object) -> ObserverEvent:
 
 def test_semantic_table_is_closed() -> None:
     assert tuple(SEMANTIC_TYPE_BY_KIND.values()) == SEMANTIC_EVENT_TYPES
-    assert len(SEMANTIC_EVENT_TYPES) == 69
-    assert SEMANTIC_EVENT_TYPES[-37:-33] == (
+    assert len(SEMANTIC_EVENT_TYPES) == 72
+    assert SEMANTIC_EVENT_TYPES[32:36] == (
         "ARTIFACT_CREATED",
         "ARTIFACT_MODIFIED",
         "ARTIFACT_MOVED",
         "ARTIFACT_DESTROYED",
     )
-    assert SEMANTIC_EVENT_TYPES[-33:-29] == (
+    assert SEMANTIC_EVENT_TYPES[36:40] == (
         "ARTIFACT_COPIED",
         "ARTIFACT_ANNOTATED",
         "ARTIFACT_DAMAGED",
         "ARTIFACT_PARTIALLY_LOST",
     )
-    assert SEMANTIC_EVENT_TYPES[-29:-22] == (
+    assert SEMANTIC_EVENT_TYPES[40:47] == (
         "AGENT_CREATED",
         "AGENT_ENTERED_WORLD",
         "AGENT_INITIALIZED",
@@ -70,7 +70,7 @@ def test_semantic_table_is_closed() -> None:
         "AGENT_FED",
         "AGENT_TRANSPORTED",
     )
-    assert SEMANTIC_EVENT_TYPES[-22:-15] == (
+    assert SEMANTIC_EVENT_TYPES[47:54] == (
         "REPOSITORY_ESTABLISHED",
         "REPOSITORY_MEMBER_DEPOSITED",
         "REPOSITORY_MEMBER_RETRIEVED",
@@ -79,25 +79,25 @@ def test_semantic_table_is_closed() -> None:
         "REPOSITORY_NEGLECTED",
         "EXPERIMENT_RESOLVED",
     )
-    assert SEMANTIC_EVENT_TYPES[-15:-11] == (
+    assert SEMANTIC_EVENT_TYPES[54:58] == (
         "CORPSE_CUSTODY_OPENED",
         "AGENT_TOOK_FROM_CORPSE",
         "POSSESSION_CLAIM_ASSERTED",
         "COMMITMENT_DECLARED",
     )
-    assert SEMANTIC_EVENT_TYPES[-11:-8] == (
+    assert SEMANTIC_EVENT_TYPES[58:61] == (
         "EXCHANGE_PROPOSED",
         "EXCHANGE_WITHDRAWN",
         "EXCHANGE_COMPLETED",
     )
-    assert SEMANTIC_EVENT_TYPES[-8:-3] == (
+    assert SEMANTIC_EVENT_TYPES[61:66] == (
         "PROJECT_CREATED",
         "PROJECT_CONTRIBUTED",
         "PROJECT_SHORTAGE",
         "PROJECT_ABANDONED",
         "PROJECT_COMPLETED",
     )
-    assert SEMANTIC_EVENT_TYPES[-3:] == (
+    assert SEMANTIC_EVENT_TYPES[66:69] == (
         "PUBLIC_GOOD_BENEFIT",
         "PUBLIC_GOOD_MAINTAINED",
         "PUBLIC_GOOD_OPPOSED",

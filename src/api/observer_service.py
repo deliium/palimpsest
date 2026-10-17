@@ -94,8 +94,7 @@ class ObserverReadService:
                 "branch_id": None,
             }
         summary = (
-            f"{loaded.intervention_kind.value}:"
-            f"{loaded.intervention_fingerprint[:12]}"
+            f"{loaded.intervention_kind.value}:{loaded.intervention_fingerprint[:12]}"
         )
         return {
             "run_id": run_id,
@@ -203,17 +202,13 @@ class ObserverReadService:
                 break
             for event in page.events:
                 item = adapt_event(event)
-                if event_type is not None and not _event_matches_type(
-                    item, event_type
-                ):
+                if event_type is not None and not _event_matches_type(item, event_type):
                     continue
                 if location_id is not None and not _event_matches_location(
                     item, location_id
                 ):
                     continue
-                if agent_id is not None and not _event_matches_agent(
-                    item, agent_id
-                ):
+                if agent_id is not None and not _event_matches_agent(item, agent_id):
                     continue
                 adapted.append(item)
                 if len(adapted) >= limit:
@@ -573,8 +568,10 @@ def _event_out(event: ObserverEvent) -> ObserverEventOut:
 
 
 def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
+    from dataclasses import asdict
+
     world = frame.world
-    payload = {
+    payload: dict[str, object] = {
         "protocol_version": frame.protocol_version,
         "cursor": {
             "run_id": frame.cursor.run_id,
@@ -595,6 +592,11 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
                     "display_name": item.display_name,
                     "neighbor_ids": list(item.neighbor_ids),
                     "presentation": _presentation(item.presentation),
+                    **(
+                        {"region_id": item.region_id, "region_label": item.region_label}
+                        if item.region_id is not None
+                        else {}
+                    ),
                 }
                 for item in world.locations
             ],
@@ -612,6 +614,11 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
                         "temperature": item.measures.temperature,
                     },
                     "agent_id": item.agent_id,
+                    **(
+                        {"journey": asdict(item.journey)}
+                        if item.journey is not None
+                        else {}
+                    ),
                     "presentation_slot": (
                         None
                         if item.presentation_slot is None
@@ -682,12 +689,14 @@ def _frame_out(frame: ObserverFrame) -> ObserverFrameOut:
         else [item.public_mapping() for item in frame.events],
     }
     if world.season is not None:
-        payload["world"]["season"] = world.season
-        payload["world"]["temperature_bands"] = [
+        world_payload = payload["world"]
+        assert isinstance(world_payload, dict)
+        world_payload["season"] = world.season
+        world_payload["temperature_bands"] = [
             {"location_id": item.location_id, "band": item.band}
             for item in world.temperature_bands
         ]
-        payload["world"]["hazards"] = [
+        world_payload["hazards"] = [
             {
                 "location_id": item.location_id,
                 "hazard_kind": item.hazard_kind,

@@ -305,9 +305,7 @@ def test_emotional_state_evaluation_and_component_kind() -> None:
             state=AgentEmotionalState(
                 owner_id=AgentId("other"),
                 tick=0,
-                intensities=(
-                    EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.1),
-                ),
+                intensities=(EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.1),),
                 last_update_tick=0,
                 policy_version="emotion.v1",
             ),

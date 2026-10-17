@@ -175,6 +175,5 @@ def test_materialize_assignments_preserves_v2_fields() -> None:
         is CognitiveBudgetMode.ENFORCED
     )
     assert (
-        budget_arm.runner_config.agents[0].cognition.cognitive_budget_limits
-        == limits
+        budget_arm.runner_config.agents[0].cognition.cognitive_budget_limits == limits
     )

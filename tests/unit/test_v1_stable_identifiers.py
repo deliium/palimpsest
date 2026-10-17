@@ -186,9 +186,8 @@ def test_derivation_v2_aliases_on_rules_fingerprint() -> None:
 
 
 def test_derivation_v3_mixes_stochastic_identity_into_ids() -> None:
-    from world.models import default_physical_rules
-
     from simulation.models import StochasticIdentity
+    from world.models import default_physical_rules
 
     rules = default_physical_rules()
     left = SimulationRunConfig(

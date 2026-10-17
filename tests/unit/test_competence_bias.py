@@ -187,9 +187,7 @@ def test_search_preference_follows_believed_domain() -> None:
 
 
 def test_believed_skill_does_not_change_level_zero_world_math() -> None:
-    model = _model(
-        {CompetenceDomain.FORAGING: 1.0, CompetenceDomain.NAVIGATION: 1.0}
-    )
+    model = _model({CompetenceDomain.FORAGING: 1.0, CompetenceDomain.NAVIGATION: 1.0})
     assert model.belief_for(CompetenceDomain.FORAGING).believed_level == 1.0
     policy = default_objective_skill_policy()
     rules = default_physical_rules()

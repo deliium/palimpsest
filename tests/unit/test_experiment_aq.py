@@ -367,9 +367,7 @@ def test_aq_llm_cannot_invent_physics() -> None:
 def test_aq_teach_record_cites_without_resolver_commands() -> None:
     config = _arm("aq-teach-record")
     assert config.durable_records is not None
-    assert (
-        config.agents[0].cognition.teaching_interaction_mode.value == "deterministic"
-    )
+    assert config.agents[0].cognition.teaching_interaction_mode.value == "deterministic"
     source = (_ROOT / "src" / "world" / "_experiment_apply.py").read_text(
         encoding="utf-8"
     )

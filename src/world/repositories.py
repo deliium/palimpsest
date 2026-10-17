@@ -118,9 +118,7 @@ class RepositoryIndexEntry:
     revision: int
 
     def __post_init__(self) -> None:
-        entry_id = require_stable_id(
-            "RepositoryIndexEntry.entry_id", self.entry_id
-        )
+        entry_id = require_stable_id("RepositoryIndexEntry.entry_id", self.entry_id)
         object.__setattr__(self, "entry_id", entry_id)
         if self.artifact_id is not None and type(self.artifact_id) is not EntityId:
             raise TypeError("RepositoryIndexEntry.artifact_id must be EntityId or None")
@@ -243,16 +241,16 @@ class KnowledgeRepository:
             raise TypeError("index_entries must be a sequence")
         entries: list[RepositoryIndexEntry] = []
         seen_entry_ids: set[str] = set()
-        for raw in self.index_entries:
-            if type(raw) is not RepositoryIndexEntry:
+        for index_entry in self.index_entries:
+            if type(index_entry) is not RepositoryIndexEntry:
                 raise TypeError("index_entries entries must be RepositoryIndexEntry")
-            if raw.entry_id in seen_entry_ids:
+            if index_entry.entry_id in seen_entry_ids:
                 raise ValueError(
-                    f"duplicate index entry_id {raw.entry_id!r} "
+                    f"duplicate index entry_id {index_entry.entry_id!r} "
                     "(code=repository_index_entry_duplicate)"
                 )
-            seen_entry_ids.add(raw.entry_id)
-            entries.append(raw)
+            seen_entry_ids.add(index_entry.entry_id)
+            entries.append(index_entry)
         object.__setattr__(self, "index_entries", tuple(entries))
         object.__setattr__(
             self,

@@ -148,9 +148,7 @@ class SqlAlchemyTruthSpecRepository:
                 return None
             return _truth_to_record(row)
 
-    async def list_truth_specs(
-        self, *, run_id: str
-    ) -> tuple[TruthSpecRecord, ...]:
+    async def list_truth_specs(self, *, run_id: str) -> tuple[TruthSpecRecord, ...]:
         async with session_scope(self._session_factory) as session:
             stmt = (
                 select(ClaimTruthSpecOrm)
@@ -319,9 +317,7 @@ class SqlAlchemyMetricDocumentRepository:
                 existing = await session.get(MetricDocumentOrm, key)
                 if existing is not None:
                     if _metric_document_matches(existing, record):
-                        _LOGGER.warning(
-                            "metric_document_identical_retry", **fields
-                        )
+                        _LOGGER.warning("metric_document_identical_retry", **fields)
                         return
                     _LOGGER.error(
                         "metric_document_divergent_conflict",
@@ -384,9 +380,7 @@ class SqlAlchemyMetricDocumentRepository:
         self, *, run_id: str, metric_set_id: str | None = None
     ) -> tuple[MetricDocumentRecord, ...]:
         async with session_scope(self._session_factory) as session:
-            stmt = select(MetricDocumentOrm).where(
-                MetricDocumentOrm.run_id == run_id
-            )
+            stmt = select(MetricDocumentOrm).where(MetricDocumentOrm.run_id == run_id)
             if metric_set_id is not None:
                 stmt = stmt.where(MetricDocumentOrm.metric_set_id == metric_set_id)
             stmt = stmt.order_by(

@@ -122,9 +122,7 @@ def _engine(*, active: bool, food_holder: str, material_holder: str | None):
         ),
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=17, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=17, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         structured_commitments_active=active,
         structured_commitments_horizon=8,
@@ -215,9 +213,7 @@ def test_food_stays_open_until_the_scripted_material_give() -> None:
         RUNNER_SCHEMA_VERSION_V39
     )
     engine = _engine(active=True, food_holder="body-b", material_holder="body-b")
-    _, declared = _step(
-        engine, {"agent-1": _declare(due_tick=8)}
-    )
+    _, declared = _step(engine, {"agent-1": _declare(due_tick=8)})
     assert _status(declared, "declare_commitment") is ActionResolutionStatus.APPLIED
     declared_kinds = [type(record.event.details) for record in declared.events]
     assert CommitmentDeclared in declared_kinds
@@ -272,9 +268,7 @@ def test_divergent_terms_forget_only_one_owners_traces() -> None:
     traces = {}
     for owner, entity in (("agent-1", "body-a"), ("agent-2", "body-b")):
         observation = next(
-            item
-            for item in heard.observations
-            if item.observer_id == EntityId(entity)
+            item for item in heard.observations if item.observer_id == EntityId(entity)
         )
         ledger = apply_structured_commitment_update(
             empty_structured_commitments(AgentId(owner)),
@@ -330,9 +324,7 @@ def test_no_collection_leaves_health_and_inventory() -> None:
     _, declared = _step(engine, {"agent-1": _declare(due_tick=0)})
     heard, _passed = _step(engine, {})
     observation = next(
-        item
-        for item in heard.observations
-        if item.observer_id == EntityId("body-a")
+        item for item in heard.observations if item.observer_id == EntityId("body-a")
     )
     ledger = apply_structured_commitment_update(
         empty_structured_commitments(AgentId("agent-1")),

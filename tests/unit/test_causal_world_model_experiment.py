@@ -156,8 +156,10 @@ def test_false_search_belief_keeps_confidence_and_reports_error() -> None:
     audit = build_world_model_audit(model)
     assert not hasattr(audit.snapshots[0], "evidence_ids")
     events = (
-        *(_search_event(event_id=f"evt-ok-{index}", success=True, sequence=index)
-          for index in range(9)),
+        *(
+            _search_event(event_id=f"evt-ok-{index}", success=True, sequence=index)
+            for index in range(9)
+        ),
         _search_event(event_id="evt-miss", success=False, sequence=9),
     )
     report = compute_causal_world_model_metrics(
@@ -363,9 +365,7 @@ async def test_foreign_id_and_missing_provider_keep_confidence_order(
         outcome=CausalOutcome.DANGER,
         support=4.0,
     )
-    model = CausalWorldModel(
-        owner_id=_OWNER, hypotheses=(hypothesis,), last_tick=2
-    )
+    model = CausalWorldModel(owner_id=_OWNER, hypotheses=(hypothesis,), last_tick=2)
     missing = await select_world_model_hypotheses(
         model,
         default_world_model_policy(allow_provider=True),
@@ -377,9 +377,7 @@ async def test_foreign_id_and_missing_provider_keep_confidence_order(
     provider = FakeLLMProvider()
     provider.enqueue(
         "world-model-2-agent-1",
-        ScriptedSuccess(
-            output=WorldModelSelectionOutput(selected_ids=("ch-foreign",))
-        ),
+        ScriptedSuccess(output=WorldModelSelectionOutput(selected_ids=("ch-foreign",))),
     )
     foreign = await select_world_model_hypotheses(
         model,
@@ -389,6 +387,7 @@ async def test_foreign_id_and_missing_provider_keep_confidence_order(
     )
     assert foreign.selection_fallback_used is True
     assert foreign.preferred_ids == ()
+
     class SchemaFailure:
         async def generate(self, request: object) -> object:
             raise ValueError("schema_rejected")

@@ -60,9 +60,7 @@ _INTERRUPT_KINDS: Final[frozenset[str]] = frozenset(
         "drink",
     }
 )
-_LOCATION_TARGET_KINDS: Final[frozenset[str]] = frozenset(
-    {"location", "frequent_area"}
-)
+_LOCATION_TARGET_KINDS: Final[frozenset[str]] = frozenset({"location", "frequent_area"})
 _TARGET_KINDS: Final[frozenset[str]] = frozenset(
     {"location", "shelter", "stored_resource", "frequent_area"}
 )
@@ -167,9 +165,7 @@ def compute_spatial_control(
         "layer": _LAYER,
         "repeated_control": bool(repeated),
         "control_contest": bool(contested),
-        "claim_contest": (
-            True if claim_reading else MetricAvailability.ABSENT.value
-        ),
+        "claim_contest": (True if claim_reading else MetricAvailability.ABSENT.value),
         "contest_source": contest_source,
         "window_count": len(windows),
         "intervals": intervals,
@@ -381,9 +377,7 @@ def _control_contests(windows: Sequence[_Window]) -> tuple[str, ...]:
             agents[location_id].add(agent_id)
     return tuple(
         sorted(
-            location_id
-            for location_id, owners in agents.items()
-            if len(owners) >= 2
+            location_id for location_id, owners in agents.items() if len(owners) >= 2
         )
     )
 

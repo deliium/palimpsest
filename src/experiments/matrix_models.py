@@ -100,9 +100,7 @@ def _sha256_hex(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _require_ordered_mapping(
-    name: str, value: object
-) -> tuple[tuple[str, str], ...]:
+def _require_ordered_mapping(name: str, value: object) -> tuple[tuple[str, str], ...]:
     if isinstance(value, (set, frozenset)):
         raise MatrixValidationError("unordered_mapping", f"{name} must be ordered")
     if not isinstance(value, Mapping):
@@ -641,7 +639,7 @@ def matrix_identity_document(spec: ExperimentMatrixSpec) -> dict[str, object]:
     """Canonical matrix identity document (excludes execution runtime policy)."""
     if type(spec) is not ExperimentMatrixSpec:
         raise TypeError("matrix_identity_document requires ExperimentMatrixSpec")
-    if type(spec.base) is MatrixEmbeddedBase:
+    if isinstance(spec.base, MatrixEmbeddedBase):
         base_doc: dict[str, object] = {
             "kind": "embedded",
             "config_fingerprint": runner_config_fingerprint(spec.base.runner_config),

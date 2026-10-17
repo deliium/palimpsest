@@ -98,7 +98,7 @@ def encode_matrix_spec_document(spec: ExperimentMatrixSpec) -> dict[str, object]
     """Encode a matrix spec to a plain JSON-ready mapping (includes execution)."""
     if type(spec) is not ExperimentMatrixSpec:
         raise TypeError("encode_matrix_spec_document requires ExperimentMatrixSpec")
-    if type(spec.base) is MatrixEmbeddedBase:
+    if isinstance(spec.base, MatrixEmbeddedBase):
         base_doc: dict[str, object] = {
             "kind": "embedded",
             "runner_config": json.loads(
@@ -392,9 +392,7 @@ def _decode_constraints(data: Mapping[str, Any], *, path: str) -> MatrixConstrai
     return MatrixConstraints(exclude_combos=tuple(combos))
 
 
-def _decode_groups(
-    raw: object, *, path: str
-) -> tuple[MatrixGroupOverlay, ...]:
+def _decode_groups(raw: object, *, path: str) -> tuple[MatrixGroupOverlay, ...]:
     if not isinstance(raw, list):
         raise MatrixSerializationError("invalid_array", path)
     groups: list[MatrixGroupOverlay] = []
@@ -421,9 +419,7 @@ def _decode_groups(
             groups.append(
                 MatrixGroupOverlay(
                     group_id=_str_field(group_raw, "group_id", path=group_path),
-                    level_match=tuple(
-                        (str(k), str(v)) for k, v in match_raw.items()
-                    ),
+                    level_match=tuple((str(k), str(v)) for k, v in match_raw.items()),
                     group_role=role,
                 )
             )

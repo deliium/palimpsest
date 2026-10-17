@@ -146,8 +146,7 @@ def note_exchange_completed(
         raise TypeError("ledger must be AcceptanceMemoryLedger")
     if observation_tick - source_tick > window_ticks:
         _LOG.debug(
-            "acceptance_event_ignored owner_id=%s source_tick=%s "
-            "observation_tick=%s",
+            "acceptance_event_ignored owner_id=%s source_tick=%s observation_tick=%s",
             ledger.owner_id.value,
             source_tick,
             observation_tick,

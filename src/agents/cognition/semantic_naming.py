@@ -440,21 +440,24 @@ class LabelBinding:
         if quantized < 0.0 or quantized > 1.0:
             raise _fail("strength", "out_of_range")
         object.__setattr__(self, "strength", quantized)
-        if isinstance(self.evidence_count, bool) or type(
-            self.evidence_count
-        ) is not int:
+        if (
+            isinstance(self.evidence_count, bool)
+            or type(self.evidence_count) is not int
+        ):
             raise _fail("evidence_count", "invalid_type")
         if self.evidence_count < 0:
             raise _fail("evidence_count", "out_of_range")
-        if isinstance(self.sense_revision, bool) or type(
-            self.sense_revision
-        ) is not int:
+        if (
+            isinstance(self.sense_revision, bool)
+            or type(self.sense_revision) is not int
+        ):
             raise _fail("sense_revision", "invalid_type")
         if self.sense_revision < 0:
             raise _fail("sense_revision", "out_of_range")
-        if isinstance(self.meaning_shift_streak, bool) or type(
-            self.meaning_shift_streak
-        ) is not int:
+        if (
+            isinstance(self.meaning_shift_streak, bool)
+            or type(self.meaning_shift_streak) is not int
+        ):
             raise _fail("meaning_shift_streak", "invalid_type")
         if self.meaning_shift_streak < 0:
             raise _fail("meaning_shift_streak", "out_of_range")
@@ -609,9 +612,7 @@ class NamingCueSummary:
 
     def __post_init__(self) -> None:
         groups = _require_tuple("group_concept_ids", self.group_concept_ids)
-        practices = _require_tuple(
-            "practice_action_kinds", self.practice_action_kinds
-        )
+        practices = _require_tuple("practice_action_kinds", self.practice_action_kinds)
         checked_groups: list[str] = []
         checked_practices: list[str] = []
         for item in groups:
@@ -629,9 +630,7 @@ class NamingCueSummary:
                     "invalid_token",
                 )
                 raise _fail("group_concept_ids", "invalid_token")
-            is_hex = (
-                len(item) == 64 and all(char in _HEX for char in item)
-            )
+            is_hex = len(item) == 64 and all(char in _HEX for char in item)
             if not is_hex and not _LABEL_TOKEN_RE.fullmatch(item):
                 _LOG.warning(
                     "naming_cues_dropped reason=%s",
@@ -1090,9 +1089,7 @@ def _record_evidence(
     ordinal = len(draft.evidence)
     draft.evidence.append(
         NamingEvidenceItem(
-            evidence_id=naming_evidence_id(
-                binding_id, ordinal, channel, lineage_ref
-            ),
+            evidence_id=naming_evidence_id(binding_id, ordinal, channel, lineage_ref),
             ordinal=ordinal,
             channel=channel,
             lineage_ref=lineage_ref,
@@ -1137,9 +1134,7 @@ def _apply_observation_cues(
     tick = observation.tick
     ordinal = 0
     location = (
-        None
-        if observation.self_body is None
-        else observation.self_body.location_id
+        None if observation.self_body is None else observation.self_body.location_id
     )
     if location is not None:
         token = _seed_token(owner_id, NamingReferentKind.LOCATION, location.value)
@@ -1164,9 +1159,7 @@ def _apply_observation_cues(
                 _notice(notices, "unresolved_entity")
                 _log_drop("unresolved_entity")
                 continue
-            agent_token = _seed_token(
-                owner_id, NamingReferentKind.AGENT, agent.value
-            )
+            agent_token = _seed_token(owner_id, NamingReferentKind.AGENT, agent.value)
             _record_evidence(
                 drafts=drafts,
                 notices=notices,
@@ -1211,9 +1204,7 @@ def _apply_observation_cues(
             if owner_id.value not in actors or len(actors) < 2 or location is None:
                 continue
             referent = f"{action_kind}|{location.value}"
-            token = _seed_token(
-                owner_id, NamingReferentKind.RECURRING_EVENT, referent
-            )
+            token = _seed_token(owner_id, NamingReferentKind.RECURRING_EVENT, referent)
             _record_evidence(
                 drafts=drafts,
                 notices=notices,
@@ -1487,9 +1478,7 @@ def _apply_memory_reinforcement(
             _log_drop("memory_no_match")
         return
     remembered_seen: set[tuple[str, str]] = set()
-    by_token = {
-        (draft.label_token, draft.referent_kind): draft for draft in drafts
-    }
+    by_token = {(draft.label_token, draft.referent_kind): draft for draft in drafts}
     matched_any = False
     for trace in memories:
         if getattr(trace, "forgotten_at_tick", None) is not None:
@@ -1620,10 +1609,7 @@ def _link_competitors(
             other_top = _top_candidate(other)
             if other_top is None:
                 continue
-            if (
-                other_top.kind is top.kind
-                and other_top.entity_id == top.entity_id
-            ):
+            if other_top.kind is top.kind and other_top.entity_id == top.entity_id:
                 competitors.append(
                     label_binding_id(
                         # owner filled later in freeze; store token-kind pair via temp
@@ -1804,10 +1790,7 @@ def _freeze(
                 other_top = _top_candidate(other)
                 if other_top is None:
                     continue
-                if (
-                    other_top.kind is top.kind
-                    and other_top.entity_id == top.entity_id
-                ):
+                if other_top.kind is top.kind and other_top.entity_id == top.entity_id:
                     competitor_ids.append(
                         token_to_id[(other.label_token, other.referent_kind)]
                     )

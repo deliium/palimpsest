@@ -625,8 +625,7 @@ def apply_developmental_budget_coupling(
             policy=policy,
         )
     _LOG.debug(
-        "developmental_budget owner_id=%s remaining=%s cost=%s policy=%s "
-        "acquired=%s",
+        "developmental_budget owner_id=%s remaining=%s cost=%s policy=%s acquired=%s",
         owner_id.value,
         decision.remaining,
         cost,
@@ -744,9 +743,8 @@ def resolve_developmental_rate_hints(
         needs = getattr(body, "dependency_needs", None)
         rows = getattr(needs, "needs", ()) if needs is not None else ()
         for row in rows:
-            if (
-                getattr(row, "need_id", None) == "learning"
-                and bool(getattr(row, "critical", False))
+            if getattr(row, "need_id", None) == "learning" and bool(
+                getattr(row, "critical", False)
             ):
                 learning_rate_zero = True
                 break

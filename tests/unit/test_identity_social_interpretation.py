@@ -44,9 +44,7 @@ def _view(
         identity_predicate(aspect, provenance, token),
         ClaimValue(kind=BeliefValueKind.BOOL, bool_value=True),
     )
-    point = IdentityRevisionPoint(
-        ordinal=0, tick=1, confidence=0.8, contradicted=False
-    )
+    point = IdentityRevisionPoint(ordinal=0, tick=1, confidence=0.8, contradicted=False)
     summary = IdentityRevisionSummary(
         ordinal=0, tick=1, activation=BeliefActivationState.ACTIVE
     )
@@ -74,9 +72,7 @@ def _state(*views: object) -> IdentityState:
 
 
 def test_missing_views_leave_trust_unchanged() -> None:
-    trust, factor = scale_trust_for_identity(
-        0.4, identity=None, counterpart_id=_OTHER
-    )
+    trust, factor = scale_trust_for_identity(0.4, identity=None, counterpart_id=_OTHER)
     assert trust == 0.4
     assert factor == 1.0
     empty = _state()
@@ -109,9 +105,7 @@ def test_full_support_raises_trust_inside_the_ceiling() -> None:
     assert factor == pytest.approx(policy.social_scale_ceiling)
     scaled, _ = scale_trust_for_identity(0.5, identity=identity, counterpart_id=_OTHER)
     assert scaled == pytest.approx(quantize_score(0.5 * policy.social_scale_ceiling))
-    clamped, _ = scale_trust_for_identity(
-        1.0, identity=identity, counterpart_id=_OTHER
-    )
+    clamped, _ = scale_trust_for_identity(1.0, identity=identity, counterpart_id=_OTHER)
     assert clamped == 1.0
 
 

@@ -40,9 +40,7 @@ def _developmental_engine(
     items: tuple = (),
     inventory: tuple[EntityId, ...] = (),
 ) -> WorldEngine:
-    body = alive_body(
-        "body-1", carry_capacity=carry_capacity, inventory=inventory
-    )
+    body = alive_body("body-1", carry_capacity=carry_capacity, inventory=inventory)
     bootstrap = WorldBootstrap(
         world_id=WorldId("world-capacity-fatigue"),
         revision=WorldRevision(0),
@@ -88,9 +86,7 @@ def _developmental_engine(
         registrations=bootstrap.registrations, spec=spec
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=31, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=31, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=records,
@@ -128,9 +124,7 @@ def test_effects_off_omits_capacity_map() -> None:
         registrations=bootstrap.registrations, spec=spec
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=33, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=33, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=records,
@@ -183,9 +177,7 @@ def test_overload_denies_new_take_without_forced_drop() -> None:
     )
     assert after_load == 5
     assert EntityId("item-held") in body_after.inventory
-    assert (
-        engine._snapshot.world.state.items[EntityId("item-ground")].holder_id is None
-    )
+    assert engine._snapshot.world.state.items[EntityId("item-ground")].holder_id is None
 
 
 def test_fatigue_factor_multiplies_metabolism_map() -> None:
@@ -197,13 +189,9 @@ def test_fatigue_factor_multiplies_metabolism_map() -> None:
     assert metabolism is not None
     assert metabolism[body_id] == 1.5
     batch = engine.observe()
-    engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId("agent-1"), Wait()),)
-    )
+    engine.resolve_tick((ActionSubmission(batch.token, AgentId("agent-1"), Wait()),))
     # Stored capacity still untouched after a tick with effects active.
-    assert (
-        engine._snapshot.world.state.bodies[body_id].carry_capacity.value == 10
-    )
+    assert engine._snapshot.world.state.bodies[body_id].carry_capacity.value == 10
 
 
 def test_age_zero_uses_dependent_factor_immediately() -> None:

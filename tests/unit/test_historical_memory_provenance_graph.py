@@ -154,9 +154,7 @@ def test_teaching_skip_when_flag_off() -> None:
     graph = build_historical_provenance_graph(
         as_of_tick=1,
         sources=(source,),
-        teaching_edges=(
-            SimpleNamespace(teacher_id="t1", learner_id="l1", at_tick=1),
-        ),
+        teaching_edges=(SimpleNamespace(teacher_id="t1", learner_id="l1", at_tick=1),),
         include_teaching_edges=False,
     )
     assert "teaching_edges_skipped" in graph.build_reason_codes
@@ -174,9 +172,7 @@ def test_died_events_build_death_ticks_ad_hoc() -> None:
         witness_rows=(
             SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
-        died_events=(
-            SimpleNamespace(kind="Died", agent_id="w1", tick=3),
-        ),
+        died_events=(SimpleNamespace(kind="Died", agent_id="w1", tick=3),),
     )
     assert graph.living_witness_count == 0
     assert graph.witness_count == 1

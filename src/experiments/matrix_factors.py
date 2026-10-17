@@ -12,7 +12,6 @@ from collections.abc import Callable
 from dataclasses import fields, replace
 from typing import Final
 
-from agents.cognition.budget import high_cost_budget_limits, low_cost_budget_limits
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
 from experiments.matrix_models import (
@@ -21,6 +20,10 @@ from experiments.matrix_models import (
     MatrixValidationError,
 )
 from experiments.territorial_scenario import territorial_worlds
+from simulation.cognition_contracts import (
+    high_cost_budget_limits,
+    low_cost_budget_limits,
+)
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
@@ -287,10 +290,13 @@ def _level_table(
     factor: MatrixFactorId,
     apply: Callable[[SimulationRunnerConfig, str], SimulationRunnerConfig],
 ) -> dict[str, FactorApplicator]:
-    return {
-        level: (lambda cfg, lid=level: apply(cfg, lid))
-        for level in LOCKED_FACTOR_LEVEL_IDS[factor.value]
-    }
+    def bind(level: str) -> FactorApplicator:
+        def apply_level(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
+            return apply(config, level)
+
+        return apply_level
+
+    return {level: bind(level) for level in LOCKED_FACTOR_LEVEL_IDS[factor.value]}
 
 
 _APPLICATORS: Final[dict[MatrixFactorId, dict[str, FactorApplicator]]] = {

@@ -41,12 +41,8 @@ __all__ = [
     "compute_knowledge_genealogy_mutation",
 ]
 
-KNOWLEDGE_GENEALOGY_HOLDERS_METRIC_VERSION: Final[str] = (
-    "knowledge_genealogy_holders@1"
-)
-KNOWLEDGE_GENEALOGY_LINEAGE_METRIC_VERSION: Final[str] = (
-    "knowledge_genealogy_lineage@1"
-)
+KNOWLEDGE_GENEALOGY_HOLDERS_METRIC_VERSION: Final[str] = "knowledge_genealogy_holders@1"
+KNOWLEDGE_GENEALOGY_LINEAGE_METRIC_VERSION: Final[str] = "knowledge_genealogy_lineage@1"
 KNOWLEDGE_GENEALOGY_MUTATION_METRIC_VERSION: Final[str] = (
     "knowledge_genealogy_mutation@1"
 )
@@ -254,9 +250,7 @@ def compute_knowledge_genealogy_lineage(
         if node.kind is KnowledgeGenealogyNodeKind.INDEPENDENT_ROOT
     ]
     multi_parent = sum(
-        1
-        for row in rows
-        if len(tuple(getattr(row, "parent_entry_ids", ()) or ())) >= 2
+        1 for row in rows if len(tuple(getattr(row, "parent_entry_ids", ()) or ())) >= 2
     )
     combination = sum(
         1 for row in rows if str(getattr(row, "origin", "")) == "combination"
@@ -354,8 +348,7 @@ def compute_knowledge_genealogy_mutation(
         values[f"origin_{origin}_count"] = count
     # Ensure we never leak fingerprints into notes/values keys.
     assert not any(
-        "fingerprint" in key and key != "mean_fingerprint_distance_q"
-        for key in values
+        "fingerprint" in key and key != "mean_fingerprint_distance_q" for key in values
     )
     return _document(
         spec,

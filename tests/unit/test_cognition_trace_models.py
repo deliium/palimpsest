@@ -54,15 +54,15 @@ def test_component_kind_mapping() -> None:
         {ComponentKind.GOAL_MANAGEMENT}
     )
     assert component_kinds_for_stage(CognitionTraceStageKind.BELIEFS) == frozenset()
-    assert component_kinds_for_stage(
-        CognitionTraceStageKind.THEORY_OF_MIND
-    ) == frozenset()
+    assert (
+        component_kinds_for_stage(CognitionTraceStageKind.THEORY_OF_MIND) == frozenset()
+    )
     assert component_kinds_for_stage(
         CognitionTraceStageKind.EMOTIONAL_STATE
     ) == frozenset({ComponentKind.EMOTIONAL_STATE})
-    assert component_kinds_for_stage(
-        CognitionTraceStageKind.BUDGET_SUMMARY
-    ) == frozenset()
+    assert (
+        component_kinds_for_stage(CognitionTraceStageKind.BUDGET_SUMMARY) == frozenset()
+    )
 
 
 def test_stage_summary_rejects_forbidden_attributes() -> None:

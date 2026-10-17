@@ -147,9 +147,9 @@ class ImaginationEngine:
     """Deterministic V1 imagination over typed observation affordances."""
 
     __slots__ = (
-        "_prospective_audit",
-        "_caregiving_cognition_mode",
         "_care_action_policy",
+        "_caregiving_cognition_mode",
+        "_prospective_audit",
     )
 
     def __init__(

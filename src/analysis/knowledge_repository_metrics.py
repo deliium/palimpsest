@@ -41,16 +41,12 @@ __all__ = [
 KNOWLEDGE_REPOSITORY_SURVIVAL_METRIC_VERSION: Final[str] = (
     "knowledge_repository_survival@1"
 )
-KNOWLEDGE_REPOSITORY_ACCESS_METRIC_VERSION: Final[str] = (
-    "knowledge_repository_access@1"
-)
+KNOWLEDGE_REPOSITORY_ACCESS_METRIC_VERSION: Final[str] = "knowledge_repository_access@1"
 KNOWLEDGE_REPOSITORY_ORGANIZATION_METRIC_VERSION: Final[str] = (
     "knowledge_repository_organization@1"
 )
 
-_LOG: Final[logging.Logger] = logging.getLogger(
-    "analysis.knowledge_repository_metrics"
-)
+_LOG: Final[logging.Logger] = logging.getLogger("analysis.knowledge_repository_metrics")
 _LAYER: Final[str] = "research_analytics"
 _CENSOR: Final[str] = "analysis-only knowledge repositories; never cognition"
 _ACCESS_MODES: Final[frozenset[str]] = frozenset(
@@ -170,11 +166,7 @@ def summarize_repository_access(
     deposit_ok = deposit_deny = retrieve_ok = retrieve_deny = 0
     inaccessible_blocks = 0
     for row in event_rows:
-        kind = (
-            _text(row, "event_kind")
-            or _text(row, "kind")
-            or ""
-        )
+        kind = _text(row, "event_kind") or _text(row, "kind") or ""
         reason = _text(row, "reason_code") or _text(row, "reason") or ""
         if kind in _DEPOSIT_SUCCESS:
             deposit_ok += 1
@@ -226,9 +218,7 @@ def summarize_repository_organization(
         row_dangling = _int(row, "dangling_index_entry_count")
         if row_dangling is not None:
             dangling += row_dangling
-    coverage = (
-        0.0 if member_total == 0 else quantize_float(index_total / member_total)
-    )
+    coverage = 0.0 if member_total == 0 else quantize_float(index_total / member_total)
     neglect_drops = 0
     for row in event_rows:
         kind = _text(row, "event_kind") or _text(row, "kind") or ""
@@ -365,8 +355,7 @@ def compute_knowledge_repository_access(
         "retrieve_deny_count": summary.retrieve_deny_count,
         "inaccessible_block_count": summary.inaccessible_block_count,
         "access_mode_histogram_encoded": ",".join(
-            f"{mode}:{count}"
-            for mode, count in summary.access_mode_histogram.items()
+            f"{mode}:{count}" for mode, count in summary.access_mode_histogram.items()
         ),
     }
     for mode, count in summary.access_mode_histogram.items():

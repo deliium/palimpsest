@@ -48,7 +48,9 @@ _ARTIFACT_DETAILS = (
 )
 
 
-def _content(*marks: str, relations: tuple[ArtifactRelation, ...] = ()) -> ArtifactContent:
+def _content(
+    *marks: str, relations: tuple[ArtifactRelation, ...] = ()
+) -> ArtifactContent:
     return ArtifactContent(marks=marks, relations=relations)
 
 
@@ -111,10 +113,14 @@ def test_inscribe_ground_creates_with_author_and_revision_zero(
     assert artifact.author_id == EntityId("body-1")
     assert artifact.created_tick == 0
     assert artifact.content_revision == 0
-    assert created.artifact_id not in engine._snapshot.world.state.bodies[
-        EntityId("body-1")
-    ].inventory
-    assert all(record.event.schema_version == EVENT_SCHEMA_REPLAY_V8 for record in result.events)
+    assert (
+        created.artifact_id
+        not in engine._snapshot.world.state.bodies[EntityId("body-1")].inventory
+    )
+    assert all(
+        record.event.schema_version == EVENT_SCHEMA_REPLAY_V8
+        for record in result.events
+    )
     assert any(
         "artifact_event_committed" in record.getMessage()
         and "kind=artifact_created" in record.getMessage()
@@ -251,7 +257,9 @@ def test_transfer_claim_deposit_give_and_fixed_rejects(
     )
     assert given.resolutions[0].status is ActionResolutionStatus.APPLIED
     assert _artifact_details(given)[0].resulting_holder_id == EntityId("body-2")
-    assert note_id not in engine._snapshot.world.state.bodies[EntityId("body-2")].inventory
+    assert (
+        note_id not in engine._snapshot.world.state.bodies[EntityId("body-2")].inventory
+    )
 
     sign = _act(
         engine,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Protocol
+from typing import Protocol, cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -26,11 +26,11 @@ from api.routes import (
     debugger_router,
     health_router,
     inspection_router,
-    research_matrix_router,
-    research_router,
     observer_router,
     observer_stream_router,
     replay_router,
+    research_matrix_router,
+    research_router,
     simulations_router,
     streams_router,
     version_router,
@@ -122,11 +122,12 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
             service="ObserverReadService",
         )
     if getattr(app.state, "debugger_service", None) is None:
+
         def _checkpoint_lookup(run_id: str, owner_id: str) -> object | None:
             manager = getattr(app.state, "simulation_manager", None)
             if manager is None or not hasattr(manager, "owner_runtime_checkpoint"):
                 return None
-            return manager.owner_runtime_checkpoint(run_id, owner_id)
+            return cast(object, manager.owner_runtime_checkpoint(run_id, owner_id))
 
         app.state.debugger_service = PersistenceCausalDebuggerService(
             traces=create_cognition_trace_repository(session_factory),  # type: ignore[arg-type]
@@ -233,7 +234,7 @@ def create_app(
     app.include_router(observer_router)
     app.include_router(observer_stream_router)
     app.include_router(version_router)
-    # Research UI before Godot catch-all `/` so `/research/` is not stolen.
+    # Research UI precedes the presentation catch-all at `/`.
     mount_research_ui(app, resolved)
     mount_presentation(app, resolved)
     return app

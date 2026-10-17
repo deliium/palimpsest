@@ -141,15 +141,11 @@ def _view(
     owner_ids: Sequence[str],
 ) -> CommitmentSpeechView:
     event_id = event.event_id.value
-    cited = tuple(
-        row for row in ledgers if event_id in row.source_event_ids
-    )
+    cited = tuple(row for row in ledgers if event_id in row.source_event_ids)
     interpretations = tuple(_cited_view(row) for row in cited)
     known = {row.owner_id for row in cited}
     missing = tuple(
-        _unformed(owner_id)
-        for owner_id in owner_ids
-        if owner_id not in known
+        _unformed(owner_id) for owner_id in owner_ids if owner_id not in known
     )
     statuses = tuple(row.status for row in cited)
     divergent = _divergent(cited)

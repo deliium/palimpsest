@@ -33,9 +33,7 @@ class FakeResources:
 
 
 class StubReplay(ReplayApiService):
-    async def replay_to_tick(
-        self, run_id: str, body: ReplayRequest
-    ) -> ReplayResultOut:
+    async def replay_to_tick(self, run_id: str, body: ReplayRequest) -> ReplayResultOut:
         if body.to_tick > 100:
             err = RuntimeError("corruption")
             err.code = "corruption"  # type: ignore[attr-defined]

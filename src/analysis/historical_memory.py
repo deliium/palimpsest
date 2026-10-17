@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict, deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -93,17 +93,13 @@ class HistoricalMemoryTransitionCause(StrEnum):
 
 class HistoricalMemoryQueryId(StrEnum):
     ANY_DIRECT_WITNESSES_ALIVE = "any_direct_witnesses_alive"
-    ANYONE_REMEMBERS_SPEAKING_TO_WITNESS = (
-        "anyone_remembers_speaking_to_witness"
-    )
+    ANYONE_REMEMBERS_SPEAKING_TO_WITNESS = "anyone_remembers_speaking_to_witness"
     EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS = (
         "event_known_only_from_stories_or_artifacts"
     )
 
 
-_SPEAKING_EDGE_KINDS: Final[frozenset[str]] = frozenset(
-    {"communicated", "taught"}
-)
+_SPEAKING_EDGE_KINDS: Final[frozenset[str]] = frozenset({"communicated", "taught"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,9 +133,7 @@ class HistoricalSourceRef:
             object.__setattr__(
                 self,
                 "cultural_digest_token",
-                require_stable_id(
-                    "cultural_digest_token", self.cultural_digest_token
-                ),
+                require_stable_id("cultural_digest_token", self.cultural_digest_token),
             )
 
 
@@ -153,18 +147,17 @@ class HistoricalProvenanceNode:
     generation_index: int | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "node_id", require_stable_id("node_id", self.node_id)
-        )
+        object.__setattr__(self, "node_id", require_stable_id("node_id", self.node_id))
         if type(self.kind) is not HistoricalProvenanceNodeKind:
             raise TypeError("kind must be HistoricalProvenanceNodeKind")
         object.__setattr__(
             self, "ref_token", require_stable_id("ref_token", self.ref_token)
         )
         if self.generation_index is not None:
-            if isinstance(self.generation_index, bool) or type(
-                self.generation_index
-            ) is not int:
+            if (
+                isinstance(self.generation_index, bool)
+                or type(self.generation_index) is not int
+            ):
                 raise TypeError("generation_index must be int or None")
             if self.generation_index < 0:
                 raise ValueError("generation_index: out_of_range")
@@ -182,9 +175,7 @@ class HistoricalProvenanceEdge:
     hop_metadata: int | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "edge_id", require_stable_id("edge_id", self.edge_id)
-        )
+        object.__setattr__(self, "edge_id", require_stable_id("edge_id", self.edge_id))
         object.__setattr__(
             self,
             "from_node_id",
@@ -287,9 +278,7 @@ class HistoricalMemoryQueryAnswer:
             raise TypeError("source_ref must be HistoricalSourceRef")
         if type(self.answer) is not bool:
             raise TypeError("answer must be bool")
-        if self.layer is not None and type(self.layer) is not (
-            HistoricalMemoryLayerId
-        ):
+        if self.layer is not None and type(self.layer) is not (HistoricalMemoryLayerId):
             raise TypeError("layer must be HistoricalMemoryLayerId or None")
         object.__setattr__(
             self, "reason_code", require_stable_id("reason_code", self.reason_code)
@@ -348,9 +337,7 @@ class HistoricalMemoryHarvest:
             raise ValueError("as_of_tick: out_of_range")
         object.__setattr__(self, "sources", tuple(self.sources))
         object.__setattr__(self, "witness_rows", tuple(self.witness_rows))
-        object.__setattr__(
-            self, "communication_edges", tuple(self.communication_edges)
-        )
+        object.__setattr__(self, "communication_edges", tuple(self.communication_edges))
         object.__setattr__(self, "teaching_edges", tuple(self.teaching_edges))
         object.__setattr__(self, "died_events", tuple(self.died_events))
         object.__setattr__(self, "narrative_rows", tuple(self.narrative_rows))
@@ -358,9 +345,7 @@ class HistoricalMemoryHarvest:
             self, "cultural_feature_audits", tuple(self.cultural_feature_audits)
         )
         object.__setattr__(self, "artifact_rows", tuple(self.artifact_rows))
-        object.__setattr__(
-            self, "transition_ticks", tuple(self.transition_ticks)
-        )
+        object.__setattr__(self, "transition_ticks", tuple(self.transition_ticks))
         object.__setattr__(
             self,
             "generation_boundary_ticks",
@@ -475,8 +460,10 @@ def _death_ticks_from_events(
         kind = getattr(row, "kind", None)
         details = getattr(row, "details", None)
         details_name = type(details).__name__ if details is not None else ""
-        if name not in {"Died", "DiedEvent"} and kind != "Died" and details_name != (
-            "Died"
+        if (
+            name not in {"Died", "DiedEvent"}
+            and kind != "Died"
+            and details_name != ("Died")
         ):
             # Duck WorldEvent wrapping Died details.
             if details_name != "Died" and name != "Died":
@@ -559,9 +546,7 @@ def build_historical_provenance_graph(
     witness_def = (
         witness_definition
         if witness_definition is not None
-        else _spec_str(
-            layers_spec, "witness_definition", "occurrence_participants"
-        )
+        else _spec_str(layers_spec, "witness_definition", "occurrence_participants")
     )
 
     deaths = _death_ticks_from_events(died_events, death_ticks)
@@ -610,6 +595,7 @@ def build_historical_provenance_graph(
         )
 
     source_ids: list[str] = []
+    source_id: str | None
     for raw in sources:
         if type(raw) is HistoricalSourceRef:
             source_id = raw.source_event_id
@@ -630,9 +616,7 @@ def build_historical_provenance_graph(
     else:
         reason_codes.append("sources_empty")
 
-    allow_colocated = (
-        witness_def == "occurrence_participants_plus_colocated_observers"
-    )
+    allow_colocated = witness_def == "occurrence_participants_plus_colocated_observers"
     witness_agents: set[str] = set()
     for row in witness_rows:
         source_id = _token(
@@ -691,12 +675,8 @@ def build_historical_provenance_graph(
 
     if include_teaching:
         for row in teaching_edges:
-            teacher = _token(
-                getattr(row, "teacher_id", None), field="teach.teacher_id"
-            )
-            learner = _token(
-                getattr(row, "learner_id", None), field="teach.learner_id"
-            )
+            teacher = _token(getattr(row, "teacher_id", None), field="teach.teacher_id")
+            learner = _token(getattr(row, "learner_id", None), field="teach.learner_id")
             if teacher is None or learner is None:
                 continue
             _add_node(
@@ -860,9 +840,7 @@ def build_historical_provenance_graph(
                 continue
             mark_id = mark or f"artifact:{source_id}:{index}"
             node_id = f"artifact:{mark_id}"
-            _add_node(
-                node_id, HistoricalProvenanceNodeKind.ARTIFACT_MARK, mark_id
-            )
+            _add_node(node_id, HistoricalProvenanceNodeKind.ARTIFACT_MARK, mark_id)
             if _source_node_id(source_id) not in nodes_by_id:
                 _add_node(
                     _source_node_id(source_id),
@@ -1041,7 +1019,7 @@ def _agent_adjacency(
             for right in agents_list[i + 1 :]:
                 # Use a representative kind from mid edges.
                 mid_kind = "narrative_transmitted"
-                for _, kind in inbound.get(mid, ()) + outbound.get(mid, ()):
+                for _, kind in (*inbound.get(mid, ()), *outbound.get(mid, ())):
                     if kind in allowed_kinds:
                         mid_kind = kind
                         break
@@ -1112,13 +1090,7 @@ def _cultural_carriers_for_source(
                 # Include reverse for undirected attestation presence.
                 reachable.add(edge.from_node_id)
                 changed = True
-    carriers = sorted(
-        {
-            agent_nodes[nid]
-            for nid in reachable
-            if nid in agent_nodes
-        }
-    )
+    carriers = sorted({agent_nodes[nid] for nid in reachable if nid in agent_nodes})
     return tuple(carriers)
 
 
@@ -1362,7 +1334,7 @@ def track_historical_memory_transitions(
     *,
     sources: Sequence[object],
     ticks: Sequence[int],
-    graph_builder,
+    graph_builder: Callable[[int], HistoricalProvenanceGraph],
     layers_spec: object | None = None,
     death_ticks: Mapping[str, int] | None = None,
     generation_boundary_ticks: Sequence[int] | None = None,
@@ -1425,9 +1397,7 @@ def track_historical_memory_transitions(
             from_layer = previous[ref.source_event_id]
             if to_layer is from_layer:
                 if assignment is not None:
-                    previous_living[ref.source_event_id] = (
-                        assignment.living_witness_ids
-                    )
+                    previous_living[ref.source_event_id] = assignment.living_witness_ids
                 continue
             cause = _infer_cause(
                 from_layer=from_layer,
@@ -1533,9 +1503,7 @@ def _answer_one_source(
     living_witnesses = tuple(
         sorted(w for w in witnesses if is_agent_living_at(w, as_of_tick, death_ticks))
     )
-    living_agents = _living_agents_at(
-        graph, as_of_tick, death_ticks, living_roster
-    )
+    living_agents = _living_agents_at(graph, as_of_tick, death_ticks, living_roster)
 
     # Query 1: any direct witnesses alive
     q1_true = bool(living_witnesses)
@@ -1610,9 +1578,7 @@ def _answer_one_source(
         assignment.cultural_carrier_ids if assignment is not None else ()
     )
     q3 = HistoricalMemoryQueryAnswer(
-        query_id=(
-            HistoricalMemoryQueryId.EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS
-        ),
+        query_id=(HistoricalMemoryQueryId.EVENT_KNOWN_ONLY_FROM_STORIES_OR_ARTIFACTS),
         source_ref=ref,
         as_of_tick=as_of_tick,
         answer=stories_only,

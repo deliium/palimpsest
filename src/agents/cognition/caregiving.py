@@ -21,7 +21,7 @@ from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipDimension,
 )
-from world.observations import Observation
+from world.observations import Observation, ObservedSelf, VisibleBody
 
 __all__ = [
     "CAREGIVING_BIAS_POLICY_VERSION",
@@ -152,8 +152,8 @@ def caregiving_future_biases(
             # receive need-based bias without a relationship profile.
             profile = _profile_for_entity(profiles, observation, target_entity)
 
-        affection, trust, familiarity, dependency, fear, resentment = (
-            _dimension_values(profile)
+        affection, trust, familiarity, dependency, fear, resentment = _dimension_values(
+            profile
         )
         # Subjective kinship-shaped signal: positive DEPENDENCY + testimony tags.
         kinship_belief = _subjective_kinship_hint(
@@ -286,7 +286,7 @@ def _subjective_kinship_hint(
 def _need_bonus(
     observation: Observation, target_entity: str, direction: ActionDirection
 ) -> float:
-    body = None
+    body: ObservedSelf | VisibleBody | None = None
     if (
         observation.self_body is not None
         and observation.self_body.entity_id.value == target_entity

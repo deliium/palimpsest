@@ -11,25 +11,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from agents.cognition.configuration import CognitionTerritorialClaimMode
-from agents.cognition.models import (
-    ActionDirection,
-    CounterpartBinding,
-    OwnerSafeSocialIdentity,
-)
-from agents.cognition.territorial import (
-    TERRITORIAL_CLAIM_POLICY_VERSION,
-    ClaimChannel,
-    ClaimTargetKind,
-    TerritorialClaim,
-    TerritorialClaimLedger,
-    TerritorialEvidenceItem,
-    apply_territorial_update,
-    default_territorial_claim_policy,
-    territorial_claim_id,
-    territorial_respect_penalties,
-    territorial_wait_replacement,
-)
 from agents.models import AgentId
 from experiments.models import (
     EXPERIMENT_SCHEMA_VERSION,
@@ -45,6 +26,24 @@ from memory.models import (
     MemorySourceKind,
     MemoryTrace,
 )
+from simulation.cognition_contracts import (
+    TERRITORIAL_CLAIM_POLICY_VERSION,
+    ActionDirection,
+    ClaimChannel,
+    ClaimTargetKind,
+    CognitionTerritorialClaimMode,
+    CounterpartBinding,
+    OwnerSafeSocialIdentity,
+    TerritorialClaim,
+    TerritorialClaimLedger,
+    TerritorialEvidenceItem,
+    apply_territorial_update,
+    default_territorial_claim_policy,
+    territorial_claim_id,
+    territorial_respect_penalties,
+    territorial_wait_replacement,
+)
+from simulation.models import StochasticIdentity
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V15,
@@ -202,9 +201,7 @@ def evaluate_territorial_conditions(
     )
     respected, respect_reason = _recorded_penalties(
         owner_id=_OWNER,
-        futures=(
-            _Future("move-place", ActionDirection.MOVE, abundant_location.value),
-        ),
+        futures=(_Future("move-place", ActionDirection.MOVE, abundant_location.value),),
         ledger=_heard_claim(abundant_location),
         relationships=abundant_trust_relationships,
         hunger=0.0,
@@ -264,7 +261,16 @@ class _Future:
         self.target_entity_id = target_entity_id
 
 
-def _recorded_penalties(**kwargs: object) -> tuple[dict[str, float], str]:
+def _recorded_penalties(
+    *,
+    owner_id: AgentId,
+    futures: Sequence[object],
+    ledger: object | None,
+    relationships: Sequence[object] | None,
+    hunger: float,
+    thirst: float,
+    mode: object | None,
+) -> tuple[dict[str, float], str]:
     captured: list[str] = []
 
     class _Capture(logging.Handler):
@@ -276,7 +282,15 @@ def _recorded_penalties(**kwargs: object) -> tuple[dict[str, float], str]:
     _BIAS_LOG.addHandler(handler)
     _BIAS_LOG.setLevel(logging.DEBUG)
     try:
-        penalties = territorial_respect_penalties(**kwargs)
+        penalties = territorial_respect_penalties(
+            owner_id=owner_id,
+            futures=futures,
+            ledger=ledger,
+            relationships=relationships,
+            hunger=hunger,
+            thirst=thirst,
+            mode=mode,
+        )
     finally:
         _BIAS_LOG.removeHandler(handler)
         _BIAS_LOG.setLevel(previous)
@@ -344,7 +358,7 @@ def _body(entity_id: EntityId) -> AgentBody:
 def _config(
     *,
     seed: int,
-    identity: object,
+    identity: StochasticIdentity,
     world: WorldScenarioSpec,
     mode: TerritorialClaimMode,
     schema_version: str,

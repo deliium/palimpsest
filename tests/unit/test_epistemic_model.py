@@ -256,9 +256,7 @@ def _speech(
             text="hidden-speech",
             concepts=(),
             relations=(
-                CommunicationRelation(
-                    subject=subject, predicate=predicate, object=obj
-                ),
+                CommunicationRelation(subject=subject, predicate=predicate, object=obj),
             ),
         ),
         declared=DeclaredTransmission(
@@ -285,9 +283,7 @@ def _speech(
     )
 
 
-def _level1(
-    model: TheoryOfMind, proposition_ref: str
-) -> EpistemicAttribution:
+def _level1(model: TheoryOfMind, proposition_ref: str) -> EpistemicAttribution:
     return next(
         item
         for item in model.attributions
@@ -416,9 +412,7 @@ def test_witness_union_depth_cap_and_testimony(
         _watch(
             tick=2,
             occurrences=(
-                _occurrence(
-                    kind="eat", tick=2, actor="body-carol", event="evt-eat"
-                ),
+                _occurrence(kind="eat", tick=2, actor="body-carol", event="evt-eat"),
             ),
             bodies=("body-carol",),
         ),
@@ -513,9 +507,7 @@ def test_witness_union_depth_cap_and_testimony(
         default_theory_of_mind_policy(),
     )
     assert preserved.attributions == first.attributions
-    derived = derive_future_actions(
-        first, default_theory_of_mind_policy(), tick=2
-    )
+    derived = derive_future_actions(first, default_theory_of_mind_policy(), tick=2)
     assert derived.attributions == first.attributions
     source = inspect_source()
     for banned in (

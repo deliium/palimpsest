@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Final
 
-from agents.cognition.architectures import (
+from simulation.cognition_contracts import (
     ARCHITECTURES,
     ArchitectureDefinition,
     ArchitectureModeSnapshot,

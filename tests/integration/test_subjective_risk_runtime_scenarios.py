@@ -78,9 +78,7 @@ async def test_divergent_beliefs_yield_different_admitted_commands() -> None:
     danger = build_belief(
         predicate="is_dangerous", confidence=0.9, belief_id="belief-danger"
     )
-    safety = build_belief(
-        predicate="is_safe", confidence=0.9, belief_id="belief-safe"
-    )
+    safety = build_belief(predicate="is_safe", confidence=0.9, belief_id="belief-safe")
 
     result_danger = await production_cognitive_loop(
         memory=FixedMemoryRetriever(beliefs=(danger,))

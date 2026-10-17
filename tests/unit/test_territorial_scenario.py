@@ -119,9 +119,7 @@ def test_arms_share_identity_and_log_without_the_seed(
         for agent in (*scarce.agents, *abundant.agents)
     )
     messages = [
-        record.getMessage()
-        for record in caplog.records
-        if record.name == _LOG.name
+        record.getMessage() for record in caplog.records if record.name == _LOG.name
     ]
     joined = " ".join(messages)
     assert "arm_id=v-disabled" in joined

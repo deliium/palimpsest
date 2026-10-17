@@ -218,9 +218,7 @@ async def run_benchmark_smoke(
         measurable_outputs=spec.measurable_outputs,
         arms=arms,
     )
-    available_codes = ",".join(
-        f"{item.status}" for item in reports
-    )
+    available_codes = ",".join(f"{item.status}" for item in reports)
     _LOG.info(
         "benchmark_smoke_finished scenario_id=%s ticks=%s metrics_available=%s",
         scenario_id,

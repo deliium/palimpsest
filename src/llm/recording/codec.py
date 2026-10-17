@@ -41,9 +41,7 @@ _TOP_LEVEL_REQUIRED: Final[frozenset[str]] = frozenset(
         "cache_namespace",
     }
 )
-_TOP_LEVEL_OPTIONAL: Final[frozenset[str]] = frozenset(
-    {"recorded_at_monotonic_offset"}
-)
+_TOP_LEVEL_OPTIONAL: Final[frozenset[str]] = frozenset({"recorded_at_monotonic_offset"})
 _TOP_LEVEL_ALLOWED: Final[frozenset[str]] = _TOP_LEVEL_REQUIRED | _TOP_LEVEL_OPTIONAL
 
 _SCHEMA_IDENTITY_KEYS: Final[frozenset[str]] = frozenset({"qualname", "digest"})
@@ -175,14 +173,14 @@ def _decode_prompt(raw: object) -> ExchangePromptRef | None:
     if raw is None:
         return None
     payload = _require_mapping("prompt", raw)
-    _require_exact_keys(
-        "prompt", payload, required=_PROMPT_KEYS, allowed=_PROMPT_KEYS
-    )
+    _require_exact_keys("prompt", payload, required=_PROMPT_KEYS, allowed=_PROMPT_KEYS)
     name = payload["name"]
     version = payload["version"]
     digest = payload["digest"]
-    if not isinstance(name, str) or not isinstance(version, str) or not isinstance(
-        digest, str
+    if (
+        not isinstance(name, str)
+        or not isinstance(version, str)
+        or not isinstance(digest, str)
     ):
         raise ValueError("prompt fields must be strings")
     return ExchangePromptRef(name=name, version=version, digest=digest)

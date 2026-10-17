@@ -28,12 +28,9 @@ async def test_both_arms_sleep_and_only_deterministic_audits() -> None:
     disabled = await _run("f-disabled", "run-f-disabled")
     deterministic = await _run("f-deterministic", "run-f-deterministic")
     disabled_again = await _run("f-disabled", "run-f-disabled-repeat")
+    assert disabled.finalized_tick_receipts[0].resolutions[0].command_kind == "sleep"
     assert (
-        disabled.finalized_tick_receipts[0].resolutions[0].command_kind == "sleep"
-    )
-    assert (
-        deterministic.finalized_tick_receipts[0].resolutions[0].command_kind
-        == "sleep"
+        deterministic.finalized_tick_receipts[0].resolutions[0].command_kind == "sleep"
     )
     assert disabled.offline_consolidation_audits == ()
     assert deterministic.offline_consolidation_audits

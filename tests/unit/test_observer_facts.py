@@ -56,9 +56,7 @@ def _engine() -> WorldEngine:
             items=(make_item("item-1", name="Rock", location_id="loc-1"),),
             bodies=(_alive("body-1"),),
             weather=weather_for_locations(locations),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         ),
         config=SimulationRunConfig(seed=7),
         run_id=RunId("run-facts"),

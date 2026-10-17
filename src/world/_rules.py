@@ -8,36 +8,32 @@ this module owns dispositions, reason codes, and precedence.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Final
+from typing import Final, Literal
 
 from world._operations import (
     ValidatedWorldOperation,
     _AmendOp,
     _AnnotateRecordOp,
     _AskOp,
+    _AssertPossessionClaimOp,
     _AttackOp,
     _BuildOp,
+    _ContributeCollectiveProjectOp,
     _CopyRecordOp,
     _CraftOp,
     _DamageRecordOp,
+    _DeclareCommitmentOp,
     _DepositRecordOp,
     _DrinkOp,
     _DropOp,
     _EatOp,
     _EraseOp,
     _EstablishRepositoryOp,
-    _AssertPossessionClaimOp,
-    _DeclareCommitmentOp,
-    _ContributeCollectiveProjectOp,
-    _MaintainPublicGoodOp,
-    _NegotiateExchangeOp,
-    _OpposePublicGoodOp,
-    _UsePublicGoodOp,
-    _StartCollectiveProjectOp,
     _ExperimentOp,
     _FeedOp,
     _FleeOp,
@@ -46,18 +42,23 @@ from world._operations import (
     _HelpOp,
     _IndexRepositoryOp,
     _InscribeOp,
+    _MaintainPublicGoodOp,
     _MaintainRepositoryOp,
     _MoveOp,
+    _NegotiateExchangeOp,
+    _OpposePublicGoodOp,
     _RepairOp,
     _RetrieveRecordOp,
     _SearchOp,
     _SleepOp,
+    _StartCollectiveProjectOp,
     _StoreOp,
     _TakeOp,
     _TalkOp,
     _TellOp,
     _TransferArtifactOp,
     _TransportOp,
+    _UsePublicGoodOp,
     _WaitOp,
 )
 from world._state import WorldState, rebuild_world_state
@@ -72,13 +73,9 @@ from world.artifacts import (
     artifact_kind_is_durable_capable,
     artifact_kind_is_portable,
 )
-from world.repositories import (
-    KnowledgeRepositoriesRuleContext,
-    KnowledgeRepository,
-    RepositoryAccessMode,
-    RepositoryIndexEntry,
-    RepositoryStatus,
-    require_repository_access_mode,
+from world.collective_projects import (
+    CollectiveProjectsRuleContext,
+    PublicGoodsRuleContext,
 )
 from world.communications import StructuredUtterance
 from world.effects import (
@@ -103,21 +100,23 @@ from world.events import (
     ArtifactPartiallyLost,
     Asked,
     Attacked,
+    CommitmentDeclared,
     CorpseCustodyOpened,
     Died,
     Dropped,
     Drunk,
     Eaten,
+    EventDetails,
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
-    EventDetails,
     Fed,
     Fled,
     Given,
     Helped,
+    JourneyArrived,
+    JourneyStarted,
     Moved,
-    CommitmentDeclared,
     PossessionClaimAsserted,
     RepositoryEstablished,
     RepositoryIndexed,
@@ -146,6 +145,18 @@ from world.models import (
     default_physical_rules,
 )
 from world.observations import CONTENT_VISIBILITY_THRESHOLD
+from world.possession_succession import PossessionSuccessionRuleContext
+from world.regions import Journey, RouteSpec
+from world.repositories import (
+    KnowledgeRepositoriesRuleContext,
+    KnowledgeRepository,
+    RepositoryAccessMode,
+    RepositoryIndexEntry,
+    RepositoryStatus,
+    require_repository_access_mode,
+)
+from world.structured_commitments import StructuredCommitmentsRuleContext
+from world.subjective_value import ExchangeOffer
 from world.values import (
     Fatigue,
     Health,
@@ -210,6 +221,9 @@ class RuleReason(StrEnum):
     UNKNOWN_RECIPE = "unknown_recipe"
     RECIPE_ACTION_MISMATCH = "recipe_action_mismatch"
     ACTOR_BUSY = "actor_busy"
+    ACTOR_TRAVELLING = "actor_travelling"
+    TARGET_TRAVELLING = "target_travelling"
+    FLEE_DESTINATION_UNAVAILABLE = "flee_destination_unavailable"
     MATERIALS_UNAVAILABLE = "materials_unavailable"
     STRUCTURE_INTACT = "structure_intact"
     SHELTER_ALREADY_PRESENT = "shelter_already_present"
@@ -797,6 +811,15 @@ def evaluate_operation(
         recipe_id = getattr(operation, "recipe_id", None)
         _warn(operation.actor_id, recipe_id, "actor_busy")
         return _reject(kind, RuleReason.ACTOR_BUSY)
+    if (
+        _body_is_travelling(state, operation.actor_id)
+        and type(operation) is not _WaitOp
+    ):
+        return _reject(kind, RuleReason.ACTOR_TRAVELLING)
+    if type(operation) is _TransportOp and _body_is_travelling(
+        state, operation.target_id
+    ):
+        return _reject(kind, RuleReason.TARGET_TRAVELLING)
     if policy.disposition is RuleDisposition.DEFERRED:
         return RuleResult(
             disposition=RuleDisposition.DEFERRED,
@@ -1102,13 +1125,42 @@ def find_eligible_flee_destinations(
     actor = state.bodies.get(actor_id)
     if actor is None or actor.life_status is LifeStatus.DEAD:
         return ()
+    if _body_is_travelling(state, actor_id):
+        return ()
     location = state.locations[actor.location_id]
     eligible: list[EntityId] = []
     for destination_id in sorted(location.adjacent, key=lambda value: value.value):
+        route = _route_spec_for_edge(state, actor.location_id, destination_id)
+        if route is not None and route.duration_ticks != 1:
+            continue
         destination = state.locations[destination_id]
         if _body_count(state, destination_id) < destination.body_capacity.value:
             eligible.append(destination_id)
     return tuple(eligible)
+
+
+def _route_spec_for_edge(
+    state: WorldState, endpoint_a: EntityId, endpoint_b: EntityId
+) -> RouteSpec | None:
+    spec = state.regions_migration
+    if spec is None:
+        return None
+    key = tuple(sorted((endpoint_a.value, endpoint_b.value)))
+    for route in spec.routes:
+        if route.edge_key == key:
+            return route
+    return None
+
+
+def _body_is_travelling(state: WorldState, body_id: EntityId) -> bool:
+    return state.journeys is not None and any(
+        body_id in journey.participant_body_ids for journey in state.journeys.values()
+    )
+
+
+def _travel_duration(state: WorldState, origin: EntityId, destination: EntityId) -> int:
+    route = _route_spec_for_edge(state, origin, destination)
+    return 1 if route is None else route.duration_ticks
 
 
 def _evaluate_move(
@@ -1120,6 +1172,17 @@ def _evaluate_move(
     location = state.locations[actor.location_id]
     if destination_id not in location.adjacent:
         return _reject(kind, RuleReason.NOT_ADJACENT)
+    if (
+        state.regions_migration is not None
+        and _travel_duration(state, actor.location_id, destination_id) > 1
+    ):
+        return RuleResult(
+            disposition=RuleDisposition.MUTATE,
+            reason=RuleReason.OCCURRENCE,
+            emits_event=True,
+            mutates_state=True,
+            action_kind=kind,
+        )
     destination = state.locations[destination_id]
     if _body_count(state, destination_id) >= destination.body_capacity.value:
         return _reject(kind, RuleReason.NO_BODY_CAPACITY)
@@ -1235,7 +1298,7 @@ def _evaluate_take(
         assert item.holder_id is not None
         holder = state.bodies[item.holder_id]
         allow = (
-            succession_context is not None
+            isinstance(succession_context, PossessionSuccessionRuleContext)
             and succession_context.allow_corpse_take
         )
         if not allow:
@@ -1244,9 +1307,7 @@ def _evaluate_take(
                 source=source,
             )
         if holder.location_id != actor.location_id:
-            return _logged_take(
-                _reject(kind, RuleReason.NOT_COLOCATED), source=source
-            )
+            return _logged_take(_reject(kind, RuleReason.NOT_COLOCATED), source=source)
     else:
         if item.location_id is None or item.holder_id is not None:
             return _logged_take(
@@ -1260,9 +1321,7 @@ def _evaluate_take(
     if effective_carry_capacity is not None and actor_id in effective_carry_capacity:
         capacity = effective_carry_capacity[actor_id]
     if _inventory_load(state, actor) + item.load.value > capacity:
-        return _logged_take(
-            _reject(kind, RuleReason.NO_CARRY_CAPACITY), source=source
-        )
+        return _logged_take(_reject(kind, RuleReason.NO_CARRY_CAPACITY), source=source)
     return _logged_take(
         RuleResult(
             disposition=RuleDisposition.MUTATE,
@@ -1448,6 +1507,8 @@ def _evaluate_feed(
         return _reject(kind, RuleReason.DEPENDENCY_CARE_TARGET_INVALID)
     if care_context.require_colocated and target.location_id != actor.location_id:
         return _reject(kind, RuleReason.NOT_COLOCATED)
+    if state.regions_migration is not None and target.location_id != actor.location_id:
+        return _reject(kind, RuleReason.NOT_COLOCATED)
     item = state.items.get(item_id)
     if item is None or item.holder_id != actor_id or item_id not in actor.inventory:
         return _reject(kind, RuleReason.NOT_HELD)
@@ -1493,7 +1554,10 @@ def _evaluate_transport(
         return _reject(kind, RuleReason.NOT_ADJACENT)
     destination = state.locations[destination_id]
     # Both caregiver and dependent relocate together.
-    if _body_count(state, destination_id) + 2 > destination.body_capacity.value:
+    if (
+        state.regions_migration is None
+        or _travel_duration(state, actor.location_id, destination_id) == 1
+    ) and _body_count(state, destination_id) + 2 > destination.body_capacity.value:
         return _reject(kind, RuleReason.NO_BODY_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
@@ -1582,6 +1646,18 @@ def _evaluate_flee(
             reason=RuleReason.OCCURRENCE,
             emits_event=True,
             mutates_state=False,
+            action_kind=kind,
+        )
+    if state.regions_migration is not None:
+        if effect.destination_id is None:
+            return _reject(kind, RuleReason.MISSING_RESOLVED_EFFECT)
+        if effect.destination_id not in eligible:
+            return _reject(kind, RuleReason.FLEE_DESTINATION_UNAVAILABLE)
+        return RuleResult(
+            disposition=RuleDisposition.MUTATE,
+            reason=RuleReason.OCCURRENCE,
+            emits_event=True,
+            mutates_state=True,
             action_kind=kind,
         )
     assert effect.destination_index is not None
@@ -1690,10 +1766,7 @@ def _artifact_access_reject(
     actor = state.bodies[actor_id]
     if artifact.holder_id == actor_id:
         return None
-    if (
-        artifact.location_id is not None
-        and artifact.location_id == actor.location_id
-    ):
+    if artifact.location_id is not None and artifact.location_id == actor.location_id:
         return None
     return _artifact_reject(
         kind, RuleReason.ARTIFACT_NOT_COLOCATED, actor_id, artifact_id
@@ -1811,9 +1884,7 @@ def _evaluate_inscribe(
             op="inscribe",
         )
     try:
-        effect = resolved.require(
-            operation.request_id, ResolvedArtifactInscribeEffect
-        )
+        effect = resolved.require(operation.request_id, ResolvedArtifactInscribeEffect)
     except (TypeError, ValueError):
         return _artifact_reject(
             kind,
@@ -2074,10 +2145,7 @@ def _evaluate_annotate_record(
     merged_relations = len(artifact.content.relations) + len(
         operation.content.relations
     )
-    if (
-        merged_marks > MAX_ARTIFACT_MARKS
-        or merged_relations > MAX_ARTIFACT_RELATIONS
-    ):
+    if merged_marks > MAX_ARTIFACT_MARKS or merged_relations > MAX_ARTIFACT_RELATIONS:
         return _artifact_reject(
             kind,
             RuleReason.ARTIFACT_CONTENT_INVALID,
@@ -2280,9 +2348,7 @@ def _evaluate_transfer_artifact(
             op="transfer_artifact",
             mode=operation.mode,
         )
-    return _artifact_success(
-        kind, op="transfer_artifact", mode=operation.mode
-    )
+    return _artifact_success(kind, op="transfer_artifact", mode=operation.mode)
 
 
 def _apply_inscribe(
@@ -2306,9 +2372,7 @@ def _apply_inscribe(
             next_state=state,
             event_details=None,
         )
-    effect = resolved.require(
-        operation.request_id, ResolvedArtifactInscribeEffect
-    )
+    effect = resolved.require(operation.request_id, ResolvedArtifactInscribeEffect)
     assert type(effect) is ResolvedArtifactInscribeEffect
     actor = state.bodies[operation.actor_id]
     location_id = None if operation.hold else actor.location_id
@@ -2628,8 +2692,7 @@ def _apply_damage_record(
     artifacts[operation.artifact_id] = updated
     next_state = rebuild_world_state(state, artifacts=artifacts)
     _OPS_LOG.info(
-        "durable_record_%s artifact_id=%s genre=%s integrity=%s "
-        "lost_mark_count=%s",
+        "durable_record_%s artifact_id=%s genre=%s integrity=%s lost_mark_count=%s",
         operation.mode,
         operation.artifact_id.value,
         prior.record_genre.value if prior.record_genre is not None else "-",
@@ -2668,18 +2731,12 @@ def _apply_transfer_artifact(
     prior = state.artifacts[operation.artifact_id]
     actor = state.bodies[operation.actor_id]
     if operation.mode == "claim":
-        updated = replace(
-            prior, location_id=None, holder_id=operation.actor_id
-        )
+        updated = replace(prior, location_id=None, holder_id=operation.actor_id)
     elif operation.mode == "deposit":
-        updated = replace(
-            prior, location_id=actor.location_id, holder_id=None
-        )
+        updated = replace(prior, location_id=actor.location_id, holder_id=None)
     else:
         assert operation.recipient_id is not None
-        updated = replace(
-            prior, location_id=None, holder_id=operation.recipient_id
-        )
+        updated = replace(prior, location_id=None, holder_id=operation.recipient_id)
     artifacts = dict(state.artifacts)
     artifacts[operation.artifact_id] = updated
     next_state = rebuild_world_state(state, artifacts=artifacts)
@@ -2938,6 +2995,19 @@ def apply_operation(
             resolved=resolved,
             witness_resource_nodes=witness_resource_nodes,
         )
+    if state.regions_migration is not None and type(operation) in {
+        _MoveOp,
+        _TransportOp,
+    }:
+        assert isinstance(operation, (_MoveOp, _TransportOp))
+        return _apply_regional_travel_command(
+            state,
+            operation,
+            result=result,
+            rules=physical_rules,
+            tick=0 if tick is None else tick,
+            skill_efficiency=skill_efficiency,
+        )
     if type(possession_succession_active) is not bool:
         raise TypeError("possession_succession_active must be bool")
     if type(operation) is _AttackOp:
@@ -3088,6 +3158,149 @@ def apply_operation(
         next_state=next_state,
         event_details=details,
         extra_event_details=extra,
+    )
+
+
+def _apply_regional_travel_command(
+    state: WorldState,
+    operation: _MoveOp | _TransportOp,
+    *,
+    result: RuleResult,
+    rules: PhysicalRules,
+    tick: int,
+    skill_efficiency: object | None,
+) -> RuleApplication:
+    from world._skills import SkillEfficiencyOverride
+
+    if state.regions_migration is None:
+        raise ValueError("regional travel requires regions_migration")
+    if (
+        skill_efficiency is not None
+        and type(skill_efficiency) is not SkillEfficiencyOverride
+    ):
+        raise TypeError("skill_efficiency must be SkillEfficiencyOverride")
+    participant_ids: tuple[EntityId, ...]
+    if type(operation) is _MoveOp:
+        actor_id = operation.actor_id
+        destination_id = operation.destination_id
+        participant_ids = (actor_id,)
+        command_kind: Literal["move", "transport"] = "move"
+    else:
+        assert isinstance(operation, _TransportOp)
+        actor_id = operation.actor_id
+        destination_id = operation.destination_id
+        participant_ids = (actor_id, operation.target_id)
+        command_kind = "transport"
+    actor = state.bodies[actor_id]
+    origin_id = actor.location_id
+    route = _route_spec_for_edge(state, origin_id, destination_id)
+    duration = 1 if route is None else route.duration_ticks
+    if type(operation) is _MoveOp:
+        fatigue_cost = rules.move_fatigue if route is None else route.fatigue_cost
+    elif route is None:
+        fatigue_cost = rules.transport_fatigue
+    else:
+        fatigue_cost = rules.transport_fatigue + max(
+            0.0, route.fatigue_cost - rules.move_fatigue
+        )
+    if skill_efficiency is not None:
+        multiplier = skill_efficiency.movement_fatigue_multiplier
+        if multiplier is None:
+            # Compatibility for private callers supplying an already-adjusted
+            # ordinary cost. Engine-produced overrides always carry the factor.
+            multiplier = (
+                skill_efficiency.move_fatigue / rules.move_fatigue
+                if rules.move_fatigue > 0
+                else 1.0
+            )
+        fatigue_cost *= multiplier
+        _RULES_LOG.debug(
+            "[FIX:regional-travel] fatigue_scaled actor_id=%s multiplier=%s",
+            actor_id.value,
+            multiplier,
+        )
+    fatigue_cost = max(0.0, fatigue_cost)
+    resulting_fatigue = clamp_need(round_physical(actor.fatigue.value + fatigue_cost))
+    next_bodies = dict(state.bodies)
+    next_bodies[actor_id] = copy_body(actor, fatigue=Fatigue(resulting_fatigue))
+    membership = {
+        item.location_id: item.region_id
+        for item in state.regions_migration.location_regions
+    }
+    journey_id = hashlib.sha256(operation.request_id.value.encode("utf-8")).hexdigest()
+    journey = Journey(
+        journey_id=journey_id,
+        participant_body_ids=participant_ids,
+        actor_body_id=actor_id,
+        origin_location_id=origin_id,
+        destination_location_id=destination_id,
+        origin_region_id=membership.get(origin_id),
+        destination_region_id=membership.get(destination_id),
+        start_tick=tick,
+        due_tick=tick + duration - 1,
+        charged_fatigue_cost=round_physical(fatigue_cost),
+        arrival_wait_deadline_tick=(
+            tick + duration - 1 + state.regions_migration.max_arrival_wait_ticks
+        ),
+    )
+    _RULES_LOG.debug(
+        "journey_start_prepared journey_id=%s actor_id=%s origin=%s "
+        "destination=%s duration_ticks=%s participant_count=%s command_kind=%s",
+        journey.journey_id,
+        actor_id.value,
+        origin_id.value,
+        destination_id.value,
+        duration,
+        len(participant_ids),
+        command_kind,
+    )
+    current_journeys = () if state.journeys is None else tuple(state.journeys.values())
+    started_state = rebuild_world_state(
+        state,
+        bodies=next_bodies,
+        journeys=(*current_journeys, journey),
+    )
+    started_details = JourneyStarted(
+        journey=journey,
+        command_kind=command_kind,
+        fatigue_delta=round_physical(resulting_fatigue - actor.fatigue.value),
+        resulting_actor_fatigue=resulting_fatigue,
+    )
+    if duration > 1:
+        return RuleApplication(
+            result=result,
+            next_state=started_state,
+            event_details=started_details,
+        )
+    arrived_bodies = dict(started_state.bodies)
+    for participant_id in participant_ids:
+        participant = arrived_bodies[participant_id]
+        arrived_bodies[participant_id] = copy_body(
+            participant, location_id=destination_id
+        )
+    next_state = rebuild_world_state(
+        started_state,
+        bodies=arrived_bodies,
+        journeys=current_journeys,
+    )
+    _RULES_LOG.debug(
+        "[FIX:regional-travel] short_arrival_prepared journey_id=%s "
+        "remaining_journey_count=%s",
+        journey.journey_id,
+        len(current_journeys),
+    )
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=started_details,
+        extra_event_details=(
+            JourneyArrived(
+                journey_id=journey.journey_id,
+                participant_body_ids=participant_ids,
+                origin_location_id=origin_id,
+                destination_location_id=destination_id,
+            ),
+        ),
     )
 
 
@@ -3258,10 +3471,15 @@ def _apply_flee(
             ),
         )
     eligible = find_eligible_flee_destinations(state, operation.actor_id)
-    assert effect.destination_index is not None
-    if effect.destination_index >= len(eligible):
-        raise ValueError("flee destination_index out of range for eligible set")
-    destination_id = eligible[effect.destination_index]
+    if state.regions_migration is not None:
+        destination_id = effect.destination_id
+        if destination_id is None or destination_id not in eligible:
+            raise ValueError("bound flee destination unavailable")
+    else:
+        assert effect.destination_index is not None
+        if effect.destination_index >= len(eligible):
+            raise ValueError("flee destination_index out of range for eligible set")
+        destination_id = eligible[effect.destination_index]
     if skill_efficiency is None:
         next_state = _mutate_flee(
             state, operation.actor_id, destination_id, rules=rules
@@ -3321,6 +3539,7 @@ def _event_details_for(
         case _TakeOp(actor_id=actor_id, item_id=item_id):
             item = state.items[item_id]
             if _is_corpse_custody_item(state, item):
+                assert item.holder_id is not None
                 return TakenFromCorpse(
                     item_id,
                     source_body_id=item.holder_id,
@@ -3422,7 +3641,9 @@ def _event_details_for(
                 resulting_target_hunger=resulting_hunger,
                 resulting_target_thirst=resulting_thirst,
             )
-        case _TransportOp(actor_id=actor_id, target_id=target_id, destination_id=destination_id):
+        case _TransportOp(
+            actor_id=actor_id, target_id=target_id, destination_id=destination_id
+        ):
             prior_helper = state.bodies[actor_id]
             resulting_helper = (
                 next_state.bodies[actor_id] if next_state is not None else prior_helper
@@ -3603,6 +3824,7 @@ def _mutate_take(
     items[item_id] = copy_item(item, location_id=None, holder_id=actor_id)
     custody = state.corpse_custody_item_ids
     if _is_corpse_custody_item(state, item):
+        assert item.holder_id is not None
         source = bodies[item.holder_id]
         bodies[item.holder_id] = copy_body(
             source,
@@ -3763,16 +3985,12 @@ def _mutate_feed(
     )
     if item.kind is ItemKind.FOOD:
         hunger = Hunger(
-            clamp_need(
-                round_physical(target.hunger.value - rules.feed_hunger_relief)
-            )
+            clamp_need(round_physical(target.hunger.value - rules.feed_hunger_relief))
         )
         bodies[target_id] = copy_body(target, hunger=hunger)
     else:
         thirst = Thirst(
-            clamp_need(
-                round_physical(target.thirst.value - rules.feed_thirst_relief)
-            )
+            clamp_need(round_physical(target.thirst.value - rules.feed_thirst_relief))
         )
         bodies[target_id] = copy_body(target, thirst=thirst)
     return rebuild_world_state(state, items=items, bodies=bodies)
@@ -3792,9 +4010,7 @@ def _mutate_transport(
         clamp_need(round_physical(actor.fatigue.value + rules.transport_fatigue))
     )
     bodies = dict(state.bodies)
-    bodies[actor_id] = copy_body(
-        actor, location_id=destination_id, fatigue=fatigue
-    )
+    bodies[actor_id] = copy_body(actor, location_id=destination_id, fatigue=fatigue)
     bodies[target_id] = copy_body(target, location_id=destination_id)
     return rebuild_world_state(state, bodies=bodies)
 
@@ -3830,7 +4046,10 @@ def _evaluate_possession_claim(
     *,
     succession_context: object | None,
 ) -> RuleResult:
-    allow = succession_context is not None and succession_context.allow_claim
+    allow = (
+        isinstance(succession_context, PossessionSuccessionRuleContext)
+        and succession_context.allow_claim
+    )
     if not allow:
         _OPS_LOG.debug(
             "possession_claim_rejected reason_code=%s",
@@ -3899,7 +4118,10 @@ def _evaluate_declare_commitment(
     tick: int | None,
     commitment_context: object | None,
 ) -> RuleResult:
-    if commitment_context is None or not commitment_context.allow_declare:
+    if (
+        not isinstance(commitment_context, StructuredCommitmentsRuleContext)
+        or not commitment_context.allow_declare
+    ):
         _OPS_LOG.debug(
             "commitment_rejected reason_code=%s",
             RuleReason.STRUCTURED_COMMITMENTS_CHANNEL_OFF.value,
@@ -3934,12 +4156,7 @@ def _evaluate_declare_commitment(
     if operation.due_kind == "by_tick":
         due = operation.due_tick
         horizon = commitment_context.horizon_ticks
-        if (
-            tick is None
-            or type(due) is not int
-            or due < tick
-            or due > tick + horizon
-        ):
+        if tick is None or type(due) is not int or due < tick or due > tick + horizon:
             _OPS_LOG.debug(
                 "commitment_rejected reason_code=%s",
                 RuleReason.COMMITMENT_HORIZON_INVALID.value,
@@ -4389,7 +4606,10 @@ def _evaluate_deposit_record(
             operation.repository_id,
             op="deposit_record",
         )
-    if len(repository.member_artifact_ids) >= repository_context.max_members_per_repository:
+    if (
+        len(repository.member_artifact_ids)
+        >= repository_context.max_members_per_repository
+    ):
         return _repository_reject(
             kind,
             RuleReason.REPOSITORY_CAPACITY,
@@ -4675,9 +4895,7 @@ def _apply_establish_repository(
             next_state=state,
             event_details=None,
         )
-    effect = resolved.require(
-        operation.request_id, ResolvedRepositoryEstablishEffect
-    )
+    effect = resolved.require(operation.request_id, ResolvedRepositoryEstablishEffect)
     assert type(effect) is ResolvedRepositoryEstablishEffect
     access_mode = (
         require_repository_access_mode(operation.access_mode)
@@ -4732,7 +4950,7 @@ def _apply_deposit_record(
         location_id=repository.location_id,
         custodian_repository_id=repository.repository_id,
     )
-    members = repository.member_artifact_ids + (operation.artifact_id,)
+    members = (*repository.member_artifact_ids, operation.artifact_id)
     updated_repo = replace(repository, member_artifact_ids=members)
     artifacts = dict(state.artifacts)
     artifacts[operation.artifact_id] = updated_artifact
@@ -4933,6 +5151,7 @@ def _apply_index_repository(
         ),
     )
 
+
 def _evaluate_experiment(
     state: WorldState,
     operation: _ExperimentOp,
@@ -5039,8 +5258,13 @@ def _require_durable_records_context(
     return value
 
 
-def _collective_context(value: object | None):
-    from world.collective_projects import CollectiveProjectsRuleContext
+def _public_goods_context(value: object | None) -> PublicGoodsRuleContext | None:
+    if value is not None and not isinstance(value, PublicGoodsRuleContext):
+        raise TypeError("public_goods_context must be PublicGoodsRuleContext or None")
+    return value
+
+
+def _collective_context(value: object | None) -> CollectiveProjectsRuleContext | None:
 
     if value is None:
         return None
@@ -5052,23 +5276,30 @@ def _collective_context(value: object | None):
 
 
 def _evaluate_collective_project(
-    state, operation, kind: str, *, context: object | None, public_goods: object | None = None
-):
-    from world.collective_projects import (
+    state: WorldState,
+    operation: ValidatedWorldOperation,
+    kind: str,
+    *,
+    context: object | None,
+    public_goods: object | None = None,
+) -> RuleResult:
+    from world._collective_projects import (
         classify_collective_contribute,
         classify_collective_start,
     )
 
     typed = _collective_context(context)
+    goods = _public_goods_context(public_goods)
     if type(operation) is _StartCollectiveProjectOp:
         reason = classify_collective_start(
             state,
             actor_id=operation.actor_id,
             project_kind=operation.project_kind,
             context=typed,
-            public_goods=public_goods,
+            public_goods=goods,
         )
     else:
+        assert isinstance(operation, _ContributeCollectiveProjectOp)
         reason = classify_collective_contribute(
             state,
             actor_id=operation.actor_id,
@@ -5107,7 +5338,7 @@ def _evaluate_collective_project(
         "not_held": RuleReason.NOT_HELD,
         "wrong_kind": RuleReason.WRONG_KIND,
     }[reason]
-    from world.collective_projects import _log_reject
+    from world._collective_projects import _log_reject
 
     _log_reject(mapped.value)
     return _reject(kind, mapped)
@@ -5122,8 +5353,8 @@ def _apply_collective_project(
     success: bool | None,
     public_goods_active: bool = False,
     decay_millis: int = 0,
-):
-    from world.collective_projects import (
+) -> RuleApplication:
+    from world._collective_projects import (
         mutate_collective_contribute,
         mutate_collective_shortage,
         mutate_collective_start,
@@ -5142,11 +5373,12 @@ def _apply_collective_project(
             next_state=next_state,
             event_details=details[0],
         )
-    if operation.item_id is None and state.collective_projects[
-        operation.project_id
-    ].materials_done < state.collective_projects[
-        operation.project_id
-    ].materials_required:
+    assert isinstance(operation, _ContributeCollectiveProjectOp)
+    if (
+        operation.item_id is None
+        and state.collective_projects[operation.project_id].materials_done
+        < state.collective_projects[operation.project_id].materials_required
+    ):
         next_state, details = mutate_collective_shortage(
             state,
             actor_id=operation.actor_id,
@@ -5174,8 +5406,15 @@ def _apply_collective_project(
     )
 
 
-def _evaluate_public_good(state, operation, kind: str, *, tick: int, context: object | None):
-    from world.collective_projects import _log_public_reject, classify_public_good
+def _evaluate_public_good(
+    state: WorldState,
+    operation: ValidatedWorldOperation,
+    kind: str,
+    *,
+    tick: int,
+    context: object | None,
+) -> RuleResult:
+    from world._collective_projects import _log_public_reject, classify_public_good
 
     if type(operation) is _UsePublicGoodOp:
         action = "use"
@@ -5184,6 +5423,7 @@ def _evaluate_public_good(state, operation, kind: str, *, tick: int, context: ob
         action = "maintain"
         item_id = operation.item_id
     else:
+        assert isinstance(operation, _OpposePublicGoodOp)
         action = "oppose"
         item_id = None
     reason = classify_public_good(
@@ -5193,7 +5433,7 @@ def _evaluate_public_good(state, operation, kind: str, *, tick: int, context: ob
         action=action,
         item_id=item_id,
         tick=tick,
-        context=context,
+        context=_public_goods_context(context),
     )
     if reason is None:
         return RuleResult(
@@ -5228,8 +5468,8 @@ def _apply_public_good(
     result: RuleResult,
     tick: int,
     success: bool | None,
-):
-    from world.collective_projects import (
+) -> RuleApplication:
+    from world._collective_projects import (
         mutate_public_maintain,
         mutate_public_oppose,
         mutate_public_use,
@@ -5253,6 +5493,7 @@ def _apply_public_good(
             success=drawn,
         )
     else:
+        assert isinstance(operation, _OpposePublicGoodOp)
         next_state, details = mutate_public_oppose(
             state,
             actor_id=operation.actor_id,
@@ -5284,9 +5525,7 @@ def _bundle_load(state: WorldState, item_ids: tuple[EntityId, ...]) -> int:
     return sum(state.items[item_id].load.value for item_id in item_ids)
 
 
-def _carry_limit(
-    body: AgentBody, capacity_map: Mapping[EntityId, int] | None
-) -> int:
+def _carry_limit(body: AgentBody, capacity_map: Mapping[EntityId, int] | None) -> int:
     if capacity_map is not None and body.entity_id in capacity_map:
         return capacity_map[body.entity_id]
     return body.carry_capacity.value
@@ -5299,7 +5538,7 @@ def _live_exchange_offer(
     *,
     tick: int,
     horizon: int,
-):
+) -> ExchangeOffer | None:
     from world.subjective_value import exchange_party_ids
 
     pair = exchange_party_ids(actor_id, counterparty_id)

@@ -16,9 +16,6 @@ from world.artifacts import (
     DurableRecordGenre,
     RecordIntegrity,
 )
-from world.identifiers import EntityId
-from world.observations import ObservationContext
-from world._perception import PerceptionService
 
 pytestmark = pytest.mark.unit
 

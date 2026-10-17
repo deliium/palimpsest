@@ -24,8 +24,8 @@ from api.schemas import (
     EventPageOut,
     EventSummaryOut,
     ExperimentalStateOut,
-    GoalSummaryOut,
     GoalsProjectionOut,
+    GoalSummaryOut,
     GroupFormationProjectionOut,
     LedgerItemSummaryOut,
     MetricCatalogItemOut,
@@ -105,9 +105,7 @@ async def list_runs_for_inspection(
 def _agent_visible(
     request: Request, settings: Settings = Depends(get_settings)
 ) -> None:
-    require_http_capability(
-        request, settings, capability=ApiCapability.AGENT_VISIBLE
-    )
+    require_http_capability(request, settings, capability=ApiCapability.AGENT_VISIBLE)
 
 
 def _debug(request: Request, settings: Settings = Depends(get_settings)) -> None:
@@ -536,9 +534,7 @@ async def get_owner_social_norms(
     )
     _LOGGER.info(
         "route_owner_social_norms",
-        route_template=(
-            "GET /v1/simulations/{run_id}/owners/{owner_id}/social-norms"
-        ),
+        route_template=("GET /v1/simulations/{run_id}/owners/{owner_id}/social-norms"),
         status=200,
         run_id=run_id,
         heads=document.head_count,

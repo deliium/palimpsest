@@ -93,9 +93,7 @@ def test_resolve_tick_completes_a_well_and_draws() -> None:
             ActionSubmission(batch.token, AgentId("agent-1"), labor),
         ]
         if draw is not None:
-            submissions.append(
-                ActionSubmission(batch.token, AgentId("agent-2"), draw)
-            )
+            submissions.append(ActionSubmission(batch.token, AgentId("agent-2"), draw))
         engine.resolve_tick(tuple(submissions))
     state = engine._snapshot.world.state
     project = state.collective_projects[project_id]

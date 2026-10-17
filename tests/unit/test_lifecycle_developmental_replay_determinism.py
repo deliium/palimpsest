@@ -87,9 +87,7 @@ async def test_developmental_same_seed_twin_exact_trajectory_hash() -> None:
     run_id = RunId("run-dev-twin-shared")
     hashes: list[str] = []
     for _ in range(2):
-        async with await SimulationRunner.from_config(
-            config, run_id=run_id
-        ) as runner:
+        async with await SimulationRunner.from_config(config, run_id=run_id) as runner:
             result = await runner.run()
             hashes.append(
                 build_runner_result_document(
@@ -175,8 +173,7 @@ async def test_ae_stays_v24_af_stays_v25() -> None:
     assert af_on.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V25
     assert ae_on.runner_config.population_lifecycle is not None
     assert (
-        ae_on.runner_config.population_lifecycle.has_developmental_extensions()
-        is False
+        ae_on.runner_config.population_lifecycle.has_developmental_extensions() is False
     )
     run_id = RunId("run-ae-bit-shared")
     hashes: list[str] = []

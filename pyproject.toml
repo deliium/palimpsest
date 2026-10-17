@@ -352,6 +352,11 @@ id = "private_world_authority"
 name = "private world authority modules are simulation-only"
 type = "protected"
 protected_modules = [
+    "world._collective_projects",
+    "world._production",
+    "world._travel",
+    "world._skills",
+    "world._teaching",
     "world._state",
     "world._transitions",
     "world._operations",
@@ -363,6 +368,11 @@ protected_modules = [
     "world._experiment_apply",
 ]
 allowed_importers = [
+    "world._collective_projects",
+    "world._production",
+    "world._travel",
+    "world._skills",
+    "world._teaching",
     "simulation.engine",
     "simulation.bootstrap",
     "world._state",
@@ -443,6 +453,9 @@ ignore_imports = [
     "simulation.runner_serialization -> llm.factory",
     "simulation.runner_serialization -> llm.models",
     "simulation.runner -> llm.factory",
+    # Provider composition is the same permitted LLM boundary as llm.factory;
+    # recording remains provider-owned and must never expose raw payloads.
+    "simulation.runner -> llm.recording",
 ]
 
 [[tool.importlinter.contracts]]
@@ -622,4 +635,3 @@ forbidden_modules = [
     "world._experiment_laws",
     "world._experiment_apply",
 ]
-

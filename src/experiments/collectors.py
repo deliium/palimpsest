@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
-from analysis.metric_service import MetricComputationInputs, assemble_metric_documents
+if TYPE_CHECKING:
+    from analysis.models import MemoryDynamicsReport
+    from analysis.offline_consolidation_metrics import OfflineConsolidationReport
+    from analysis.reflection_metrics import ReflectionReport
+
+from analysis.metric_service import (
+    MetricBundle,
+    MetricComputationInputs,
+    assemble_metric_documents,
+)
 from analysis.models import MetricAvailability
 from experiments.metric_collection import (
     collector_fields_from_documents,
@@ -77,7 +87,7 @@ def assemble_arm_metric_bundle(
     memory_dynamics_report: object | None = None,
     offline_consolidation_report: object | None = None,
     reflection_report: object | None = None,
-):
+) -> MetricBundle:
     """Assemble run-level catalog metrics without requiring experiment membership."""
     from analysis.models import MemoryDynamicsReport
     from experiments.composition import (
@@ -118,6 +128,53 @@ def assemble_arm_metric_bundle(
     events = getattr(arm, "committed_events", None)
     if events is None:
         events = getattr(arm.runner_result, "committed_events", None)
+    regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
+    if regions_spec is not None and events is not None:
+        from experiments.composition import (
+            regional_context_from_run,
+            regional_destination_evidence_rows_from_traces,
+            regional_population_input_from_context,
+        )
+
+        scenario = arm.assignment.runner_config.scenario
+        context = regional_context_from_run(
+            regions_spec=regions_spec,
+            bodies=scenario.bodies,
+            known_location_ids=tuple(
+                location.entity_id for location in scenario.locations
+            ),
+            owner_ids=agent_ids,
+            lifecycle_records=tuple(
+                getattr(arm.runner_result, "initial_lifecycle_records", ())
+            ),
+        )
+        if context is not None:
+            regional_input = regional_population_input_from_context(
+                context,
+                events=events,
+                run_id=arm.assignment.run_id.value,
+                input_revision=arm.config_fingerprint[:32] or "rev-run",
+                window_end=ticks,
+                complete_through_boundary=ticks,
+            )
+            destination_rows = getattr(arm, "regional_destination_evidence", None)
+            if destination_rows is None:
+                destination_traces = getattr(
+                    arm.runner_result, "regional_destination_traces", None
+                )
+                destination_rows = (
+                    None
+                    if destination_traces is None
+                    else regional_destination_evidence_rows_from_traces(
+                        destination_traces
+                    )
+                )
+            inputs = replace(
+                inputs,
+                regional_population=regional_input,
+                regional_destination_evidence=destination_rows,
+                regional_destination_expected_owner_count=len(context.owner_ids),
+            )
     ledgers = getattr(arm, "territorial_ledgers", None)
     if ledgers is None:
         ledgers = getattr(arm.runner_result, "territorial_ledgers", None)
@@ -258,7 +315,7 @@ def assemble_arm_metric_bundle(
         death_ticks_by_body=(
             None
             if durable_harvest is None
-            else dict(durable_harvest["death_ticks_by_body"])  # type: ignore[arg-type]
+            else dict(cast(Mapping[str, int], durable_harvest["death_ticks_by_body"]))
         ),
         false_record_expectations=(
             None
@@ -279,7 +336,9 @@ def assemble_arm_metric_bundle(
         founder_death_ticks=(
             None
             if repository_harvest is None
-            else dict(repository_harvest["founder_death_ticks"])  # type: ignore[arg-type]
+            else dict(
+                cast(Mapping[str, int], repository_harvest["founder_death_ticks"])
+            )
         ),
         inaccessible_expectations=(
             None
@@ -295,12 +354,10 @@ def assemble_arm_metric_bundle(
         death_ticks=(
             None
             if genealogy_harvest is None
-            else dict(genealogy_harvest["death_ticks"])  # type: ignore[arg-type]
+            else dict(cast(Mapping[str, int], genealogy_harvest["death_ticks"]))
         ),
     )
-    lifecycle_spec = getattr(
-        arm.assignment.runner_config, "technique_lifecycle", None
-    )
+    lifecycle_spec = getattr(arm.assignment.runner_config, "technique_lifecycle", None)
     if lifecycle_spec is not None:
         from experiments.composition import (
             technique_item_rows_from_items,
@@ -381,9 +438,7 @@ def collect_catalog_metrics(arm: Any) -> CollectorMetricDocument:
         reflection_report=reflection,
     )
     present = sum(
-        1
-        for doc in bundle.documents
-        if doc.availability is MetricAvailability.PRESENT
+        1 for doc in bundle.documents if doc.availability is MetricAvailability.PRESENT
     )
     fields = (
         ("catalog_document_count", len(bundle.documents)),
@@ -460,7 +515,7 @@ def collect_phenomenon_panel(arm: Any) -> CollectorMetricDocument | None:
     )
 
 
-def _memory_dynamics_report_for(arm: Any):
+def _memory_dynamics_report_for(arm: Any) -> MemoryDynamicsReport | None:
     """Compose MemoryDynamicsReport from runner-harvested audits when present."""
     from experiments.composition import map_recall_audits_to_dynamics_report
 
@@ -477,7 +532,7 @@ def _memory_dynamics_report_for(arm: Any):
     )
 
 
-def _offline_consolidation_report_for(arm: Any):
+def _offline_consolidation_report_for(arm: Any) -> OfflineConsolidationReport | None:
     """Compose a count report from runner-harvested consolidation audits."""
     from experiments.composition import map_consolidation_audits_to_report
 
@@ -490,7 +545,7 @@ def _offline_consolidation_report_for(arm: Any):
     )
 
 
-def _reflection_report_for(arm: Any):
+def _reflection_report_for(arm: Any) -> ReflectionReport | None:
     """Compose a count report from runner-harvested reflection audits."""
     from experiments.composition import map_reflection_audits_to_report
 
@@ -503,7 +558,7 @@ def _reflection_report_for(arm: Any):
     )
 
 
-def _optional_reflection_report(report: object | None) -> object | None:
+def _optional_reflection_report(report: object | None) -> ReflectionReport | None:
     from analysis.reflection_metrics import ReflectionReport
 
     if report is None:
@@ -513,7 +568,9 @@ def _optional_reflection_report(report: object | None) -> object | None:
     return report
 
 
-def _optional_consolidation_report(report: object | None) -> object | None:
+def _optional_consolidation_report(
+    report: object | None,
+) -> OfflineConsolidationReport | None:
     from analysis.offline_consolidation_metrics import OfflineConsolidationReport
 
     if report is None:

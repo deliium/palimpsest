@@ -11,17 +11,17 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 from agents.models import AgentId
 from simulation.actions import (
     PHYSICAL_PURPOSE_ATTACK_DAMAGE,
     PHYSICAL_PURPOSE_ATTACK_HIT,
     PHYSICAL_PURPOSE_COLLECTIVE_PROJECT_SUCCESS,
-    PHYSICAL_PURPOSE_PUBLIC_GOOD_MAINTAIN,
     PHYSICAL_PURPOSE_FLEE_DESTINATION,
     PHYSICAL_PURPOSE_FLEE_SUCCESS,
     PHYSICAL_PURPOSE_PRODUCTION_SUCCESS,
+    PHYSICAL_PURPOSE_PUBLIC_GOOD_MAINTAIN,
     PHYSICAL_PURPOSE_SEARCH_SUCCESS,
     PHYSICAL_PURPOSE_WEATHER,
     admit_agent_command,
@@ -129,6 +129,9 @@ from world.events import (
     AgentInitializationRecorded,
     CorpseCustodyOpened,
     Died,
+    JourneyArrived,
+    JourneyEnded,
+    JourneyStarted,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     WorldEvent,
@@ -161,8 +164,25 @@ from world.observations import (
 from world.values import Health, WeatherCondition, clamp_unit_interval
 
 if TYPE_CHECKING:
+    from simulation.new_agent_initialization import PreparedEntrantBody
     from simulation.observer_facts import ObjectiveFacts
-    from simulation.runner_models import DetachedObjectiveProjection
+    from simulation.runner_models import (
+        DetachedObjectiveProjection,
+        PopulationLifecycleSpec,
+    )
+    from world._skills import (
+        ObjectiveSkillLedger,
+        ObjectiveSkillPolicy,
+        SkillGrowthInput,
+    )
+    from world._state import WorldState
+    from world.collective_projects import (
+        CollectiveProjectsRuleContext,
+        PublicGoodsRuleContext,
+    )
+    from world.environment import EnvironmentalDynamicsSpec
+    from world.events import EventDetails, ProjectAbandoned
+    from world.production import ProductionCatalog
 
 _LOGGER = logging.getLogger("simulation.engine")
 
@@ -204,9 +224,9 @@ class _PreparedTickCandidate:
     result: TickResult
     next_snapshot: _EngineSnapshot
     events: tuple[WorldEvent, ...]
-    skill_ledger: object | None = None
+    skill_ledger: ObjectiveSkillLedger | None = None
     registrations: tuple[AgentRegistration, ...] | None = None
-    lifecycle_records: tuple[object, ...] | None = None
+    lifecycle_records: tuple[AgentLifecycleRecord, ...] | None = None
     translator: RegistrationTranslator | None = None
 
 
@@ -230,6 +250,56 @@ class PopulationEntryAdmission:
     creation_config_id: str | None = None
 
 
+def objective_skill_policy(
+    *,
+    practice_rate: float,
+    success_rate: float,
+    failure_rate: float,
+    instruction_rate: float,
+    observation_rate: float,
+    probability_gain: float,
+    efficiency_gain: float,
+) -> object:
+    """Build objective policy at the authorized engine composition boundary."""
+    from world._skills import ObjectiveSkillPolicy
+
+    return ObjectiveSkillPolicy(
+        practice_rate=practice_rate,
+        success_rate=success_rate,
+        failure_rate=failure_rate,
+        instruction_rate=instruction_rate,
+        observation_rate=observation_rate,
+        probability_gain=probability_gain,
+        efficiency_gain=efficiency_gain,
+    )
+
+
+def teaching_interaction_policy(
+    *,
+    demonstration_rate: float,
+    practice_together_rate: float,
+    offer_window: int,
+    belief_explain_rate: float,
+    explain_low_below: float,
+    explain_high_at: float,
+    teaching_response_weight: float,
+    allow_provider: bool,
+) -> object:
+    """Build teaching policy without exposing private authority to the runner."""
+    from world._teaching import TeachingInteractionPolicy
+
+    return TeachingInteractionPolicy(
+        demonstration_rate=demonstration_rate,
+        practice_together_rate=practice_together_rate,
+        offer_window=offer_window,
+        belief_explain_rate=belief_explain_rate,
+        explain_low_below=explain_low_below,
+        explain_high_at=explain_high_at,
+        teaching_response_weight=teaching_response_weight,
+        allow_provider=allow_provider,
+    )
+
+
 def _request_id_set(value: object | None) -> set[str]:
     if value is None:
         return set()
@@ -244,12 +314,12 @@ def _request_id_set(value: object | None) -> set[str]:
 
 
 def _project_skill_prefix(
-    initial_state: object,
-    events: object,
+    initial_state: WorldState,
+    events: Sequence[WorldEvent],
     expected_run_id: str,
-    expected_world_id: object,
+    expected_world_id: WorldId,
     environmental_dynamics: object | None = None,
-) -> object:
+) -> WorldState:
     from world._replay import project_events
 
     return project_events(
@@ -261,7 +331,7 @@ def _project_skill_prefix(
     )
 
 
-def _fold_opened_custody(state: object, events: Sequence[object]) -> object:
+def _fold_opened_custody(state: object, events: Sequence[object]) -> WorldState:
     """Copy opened custody ids onto the live state.
 
     The custody event is the record. The id set is what a later ``Take``
@@ -285,7 +355,7 @@ def _fold_opened_custody(state: object, events: Sequence[object]) -> object:
     return rebuild_world_state(state, corpse_custody_item_ids=frozenset(custody))
 
 
-def _bind_collective_projects_channel(engine: object, config: object) -> None:
+def _bind_collective_projects_channel(engine: WorldEngine, config: object) -> None:
     """Restore the collective-projects channel from a config that may carry the spec."""
     spec = getattr(config, "collective_projects", None)
     active = spec is not None
@@ -300,7 +370,7 @@ def _bind_collective_projects_channel(engine: object, config: object) -> None:
         )
 
 
-def _bind_public_goods_channel(engine: object, config: object) -> None:
+def _bind_public_goods_channel(engine: WorldEngine, config: object) -> None:
     """Restore the public-goods channel from a config that may carry the spec."""
     spec = getattr(config, "public_goods", None)
     active = spec is not None
@@ -315,12 +385,14 @@ def _bind_public_goods_channel(engine: object, config: object) -> None:
         )
 
 
-def _bind_resource_exchange_profile_channel(engine: object, config: object) -> None:
+def _bind_resource_exchange_profile_channel(
+    engine: WorldEngine, config: object
+) -> None:
     """Restore the exchange-profile channel from a config that may carry the spec."""
     spec = getattr(config, "resource_exchange_profile", None)
     active = spec is not None
     engine._resource_exchange_profile_active = active
-    if active:
+    if spec is not None:
         _LOGGER.debug(
             "resource_exchange_profile_channel active=%s acceptance_window_ticks=%s",
             True,
@@ -328,7 +400,7 @@ def _bind_resource_exchange_profile_channel(engine: object, config: object) -> N
         )
 
 
-def _bind_subjective_valuation_channel(engine: object, config: object) -> None:
+def _bind_subjective_valuation_channel(engine: WorldEngine, config: object) -> None:
     """Restore the private-valuation channel from a config that may carry the spec."""
     spec = getattr(config, "subjective_valuation", None)
     active = spec is not None
@@ -349,43 +421,48 @@ def _bind_subjective_valuation_channel(engine: object, config: object) -> None:
 class WorldEngine:
     """Public authority for observation and ordered tick resolution."""
 
+    _skill_policy: ObjectiveSkillPolicy | None
+    _skill_ledger: ObjectiveSkillLedger | None
+    _skill_entity_ids: frozenset[EntityId]
+    _teaching_entity_ids: frozenset[EntityId]
+
     __slots__ = (
         "_artifacts_enabled",
         "_bootstrap",
+        "_collective_projects_active",
+        "_collective_projects_idle_ticks",
         "_config",
-        "_engine_id",
-        "_environmental_dynamics",
-        "_experiment_catalog",
         "_dependency_care_spec",
         "_dependency_need_registers",
         "_durable_records_spec",
-        "_knowledge_repositories_spec",
+        "_engine_id",
+        "_environmental_dynamics",
+        "_experiment_catalog",
         "_kinship_graph",
         "_kinship_spec",
+        "_knowledge_repositories_spec",
         "_last_tick_result",
         "_lifecycle_records",
         "_new_agent_initialization",
         "_perception",
         "_population_lifecycle",
         "_possession_succession_active",
-        "_structured_commitments_active",
-        "_structured_commitments_horizon",
-        "_resource_exchange_profile_active",
-        "_collective_projects_active",
-        "_collective_projects_idle_ticks",
+        "_production_catalog",
         "_public_goods_active",
         "_public_goods_decay_millis",
-        "_subjective_valuation_active",
-        "_subjective_valuation_horizon",
-        "_subjective_valuation_max_bundle",
-        "_production_catalog",
         "_registrations",
+        "_resource_exchange_profile_active",
         "_run_id",
         "_skill_entity_ids",
         "_skill_ledger",
         "_skill_policy",
         "_skill_untargeted_requests",
         "_snapshot",
+        "_structured_commitments_active",
+        "_structured_commitments_horizon",
+        "_subjective_valuation_active",
+        "_subjective_valuation_horizon",
+        "_subjective_valuation_max_bundle",
         "_teaching_entity_ids",
         "_teaching_policy",
         "_translator",
@@ -619,9 +696,10 @@ class WorldEngine:
             self._kinship_graph = KinshipGraph.empty()
         from simulation.runner_models import DependencyCareSpec
 
-        if dependency_care_spec is not None and type(
-            dependency_care_spec
-        ) is not DependencyCareSpec:
+        if (
+            dependency_care_spec is not None
+            and type(dependency_care_spec) is not DependencyCareSpec
+        ):
             raise TypeError("dependency_care_spec must be DependencyCareSpec or None")
         if dependency_care_spec is not None and self._population_lifecycle is None:
             raise ValueError(
@@ -641,12 +719,11 @@ class WorldEngine:
         )
         from simulation.runner_models import DurableRecordsSpec
 
-        if durable_records_spec is not None and type(
-            durable_records_spec
-        ) is not DurableRecordsSpec:
-            raise TypeError(
-                "durable_records_spec must be DurableRecordsSpec or None"
-            )
+        if (
+            durable_records_spec is not None
+            and type(durable_records_spec) is not DurableRecordsSpec
+        ):
+            raise TypeError("durable_records_spec must be DurableRecordsSpec or None")
         self._durable_records_spec = durable_records_spec
         if self._durable_records_spec is not None and not self._artifacts_enabled:
             self._artifacts_enabled = True
@@ -678,20 +755,26 @@ class WorldEngine:
         )
         from simulation.runner_models import KnowledgeRepositoriesSpec
 
-        if knowledge_repositories_spec is not None and type(
-            knowledge_repositories_spec
-        ) is not KnowledgeRepositoriesSpec:
+        if (
+            knowledge_repositories_spec is not None
+            and type(knowledge_repositories_spec) is not KnowledgeRepositoriesSpec
+        ):
             raise TypeError(
-                "knowledge_repositories_spec must be "
-                "KnowledgeRepositoriesSpec or None"
+                "knowledge_repositories_spec must be KnowledgeRepositoriesSpec or None"
             )
-        if knowledge_repositories_spec is not None and self._durable_records_spec is None:
+        if (
+            knowledge_repositories_spec is not None
+            and self._durable_records_spec is None
+        ):
             raise ValueError(
                 "knowledge_repositories requires durable_records "
                 "(code=knowledge_repositories_requires_durable_records)"
             )
         self._knowledge_repositories_spec = knowledge_repositories_spec
-        if self._knowledge_repositories_spec is not None and not self._artifacts_enabled:
+        if (
+            self._knowledge_repositories_spec is not None
+            and not self._artifacts_enabled
+        ):
             self._artifacts_enabled = True
             _LOGGER.debug(
                 "repository_artifacts_enabled_for_channel "
@@ -826,6 +909,8 @@ class WorldEngine:
             corpse_custody_item_ids=frozenset(snapshot.corpse_custody_item_ids),
             exchange_offers=tuple(snapshot.exchange_offers),
             collective_projects=tuple(snapshot.collective_projects),
+            regions_migration=getattr(snapshot, "regions_migration", None),
+            journeys=getattr(snapshot, "journeys", None),
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -843,7 +928,7 @@ class WorldEngine:
                 normalized_events,
                 expected_run_id=snapshot.run_id.value,
                 expected_world_id=snapshot.world_id,
-                production_catalog=resolved_catalog,  # type: ignore[arg-type]
+                production_catalog=resolved_catalog,
                 environmental_dynamics=environmental_dynamics,
             )
         except ProjectionError as exc:
@@ -929,6 +1014,12 @@ class WorldEngine:
                 normalized_events, observation_tick=restored_tick.value
             ),
         )
+        # Skill refolding projects event prefixes through these channel bindings.
+        # Bind them before refolding, just as construction does before live ticks.
+        engine._production_catalog = resolved_catalog
+        engine._environmental_dynamics = _optional_environmental_dynamics(
+            environmental_dynamics
+        )
         engine._bind_skill_state(
             skill_policy=skill_policy,
             skill_entity_ids=skill_entity_ids,
@@ -979,7 +1070,23 @@ class WorldEngine:
             artifacts_enabled
             or bool(snapshot.artifacts)
             or snapshot.persistence_codec_version
-            in {"v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
+            in {
+                "v5",
+                "v6",
+                "v7",
+                "v8",
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            }
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
         if snapshot.persistence_codec_version in {
@@ -989,8 +1096,15 @@ class WorldEngine:
             "v9",
             "v10",
             "v11",
-            "v12", "v13",
-            "v14", "v15", "v16", "v17", "v18"}:
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
                     "codec v6/v7/v8/v9 restore requires population_lifecycle "
@@ -1019,11 +1133,21 @@ class WorldEngine:
                         "(code=lifecycle_channel_off)"
                     )
                 engine._new_agent_initialization = new_agent_initialization
-            elif (
-                snapshot.persistence_codec_version
-                in {"v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}
-                and snapshot.event_schema_version in {10, 11, 12, 13, 14}
-            ):
+            elif snapshot.persistence_codec_version in {
+                "v7",
+                "v8",
+                "v9",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+            } and snapshot.event_schema_version in {10, 11, 12, 13, 14}:
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
                 config_init = getattr(snapshot.config, "new_agent_initialization", None)
                 if config_init is not None:
@@ -1049,21 +1173,48 @@ class WorldEngine:
         engine._durable_records_spec = None
         engine._knowledge_repositories_spec = None
         engine._dependency_need_registers = {}
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+        if snapshot.persistence_codec_version in {
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             from simulation.runner_models import DurableRecordsSpec
 
             resolved_durable = getattr(snapshot.config, "durable_records", None)
-            if resolved_durable is not None and type(resolved_durable) is not DurableRecordsSpec:
+            if (
+                resolved_durable is not None
+                and type(resolved_durable) is not DurableRecordsSpec
+            ):
                 raise TypeError("durable_records must be DurableRecordsSpec or None")
             engine._durable_records_spec = resolved_durable
-            if engine._durable_records_spec is not None and not engine._artifacts_enabled:
+            if (
+                engine._durable_records_spec is not None
+                and not engine._artifacts_enabled
+            ):
                 engine._artifacts_enabled = True
             _LOGGER.debug(
                 "durable_records_restore codec_version=%s durable_records_active=%s",
                 snapshot.persistence_codec_version,
                 engine._durable_records_spec is not None,
             )
-        if snapshot.persistence_codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+        if snapshot.persistence_codec_version in {
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
             resolved_repos = getattr(snapshot.config, "knowledge_repositories", None)
@@ -1075,7 +1226,10 @@ class WorldEngine:
                     "knowledge_repositories must be KnowledgeRepositoriesSpec or None"
                 )
             engine._knowledge_repositories_spec = resolved_repos
-            if engine._knowledge_repositories_spec is not None and not engine._artifacts_enabled:
+            if (
+                engine._knowledge_repositories_spec is not None
+                and not engine._artifacts_enabled
+            ):
                 engine._artifacts_enabled = True
             _LOGGER.debug(
                 "knowledge_repositories_restore codec_version=%s "
@@ -1084,7 +1238,18 @@ class WorldEngine:
                 engine._knowledge_repositories_spec is not None,
                 len(snapshot.repositories),
             )
-        if snapshot.persistence_codec_version in {"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+        if snapshot.persistence_codec_version in {
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
                 if engine._durable_records_spec is not None
@@ -1105,11 +1270,27 @@ class WorldEngine:
                     collective_projects_active=engine._collective_projects_active,
                     public_goods_active=engine._public_goods_active,
                 )
-        if snapshot.persistence_codec_version in {"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+        if snapshot.persistence_codec_version in {
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
                 resolved_kinship = getattr(snapshot.config, "kinship", None)
-            if resolved_kinship is not None and type(resolved_kinship) is not KinshipSpec:
+            if (
+                resolved_kinship is not None
+                and type(resolved_kinship) is not KinshipSpec
+            ):
                 raise TypeError("kinship_spec must be KinshipSpec or None")
             engine._kinship_spec = resolved_kinship
             max_parents = (
@@ -1163,19 +1344,35 @@ class WorldEngine:
                     if type(event.details) is KinshipEdgeRecorded
                 ),
             )
-        if snapshot.persistence_codec_version in {"v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+        if snapshot.persistence_codec_version in {
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
 
             resolved_care = getattr(snapshot.config, "dependency_care", None)
-            if resolved_care is not None and type(resolved_care) is not DependencyCareSpec:
+            if (
+                resolved_care is not None
+                and type(resolved_care) is not DependencyCareSpec
+            ):
                 raise TypeError("dependency_care must be DependencyCareSpec or None")
             engine._dependency_care_spec = resolved_care
             registers: dict[AgentId, object] = {}
             for raw_register in snapshot.dependency_need_registers:
                 if type(raw_register) is not DependencyNeedRegister:
                     raise TypeError(
-                        "dependency_need_registers entries must be DependencyNeedRegister"
+                        "dependency_need_registers entries must be "
+                        "DependencyNeedRegister"
                     )
                 registers[raw_register.agent_id] = raw_register
             engine._dependency_need_registers = registers
@@ -1319,9 +1516,7 @@ class WorldEngine:
         from world.kinship import KinshipGraph, establish_edge
 
         if type(self._kinship_spec) is not KinshipSpec:
-            raise ValueError(
-                "kinship channel inactive (code=kinship_channel_off)"
-            )
+            raise ValueError("kinship channel inactive (code=kinship_channel_off)")
         if type(parent_agent_id) is not AgentId or type(child_agent_id) is not AgentId:
             raise TypeError("parent_agent_id and child_agent_id must be AgentId")
         tick = (
@@ -1382,15 +1577,16 @@ class WorldEngine:
                 bounded_experimentation_active=self.bounded_experimentation_active,
                 possession_succession_active=self.possession_succession_active,
                 structured_commitments_active=self.structured_commitments_active,
-            subjective_valuation_active=self.subjective_valuation_active,
+                subjective_valuation_active=self.subjective_valuation_active,
                 resource_exchange_profile_active=self.resource_exchange_profile_active,
                 collective_projects_active=self.collective_projects_active,
                 public_goods_active=self._public_goods_active,
+                regions_migration_active=(
+                    self._snapshot.world.state.regions_migration is not None
+                ),
             )
             snap = self._snapshot
-            same_tick = [
-                event for event in snap.event_history if event.tick == tick
-            ]
+            same_tick = [event for event in snap.event_history if event.tick == tick]
             sequence = len(same_tick)
             origin_location = snap.world.state.bodies[child_body_id].location_id
             cause_id = derive_system_cause_id(
@@ -1486,9 +1682,7 @@ class WorldEngine:
         from simulation.runner_models import PopulationLifecycleSpec
 
         if self._population_lifecycle is None:
-            _LOGGER.error(
-                "population_entry_rejected reason_code=lifecycle_channel_off"
-            )
+            _LOGGER.error("population_entry_rejected reason_code=lifecycle_channel_off")
             raise RuntimeError(
                 "admit_population_entry requires lifecycle channel "
                 "(code=lifecycle_channel_off)"
@@ -1528,9 +1722,7 @@ class WorldEngine:
                 living,
                 spec.max_population,
             )
-            raise ValueError(
-                "population cap reached (code=population_cap)"
-            )
+            raise ValueError("population cap reached (code=population_cap)")
 
         state = snap.world.state
         known_agents = {reg.agent_id.value for reg in self._registrations}
@@ -1546,18 +1738,14 @@ class WorldEngine:
                 candidate.agent_id.value,
                 candidate.body_id.value,
             )
-            raise ValueError(
-                "population entry id collision (code=id_collision)"
-            )
+            raise ValueError("population entry id collision (code=id_collision)")
         if candidate.spawn_location_id not in state.locations:
             _LOGGER.error(
                 "population_entry_rejected reason_code=unknown_spawn_location "
                 "location_id=%s",
                 candidate.spawn_location_id.value,
             )
-            raise ValueError(
-                "spawn location unknown (code=unknown_spawn_location)"
-            )
+            raise ValueError("spawn location unknown (code=unknown_spawn_location)")
 
         entry_tick = snap.tick.value
         stage = resolve_lifecycle_stage(0, spec.stage_thresholds)
@@ -1634,9 +1822,12 @@ class WorldEngine:
             possession_succession_active=self.possession_succession_active,
             structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
-                resource_exchange_profile_active=self.resource_exchange_profile_active,
-                collective_projects_active=self.collective_projects_active,
-                public_goods_active=self._public_goods_active,
+            resource_exchange_profile_active=self.resource_exchange_profile_active,
+            collective_projects_active=self.collective_projects_active,
+            public_goods_active=self._public_goods_active,
+            regions_migration_active=(
+                self._snapshot.world.state.regions_migration is not None
+            ),
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -1754,7 +1945,7 @@ class WorldEngine:
         demographic_policy_id: str,
         explicit_body: AgentBody | None,
         origin_body: AgentBody | None,
-    ) -> object:
+    ) -> PreparedEntrantBody:
         """Resolve spawn location, body, and provenance facts for one admit."""
         from simulation.demographic_policy import DemographicEntryCandidate
         from simulation.new_agent_initialization import (
@@ -1917,11 +2108,10 @@ class WorldEngine:
         entry_tick: int,
         spawn_location: EntityId,
         prepared: object,
-    ) -> tuple[object, ...]:
+    ) -> tuple[EventDetails, ...]:
         """AgentCreated → optional AgentInitializationRecorded → AgentEnteredWorld."""
         from simulation.demographic_policy import DemographicEntryCandidate
         from simulation.new_agent_initialization import (
-            OriginRef,
             PreparedEntrantBody,
         )
 
@@ -1944,10 +2134,7 @@ class WorldEngine:
         )
         if not self.new_agent_provenance_active:
             return (created, entered)
-        origin_payload = tuple(
-            ref.canonical_payload() if type(ref) is OriginRef else dict(ref)
-            for ref in prepared.origin_refs
-        )
+        origin_payload = tuple(ref.canonical_payload() for ref in prepared.origin_refs)
         recorded = AgentInitializationRecorded(
             body_id=candidate.body_id,
             agent_id=candidate.agent_id.value,
@@ -1964,7 +2151,7 @@ class WorldEngine:
         candidate: object,
         entry_tick: int,
     ) -> tuple[KinshipEdgeRecorded, ...]:
-        """Establish mid-run parent links when both kinship + lifecycle channels allow."""
+        """Establish mid-run parent links when kinship and lifecycle allow."""
         from simulation.demographic_policy import DemographicEntryCandidate
         from simulation.runner_models import KinshipSpec
 
@@ -1985,8 +2172,7 @@ class WorldEngine:
         policy = self._kinship_spec.admit_link_policy
         if not policy.allow_parent_links_on_admit:
             raise ValueError(
-                "admit parent links disabled "
-                "(code=kinship_admit_links_disabled)"
+                "admit parent links disabled (code=kinship_admit_links_disabled)"
             )
         known = {registration.agent_id for registration in self._registrations}
         known.add(candidate.agent_id)
@@ -2013,7 +2199,10 @@ class WorldEngine:
                         "(code=kinship_unknown_agent)"
                     )
                 parent_body = state.bodies.get(parent_reg.entity_id)
-                if parent_body is None or parent_body.life_status is not LifeStatus.ALIVE:
+                if (
+                    parent_body is None
+                    or parent_body.life_status is not LifeStatus.ALIVE
+                ):
                     _LOGGER.warning(
                         "kinship_admit_parent_not_living parent=%s child=%s "
                         "reason_code=kinship_parent_not_living",
@@ -2048,12 +2237,12 @@ class WorldEngine:
         snap: _EngineSnapshot,
         working_state: object,
         registrations: tuple[AgentRegistration, ...],
-        lifecycle_records: tuple[object, ...],
+        lifecycle_records: tuple[AgentLifecycleRecord, ...],
     ) -> tuple[
-        object,
+        WorldState,
         list[PendingEvent],
         tuple[AgentRegistration, ...],
-        tuple[object, ...],
+        tuple[AgentLifecycleRecord, ...],
         RegistrationTranslator,
         bool,
         int,
@@ -2076,6 +2265,7 @@ class WorldEngine:
 
         tick = snap.tick.value
         pending: list[PendingEvent] = []
+        details: EventDetails
         family_ordinal = 0
         semantic_mutation = False
         stage_changed_count = 0
@@ -2115,9 +2305,7 @@ class WorldEngine:
                 or dependency is not record.dependency_status
             ):
                 previous_stage = record.stage.value
-                record = replace(
-                    record, stage=stage, dependency_status=dependency
-                )
+                record = replace(record, stage=stage, dependency_status=dependency)
                 records_by_body[record.body_id.value] = record
                 details = LifecycleStageChanged(
                     body_id=record.body_id,
@@ -2358,8 +2546,7 @@ class WorldEngine:
                 working_state = rebuild_world_state(working_state, bodies=bodies)
             except ValueError:
                 _LOGGER.error(
-                    "population_entry_rejected reason_code=world_invariant "
-                    "body_id=%s",
+                    "population_entry_rejected reason_code=world_invariant body_id=%s",
                     candidate.body_id.value,
                 )
                 continue
@@ -2488,6 +2675,12 @@ class WorldEngine:
             rules=rules,
         )
         facts = ObjectiveFacts(
+            regions_migration=state.regions_migration,
+            journeys=tuple(
+                sorted(
+                    (state.journeys or {}).values(), key=lambda item: item.journey_id
+                )
+            ),
             run_id=self._run_id.value,
             world_id=self.world_id.value,
             tick=self.tick.value,
@@ -2542,10 +2735,10 @@ class WorldEngine:
         expected_world_id: object,
     ) -> object:
         return _project_skill_prefix(
-            initial_state,
-            events,
+            cast("WorldState", initial_state),
+            cast(Sequence[WorldEvent], events),
             expected_run_id,
-            expected_world_id,
+            cast(WorldId, expected_world_id),
             self._environmental_dynamics,
         )
 
@@ -2675,26 +2868,16 @@ class WorldEngine:
             }
             self_views: dict[EntityId, ObservedKinshipVisible] = {}
             for registration in self._registrations:
-                parent_ids = parents_of(
-                    self._kinship_graph, registration.agent_id
-                )
-                child_ids = children_of(
-                    self._kinship_graph, registration.agent_id
-                )
+                parent_ids = parents_of(self._kinship_graph, registration.agent_id)
+                child_ids = children_of(self._kinship_graph, registration.agent_id)
                 # Only include agents still addressable in the registration map.
                 parents = tuple(
                     sorted(
-                        agent.value
-                        for agent in parent_ids
-                        if agent in body_by_agent
+                        agent.value for agent in parent_ids if agent in body_by_agent
                     )
                 )
                 children = tuple(
-                    sorted(
-                        agent.value
-                        for agent in child_ids
-                        if agent in body_by_agent
-                    )
+                    sorted(agent.value for agent in child_ids if agent in body_by_agent)
                 )
                 if parents or children:
                     self_views[registration.entity_id] = ObservedKinshipVisible(
@@ -2731,7 +2914,7 @@ class WorldEngine:
             policies = spec.to_domain_policies()
             state = self._snapshot.world.state
             need_views: dict[EntityId, ObservedDependencyNeeds] = {}
-            for body_id, lifecycle_view in lifecycle_by_body.items():
+            for body_id in lifecycle_by_body:
                 body = state.bodies.get(body_id)
                 if body is None:
                     continue
@@ -2750,7 +2933,7 @@ class WorldEngine:
                 rows: list[ObservedDependencyNeed] = []
                 for need_name in spec.enabled_needs:
                     need = CareNeedId(need_name)
-                    policy = policies.get(need)  # type: ignore[arg-type]
+                    policy = policies.get(need)
                     if type(policy) is not CareNeedPolicy:
                         continue
                     if need is CareNeedId.FOOD:
@@ -2758,9 +2941,7 @@ class WorldEngine:
                     elif need is CareNeedId.WATER:
                         deficit = min(1.0, max(0.0, body.thirst.value / 100.0))
                     elif need is CareNeedId.SAFETY:
-                        deficit = min(
-                            1.0, max(0.0, 1.0 - (body.health.value / 100.0))
-                        )
+                        deficit = min(1.0, max(0.0, 1.0 - (body.health.value / 100.0)))
                     elif need is CareNeedId.SHELTER:
                         deficit = min(1.0, max(0.0, 1.0 - shelter))
                     elif need is CareNeedId.LEARNING:
@@ -3191,6 +3372,30 @@ class WorldEngine:
             len(result.events),
             death_count,
         )
+        for record in result.events:
+            details = record.event.details
+            if type(details) is JourneyStarted:
+                journey_id = details.journey.journey_id
+                reason_code = "start"
+                participant_count = len(details.journey.participant_body_ids)
+            elif isinstance(details, (JourneyArrived, JourneyEnded)):
+                journey_id = details.journey_id
+                reason_code = (
+                    details.reason if isinstance(details, JourneyEnded) else "arrival"
+                )
+                participant_count = len(details.participant_body_ids)
+            else:
+                continue
+            _LOGGER.info(
+                "journey_event_committed event_id=%s journey_id=%s "
+                "tick=%s kind=%s participant_count=%s reason_code=%s",
+                record.event.event_id.value,
+                journey_id,
+                record.event.tick,
+                details.kind,
+                participant_count,
+                reason_code,
+            )
         return result
 
     def export_events(self) -> SimulationExport:
@@ -3239,10 +3444,10 @@ class WorldEngine:
         tuple[ActionResolution, ...],
         tuple[WorldEvent, ...],
         World,
-        object | None,
+        ObjectiveSkillLedger | None,
         tuple[
             tuple[AgentRegistration, ...],
-            tuple[object, ...],
+            tuple[AgentLifecycleRecord, ...],
             RegistrationTranslator,
         ],
     ]:
@@ -3387,6 +3592,17 @@ class WorldEngine:
                 if self._collective_projects_active
                 else None
             ),
+            deferred_regional_flee_effect=(
+                None
+                if snap.world.state.regions_migration is None
+                else lambda request, working_state: self._resolve_flee_effect(
+                    snap=snap,
+                    request=request,
+                    request_ordinals=request_ordinals,
+                    rules=physical_rules,
+                    starting_state=working_state,
+                )
+            ),
         )
         start_ledger = self._skill_ledger
         folded_ledger, skill_facts = self._fold_skill_ledger(
@@ -3421,8 +3637,48 @@ class WorldEngine:
             )
 
         action_pending = pending
-        completion_state = action_pending.working_state
-        completion_details: tuple[object, ...] = ()
+        from world._travel import advance_due_journeys
+
+        completion_state, journey_transitions = advance_due_journeys(
+            action_pending.working_state, tick=snap.tick.value
+        )
+
+        def _prepare_journey_events(
+            transitions: Sequence[JourneyArrived | JourneyEnded],
+            *,
+            ordinal_offset: int,
+        ) -> list[PendingEvent]:
+            pending_events: list[PendingEvent] = []
+            for ordinal, details in enumerate(transitions, start=ordinal_offset):
+                entity_id = details.participant_body_ids[0]
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=snap.tick.value,
+                    effect_family=SystemEffectFamily.TRAVEL.value,
+                    entity_id=entity_id,
+                    family_ordinal=ordinal,
+                )
+                pending_events.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id=cause_id,
+                            effect_family=SystemEffectFamily.TRAVEL,
+                            entity_id=entity_id,
+                            family_ordinal=ordinal,
+                        ),
+                        details=details,
+                        occurrence=build_occurrence_context(
+                            details,
+                            origin_location_id=details.origin_location_id,
+                        ),
+                    )
+                )
+            return pending_events
+
+        journey_pending = _prepare_journey_events(journey_transitions, ordinal_offset=0)
+        completion_details: tuple[EventDetails, ...] = ()
         catalog = self._production_catalog
         if catalog is not None and completion_state.production_jobs:
             from world._production import complete_due_jobs
@@ -3432,9 +3688,9 @@ class WorldEngine:
                 tick=snap.tick.value,
                 catalog=catalog,
             )
-        abandon_details: tuple[object, ...] = ()
+        abandon_details: tuple[ProjectAbandoned, ...] = ()
         if self._collective_projects_active:
-            from world.collective_projects import abandon_idle_projects
+            from world._collective_projects import abandon_idle_projects
 
             completion_state, abandon_details = abandon_idle_projects(
                 completion_state,
@@ -3442,7 +3698,7 @@ class WorldEngine:
                 idle_ticks=self._collective_projects_idle_ticks,
             )
         if self._public_goods_active and self._public_goods_decay_millis > 0:
-            from world.collective_projects import decay_linked_structures
+            from world._collective_projects import decay_linked_structures
 
             completion_state = decay_linked_structures(
                 completion_state, decay_millis=self._public_goods_decay_millis
@@ -3535,18 +3791,17 @@ class WorldEngine:
             ResourceHarvested,
             StructureBuilt,
             StructureRepaired,
-            build_occurrence_context,
         )
 
         production_pending: list[PendingEvent] = []
-        for family_ordinal, detail in enumerate(abandon_details):
+        for family_ordinal, abandoned_detail in enumerate(abandon_details):
             cause_id = derive_system_cause_id(
                 self._config,
                 run_id=self._run_id,
                 world_id=self.world_id,
                 tick=snap.tick.value,
                 effect_family=SystemEffectFamily.COLLECTIVE_PROJECT.value,
-                entity_id=detail.project_id,
+                entity_id=abandoned_detail.project_id,
                 family_ordinal=family_ordinal,
             )
             production_pending.append(
@@ -3554,22 +3809,22 @@ class WorldEngine:
                     cause=SystemCause(
                         cause_id=cause_id,
                         effect_family=SystemEffectFamily.COLLECTIVE_PROJECT,
-                        entity_id=detail.project_id,
+                        entity_id=abandoned_detail.project_id,
                         family_ordinal=family_ordinal,
                     ),
-                    details=detail,
+                    details=abandoned_detail,
                     occurrence=build_occurrence_context(
-                        detail,
+                        abandoned_detail,
                         origin_location_id=completion_state.collective_projects[
-                            detail.project_id
+                            abandoned_detail.project_id
                         ].location_id,
                     ),
                 )
             )
-        for family_ordinal, detail in enumerate(completion_details):
-            if type(detail) is not ItemCrafted:
+        for family_ordinal, completion_detail in enumerate(completion_details):
+            if type(completion_detail) is not ItemCrafted:
                 continue
-            holder = detail.resulting_holder_id
+            holder = completion_detail.resulting_holder_id
             cause_id = derive_system_cause_id(
                 self._config,
                 run_id=self._run_id,
@@ -3587,9 +3842,9 @@ class WorldEngine:
                         entity_id=holder,
                         family_ordinal=family_ordinal,
                     ),
-                    details=detail,
+                    details=completion_detail,
                     occurrence=build_occurrence_context(
-                        detail,
+                        completion_detail,
                         origin_location_id=completion_state.bodies[holder].location_id,
                     ),
                 )
@@ -3632,6 +3887,16 @@ class WorldEngine:
                 demographic_admit_count,
             )
 
+        from world._travel import cancel_dead_journeys
+
+        working_state, death_journey_transitions = cancel_dead_journeys(working_state)
+        journey_cleanup_pending = _prepare_journey_events(
+            death_journey_transitions,
+            ordinal_offset=len(journey_transitions),
+        )
+        semantic_mutation = semantic_mutation or bool(death_journey_transitions)
+        working_state.validate_finalized_boundary(snap.tick.value)
+
         repository_pending: list[PendingEvent] = []
         if self.knowledge_repositories_channel_active:
             working_state, repository_pending, repo_mutation = (
@@ -3643,9 +3908,11 @@ class WorldEngine:
 
         opened = (
             action_pending.pending_events
+            + tuple(journey_pending)
             + tuple(production_pending)
             + tuple(system_pending)
             + tuple(lifecycle_pending)
+            + tuple(journey_cleanup_pending)
             + tuple(repository_pending)
         )
         working_state = _fold_opened_custody(working_state, opened)
@@ -3729,9 +3996,10 @@ class WorldEngine:
             possession_succession_active=self.possession_succession_active,
             structured_commitments_active=self.structured_commitments_active,
             subjective_valuation_active=self.subjective_valuation_active,
-                resource_exchange_profile_active=self.resource_exchange_profile_active,
-                collective_projects_active=self.collective_projects_active,
-                public_goods_active=self._public_goods_active,
+            resource_exchange_profile_active=self.resource_exchange_profile_active,
+            collective_projects_active=self.collective_projects_active,
+            public_goods_active=self._public_goods_active,
+            regions_migration_active=(snap.world.state.regions_migration is not None),
         )
         prepared = finalize_pending_batch(
             merged,
@@ -3852,7 +4120,7 @@ class WorldEngine:
         pending: object,
         requests: tuple[ActionRequest, ...],
         rules: object,
-    ) -> tuple[object | None, tuple[object, ...]]:
+    ) -> tuple[ObjectiveSkillLedger | None, tuple[SkillGrowthInput, ...]]:
         if self._skill_ledger is None or self._skill_policy is None:
             return None, ()
         from world._operations import PendingBatch
@@ -3863,7 +4131,7 @@ class WorldEngine:
             raise TypeError("pending must be PendingBatch")
         if type(self._skill_ledger).__name__ == "CompetenceSelfModel":
             raise TypeError("skill growth accepts only the objective skill ledger")
-        by_request: dict[object, list[object]] = {}
+        by_request: dict[RequestId, list[PendingEvent]] = {}
         for pending_event in pending.pending_events:
             cause = pending_event.cause
             if type(cause) is not ActionCause:
@@ -3924,10 +4192,10 @@ class WorldEngine:
         *,
         snap: _EngineSnapshot,
         rules: object,
-        start_ledger: object | None,
-        folded_ledger: object | None,
+        start_ledger: ObjectiveSkillLedger | None,
+        folded_ledger: ObjectiveSkillLedger | None,
         skill_facts: tuple[object, ...],
-    ) -> object | None:
+    ) -> ObjectiveSkillLedger | None:
         if start_ledger is None or folded_ledger is None:
             _LOGGER.error(
                 "teaching_validation_failed field=%s reason_code=%s",
@@ -3936,6 +4204,8 @@ class WorldEngine:
             )
             return folded_ledger
         from world._teaching import fold_teaching_opportunities
+
+        assert self._teaching_policy is not None
 
         return fold_teaching_opportunities(
             folded_ledger,
@@ -4036,7 +4306,7 @@ class WorldEngine:
                 )
                 if attack_effect is not None:
                     by_request[request.request_id] = attack_effect
-            elif type(command) is Flee:
+            elif type(command) is Flee and starting_state.regions_migration is None:
                 flee_effect = self._resolve_flee_effect(
                     snap=snap,
                     request=request,
@@ -4122,9 +4392,7 @@ class WorldEngine:
         command = request.command
         assert type(command) is CopyRecordCommand
         parent = snap.world.state.artifacts.get(command.artifact_id)
-        parent_content = (
-            parent.content if parent is not None else ArtifactContent()
-        )
+        parent_content = parent.content if parent is not None else ArtifactContent()
         fidelity = "perfect"
         max_mark_edits = 0
         max_relation_edits = 0
@@ -4296,13 +4564,15 @@ class WorldEngine:
             return
         from world._teaching import refold_teaching_offers
 
+        if teaching_offers is not None and not isinstance(teaching_offers, Sequence):
+            raise TypeError("teaching_offers must be an ordered sequence")
         supplied = None if teaching_offers is None else tuple(teaching_offers)
         refold_teaching_offers(
             events,
             self._teaching_policy,
             self._teaching_entity_ids,
             tick=tick,
-            untargeted_request_ids=self._skill_untargeted_requests,
+            untargeted_request_ids=frozenset(self._skill_untargeted_requests),
             project_prefix=self._project_dynamics_prefix,
             initial_state=initial_state,
             expected_run_id=expected_run_id,
@@ -4349,7 +4619,7 @@ class WorldEngine:
             initial_state,
             events,
             skill_policy,
-            entity_ids,
+            cast(Sequence[EntityId], entity_ids),
             rules=physical_rules,
             expected_run_id=expected_run_id,
             expected_world_id=expected_world_id,
@@ -4494,6 +4764,7 @@ class WorldEngine:
     ) -> dict[str, dict[EntityId, float] | None]:
         """Accumulate DEPENDENT unmet-need extras and update need registers."""
         from simulation.runner_models import DependencyCareSpec
+        from world._production import shelter_factor_for
         from world.dependency_care import (
             CareNeedId,
             DependencyNeedRegister,
@@ -4501,7 +4772,6 @@ class WorldEngine:
             empty_need_register,
         )
         from world.lifecycle import AgentLifecycleRecord, DependencyStatus
-        from world._production import shelter_factor_for
 
         empty: dict[str, dict[EntityId, float] | None] = {
             "hunger": None,
@@ -4533,7 +4803,9 @@ class WorldEngine:
             if location is not None:
                 shelter = float(
                     shelter_factor_for(
-                        state, body.location_id, location.shelter_factor.value
+                        cast("WorldState", state),
+                        body.location_id,
+                        location.shelter_factor.value,
                     )
                 )
             agent_id = AgentId(raw.agent_id)
@@ -4665,9 +4937,7 @@ class WorldEngine:
 
         if not self.possession_succession_active:
             return None
-        return PossessionSuccessionRuleContext(
-            allow_corpse_take=True, allow_claim=True
-        )
+        return PossessionSuccessionRuleContext(allow_corpse_take=True, allow_claim=True)
 
     def _dependency_care_rule_context(self) -> object | None:
         """Build ephemeral Feed/Transport legality context for this tick."""
@@ -4769,8 +5039,7 @@ class WorldEngine:
 
         if type(self._knowledge_repositories_spec) is not KnowledgeRepositoriesSpec:
             raise ValueError(
-                "knowledge_repositories_inactive "
-                "(code=knowledge_repositories_inactive)"
+                "knowledge_repositories_inactive (code=knowledge_repositories_inactive)"
             )
         if type(repository_id) is not EntityId:
             raise TypeError("repository_id must be EntityId")
@@ -4780,8 +5049,7 @@ class WorldEngine:
         repository = snap.world.state.repositories.get(repository_id)
         if repository is None:
             raise ValueError(
-                f"unknown repository {repository_id.value!r} "
-                "(code=unknown_repository)"
+                f"unknown repository {repository_id.value!r} (code=unknown_repository)"
             )
         if repository.status is RepositoryStatus.DESTROYED:
             raise ValueError(
@@ -4815,8 +5083,7 @@ class WorldEngine:
             prior_event_window=snap.prior_event_window,
         )
         _LOGGER.info(
-            "repository_marked_inaccessible repository_id=%s status=%s "
-            "reason_code=%s",
+            "repository_marked_inaccessible repository_id=%s status=%s reason_code=%s",
             repository_id.value,
             RepositoryStatus.INACCESSIBLE.value,
             reason_code,
@@ -4829,8 +5096,7 @@ class WorldEngine:
 
         if type(self._knowledge_repositories_spec) is not KnowledgeRepositoriesSpec:
             raise ValueError(
-                "knowledge_repositories_inactive "
-                "(code=knowledge_repositories_inactive)"
+                "knowledge_repositories_inactive (code=knowledge_repositories_inactive)"
             )
         if type(repository_id) is not EntityId:
             raise TypeError("repository_id must be EntityId")
@@ -4838,8 +5104,7 @@ class WorldEngine:
         repository = snap.world.state.repositories.get(repository_id)
         if repository is None:
             raise ValueError(
-                f"unknown repository {repository_id.value!r} "
-                "(code=unknown_repository)"
+                f"unknown repository {repository_id.value!r} (code=unknown_repository)"
             )
         if repository.status is not RepositoryStatus.INACCESSIBLE:
             raise ValueError(
@@ -4883,7 +5148,7 @@ class WorldEngine:
         *,
         snap: _EngineSnapshot,
         working_state: object,
-    ) -> tuple[object, list[PendingEvent], bool]:
+    ) -> tuple[WorldState, list[PendingEvent], bool]:
         """Advance neglect timers and emit RepositoryNeglected system events."""
         from simulation.runner_models import KnowledgeRepositoriesSpec
         from world._state import WorldState
@@ -4900,9 +5165,7 @@ class WorldEngine:
         repositories = dict(working_state.repositories)
         semantic_mutation = False
         family_ordinal = 0
-        for repository_id in sorted(
-            repositories.keys(), key=lambda value: value.value
-        ):
+        for repository_id in sorted(repositories.keys(), key=lambda value: value.value):
             repository = repositories[repository_id]
             drop_entry_index: int | None = None
             # Corrupt index only on neglect onset (intact → neglected).
@@ -5105,6 +5368,7 @@ class WorldEngine:
                     move_fatigue=factor * rules.move_fatigue,
                     flee_fatigue=factor * rules.flee_fatigue,
                     help_health_gain=rules.help_health_gain,
+                    movement_fatigue_multiplier=factor,
                 )
                 _LOGGER.debug(
                     "lifecycle_fatigue_factor body_id=%s factor=%s "
@@ -5123,7 +5387,7 @@ class WorldEngine:
         from world.models import PhysicalRules
 
         assert type(rules) is PhysicalRules
-        overrides: dict[object, object] = {}
+        overrides = {}
         tick = self._snapshot.tick.value
         for entity_id in self._skill_entity_ids:
             navigation = self._skill_level(
@@ -5154,6 +5418,8 @@ class WorldEngine:
                 help_health_gain=adjusted_help_gain(
                     rules.help_health_gain, healing, self._skill_policy
                 ),
+                movement_fatigue_multiplier=lifecycle_factor
+                * adjusted_move_fatigue(1.0, navigation, self._skill_policy),
             )
         return overrides
 
@@ -5429,6 +5695,7 @@ class WorldEngine:
             rules.flee_success_probability,
         )
         destination_index = None
+        destination_id = None
         if success:
             dest_scope = physical_action_effect_scope(
                 config=self._config,
@@ -5443,6 +5710,8 @@ class WorldEngine:
                 create_named_stream(self._config, dest_scope),
                 len(eligible),
             )
+            if starting_state.regions_migration is not None:
+                destination_id = eligible[destination_index]
         _LOGGER.debug(
             "%s tick=%s ordinal=%s kind=flee request_id=%s outcome=%s",
             EngineDiagnosticCode.RESOLUTION_APPLIED.value,
@@ -5455,9 +5724,10 @@ class WorldEngine:
             request_id=request.request_id,
             success=success,
             destination_index=destination_index,
+            destination_id=destination_id,
         )
 
-    def _collective_projects_rule_context(self) -> object | None:
+    def _collective_projects_rule_context(self) -> CollectiveProjectsRuleContext | None:
         if not self._collective_projects_active:
             return None
         from world.collective_projects import CollectiveProjectsRuleContext
@@ -5541,7 +5811,7 @@ class WorldEngine:
         )
         return success
 
-    def _public_goods_rule_context(self) -> object | None:
+    def _public_goods_rule_context(self) -> PublicGoodsRuleContext | None:
         if not self._public_goods_active:
             return None
         from world.collective_projects import PublicGoodsRuleContext
@@ -5561,10 +5831,10 @@ class WorldEngine:
     ) -> bool:
         """Draw ``public_good_maintain`` only when the chance is below 1."""
         from world._production import adjusted_production_probability
+        from world._skills import SkillDomain
         from world._state import WorldState
         from world.actions import MaintainPublicGood
         from world.collective_projects import PUBLIC_GOOD_MAINTAIN_BASE_PROBABILITY
-        from world._skills import SkillDomain
 
         if type(working_state) is not WorldState:
             raise TypeError("working_state must be WorldState")
@@ -5777,6 +6047,7 @@ def select_checkpoint_schema(
     resource_exchange_profile_active: bool = False,
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
+    regions_migration_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -5793,12 +6064,14 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -5818,7 +6091,19 @@ def select_checkpoint_schema(
         resource_exchange_profile_active=resource_exchange_profile_active,
         collective_projects_active=collective_projects_active,
         public_goods_active=public_goods_active,
+        regions_migration_active=regions_migration_active,
     )
+    if regions_migration_active and (
+        schema_version != EVENT_SCHEMA_REPLAY_V21 or codec != "v19"
+    ):
+        _LOGGER.warning(
+            "checkpoint_schema_disagrees schema_version=%s codec=%s "
+            "expected_schema=%s expected_codec=v19 "
+            "reason=regions_migration_active",
+            schema_version,
+            codec,
+            EVENT_SCHEMA_REPLAY_V21,
+        )
     if public_goods_active and (
         schema_version != EVENT_SCHEMA_REPLAY_V20 or codec != "v18"
     ):
@@ -5829,8 +6114,10 @@ def select_checkpoint_schema(
             codec,
             EVENT_SCHEMA_REPLAY_V20,
         )
-    if collective_projects_active and not public_goods_active and (
-        schema_version != EVENT_SCHEMA_REPLAY_V19 or codec != "v17"
+    if (
+        collective_projects_active
+        and not public_goods_active
+        and (schema_version != EVENT_SCHEMA_REPLAY_V19 or codec != "v17")
     ):
         _LOGGER.warning(
             "checkpoint_schema_disagrees schema_version=%s codec=%s "
@@ -5854,120 +6141,143 @@ def select_checkpoint_schema(
             EVENT_SCHEMA_REPLAY_V18,
         )
     agreed = (
-        public_goods_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V20
-        and codec == "v18"
-    ) or (
-        not public_goods_active
-        and collective_projects_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V19
-        and codec == "v17"
-    ) or (
-        not collective_projects_active
-        and resource_exchange_profile_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V18
-        and codec == "v16"
-    ) or (
-        not collective_projects_active
-        and not resource_exchange_profile_active
-        and subjective_valuation_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V18
-        and codec == "v15"
-    ) or (
-        not subjective_valuation_active
-        and structured_commitments_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V17
-        and codec == "v14"
-    ) or (
-        not structured_commitments_active
-        and possession_succession_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V16
-        and codec == "v13"
-    ) or (
-        not structured_commitments_active
-        and not possession_succession_active
-        and bounded_experimentation_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V15
-        and codec == "v12"
-    ) or (
-        not bounded_experimentation_active
-        and knowledge_repositories_active
-        and durable_records_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V14
-        and codec == "v11"
-    ) or (
-        not knowledge_repositories_active
-        and durable_records_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V13
-        and codec == "v10"
-    ) or (
-        not knowledge_repositories_active
-        and not durable_records_active
-        and dependency_care_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V12
-        and codec == "v9"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and kinship_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V11
-        and codec == "v8"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and not kinship_active
-        and new_agent_provenance_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V10
-        and codec == "v7"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and not kinship_active
-        and not new_agent_provenance_active
-        and lifecycle_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V9
-        and codec == "v6"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and not kinship_active
-        and not new_agent_provenance_active
-        and not lifecycle_active
-        and artifacts_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V8
-        and codec == "v5"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and not kinship_active
-        and not new_agent_provenance_active
-        and not lifecycle_active
-        and not artifacts_active
-        and dynamics_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V7
-        and codec == "v4"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and not kinship_active
-        and not new_agent_provenance_active
-        and not lifecycle_active
-        and not artifacts_active
-        and not dynamics_active
-        and production_active
-        and schema_version == EVENT_SCHEMA_REPLAY_V6
-        and codec == "v3"
-    ) or (
-        not durable_records_active
-        and not dependency_care_active
-        and not kinship_active
-        and not new_agent_provenance_active
-        and not lifecycle_active
-        and not artifacts_active
-        and not dynamics_active
-        and not production_active
-        and schema_version == EVENT_SCHEMA_VERSION
-        and codec == PERSISTENCE_CODEC_VERSION
+        (
+            regions_migration_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V21
+            and codec == "v19"
+        )
+        or (
+            public_goods_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V20
+            and codec == "v18"
+        )
+        or (
+            not public_goods_active
+            and collective_projects_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V19
+            and codec == "v17"
+        )
+        or (
+            not collective_projects_active
+            and resource_exchange_profile_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V18
+            and codec == "v16"
+        )
+        or (
+            not collective_projects_active
+            and not resource_exchange_profile_active
+            and subjective_valuation_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V18
+            and codec == "v15"
+        )
+        or (
+            not subjective_valuation_active
+            and structured_commitments_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V17
+            and codec == "v14"
+        )
+        or (
+            not structured_commitments_active
+            and possession_succession_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V16
+            and codec == "v13"
+        )
+        or (
+            not structured_commitments_active
+            and not possession_succession_active
+            and bounded_experimentation_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V15
+            and codec == "v12"
+        )
+        or (
+            not bounded_experimentation_active
+            and knowledge_repositories_active
+            and durable_records_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V14
+            and codec == "v11"
+        )
+        or (
+            not knowledge_repositories_active
+            and durable_records_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V13
+            and codec == "v10"
+        )
+        or (
+            not knowledge_repositories_active
+            and not durable_records_active
+            and dependency_care_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V12
+            and codec == "v9"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and kinship_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V11
+            and codec == "v8"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and not kinship_active
+            and new_agent_provenance_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V10
+            and codec == "v7"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and not kinship_active
+            and not new_agent_provenance_active
+            and lifecycle_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V9
+            and codec == "v6"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and not kinship_active
+            and not new_agent_provenance_active
+            and not lifecycle_active
+            and artifacts_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V8
+            and codec == "v5"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and not kinship_active
+            and not new_agent_provenance_active
+            and not lifecycle_active
+            and not artifacts_active
+            and dynamics_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V7
+            and codec == "v4"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and not kinship_active
+            and not new_agent_provenance_active
+            and not lifecycle_active
+            and not artifacts_active
+            and not dynamics_active
+            and production_active
+            and schema_version == EVENT_SCHEMA_REPLAY_V6
+            and codec == "v3"
+        )
+        or (
+            not durable_records_active
+            and not dependency_care_active
+            and not kinship_active
+            and not new_agent_provenance_active
+            and not lifecycle_active
+            and not artifacts_active
+            and not dynamics_active
+            and not production_active
+            and schema_version == EVENT_SCHEMA_VERSION
+            and codec == PERSISTENCE_CODEC_VERSION
+        )
     )
     if not agreed:
         _LOGGER.error(
@@ -6014,7 +6324,9 @@ def select_checkpoint_schema(
     return schema_version, codec
 
 
-def _optional_environmental_dynamics(value: object | None) -> object | None:
+def _optional_environmental_dynamics(
+    value: object | None,
+) -> EnvironmentalDynamicsSpec | None:
     if value is None:
         return None
     from world.environment import EnvironmentalDynamicsSpec
@@ -6031,7 +6343,7 @@ def _optional_population_lifecycle(
     *,
     lifecycle_records: Sequence[object] | None,
     synthesize_assigned_lifespan: bool = False,
-) -> tuple[object | None, tuple[object, ...]]:
+) -> tuple[PopulationLifecycleSpec | None, tuple[AgentLifecycleRecord, ...]]:
     if value is None:
         if lifecycle_records:
             raise ValueError(
@@ -6046,9 +6358,7 @@ def _optional_population_lifecycle(
     from world.lifecycle import AgentLifecycleRecord
 
     if type(value) is not PopulationLifecycleSpec:
-        raise TypeError(
-            "population_lifecycle must be PopulationLifecycleSpec or None"
-        )
+        raise TypeError("population_lifecycle must be PopulationLifecycleSpec or None")
     pending_synthesis = (
         consume_pending_assigned_lifespan_synthesis()
         if synthesize_assigned_lifespan
@@ -6067,9 +6377,7 @@ def _optional_population_lifecycle(
             )
         seen_bodies.add(record.body_id.value)
         if record.body_id.value in pending_synthesis:
-            record = replace(
-                record, assigned_lifespan_ticks=value.lifespan_ticks
-            )
+            record = replace(record, assigned_lifespan_ticks=value.lifespan_ticks)
             _LOGGER.debug(
                 "lifecycle_assigned_lifespan_synthesized body_id=%s "
                 "assigned_lifespan_ticks=%s",
@@ -6080,7 +6388,7 @@ def _optional_population_lifecycle(
     return value, tuple(frozen)
 
 
-def _optional_production_catalog(value: object | None) -> object | None:
+def _optional_production_catalog(value: object | None) -> ProductionCatalog | None:
     if value is None:
         return None
     from world.production import ProductionCatalog
@@ -6142,7 +6450,9 @@ def _map_batch_outcome(
         "no_item_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
         "no_carry_capacity": ActionResolutionReason.STRUCTURAL_REJECTION,
         "lifecycle_stage_action_denied": ActionResolutionReason.STRUCTURAL_REJECTION,
-        "dependency_care_self_satisfy_denied": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "dependency_care_self_satisfy_denied": (
+            ActionResolutionReason.STRUCTURAL_REJECTION
+        ),
         "dependency_care_channel_off": ActionResolutionReason.STRUCTURAL_REJECTION,
         "dependency_care_target_invalid": ActionResolutionReason.STRUCTURAL_REJECTION,
         "dependency_care_action_disabled": ActionResolutionReason.STRUCTURAL_REJECTION,
@@ -6167,6 +6477,9 @@ def _map_batch_outcome(
         "unknown_recipe": ActionResolutionReason.STRUCTURAL_REJECTION,
         "recipe_action_mismatch": ActionResolutionReason.STRUCTURAL_REJECTION,
         "actor_busy": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "actor_travelling": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "target_travelling": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "flee_destination_unavailable": ActionResolutionReason.CONFLICT_WITH_PRIOR,
         "materials_unavailable": ActionResolutionReason.STRUCTURAL_REJECTION,
         "structure_intact": ActionResolutionReason.STRUCTURAL_REJECTION,
         "shelter_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
@@ -6175,7 +6488,9 @@ def _map_batch_outcome(
         "unknown_collective_project": ActionResolutionReason.STRUCTURAL_REJECTION,
         "collective_project_location_busy": ActionResolutionReason.STRUCTURAL_REJECTION,
         "collective_project_cap": ActionResolutionReason.STRUCTURAL_REJECTION,
-        "collective_project_store_required": ActionResolutionReason.STRUCTURAL_REJECTION,
+        "collective_project_store_required": (
+            ActionResolutionReason.STRUCTURAL_REJECTION
+        ),
         "bridge_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
         "record_site_already_present": ActionResolutionReason.STRUCTURAL_REJECTION,
         "unknown_artifact": ActionResolutionReason.STRUCTURAL_REJECTION,

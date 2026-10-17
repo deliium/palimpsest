@@ -18,8 +18,9 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Final
+from typing import Any, Final, cast
 
+from llm.contracts import LLMProvider
 from llm.errors import LLMError, LLMErrorCode
 from llm.models import (
     FinishReason,
@@ -243,25 +244,27 @@ def _synthesize_structured[T: StructuredOutput](
                 for tag in ctx.get("tags", ()) or ():
                     if isinstance(tag, str) and tag not in context_tags:
                         context_tags.append(tag)
-        return model(
-            narrative="deterministic-reconstruction",
-            concepts=tuple(concepts[:16]),
-            entity_labels=tuple(entity_labels[:16]),
-            entity_ids=tuple(entity_ids[:16]),
-            relation_predicates=(),
-            relation_subject_indexes=(),
-            relation_object_indexes=(),
-            relation_subject_kinds=(),
-            relation_object_kinds=(),
-            context_tags=tuple(context_tags[:16]),
-            location_id=location_id,
-            confidence=min(1.0, max(0.0, confidence)),
-            emotional_salience=min(1.0, max(0.0, salience)),
-            source_memory_ids=tuple(source_ids),
+        return model.model_validate(
+            {
+                "narrative": "deterministic-reconstruction",
+                "concepts": tuple(concepts[:16]),
+                "entity_labels": tuple(entity_labels[:16]),
+                "entity_ids": tuple(entity_ids[:16]),
+                "relation_predicates": (),
+                "relation_subject_indexes": (),
+                "relation_object_indexes": (),
+                "relation_subject_kinds": (),
+                "relation_object_kinds": (),
+                "context_tags": tuple(context_tags[:16]),
+                "location_id": location_id,
+                "confidence": min(1.0, max(0.0, confidence)),
+                "emotional_salience": min(1.0, max(0.0, salience)),
+                "source_memory_ids": tuple(source_ids),
+            }
         )
     # Generic fallback: empty construction if the model permits it.
     try:
-        return model.model_validate({})  # type: ignore[attr-defined]
+        return model.model_validate({})
     except Exception as exc:
         _LOG.error(
             "deterministic_fake_unsupported response_model=%s reason_code=%s",
@@ -406,7 +409,7 @@ class ConcurrencyLimitedLLMProvider:
             or max_concurrency < 1
         ):
             raise ValueError("max_concurrency must be >= 1")
-        self._inner = inner
+        self._inner = cast(LLMProvider, inner)
         self._max = max_concurrency
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._in_flight = 0
@@ -433,7 +436,7 @@ class ConcurrencyLimitedLLMProvider:
                     self._in_flight,
                     self._max,
                 )
-                return await self._inner.generate(request)  # type: ignore[no-any-return]
+                return await self._inner.generate(request)
             finally:
                 self._in_flight -= 1
 

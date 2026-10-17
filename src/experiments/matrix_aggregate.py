@@ -81,10 +81,7 @@ def build_matrix_aggregate(
             continue
         families = tuple(
             sorted(
-                {
-                    str(getattr(metric, "family", "unknown"))
-                    for metric in arm.metrics
-                }
+                {str(getattr(metric, "family", "unknown")) for metric in arm.metrics}
             )
         )
         refs.append(

@@ -98,9 +98,7 @@ def _engine(*, active: bool, foods: int):
         )
         for index in range(1, foods + 1)
     )
-    alice = alive_body(
-        "body-a", inventory=(tool.entity_id,), carry_capacity=10
-    )
+    alice = alive_body("body-a", inventory=(tool.entity_id,), carry_capacity=10)
     bob = alive_body(
         "body-b",
         inventory=tuple(item.entity_id for item in food),
@@ -119,9 +117,7 @@ def _engine(*, active: bool, foods: int):
         ),
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=17, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=17, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         subjective_valuation_active=active,
         subjective_valuation_horizon=8,
@@ -267,9 +263,7 @@ def test_divergent_reservations_do_not_complete() -> None:
     _, answered = _step(engine, {"agent-1": counter})
     names = [type(event.details).__name__ for event in engine._snapshot.event_history]
     assert "ExchangeCompleted" not in names
-    answered_names = [
-        type(record.event.details).__name__ for record in answered.events
-    ]
+    answered_names = [type(record.event.details).__name__ for record in answered.events]
     assert "ExchangeProposed" in answered_names
     assert _reservation(alice, ItemKind.TOOL) == 8
     assert _reservation(bob, ItemKind.TOOL) == 3

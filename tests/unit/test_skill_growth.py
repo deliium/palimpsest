@@ -155,12 +155,8 @@ def test_witness_visibility_disabled_rejected_and_attack(
     batch = visible.observe()
     visible.resolve_tick(
         (
-            ActionSubmission(
-                batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))
-            ),
-            ActionSubmission(
-                batch.token, AgentId("agent-2"), Move(EntityId("loc-2"))
-            ),
+            ActionSubmission(batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))),
+            ActionSubmission(batch.token, AgentId("agent-2"), Move(EntityId("loc-2"))),
         )
     )
     assert _level(visible, "body-2", SkillDomain.NAVIGATION) == _quantize(
@@ -182,9 +178,7 @@ def test_witness_visibility_disabled_rejected_and_attack(
     assert "reason_code=rejected" in caplog.text
     attacker = _engine(("body-1",))
     _act(attacker, "agent-1", Attack(EntityId("body-2")))
-    assert all(
-        _level(attacker, "body-1", domain) == 0.0 for domain in SkillDomain
-    )
+    assert all(_level(attacker, "body-1", domain) == 0.0 for domain in SkillDomain)
     messages = [
         record.getMessage()
         for record in caplog.records

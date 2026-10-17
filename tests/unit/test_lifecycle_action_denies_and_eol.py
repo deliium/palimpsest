@@ -17,7 +17,12 @@ from simulation.runner_models import (
     example_developmental_lifecycle_spec,
     seed_bootstrap_lifecycle_records,
 )
-from tests.simulation_helpers import alive_body, make_location, make_resource, make_weather
+from tests.simulation_helpers import (
+    alive_body,
+    make_location,
+    make_resource,
+    make_weather,
+)
 from world.actions import Harvest, Wait
 from world.effects import DeathCause
 from world.events import Died
@@ -64,9 +69,7 @@ def _engine(*, lifespan_ticks: int = 8) -> WorldEngine:
         registrations=bootstrap.registrations, spec=spec
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=19, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=19, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=records,
@@ -74,7 +77,8 @@ def _engine(*, lifespan_ticks: int = 8) -> WorldEngine:
     )
 
 
-def _step(engine: WorldEngine, command=Wait()) -> object:
+def _step(engine: WorldEngine, command=None) -> object:
+    command = Wait() if command is None else command
     batch = engine.observe()
     submissions = tuple(
         ActionSubmission(
@@ -94,9 +98,7 @@ def test_dependent_denies_harvest_structural_rejection(
     engine = _engine(lifespan_ticks=20)
     assert engine.lifecycle_records[0].stage.value == "dependent"
     with caplog.at_level(logging.WARNING):
-        result = _step(
-            engine, Harvest(RecipeId("harvest_wood"), EntityId("res-wood"))
-        )
+        result = _step(engine, Harvest(RecipeId("harvest_wood"), EntityId("res-wood")))
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
     assert "lifecycle_stage_action_denied" in caplog.text
 

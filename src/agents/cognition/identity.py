@@ -289,9 +289,7 @@ class IdentityPolicy:
         if max_beliefs > _MAX_VIEWS:
             raise _reason("IdentityPolicy.max_beliefs", "exceeds_max_length")
         object.__setattr__(self, "max_beliefs", max_beliefs)
-        depth_weight = _quantized_unit(
-            "IdentityPolicy.depth_weight", self.depth_weight
-        )
+        depth_weight = _quantized_unit("IdentityPolicy.depth_weight", self.depth_weight)
         recency_weight = _quantized_unit(
             "IdentityPolicy.recency_weight", self.recency_weight
         )
@@ -339,9 +337,7 @@ class IdentityPolicy:
         object.__setattr__(
             self,
             "risk_rate_ceiling",
-            _quantized_unit(
-                "IdentityPolicy.risk_rate_ceiling", self.risk_rate_ceiling
-            ),
+            _quantized_unit("IdentityPolicy.risk_rate_ceiling", self.risk_rate_ceiling),
         )
         floor = self.social_scale_floor
         ceiling = self.social_scale_ceiling
@@ -1145,13 +1141,13 @@ def appraise_identity(
                 goal.goal_id.value,
                 (cited[0].memory_id,),
             )
-    for drive, count in sorted(drive_counts.items()):
+    for drive_token, count in sorted(drive_counts.items()):
         if count < _REPEAT_MIN:
             continue
         add(
             IdentityAspect.INFERRED_VALUE,
             IdentityProvenanceKind.OWN_CHOICE,
-            drive,
+            drive_token,
             (cited[0].memory_id,),
         )
 
@@ -1320,10 +1316,7 @@ def _collect_blocked_belief_ids(
     from agents.cognition.consolidation import OfflineConsolidationPlan
     from agents.cognition.reflection import ReflectionPlan
 
-    if (
-        type(plan) is not OfflineConsolidationPlan
-        and type(plan) is not ReflectionPlan
-    ):
+    if type(plan) is not OfflineConsolidationPlan and type(plan) is not ReflectionPlan:
         return
     revisions = plan.belief_revisions
     for request in revisions:
@@ -1567,9 +1560,7 @@ def detect_identity_dissonance(
             if view is not None:
                 still_deferred.append(notice)
             continue
-        _emit_contradiction(
-            view, memory_id=memory_id, tick=tick, requests=requests
-        )
+        _emit_contradiction(view, memory_id=memory_id, tick=tick, requests=requests)
         emitted.append(notice)
         handled.add(notice.belief_id.value)
 
@@ -1616,9 +1607,7 @@ def detect_identity_dissonance(
                     },
                 )
                 continue
-            _emit_contradiction(
-                view, memory_id=memory_id, tick=tick, requests=requests
-            )
+            _emit_contradiction(view, memory_id=memory_id, tick=tick, requests=requests)
             emitted.append(notice)
 
     result = IdentityDissonanceResult(
@@ -1677,6 +1666,7 @@ def _emit_contradiction(
     tick: int,
     requests: list[BeliefRevisionRequest],
 ) -> None:
+    assert view.claim.subject.agent_id is not None
     raw = (
         f"{view.claim.subject.agent_id.value}|{tick}|{view.belief_id.value}|"
         f"{view.aspect.value}"
@@ -1745,15 +1735,23 @@ def _conflict_for_view(
 
 
 def _future_direction_present(futures: object | None, token: str) -> bool:
+    from agents.cognition.models import PossibleFutures
+
     if futures is None:
         return False
+    assert isinstance(futures, PossibleFutures)
     return any(item.direction.value == token for item in futures.futures)
 
 
 def _harm_exceeds_minimum(
     futures: object | None, *, direction: str, selected_future_id: str | None
 ) -> bool:
-    if futures is None or not futures.futures:
+    from agents.cognition.models import PossibleFutures
+
+    if futures is None:
+        return False
+    assert isinstance(futures, PossibleFutures)
+    if not futures.futures:
         return False
     harms = tuple(_future_harm(item) for item in futures.futures)
     minimum = min(harms)

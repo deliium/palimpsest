@@ -33,16 +33,12 @@ def test_mode_disabled_rejected() -> None:
 
 
 def test_unknown_access_mode_rejected() -> None:
-    with pytest.raises(
-        ValueError, match="knowledge_repositories_access_mode_invalid"
-    ):
+    with pytest.raises(ValueError, match="knowledge_repositories_access_mode_invalid"):
         KnowledgeRepositoryAccessPolicy(default_access_mode="librarian")
 
 
 def test_capacity_must_be_positive() -> None:
-    with pytest.raises(
-        ValueError, match="knowledge_repositories_capacity_invalid"
-    ):
+    with pytest.raises(ValueError, match="knowledge_repositories_capacity_invalid"):
         KnowledgeRepositoryCapacityPolicy(max_repositories=0)
 
 
@@ -54,9 +50,7 @@ def test_neglect_ticks_must_be_positive() -> None:
 
 
 def test_index_op_must_be_positive() -> None:
-    with pytest.raises(
-        ValueError, match="knowledge_repositories_index_op_invalid"
-    ):
+    with pytest.raises(ValueError, match="knowledge_repositories_index_op_invalid"):
         KnowledgeRepositoryIndexPolicy(max_entries_per_index_op=0)
 
 

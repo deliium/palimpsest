@@ -22,6 +22,7 @@ from analysis.specifications import (
 )
 from analysis.structured_commitments import (
     CommitmentLedgerSnapshot,
+    CommitmentSpeechView,
     classify_commitment_speech,
 )
 from world.events import WorldEvent
@@ -38,9 +39,7 @@ _CHANNELS: Final[tuple[str, ...]] = (
     "sanction",
 )
 
-COMMITMENT_TERM_DIVERGENCE_METRIC_VERSION: Final[str] = (
-    "commitment_term_divergence@1"
-)
+COMMITMENT_TERM_DIVERGENCE_METRIC_VERSION: Final[str] = "commitment_term_divergence@1"
 COMMITMENT_FULFILLMENT_STATUS_METRIC_VERSION: Final[str] = (
     "commitment_fulfillment_status@1"
 )
@@ -127,15 +126,14 @@ def _document(
     )
 
 
-def _divergence(views, run_id: str, revision: str) -> MetricDocument:
+def _divergence(
+    views: Sequence[CommitmentSpeechView], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.COMMITMENT_TERM_DIVERGENCE)
     if spec.version_identifier != COMMITMENT_TERM_DIVERGENCE_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
     unformed = sum(
-        1
-        for view in views
-        for row in view.interpretations
-        if row.status == "unformed"
+        1 for view in views for row in view.interpretations if row.status == "unformed"
     )
     return _document(
         spec,
@@ -151,7 +149,9 @@ def _divergence(views, run_id: str, revision: str) -> MetricDocument:
     )
 
 
-def _fulfillment(views, run_id: str, revision: str) -> MetricDocument:
+def _fulfillment(
+    views: Sequence[CommitmentSpeechView], run_id: str, revision: str
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.COMMITMENT_FULFILLMENT_STATUS)
     if spec.version_identifier != COMMITMENT_FULFILLMENT_STATUS_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
@@ -181,7 +181,12 @@ def _fulfillment(views, run_id: str, revision: str) -> MetricDocument:
     )
 
 
-def _consequences(views, counts: Mapping[str, int], run_id: str, revision: str):
+def _consequences(
+    views: Sequence[CommitmentSpeechView],
+    counts: Mapping[str, int],
+    run_id: str,
+    revision: str,
+) -> MetricDocument:
     spec = metric_specification(MetricFamilyId.COMMITMENT_SOCIAL_CONSEQUENCES)
     if spec.version_identifier != COMMITMENT_SOCIAL_CONSEQUENCES_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")

@@ -133,9 +133,7 @@ def apply_retrieval_emotion_bias(
         reordered.append(replace(hit, rank=rank, score=score))
     bias_applied = tuple(hit.trace.memory_id for hit in reordered) != tuple(
         hit.trace.memory_id for hit in ordered
-    ) or any(
-        reordered[i].score != ordered[i].score for i in range(len(ordered))
-    )
+    ) or any(reordered[i].score != ordered[i].score for i in range(len(ordered)))
     _LOG.debug(
         "retrieval_emotion_bias",
         extra={

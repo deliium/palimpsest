@@ -64,8 +64,7 @@ def test_container_and_meta_projects_repository_fields() -> None:
     for forbidden in ("library", "archive", "sacred", "family_records"):
         assert forbidden not in seen.__dataclass_fields__
         assert not any(
-            forbidden == getattr(seen, name, None)
-            for name in seen.__dataclass_fields__
+            forbidden == getattr(seen, name, None) for name in seen.__dataclass_fields__
         )
     _LOG.debug("container_and_meta ok repository_count=1")
 

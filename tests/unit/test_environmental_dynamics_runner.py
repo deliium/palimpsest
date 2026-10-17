@@ -26,9 +26,9 @@ from world.production import example_production_catalog
 
 def test_default_write_stays_v4() -> None:
     document = json.loads(
-        encode_runner_config(
-            _configured(schema_version=RUNNER_SCHEMA_VERSION)
-        ).decode("utf-8")
+        encode_runner_config(_configured(schema_version=RUNNER_SCHEMA_VERSION)).decode(
+            "utf-8"
+        )
     )
     assert document["schema_version"] == "runner-config-v4"
     assert "environmental_dynamics" not in document

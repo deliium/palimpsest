@@ -268,9 +268,7 @@ def compute_mentorship_bonds(
             notes_code="no_mentorship_bonds",
         )
     mean_strength = (
-        0.0
-        if bond_count_from_ledgers == 0
-        else strength_mass / bond_count_from_ledgers
+        0.0 if bond_count_from_ledgers == 0 else strength_mass / bond_count_from_ledgers
     )
     values = {
         "layer": _LAYER,

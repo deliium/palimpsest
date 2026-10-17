@@ -15,6 +15,7 @@ from observer.contracts import (
     ObserverFrame,
     ObserverHazard,
     ObserverItem,
+    ObserverJourney,
     ObserverLocation,
     ObserverPlaybackCursor,
     ObserverRepository,
@@ -34,8 +35,8 @@ from observer.layout import (
 )
 from observer.presentation import entity_presentation
 from observer.version import OBSERVER_PROTOCOL_VERSION
-from simulation.bootstrap import AgentRegistration
 from simulation.observer_facts import ObjectiveScene
+from simulation.registrations import AgentRegistration
 
 _LOGGER = logging.getLogger("observer.project")
 
@@ -75,6 +76,19 @@ def project_frame(
                 local_y=slot.local_y,
             )
     locations: list[ObserverLocation] = []
+    region_by_location = (
+        {}
+        if scene.regions_migration is None
+        else {
+            item.location_id: item.region_id
+            for item in scene.regions_migration.location_regions
+        }
+    )
+    labels = (
+        {}
+        if scene.regions_migration is None
+        else {item.region_id: item.label for item in scene.regions_migration.regions}
+    )
     for location in scene.locations:
         spec = layout.spec_for(location.entity_id.value)
         presentation = None if spec is None else presentation_for(spec)
@@ -86,9 +100,27 @@ def project_frame(
                 display_name=display_name,
                 neighbor_ids=tuple(item.value for item in location.adjacent),
                 presentation=presentation,
+                region_id=region_by_location.get(location.entity_id),
+                region_label=labels.get(region_by_location.get(location.entity_id, "")),
             )
         )
     agents: list[ObserverAgent] = []
+    journeys = {
+        participant: ObserverJourney(
+            journey_id=journey.journey_id,
+            origin_location_id=journey.origin_location_id.value,
+            destination_location_id=journey.destination_location_id.value,
+            participant_body_ids=tuple(
+                item.value for item in journey.participant_body_ids
+            ),
+            start_tick=journey.start_tick,
+            due_tick=journey.due_tick,
+            arrival_wait_deadline_tick=journey.arrival_wait_deadline_tick,
+            phase="capacity_wait" if scene.tick > journey.due_tick else "preparing",
+        )
+        for journey in scene.journeys
+        for participant in journey.participant_body_ids
+    }
     for body in scene.bodies:
         agent_id = by_entity.get(body.entity_id.value)
         if agent_id is None:
@@ -112,6 +144,7 @@ def project_frame(
                     temperature=body.temperature.value,
                 ),
                 presentation_slot=slots_by_entity.get(body.entity_id.value),
+                journey=journeys.get(body.entity_id),
             )
         )
     items = tuple(
@@ -158,25 +191,21 @@ def project_frame(
             author_id=item.author_id.value,
             created_tick=item.created_tick,
             content_revision=item.content_revision,
-            location_id=(
-                None if item.location_id is None else item.location_id.value
-            ),
+            location_id=(None if item.location_id is None else item.location_id.value),
             holder_id=None if item.holder_id is None else item.holder_id.value,
             marks=tuple(item.content.marks),
             presentation=entity_presentation(item.kind.value, item.kind.value),
             record_genre=(
-                None
-                if getattr(item, "record_genre", None) is None
-                else item.record_genre.value
+                None if item.record_genre is None else item.record_genre.value
             ),
             parent_artifact_id=(
                 None
-                if getattr(item, "parent_artifact_id", None) is None
+                if item.parent_artifact_id is None
                 else item.parent_artifact_id.value
             ),
             source_artifact_id=(
                 None
-                if getattr(item, "source_artifact_id", None) is None
+                if item.source_artifact_id is None
                 else item.source_artifact_id.value
             ),
             copy_generation=(
@@ -210,7 +239,7 @@ def project_frame(
             ),
             custodian_repository_id=(
                 None
-                if getattr(item, "custodian_repository_id", None) is None
+                if item.custodian_repository_id is None
                 else item.custodian_repository_id.value
             ),
         )
@@ -384,9 +413,7 @@ def project_physical_control(frame: ObserverFrame) -> PhysicalControlDocument:
             continue
         items_at.setdefault(site, []).append(item.item_id)
     location_ids = sorted(
-        set(agents_at)
-        | set(items_at)
-        | {item.location_id for item in world.locations}
+        set(agents_at) | set(items_at) | {item.location_id for item in world.locations}
     )
     locations = tuple(
         PhysicalControlLocation(

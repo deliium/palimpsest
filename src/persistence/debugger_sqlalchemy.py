@@ -21,6 +21,7 @@ from persistence.readers import event_from_orm
 from persistence.subjective_orm import SemanticBeliefEvidenceOrm
 from simulation.causal_debugger import (
     CausalTraceAvailability,
+    CounterfactualNodeMaterial,
     DebuggerEventLookupPort,
     DebuggerEventRecord,
     DebuggerFocusHandle,
@@ -160,9 +161,7 @@ class SqlAlchemyDebuggerEventLookup:
             sequence=sequence,
         )
         async with session_scope(self._session_factory) as session:
-            row = await session.get(
-                WorldEventOrm, (run_id.value, tick, sequence)
-            )
+            row = await session.get(WorldEventOrm, (run_id.value, tick, sequence))
             if row is None:
                 _LOGGER.warning(
                     "debugger_event_lookup",
@@ -193,19 +192,23 @@ class SqlAlchemyBeliefEvidenceLineage:
         )
         async with session_scope(self._session_factory) as session:
             rows = (
-                await session.execute(
-                    select(SemanticBeliefEvidenceOrm)
-                    .where(
-                        SemanticBeliefEvidenceOrm.run_id == run_id.value,
-                        SemanticBeliefEvidenceOrm.owner_id == owner_id.value,
-                        SemanticBeliefEvidenceOrm.belief_id == subject_id,
-                    )
-                    .order_by(
-                        SemanticBeliefEvidenceOrm.revision_id,
-                        SemanticBeliefEvidenceOrm.ordinal,
+                (
+                    await session.execute(
+                        select(SemanticBeliefEvidenceOrm)
+                        .where(
+                            SemanticBeliefEvidenceOrm.run_id == run_id.value,
+                            SemanticBeliefEvidenceOrm.owner_id == owner_id.value,
+                            SemanticBeliefEvidenceOrm.belief_id == subject_id,
+                        )
+                        .order_by(
+                            SemanticBeliefEvidenceOrm.revision_id,
+                            SemanticBeliefEvidenceOrm.ordinal,
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             if not rows:
                 _LOGGER.warning(
                     "debugger_lineage_query",
@@ -257,16 +260,20 @@ class SqlAlchemyMemoryDerivationLineage:
         )
         async with session_scope(self._session_factory) as session:
             sources = (
-                await session.execute(
-                    select(MemoryDerivationSourceOrm)
-                    .where(
-                        MemoryDerivationSourceOrm.run_id == run_id.value,
-                        MemoryDerivationSourceOrm.owner_id == owner_id.value,
-                        MemoryDerivationSourceOrm.derived_memory_id == subject_id,
+                (
+                    await session.execute(
+                        select(MemoryDerivationSourceOrm)
+                        .where(
+                            MemoryDerivationSourceOrm.run_id == run_id.value,
+                            MemoryDerivationSourceOrm.owner_id == owner_id.value,
+                            MemoryDerivationSourceOrm.derived_memory_id == subject_id,
+                        )
+                        .order_by(MemoryDerivationSourceOrm.source_memory_id)
                     )
-                    .order_by(MemoryDerivationSourceOrm.source_memory_id)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             if not sources:
                 _LOGGER.warning(
                     "debugger_lineage_query",
@@ -449,7 +456,7 @@ class SqlAlchemyPredictionProvenance:
         owner_id: AgentId,
         subject_id: str,
         invocation: CognitionTraceInvocation | None = None,
-        harvest=None,
+        harvest: CounterfactualNodeMaterial | None = None,
     ) -> PredictionProvenance:
         return assemble_prediction_provenance(
             run_id=run_id,

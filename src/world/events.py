@@ -61,6 +61,7 @@ from world.identifiers import (
 )
 from world.models import LifeStatus
 from world.possession_succession import POSSESSION_DOCTRINES as _POSSESSION_DOCTRINES
+from world.regions import Journey
 from world.values import ItemKind, WeatherCondition, round_physical
 
 EVENT_SCHEMA_AUDIT_V1: Final[int] = 1
@@ -84,6 +85,7 @@ EVENT_SCHEMA_REPLAY_V17: Final[int] = 17
 EVENT_SCHEMA_REPLAY_V18: Final[int] = 18
 EVENT_SCHEMA_REPLAY_V19: Final[int] = 19
 EVENT_SCHEMA_REPLAY_V20: Final[int] = 20
+EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -97,14 +99,16 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
-    EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -119,14 +123,16 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
-    EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -140,14 +146,16 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
-    EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -158,14 +166,16 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
-    EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -175,12 +185,16 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
-    EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -189,12 +203,16 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V9,
         EVENT_SCHEMA_REPLAY_V10,
         EVENT_SCHEMA_REPLAY_V11,
-    EVENT_SCHEMA_REPLAY_V12,
+        EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -204,10 +222,14 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -216,10 +238,14 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V11,
         EVENT_SCHEMA_REPLAY_V12,
         EVENT_SCHEMA_REPLAY_V13,
-        EVENT_SCHEMA_REPLAY_V14, EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V14,
+        EVENT_SCHEMA_REPLAY_V15,
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -232,6 +258,9 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -243,6 +272,9 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -343,6 +375,90 @@ class Moved:
             raise TypeError("Moved.resulting_location_id must be EntityId or None")
         _optional_finite_float("Moved.fatigue_delta", self.fatigue_delta)
         _optional_finite_float("Moved.resulting_fatigue", self.resulting_fatigue)
+
+
+@dataclass(frozen=True, slots=True)
+class JourneyStarted:
+    journey: Journey
+    command_kind: Literal["move", "transport"]
+    fatigue_delta: float
+    resulting_actor_fatigue: float
+    kind: Literal["journey_started"] = field(default="journey_started", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.journey) is not Journey:
+            raise TypeError("JourneyStarted.journey must be Journey")
+        if self.command_kind not in {"move", "transport"}:
+            raise ValueError("JourneyStarted.command_kind")
+        _optional_finite_float("JourneyStarted.fatigue_delta", self.fatigue_delta)
+        _optional_finite_float(
+            "JourneyStarted.resulting_actor_fatigue", self.resulting_actor_fatigue
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class JourneyArrived:
+    journey_id: str
+    participant_body_ids: Sequence[EntityId]
+    origin_location_id: EntityId
+    destination_location_id: EntityId
+    kind: Literal["journey_arrived"] = field(default="journey_arrived", init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "journey_id",
+            require_stable_id("JourneyArrived.journey_id", self.journey_id),
+        )
+        object.__setattr__(
+            self,
+            "participant_body_ids",
+            require_ordered_unique(
+                "JourneyArrived.participant_body_ids",
+                self.participant_body_ids,
+                item_type=EntityId,
+            ),
+        )
+        if not self.participant_body_ids:
+            raise ValueError("JourneyArrived requires participants")
+        if type(self.origin_location_id) is not EntityId:
+            raise TypeError("JourneyArrived.origin_location_id must be EntityId")
+        if type(self.destination_location_id) is not EntityId:
+            raise TypeError("JourneyArrived.destination_location_id must be EntityId")
+
+
+@dataclass(frozen=True, slots=True)
+class JourneyEnded:
+    journey_id: str
+    participant_body_ids: Sequence[EntityId]
+    origin_location_id: EntityId
+    destination_location_id: EntityId
+    reason: Literal["participant_dead", "arrival_timeout"]
+    kind: Literal["journey_ended"] = field(default="journey_ended", init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "journey_id",
+            require_stable_id("JourneyEnded.journey_id", self.journey_id),
+        )
+        object.__setattr__(
+            self,
+            "participant_body_ids",
+            require_ordered_unique(
+                "JourneyEnded.participant_body_ids",
+                self.participant_body_ids,
+                item_type=EntityId,
+            ),
+        )
+        if not self.participant_body_ids:
+            raise ValueError("JourneyEnded requires participants")
+        if type(self.origin_location_id) is not EntityId:
+            raise TypeError("JourneyEnded.origin_location_id must be EntityId")
+        if type(self.destination_location_id) is not EntityId:
+            raise TypeError("JourneyEnded.destination_location_id must be EntityId")
+        if self.reason not in {"participant_dead", "arrival_timeout"}:
+            raise ValueError("JourneyEnded.reason")
 
 
 @dataclass(frozen=True, slots=True)
@@ -558,7 +674,6 @@ class Helped:
         )
 
 
-
 @dataclass(frozen=True, slots=True)
 class Fed:
     target_id: EntityId
@@ -579,8 +694,12 @@ class Fed:
             raise TypeError("Fed.item_kind must be str")
         _optional_finite_float("Fed.hunger_delta", self.hunger_delta)
         _optional_finite_float("Fed.thirst_delta", self.thirst_delta)
-        _optional_finite_float("Fed.resulting_target_hunger", self.resulting_target_hunger)
-        _optional_finite_float("Fed.resulting_target_thirst", self.resulting_target_thirst)
+        _optional_finite_float(
+            "Fed.resulting_target_hunger", self.resulting_target_hunger
+        )
+        _optional_finite_float(
+            "Fed.resulting_target_thirst", self.resulting_target_thirst
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -597,9 +716,14 @@ class Transported:
             raise TypeError("Transported.target_id must be EntityId")
         if type(self.destination_id) is not EntityId:
             raise TypeError("Transported.destination_id must be EntityId")
-        if self.origin_location_id is not None and type(self.origin_location_id) is not EntityId:
+        if (
+            self.origin_location_id is not None
+            and type(self.origin_location_id) is not EntityId
+        ):
             raise TypeError("Transported.origin_location_id must be EntityId or None")
-        _optional_finite_float("Transported.helper_fatigue_delta", self.helper_fatigue_delta)
+        _optional_finite_float(
+            "Transported.helper_fatigue_delta", self.helper_fatigue_delta
+        )
         _optional_finite_float(
             "Transported.resulting_helper_fatigue", self.resulting_helper_fatigue
         )
@@ -1207,9 +1331,7 @@ class ArtifactModified:
     resulting_location_id: EntityId | None = None
     resulting_holder_id: EntityId | None = None
     success: bool = True
-    kind: Literal["artifact_modified"] = field(
-        default="artifact_modified", init=False
-    )
+    kind: Literal["artifact_modified"] = field(default="artifact_modified", init=False)
 
     def __post_init__(self) -> None:
         if type(self.artifact_id) is not EntityId:
@@ -1466,9 +1588,7 @@ class ArtifactPartiallyLost:
         )
         if type(self.integrity) is not str or not self.integrity:
             raise TypeError("ArtifactPartiallyLost.integrity must be a non-empty str")
-        if _require_success(
-            "ArtifactPartiallyLost.success", self.success
-        ) is not True:
+        if _require_success("ArtifactPartiallyLost.success", self.success) is not True:
             raise ValueError("ArtifactPartiallyLost does not emit a failure detail")
         _reject_presentation_fields(self.kind, self.__slots__)
 
@@ -1553,9 +1673,7 @@ class AgentEnteredWorld:
         object.__setattr__(
             self,
             "entry_tick",
-            require_exact_nonneg_int(
-                "AgentEnteredWorld.entry_tick", self.entry_tick
-            ),
+            require_exact_nonneg_int("AgentEnteredWorld.entry_tick", self.entry_tick),
         )
         if _require_success("AgentEnteredWorld.success", self.success) is not True:
             raise ValueError("AgentEnteredWorld does not emit a failure detail")
@@ -1641,9 +1759,10 @@ class AgentInitializationRecorded:
             "initial_conditions",
             MappingProxyType(dict(self.initial_conditions)),
         )
-        if _require_success(
-            "AgentInitializationRecorded.success", self.success
-        ) is not True:
+        if (
+            _require_success("AgentInitializationRecorded.success", self.success)
+            is not True
+        ):
             raise ValueError(
                 "AgentInitializationRecorded does not emit a failure detail"
             )
@@ -1742,9 +1861,7 @@ class KinshipEdgeRecorded:
             ),
         )
         if self.parent_agent_id == self.child_agent_id:
-            raise ValueError(
-                "parent and child must differ (code=kinship_self_parent)"
-            )
+            raise ValueError("parent and child must differ (code=kinship_self_parent)")
         object.__setattr__(
             self,
             "established_tick",
@@ -1758,9 +1875,7 @@ class KinshipEdgeRecorded:
             require_stable_id("KinshipEdgeRecorded.edge_id", self.edge_id),
         )
         if _require_success("KinshipEdgeRecorded.success", self.success) is not True:
-            raise ValueError(
-                "KinshipEdgeRecorded does not emit a failure detail"
-            )
+            raise ValueError("KinshipEdgeRecorded does not emit a failure detail")
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
@@ -1792,7 +1907,9 @@ class RepositoryEstablished:
             raise TypeError("RepositoryEstablished.founder_ids must be a tuple")
         for founder in self.founder_ids:
             if type(founder) is not EntityId:
-                raise TypeError("RepositoryEstablished.founder_ids entries must be EntityId")
+                raise TypeError(
+                    "RepositoryEstablished.founder_ids entries must be EntityId"
+                )
         if type(self.access_mode) is not str or not self.access_mode:
             raise TypeError("RepositoryEstablished.access_mode must be a non-empty str")
         object.__setattr__(
@@ -1829,12 +1946,11 @@ class RepositoryMemberDeposited:
                 "RepositoryMemberDeposited.member_count", self.member_count
             ),
         )
-        if _require_success(
-            "RepositoryMemberDeposited.success", self.success
-        ) is not True:
-            raise ValueError(
-                "RepositoryMemberDeposited does not emit a failure detail"
-            )
+        if (
+            _require_success("RepositoryMemberDeposited.success", self.success)
+            is not True
+        ):
+            raise ValueError("RepositoryMemberDeposited does not emit a failure detail")
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
@@ -1863,12 +1979,11 @@ class RepositoryMemberRetrieved:
         )
         if type(self.hold) is not bool:
             raise TypeError("RepositoryMemberRetrieved.hold must be bool")
-        if _require_success(
-            "RepositoryMemberRetrieved.success", self.success
-        ) is not True:
-            raise ValueError(
-                "RepositoryMemberRetrieved does not emit a failure detail"
-            )
+        if (
+            _require_success("RepositoryMemberRetrieved.success", self.success)
+            is not True
+        ):
+            raise ValueError("RepositoryMemberRetrieved does not emit a failure detail")
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
@@ -2096,9 +2211,7 @@ class TakenFromCorpse:
     item_id: EntityId
     source_body_id: EntityId
     resulting_holder_id: EntityId
-    kind: Literal["taken_from_corpse"] = field(
-        default="taken_from_corpse", init=False
-    )
+    kind: Literal["taken_from_corpse"] = field(default="taken_from_corpse", init=False)
 
     def __post_init__(self) -> None:
         for name in ("item_id", "source_body_id", "resulting_holder_id"):
@@ -2189,7 +2302,10 @@ class CommitmentDeclared:
             raise ValueError("CommitmentDeclared.owed_by")
         if self.service not in _COMMITMENT_SERVICES:
             raise ValueError("CommitmentDeclared.service")
-        if type(self.quantity) is not int or self.quantity not in _COMMITMENT_QUANTITIES:
+        if (
+            type(self.quantity) is not int
+            or self.quantity not in _COMMITMENT_QUANTITIES
+        ):
             raise ValueError("CommitmentDeclared.quantity")
         if self.due_kind not in _COMMITMENT_DUE_KINDS:
             raise ValueError("CommitmentDeclared.due_kind")
@@ -2235,9 +2351,7 @@ class ExchangeProposed:
     act: str
     give_item_ids: tuple[EntityId, ...] = ()
     take_item_ids: tuple[EntityId, ...] = ()
-    kind: Literal["exchange_proposed"] = field(
-        default="exchange_proposed", init=False
-    )
+    kind: Literal["exchange_proposed"] = field(default="exchange_proposed", init=False)
 
     def __post_init__(self) -> None:
         if type(self.actor_id) is not EntityId:
@@ -2429,9 +2543,7 @@ class ProjectCompleted:
     structure_id: EntityId | None = None
     stored_delta: int = 0
     decay_millis: int | None = None
-    kind: Literal["project_completed"] = field(
-        default="project_completed", init=False
-    )
+    kind: Literal["project_completed"] = field(default="project_completed", init=False)
 
     def __post_init__(self) -> None:
         if type(self.project_id) is not EntityId:
@@ -2553,6 +2665,9 @@ class PublicGoodOpposed:
 
 EventDetails = (
     Moved
+    | JourneyStarted
+    | JourneyArrived
+    | JourneyEnded
     | Searched
     | Taken
     | Dropped
@@ -2626,6 +2741,9 @@ EventDetails = (
 _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
         Moved,
+        JourneyStarted,
+        JourneyArrived,
+        JourneyEnded,
         Searched,
         Taken,
         Dropped,
@@ -2716,22 +2834,53 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17, EVENT_SCHEMA_REPLAY_V18}
+    {
+        EVENT_SCHEMA_REPLAY_V15,
+        EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+    }
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17, EVENT_SCHEMA_REPLAY_V18}
+    {
+        EVENT_SCHEMA_REPLAY_V16,
+        EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+    }
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {CorpseCustodyOpened, TakenFromCorpse, PossessionClaimAsserted}
 )
 _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V17, EVENT_SCHEMA_REPLAY_V18}
+    {
+        EVENT_SCHEMA_REPLAY_V17,
+        EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+    }
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
-_EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V18})
+_EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {
+        EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+    }
+)
 _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {
         ProjectCreated,
@@ -2742,14 +2891,18 @@ _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V19, EVENT_SCHEMA_REPLAY_V20}
+    {EVENT_SCHEMA_REPLAY_V19, EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
 )
 _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}
 )
 _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V20}
+    {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
 )
+_JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {JourneyStarted, JourneyArrived, JourneyEnded}
+)
+_JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V21})
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
 )
@@ -2806,6 +2959,9 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V16,
         EVENT_SCHEMA_REPLAY_V17,
         EVENT_SCHEMA_REPLAY_V18,
+        EVENT_SCHEMA_REPLAY_V19,
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
     }
 )
 
@@ -2914,6 +3070,17 @@ def _artifact_effect_complete(details: EventDetails) -> bool:
 
 
 def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> bool:
+    if type(details) in _JOURNEY_DETAIL_TYPES:
+        if schema_version not in _JOURNEY_EVENT_SCHEMAS:
+            return False
+        match details:
+            case JourneyStarted() as started:
+                return (
+                    started.fatigue_delta is not None
+                    and started.resulting_actor_fatigue is not None
+                )
+            case JourneyArrived() | JourneyEnded():
+                return True
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
         return schema_version in _PUBLIC_GOOD_EVENT_SCHEMAS
     if type(details) in _PROJECT_DETAIL_TYPES:
@@ -2972,6 +3139,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
                 and moved.fatigue_delta is not None
                 and moved.resulting_fatigue is not None
             )
+        case JourneyStarted() | JourneyArrived() | JourneyEnded():
+            return schema_version in _JOURNEY_EVENT_SCHEMAS
         case Searched() as searched:
             if searched.success is None:
                 return False
@@ -3002,13 +3171,16 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
                 and helped.resulting_helper_fatigue is not None
             )
         case Fed() as fed:
-            return (
-                fed.item_kind in {"food", "water"}
-                and (
-                    (fed.item_kind == "food" and fed.hunger_delta is not None
-                     and fed.resulting_target_hunger is not None)
-                    or (fed.item_kind == "water" and fed.thirst_delta is not None
-                        and fed.resulting_target_thirst is not None)
+            return fed.item_kind in {"food", "water"} and (
+                (
+                    fed.item_kind == "food"
+                    and fed.hunger_delta is not None
+                    and fed.resulting_target_hunger is not None
+                )
+                or (
+                    fed.item_kind == "water"
+                    and fed.thirst_delta is not None
+                    and fed.resulting_target_thirst is not None
                 )
             )
         case Transported() as transported:
@@ -3057,12 +3229,12 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
             if harvested.success:
                 return harvested.created_item_id is not None
             return harvested.created_item_id is None
-        case CraftStarted() as started:
+        case CraftStarted() as craft_started:
             if schema_version not in _PRODUCTION_EVENT_SCHEMAS:
                 return False
-            if started.success:
-                return len(started.consumed_item_ids) >= 1
-            return len(started.consumed_item_ids) == 0
+            if craft_started.success:
+                return len(craft_started.consumed_item_ids) >= 1
+            return len(craft_started.consumed_item_ids) == 0
         case ItemCrafted() | StructureBuilt() | StructureRepaired() | ItemStored():
             return schema_version in _PRODUCTION_EVENT_SCHEMAS
         case _:
@@ -3092,6 +3264,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
     match details:
         case Moved(destination_id=destination_id):
             return destination_id
+        case JourneyStarted() | JourneyArrived() | JourneyEnded():
+            return None
         case Searched(target_id=target_id):
             return target_id
         case Taken(item_id=item_id) | Dropped(item_id=item_id) | Eaten(item_id=item_id):
@@ -3106,7 +3280,12 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | Told(recipient_id=recipient_id)
         ):
             return recipient_id
-        case Helped(target_id=target_id) | Fed(target_id=target_id) | Transported(target_id=target_id) | Attacked(target_id=target_id):
+        case (
+            Helped(target_id=target_id)
+            | Fed(target_id=target_id)
+            | Transported(target_id=target_id)
+            | Attacked(target_id=target_id)
+        ):
             return target_id
         case Fled(threat_id=threat_id):
             return threat_id
@@ -3177,8 +3356,9 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return repository_id
         case ExperimentResolved(operand_a_id=operand_a_id):
             return operand_a_id
-        case CorpseCustodyOpened(body_id=body_id) | PossessionClaimAsserted(
-            decedent_id=body_id
+        case (
+            CorpseCustodyOpened(body_id=body_id)
+            | PossessionClaimAsserted(decedent_id=body_id)
         ):
             return body_id
         case TakenFromCorpse(item_id=item_id):
@@ -3191,14 +3371,15 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             | ExchangeCompleted(counterparty_id=counterparty_id)
         ):
             return counterparty_id
-        case ProjectCreated(project_id=project_id) | ProjectContributed(
-            project_id=project_id
-        ) | ProjectShortage(project_id=project_id) | ProjectAbandoned(
-            project_id=project_id
-        ) | ProjectCompleted(project_id=project_id) | PublicGoodBenefit(
-            project_id=project_id
-        ) | PublicGoodMaintained(project_id=project_id) | PublicGoodOpposed(
-            project_id=project_id
+        case (
+            ProjectCreated(project_id=project_id)
+            | ProjectContributed(project_id=project_id)
+            | ProjectShortage(project_id=project_id)
+            | ProjectAbandoned(project_id=project_id)
+            | ProjectCompleted(project_id=project_id)
+            | PublicGoodBenefit(project_id=project_id)
+            | PublicGoodMaintained(project_id=project_id)
+            | PublicGoodOpposed(project_id=project_id)
         ):
             return project_id
         case _:
@@ -3368,6 +3549,16 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _JOURNEY_DETAIL_TYPES and (
+            self.schema_version not in _JOURNEY_EVENT_SCHEMAS
+        ):
+            _LOG.error(
+                "invalid_event_schema_version kind=%s schema_version=%s "
+                "reason_code=journey_requires_v21",
+                self.details.kind,
+                self.schema_version,
+            )
+            raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _PROJECT_DETAIL_TYPES:
             if self.schema_version not in _PROJECT_EVENT_SCHEMAS:
                 _LOG.error(
@@ -3380,7 +3571,8 @@ class WorldEvent:
             if (
                 type(self.details) is ProjectCompleted
                 and self.details.decay_millis is not None
-                and self.schema_version != EVENT_SCHEMA_REPLAY_V20
+                and self.schema_version
+                not in {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
             ):
                 _LOG.warning(
                     "decay_millis rejected on pre-v20 payload schema_version=%s",
@@ -3458,6 +3650,11 @@ class WorldEvent:
             raise ValueError(EventValidationCode.INVALID_OCCURRENCE_CONTEXT.value)
         expected_target = target_id_for_details(self.details)
         if self.target_id != expected_target:
+            raise ValueError(EventValidationCode.INVALID_IDENTITY.value)
+        if (
+            type(self.details) is JourneyStarted
+            and self.actor_id != self.details.journey.actor_body_id
+        ):
             raise ValueError(EventValidationCode.INVALID_IDENTITY.value)
         if (
             self.schema_version in REPLAYABLE_EVENT_SCHEMA_VERSIONS
@@ -3589,6 +3786,39 @@ def build_occurrence_context(
     ):
         raise TypeError("destination_location_id must be EntityId or None")
     match typed:
+        case JourneyStarted(journey=journey):
+            return OccurrenceContext(
+                origin_location_id=journey.origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=tuple(
+                    sorted(journey.participant_body_ids, key=lambda item: item.value)
+                ),
+                private_recipient_ids=(),
+            )
+        case JourneyArrived(
+            destination_location_id=destination_id,
+            participant_body_ids=participant_ids,
+        ):
+            return OccurrenceContext(
+                origin_location_id=None,
+                destination_location_id=destination_id,
+                affected_entity_ids=tuple(
+                    sorted(participant_ids, key=lambda item: item.value)
+                ),
+                private_recipient_ids=(),
+            )
+        case JourneyEnded(
+            origin_location_id=origin_id,
+            participant_body_ids=participant_ids,
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_id,
+                destination_location_id=None,
+                affected_entity_ids=tuple(
+                    sorted(participant_ids, key=lambda item: item.value)
+                ),
+                private_recipient_ids=(),
+            )
         case Moved(destination_id=destination_id, resulting_location_id=resulting):
             moved_dest = destination_location_id or resulting or destination_id
             return OccurrenceContext(
@@ -3618,7 +3848,12 @@ def build_occurrence_context(
                 affected_entity_ids=(),
                 private_recipient_ids=(recipient_id,),
             )
-        case Helped(target_id=target_id) | Fed(target_id=target_id) | Transported(target_id=target_id) | Attacked(target_id=target_id):
+        case (
+            Helped(target_id=target_id)
+            | Fed(target_id=target_id)
+            | Transported(target_id=target_id)
+            | Attacked(target_id=target_id)
+        ):
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
@@ -3842,11 +4077,13 @@ def build_occurrence_context(
                 private_recipient_ids=(),
             )
         case PossessionClaimAsserted(decedent_id=decedent_id, item_id=item_id):
-            affected = (decedent_id,) if item_id is None else (decedent_id, item_id)
+            claim_affected = (
+                (decedent_id,) if item_id is None else (decedent_id, item_id)
+            )
             return OccurrenceContext(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
-                affected_entity_ids=affected,
+                affected_entity_ids=claim_affected,
                 private_recipient_ids=(),
             )
         case ExperimentResolved(

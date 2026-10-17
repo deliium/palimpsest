@@ -201,9 +201,7 @@ def _public_good_focus_code(goal_board: object | None) -> tuple[str, str] | None
     for goal_id in getattr(goal_board, "foci_ids", ()):
         goal = by_id.get(goal_id)
         code = (
-            None
-            if goal is None or goal.outcome is None
-            else goal.outcome.outcome_code
+            None if goal is None or goal.outcome is None else goal.outcome.outcome_code
         )
         if code is None or not code.startswith("public_good:"):
             continue

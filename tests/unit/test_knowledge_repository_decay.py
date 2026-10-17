@@ -121,9 +121,7 @@ def test_neglect_after_n_ticks_and_maintain_resets(
     repo = engine._snapshot.world.state.repositories[repository_id]
     assert repo.status is RepositoryStatus.NEGLECTED
     assert repo.neglect_streak >= 1
-    assert any(
-        "repository_status_transition" in r.getMessage() for r in caplog.records
-    )
+    assert any("repository_status_transition" in r.getMessage() for r in caplog.records)
 
     reset = _act(
         engine,
@@ -167,9 +165,7 @@ def test_inaccessible_blocks_access() -> None:
     retrieve = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert retrieve.resolutions[0].status is ActionResolutionStatus.REJECTED
 
@@ -181,9 +177,7 @@ def test_inaccessible_blocks_access() -> None:
     retrieve_ok = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert retrieve_ok.resolutions[0].status is ActionResolutionStatus.APPLIED
 

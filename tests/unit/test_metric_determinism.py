@@ -103,13 +103,25 @@ def test_network_and_relationship_permutation_invariant() -> None:
 
     rows = [
         RelationshipEdgeRow(
-            source_id="a", target_id="b", logical_tick=1, activation_state="active", trust=0.5
+            source_id="a",
+            target_id="b",
+            logical_tick=1,
+            activation_state="active",
+            trust=0.5,
         ),
         RelationshipEdgeRow(
-            source_id="b", target_id="a", logical_tick=2, activation_state="active", trust=-0.2
+            source_id="b",
+            target_id="a",
+            logical_tick=2,
+            activation_state="active",
+            trust=-0.2,
         ),
         RelationshipEdgeRow(
-            source_id="a", target_id="b", logical_tick=4, activation_state="active", trust=0.9
+            source_id="a",
+            target_id="b",
+            logical_tick=4,
+            activation_state="active",
+            trust=0.9,
         ),
     ]
     rel_a = compute_relationship_stability(
@@ -122,7 +134,10 @@ def test_network_and_relationship_permutation_invariant() -> None:
         rows, run_id="run-d", input_revision="rev-d", agent_ids=("a", "b")
     )
     net_b = compute_trust_network_structure(
-        list(reversed(rows)), run_id="run-d", input_revision="rev-d", agent_ids=("b", "a")
+        list(reversed(rows)),
+        run_id="run-d",
+        input_revision="rev-d",
+        agent_ids=("b", "a"),
     )
     assert metric_document_fingerprint(rel_a) == metric_document_fingerprint(rel_b)
     assert metric_document_fingerprint(net_a) == metric_document_fingerprint(net_b)

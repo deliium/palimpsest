@@ -149,9 +149,7 @@ def decode_cognition_trace_invocation(payload: bytes) -> CognitionTraceInvocatio
         invocation_id = _require_str(data, "invocation_id", path="$")
         command_kind = data["command_kind"]
         if command_kind is not None and not isinstance(command_kind, str):
-            raise CognitionTraceSerializationError(
-                "invalid_string", "$.command_kind"
-            )
+            raise CognitionTraceSerializationError("invalid_string", "$.command_kind")
         final_confidence = data["final_confidence"]
         if final_confidence is not None and (
             isinstance(final_confidence, bool)
@@ -354,9 +352,7 @@ def _decode_stage_summary(
     llm_raw = data["llm_meta"]
     if llm_raw is not None:
         if not isinstance(llm_raw, dict):
-            raise CognitionTraceSerializationError(
-                "invalid_object", f"{path}.llm_meta"
-            )
+            raise CognitionTraceSerializationError("invalid_object", f"{path}.llm_meta")
         _require_keys(
             llm_raw,
             {
@@ -374,9 +370,7 @@ def _decode_stage_summary(
             provider_name=_optional_str(
                 llm_raw, "provider_name", path=f"{path}.llm_meta"
             ),
-            model_name=_optional_str(
-                llm_raw, "model_name", path=f"{path}.llm_meta"
-            ),
+            model_name=_optional_str(llm_raw, "model_name", path=f"{path}.llm_meta"),
             finish_reason=_optional_str(
                 llm_raw, "finish_reason", path=f"{path}.llm_meta"
             ),
@@ -398,9 +392,7 @@ def _decode_stage_summary(
         raise CognitionTraceSerializationError("invalid_number", f"{path}.confidence")
     command_kind = data["command_kind"]
     if command_kind is not None and not isinstance(command_kind, str):
-        raise CognitionTraceSerializationError(
-            "invalid_string", f"{path}.command_kind"
-        )
+        raise CognitionTraceSerializationError("invalid_string", f"{path}.command_kind")
     intention_code = data["intention_code"]
     if intention_code is not None and not isinstance(intention_code, str):
         raise CognitionTraceSerializationError(
@@ -408,9 +400,7 @@ def _decode_stage_summary(
         )
     reason_code = data["reason_code"]
     if reason_code is not None and not isinstance(reason_code, str):
-        raise CognitionTraceSerializationError(
-            "invalid_string", f"{path}.reason_code"
-        )
+        raise CognitionTraceSerializationError("invalid_string", f"{path}.reason_code")
     try:
         return CognitionTraceStageSummary(
             stage_kind=stage_kind,
@@ -496,16 +486,12 @@ def _require_list_str(values: Sequence[object], *, path: str) -> list[str]:
     result: list[str] = []
     for index, item in enumerate(values):
         if not isinstance(item, str):
-            raise CognitionTraceSerializationError(
-                "invalid_string", f"{path}[{index}]"
-            )
+            raise CognitionTraceSerializationError("invalid_string", f"{path}[{index}]")
         result.append(item)
     return result
 
 
-def _optional_str(
-    data: Mapping[str, Any], key: str, *, path: str
-) -> str | None:
+def _optional_str(data: Mapping[str, Any], key: str, *, path: str) -> str | None:
     value = data[key]
     if value is None:
         return None
@@ -514,9 +500,7 @@ def _optional_str(
     return value
 
 
-def _optional_nonneg_int(
-    data: Mapping[str, Any], key: str, *, path: str
-) -> int | None:
+def _optional_nonneg_int(data: Mapping[str, Any], key: str, *, path: str) -> int | None:
     value = data[key]
     if value is None:
         return None

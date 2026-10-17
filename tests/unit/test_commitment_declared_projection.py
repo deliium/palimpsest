@@ -39,13 +39,18 @@ def _state():
     item = make_item("food-1", location_id=None, holder_id="body-a")
     giver = alive_body("body-a", inventory=(item.entity_id,))
     other = alive_body("body-b")
-    return WorldState(
-        WorldRevision(0),
-        locations=(make_location(),),
-        items=(item,),
-        bodies=(giver, other),
-        weather=(make_weather(),),
-    ), item, giver, other
+    return (
+        WorldState(
+            WorldRevision(0),
+            locations=(make_location(),),
+            items=(item,),
+            bodies=(giver, other),
+            weather=(make_weather(),),
+        ),
+        item,
+        giver,
+        other,
+    )
 
 
 def test_declaration_does_not_change_inventory_or_health() -> None:
@@ -87,7 +92,9 @@ def test_declaration_does_not_change_inventory_or_health() -> None:
         entity_id: (held.holder_id, held.location_id)
         for entity_id, held in after.items.items()
     } == before_items
-    assert {body.entity_id: body.health for body in after.bodies.values()} == before_health
+    assert {
+        body.entity_id: body.health for body in after.bodies.values()
+    } == before_health
     assert not hasattr(after, "agreements")
     assert item.entity_id in after.items
 
@@ -107,7 +114,9 @@ def test_v16_rejects_declaration_kind() -> None:
         None,
         None,
     )
-    with pytest.raises(ValueError, match=EventValidationCode.INVALID_SCHEMA_VERSION.value):
+    with pytest.raises(
+        ValueError, match=EventValidationCode.INVALID_SCHEMA_VERSION.value
+    ):
         make_physical_replayable_event(
             event_id=EventId("evt-v16"),
             run_id=_RUN,

@@ -82,6 +82,5 @@ def test_bench_16_communication_remove_keeps_parent_events_immutable() -> None:
     # Child template retains shared seed/stochastic identity (inherit stream).
     assert applied.runner_config.seed == parent_config.seed
     assert (
-        applied.runner_config.stochastic_identity
-        == parent_config.stochastic_identity
+        applied.runner_config.stochastic_identity == parent_config.stochastic_identity
     )

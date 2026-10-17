@@ -11,7 +11,11 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from world._skills import ObjectiveSkillLedger
+    from world.events import WorldEvent
 
 from world._skills import SkillDomain
 from world.communications import CommunicationRelation
@@ -261,13 +265,13 @@ def _require_world_state(value: object) -> object:
 
 
 def _practice_domain(details: object, *, untargeted: bool | None) -> SkillDomain | None:
-    from world.events import Fled, Helped, Moved, Searched
+    from world.events import Fled, Helped, JourneyStarted, Moved, Searched
 
     if type(details) is Searched:
         if untargeted is True or (untargeted is None and details.target_id is None):
             return SkillDomain.FORAGING
         return SkillDomain.RESOURCE_DETECTION
-    if type(details) is Fled or type(details) is Moved:
+    if type(details) in {Fled, JourneyStarted, Moved}:
         return SkillDomain.NAVIGATION
     if type(details) is Helped:
         return SkillDomain.HEALING
@@ -283,11 +287,11 @@ def _is_public_success(details: object) -> bool:
 
 
 def _is_applied_practice(details: object) -> bool:
-    from world.events import Fled, Helped, Moved, Searched
+    from world.events import Fled, Helped, JourneyStarted, Moved, Searched
 
     if type(details) is Searched or type(details) is Fled:
         return type(details.success) is bool
-    return type(details) is Moved or type(details) is Helped
+    return type(details) in {JourneyStarted, Moved, Helped}
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,7 +308,8 @@ def _visibility(
     location_id: EntityId,
     tick: int,
 ) -> float | None:
-    from world.models import PhysicalRules, WeatherCondition
+    from world.models import PhysicalRules
+    from world.values import WeatherCondition
 
     if type(rules) is not PhysicalRules:
         raise TypeError("rules must be PhysicalRules")
@@ -496,7 +501,7 @@ def fold_teaching_opportunities(
     tick: int,
     rules: object,
     untargeted_request_ids: frozenset[str] = frozenset(),
-) -> object:
+) -> ObjectiveSkillLedger:
     """Add demonstration and joint-practice bonuses onto an already folded ledger.
 
     Start-of-tick levels come from ``start_ledger``. The other body's level is
@@ -713,9 +718,13 @@ def reject_supplied_offers_without_policy(supplied: object | None) -> None:
 
 def _event_tick_groups(
     events: Sequence[object],
-) -> tuple[tuple[int, tuple[object, ...]], ...]:
-    grouped: dict[int, list[object]] = {}
+) -> tuple[tuple[int, tuple[WorldEvent, ...]], ...]:
+    from world.events import WorldEvent
+
+    grouped: dict[int, list[WorldEvent]] = {}
     for event in events:
+        if type(event) is not WorldEvent:
+            raise TypeError("events entries must be WorldEvent")
         grouped.setdefault(int(event.tick), []).append(event)
     return tuple((tick, tuple(grouped[tick])) for tick in sorted(grouped))
 
@@ -754,6 +763,8 @@ def refold_teaching_offers(
         raise TypeError("teaching_entity_ids must be a frozenset")
     groups = _event_tick_groups(events)
     if project_prefix is not None:
+        if not callable(project_prefix):
+            raise TypeError("project_prefix must be callable")
         prefix: list[object] = []
         for event_tick, group in groups:
             if event_tick >= tick:
@@ -765,7 +776,9 @@ def refold_teaching_offers(
                 expected_run_id,
                 expected_world_id,
             )
-    prior = tuple(event for event in events if int(event.tick) < tick)
+    prior = tuple(
+        event for event_tick, group in groups if event_tick < tick for event in group
+    )
     participants = teaching_entity_ids
     offers = _offers_from_events(prior, participants)
     successes = _prior_successes(prior, untargeted_request_ids)
@@ -797,14 +810,15 @@ def refold_teaching_offers(
     )
     if supplied is None:
         return derived
-    supplied_rows = tuple(supplied)
-    for row in supplied_rows:
+    supplied_rows: list[TeachingOffer] = []
+    for row in supplied:
         if type(row) is not TeachingOffer:
             _LOG.error(
                 "teaching_offer_mismatch reason_code=%s",
                 "teaching_offer_mismatch",
             )
             raise ValueError("teaching_offer_mismatch")
+        supplied_rows.append(row)
     if tuple(sorted(_offer_signature(row) for row in supplied_rows)) != tuple(
         sorted(_offer_signature(row) for row in derived)
     ):

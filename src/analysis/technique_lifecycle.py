@@ -11,7 +11,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Final, cast
 
 from analysis.knowledge_genealogy import (
     build_knowledge_genealogy_graph,
@@ -28,9 +28,7 @@ from world.production import (
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.technique_lifecycle")
 _UNKNOWN_PLACE: Final[str] = "location:unknown"
-_INTACT: Final[frozenset[str]] = frozenset(
-    {"intact", "damaged", "partially_lost"}
-)
+_INTACT: Final[frozenset[str]] = frozenset({"intact", "damaged", "partially_lost"})
 _TEACHING_ORIGINS: Final[frozenset[str]] = frozenset({"teaching", "imitation"})
 
 
@@ -190,9 +188,7 @@ def _alive(owner: str, tick: int, deaths: Mapping[str, int]) -> bool:
     return death is None or death > tick
 
 
-def _place(
-    owner: str, tick: int, actions: Sequence[AppliedActionRow]
-) -> str:
+def _place(owner: str, tick: int, actions: Sequence[AppliedActionRow]) -> str:
     best: AppliedActionRow | None = None
     for row in actions:
         if row.agent_id != owner or row.tick > tick or row.location_id is None:
@@ -329,9 +325,7 @@ def ground_technique_lifecycle(
     tick = require_exact_nonneg_int("as_of_tick", as_of_tick)
     deaths = dict(death_ticks or {})
     entries = _entries(audits)
-    graph = build_knowledge_genealogy_graph(
-        audits, as_of_tick=tick, death_ticks=deaths
-    )
+    graph = build_knowledge_genealogy_graph(audits, as_of_tick=tick, death_ticks=deaths)
     artifacts = _artifacts(artifact_rows)
     keys = tuple(dict.fromkeys(str(row["content_key"]) for row in entries))
     grounded: list[TechniqueGrounding] = []
@@ -435,7 +429,7 @@ def evaluate_technique_performable(
             "not_applicable",
         )
         return None
-    recipes = ()
+    recipes: tuple[object, ...] = ()
     if catalog is not None:
         recipes = tuple(getattr(catalog, "recipes", ()) or ())
     performable = True
@@ -497,7 +491,9 @@ def _input_present(
         ]
         if not matched:
             return False
-        return any(float(_row_value(row, "quantity") or 0) > 0 for row in matched)
+        return any(
+            float(cast(float, _row_value(row, "quantity") or 0)) > 0 for row in matched
+        )
     if type(item) is HeldItemNameInput:
         return any(
             _token(_row_value(row, "name")) == item.name
@@ -729,9 +725,8 @@ def _rediscovery_roots(
         if origin == "written_record":
             continue
         earlier_loss = any(tick < acquired for tick in lost_before) or any(
-            tick < acquired and _was_locally_extinct(
-                entries, artifacts, actions, deaths, tick, scope
-            )
+            tick < acquired
+            and _was_locally_extinct(entries, artifacts, actions, deaths, tick, scope)
             for tick in ordered
             if scope != "global"
         )
@@ -793,18 +788,14 @@ def _pick_state(
         return TechniqueLifecycleState.DIFFUSING
     record_only = current_n == 0 and intact > 0
     if extant and (
-        (current_n <= rare_max and peak > rare_max)
-        or (record_only and ever_holder)
+        (current_n <= rare_max and peak > rare_max) or (record_only and ever_holder)
     ):
         return TechniqueLifecycleState.RARE
     location_peak = max((len(item[1]) for item in series), default=0)
     if (
         extant
         and not prior_loss
-        and (
-            (peak <= 1 and location_peak <= 1)
-            or (record_only and not ever_holder)
-        )
+        and ((peak <= 1 and location_peak <= 1) or (record_only and not ever_holder))
     ):
         return TechniqueLifecycleState.DISCOVERED
     if extant and current_n >= 1:
@@ -863,9 +854,10 @@ def _causes(
         TechniqueLifecycleState.LOCALLY_EXTINCT,
         TechniqueLifecycleState.GLOBALLY_LOST,
     }
-    holders_died = any(
-        deaths.get(str(entry["owner_id"]), as_of + 1) <= as_of for entry in entries
-    ) and current_n < peak
+    holders_died = (
+        any(deaths.get(str(entry["owner_id"]), as_of + 1) <= as_of for entry in entries)
+        and current_n < peak
+    )
     cited = _cited_ids(entries)
     records_destroyed = any(
         str(row["artifact_id"]) in cited and not _record_intact(row, as_of)

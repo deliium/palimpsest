@@ -64,8 +64,7 @@ def compute_cognitive_budget_metrics(
     if low_rows or high_rows:
         values.update(_low_vs_high(low_rows, high_rows))
     _LOG.debug(
-        "cognitive_budget_metric_computed run_id=%s audit_count=%s "
-        "value_count=%s",
+        "cognitive_budget_metric_computed run_id=%s audit_count=%s value_count=%s",
         run_id,
         len(audits),
         len(values),
@@ -82,16 +81,19 @@ def compute_cognitive_budget_metrics(
 
 
 def _consumption(rows: Sequence[Mapping[str, object]]) -> dict[str, object]:
-    llm = [_int(row, "llm_calls_used") for row in rows]
-    llm = [value for value in llm if value is not None]
-    tokens = [_int(row, "tokens_used") for row in rows]
-    tokens = [value for value in tokens if value is not None]
-    branches = [_int(row, "imagination_branches_used") for row in rows]
-    branches = [value for value in branches if value is not None]
-    memories = [_int(row, "memories_recalled") for row in rows]
-    memories = [value for value in memories if value is not None]
-    tom = [_int(row, "tom_targets_used") for row in rows]
-    tom = [value for value in tom if value is not None]
+    llm = [value for row in rows if (value := _int(row, "llm_calls_used")) is not None]
+    tokens = [value for row in rows if (value := _int(row, "tokens_used")) is not None]
+    branches = [
+        value
+        for row in rows
+        if (value := _int(row, "imagination_branches_used")) is not None
+    ]
+    memories = [
+        value for row in rows if (value := _int(row, "memories_recalled")) is not None
+    ]
+    tom = [
+        value for row in rows if (value := _int(row, "tom_targets_used")) is not None
+    ]
     return {
         "total_llm_calls": sum(llm) if llm else _ABSENT,
         "total_tokens": sum(tokens) if tokens else _ABSENT,
@@ -131,9 +133,7 @@ def _low_vs_high(
 ) -> dict[str, object]:
     low_llm = sum(_int(row, "llm_calls_used") or 0 for row in low_rows)
     high_llm = sum(_int(row, "llm_calls_used") or 0 for row in high_rows)
-    low_branches = sum(
-        _int(row, "imagination_branches_used") or 0 for row in low_rows
-    )
+    low_branches = sum(_int(row, "imagination_branches_used") or 0 for row in low_rows)
     high_branches = sum(
         _int(row, "imagination_branches_used") or 0 for row in high_rows
     )

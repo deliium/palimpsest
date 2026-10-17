@@ -164,9 +164,7 @@ class SqlAlchemyCognitionTraceRepository:
             rows = (await session.execute(stmt)).scalars().all()
             items: list[CognitionTraceInvocation] = []
             for row in rows:
-                cursor = (
-                    f"{row.tick:016d}:{row.agent_id}:{row.invocation_id}"
-                )
+                cursor = f"{row.tick:016d}:{row.agent_id}:{row.invocation_id}"
                 if after_cursor is not None and cursor <= after_cursor:
                     continue
                 items.append(decode_cognition_trace_invocation(bytes(row.payload)))

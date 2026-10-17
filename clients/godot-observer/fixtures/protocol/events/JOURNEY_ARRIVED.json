@@ -1,0 +1,12 @@
+{
+  "protocol_version": "observer-protocol-v1",
+  "type": "JOURNEY_ARRIVED",
+  "domain_kind": "journey_arrived",
+  "event_id": "event-journey-arrived",
+  "tick": 2,
+  "sequence": 0,
+  "actor_id": "body-ada",
+  "origin_location_id": "loc-camp",
+  "destination_location_id": "loc-grove",
+  "participant_body_ids": ["body-ada"]
+}

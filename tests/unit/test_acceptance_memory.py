@@ -133,9 +133,7 @@ def test_codec_v16_round_trip_and_owner_guard() -> None:
         give_item_kinds=(ItemKind.GENERIC,),
         take_item_kinds=(ItemKind.FOOD,),
     )
-    payload = acceptance_memories_checkpoint_payload(
-        {owner.value: ledger}, codec="v16"
-    )
+    payload = acceptance_memories_checkpoint_payload({owner.value: ledger}, codec="v16")
     restored = decode_acceptance_memories_checkpoint(payload, codec="v16")
     assert received_count_for(restored[owner.value], ItemKind.GENERIC) == 1
     require_owner_acceptance_memories(

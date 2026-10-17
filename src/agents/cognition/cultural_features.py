@@ -500,9 +500,7 @@ def _token_jaccard(left: str, right: str) -> float:
     return len(left_set & right_set) / len(union)
 
 
-def _cap_evidence_refs(
-    refs: Sequence[str], *, max_refs: int
-) -> tuple[str, ...]:
+def _cap_evidence_refs(refs: Sequence[str], *, max_refs: int) -> tuple[str, ...]:
     checked: list[str] = []
     seen: set[str] = set()
     for item in refs:
@@ -1283,9 +1281,7 @@ def collect_cultural_feature_public_cues(
             CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
         )
         content_prefix = (
-            f"durable:{genre_token}"
-            if isinstance(genre_token, str)
-            else "symbol"
+            f"durable:{genre_token}" if isinstance(genre_token, str) else "symbol"
         )
         cues.append(
             CulturalFeatureUptakeCue(
@@ -1632,9 +1628,7 @@ def apply_cultural_feature_compose_adapters(
             )
             if belief is None:
                 continue
-            audits.append(
-                belief_to_audit(belief, reason_code=f"compose_{source_mode}")
-            )
+            audits.append(belief_to_audit(belief, reason_code=f"compose_{source_mode}"))
             _LOG.debug(
                 "cultural_feature_compose_write source_mode=%s feature_kind=%s "
                 "reason_code=%s",
@@ -1674,9 +1668,7 @@ def apply_cultural_feature_compose_adapters(
         source_mode="narrative",
         feature_kind=CulturalFeatureKindId.SYMBOLIC_ASSOCIATION,
         channel=CulturalTransmissionChannelId.OBSERVATION,
-        rows=tuple(
-            (src, f"symbol-narr:{key}", fp) for src, key, fp in narrative_keys
-        ),
+        rows=tuple((src, f"symbol-narr:{key}", fp) for src, key, fp in narrative_keys),
     )
     _ingest(
         compose_bit=norms_on,
@@ -1703,9 +1695,7 @@ def apply_cultural_feature_compose_adapters(
         source_mode="conventions",
         feature_kind=CulturalFeatureKindId.SOCIAL_EXPECTATION,
         channel=CulturalTransmissionChannelId.OBSERVATION,
-        rows=tuple(
-            (src, f"expect-conv:{key}", fp) for src, key, fp in convention_keys
-        ),
+        rows=tuple((src, f"expect-conv:{key}", fp) for src, key, fp in convention_keys),
     )
     _ingest(
         compose_bit=artifacts_on,
@@ -1832,9 +1822,7 @@ def collect_cultural_feature_compose_keys(
                 id_attrs=("artifact_id", "mark_id", "entity_id"),
             )
         ),
-        "repository_keys": tuple(
-            _repository_compose_keys(observation)
-        ),
+        "repository_keys": tuple(_repository_compose_keys(observation)),
     }
 
 
@@ -1907,10 +1895,7 @@ def log_unsatisfiable_feature_kinds(
             )
         elif kind is CulturalFeatureKindId.PRACTICE:
             compose_ok = (
-                (
-                    bool(getattr(compose, "conventions", False))
-                    and conventions_mode_on
-                )
+                (bool(getattr(compose, "conventions", False)) and conventions_mode_on)
                 or (
                     bool(getattr(compose, "repositories", False))
                     and repositories_mode_on
@@ -1925,8 +1910,7 @@ def log_unsatisfiable_feature_kinds(
             compose_ok = (
                 (bool(getattr(compose, "norms", False)) and norms_mode_on)
                 or (
-                    bool(getattr(compose, "conventions", False))
-                    and conventions_mode_on
+                    bool(getattr(compose, "conventions", False)) and conventions_mode_on
                 )
                 or (bool(getattr(compose, "teaching", False)) and teaching_mode_on)
                 or (
@@ -1936,12 +1920,8 @@ def log_unsatisfiable_feature_kinds(
             )
         elif kind is CulturalFeatureKindId.PRODUCTION_TECHNIQUE:
             compose_ok = (
-                (bool(getattr(compose, "teaching", False)) and teaching_mode_on)
-                or (
-                    bool(getattr(compose, "mentorship", False))
-                    and mentorship_channel_on
-                )
-            )
+                bool(getattr(compose, "teaching", False)) and teaching_mode_on
+            ) or (bool(getattr(compose, "mentorship", False)) and mentorship_channel_on)
         elif kind is CulturalFeatureKindId.SYMBOLIC_ASSOCIATION:
             compose_ok = (
                 (bool(getattr(compose, "artifacts", False)) and artifacts_mode_on)

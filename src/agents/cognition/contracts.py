@@ -12,7 +12,16 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
+    from agents.cognition.competence import CompetenceSelfModel
+    from agents.cognition.production import RecipeBeliefSet
+    from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+    from agents.cognition.subjective_value import SubjectiveValuationLedger
+    from agents.cognition.theory_of_mind import TheoryOfMind
+    from agents.cognition.world_model import CausalWorldModel
 
 from agents.cognition.models import (
     ActionPlan,
@@ -380,7 +389,9 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.cultural_features",
         )
-        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+        from agents.cognition.practical_knowledge import (
+            require_owner_practical_knowledge,
+        )
 
         require_owner_practical_knowledge(
             self.practical_knowledge,
@@ -426,8 +437,10 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.structured_commitments",
         )
-        from agents.cognition.subjective_value import require_owner_subjective_valuations
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+        from agents.cognition.subjective_value import (
+            require_owner_subjective_valuations,
+        )
 
         require_owner_subjective_valuations(
             self.subjective_valuations,
@@ -465,9 +478,9 @@ class Perspective:
             drives=self.drives,
             inbox=self.inbox,
             social_identity=self.social_identity,
-            emotional_state=emotion,  # type: ignore[arg-type]
-            causal_world_model=self.causal_world_model,
-            theory_of_mind=self.theory_of_mind,
+            emotional_state=emotion,
+            causal_world_model=cast("CausalWorldModel | None", self.causal_world_model),
+            theory_of_mind=cast("TheoryOfMind | None", self.theory_of_mind),
             reputation=self.reputation,
             territorial_claims=self.territorial_claims,
             group_formation=self.group_formation,
@@ -480,14 +493,18 @@ class Perspective:
             mentorship=self.mentorship,
             cultural_features=self.cultural_features,
             practical_knowledge=self.practical_knowledge,
-            competence_model=self.competence_model,
+            competence_model=cast("CompetenceSelfModel | None", self.competence_model),
             declarative_advice=self.declarative_advice,
-            recipe_beliefs=self.recipe_beliefs,
+            recipe_beliefs=cast("RecipeBeliefSet | None", self.recipe_beliefs),
             possession_legitimacy=self.possession_legitimacy,
             structured_commitments=self.structured_commitments,
-            subjective_valuations=self.subjective_valuations,
-            scarcity_beliefs=self.scarcity_beliefs,
-            acceptance_memories=self.acceptance_memories,
+            subjective_valuations=cast(
+                "SubjectiveValuationLedger | None", self.subjective_valuations
+            ),
+            scarcity_beliefs=cast("ScarcityBeliefLedger | None", self.scarcity_beliefs),
+            acceptance_memories=cast(
+                "AcceptanceMemoryLedger | None", self.acceptance_memories
+            ),
         )
 
     def __repr__(self) -> str:

@@ -79,9 +79,10 @@ def test_compose_pins_pgvector_and_startup_order() -> None:
     assert "non-production" in text
     assert "not secret-safe" in text
     assert "PALIMPSEST_API_PUBLISH_PORT" in text
-    assert text.count(
-        "image: ${PALIMPSEST_API_IMAGE:-ghcr.io/deliium/palimpsest:0.1.0}"
-    ) == 2
+    assert (
+        text.count("image: ${PALIMPSEST_API_IMAGE:-ghcr.io/deliium/palimpsest:0.1.0}")
+        == 2
+    )
     assert "build:" not in text
     assert ":latest" not in text
 

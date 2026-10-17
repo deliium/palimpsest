@@ -44,10 +44,7 @@ def test_observer_graphical_fixture_lists_required_event_types() -> None:
     assert document["scenario_id"] == OBSERVER_GRAPHICAL_SCENARIO_ID
     assert int(document["seek_high_water"]) >= 1000
     assert int(document["cursor_high_water"]["tick"]) >= 1000
-    stems = {
-        Path(str(path)).stem
-        for path in document["events"]
-    }
+    stems = {Path(str(path)).stem for path in document["events"]}
     assert set(REQUIRED_FIXTURE_EVENT_TYPES) <= stems
     for feature in REQUIRED_GRAPHICAL_FEATURES:
         assert feature in document["features"]

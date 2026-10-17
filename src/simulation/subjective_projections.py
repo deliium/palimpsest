@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
+from agents.cognition.identity import IdentityCursor
 from simulation.run_control import AgentRuntimeCheckpoint
 from world.identifiers import require_stable_id
 
@@ -19,10 +20,10 @@ _LOG: Final[logging.Logger] = logging.getLogger("simulation.subjective_projectio
 Availability = Literal["available", "unavailable"]
 
 __all__ = [
-    "EmotionalStateProjection",
     "EmotionIntensitySummary",
-    "GoalsProjection",
+    "EmotionalStateProjection",
     "GoalSummary",
+    "GoalsProjection",
     "GroupFormationProjection",
     "LedgerItemSummary",
     "NarrativeProjection",
@@ -272,8 +273,11 @@ def project_self_model(
             goal_ids=(),
             note="identity_and_goals_absent",
         )
-    identity_tick = None if cursor is None else int(cursor.last_applied_tick)
-    op_count = 0 if cursor is None else len(cursor.operation_ids)
+    identity_cursor = cast(IdentityCursor | None, cursor)
+    identity_tick = (
+        None if identity_cursor is None else int(identity_cursor.last_applied_tick)
+    )
+    op_count = 0 if identity_cursor is None else len(identity_cursor.operation_ids)
     _LOG.debug(
         "subjective_projection kind=self_model availability=available "
         "goal_count=%s identity_ops=%s",
@@ -317,7 +321,9 @@ def project_theory_of_mind(
         items.append(
             LedgerItemSummary(
                 item_id=str(getattr(hyp, "hypothesis_id", "")),
-                kind_code=str(getattr(getattr(hyp, "aspect", None), "value", "unknown")),
+                kind_code=str(
+                    getattr(getattr(hyp, "aspect", None), "value", "unknown")
+                ),
                 status=None,
                 strength=float(getattr(hyp, "confidence", 0.0)),
                 target_id=str(
@@ -373,7 +379,9 @@ def project_group_formation(
                 kind_code=str(
                     getattr(getattr(belief, "stance", None), "value", "membership")
                 ),
-                status=None if status is None else str(getattr(status, "value", status)),
+                status=None
+                if status is None
+                else str(getattr(status, "value", status)),
                 strength=float(getattr(belief, "support", 0.0)),
                 target_id=f"members:{len(members)}" if members else None,
                 evidence_count=len(getattr(belief, "evidence", ())),
@@ -424,7 +432,9 @@ def project_social_norms(
                 kind_code=str(
                     getattr(getattr(belief, "pattern", None), "value", "norm")
                 ),
-                status=None if status is None else str(getattr(status, "value", status)),
+                status=None
+                if status is None
+                else str(getattr(status, "value", status)),
                 strength=float(getattr(belief, "confidence", 0.0)),
                 target_id=None,
                 evidence_count=len(getattr(belief, "evidence", ())),
@@ -466,7 +476,7 @@ def project_social_conventions(
     items: list[LedgerItemSummary] = []
     beliefs = getattr(ledger, "beliefs", None)
     if beliefs is None:
-        beliefs = getattr(ledger, "conventions", ())
+        beliefs = getattr(ledger, "conventions", ()) or ()
     for belief in beliefs:
         status = getattr(belief, "status", None)
         items.append(
@@ -482,8 +492,12 @@ def project_social_conventions(
                         getattr(getattr(belief, "kind", None), "value", "convention"),
                     )
                 ),
-                status=None if status is None else str(getattr(status, "value", status)),
-                strength=float(getattr(belief, "confidence", getattr(belief, "strength", 0.0))),
+                status=None
+                if status is None
+                else str(getattr(status, "value", status)),
+                strength=float(
+                    getattr(belief, "confidence", getattr(belief, "strength", 0.0))
+                ),
                 target_id=None,
                 evidence_count=len(getattr(belief, "evidence", ())),
             )
@@ -531,7 +545,9 @@ def project_cultural_narratives(
                 kind_code=str(
                     getattr(getattr(variant, "origin", None), "value", "narrative")
                 ),
-                status=None if status is None else str(getattr(status, "value", status)),
+                status=None
+                if status is None
+                else str(getattr(status, "value", status)),
                 strength=float(getattr(variant, "strength", 0.0)),
                 target_id=None,
                 evidence_count=len(getattr(variant, "evidence", ())),

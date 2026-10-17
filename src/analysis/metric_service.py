@@ -102,6 +102,15 @@ from analysis.possession_succession_metrics import (
 )
 from analysis.prediction_calibration_metrics import compute_prediction_calibration
 from analysis.reflection_metrics import ReflectionReport, compute_reflection
+from analysis.regional_destination_beliefs import (
+    RegionalDestinationEvidenceRow,
+    compute_regional_destination_beliefs,
+)
+from analysis.regional_migration_metrics import compute_regional_migration_metrics
+from analysis.regional_population import (
+    RegionalPopulationInput,
+    compute_regional_population,
+)
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.reputation_metrics import compute_distributed_reputation
 from analysis.serialization import (
@@ -121,6 +130,7 @@ from analysis.transmission_metrics import (
     compute_rumor_distortion,
 )
 from analysis.truth import ClaimTruthSpec
+from simulation.runner_models import TechniqueLifecycleSpec
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 _NON_CATALOG_FAMILIES: Final[frozenset[str]] = frozenset(
@@ -185,7 +195,7 @@ class MetricComputationInputs:
     founder_death_ticks: Mapping[str, int] | None = None
     inaccessible_expectations: Sequence[object] | None = None
     practical_knowledge_audits: Sequence[object] | None = None
-    technique_lifecycle_spec: object | None = None
+    technique_lifecycle_spec: TechniqueLifecycleSpec | None = None
     possession_succession_spec: object | None = None
     possession_events: Sequence[object] | None = None
     possession_ledgers: Sequence[object] | None = None
@@ -216,6 +226,11 @@ class MetricComputationInputs:
     reputation_neighborhoods: Mapping[str, str] | None = None
     reputation_target_id: str | None = None
     survival_cohort_map: Mapping[str, Sequence[str]] | None = None
+    regional_population: RegionalPopulationInput | None = None
+    regional_destination_evidence: Sequence[RegionalDestinationEvidenceRow] | None = (
+        None
+    )
+    regional_destination_expected_owner_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,6 +308,11 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
     run_id = require_stable_id("run_id", inputs.run_id)
     revision = require_stable_id("input_revision", inputs.input_revision)
     window_end = require_exact_nonneg_int("window_end", inputs.window_end)
+    if inputs.regional_population is not None and (
+        inputs.regional_population.run_id != run_id
+        or inputs.regional_population.input_revision != revision
+    ):
+        raise ValueError("regional_population_scope_mismatch")
     deaths = dict(inputs.death_ticks or {})
     documents: list[MetricDocument] = []
 
@@ -1146,13 +1166,15 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         target = inputs.reputation_target_id or "target"
         _safe(
             "distributed_reputation",
-            lambda: compute_distributed_reputation(
-                ledgers,
-                neighborhoods,
-                target_id=target,
-                run_id=run_id,
-                input_revision=revision,
-            ).document,
+            lambda: (
+                compute_distributed_reputation(
+                    ledgers,
+                    neighborhoods,
+                    target_id=target,
+                    run_id=run_id,
+                    input_revision=revision,
+                ).document
+            ),
         )
     if inputs.survival_cohort_map is not None:
         cohort_map = inputs.survival_cohort_map
@@ -1189,6 +1211,27 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             ),
         ),
     )
+    if inputs.regional_population is not None:
+        regional_inputs = inputs.regional_population
+        _safe(
+            "regional_population",
+            lambda: compute_regional_population(regional_inputs),
+        )
+        _safe(
+            "regional_migration",
+            lambda: compute_regional_migration_metrics(regional_inputs),
+        )
+        evidence_rows = inputs.regional_destination_evidence
+        _safe(
+            "regional_destination_beliefs",
+            lambda: compute_regional_destination_beliefs(
+                evidence_rows,
+                run_id=run_id,
+                input_revision=revision,
+                as_of_tick=window_end,
+                expected_owner_count=(inputs.regional_destination_expected_owner_count),
+            ),
+        )
 
     documents.sort(key=lambda doc: doc.metric_family)
     fingerprints = tuple(metric_document_fingerprint(doc) for doc in documents)

@@ -8,6 +8,7 @@ from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission
 from simulation.models import SimulationRunConfig
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
+from world._collective_projects import abandon_idle_projects
 from world._operations import prepare_action_batch
 from world._state import WorldState
 from world.actions import (
@@ -20,10 +21,9 @@ from world.actions import (
 from world.collective_projects import (
     CollectiveProject,
     CollectiveProjectKind,
-    CollectiveProjectStatus,
     CollectiveProjectsRuleContext,
+    CollectiveProjectStatus,
     ProjectContribution,
-    abandon_idle_projects,
 )
 from world.events import ProjectCompleted, ProjectContributed, StructureBuilt
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
@@ -326,8 +326,6 @@ def test_engine_abandons_after_a_quiet_tick() -> None:
     opened = engine._snapshot.world.state.collective_projects
     assert next(iter(opened.values())).status is CollectiveProjectStatus.OPEN
     batch = engine.observe()
-    engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId("agent-1"), Wait()),)
-    )
+    engine.resolve_tick((ActionSubmission(batch.token, AgentId("agent-1"), Wait()),))
     project = next(iter(engine._snapshot.world.state.collective_projects.values()))
     assert project.status is CollectiveProjectStatus.ABANDONED

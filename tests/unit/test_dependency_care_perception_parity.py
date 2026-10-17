@@ -57,9 +57,7 @@ def _engine(*, perception_mode: str) -> WorldEngine:
     )
     care = example_dependency_care_spec(perception_mode=perception_mode)
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=81, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=81, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=(dep_record, care_record),
@@ -84,18 +82,14 @@ def test_perception_self_and_colocated_exposes_need_summaries(
     with caplog.at_level(logging.DEBUG):
         batch = engine.observe()
     dep_obs = next(
-        obs
-        for obs in batch.observations
-        if obs.observer_id == EntityId("body-dep")
+        obs for obs in batch.observations if obs.observer_id == EntityId("body-dep")
     )
     assert dep_obs.self_body is not None
     assert type(dep_obs.self_body.dependency_needs) is ObservedDependencyNeeds
     need_ids = {row.need_id for row in dep_obs.self_body.dependency_needs.needs}
     assert "food" in need_ids
     care_obs = next(
-        obs
-        for obs in batch.observations
-        if obs.observer_id == EntityId("body-care")
+        obs for obs in batch.observations if obs.observer_id == EntityId("body-care")
     )
     visible_dep = next(
         body for body in care_obs.visible_bodies if body.entity_id.value == "body-dep"

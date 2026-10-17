@@ -13,7 +13,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol, cast
 
 from agents.cognition.loop import CognitiveLoop, CognitiveLoopError
 from agents.cognition.models import (
@@ -31,6 +31,7 @@ from agents.cognition.models import (
     MemoryUpdateKind,
 )
 from agents.models import Agent, AgentId, GoalOutcomeKind, GoalStatus
+from memory.beliefs import BeliefRevisionRequest
 from memory.contracts import (
     BeliefReader,
     BeliefWriter,
@@ -69,12 +70,19 @@ from simulation.subjective_state import (
 )
 from social.contracts import RelationshipReader
 from social.models import CommunicationEnvelope
+from social.relationships import RelationshipRevisionRequest
 from world.actions import AgentCommand, agent_command_tag, require_agent_command
 from world.identifiers import require_stable_id
 from world.models import LifeStatus
 from world.observations import Observation, ObservationAudienceRole
 
 if TYPE_CHECKING:
+    from agents.cognition.counterfactual import RememberedDecision
+    from agents.cognition.identity import IdentityCursor
+    from agents.cognition.reflection import (
+        DecisionOutcomeCode,
+        SubjectiveDecisionRecord,
+    )
     from simulation.persistence import ScientificEvidenceRepository
 
 __all__ = [
@@ -402,6 +410,7 @@ class AgentRuntime:
     """Trusted per-agent composition boundary for cognition and submission."""
 
     __slots__ = (
+        "_acceptance_memories",
         "_advice",
         "_agent",
         "_applied_identity_operation_ids",
@@ -455,7 +464,6 @@ class AgentRuntime:
         "_remembered_decisions",
         "_reputation",
         "_run_id",
-        "_acceptance_memories",
         "_scarcity_beliefs",
         "_scientific_evidence",
         "_semantic_belief_reader",
@@ -588,12 +596,21 @@ class AgentRuntime:
         self._advice: object | None = None
         self._identity_cursor: object | None = None
         self._reflection_cursor: object | None = None
-        self._decision_journal: tuple[object, ...] | None = None
-        self._remembered_decisions: tuple[object, ...] | None = None
+        self._decision_journal: tuple[SubjectiveDecisionRecord, ...] | None = None
+        self._remembered_decisions: tuple[RememberedDecision, ...] | None = None
         from agents.cognition.counterfactual import CounterfactualState
 
         self._counterfactual_state = CounterfactualState()
-        self._reflection_capture: object | None = None
+        self._reflection_capture: (
+            tuple[
+                str,
+                str | None,
+                str | None,
+                DecisionOutcomeCode,
+                tuple[tuple[AgentId, AgentId, int], ...],
+            ]
+            | None
+        ) = None
         self._counterfactual_capture: object | None = None
         self._last_observation_key: tuple[int, int] | None = None
         self._processed_invocations: set[str] = set()
@@ -1090,9 +1107,7 @@ class AgentRuntime:
             tick,
         )
 
-    def _commit_developmental_knowledge(
-        self, ledger: object | None, tick: int
-    ) -> None:
+    def _commit_developmental_knowledge(self, ledger: object | None, tick: int) -> None:
         from agents.cognition.developmental_learning import DevelopmentalKnowledgeLedger
 
         owner = self._agent.agent_id
@@ -1216,7 +1231,6 @@ class AgentRuntime:
             len(ledger.beliefs),
             tick,
         )
-
 
     def _commit_practical_knowledge(self, ledger: object | None, tick: int) -> None:
         from agents.cognition.practical_knowledge import PracticalKnowledgeLedger
@@ -2098,7 +2112,9 @@ class AgentRuntime:
             command_kind=command_kind,
             next_status=prepared.prior_status.value,
             revision_hint=(
-                0 if subjective_batch is None else subjective_batch.expected_revision
+                0
+                if subjective_batch is None
+                else (subjective_batch.expected_revision or 0)
             ),
         )
         has_futures = any(
@@ -2511,7 +2527,7 @@ class AgentRuntime:
         )
         from social.relationships import DirectedRelationshipProfile
 
-        pairs: tuple[tuple[object, object, int], ...] = ()
+        pairs: tuple[tuple[AgentId, AgentId, int], ...] = ()
         relationships = getattr(snapshot, "relationships", ())
         if relationships:
             collected = []
@@ -2695,9 +2711,7 @@ class AgentRuntime:
         self._territorial_claims = getattr(checkpoint, "territorial_claims", None)
         self._group_formation = getattr(checkpoint, "group_formation", None)
         self._social_norms = getattr(checkpoint, "social_norms", None)
-        self._possession_legitimacy = getattr(
-            checkpoint, "possession_legitimacy", None
-        )
+        self._possession_legitimacy = getattr(checkpoint, "possession_legitimacy", None)
         self._structured_commitments = getattr(
             checkpoint, "structured_commitments", None
         )
@@ -2720,8 +2734,12 @@ class AgentRuntime:
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
         self._reflection_cursor = checkpoint.reflection_cursor
-        self._decision_journal = checkpoint.decision_journal
-        self._remembered_decisions = checkpoint.remembered_decisions
+        self._decision_journal = cast(
+            "tuple[SubjectiveDecisionRecord, ...] | None", checkpoint.decision_journal
+        )
+        self._remembered_decisions = cast(
+            "tuple[RememberedDecision, ...] | None", checkpoint.remembered_decisions
+        )
         self._identity_cursor = checkpoint.identity_cursor
         if checkpoint.identity_cursor is None:
             self._applied_identity_operation_ids = set()
@@ -2730,14 +2748,13 @@ class AgentRuntime:
                 extra={"owner_id": self._agent.agent_id.value},
             )
         else:
-            self._applied_identity_operation_ids = set(
-                checkpoint.identity_cursor.operation_ids
-            )
+            cursor = cast("IdentityCursor", checkpoint.identity_cursor)
+            self._applied_identity_operation_ids = set(cursor.operation_ids)
             _LOG.debug(
                 "identity_cursor_restored",
                 extra={
-                    "tick": checkpoint.identity_cursor.last_applied_tick,
-                    "operation_count": len(checkpoint.identity_cursor.operation_ids),
+                    "tick": cursor.last_applied_tick,
+                    "operation_count": len(cursor.operation_ids),
                 },
             )
         self._pending = None
@@ -2812,6 +2829,7 @@ class AgentRuntime:
         prepared = await self.prepare_observation(observation, token=token)
         if type(prepared) is AgentStepResult:
             return prepared
+        assert isinstance(prepared, PreparedObservation)
         pending = await self.bind_effective_command(prepared)
         return await self.finalize_pending(pending)
 
@@ -3386,9 +3404,7 @@ class AgentRuntime:
         self, rates_by_entity: object | None
     ) -> None:
         """Forward tick-scoped objective learning rates into the cognitive loop."""
-        binder = getattr(
-            self._loop, "bind_developmental_entity_learning_rates", None
-        )
+        binder = getattr(self._loop, "bind_developmental_entity_learning_rates", None)
         if callable(binder):
             binder(rates_by_entity)
 
@@ -3585,7 +3601,7 @@ def _extend_identity_revisions(
     agent_id: AgentId,
     tick: int,
     invocation_id: str,
-    belief_revisions: list[object],
+    belief_revisions: list[BeliefRevisionRequest],
     applied: set[str] | None = None,
 ) -> None:
     from memory.beliefs import BeliefRevisionRequest
@@ -3629,8 +3645,8 @@ def _extend_consolidation_writes(
     plan: object | None,
     *,
     writes: list[MemoryTrace],
-    belief_revisions: list[object],
-    relationship_revisions: list[object],
+    belief_revisions: list[BeliefRevisionRequest],
+    relationship_revisions: list[RelationshipRevisionRequest],
 ) -> None:
     if plan is None:
         return
@@ -3659,8 +3675,8 @@ def _consolidation_goal_intents(
 def _extend_reflection_writes(
     plan: object | None,
     *,
-    belief_revisions: list[object],
-    relationship_revisions: list[object],
+    belief_revisions: list[BeliefRevisionRequest],
+    relationship_revisions: list[RelationshipRevisionRequest],
     applied: set[str],
 ) -> None:
     if plan is None:

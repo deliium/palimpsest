@@ -10,13 +10,14 @@ authority, or replay readers.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import time
 from collections.abc import Sequence
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -199,14 +200,15 @@ class SqlAlchemyMemoryService:
                 raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
 
         async with session_scope(self._session_factory) as session:
-            load_started = time.perf_counter()
+            clock = asyncio.get_running_loop().time
+            load_started = clock()
             candidates, retrieve_path = await self._load_filtered_traces(
                 session,
                 request.filters,
                 query_embedding=request.query_embedding,
                 candidate_cap=self._max_candidates,
             )
-            load_ms = (time.perf_counter() - load_started) * 1000.0
+            load_ms = (clock() - load_started) * 1000.0
             loaded_count = len(candidates)
             embeddings = {
                 trace.memory_id.value: trace.embedding
@@ -598,7 +600,7 @@ class SqlAlchemyMemoryService:
                 .values(forgotten_at_tick=tick)
             )
             await session.commit()
-        forgotten = int(result.rowcount or 0)
+        forgotten = int(cast(CursorResult[Any], result).rowcount or 0)
         _LOG.info(
             "memory_forget_selected",
             extra={
@@ -693,9 +695,7 @@ class SqlAlchemyMemoryService:
             # deterministic rank_traces. Not used for objective replay.
             stmt = stmt.where(MemoryTraceOrm.embedding.is_not(None))
             stmt = stmt.order_by(
-                MemoryTraceOrm.embedding.cosine_distance(
-                    list(query_embedding.vector)
-                )
+                MemoryTraceOrm.embedding.cosine_distance(list(query_embedding.vector))
             )
             retrieve_path = "sql_ann_shortlist"
         else:

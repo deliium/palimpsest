@@ -94,11 +94,7 @@ def classify_exchange_functions(
         return ExchangeFunctionViews((), (), ())
     ordered = tuple(events)
     kind_of = _kind_index(ordered)
-    completed = [
-        event
-        for event in ordered
-        if type(event.details) is ExchangeCompleted
-    ]
+    completed = [event for event in ordered if type(event.details) is ExchangeCompleted]
     quotes = [
         event
         for event in ordered
@@ -106,10 +102,13 @@ def classify_exchange_functions(
     ]
     share = tuple(_acceptance_share(kind, completed) for kind in ItemKind)
     fate = tuple(_acquisition_fate(kind, ordered, kind_of) for kind in ItemKind)
-    homogeneity = tuple(
-        _quote_row(kind, quotes, kind_of, ledgers) for kind in ItemKind
+    homogeneity = tuple(_quote_row(kind, quotes, kind_of, ledgers) for kind in ItemKind)
+    rows: tuple[AcceptanceShareRow | AcquisitionFateRow | QuoteHomogeneityRow, ...] = (
+        *share,
+        *fate,
+        *homogeneity,
     )
-    for row in (*share, *fate, *homogeneity):
+    for row in rows:
         _reject_forbidden(row)
         _LOG.debug(
             "exchange_functions_assembled family=%s kind=%s num=%s den=%s",
@@ -226,9 +225,7 @@ def _quote_row(
             other = right if left and all(item == token for item in left) else left
             paired.append(len(other))
     references = sum(
-        1
-        for row in ledgers
-        if str(getattr(row, "reference_kind", "")) == token
+        1 for row in ledgers if str(getattr(row, "reference_kind", "")) == token
     )
     return QuoteHomogeneityRow(
         token,
@@ -241,9 +238,7 @@ def _quote_row(
     )
 
 
-def _homogeneous_kinds(
-    left: tuple[str, ...], right: tuple[str, ...]
-) -> set[str]:
+def _homogeneous_kinds(left: tuple[str, ...], right: tuple[str, ...]) -> set[str]:
     found: set[str] = set()
     if left and right:
         if len(set(left)) == 1 and any(item != left[0] for item in right):
@@ -339,8 +334,7 @@ def _departures(details: object) -> tuple[tuple[str, str], ...]:
         return ()
     if type(details) is ExchangeCompleted:
         leaving = [
-            (item_id.value, details.actor_id.value)
-            for item_id in details.give_item_ids
+            (item_id.value, details.actor_id.value) for item_id in details.give_item_ids
         ]
         leaving.extend(
             (item_id.value, details.counterparty_id.value)

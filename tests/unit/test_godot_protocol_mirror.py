@@ -14,9 +14,7 @@ from simulation.compatibility import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
-MODELS_GD = (
-    ROOT / "clients" / "godot-observer" / "scripts" / "protocol" / "models.gd"
-)
+MODELS_GD = ROOT / "clients" / "godot-observer" / "scripts" / "protocol" / "models.gd"
 
 
 def _gd_const(name: str) -> str:
@@ -39,9 +37,9 @@ def test_godot_protocol_and_layout_mirror_python() -> None:
 
 def test_version_payload_source_has_no_v3_capability_fields() -> None:
     """Non-goal: GET /version must not grow V3 capability fields in scaffolding."""
-    source = (
-        ROOT / "src" / "api" / "presentation_static.py"
-    ).read_text(encoding="utf-8")
+    source = (ROOT / "src" / "api" / "presentation_static.py").read_text(
+        encoding="utf-8"
+    )
     # Locked application/protocol/export/revision/research_ui keys only.
     assert '"protocol_version"' in source
     assert '"research_ui_configured"' in source

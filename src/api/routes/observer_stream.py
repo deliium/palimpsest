@@ -83,11 +83,10 @@ class ObserverStreamSession:
                     )
                     if batch:
                         _LOGGER.debug(
-                            "[api.observer_stream] catchup_batch run_id=%s "
-                            "count=%s queue_size=%s",
-                            config.run_id,
-                            len(batch),
-                            queue.qsize(),
+                            "catchup_batch",
+                            run_id=config.run_id,
+                            count=len(batch),
+                            queue_size=queue.qsize(),
                         )
                     for raw in batch:
                         mapping = _event_mapping(raw)

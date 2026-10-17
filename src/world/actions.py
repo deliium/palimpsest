@@ -34,6 +34,7 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.possession_succession import POSSESSION_DOCTRINES
+from world.production import require_production_command_fields
 from world.structured_commitments import (
     COMMITMENT_ACTS,
     COMMITMENT_DUE_KINDS,
@@ -42,7 +43,6 @@ from world.structured_commitments import (
     COMMITMENT_SERVICES,
 )
 from world.values import ItemKind
-from world.production import require_production_command_fields
 
 _ARTIFACT_LOG: Final[logging.Logger] = logging.getLogger("world.artifacts")
 _EXPERIMENT_LOG: Final[logging.Logger] = logging.getLogger("world.actions")
@@ -338,9 +338,7 @@ class Store:
 _COPY_FIDELITY_OVERRIDES: Final[frozenset[str]] = frozenset(
     {"perfect", "deterministic_mutation", "lossy"}
 )
-_MAINTAIN_REPOSITORY_MODES: Final[frozenset[str]] = frozenset(
-    {"maintain", "destroy"}
-)
+_MAINTAIN_REPOSITORY_MODES: Final[frozenset[str]] = frozenset({"maintain", "destroy"})
 _DAMAGE_RECORD_MODES: Final[frozenset[str]] = frozenset(
     {"damage", "partial_loss", "destroy"}
 )
@@ -421,9 +419,7 @@ class TransferArtifact:
     artifact_id: EntityId
     mode: Literal["deposit", "claim", "give"]
     recipient_id: EntityId | None = None
-    kind: Literal["transfer_artifact"] = field(
-        default="transfer_artifact", init=False
-    )
+    kind: Literal["transfer_artifact"] = field(default="transfer_artifact", init=False)
 
     def __post_init__(self) -> None:
         if type(self.artifact_id) is not EntityId:
@@ -537,9 +533,7 @@ class EstablishRepository:
         if type(self.location_id) is not EntityId:
             raise TypeError("EstablishRepository.location_id must be EntityId")
         if self.structure_id is not None and type(self.structure_id) is not EntityId:
-            raise TypeError(
-                "EstablishRepository.structure_id must be EntityId or None"
-            )
+            raise TypeError("EstablishRepository.structure_id must be EntityId or None")
         if self.access_mode is not None:
             if type(self.access_mode) is not str or self.access_mode not in {
                 "open",
@@ -646,9 +640,7 @@ class IndexRepository:
             raise TypeError("IndexRepository.entries must be a tuple")
         for index, entry in enumerate(self.entries):
             if not isinstance(entry, Mapping):
-                raise TypeError(
-                    f"IndexRepository.entries[{index}] must be a mapping"
-                )
+                raise TypeError(f"IndexRepository.entries[{index}] must be a mapping")
         _ARTIFACT_LOG.debug(
             "command_constructed tag=index_repository entry_count=%s",
             len(self.entries),
@@ -674,14 +666,13 @@ class Experiment:
         if self.operand_b_id is not None and type(self.operand_b_id) is not EntityId:
             raise TypeError("Experiment.operand_b_id must be EntityId or None")
         if type(self.process_token) is not ExperimentProcessToken:
-            raise TypeError(
-                "Experiment.process_token must be ExperimentProcessToken"
-            )
+            raise TypeError("Experiment.process_token must be ExperimentProcessToken")
         if type(self.hypothesis_id) is not str:
             raise TypeError("Experiment.hypothesis_id must be str")
-        if self.hypothesis_id and re.fullmatch(
-            _HYPOTHESIS_ID_RE, self.hypothesis_id
-        ) is None:
+        if (
+            self.hypothesis_id
+            and re.fullmatch(_HYPOTHESIS_ID_RE, self.hypothesis_id) is None
+        ):
             raise ValueError("Experiment.hypothesis_id: experiment_hypothesis_invalid")
         _EXPERIMENT_LOG.debug(
             "command_constructed tag=experiment operator=%s",
@@ -884,12 +875,8 @@ class NegotiateExchange:
             raise TypeError("NegotiateExchange.counterparty_id must be EntityId")
         if self.act not in _EXCHANGE_ACTS:
             raise ValueError("NegotiateExchange.act")
-        give = _exchange_id_tuple(
-            "NegotiateExchange.give_item_ids", self.give_item_ids
-        )
-        take = _exchange_id_tuple(
-            "NegotiateExchange.take_item_ids", self.take_item_ids
-        )
+        give = _exchange_id_tuple("NegotiateExchange.give_item_ids", self.give_item_ids)
+        take = _exchange_id_tuple("NegotiateExchange.take_item_ids", self.take_item_ids)
         if set(give) & set(take):
             raise ValueError("NegotiateExchange item ids must be disjoint")
         _EXPERIMENT_LOG.debug(

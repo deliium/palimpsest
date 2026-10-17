@@ -318,9 +318,7 @@ class SubjectivePracticalKnowledge:
             if parents:
                 # Mutation creates a child of a discovery root while retaining origin.
                 if not (self.mutated and len(parents) == 1):
-                    raise _fail(
-                        "parent_entry_ids", "independent_discovery_no_parents"
-                    )
+                    raise _fail("parent_entry_ids", "independent_discovery_no_parents")
                 if hop < 1:
                     raise _fail("hop_index", "mutated_child_hop_must_be_positive")
             elif hop != PRACTICAL_KNOWLEDGE_FIRST_HOP_INDEX:
@@ -645,9 +643,7 @@ def resolve_practical_knowledge_hop_index(
         if parent is not None:
             hops.append(parent.hop_index)
         elif parent_hop_index is not None:
-            hops.append(
-                require_exact_nonneg_int("parent_hop_index", parent_hop_index)
-            )
+            hops.append(require_exact_nonneg_int("parent_hop_index", parent_hop_index))
         else:
             # Evicted / missing owner-local parent ⇒ hop 1 (not 0).
             hops.append(1)
@@ -754,9 +750,7 @@ def upsert_practical_knowledge(
     return result
 
 
-def _cap_evidence_refs(
-    refs: Sequence[str], *, max_refs: int
-) -> tuple[str, ...]:
+def _cap_evidence_refs(refs: Sequence[str], *, max_refs: int) -> tuple[str, ...]:
     checked: list[str] = []
     seen: set[str] = set()
     for item in refs:
@@ -770,9 +764,7 @@ def _cap_evidence_refs(
     return tuple(checked)
 
 
-def fingerprint_jaccard_distance(
-    left: Sequence[str], right: Sequence[str]
-) -> float:
+def fingerprint_jaccard_distance(left: Sequence[str], right: Sequence[str]) -> float:
     """Return ``1 - jaccard`` over fingerprint token sets."""
     left_set = set(_normalize_fingerprint(left))
     right_set = set(_normalize_fingerprint(right))
@@ -920,9 +912,7 @@ def form_or_reinforce_practical_knowledge(
         # once assigned; checked on upsert via ledger edges.
 
     if entry_id is None:
-        entry_id = (
-            f"pk:{ledger.owner_id.value}:{kind_id.value}:{key}:h{hop}:t{tick_i}"
-        )
+        entry_id = f"pk:{ledger.owner_id.value}:{kind_id.value}:{key}:h{hop}:t{tick_i}"
     root = _lineage_root_for(
         owner_id=ledger.owner_id,
         kind=kind_id,
@@ -1015,9 +1005,7 @@ def mutate_practical_knowledge(
     edit_count = min(edits, len(tokens))
     material = f"{namespace}:{seed}:{token}:{tick_i}"
     for index in range(edit_count):
-        pick = int(
-            hashlib.sha256(f"{material}:pick:{index}".encode()).hexdigest(), 16
-        )
+        pick = int(hashlib.sha256(f"{material}:pick:{index}".encode()).hexdigest(), 16)
         target = pick % len(tokens)
         replacement = hashlib.sha256(
             f"{material}:edit:{index}:{tokens[target]}".encode()
@@ -1212,8 +1200,7 @@ def supersede_practical_knowledge(
     )
     result = upsert_practical_knowledge(ledger, superseded)
     _LOG.info(
-        "practical_knowledge_supersede entry_id=%s origin=%s hop_index=%s "
-        "mutated=%s",
+        "practical_knowledge_supersede entry_id=%s origin=%s hop_index=%s mutated=%s",
         superseded.entry_id,
         superseded.origin.value,
         superseded.hop_index,
@@ -1506,7 +1493,7 @@ def apply_practical_knowledge_from_written_record(
     audits: list[PracticalKnowledgeAudit] = []
 
     if artifacts_on or durable_on:
-        entries = ()
+        entries: Sequence[object] = ()
         if artifact_interpretations is not None:
             entries = (
                 getattr(artifact_interpretations, "interpretations", None)
@@ -1547,16 +1534,14 @@ def apply_practical_knowledge_from_written_record(
             if audit is not None:
                 audits.append(audit)
 
-        artifacts = (
-            getattr(observation, "artifacts", ()) or () if observation else ()
-        )
+        artifacts = getattr(observation, "artifacts", ()) or () if observation else ()
         for artifact in artifacts:
             genre = getattr(artifact, "record_genre", None)
             genre_token = getattr(genre, "value", None)
             if not isinstance(genre_token, str):
                 continue
-            kind = _WRITTEN_GENRE_TO_KIND.get(genre_token)
-            if kind is None:
+            durable_kind = _WRITTEN_GENRE_TO_KIND.get(genre_token)
+            if durable_kind is None:
                 continue
             aid = getattr(
                 getattr(artifact, "artifact_id", None), "value", None
@@ -1566,7 +1551,7 @@ def apply_practical_knowledge_from_written_record(
             author = _agent_id_or_none(getattr(artifact, "author_id", None))
             current, audit = _try_form(
                 current,
-                kind=kind,
+                kind=durable_kind,
                 technique_token=_technique_token(f"durable-{aid}"),
                 fingerprint=(f"cue:durable:{aid}", f"genre:{genre_token}"),
                 origin=KnowledgeTransmissionOrigin.WRITTEN_RECORD,

@@ -185,8 +185,7 @@ def test_production_projection_has_no_coordinates() -> None:
     } <= semantic
     assert {item.location_id for item in frame.world.structures} == {"loc-1"}
     assert all(
-        item.presentation is not None
-        and item.presentation.icon_key == item.kind
+        item.presentation is not None and item.presentation.icon_key == item.kind
         for item in frame.world.structures
     )
     wood = next(item for item in frame.world.resources if item.name == "wood")

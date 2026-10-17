@@ -136,9 +136,7 @@ def _observation() -> Observation:
 
 def _scripted_loop(*, enabled: bool) -> CognitiveLoop:
     mode = (
-        CognitionIdentityMode.ENABLED
-        if enabled
-        else CognitionIdentityMode.PASSTHROUGH
+        CognitionIdentityMode.ENABLED if enabled else CognitionIdentityMode.PASSTHROUGH
     )
     return CognitiveLoop(
         perception=ScriptedPerceptionInterpreter(),

@@ -48,6 +48,7 @@ def is_supported_metric_family(metric_family: str) -> bool:
         return False
     return True
 
+
 _REQUIRED_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "schema_version",
@@ -312,9 +313,7 @@ def decode_metric_document(payload: bytes | str | Mapping[str, Any]) -> MetricDo
     stages: list[EvidenceStage] = []
     for index, item in enumerate(stages_raw):
         try:
-            stages.append(
-                require_evidence_stage(f"$.evidence_stages[{index}]", item)
-            )
+            stages.append(require_evidence_stage(f"$.evidence_stages[{index}]", item))
         except (TypeError, ValueError) as exc:
             raise MetricSerializationError(
                 "invalid_enum", f"$.evidence_stages[{index}]"

@@ -1,6 +1,6 @@
 # Read-only observer
 
-[← Architecture](architecture.md) · [Research API](research-api.md) · [Back to README](../README.md)
+[← Previous Page](research-ui.md) · [Back to README](../README.md) · [Next Page →](godot-observer.md)
 
 The observer shows a run to a human or to the read-only [Godot observer](godot-observer.md). It does not decide what the run does. The client lives in `clients/godot-observer/` and is not part of the Python package. `simulation.WorldEngine` remains the only authority that commits a tick. Presentation coordinates come from a layout catalog and are not simulation coordinates. Camera motion and playback speed do not change the run.
 
@@ -89,6 +89,28 @@ Optional additive GET filters on `.../observer/events`: `agent_id`, `event_type`
 
 A client that missed events loads `GET .../observer/events` for the exclusive gap (optionally with `catch_up=true`), then resumes the socket at the last event it applied. The next session does not repeat those events. Presentation coalescing (high-speed tick envelope merge / motion skip) lives only in Godot / observer projection — scientific event pages and the WS journal stay complete.
 
+## Regions and journey presentation
+
+Enabled frames add optional `region_id`/`region_label` to assigned locations and
+a closed `journey` to participating agents. A journey includes its ID,
+participants, endpoints, start/due/deadline ticks, and phase `preparing` or
+`capacity_wait`. Off-channel/absent values are omitted from these additions.
+Agents keep their authoritative origin `location_id` until arrival.
+
+Semantic types `JOURNEY_STARTED`, `JOURNEY_ARRIVED`, and `JOURNEY_ENDED` extend
+the catalog to 72 under `observer-protocol-v1`. Start events carry a journey;
+all three carry participant IDs. The client updates each participant once,
+clears journey state at arrival/end, and retains legacy movement handling.
+Frames are folded state: replacing a frame or seeking backward does not replay
+its historical events or trigger a live arrival animation.
+
+Godot draws visual-only region envelopes around location rectangles and marks
+busy travellers **at origin**. No authoritative mid-edge coordinate exists.
+Camera, layout, and animation never change graph edges, route cost, or world
+hashes. Researcher regional population metrics remain analytical; selected-owner
+destination evidence remains subjective and must not be merged into objective
+frames or another owner's overlay. Missing knowledge is not corrected by the map.
+
 ## Layout and privacy
 
 Two catalogs can place the same location at different screen positions. Neighbor ids, life status, holders, and action outcomes stay the ones committed by the engine.
@@ -96,3 +118,9 @@ Two catalogs can place the same location at different screen positions. Neighbor
 Ordinary manifest, state, event, tick, run, and stream payloads have no relationship, memory, belief, goal, emotion, utterance, or terminology field. Relationship dimension scores are available only on the researcher route, and only when subjective debug is enabled. That route copies stored dimension values and drops evidence rows. Subjective labels use layer `subjective_labels` from the live `owner_runtime_checkpoint` path: each row keeps objective id/display beside the agent's closed label token, `label_source="agent_perspective"`, and closed `strength_band` (`candidate` / `low` / `mid` / `high`). Objective `display_name` is never silently replaced. Optional `tick=` fails closed with `labels_unavailable_at_tick` unless it matches the live head. When debug is off the response is `debug_disabled`.
 
 Causal explanation of a selected event uses the separate research debugger surface (`subjective_debug`); see [Research causal debugger](research-causal-debugger.md) and [Godot observer](godot-observer.md#causal-debugger).
+
+## See also
+
+- [Physical simulation](physical-simulation.md#discrete-regional-journeys)
+- [Experiments](experiments.md#experiment-ay-regional-migration)
+- [Godot observer](godot-observer.md)

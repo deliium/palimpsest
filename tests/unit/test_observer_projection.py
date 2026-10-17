@@ -72,9 +72,7 @@ def _scene():
             ),
             bodies=bodies,
             weather=weather_for_locations(locations),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), EntityId("body-1")),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), EntityId("body-1")),),
         ),
         config=SimulationRunConfig(seed=3),
         run_id=RunId("run-project"),

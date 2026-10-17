@@ -93,6 +93,4 @@ async def test_mid_run_agent_blank_slate_despite_bootstrap_goals() -> None:
     assert len(runner.runtimes) == 2
     entrant = runner.runtimes[1]
     assert entrant.agent.goals == ()
-    assert_blank_slate_subjective_state(
-        entrant.agent_id, BlankSlateStoreCounts()
-    )
+    assert_blank_slate_subjective_state(entrant.agent_id, BlankSlateStoreCounts())

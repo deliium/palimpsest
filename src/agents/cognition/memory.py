@@ -9,7 +9,11 @@ them after successful cognition.
 from __future__ import annotations
 
 import logging
-from typing import Final
+from dataclasses import replace
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from memory.beliefs import BeliefRevisionRequest
 
 from agents.cognition.configuration import MEMORY_POLICY_VERSION
 from agents.cognition.models import (
@@ -31,6 +35,7 @@ from memory.models import (
     BeliefId,
     ConceptMention,
     EntityMention,
+    MemoryAccessReceipt,
     MemoryDynamicsPolicy,
     MemoryId,
     MemoryLineage,
@@ -42,6 +47,7 @@ from memory.models import (
     MemoryReconstructionPolicy,
     MemoryRelation,
     MemoryRetrieveRequest,
+    MemoryRetrieveResult,
     MemoryScoringPolicy,
     MemorySituationContext,
     MemorySourceKind,
@@ -75,6 +81,8 @@ class ScopedMemoryRetriever:
     __slots__ = (
         "_audits",
         "_belief_reader",
+        "_destination_hop_limit",
+        "_destination_memory_limit",
         "_dynamics_policy",
         "_emotion_bias",
         "_limit",
@@ -93,6 +101,8 @@ class ScopedMemoryRetriever:
         limit: int = _DEFAULT_LIMIT,
         emotion_bias: bool = False,
         dynamics_policy: MemoryDynamicsPolicy | None = None,
+        destination_memory_limit: int = 0,
+        destination_hop_limit: int = 1,
     ) -> None:
         if type(scoring_policy) is not MemoryScoringPolicy:
             raise TypeError("scoring_policy must be MemoryScoringPolicy")
@@ -116,6 +126,10 @@ class ScopedMemoryRetriever:
             MemoryDynamicsPolicy
         ):
             raise TypeError("dynamics_policy must be MemoryDynamicsPolicy | None")
+        if type(destination_memory_limit) is not int or destination_memory_limit < 0:
+            raise ValueError("destination_memory_limit must be non-negative")
+        if type(destination_hop_limit) is not int or destination_hop_limit < 1:
+            raise ValueError("destination_hop_limit must be positive")
         self._service = memory_service
         self._scoring_policy = scoring_policy
         self._reconstruction_policy = reconstruction_policy
@@ -123,6 +137,8 @@ class ScopedMemoryRetriever:
         self._limit = limit
         self._emotion_bias = emotion_bias
         self._dynamics_policy = dynamics_policy
+        self._destination_memory_limit = destination_memory_limit
+        self._destination_hop_limit = destination_hop_limit
         self._audits: list[RecallAuditRecord] = []
 
     def export_audits(self) -> tuple[RecallAuditRecord, ...]:
@@ -143,6 +159,7 @@ class ScopedMemoryRetriever:
         if self._service.scope.owner_id != loop_input.agent_id:
             raise ValueError("memory service scope owner mismatch")
 
+        observation = loop_input.observation
         tags = tuple(code.value for code in perception.claim_codes[:16])
         beliefs: tuple[Belief, ...] = ()
         belief_ids: tuple[BeliefId, ...] = ()
@@ -207,49 +224,214 @@ class ScopedMemoryRetriever:
         result = await self._service.recall(recall_request)
         if result.audits:
             self._audits.extend(result.audits)
+        destination_result = None
+        destination_selected_count = 0
+        if (
+            self._destination_memory_limit > 0
+            and observation.regional_context is not None
+        ):
+            from agents.cognition.regional_migration import (
+                destination_lane_id,
+                known_destination_ids,
+            )
 
-        # Scientific ranked evidence: rebuild hits from evidence sources only as
-        # ID metadata. Full ranked_hits require a retrieve; recall already ran
-        # retrieve once, so re-rank from evidence without a second service call
-        # by mapping source ranks. Downstream keeps traces out of "remembered".
+            owned_memories = (
+                () if loop_input.snapshot is None else loop_input.snapshot.memories
+            )
+            destination_ids = known_destination_ids(
+                owner_id=loop_input.agent_id,
+                observation=observation,
+                memories=owned_memories,
+                hop_limit=self._destination_hop_limit,
+            )
+            shared_source_limit = min(self._limit, policy.max_source_traces)
+            remaining_sources = max(
+                0, shared_source_limit - len(result.evidence.sources)
+            )
+            destination_limit = min(self._destination_memory_limit, remaining_sources)
+            local_narrative_chars = sum(
+                len(item.narrative) for item in result.reconstructions
+            )
+            remaining_narrative_chars = max(
+                0, policy.max_narrative_chars - local_narrative_chars
+            )
+            if destination_ids and destination_limit > 0 and remaining_narrative_chars:
+                destination_operation_id = destination_lane_id(
+                    namespace="operation",
+                    owner_id=loop_input.agent_id,
+                    tick=perception.tick,
+                    policy_version=policy.version,
+                )
+                destination_retrieve = MemoryRetrieveRequest(
+                    current_tick=perception.tick,
+                    limit=destination_limit,
+                    scoring_policy=self._scoring_policy,
+                    filters=MemoryQueryFilters(
+                        entity_ids=destination_ids,
+                        require_active=True,
+                    ),
+                    context=MemoryQueryContext(
+                        tags=("destination",),
+                        related_entity_ids=destination_ids,
+                    ),
+                    operation_id=destination_operation_id,
+                )
+                raw_destination = await self._service.retrieve(destination_retrieve)
+                local_memory_ids = {
+                    source.memory_id for source in result.evidence.sources
+                }
+                local_memory_ids.update(
+                    receipt.memory_id for receipt in result.pending_accesses
+                )
+                destination_hits = tuple(
+                    replace(hit, rank=index)
+                    for index, hit in enumerate(
+                        (
+                            hit
+                            for hit in raw_destination.hits
+                            if hit.trace.memory_id not in local_memory_ids
+                        ),
+                        start=1,
+                    )
+                )
+                destination_memory_ids = {
+                    hit.trace.memory_id for hit in destination_hits
+                }
+                destination_accesses = tuple(
+                    receipt
+                    for receipt in raw_destination.pending_accesses
+                    if receipt.memory_id in destination_memory_ids
+                    and receipt.memory_id not in local_memory_ids
+                )
+                if destination_hits:
+                    destination_retrieval_result = MemoryRetrieveResult(
+                        hits=destination_hits,
+                        pending_accesses=destination_accesses,
+                        candidate_count=raw_destination.candidate_count,
+                        retrieval_tick=raw_destination.retrieval_tick,
+                        scoring_policy_version=raw_destination.scoring_policy_version,
+                    )
+                    destination_policy = replace(
+                        policy,
+                        max_source_traces=min(
+                            policy.max_source_traces, len(destination_hits)
+                        ),
+                        max_narrative_chars=min(
+                            policy.max_narrative_chars,
+                            remaining_narrative_chars,
+                        ),
+                        allow_provider=(
+                            policy.allow_provider
+                            and not any(
+                                reconstructed.used_provider
+                                for reconstructed in result.reconstructions
+                            )
+                        ),
+                        reconsolidate=(
+                            policy.reconsolidate and result.reconsolidation is None
+                        ),
+                    )
+                    destination_reconstruction_id = ReconstructionId(
+                        destination_lane_id(
+                            namespace="reconstruction",
+                            owner_id=loop_input.agent_id,
+                            tick=perception.tick,
+                            policy_version=policy.version,
+                        )
+                    )
+                    destination_derived_id = (
+                        MemoryId(
+                            destination_lane_id(
+                                namespace="derived-memory",
+                                owner_id=loop_input.agent_id,
+                                tick=perception.tick,
+                                policy_version=policy.version,
+                            )
+                        )
+                        if destination_policy.reconsolidate
+                        else None
+                    )
+                    destination_request = MemoryRecallRequest(
+                        retrieve=destination_retrieve,
+                        reconstruction_id=destination_reconstruction_id,
+                        reconstruction_policy=destination_policy,
+                        beliefs=beliefs,
+                        recall_context=MemoryRecallContext(tags=("destination",)),
+                        derived_memory_id=destination_derived_id,
+                        dynamics_policy=self._dynamics_policy,
+                        pre_retrieved=destination_retrieval_result,
+                    )
+                    destination_result = await self._service.recall(destination_request)
+                    destination_selected_count = len(
+                        destination_result.evidence.sources
+                    )
+                    if destination_result.audits:
+                        self._audits.extend(destination_result.audits)
+            _LOG.debug(
+                "destination_recall_lane",
+                extra={
+                    "cognition": {
+                        "owner_id": loop_input.agent_id.value,
+                        "tick": perception.tick,
+                        "known_destination_count": len(destination_ids),
+                        "selected_count": destination_selected_count,
+                        "memory_limit": self._destination_memory_limit,
+                        "hop_limit": self._destination_hop_limit,
+                        "budget_degraded": remaining_sources
+                        < self._destination_memory_limit,
+                    }
+                },
+            )
+
+        # Map owner-scoped evidence from each lane into one deterministic rank
+        # order. The local lane precedes destination evidence.
         from memory.models import (
             MemoryRankedHit,
             MemoryScoreBreakdown,
         )
 
+        recall_results = (
+            (result,) if destination_result is None else (result, destination_result)
+        )
         ranked_hits: list[MemoryRankedHit] = []
         # Prefer loading traces for scientific metadata via get (no access bump).
-        for source in result.evidence.sources:
-            trace = await self._service.get(source.memory_id)
-            if trace is None:
-                continue
-            if trace.owner_id != loop_input.agent_id:
-                _LOG.error(
-                    "memory_recall_foreign_owner",
-                    extra={
-                        "cognition": {
-                            "owner_id": loop_input.agent_id.value,
-                            "tick": perception.tick,
-                            "reason_code": "ownership",
-                        }
-                    },
+        for recall_lane in recall_results:
+            for source in recall_lane.evidence.sources:
+                trace = await self._service.get(source.memory_id)
+                if trace is None:
+                    continue
+                if trace.owner_id != loop_input.agent_id:
+                    _LOG.error(
+                        "memory_recall_foreign_owner",
+                        extra={
+                            "cognition": {
+                                "owner_id": loop_input.agent_id.value,
+                                "tick": perception.tick,
+                                "reason_code": "ownership",
+                            }
+                        },
+                    )
+                    raise ValueError("foreign-owner memory result rejected")
+                ranked_hits.append(
+                    MemoryRankedHit(
+                        rank=len(ranked_hits) + 1,
+                        trace=trace,
+                        score=source.score,
+                        breakdown=MemoryScoreBreakdown(),
+                        matched_concept_mention_ids=(),
+                        matched_entity_mention_ids=(),
+                        scoring_policy_id=self._scoring_policy.policy_id,
+                        scoring_policy_version=self._scoring_policy.version,
+                        retrieval_tick=perception.tick,
+                    )
                 )
-                raise ValueError("foreign-owner memory result rejected")
-            ranked_hits.append(
-                MemoryRankedHit(
-                    rank=source.rank,
-                    trace=trace,
-                    score=source.score,
-                    breakdown=MemoryScoreBreakdown(),
-                    matched_concept_mention_ids=(),
-                    matched_entity_mention_ids=(),
-                    scoring_policy_id=self._scoring_policy.policy_id,
-                    scoring_policy_version=self._scoring_policy.version,
-                    retrieval_tick=perception.tick,
-                )
-            )
 
-        for reconstructed in result.reconstructions:
+        reconstructions = tuple(
+            reconstruction
+            for recall_lane in recall_results
+            for reconstruction in recall_lane.reconstructions
+        )
+        for reconstructed in reconstructions:
             if reconstructed.owner_id != loop_input.agent_id:
                 raise ValueError("foreign-owner reconstruction rejected")
 
@@ -268,7 +450,7 @@ class ScopedMemoryRetriever:
             enabled=self._emotion_bias,
         )
         reconstructions, reconstruction_bias = apply_reconstruction_emotion_bias(
-            result.reconstructions,
+            reconstructions,
             prior,
             enabled=self._emotion_bias,
         )
@@ -279,6 +461,32 @@ class ScopedMemoryRetriever:
         )
         memory_ids = tuple(hit.trace.memory_id for hit in ranked_hits_tuple)
         generation = reconstructions[0].generation if reconstructions else 0
+        candidate_count = sum(
+            len(recall_lane.evidence.sources) for recall_lane in recall_results
+        )
+        access_rows: list[MemoryAccessReceipt] = []
+        seen_access_ids: set[MemoryId] = set()
+        for recall_lane in recall_results:
+            for access in recall_lane.pending_accesses:
+                if access.memory_id not in seen_access_ids:
+                    access_rows.append(access)
+                    seen_access_ids.add(access.memory_id)
+        reconsolidation = next(
+            (
+                recall_lane.reconsolidation
+                for recall_lane in recall_results
+                if recall_lane.reconsolidation is not None
+            ),
+            None,
+        )
+        pending_semanticization = next(
+            (
+                recall_lane.pending_semanticization
+                for recall_lane in recall_results
+                if recall_lane.pending_semanticization is not None
+            ),
+            None,
+        )
         _LOG.debug(
             "memory_recall_mapped",
             extra={
@@ -290,18 +498,16 @@ class ScopedMemoryRetriever:
                     "dynamics_policy_version": dynamics_version,
                     "emotion_bias_policy_version": EMOTION_BIAS_POLICY_VERSION,
                     "emotion_bias_applied": emotion_bias_applied,
-                    "audit_count": len(result.audits),
+                    "audit_count": sum(len(row.audits) for row in recall_results),
                     "enabled_components": list(
                         self._scoring_policy.weights.enabled_components()
                     ),
-                    "candidate_count": result.evidence.policy.max_source_traces,
-                    "source_count": len(result.evidence.sources),
+                    "candidate_count": candidate_count,
+                    "source_count": candidate_count,
                     "result_count": len(ranked_hits_tuple),
                     "reconstruction_count": len(reconstructions),
-                    "pending_write_count": 1 if result.reconsolidation else 0,
-                    "semanticization_pending": (
-                        result.pending_semanticization is not None
-                    ),
+                    "pending_write_count": 1 if reconsolidation else 0,
+                    "semanticization_pending": pending_semanticization is not None,
                     "generation": generation,
                     "used_provider": (
                         reconstructions[0].used_provider if reconstructions else False
@@ -318,23 +524,23 @@ class ScopedMemoryRetriever:
             belief_ids=belief_ids,
             confidence=(reconstructions[0].confidence if reconstructions else 1.0),
             decision_metadata=DecisionMetadata(
-                candidate_count=len(result.evidence.sources),
+                candidate_count=candidate_count,
                 selection_codes=tuple(
                     f"recon:{item.reconstruction_id.value}" for item in reconstructions
                 )
                 or tuple(f"rank:{hit.rank}" for hit in ranked_hits_tuple),
             ),
             ranked_hits=ranked_hits_tuple,
-            pending_accesses=result.pending_accesses,
-            candidate_count=len(result.evidence.sources),
+            pending_accesses=tuple(access_rows),
+            candidate_count=candidate_count,
             retrieval_tick=perception.tick,
             scoring_policy_version=self._scoring_policy.version,
             reconstructions=reconstructions,
-            reconsolidation=result.reconsolidation,
+            reconsolidation=reconsolidation,
             reconstruction_policy_version=policy.version,
             semantic_beliefs=semantic_beliefs,
             pending_semanticization=_belief_revision_from_semanticization(
-                result.pending_semanticization,
+                pending_semanticization,
                 owner_id=loop_input.agent_id,
             ),
         )
@@ -350,6 +556,8 @@ class ReferenceMemoryRetriever:
 
     __slots__ = (
         "_belief_reader",
+        "_destination_hop_limit",
+        "_destination_memory_limit",
         "_emotion_bias",
         "_limit",
         "_scoring_policy",
@@ -364,6 +572,8 @@ class ReferenceMemoryRetriever:
         belief_reader: BeliefReader | None = None,
         limit: int = _DEFAULT_LIMIT,
         emotion_bias: bool = False,
+        destination_memory_limit: int = 0,
+        destination_hop_limit: int = 1,
     ) -> None:
         if type(scoring_policy) is not MemoryScoringPolicy:
             raise TypeError("scoring_policy must be MemoryScoringPolicy")
@@ -375,11 +585,17 @@ class ReferenceMemoryRetriever:
             raise ValueError("limit must be positive")
         if type(emotion_bias) is not bool:
             raise TypeError("emotion_bias must be bool")
+        if type(destination_memory_limit) is not int or destination_memory_limit < 0:
+            raise ValueError("destination_memory_limit must be non-negative")
+        if type(destination_hop_limit) is not int or destination_hop_limit < 1:
+            raise ValueError("destination_hop_limit must be positive")
         self._service = memory_service
         self._scoring_policy = scoring_policy
         self._belief_reader = belief_reader
         self._limit = limit
         self._emotion_bias = emotion_bias
+        self._destination_memory_limit = destination_memory_limit
+        self._destination_hop_limit = destination_hop_limit
 
     async def retrieve(
         self,
@@ -395,6 +611,7 @@ class ReferenceMemoryRetriever:
         if self._service.scope.owner_id != loop_input.agent_id:
             raise ValueError("memory service scope owner mismatch")
 
+        observation = loop_input.observation
         tags = tuple(code.value for code in perception.claim_codes[:16])
         belief_ids: tuple[BeliefId, ...] = ()
         semantic_beliefs: tuple[SemanticBelief, ...] = ()
@@ -429,6 +646,84 @@ class ReferenceMemoryRetriever:
             ),
         )
         result = await self._service.retrieve(retrieve)
+        retrieved_results = [result]
+        destination_count = 0
+        if (
+            self._destination_memory_limit > 0
+            and observation.regional_context is not None
+        ):
+            from agents.cognition.regional_migration import (
+                destination_lane_id,
+                known_destination_ids,
+            )
+
+            destination_ids = known_destination_ids(
+                owner_id=loop_input.agent_id,
+                observation=observation,
+                memories=(
+                    () if loop_input.snapshot is None else loop_input.snapshot.memories
+                ),
+                hop_limit=self._destination_hop_limit,
+            )
+            remaining = max(0, self._limit - len(result.hits))
+            destination_limit = min(self._destination_memory_limit, remaining)
+            if destination_ids and destination_limit > 0:
+                destination_request = MemoryRetrieveRequest(
+                    current_tick=perception.tick,
+                    limit=destination_limit,
+                    scoring_policy=self._scoring_policy,
+                    filters=MemoryQueryFilters(
+                        entity_ids=destination_ids,
+                        require_active=True,
+                    ),
+                    context=MemoryQueryContext(
+                        tags=("destination",),
+                        related_entity_ids=destination_ids,
+                    ),
+                    operation_id=destination_lane_id(
+                        namespace="reference-operation",
+                        owner_id=loop_input.agent_id,
+                        tick=perception.tick,
+                        policy_version=self._scoring_policy.version,
+                    ),
+                )
+                destination_result = await self._service.retrieve(destination_request)
+                local_ids = {hit.trace.memory_id for hit in result.hits}
+                destination_hits = tuple(
+                    replace(hit, rank=index)
+                    for index, hit in enumerate(
+                        (
+                            hit
+                            for hit in destination_result.hits
+                            if hit.trace.memory_id not in local_ids
+                        ),
+                        start=1,
+                    )
+                )
+                destination_ids_selected = {
+                    hit.trace.memory_id for hit in destination_hits
+                }
+                destination_result = MemoryRetrieveResult(
+                    hits=destination_hits,
+                    pending_accesses=tuple(
+                        receipt
+                        for receipt in destination_result.pending_accesses
+                        if receipt.memory_id in destination_ids_selected
+                        and receipt.memory_id not in local_ids
+                    ),
+                    candidate_count=destination_result.candidate_count,
+                    retrieval_tick=destination_result.retrieval_tick,
+                    scoring_policy_version=destination_result.scoring_policy_version,
+                )
+                if destination_hits:
+                    retrieved_results.append(destination_result)
+                    destination_count = len(destination_hits)
+        combined_hits = tuple(
+            replace(hit, rank=index)
+            for index, hit in enumerate(
+                (hit for lane in retrieved_results for hit in lane.hits), start=1
+            )
+        )
         prior = (
             None if loop_input.snapshot is None else loop_input.snapshot.emotional_state
         )
@@ -438,7 +733,7 @@ class ReferenceMemoryRetriever:
         )
 
         biased_hits, retrieval_bias = apply_retrieval_emotion_bias(
-            result.hits,
+            combined_hits,
             prior,
             enabled=self._emotion_bias,
         )
@@ -475,8 +770,11 @@ class ReferenceMemoryRetriever:
                     "emotion_bias_policy_version": EMOTION_BIAS_POLICY_VERSION,
                     "emotion_bias_applied": retrieval_bias,
                     "mode": "reference",
-                    "candidate_count": result.candidate_count,
+                    "candidate_count": sum(
+                        lane.candidate_count for lane in retrieved_results
+                    ),
                     "result_count": len(reference_episodes),
+                    "destination_count": destination_count,
                     "status": "complete",
                 }
             },
@@ -487,15 +785,17 @@ class ReferenceMemoryRetriever:
             belief_ids=belief_ids,
             confidence=confidence,
             decision_metadata=DecisionMetadata(
-                candidate_count=result.candidate_count,
+                candidate_count=sum(lane.candidate_count for lane in retrieved_results),
                 selection_codes=tuple(
                     f"ref:{item.episode_id}" for item in reference_episodes
                 )
                 or tuple(f"rank:{hit.rank}" for hit in biased_hits),
             ),
             ranked_hits=biased_hits,
-            pending_accesses=result.pending_accesses,
-            candidate_count=result.candidate_count,
+            pending_accesses=tuple(
+                access for lane in retrieved_results for access in lane.pending_accesses
+            ),
+            candidate_count=sum(lane.candidate_count for lane in retrieved_results),
             retrieval_tick=perception.tick,
             scoring_policy_version=self._scoring_policy.version,
             reference_episodes=tuple(reference_episodes),
@@ -586,7 +886,12 @@ def build_direct_observation_memory_trace(
                 ),
             )
         )
-    tags = ("direct", "occurrence", occurrence.kind, occurrence.audience_role.value)
+    tags: tuple[str, ...] = (
+        "direct",
+        "occurrence",
+        occurrence.kind,
+        occurrence.audience_role.value,
+    )
     if occurrence.kind == "experiment_resolved":
         facts = occurrence.public_facts
         outcome_class = facts.get("outcome_class")
@@ -938,6 +1243,60 @@ class DirectObservationMemoryUpdateHook:
                 },
             )
 
+        if observation.regional_context is not None:
+            from agents.cognition.regional_migration import destination_memory_trace
+
+            for exit_view in observation.exits:
+                if exit_view.travel_duration_ticks is None:
+                    continue
+                try:
+                    trace = destination_memory_trace(
+                        owner_id=owner,
+                        observer_body_id=observation.observer_id,
+                        observation=observation,
+                        exit_view=exit_view,
+                    )
+                except (TypeError, ValueError) as exc:
+                    _LOG.warning(
+                        "destination_memory_rejected",
+                        extra={
+                            "cognition": {
+                                "owner_id": owner.value,
+                                "tick": tick,
+                                "reason_code": "trace_build_failed",
+                                "detail": type(exc).__name__,
+                            }
+                        },
+                    )
+                    continue
+                if trace.memory_id.value in seen_ids:
+                    deduped += 1
+                    continue
+                seen_ids.add(trace.memory_id.value)
+                proposed += 1
+                intents.append(
+                    MemoryUpdateIntent(
+                        owner_id=owner,
+                        kind=MemoryUpdateKind.WRITE_MEMORY,
+                        memory=trace,
+                    )
+                )
+            _LOG.debug(
+                "destination_memory_observed",
+                extra={
+                    "cognition": {
+                        "owner_id": owner.value,
+                        "tick": tick,
+                        "exit_count": len(observation.exits),
+                        "destination_count": sum(
+                            exit_view.travel_duration_ticks is not None
+                            for exit_view in observation.exits
+                        ),
+                        "policy_version": "regional-destination-memory.v1",
+                    }
+                },
+            )
+
         scene = build_direct_scene_memory_trace(
             owner_id=owner,
             observation=observation,
@@ -985,7 +1344,7 @@ def _belief_revision_from_semanticization(
     pending: object | None,
     *,
     owner_id: AgentId,
-) -> object | None:
+) -> BeliefRevisionRequest | None:
     """Map V2 pending semanticization into one ownership-checked belief revision."""
     from memory.belief_formation import (
         DEFAULT_BELIEF_FORMATION_POLICY,

@@ -19,7 +19,7 @@ from analysis.models import (
 )
 from analysis.numerical import library_versions, quantize_float
 from analysis.specifications import MetricFamilyId, metric_specification
-from world.events import WorldEvent
+from world.events import JourneyStarted, WorldEvent
 from world.identifiers import require_stable_id
 
 __all__ = [
@@ -99,8 +99,7 @@ def compute_prospective_imagination_metrics(
         rate = 0.0 if harm_count == 0 else 1.0
         errors.append(abs(confidence - rate))
     _LOG.debug(
-        "prospective_imagination_metric arm_id=%s matched_count=%s "
-        "unmatched_count=%s",
+        "prospective_imagination_metric arm_id=%s matched_count=%s unmatched_count=%s",
         arm,
         matched,
         unmatched,
@@ -155,6 +154,8 @@ def compute_prospective_imagination_metrics(
 def _first_command(events: tuple[WorldEvent, ...]) -> str | None:
     for event in events:
         direction = _DIRECTION.get(type(event.details).__name__)
+        if type(event.details) is JourneyStarted:
+            direction = event.details.command_kind
         if direction is not None:
             return direction
     return None

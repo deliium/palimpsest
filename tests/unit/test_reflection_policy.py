@@ -132,9 +132,7 @@ def test_three_help_traces_copy_predicate_into_one_hypothesis() -> None:
     assert belief.evidence_ids == ("mem-0", "mem-1", "mem-2")
     assert belief.belief_request is not None
     assert belief.belief_request.claim.predicate == "help_received"
-    assert (
-        belief.belief_request.activation_state is BeliefActivationState.CANDIDATE
-    )
+    assert belief.belief_request.activation_state is BeliefActivationState.CANDIDATE
     assert belief.belief_request.claim.value.number_value == 3
     relations = [
         item

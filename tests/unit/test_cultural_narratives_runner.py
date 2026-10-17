@@ -75,8 +75,7 @@ def test_runner_v21_wires_deterministic_cultural_narratives() -> None:
     document = json.loads(encoded.decode("utf-8"))
     assert document["schema_version"] == "runner-config-v21"
     assert (
-        document["agents"][0]["cognition"]["cultural_narrative_mode"]
-        == "deterministic"
+        document["agents"][0]["cognition"]["cultural_narrative_mode"] == "deterministic"
     )
     assert document["agents"][0]["cognition"]["semantic_naming_mode"] == "disabled"
     assert decode_runner_config(encoded) == enabled

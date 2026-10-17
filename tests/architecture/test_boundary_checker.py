@@ -89,6 +89,23 @@ def test_checker_detects_private_world_state_access(tmp_path: Path) -> None:
     assert "memory/__init__.py" in report
 
 
+@pytest.mark.parametrize("module", ("_travel", "_production", "_experiment_apply"))
+def test_checker_allows_private_world_collaboration_but_not_cognition(
+    tmp_path: Path, module: str
+) -> None:
+    root = _write_tree(
+        tmp_path,
+        {
+            "world/__init__.py": _PUBLIC_INIT,
+            "world/_state.py": "class WorldState: pass\n",
+            f"world/{module}.py": "from world._state import WorldState\n",
+        },
+    )
+    assert check_tree(root) == []
+    _write_tree(root, {"agents/cognition/bad.py": f"import world.{module}\n"})
+    assert "private-world-authority" in _rules(root)
+
+
 def test_checker_detects_private_perception_access(tmp_path: Path) -> None:
     root = _write_tree(
         tmp_path,

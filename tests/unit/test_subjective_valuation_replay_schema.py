@@ -179,9 +179,7 @@ def test_engine_init_and_restore_keep_horizon() -> None:
         pass
 
     restored = _Restored()
-    spec = replace(
-        example_subjective_valuation_spec(), horizon_ticks=9, max_bundle=3
-    )
+    spec = replace(example_subjective_valuation_spec(), horizon_ticks=9, max_bundle=3)
 
     class _Config:
         subjective_valuation = spec

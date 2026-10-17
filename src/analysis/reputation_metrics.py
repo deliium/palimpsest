@@ -172,9 +172,7 @@ def _means(
         if not samples:
             continue
         averaged = {
-            name: quantize_float(
-                sum(sample[name] for sample in samples) / len(samples)
-            )
+            name: quantize_float(sum(sample[name] for sample in samples) / len(samples))
             for name in _DIMENSIONS
         }
         rows.append(

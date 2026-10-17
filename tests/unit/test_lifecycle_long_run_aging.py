@@ -133,9 +133,7 @@ async def test_twin_runs_share_hashes_different_seeds_diverge_assigned() -> None
             ),
         )
         run_id = RunId(f"run-aging-{seed}-shared")
-        async with await SimulationRunner.from_config(
-            config, run_id=run_id
-        ) as runner:
+        async with await SimulationRunner.from_config(config, run_id=run_id) as runner:
             result = await runner.run()
             doc = build_runner_result_document(result=result, config=config)
             hashes.append(doc.exact_trajectory_hash)

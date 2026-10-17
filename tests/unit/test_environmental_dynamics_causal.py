@@ -134,9 +134,7 @@ def test_learned_winter_search_is_more_costly_than_naive_autumn(
         learned.season_successors,
         owner_id=owner,
     )
-    season_values = [
-        atom.value for atom in biased if atom.slot is CausalSlot.SEASON
-    ]
+    season_values = [atom.value for atom in biased if atom.slot is CausalSlot.SEASON]
     assert season_values == ["autumn"]
     learned_score = _search_failure_score(learned, biased)
     naive_score = _search_failure_score(empty_world_model(owner), atoms)
@@ -195,9 +193,7 @@ def _search_failure_score(
     model: CausalWorldModel,
     atoms: tuple,
 ) -> float:
-    match = match_hypothesis(
-        model, outcome=CausalOutcome.SEARCH_FAILURE, atoms=atoms
-    )
+    match = match_hypothesis(model, outcome=CausalOutcome.SEARCH_FAILURE, atoms=atoms)
     if match is None:
         return 0.0
     return -match.confidence
@@ -223,7 +219,7 @@ def _observation(
                 actor_id=EntityId("body-1"),
                 success=False,
             ),
-            )
+        )
     return Observation(
         world_id=WorldId("world-1"),
         observer_id=EntityId("body-1"),

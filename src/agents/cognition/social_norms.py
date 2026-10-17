@@ -869,9 +869,7 @@ def norm_communicate_utterance(
     utterance = origin_utterance(
         text=plan.predicate,
         speaker_id=identity.owner_entity_id,
-        communication_id=(
-            f"social-norms-{owner_id.value}-{tick}-{plan.pattern.value}"
-        ),
+        communication_id=(f"social-norms-{owner_id.value}-{tick}-{plan.pattern.value}"),
         relations=(
             CommunicationRelation(
                 subject=plan.subject,

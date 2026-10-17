@@ -83,9 +83,7 @@ def test_location_bootstrap_names_unchanged_by_labeling() -> None:
         owner_id=AgentId("ada"),
         owner_entity_id=EntityId("body-1"),
         counterparts=(
-            CounterpartBinding(
-                agent_id=AgentId("ben"), entity_id=EntityId("body-2")
-            ),
+            CounterpartBinding(agent_id=AgentId("ben"), entity_id=EntityId("body-2")),
         ),
     )
     location_id = next(iter(before))
@@ -121,9 +119,7 @@ def test_location_bootstrap_names_unchanged_by_labeling() -> None:
 
 def test_two_owners_mint_different_place_seeds_for_same_location() -> None:
     location_id = "clearing"
-    alice = stable8_digest(
-        AgentId("alice"), NamingReferentKind.LOCATION, location_id
-    )
+    alice = stable8_digest(AgentId("alice"), NamingReferentKind.LOCATION, location_id)
     bob = stable8_digest(AgentId("bob"), NamingReferentKind.LOCATION, location_id)
     assert alice != bob
     assert f"place_{alice}" != f"place_{bob}"

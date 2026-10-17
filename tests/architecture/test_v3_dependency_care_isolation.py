@@ -53,9 +53,7 @@ def test_caregiving_bias_does_not_import_analysis() -> None:
     path = _SRC / "agents" / "cognition" / "caregiving.py"
     imported = _imported_modules(path)
     hits = {
-        name
-        for name in imported
-        if name == "analysis" or name.startswith("analysis.")
+        name for name in imported if name == "analysis" or name.startswith("analysis.")
     }
     assert hits == set(), sorted(hits)
 

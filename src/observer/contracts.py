@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, NoReturn
+from typing import Literal, NoReturn, cast
 
 from observer.presentation import EntityPresentation
 from observer.version import (
@@ -227,8 +227,18 @@ class ObserverLocation:
     display_name: str
     neighbor_ids: tuple[str, ...]
     presentation: ObserverPresentation | None = None
+    region_id: str | None = None
+    region_label: str | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "region_id", _optional_text("region_id", self.region_id)
+        )
+        object.__setattr__(
+            self, "region_label", _optional_text("region_label", self.region_label)
+        )
+        if (self.region_id is None) != (self.region_label is None):
+            _reject("region_id", "incomplete_region")
         object.__setattr__(
             self, "location_id", _require_text("location_id", self.location_id)
         )
@@ -264,6 +274,33 @@ class ObserverBodyMeasures:
 
 
 @dataclass(frozen=True, slots=True)
+class ObserverJourney:
+    journey_id: str
+    origin_location_id: str
+    destination_location_id: str
+    participant_body_ids: tuple[str, ...]
+    start_tick: int
+    due_tick: int
+    arrival_wait_deadline_tick: int
+    phase: str
+
+    def __post_init__(self) -> None:
+        for name in ("journey_id", "origin_location_id", "destination_location_id"):
+            object.__setattr__(self, name, _require_text(name, getattr(self, name)))
+        object.__setattr__(
+            self,
+            "participant_body_ids",
+            _id_tuple("participant_body_ids", self.participant_body_ids),
+        )
+        for name in ("start_tick", "due_tick", "arrival_wait_deadline_tick"):
+            object.__setattr__(self, name, _require_tick(name, getattr(self, name)))
+        if not self.start_tick <= self.due_tick <= self.arrival_wait_deadline_tick:
+            _reject("journey", "invalid_ticks")
+        if self.phase not in {"preparing", "capacity_wait"}:
+            _reject("journey", "invalid_phase")
+
+
+@dataclass(frozen=True, slots=True)
 class ObserverAgent:
     entity_id: str
     location_id: str
@@ -272,8 +309,17 @@ class ObserverAgent:
     measures: ObserverBodyMeasures
     agent_id: str | None = None
     presentation_slot: PresentationSlot | None = None
+    journey: ObserverJourney | None = None
 
     def __post_init__(self) -> None:
+        if self.journey is not None:
+            if type(self.journey) is not ObserverJourney:
+                _reject("journey", "invalid_type")
+            if (
+                self.entity_id not in self.journey.participant_body_ids
+                or self.location_id != self.journey.origin_location_id
+            ):
+                _reject("journey", "invalid_placement")
         object.__setattr__(
             self, "entity_id", _require_text("entity_id", self.entity_id)
         )
@@ -469,9 +515,7 @@ class ObserverArtifact:
         object.__setattr__(
             self,
             "custodian_repository_id",
-            _optional_text(
-                "custodian_repository_id", self.custodian_repository_id
-            ),
+            _optional_text("custodian_repository_id", self.custodian_repository_id),
         )
 
 
@@ -517,9 +561,7 @@ class ObserverRepository:
             object.__setattr__(
                 self,
                 "founder_ids",
-                tuple(
-                    _require_text("founder_ids", item) for item in self.founder_ids
-                ),
+                tuple(_require_text("founder_ids", item) for item in self.founder_ids),
             )
         if self.index_entry_count is not None:
             object.__setattr__(
@@ -680,9 +722,7 @@ class ObserverWorldState:
         _unique("weather", tuple(item.location_id for item in weather))
         _unique("structures", tuple(item.structure_id for item in structures))
         _unique("artifacts", tuple(item.artifact_id for item in artifacts))
-        _unique(
-            "repositories", tuple(item.repository_id for item in repositories)
-        )
+        _unique("repositories", tuple(item.repository_id for item in repositories))
         _unique("temperature_bands", tuple(item.location_id for item in bands))
         _unique(
             "hazards",
@@ -711,17 +751,17 @@ class ObserverWorldState:
 
 
 _WORLD_FIELDS: frozenset[str] = frozenset(ObserverWorldState.__dataclass_fields__)
-_generated_world_init = ObserverWorldState.__init__
 
 
-def _guarded_world_init(
-    self: ObserverWorldState, *args: object, **kwargs: object
-) -> None:
-    _reject_objective_leak(set(kwargs))
-    _generated_world_init(self, *args, **kwargs)
+def _guard_world_init[**P](initializer: Callable[P, None]) -> Callable[P, None]:
+    def guarded(*args: P.args, **kwargs: P.kwargs) -> None:
+        _reject_objective_leak(set(kwargs))
+        initializer(*args, **kwargs)
+
+    return guarded
 
 
-ObserverWorldState.__init__ = _guarded_world_init  # type: ignore[method-assign]
+ObserverWorldState.__init__ = _guard_world_init(ObserverWorldState.__init__)  # type: ignore[method-assign]
 
 
 def observer_world_state_from_mapping(
@@ -735,7 +775,40 @@ def observer_world_state_from_mapping(
     extra = {key: payload[key] for key in names if key not in _WORLD_FIELDS}
     _reject_extra(extra)
     known = {key: payload[key] for key in names if key in _WORLD_FIELDS}
-    return ObserverWorldState(**known)
+    return ObserverWorldState(
+        tick=_require_tick("tick", known["tick"]),
+        revision=_require_tick("revision", known["revision"]),
+        locations=_typed_tuple(
+            "locations", known.get("locations", ()), ObserverLocation
+        ),
+        agents=_typed_tuple("agents", known.get("agents", ()), ObserverAgent),
+        items=_typed_tuple("items", known.get("items", ()), ObserverItem),
+        resources=_typed_tuple(
+            "resources", known.get("resources", ()), ObserverResource
+        ),
+        weather=_typed_tuple("weather", known.get("weather", ()), ObserverWeather),
+        structures=_typed_tuple(
+            "structures", known.get("structures", ()), ObserverStructure
+        ),
+        artifacts=_typed_tuple(
+            "artifacts", known.get("artifacts", ()), ObserverArtifact
+        ),
+        repositories=_typed_tuple(
+            "repositories", known.get("repositories", ()), ObserverRepository
+        ),
+        collective_projects=_typed_tuple(
+            "collective_projects",
+            known.get("collective_projects", ()),
+            ObserverCollectiveProject,
+        ),
+        season=cast(str | None, known.get("season")),
+        temperature_bands=_typed_tuple(
+            "temperature_bands",
+            known.get("temperature_bands", ()),
+            ObserverTemperatureBand,
+        ),
+        hazards=_typed_tuple("hazards", known.get("hazards", ()), ObserverHazard),
+    )
 
 
 def _typed_tuple[T](field: str, values: object, model: type[T]) -> tuple[T, ...]:
@@ -778,6 +851,8 @@ class ObserverEvent:
     temperature_band: str | None = None
     hazard_kind: str | None = None
     declared_confidence_band: str | None = None
+    journey: ObserverJourney | None = None
+    participant_body_ids: tuple[str, ...] = ()
 
     def __init__(
         self,
@@ -801,9 +876,19 @@ class ObserverEvent:
         temperature_band: str | None = None,
         hazard_kind: str | None = None,
         declared_confidence_band: str | None = None,
+        journey: ObserverJourney | None = None,
+        participant_body_ids: tuple[str, ...] = (),
         **extra: object,
     ) -> None:
         _reject_extra(extra)
+        if journey is not None and journey.__class__ is not ObserverJourney:
+            _reject("journey", "invalid_type")
+        object.__setattr__(self, "journey", journey)
+        object.__setattr__(
+            self,
+            "participant_body_ids",
+            _id_tuple("participant_body_ids", participant_body_ids),
+        )
         protocol = _require_protocol(protocol_version)
         semantic = type
         if not isinstance(semantic, str) or semantic not in SEMANTIC_EVENT_TYPES:
@@ -892,6 +977,12 @@ class ObserverEvent:
             payload["hazard_kind"] = self.hazard_kind
         if self.declared_confidence_band is not None:
             payload["declared_confidence_band"] = self.declared_confidence_band
+        if self.journey is not None:
+            from dataclasses import asdict
+
+            payload["journey"] = asdict(self.journey)
+        if self.participant_body_ids:
+            payload["participant_body_ids"] = list(self.participant_body_ids)
         return payload
 
 

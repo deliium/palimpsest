@@ -66,12 +66,8 @@ def test_cultural_channel_rows_from_norm_and_convention_dicts() -> None:
             },
         )
     )
-    assert norms == (
-        CulturalChannelRow(owner_id="a1", token="share|active|comply"),
-    )
-    assert conventions == (
-        CulturalChannelRow(owner_id="a2", token="morning|greet"),
-    )
+    assert norms == (CulturalChannelRow(owner_id="a1", token="share|active|comply"),)
+    assert conventions == (CulturalChannelRow(owner_id="a2", token="morning|greet"),)
 
 
 def test_inputs_with_opt_in_attaches_territorial_from_events_none_safe() -> None:

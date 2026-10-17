@@ -143,9 +143,7 @@ def test_ar_channel_off_matches_v36_without_lifecycle(caplog) -> None:
     )
     aq = experiment_aq_bounded_experimentation(_base())
     aq_arm = next(
-        item.runner_config
-        for item in aq.conditions
-        if item.condition_id == "aq-harm"
+        item.runner_config for item in aq.conditions if item.condition_id == "aq-harm"
     )
     assert b"technique_lifecycle" not in encode_runner_config(aq_arm)
     assert "experiment_arm_start arm_id=ar-channel-off" in caplog.text

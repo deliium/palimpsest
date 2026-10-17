@@ -25,9 +25,7 @@ def _living_harvest() -> HistoricalMemoryHarvest:
         as_of_tick=3,
         sources=(HistoricalSourceRef(source_event_id="evt-1"),),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         death_ticks={},
         layers_spec=SimpleNamespace(
@@ -47,9 +45,7 @@ def _death_transition_harvest() -> HistoricalMemoryHarvest:
         as_of_tick=4,
         sources=(HistoricalSourceRef(source_event_id="evt-1"),),
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         communication_edges=(
             SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=1),
@@ -69,7 +65,7 @@ def _death_transition_harvest() -> HistoricalMemoryHarvest:
 
 def test_metric_family_count_includes_historical_memory() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 91
+    assert len(specs) == METRIC_FAMILY_COUNT == 94
     ids = {spec.family_id.value for spec in specs}
     assert {
         "historical_memory_layers",

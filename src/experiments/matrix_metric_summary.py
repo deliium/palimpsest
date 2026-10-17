@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import Final
@@ -45,7 +45,7 @@ def load_matrix_metric_summary_from_store(
     store: FilesystemMatrixManifestStore,
     cells: Sequence[MatrixCell],
     *,
-    group_role_for_cell: object | None = None,
+    group_role_for_cell: Callable[[MatrixCell], str] | None = None,
 ) -> MatrixMetricSummary:
     """Read metric sidecars and build ``matrix-metric-summary-v1``."""
     refs: list[MatrixMetricCellRef] = []

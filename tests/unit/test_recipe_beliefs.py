@@ -103,9 +103,7 @@ def test_disabled_mode_builds_no_set_and_checkpoint_carries_deterministic_belief
     )
     runtime, _reader = _runtime()
     owner = runtime.agent_id
-    seeded = update_recipe_beliefs(
-        None, owner_id=owner, seed_ids=("store_food",)
-    )
+    seeded = update_recipe_beliefs(None, owner_id=owner, seed_ids=("store_food",))
     runtime._loop._production_knowledge_mode = ProductionKnowledgeMode.DISABLED
     runtime._commit_recipe_beliefs(seeded, 1)
     assert runtime._recipe_beliefs is None

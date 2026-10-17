@@ -43,8 +43,8 @@ from world.actions import (
     MaintainPublicGood,
     MaintainRepository,
     Move,
-    OpposePublicGood,
     NegotiateExchange,
+    OpposePublicGood,
     Repair,
     RetrieveRecord,
     Search,
@@ -142,15 +142,11 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "temperature_band",
         "hazard_kinds",
         "exchange_visible_holdings",
+        "regional_context",
     }
 )
 
-_PARITY_GATE = (
-    ROOT
-    / "tests"
-    / "unit"
-    / "test_checkpoint_restoration.py"
-)
+_PARITY_GATE = ROOT / "tests" / "unit" / "test_checkpoint_restoration.py"
 
 
 def test_agent_command_set_remains_closed_at_thirty_five() -> None:
@@ -308,6 +304,7 @@ def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> 
 
     assert "lifecycle" in ObservedSelf.__dataclass_fields__
     assert "lifecycle" in VisibleBody.__dataclass_fields__
+    assert "journey" in ObservedSelf.__dataclass_fields__
 
 
 def test_v3_domain_bump_policy_documents_parity_gate() -> None:

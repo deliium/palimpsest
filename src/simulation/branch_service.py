@@ -16,7 +16,11 @@ import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Final
+from typing import TYPE_CHECKING, Final, TypedDict, Unpack, cast
+
+if TYPE_CHECKING:
+    from simulation.persistence import BranchLineageRepository
+    from simulation.runner_models import CognitiveBudgetLimits
 
 from agents.cognition.architectures import (
     ArchitectureCompatibilityError,
@@ -26,7 +30,6 @@ from agents.cognition.architectures import (
 )
 from agents.models import AgentId, Goal
 from memory.beliefs import (
-    BeliefId,
     BeliefValueKind,
     ClaimSubject,
     ClaimSubjectKind,
@@ -34,6 +37,7 @@ from memory.beliefs import (
     SemanticBelief,
     SemanticClaim,
 )
+from memory.models import BeliefId
 from simulation.branching import (
     BeliefPatchPayload,
     BranchCreateRequest,
@@ -261,11 +265,7 @@ class InMemorySubjectiveClonePort:
             raise BranchError("subjective_clone_incomplete")
 
         owners = sorted(
-            {
-                owner
-                for (run_id, owner) in self._parent
-                if run_id == parent_run_id.value
-            }
+            {owner for (run_id, owner) in self._parent if run_id == parent_run_id.value}
         )
         memory_rows = 0
         belief_rows = 0
@@ -440,6 +440,8 @@ def rematerialize_snapshot(
         corpse_custody_item_ids=snapshot.corpse_custody_item_ids,
         exchange_offers=snapshot.exchange_offers,
         collective_projects=snapshot.collective_projects,
+        regions_migration=snapshot.regions_migration,
+        journeys=snapshot.journeys,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -470,6 +472,8 @@ def rematerialize_snapshot(
         corpse_custody_item_ids=draft.corpse_custody_item_ids,
         exchange_offers=draft.exchange_offers,
         collective_projects=draft.collective_projects,
+        regions_migration=draft.regions_migration,
+        journeys=draft.journeys,
     )
 
 
@@ -542,12 +546,21 @@ def _select_agent_ids(
     return frozenset(agent_ids)
 
 
+class _CognitionUpdates(TypedDict, total=False):
+    memory_mode: MemoryMode
+    imagination_mode: ImaginationMode
+    reflection_mode: ReflectionMode
+    prospective_mode: ProspectiveImaginationMode
+    cognitive_budget_mode: CognitiveBudgetMode
+    cognitive_budget_limits: CognitiveBudgetLimits | None
+
+
 def _map_agent_cognition(
     config: SimulationRunnerConfig,
     targets: frozenset[str],
     *,
     schema_version: str | None = None,
-    **cognition_updates: object,
+    **cognition_updates: Unpack[_CognitionUpdates],
 ) -> SimulationRunnerConfig:
     agents: list[AgentRunnerSpec] = []
     for agent in config.agents:
@@ -632,9 +645,7 @@ def _expand_agent_architecture(
         ),
         schema_version=definition.schema_version,
     )
-    snapshot = _architecture_mode_snapshot(
-        expanded, agent_id=next(iter(targets))
-    )
+    snapshot = _architecture_mode_snapshot(expanded, agent_id=next(iter(targets)))
     try:
         validate_architecture_compatibility(definition, snapshot)
     except ArchitectureCompatibilityError as exc:
@@ -697,8 +708,7 @@ def _validate_communication_remove(
         "kind": type(event.details).__name__,
     }
     _LOG.debug(
-        "research_intervention_communication_remove event_id=%s tick=%s "
-        "sequence=%s",
+        "research_intervention_communication_remove event_id=%s tick=%s sequence=%s",
         event.event_id.value,
         event.tick,
         event.sequence,
@@ -716,9 +726,7 @@ def _claim_subject_from_patch(patch: BeliefPatchPayload) -> ClaimSubject:
             kind=ClaimSubjectKind.ENTITY, entity_id=EntityId(patch.subject_id)
         )
     # subject_kind == "self" — claim about the belief owner.
-    return ClaimSubject(
-        kind=ClaimSubjectKind.AGENT, agent_id=AgentId(patch.owner_id)
-    )
+    return ClaimSubject(kind=ClaimSubjectKind.AGENT, agent_id=AgentId(patch.owner_id))
 
 
 def _claim_value_from_patch(patch: BeliefPatchPayload) -> ClaimValue:
@@ -808,9 +816,7 @@ def apply_research_intervention(
     if kind is ResearchInterventionKind.MEMORY_ARCHITECTURE:
         assert validated.memory_mode is not None
         targets = _select_agent_ids(config, validated.agent_ids)
-        child = _map_agent_cognition(
-            config, targets, memory_mode=validated.memory_mode
-        )
+        child = _map_agent_cognition(config, targets, memory_mode=validated.memory_mode)
     elif kind is ResearchInterventionKind.BELIEF_PATCH:
         # Config unchanged; subjective patch applied after clone.
         assert validated.belief_patch is not None
@@ -869,9 +875,7 @@ def apply_research_intervention(
     # Default inherit: keep parent's stochastic_identity (already on config).
     if policy is SeedStreamPolicy.INHERIT:
         if child.stochastic_identity != config.stochastic_identity:
-            child = replace(
-                child, stochastic_identity=config.stochastic_identity
-            )
+            child = replace(child, stochastic_identity=config.stochastic_identity)
 
     _LOG.debug(
         "research_intervention_applied kind=%s seed_policy=%s",
@@ -1261,9 +1265,12 @@ class BranchService:
 
         existing: BranchLineage | None = None
         if self._lineage is not None:
-            existing = await self._lineage.get_lineage(child_run_id=child_run_id)  # type: ignore[union-attr]
-            if existing is not None and type(existing) is not BranchLineage:
+            existing_raw = await cast(
+                "BranchLineageRepository", self._lineage
+            ).get_lineage(child_run_id=child_run_id)
+            if existing_raw is not None and type(existing_raw) is not BranchLineage:
                 raise TypeError("lineage repository must return BranchLineage")
+            existing = existing_raw
         hit = resolve_idempotent_create(
             child_run_id=child_run_id,
             request=validated,
@@ -1273,10 +1280,7 @@ class BranchService:
             return hit
 
         parent_events: tuple[WorldEvent, ...] = ()
-        if (
-            validated.intervention.kind
-            is ResearchInterventionKind.COMMUNICATION_REMOVE
-        ):
+        if validated.intervention.kind is ResearchInterventionKind.COMMUNICATION_REMOVE:
             parent_events = tuple(
                 await self._journal.list_events(
                     validated.parent_run_id,
@@ -1359,7 +1363,7 @@ class BranchService:
             created_as_of_parent_head=head_next.value,
         )
         if self._lineage is not None:
-            await self._lineage.put_lineage(lineage)  # type: ignore[union-attr]
+            await cast("BranchLineageRepository", self._lineage).put_lineage(lineage)
 
         _LOG.info(
             "research_fork_created parent_run_id=%s child_run_id=%s "

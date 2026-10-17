@@ -87,9 +87,7 @@ PASSTHROUGH_CONTINUOUS_FACTORS: Final[ContinuousLifecycleFactors] = (
 
 def require_positive_factor_in_unit_two(name: str, value: object) -> float:
     """Accept a positive float in the closed range ``(0, 2]``."""
-    if isinstance(value, bool) or (
-        type(value) is not float and type(value) is not int
-    ):
+    if isinstance(value, bool) or (type(value) is not float and type(value) is not int):
         raise TypeError(f"{name} must be a number (code=lifecycle_factor_type)")
     factor = float(value)
     if not (0.0 < factor <= _FACTOR_MAX):
@@ -97,9 +95,7 @@ def require_positive_factor_in_unit_two(name: str, value: object) -> float:
             "lifecycle_factor_out_of_range code=lifecycle_factor_range name=%s",
             name,
         )
-        raise ValueError(
-            f"{name} must be in (0, 2] (code=lifecycle_factor_range)"
-        )
+        raise ValueError(f"{name} must be in (0, 2] (code=lifecycle_factor_range)")
     return factor
 
 
@@ -166,9 +162,7 @@ class StageCapabilityEffect:
 
     def __post_init__(self) -> None:
         if type(self.stage_id) is not LifecycleStageId:
-            raise TypeError(
-                "StageCapabilityEffect.stage_id must be LifecycleStageId"
-            )
+            raise TypeError("StageCapabilityEffect.stage_id must be LifecycleStageId")
         object.__setattr__(
             self,
             "physical_capacity_factor",
@@ -277,8 +271,7 @@ def resolve_stage_effect(
     if effects is None:
         resolved = _passthrough_effect(stage)
         _LOGGER.debug(
-            "resolve_stage_effect stage_id=%s age=- factors=passthrough "
-            "denied_count=0",
+            "resolve_stage_effect stage_id=%s age=- factors=passthrough denied_count=0",
             stage.value,
         )
         return resolved

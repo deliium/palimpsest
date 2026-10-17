@@ -106,9 +106,7 @@ def test_each_trigger_fires_alone_and_stays_silent_when_false() -> None:
     assert goals.matched == (ReflectionTriggerKind.MAJOR_GOAL_COMPLETION,)
     contradiction = engine.triggers(_input(contradiction_masses=(0.9,)))
     assert contradiction.matched == (ReflectionTriggerKind.BELIEF_CONTRADICTION,)
-    initial = engine.triggers(
-        _input(relationship_ordinals=(("agent-1", "bob", 0),))
-    )
+    initial = engine.triggers(_input(relationship_ordinals=(("agent-1", "bob", 0),)))
     assert ReflectionTriggerKind.RELATIONSHIP_CHANGE not in initial.matched
     marked = ReflectionCursor(
         owner_id=AgentId("agent-1"),
@@ -157,9 +155,7 @@ def test_journal_backfill_keeps_the_new_record_unknown() -> None:
 def test_owner_mismatch_is_rejected() -> None:
     engine = ReflectionEngine()
     with pytest.raises(ValueError, match="owner_mismatch"):
-        engine.triggers(
-            _input(cursor=ReflectionCursor(owner_id=AgentId("agent-2")))
-        )
+        engine.triggers(_input(cursor=ReflectionCursor(owner_id=AgentId("agent-2"))))
 
 
 def test_enabled_finalize_appends_a_journal_without_moving_the_cursor_tick() -> None:

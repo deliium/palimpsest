@@ -10,8 +10,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
+from infrastructure.database import SQLAlchemySessionFactory
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings, load_settings
 from persistence import (
@@ -31,7 +30,7 @@ _LOGGER = get_logger("api.durable_runner")
 
 
 def make_durable_runner_factory(
-    session_factory: async_sessionmaker[AsyncSession],
+    session_factory: SQLAlchemySessionFactory,
     settings: Settings | None = None,
 ) -> Callable[[RunControlRecord], Awaitable[SimulationRunner]]:
     """Return the manager hook that constructs one durable runner."""

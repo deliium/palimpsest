@@ -30,6 +30,7 @@ from memory.models import (
     MemorySituationContext,
     MemoryTrace,
     PendingSemanticizationIntent,
+    RecallAuditRecord,
     RecallEvidence,
     RecallSourceEvidence,
     ReconsolidationIntent,
@@ -197,9 +198,7 @@ def plan_reconsolidation(
         if parent.memory_id == evidence.derived_memory_id:
             raise ValueError("plan_reconsolidation: not_fresh")
 
-    expected_generation = 1 + max(
-        item.generation for item in evidence.sources
-    )
+    expected_generation = 1 + max(item.generation for item in evidence.sources)
     if reconstructed.generation != expected_generation:
         raise ValueError("plan_reconsolidation: generation_not_dense")
 
@@ -278,9 +277,7 @@ class MemoryRecallOrchestrator:
 
         scope = service.scope
         dynamics_version = (
-            None
-            if request.dynamics_policy is None
-            else request.dynamics_policy.version
+            None if request.dynamics_policy is None else request.dynamics_policy.version
         )
         _LOG.debug(
             "memory_recall_start",
@@ -295,7 +292,11 @@ class MemoryRecallOrchestrator:
             },
         )
 
-        retrieve_result = await service.retrieve(request.retrieve)
+        retrieve_result = (
+            request.pre_retrieved
+            if request.pre_retrieved is not None
+            else await service.retrieve(request.retrieve)
+        )
         try:
             evidence = build_recall_evidence(
                 owner_id=scope.owner_id,
@@ -335,7 +336,7 @@ class MemoryRecallOrchestrator:
                 pending_semanticization=None,
             )
 
-        audits: tuple = ()
+        audits: tuple[RecallAuditRecord, ...] = ()
         if request.dynamics_policy is not None:
             access_counts = {
                 hit.trace.memory_id.value: hit.trace.access_count

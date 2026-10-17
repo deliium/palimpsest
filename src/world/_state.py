@@ -23,6 +23,7 @@ from world.identifiers import (
 )
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
+from world.regions import Journey, RegionsMigrationSpec
 from world.repositories import KnowledgeRepository, index_repositories
 from world.subjective_value import ExchangeOffer
 
@@ -49,6 +50,8 @@ def rebuild_world_state(
     corpse_custody_item_ids: frozenset[EntityId] | None = None,
     exchange_offers: tuple[ExchangeOffer, ...] | None = None,
     collective_projects: Mapping[EntityId, CollectiveProject] | None = None,
+    regions_migration: RegionsMigrationSpec | None = None,
+    journeys: Sequence[Journey] | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -77,6 +80,10 @@ def rebuild_world_state(
         if collective_projects is None
         else collective_projects
     )
+    region_spec = (
+        state.regions_migration if regions_migration is None else regions_migration
+    )
+    journey_src = state.journeys if journeys is None else journeys
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -121,6 +128,16 @@ def rebuild_world_state(
         collective_projects=tuple(
             sorted(project_src.values(), key=lambda value: value.project_id.value)
         ),
+        regions_migration=region_spec,
+        journeys=(
+            None
+            if journey_src is None
+            else (
+                tuple(journey_src.values())
+                if isinstance(journey_src, Mapping)
+                else tuple(journey_src)
+            )
+        ),
     )
 
 
@@ -140,9 +157,7 @@ def _validate_corpse_custody(
             raise TypeError("corpse_custody_item_ids entries must be EntityId")
         item = item_index.get(item_id)
         if item is None or item.holder_id is None:
-            _LOG.error(
-                "corpse_custody_invalid reason_code=corpse_custody_item_unheld"
-            )
+            _LOG.error("corpse_custody_invalid reason_code=corpse_custody_item_unheld")
             raise ValueError("corpse custody item must be held by a dead body")
         holder = body_index.get(item.holder_id)
         if (
@@ -204,6 +219,68 @@ def _index_collective_projects(
     return MappingProxyType(indexed)
 
 
+def _index_journeys(
+    journeys: Sequence[Journey],
+    *,
+    spec: RegionsMigrationSpec,
+    location_index: Mapping[EntityId, Location],
+    body_index: Mapping[EntityId, AgentBody],
+) -> Mapping[str, Journey]:
+    if isinstance(journeys, (str, bytes)) or not isinstance(journeys, (tuple, list)):
+        raise TypeError("journeys must be an ordered sequence")
+    region_by_location = {
+        membership.location_id: membership.region_id
+        for membership in spec.location_regions
+    }
+    indexed: dict[str, Journey] = {}
+    participants: set[EntityId] = set()
+    for journey in journeys:
+        if type(journey) is not Journey:
+            raise TypeError("journey entries must be Journey")
+        if journey.journey_id in indexed:
+            raise ValueError("duplicate journey id (code=duplicate_journey)")
+        if journey.origin_location_id not in location_index:
+            raise ValueError("unknown journey origin (code=journey_unknown_location)")
+        if journey.destination_location_id not in location_index:
+            raise ValueError(
+                "unknown journey destination (code=journey_unknown_location)"
+            )
+        if (
+            journey.destination_location_id
+            not in location_index[journey.origin_location_id].adjacent
+        ):
+            raise ValueError("journey must use adjacent edge (code=journey_non_edge)")
+        if journey.origin_region_id != region_by_location.get(
+            journey.origin_location_id
+        ):
+            raise ValueError(
+                "journey origin region mismatch (code=journey_region_mismatch)"
+            )
+        if journey.destination_region_id != region_by_location.get(
+            journey.destination_location_id
+        ):
+            raise ValueError(
+                "journey destination region mismatch (code=journey_region_mismatch)"
+            )
+        for participant_id in journey.participant_body_ids:
+            body = body_index.get(participant_id)
+            if body is None:
+                raise ValueError(
+                    "unknown journey participant (code=journey_unknown_body)"
+                )
+            if body.location_id != journey.origin_location_id:
+                raise ValueError(
+                    "journey participant not at origin (code=journey_origin_mismatch)"
+                )
+            if participant_id in participants:
+                raise ValueError(
+                    "body participates in multiple journeys (code=journey_busy)"
+                )
+            participants.add(participant_id)
+        indexed[journey.journey_id] = journey
+    return MappingProxyType(dict(sorted(indexed.items())))
+
+
 def _index_by_entity_id[T](
     name: str,
     values: Sequence[T],
@@ -230,12 +307,14 @@ class WorldState:
         "_active_hazards",
         "_artifacts",
         "_bodies",
-        "_corpse_custody_item_ids",
         "_collective_projects",
+        "_corpse_custody_item_ids",
         "_exchange_offers",
         "_items",
+        "_journeys",
         "_locations",
         "_production_jobs",
+        "_regions_migration",
         "_repositories",
         "_resources",
         "_revision",
@@ -258,10 +337,12 @@ class WorldState:
         tool_marks: Sequence[ToolMark] = (),
         active_hazards: Sequence[ActiveHazard] = (),
         artifacts: Sequence[InformationArtifact] = (),
-        repositories: Sequence[object] = (),
+        repositories: Sequence[KnowledgeRepository] = (),
         corpse_custody_item_ids: frozenset[EntityId] | Sequence[EntityId] = frozenset(),
         exchange_offers: tuple[ExchangeOffer, ...] | Sequence[ExchangeOffer] = (),
         collective_projects: Sequence[CollectiveProject] = (),
+        regions_migration: RegionsMigrationSpec | None = None,
+        journeys: Sequence[Journey] | None = None,
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -342,11 +423,58 @@ class WorldState:
         self._collective_projects = _index_collective_projects(
             collective_projects, location_index=location_index
         )
+        if (
+            regions_migration is not None
+            and type(regions_migration) is not RegionsMigrationSpec
+        ):
+            raise TypeError("regions_migration must be RegionsMigrationSpec or None")
+        if regions_migration is None:
+            if journeys is not None and len(journeys) > 0:
+                raise ValueError(
+                    "journeys require regions_migration (code=journey_channel_off)"
+                )
+            self._regions_migration = None
+            self._journeys = None
+        else:
+            regions_migration.validate_topology(
+                {
+                    location_id: location.adjacent
+                    for location_id, location in location_index.items()
+                }
+            )
+            journey_values = () if journeys is None else journeys
+            self._regions_migration = regions_migration
+            self._journeys = _index_journeys(
+                journey_values,
+                spec=regions_migration,
+                location_index=location_index,
+                body_index=body_index,
+            )
         _LOG.debug(
             "world_state_constructed corpse_custody_count=%s exchange_offer_count=%s",
             len(self._corpse_custody_item_ids),
             len(self._exchange_offers),
         )
+
+    def validate_finalized_boundary(self, completed_tick: int) -> None:
+        """Reject pending journey state that is invalid at a committed boundary."""
+        if type(completed_tick) is not int or completed_tick < 0:
+            raise ValueError("completed_tick must be non-negative (code=invalid_tick)")
+        if self._journeys is None:
+            return
+        for journey in self._journeys.values():
+            for participant_id in journey.participant_body_ids:
+                body = self._bodies[participant_id]
+                if body.life_status is not LifeStatus.ALIVE:
+                    raise ValueError(
+                        "pending journey participant is dead "
+                        "(code=journey_participant_dead)"
+                    )
+            if completed_tick >= journey.arrival_wait_deadline_tick:
+                raise ValueError(
+                    "overdue journey at finalized boundary "
+                    "(code=journey_overdue_at_boundary)"
+                )
 
     @property
     def revision(self) -> WorldRevision:
@@ -407,6 +535,14 @@ class WorldState:
     @property
     def collective_projects(self) -> Mapping[EntityId, CollectiveProject]:
         return self._collective_projects
+
+    @property
+    def regions_migration(self) -> RegionsMigrationSpec | None:
+        return self._regions_migration
+
+    @property
+    def journeys(self) -> Mapping[str, Journey] | None:
+        return self._journeys
 
 
 class World:
@@ -575,14 +711,10 @@ def _validate_artifacts(
                     f"artifact {artifact.artifact_id.value!r} holder_id must name "
                     f"a living body"
                 )
-            held_counts[artifact.holder_id] = (
-                held_counts.get(artifact.holder_id, 0) + 1
-            )
+            held_counts[artifact.holder_id] = held_counts.get(artifact.holder_id, 0) + 1
     for holder_id, count in held_counts.items():
         if count > MAX_HELD_ARTIFACTS_PER_BODY:
-            raise ValueError(
-                f"body {holder_id.value!r}: artifact_hold_cap"
-            )
+            raise ValueError(f"body {holder_id.value!r}: artifact_hold_cap")
 
 
 def _validate_repositories(
@@ -635,13 +767,13 @@ def _validate_repositories(
     for artifact in artifact_index.values():
         if artifact.custodian_repository_id is None:
             continue
-        repository = repositories.get(artifact.custodian_repository_id)
-        if repository is None:
+        custodian = repositories.get(artifact.custodian_repository_id)
+        if custodian is None:
             raise ValueError(
                 f"artifact {artifact.artifact_id.value!r} references unknown "
                 f"custodian_repository_id {artifact.custodian_repository_id.value!r}"
             )
-        if artifact.artifact_id not in repository.member_artifact_ids:
+        if artifact.artifact_id not in custodian.member_artifact_ids:
             raise ValueError(
                 f"artifact {artifact.artifact_id.value!r} custodian set but "
                 f"not a member of repository "

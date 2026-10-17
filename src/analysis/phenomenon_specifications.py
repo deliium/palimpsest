@@ -67,7 +67,13 @@ def _ref(
 
 _MAPPINGS: Final[dict[PhenomenonId, tuple[PhenomenonIndicatorRef, ...]]] = {
     PhenomenonId.COMMUNITY_STRUCTURE: (
-        _ref("group_community_structure", "modularity", weak=0.05, moderate=0.2, strong=0.4),
+        _ref(
+            "group_community_structure",
+            "modularity",
+            weak=0.05,
+            moderate=0.2,
+            strong=0.4,
+        ),
         _ref(
             "group_community_structure",
             "community_count",

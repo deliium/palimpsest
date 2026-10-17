@@ -168,8 +168,13 @@ def compute_technique_lifecycle_state(
     for state in TechniqueLifecycleState:
         values[f"{state.value}_count"] = sum(row.state is state for row in rows)
     return _document(
-        spec, run_id, input_revision, MetricAvailability.PRESENT, values,
-        notes_code="ok", observed=len(rows),
+        spec,
+        run_id,
+        input_revision,
+        MetricAvailability.PRESENT,
+        values,
+        notes_code="ok",
+        observed=len(rows),
     )
 
 
@@ -205,8 +210,13 @@ def compute_technique_lifecycle_loss(
         ),
     }
     return _document(
-        spec, run_id, input_revision, MetricAvailability.PRESENT, values,
-        notes_code="ok", observed=len(rows),
+        spec,
+        run_id,
+        input_revision,
+        MetricAvailability.PRESENT,
+        values,
+        notes_code="ok",
+        observed=len(rows),
     )
 
 
@@ -223,9 +233,7 @@ def compute_technique_lifecycle_diffusion(
     if not global_rows:
         return _absent(spec, run_id, input_revision)
     rediscovered = [
-        row
-        for row in global_rows
-        if row.state is TechniqueLifecycleState.REDISCOVERED
+        row for row in global_rows if row.state is TechniqueLifecycleState.REDISCOVERED
     ]
     new_roots = sum(row.new_lineage_root_id is not None for row in rediscovered)
     hop_count = sum(row.living_hop_count for row in global_rows)
@@ -247,8 +255,13 @@ def compute_technique_lifecycle_diffusion(
         values["mean_hop"],
     )
     return _document(
-        spec, run_id, input_revision, MetricAvailability.PRESENT, values,
-        notes_code="ok", observed=len(global_rows),
+        spec,
+        run_id,
+        input_revision,
+        MetricAvailability.PRESENT,
+        values,
+        notes_code="ok",
+        observed=len(global_rows),
     )
 
 

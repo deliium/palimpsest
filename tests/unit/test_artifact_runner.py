@@ -65,9 +65,13 @@ def test_runner_v19_wires_deterministic_artifact_interpretation(
     conventions_config = replace(
         base, agents=(conventions_only,), schema_version=RUNNER_SCHEMA_VERSION_V18
     )
-    conventions_doc = json.loads(encode_runner_config(conventions_config).decode("utf-8"))
+    conventions_doc = json.loads(
+        encode_runner_config(conventions_config).decode("utf-8")
+    )
     assert conventions_doc["schema_version"] == "runner-config-v18"
-    assert "artifact_interpretation_mode" not in conventions_doc["agents"][0]["cognition"]
+    assert (
+        "artifact_interpretation_mode" not in conventions_doc["agents"][0]["cognition"]
+    )
     assert (
         conventions_doc["agents"][0]["cognition"]["social_convention_mode"]
         == "deterministic"

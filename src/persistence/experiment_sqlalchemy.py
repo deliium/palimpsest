@@ -68,9 +68,7 @@ class SqlAlchemyExperimentRecordRepository:
                 )
                 if existing is not None:
                     if _definition_matches(existing, record):
-                        _LOGGER.warning(
-                            "experiment_definition_idempotent", **fields
-                        )
+                        _LOGGER.warning("experiment_definition_idempotent", **fields)
                         return
                     raise PersistenceConflictError(
                         "definition_conflict", operation="append_definition"
@@ -115,9 +113,7 @@ class SqlAlchemyExperimentRecordRepository:
                 existing = await session.get(ExperimentAssignmentOrm, key)
                 if existing is not None:
                     if _assignment_matches(existing, record):
-                        _LOGGER.warning(
-                            "experiment_assignment_idempotent", **fields
-                        )
+                        _LOGGER.warning("experiment_assignment_idempotent", **fields)
                         return
                     raise PersistenceConflictError(
                         "assignment_conflict", operation="append_assignment"
@@ -376,9 +372,7 @@ def _assignment_matches(
     )
 
 
-def _result_matches(
-    row: ExperimentResultOrm, record: ExperimentResultRecord
-) -> bool:
+def _result_matches(row: ExperimentResultOrm, record: ExperimentResultRecord) -> bool:
     return (
         row.experiment_id == record.experiment_id
         and row.condition_id == record.condition_id

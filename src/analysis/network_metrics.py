@@ -135,7 +135,9 @@ def nonnegative_undirected_projection(digraph: nx.DiGraph) -> nx.Graph:
     undirected = nx.Graph()
     for node in sorted_graph_nodes(digraph.nodes):
         undirected.add_node(node)
-    for u, v, data in sorted(digraph.edges(data=True), key=lambda item: (item[0], item[1])):
+    for u, v, data in sorted(
+        digraph.edges(data=True), key=lambda item: (item[0], item[1])
+    ):
         weight = float(data.get("weight", 0.0))
         projected = max(weight, 0.0)
         if projected <= 0.0:
@@ -209,11 +211,21 @@ def compute_trust_network_structure(
         require_finite(float(nx.reciprocity(graph) if m > 0 else 0.0))
     )
     in_weights = [
-        float(sum(data.get("weight", 0.0) for _, _, data in graph.in_edges(node, data=True)))
+        float(
+            sum(
+                data.get("weight", 0.0)
+                for _, _, data in graph.in_edges(node, data=True)
+            )
+        )
         for node in sorted_graph_nodes(graph.nodes)
     ]
     out_weights = [
-        float(sum(data.get("weight", 0.0) for _, _, data in graph.out_edges(node, data=True)))
+        float(
+            sum(
+                data.get("weight", 0.0)
+                for _, _, data in graph.out_edges(node, data=True)
+            )
+        )
         for node in sorted_graph_nodes(graph.nodes)
     ]
     mean_in = quantize_float(require_finite(float(sum(in_weights) / n)))
@@ -377,7 +389,9 @@ def compute_group_community_structure(
     ordered = nx.Graph()
     for node in sorted_graph_nodes(graph.nodes):
         ordered.add_node(node)
-    for u, v, data in sorted(graph.edges(data=True), key=lambda item: (item[0], item[1])):
+    for u, v, data in sorted(
+        graph.edges(data=True), key=lambda item: (item[0], item[1])
+    ):
         ordered.add_edge(u, v, **data)
 
     if ordered.number_of_edges() == 0:
@@ -385,7 +399,9 @@ def compute_group_community_structure(
         modularity_value = 0.0
     else:
         raw = list(
-            greedy_modularity_communities(ordered, weight="weight", cutoff=1, best_n=None)
+            greedy_modularity_communities(
+                ordered, weight="weight", cutoff=1, best_n=None
+            )
         )
         communities = [frozenset(community) for community in raw]
         modularity_value = float(modularity(ordered, communities, weight="weight"))

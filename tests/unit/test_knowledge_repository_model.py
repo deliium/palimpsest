@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.simulation_helpers import make_location, make_weather
+from world._state import WorldState
 from world.artifacts import (
     ArtifactContent,
     ArtifactKind,
@@ -19,7 +20,6 @@ from world.repositories import (
     RepositoryIndexEntry,
     RepositoryStatus,
 )
-from world._state import WorldState
 
 pytestmark = pytest.mark.unit
 

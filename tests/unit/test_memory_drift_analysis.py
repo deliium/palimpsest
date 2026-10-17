@@ -325,7 +325,6 @@ def test_identical_fact_sets_are_canonically_equal() -> None:
 def test_visibility_aware_chain_prefers_agent_visible_baseline() -> None:
     from analysis.memory_drift import (
         build_reconstruction_chains,
-        compute_memory_drift,
         project_agent_visible_observation,
     )
     from analysis.models import ChainNodeKind, StructuredFactSet

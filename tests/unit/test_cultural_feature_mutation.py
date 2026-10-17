@@ -126,8 +126,7 @@ def test_mutate_requires_evidence_skip() -> None:
     )
     assert skipped.beliefs[0].mutated is False
     assert (
-        skipped.beliefs[0].content_fingerprint
-        == ledger.beliefs[0].content_fingerprint
+        skipped.beliefs[0].content_fingerprint == ledger.beliefs[0].content_fingerprint
     )
 
 

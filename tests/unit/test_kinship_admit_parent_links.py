@@ -53,9 +53,7 @@ def _engine(*, allow_parent_links: bool) -> WorldEngine:
         )
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=11, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=11, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=lifecycle,
         lifecycle_records=records,
@@ -119,9 +117,7 @@ def test_admit_parent_links_require_kinship_channel() -> None:
         registrations=bootstrap.registrations, spec=lifecycle
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=13, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=13, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=lifecycle,
         lifecycle_records=records,

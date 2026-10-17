@@ -81,9 +81,7 @@ def test_channel_off_omits_kinship_visible() -> None:
 def test_self_incident_public_exposes_self_kinship() -> None:
     _LOG.debug("case_id=obs_self_incident_public")
     engine = _engine(perception_mode="self_incident_public")
-    by_body = {
-        obs.observer_id.value: obs for obs in engine.observe().observations
-    }
+    by_body = {obs.observer_id.value: obs for obs in engine.observe().observations}
     parent_obs = by_body["body-a"]
     child_obs = by_body["body-b"]
     assert parent_obs.self_body is not None

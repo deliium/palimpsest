@@ -13,7 +13,10 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol, TypedDict
+
+if TYPE_CHECKING:
+    from world.lifecycle import AgentLifecycleRecord
 
 from agents.cognition.communication_strategy import (
     default_communication_strategy_policy,
@@ -38,8 +41,6 @@ from agents.cognition.configuration import (
     CognitionTheoryOfMindMode,
     CognitionWorldModelMode,
     build_cognitive_loop,
-    default_theory_of_mind_policy,
-    default_world_model_policy,
 )
 from agents.cognition.counterfactual import default_counterfactual_policy
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
@@ -48,6 +49,8 @@ from agents.cognition.prospective import default_prospective_policy
 from agents.cognition.reconstruction import LLMMemoryReconstructor
 from agents.cognition.reflection import default_reflection_policy
 from agents.cognition.reputation import default_reputation_policy
+from agents.cognition.theory_of_mind import default_theory_of_mind_policy
+from agents.cognition.world_model import default_world_model_policy
 from agents.models import Agent, AgentId, Goal, GoalStatus
 from llm.factory import (
     DeterministicFakeLLMProvider,
@@ -72,6 +75,7 @@ from memory.models import (
     MemoryScoreWeights,
     MemoryScoringPolicy,
     MemoryStore,
+    MemoryTrace,
 )
 from memory.reconstruction import DeterministicMemoryReconstructor
 from memory.service import InMemoryMemoryService
@@ -92,7 +96,11 @@ from simulation.cognition_trace import (
     CognitionTraceRepository,
     select_cognition_trace_repository,
 )
-from simulation.engine import WorldEngine
+from simulation.engine import (
+    WorldEngine,
+    objective_skill_policy,
+    teaching_interaction_policy,
+)
 from simulation.identifiers import derive_run_id
 from simulation.journal import hash_snapshot
 from simulation.lifecycle import (
@@ -113,6 +121,7 @@ from simulation.persistence import (
     RunCreateRequest,
     ScientificEvidenceRepository,
     SimulationRunRepository,
+    SnapshotExtensions,
     SnapshotId,
     TickJournalRepository,
     WorldSnapshot,
@@ -537,8 +546,56 @@ def _default_reconstruction_policy(
     )
 
 
+class _ChannelLoopOptions(TypedDict, total=False):
+    """Closed opt-in arguments shared by initial and mid-run loop composition."""
 
-def _caregiving_loop_kwargs(config: object) -> dict[str, object]:
+    caregiving_cognition_mode: str | None
+    care_action_policy: object | None
+    developmental_learning_spec: object | None
+    developmental_stage_learning_rates: object | None
+    mentorship_spec: object | None
+    cultural_features_spec: object | None
+    durable_records_active: bool
+    knowledge_repositories_active: bool
+    possession_succession_active: bool
+    structured_commitments_active: bool
+    max_open_interpretations: int | None
+    commitment_horizon_ticks: int
+    subjective_valuation_active: bool
+    horizon_ticks: int
+    max_bundle: int
+    resource_exchange_profile_active: bool
+    acceptance_window_ticks: int
+    collective_projects_active: bool
+    public_goods_active: bool
+    knowledge_genealogy_spec: object | None
+    knowledge_genealogy_seed_material: object | None
+    bounded_experimentation_spec: object | None
+
+
+def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
+    options: _ChannelLoopOptions = {}
+    for factory in (
+        _caregiving_loop_kwargs,
+        _developmental_learning_loop_kwargs,
+        _mentorship_loop_kwargs,
+        _cultural_features_loop_kwargs,
+        _durable_records_loop_kwargs,
+        _knowledge_repositories_loop_kwargs,
+        _possession_succession_loop_kwargs,
+        _structured_commitments_loop_kwargs,
+        _subjective_valuation_loop_kwargs,
+        _resource_exchange_profile_loop_kwargs,
+        _collective_projects_loop_kwargs,
+        _public_goods_loop_kwargs,
+        _knowledge_genealogy_loop_kwargs,
+        _bounded_experimentation_loop_kwargs,
+    ):
+        options.update(factory(config))
+    return options
+
+
+def _caregiving_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind caregiving cognition from dependency_care only (no AgentCognitionSpec)."""
     care = getattr(config, "dependency_care", None)
     if care is None:
@@ -568,7 +625,7 @@ def _developmental_stage_learning_rates(config: object) -> dict[str, float]:
     return rates
 
 
-def _developmental_learning_loop_kwargs(config: object) -> dict[str, object]:
+def _developmental_learning_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind developmental_learning channel (no AgentCognitionSpec enum)."""
     spec = getattr(config, "developmental_learning", None)
     if spec is None:
@@ -581,7 +638,7 @@ def _developmental_learning_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _mentorship_loop_kwargs(config: object) -> dict[str, object]:
+def _mentorship_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind mentorship channel (no AgentCognitionSpec enum)."""
     spec = getattr(config, "mentorship", None)
     if spec is None:
@@ -589,7 +646,7 @@ def _mentorship_loop_kwargs(config: object) -> dict[str, object]:
     return {"mentorship_spec": spec}
 
 
-def _cultural_features_loop_kwargs(config: object) -> dict[str, object]:
+def _cultural_features_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind cultural_feature_provenance channel (no AgentCognitionSpec enum)."""
     spec = getattr(config, "cultural_feature_provenance", None)
     if spec is None:
@@ -597,12 +654,14 @@ def _cultural_features_loop_kwargs(config: object) -> dict[str, object]:
     return {"cultural_features_spec": spec}
 
 
-def _durable_records_loop_kwargs(config: object) -> dict[str, object]:
+def _durable_records_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind durable_records channel (no AgentCognitionSpec enum)."""
-    return {"durable_records_active": getattr(config, "durable_records", None) is not None}
+    return {
+        "durable_records_active": getattr(config, "durable_records", None) is not None
+    }
 
 
-def _possession_succession_loop_kwargs(config: object) -> dict[str, object]:
+def _possession_succession_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind possession succession (no AgentCognitionSpec enum)."""
     return {
         "possession_succession_active": getattr(config, "possession_succession", None)
@@ -610,11 +669,10 @@ def _possession_succession_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _structured_commitments_loop_kwargs(config: object) -> dict[str, object]:
+def _structured_commitments_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind structured commitments. The world context carries horizon only."""
     spec = getattr(config, "structured_commitments", None)
-    active = spec is not None
-    if not active:
+    if spec is None:
         _LOG.debug(
             "structured_commitments_loop_kwargs structured_commitments_active=%s",
             False,
@@ -636,7 +694,7 @@ def _structured_commitments_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _subjective_valuation_loop_kwargs(config: object) -> dict[str, object]:
+def _subjective_valuation_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind private valuation. The world context carries horizon and bundle only."""
     spec = getattr(config, "subjective_valuation", None)
     if spec is None:
@@ -659,7 +717,7 @@ def _subjective_valuation_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _collective_projects_loop_kwargs(config: object) -> dict[str, object]:
+def _collective_projects_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind the work-site channel. Idle ticks stay on the engine, not the agent."""
     spec = getattr(config, "collective_projects", None)
     active = spec is not None
@@ -672,7 +730,7 @@ def _collective_projects_loop_kwargs(config: object) -> dict[str, object]:
     return {"collective_projects_active": active}
 
 
-def _public_goods_loop_kwargs(config: object) -> dict[str, object]:
+def _public_goods_loop_kwargs(config: object) -> _ChannelLoopOptions:
     spec = getattr(config, "public_goods", None)
     active = spec is not None
     decay_millis = 0 if spec is None else spec.decay_millis
@@ -684,13 +742,12 @@ def _public_goods_loop_kwargs(config: object) -> dict[str, object]:
     return {"public_goods_active": active}
 
 
-def _resource_exchange_profile_loop_kwargs(config: object) -> dict[str, object]:
+def _resource_exchange_profile_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind acceptance memory. The window stays out of the world rule context."""
     spec = getattr(config, "resource_exchange_profile", None)
     if spec is None:
         _LOG.debug(
-            "resource_exchange_profile_loop_kwargs "
-            "resource_exchange_profile_active=%s",
+            "resource_exchange_profile_loop_kwargs resource_exchange_profile_active=%s",
             False,
         )
         return {"resource_exchange_profile_active": False}
@@ -706,7 +763,7 @@ def _resource_exchange_profile_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
+def _knowledge_repositories_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind knowledge_repositories channel (no AgentCognitionSpec enum)."""
     return {
         "knowledge_repositories_active": getattr(config, "knowledge_repositories", None)
@@ -714,7 +771,7 @@ def _knowledge_repositories_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _knowledge_genealogy_loop_kwargs(config: object) -> dict[str, object]:
+def _knowledge_genealogy_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Bind knowledge_genealogy channel (spec object + seed material)."""
     spec = getattr(config, "knowledge_genealogy", None)
     if spec is None:
@@ -725,7 +782,7 @@ def _knowledge_genealogy_loop_kwargs(config: object) -> dict[str, object]:
     }
 
 
-def _bounded_experimentation_loop_kwargs(config: object) -> dict[str, object]:
+def _bounded_experimentation_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """Pass the experiment spec into the loop. Law rows stay on WorldEngine."""
     spec = getattr(config, "bounded_experimentation", None)
     if spec is None:
@@ -957,9 +1014,7 @@ def _cognition_config_for(
     )
     from agents.cognition.cultural_narratives import default_cultural_narrative_policy
 
-    narrative_mode = CognitionCulturalNarrativeMode(
-        spec.cultural_narrative_mode.value
-    )
+    narrative_mode = CognitionCulturalNarrativeMode(spec.cultural_narrative_mode.value)
     narrative_policy = None
     if narrative_mode is CognitionCulturalNarrativeMode.DETERMINISTIC:
         narrative_policy = default_cultural_narrative_policy()
@@ -1423,9 +1478,7 @@ class SimulationRunner:
             owned_enabled = config.capability_flags.owned_enabled_names()
             unimplemented_flags = config.capability_flags.unimplemented_enabled_names()
             v3_enabled_flags = config.v3_capability_flags.enabled_names()
-            v3_unimplemented = (
-                config.v3_capability_flags.unimplemented_enabled_names()
-            )
+            v3_unimplemented = config.v3_capability_flags.unimplemented_enabled_names()
             _LOG.debug(
                 "runner_construction_start schema_version=%s agent_count=%s "
                 "mortality_mode=%s durable=%s capability_flag_count=%s "
@@ -1503,6 +1556,7 @@ class SimulationRunner:
                 weather=config.scenario.weather,
                 artifacts=config.scenario.artifacts,
                 registrations=registrations,
+                regions_migration=config.regions_migration,
             )
             translator = registration_translator(bootstrap)
             _validate_registration_ownership(config, bootstrap)
@@ -1526,11 +1580,9 @@ class SimulationRunner:
             )
             skill_kwargs: dict[str, object] = {}
             if skill_ids:
-                from world._skills import ObjectiveSkillPolicy
-
                 rate_spec = config.agents[0].cognition
                 skill_kwargs = {
-                    "skill_policy": ObjectiveSkillPolicy(
+                    "skill_policy": objective_skill_policy(
                         practice_rate=rate_spec.practice_rate,
                         success_rate=rate_spec.success_rate,
                         failure_rate=rate_spec.failure_rate,
@@ -1549,11 +1601,9 @@ class SimulationRunner:
             )
             teaching_kwargs: dict[str, object] = {}
             if teaching_ids:
-                from world._teaching import TeachingInteractionPolicy
-
                 rate_spec = config.agents[0].cognition
                 teaching_kwargs = {
-                    "teaching_policy": TeachingInteractionPolicy(
+                    "teaching_policy": teaching_interaction_policy(
                         demonstration_rate=rate_spec.demonstration_rate,
                         practice_together_rate=rate_spec.practice_together_rate,
                         offer_window=rate_spec.offer_window,
@@ -1568,9 +1618,7 @@ class SimulationRunner:
             catalog = config.agents[0].cognition.production_catalog
             production_catalog = catalog if catalog.recipe_count > 0 else None
             durable_records_active = config.durable_records is not None
-            knowledge_repositories_active = (
-                config.knowledge_repositories is not None
-            )
+            knowledge_repositories_active = config.knowledge_repositories is not None
             knowledge_genealogy_active = config.knowledge_genealogy is not None
             artifacts_active = (
                 bool(bootstrap.artifacts)
@@ -1605,8 +1653,9 @@ class SimulationRunner:
                 and config.kinship is not None
             )
             dependency_care_channel = config.dependency_care is not None
-            lifecycle_records = ()
+            lifecycle_records: tuple[AgentLifecycleRecord, ...] = ()
             if lifecycle_channel:
+                assert config.population_lifecycle is not None
                 from simulation.runner_models import seed_bootstrap_lifecycle_records
 
                 lifecycle_records = seed_bootstrap_lifecycle_records(
@@ -1688,17 +1737,25 @@ class SimulationRunner:
                     config.resource_exchange_profile is not None
                 ),
                 collective_projects_active=config.collective_projects is not None,
-            collective_projects_idle_ticks=(
-                4
-                if config.collective_projects is None
-                else config.collective_projects.idle_ticks
-            ),
-            public_goods_active=config.public_goods is not None,
-            public_goods_decay_millis=(
-                0 if config.public_goods is None else config.public_goods.decay_millis
-            ),
-            **skill_kwargs,
-                **teaching_kwargs,
+                collective_projects_idle_ticks=(
+                    4
+                    if config.collective_projects is None
+                    else config.collective_projects.idle_ticks
+                ),
+                public_goods_active=config.public_goods is not None,
+                public_goods_decay_millis=(
+                    0
+                    if config.public_goods is None
+                    else config.public_goods.decay_millis
+                ),
+                skill_policy=skill_kwargs.get("skill_policy"),
+                skill_entity_ids=skill_ids or None,
+                teaching_policy=teaching_kwargs.get("teaching_policy"),
+                teaching_entity_ids=tuple(
+                    sorted(teaching_ids, key=lambda item: getattr(item, "value", ""))
+                )
+                if teaching_ids
+                else None,
             )
             _LOG.debug(
                 "artifact_write_pair_inputs artifacts_active=%s "
@@ -1731,9 +1788,7 @@ class SimulationRunner:
                     default_new_agent_initialization_spec().canonical_payload()
                 )
                 explicit = config.new_agent_initialization.canonical_payload()
-                new_agent_init_mode = (
-                    "default" if explicit == default_payload else "on"
-                )
+                new_agent_init_mode = "default" if explicit == default_payload else "on"
                 species_defaults_id = (
                     config.new_agent_initialization.species_defaults_id
                 )
@@ -1789,8 +1844,7 @@ class SimulationRunner:
                 )
             else:
                 _LOG.debug(
-                    "durable_records_skip schema_version=%s "
-                    "durable_records_present=%s",
+                    "durable_records_skip schema_version=%s durable_records_present=%s",
                     config.schema_version,
                     False,
                 )
@@ -1900,10 +1954,32 @@ class SimulationRunner:
                         loop_config.emotional_state_mode
                         is CognitionEmotionalStateMode.ENABLED
                     ),
+                    destination_memory_limit=(
+                        config.regions_migration.destination_memory_limit
+                        if config.regions_migration is not None
+                        and config.regions_migration.cognition_mode.value
+                        == "deterministic"
+                        else 0
+                    ),
+                    destination_hop_limit=(
+                        1
+                        if config.regions_migration is None
+                        else config.regions_migration.destination_hop_limit
+                    ),
                 )
                 cognitive_loop = build_cognitive_loop(
                     loop_config,
                     memory=memory_retriever,
+                    regional_migration_cognition_mode=(
+                        "disabled"
+                        if config.regions_migration is None
+                        else config.regions_migration.cognition_mode.value
+                    ),
+                    regional_migration_hop_limit=(
+                        1
+                        if config.regions_migration is None
+                        else config.regions_migration.destination_hop_limit
+                    ),
                     resolve_counterpart=counterpart,
                     identity_history=owner_bundle.semantic_belief_reader.history,
                     consolidation_selector=_consolidation_selector_for(
@@ -1916,20 +1992,7 @@ class SimulationRunner:
                         provider,
                         loop_config.reflection_mode,
                     ),
-                    **_caregiving_loop_kwargs(config),
-                    **_developmental_learning_loop_kwargs(config),
-                    **_mentorship_loop_kwargs(config),
-                    **_cultural_features_loop_kwargs(config),
-                    **_durable_records_loop_kwargs(config),
-                    **_knowledge_repositories_loop_kwargs(config),
-                    **_possession_succession_loop_kwargs(config),
-                    **_structured_commitments_loop_kwargs(config),
-                    **_subjective_valuation_loop_kwargs(config),
-                    **_resource_exchange_profile_loop_kwargs(config),
-                    **_collective_projects_loop_kwargs(config),
-                    **_public_goods_loop_kwargs(config),
-                    **_knowledge_genealogy_loop_kwargs(config),
-                    **_bounded_experimentation_loop_kwargs(config),
+                    **_channel_loop_kwargs(config),
                 )
                 agent = Agent(
                     agent_id=owner,
@@ -2141,13 +2204,9 @@ class SimulationRunner:
         if getattr(self._config, "developmental_learning", None) is None:
             return
         raw = self._engine.learning_rate_by_entity(tick=tick)
-        rates = {
-            entity_id.value: float(factor) for entity_id, factor in raw.items()
-        }
+        rates = {entity_id.value: float(factor) for entity_id, factor in raw.items()}
         for runtime in self._runtimes:
-            binder = getattr(
-                runtime, "bind_developmental_entity_learning_rates", None
-            )
+            binder = getattr(runtime, "bind_developmental_entity_learning_rates", None)
             if callable(binder):
                 binder(rates)
         _LOG.debug(
@@ -2622,6 +2681,43 @@ class SimulationRunner:
             pending_count=pending_count,
         )
 
+    async def export_regional_destination_traces(
+        self,
+    ) -> tuple[MemoryTrace, ...] | None:
+        """Return detached owner-scoped destination traces for post-run analysis."""
+        if self._config.regions_migration is None:
+            return None
+        traces: list[MemoryTrace] = []
+        for bundle in self._agents:
+            owner_id = bundle.runtime.agent.agent_id
+            for trace in await bundle.memory_service.snapshot():
+                if "destination" not in trace.context.tags:
+                    continue
+                if trace.owner_id != owner_id:
+                    _LOG.error(
+                        "regional_destination_export_owner_mismatch "
+                        "owner_id=%s reason_code=ownership",
+                        owner_id.value,
+                    )
+                    raise RunnerConstructionError(
+                        RunnerConstructionErrorCode.OWNERSHIP,
+                        stage="regional_destination_export",
+                    )
+                traces.append(trace)
+        traces.sort(
+            key=lambda trace: (
+                trace.owner_id.value,
+                trace.created_tick,
+                trace.memory_id.value,
+            )
+        )
+        _LOG.debug(
+            "regional_destination_traces_exported owner_count=%s trace_count=%s",
+            len(self._agents),
+            len(traces),
+        )
+        return tuple(traces)
+
     def apply_runtime_checkpoint(self, checkpoint: RunnerRuntimeCheckpoint) -> None:
         """Restore runner cursors and per-owner runtime state after construction."""
         if type(checkpoint) is not RunnerRuntimeCheckpoint:
@@ -2894,16 +2990,12 @@ class SimulationRunner:
 
         collected: list[DevelopmentalAcquisitionAudit] = []
         for runtime in self._runtimes:
-            export = getattr(
-                runtime, "export_developmental_acquisition_audits", None
-            )
+            export = getattr(runtime, "export_developmental_acquisition_audits", None)
             if export is None:
                 continue
             for audit in export():
                 if type(audit) is not DevelopmentalAcquisitionAudit:
-                    raise TypeError(
-                        "developmental_acquisition_audits: invalid_item"
-                    )
+                    raise TypeError("developmental_acquisition_audits: invalid_item")
                 collected.append(audit)
         _LOG.debug(
             "developmental_acquisition_audit_export run_id=%s audit_count=%s",
@@ -2971,7 +3063,7 @@ class SimulationRunner:
 
     def export_skill_audits(self) -> tuple[SkillAudit, ...]:
         """Harvest objective and subjective skill rows. Not part of result JSON."""
-        from world._skills import SkillDomain
+        from world.skill_contracts import SkillDomain
 
         ledger = self._engine._skill_ledger
         if ledger is None:
@@ -2999,6 +3091,8 @@ class SimulationRunner:
             if model is None:
                 continue
             owner = getattr(model, "owner_id", None)
+            if not isinstance(owner, AgentId):
+                raise TypeError("competence_model owner_id must be AgentId")
             beliefs = getattr(model, "beliefs", ())
             for belief in beliefs:
                 domain = belief.domain.value
@@ -3400,10 +3494,32 @@ class SimulationRunner:
                     loop_config.emotional_state_mode
                     is CognitionEmotionalStateMode.ENABLED
                 ),
+                destination_memory_limit=(
+                    self._config.regions_migration.destination_memory_limit
+                    if self._config.regions_migration is not None
+                    and self._config.regions_migration.cognition_mode.value
+                    == "deterministic"
+                    else 0
+                ),
+                destination_hop_limit=(
+                    1
+                    if self._config.regions_migration is None
+                    else self._config.regions_migration.destination_hop_limit
+                ),
             )
             cognitive_loop = build_cognitive_loop(
                 loop_config,
                 memory=memory_retriever,
+                regional_migration_cognition_mode=(
+                    "disabled"
+                    if self._config.regions_migration is None
+                    else self._config.regions_migration.cognition_mode.value
+                ),
+                regional_migration_hop_limit=(
+                    1
+                    if self._config.regions_migration is None
+                    else self._config.regions_migration.destination_hop_limit
+                ),
                 resolve_counterpart=counterpart,
                 identity_history=owner_bundle.semantic_belief_reader.history,
                 consolidation_selector=_consolidation_selector_for(
@@ -3416,20 +3532,7 @@ class SimulationRunner:
                     self._provider,
                     loop_config.reflection_mode,
                 ),
-                **_caregiving_loop_kwargs(self._config),
-                **_developmental_learning_loop_kwargs(self._config),
-                **_mentorship_loop_kwargs(self._config),
-                **_cultural_features_loop_kwargs(self._config),
-                **_durable_records_loop_kwargs(self._config),
-                **_knowledge_repositories_loop_kwargs(self._config),
-                **_possession_succession_loop_kwargs(self._config),
-                **_structured_commitments_loop_kwargs(self._config),
-                **_subjective_valuation_loop_kwargs(self._config),
-                **_resource_exchange_profile_loop_kwargs(self._config),
-                **_collective_projects_loop_kwargs(self._config),
-                **_public_goods_loop_kwargs(self._config),
-                **_knowledge_genealogy_loop_kwargs(self._config),
-                **_bounded_experimentation_loop_kwargs(self._config),
+                **_channel_loop_kwargs(self._config),
             )
             agent = Agent(
                 agent_id=owner,
@@ -3586,6 +3689,8 @@ def _memory_retriever_for(
     reconstruction_policy: MemoryReconstructionPolicy | None = None,
     belief_reader: object | None = None,
     emotion_bias: bool = False,
+    destination_memory_limit: int = 0,
+    destination_hop_limit: int = 1,
 ) -> ReferenceMemoryRetriever | ScopedMemoryRetriever:
     from memory.models import default_memory_dynamics_policy
 
@@ -3605,6 +3710,8 @@ def _memory_retriever_for(
             scoring_policy=scoring_policy,
             belief_reader=belief_reader,  # type: ignore[arg-type]
             emotion_bias=emotion_bias,
+            destination_memory_limit=destination_memory_limit,
+            destination_hop_limit=destination_hop_limit,
         )
     if mode is MemoryMode.RECONSTRUCTIVE:
         _LOG.debug(
@@ -3642,6 +3749,8 @@ def _memory_retriever_for(
             reconstruction_policy=reconstruction_policy,
             belief_reader=belief_reader,  # type: ignore[arg-type]
             emotion_bias=emotion_bias,
+            destination_memory_limit=destination_memory_limit,
+            destination_hop_limit=destination_hop_limit,
             dynamics_policy=dynamics,
         )
     _LOG.error(
@@ -3708,6 +3817,7 @@ async def _cleanup_created(
 
 def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     """Build the tick-0 durable bootstrap checkpoint from a live engine."""
+    state = engine._snapshot.world.state
     schema_version, codec_version = checkpoint_schema_for_production(
         production_active=engine._production_catalog is not None,
         dynamics_active=engine._environmental_dynamics is not None,
@@ -3724,9 +3834,10 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         subjective_valuation_active=engine.subjective_valuation_active,
         resource_exchange_profile_active=engine.resource_exchange_profile_active,
         collective_projects_active=engine.collective_projects_active,
+        public_goods_active=engine._public_goods_active,
+        regions_migration_active=state.regions_migration is not None,
     )
-    state = engine._snapshot.world.state
-    production_rows: dict[str, tuple[object, ...]] = {}
+    production_rows: SnapshotExtensions = {}
     if codec_version in {
         "v3",
         "v4",
@@ -3744,6 +3855,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v16",
         "v17",
         "v18",
+        "v19",
     }:
         production_rows = {
             "structures": tuple(state.structures.values()),
@@ -3766,6 +3878,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v16",
         "v17",
         "v18",
+        "v19",
     }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
     if codec_version in {
@@ -3783,6 +3896,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v16",
         "v17",
         "v18",
+        "v19",
     }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
     if codec_version in {
@@ -3799,6 +3913,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v16",
         "v17",
         "v18",
+        "v19",
     }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     if codec_version in {
@@ -3813,6 +3928,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v16",
         "v17",
         "v18",
+        "v19",
     }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
@@ -3830,21 +3946,27 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         "v16",
         "v17",
         "v18",
+        "v19",
     }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"}:
+    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19"}:
         production_rows["repositories"] = tuple(state.repositories.values())
-    if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18"}:
+    if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17", "v18"}:
+    if codec_version in {"v15", "v16", "v17", "v18", "v19"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version in {"v17", "v18"}:
+    if codec_version in {"v17", "v18", "v19"}:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
+        )
+    if codec_version == "v19":
+        production_rows["regions_migration"] = state.regions_migration
+        production_rows["journeys"] = (
+            None if state.journeys is None else tuple(state.journeys.values())
         )
     draft = WorldSnapshot(
         snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
@@ -3900,6 +4022,8 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         corpse_custody_item_ids=getattr(draft, "corpse_custody_item_ids", ()),
         exchange_offers=getattr(draft, "exchange_offers", ()),
         collective_projects=getattr(draft, "collective_projects", ()),
+        regions_migration=draft.regions_migration,
+        journeys=draft.journeys,
     )
 
 

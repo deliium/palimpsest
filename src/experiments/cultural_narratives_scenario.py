@@ -18,6 +18,7 @@ from experiments.models import (
     ExperimentSeedMatrix,
     require_stochastic,
 )
+from simulation.models import StochasticIdentity
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V21,
@@ -153,7 +154,7 @@ def _scenario() -> WorldScenarioSpec:
 def _config(
     *,
     seed: int,
-    identity: str,
+    identity: StochasticIdentity,
     scenario: WorldScenarioSpec,
     mode: CulturalNarrativeMode,
     schema_version: str,

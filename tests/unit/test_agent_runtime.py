@@ -499,9 +499,7 @@ def test_build_perspective_threads_emotional_state() -> None:
     emotion = AgentEmotionalState(
         owner_id=AgentId("agent-1"),
         tick=3,
-        intensities=(
-            EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.4),
-        ),
+        intensities=(EmotionIntensity(kind=EmotionKind.FEAR, intensity=0.4),),
         last_update_tick=3,
         policy_version="emotion.v1",
     )
@@ -686,10 +684,9 @@ def test_apply_goal_transition_intents_upsert_and_precedence() -> None:
         reason_code=GoalTransitionReasonCode.COMPLETED,
     )
     runtime.apply_goal_status_transitions((objective,))
-    assert (
-        {goal.goal_id.value: goal.status for goal in runtime.agent.goals}["g-parent"]
-        is GoalStatus.COMPLETED
-    )
+    assert {goal.goal_id.value: goal.status for goal in runtime.agent.goals}[
+        "g-parent"
+    ] is GoalStatus.COMPLETED
 
 
 @pytest.mark.asyncio

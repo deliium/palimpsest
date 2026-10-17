@@ -130,9 +130,7 @@ def test_ao_catalog_arms_and_profile(caplog: pytest.LogCaptureFixture) -> None:
     assert establish.schema_version == RUNNER_SCHEMA_VERSION_V34
     knowledge_repositories_profile(establish)
     assert establish.knowledge_repositories is not None
-    assert (
-        establish.knowledge_repositories.access_policy.default_access_mode == "open"
-    )
+    assert establish.knowledge_repositories.access_policy.default_access_mode == "open"
 
     creator_death = _arm(definition, "ao-creator-death")
     assert creator_death.population_lifecycle is not None
@@ -314,9 +312,7 @@ def test_arm_neglect_decay_organization() -> None:
         event_rows=(
             {
                 "event_kind": "repository_neglected",
-                "index_entries_dropped": max(
-                    0, 1 - len(repo.index_entries)
-                ),
+                "index_entries_dropped": max(0, 1 - len(repo.index_entries)),
             },
         ),
     )
@@ -331,9 +327,7 @@ def test_arm_inaccessible_blocks_access_family() -> None:
     denied = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert denied.resolutions[0].status is ActionResolutionStatus.REJECTED, arm_id
     access = compute_knowledge_repository_access(
@@ -360,14 +354,10 @@ def test_arm_missing_index_coverage_zero() -> None:
     retrieved = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert retrieved.resolutions[0].status is ActionResolutionStatus.APPLIED, arm_id
-    rows = repository_objective_rows_from_repositories(
-        {repository_id: repo}
-    )
+    rows = repository_objective_rows_from_repositories({repository_id: repo})
     org = compute_knowledge_repository_organization(
         rows, run_id="ao-run", input_revision="rev-1"
     )
@@ -398,15 +388,11 @@ def test_arm_custody_block_then_retrieve() -> None:
     )
     assert blocked.resolutions[0].status is ActionResolutionStatus.REJECTED, arm_id
     take_blocked = _act(engine, "agent-1", Take(artifact_id))
-    assert take_blocked.resolutions[0].status is ActionResolutionStatus.REJECTED, (
-        arm_id
-    )
+    assert take_blocked.resolutions[0].status is ActionResolutionStatus.REJECTED, arm_id
     retrieved = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert retrieved.resolutions[0].status is ActionResolutionStatus.APPLIED, arm_id
 
@@ -431,9 +417,7 @@ def test_arm_channel_off_rejects_establish() -> None:
         artifacts_enabled=True,
         durable_records_spec=example_durable_records_spec(),
     )
-    result = _act(
-        engine, "agent-1", EstablishRepository(location_id=EntityId("loc-1"))
-    )
+    result = _act(engine, "agent-1", EstablishRepository(location_id=EntityId("loc-1")))
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED, arm_id
     assert engine._snapshot.world.state.repositories == {}, arm_id
 

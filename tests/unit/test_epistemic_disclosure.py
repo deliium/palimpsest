@@ -71,9 +71,7 @@ def test_disclosure_precedence_and_skip_reasons(
     assert epistemic_disclosure(None, _BOB, proposition, policy) is None
     assert "reason=no_model" in caplog.text
     assert (
-        epistemic_disclosure(
-            TheoryOfMind(owner_id=_OWNER), _BOB, proposition, policy
-        )
+        epistemic_disclosure(TheoryOfMind(owner_id=_OWNER), _BOB, proposition, policy)
         is None
     )
     assert "reason=empty_ledger" in caplog.text

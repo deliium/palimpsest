@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 91
+METRIC_FAMILY_COUNT: Final[int] = 94
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -69,9 +69,7 @@ class MetricSpecificationError(ValueError):
         self.metric_family = metric_family
         self.algorithm_version = algorithm_version
         self.reason_code = reason_code
-        super().__init__(
-            f"{metric_family}:{algorithm_version}:{reason_code}"
-        )
+        super().__init__(f"{metric_family}:{algorithm_version}:{reason_code}")
 
 
 class MetricFamilyId(StrEnum):
@@ -113,6 +111,9 @@ class MetricFamilyId(StrEnum):
     CULTURAL_NARRATIVE_LINEAGE = "cultural_narrative_lineage"
     COGNITIVE_BUDGET = "cognitive_budget"
     TERRITORIAL_CONCENTRATION = "territorial_concentration"
+    REGIONAL_POPULATION = "regional_population"
+    REGIONAL_MIGRATION = "regional_migration"
+    REGIONAL_DESTINATION_BELIEFS = "regional_destination_beliefs"
     PREDICTION_CALIBRATION = "prediction_calibration"
     BELIEF_CONVERGENCE = "belief_convergence"
     CULTURAL_SIMILARITY = "cultural_similarity"
@@ -762,8 +763,7 @@ def _spec_goal_completion() -> MetricSpecification:
             "abandonment_rate": "n_abandoned / n_terminal_or_censored",
             "death_interrupt_rate": "n_death_outcome / n_terminal_or_censored",
             "by_outcome_kind": (
-                "pandas counts keyed by GoalOutcomeKind / GoalStatus codes; "
-                "sorted keys"
+                "pandas counts keyed by GoalOutcomeKind / GoalStatus codes; sorted keys"
             ),
         },
         value_keys=(
@@ -1463,20 +1463,14 @@ def _spec_historical_memory_layers() -> MetricSpecification:
         zero_holding_policy="no sources -> availability=absent",
         opportunity_vs_occurrence="layer histogram over tracked sources",
         self_edge_policy="not_applicable",
-        censoring_policy=(
-            "analysis-only historical memory; never cognition"
-        ),
+        censoring_policy=("analysis-only historical memory; never cognition"),
         formulas={
-            "mean_living_witness_count": (
-                "sum living_witness_ids / source_count"
-            ),
+            "mean_living_witness_count": ("sum living_witness_ids / source_count"),
             "communicative_carrier_share": (
-                "communicative_carriers / "
-                "(communicative_carriers + cultural_carriers)"
+                "communicative_carriers / (communicative_carriers + cultural_carriers)"
             ),
             "cultural_carrier_share": (
-                "cultural_carriers / "
-                "(communicative_carriers + cultural_carriers)"
+                "cultural_carriers / (communicative_carriers + cultural_carriers)"
             ),
         },
         value_keys=(
@@ -1502,15 +1496,11 @@ def _spec_historical_memory_transitions() -> MetricSpecification:
         denominator="transition_count",
         denominator_kind=DenominatorKind.OCCURRENCE,
         cohort_window="sampled ticks under transition_tick_resolution",
-        deceased_policy=(
-            "death-linked causes when last witness dies or chain expires"
-        ),
+        deceased_policy=("death-linked causes when last witness dies or chain expires"),
         zero_holding_policy="no transitions -> availability=absent",
         opportunity_vs_occurrence="transition rates by cause and from->to",
         self_edge_policy="not_applicable",
-        censoring_policy=(
-            "analysis-only historical memory; never cognition"
-        ),
+        censoring_policy=("analysis-only historical memory; never cognition"),
         formulas={
             "living_to_communicative_rate": (
                 "count(living->communicative) / transition_count"
@@ -1518,9 +1508,7 @@ def _spec_historical_memory_transitions() -> MetricSpecification:
             "communicative_to_cultural_rate": (
                 "count(communicative->cultural) / transition_count"
             ),
-            "death_linked_share": (
-                "count(death-linked causes) / transition_count"
-            ),
+            "death_linked_share": ("count(death-linked causes) / transition_count"),
         },
         value_keys=(
             "communicative_to_cultural_count",
@@ -1587,9 +1575,7 @@ def _spec_durable_record_fidelity() -> MetricSpecification:
             ),
             "lossy_rate": "lossy copies / copy_event_count",
             "mean_mark_edit_distance": "mean parent→child mark L1 distance",
-            "mean_relation_edit_distance": (
-                "mean parent→child relation L1 distance"
-            ),
+            "mean_relation_edit_distance": ("mean parent→child relation L1 distance"),
         },
         value_keys=(
             "copy_event_count",
@@ -2025,19 +2011,13 @@ def _spec_historical_memory_queries() -> MetricSpecification:
         denominator="tracked_source_count",
         denominator_kind=DenominatorKind.OCCURRENCE,
         cohort_window="as_of tick query report",
-        deceased_policy=(
-            "death-exclusive living witnesses; dead witnesses excluded"
-        ),
+        deceased_policy=("death-exclusive living witnesses; dead witnesses excluded"),
         zero_holding_policy="no sources -> availability=absent",
         opportunity_vs_occurrence="true-counts for three locked queries",
         self_edge_policy="not_applicable",
-        censoring_policy=(
-            "analysis-only historical memory; never cognition"
-        ),
+        censoring_policy=("analysis-only historical memory; never cognition"),
         formulas={
-            "true_share_any_direct_witnesses_alive": (
-                "true_count / source_count"
-            ),
+            "true_share_any_direct_witnesses_alive": ("true_count / source_count"),
             "true_share_anyone_remembers_speaking_to_witness": (
                 "true_count / source_count"
             ),
@@ -2158,8 +2138,7 @@ def _spec_spatial_control() -> MetricSpecification:
         ),
         self_edge_policy="not_applicable",
         censoring_policy=(
-            "omitted claim rows leave claim_contest absent; "
-            "never invent a head"
+            "omitted claim rows leave claim_contest absent; never invent a head"
         ),
         formulas={
             "repeated_control": (
@@ -2764,8 +2743,7 @@ def _spec_emergent_group_formation() -> MetricSpecification:
         deceased_policy="not_applicable",
         zero_holding_policy="omitted rows -> availability=absent for that signal",
         opportunity_vs_occurrence=(
-            "an edge requires the signal threshold; "
-            "absent rows are not a zero cluster"
+            "an edge requires the signal threshold; absent rows are not a zero cluster"
         ),
         self_edge_policy="self pairs are dropped",
         censoring_policy=(
@@ -3301,8 +3279,7 @@ def _spec_counterfactual_reasoning() -> MetricSpecification:
         deceased_policy="terminal agents stop new audits; existing audits remain",
         zero_holding_policy="no audits -> availability=absent",
         opportunity_vs_occurrence=(
-            "counts harvested scenario audits against committed event ids "
-            "after the run"
+            "counts harvested scenario audits against committed event ids after the run"
         ),
         self_edge_policy="not_applicable",
         censoring_policy="audits without a scenario count stay absent",
@@ -3495,9 +3472,7 @@ def _spec_false_belief_persistence() -> MetricSpecification:
             "onset_count",
         ),
         empty_case="no false onsets -> availability=absent",
-        unknown_case=(
-            "missing truth specs -> unknown; MetricAvailability.unknown"
-        ),
+        unknown_case=("missing truth specs -> unknown; MetricAvailability.unknown"),
     )
 
 
@@ -3754,9 +3729,7 @@ def _spec_rumor_distortion() -> MetricSpecification:
         formulas={
             "mean_concepts_added": "mean concepts_added over TransmissionDistortion",
             "mean_concepts_removed": "mean concepts_removed",
-            "mean_relations_changed": (
-                "mean(relations_added+relations_removed)"
-            ),
+            "mean_relations_changed": ("mean(relations_added+relations_removed)"),
             "mean_confidence_attenuation": (
                 "mean max(0, sender_confidence-receiver_confidence) when both known"
             ),
@@ -3862,6 +3835,172 @@ def _spec_territorial_concentration() -> MetricSpecification:
             "control_location_count",
         ),
         empty_case="availability=absent; reason no_spatial_rows",
+    )
+
+
+def _spec_regional_population() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REGIONAL_POPULATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="living_bodies_at_completed_regional_boundaries",
+        denominator="completed_boundaries_and_person_ticks",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="bootstrap placement plus ordered committed relocations",
+        deceased_policy="dead bodies leave living population at the death boundary",
+        zero_holding_policy="missing regional context omits this optional family",
+        opportunity_vs_occurrence=(
+            "boundaries are censuses; raw crossings remain separate flows"
+        ),
+        self_edge_policy="same-region relocation does not change population",
+        censoring_policy=(
+            "incomplete event prefixes expose boundary coverage; unassigned locations "
+            "remain explicit"
+        ),
+        formulas={
+            "region_living_population": "living body count at last completed boundary",
+            "region_person_ticks": "sum of living bodies at boundaries 0..window_end",
+            "region_entries": "successful AgentEnteredWorld events by assigned region",
+            "region_deaths": "Died events by last assigned region",
+            "region_count": "configured region id count",
+            "region_stage_living_population": (
+                "living population with available lifecycle stage data"
+            ),
+            "region_cohort_living_population": (
+                "living population with available lifecycle cohort data"
+            ),
+            "conservation_violations": "must equal zero for every completed boundary",
+        },
+        value_keys=(
+            "assigned_living_population",
+            "assigned_person_ticks",
+            "assigned_unassigned_in",
+            "assigned_unassigned_out",
+            "conservation_check_count",
+            "conservation_violations",
+            "death_count",
+            "entry_count",
+            "final_unassigned_population",
+            "lifecycle_evidence_available",
+            "region_cohort_living_population",
+            "region_cohort_group_count",
+            "region_cohort_person_ticks",
+            "relocation_kind_counts",
+            "region_arrivals",
+            "region_departures",
+            "region_deaths",
+            "region_entries",
+            "region_living_population",
+            "region_person_ticks",
+            "region_stage_living_population",
+            "region_stage_group_count",
+            "region_stage_person_ticks",
+            "region_count",
+            "unassigned_coverage",
+            "unassigned_death_count",
+            "unassigned_entry_count",
+            "unassigned_location_count",
+            "unassigned_person_ticks",
+        ),
+        empty_case="missing regional context omits family; not zero population",
+    )
+
+
+def _spec_regional_migration() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REGIONAL_MIGRATION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="successful_participant_level_relocations",
+        denominator="raw_crossings_and_dwell_qualified_migrations",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="ordered pre/post placement through completed boundaries",
+        deceased_policy=(
+            "death clears unqualified dwell and cannot qualify that boundary"
+        ),
+        zero_holding_policy="missing regional context omits this optional family",
+        opportunity_vs_occurrence=(
+            "raw crossings count arrival effects; qualified migration requires "
+            "residence_min_ticks"
+        ),
+        self_edge_policy="same-region movement is excluded from interregional flow",
+        censoring_policy=(
+            "departure, failed flee, timeout, and partial prefixes are not arrivals"
+        ),
+        formulas={
+            "interregional_raw_arrivals": (
+                "assigned-to-different-assigned region crossings"
+            ),
+            "qualified_migration_count": (
+                "candidate residence reaches configured dwell threshold"
+            ),
+            "return_flow_count": (
+                "qualified return to the prior qualified origin region"
+            ),
+        },
+        value_keys=(
+            "assigned_unassigned_in",
+            "assigned_unassigned_out",
+            "interregional_raw_arrivals",
+            "interregional_raw_departures",
+            "qualified_migration_count",
+            "qualified_migration_from_region",
+            "qualified_migration_to_region",
+            "qualified_migrations",
+            "raw_flow_counts",
+            "relocation_kind_counts",
+            "return_flow_count",
+            "return_flows",
+            "residence_min_ticks",
+            "same_region_relocations_excluded",
+        ),
+        empty_case=(
+            "missing regional context omits family; no crossings is not migration"
+        ),
+    )
+
+
+def _spec_regional_destination_beliefs() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REGIONAL_DESTINATION_BELIEFS,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owners_with_available_destination_trace_evidence",
+        denominator="owners_with_destination_evidence_coverage",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="owner-scoped traces available after the run",
+        deceased_policy="not_applicable",
+        zero_holding_policy=(
+            "unavailable evidence -> unknown; loaded empty traces -> absent"
+        ),
+        opportunity_vs_occurrence=(
+            "coverage counts owner/destination evidence records, not objective truth"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "unknown remote evidence remains unavailable; no truth is fed to cognition"
+        ),
+        formulas={
+            "owner_coverage_ratio": (
+                "owners with destination evidence / expected owners"
+            ),
+            "direct_observation_count": (
+                "destination traces sourced from direct observation"
+            ),
+            "communicated_count": "destination traces sourced from testimony",
+            "mean_source_age_ticks": "mean as_of_tick - immutable source_tick",
+        },
+        value_keys=(
+            "communicated_count",
+            "destination_count",
+            "direct_observation_count",
+            "evidence_trace_count",
+            "expected_owner_count",
+            "mean_confidence",
+            "mean_source_age_ticks",
+            "owner_coverage_ratio",
+            "owner_count",
+            "region_assigned_evidence_count",
+            "unassigned_region_evidence_count",
+        ),
+        empty_case="unavailable -> unknown; loaded empty traces -> absent",
     )
 
 
@@ -4076,6 +4215,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cultural_narrative_lineage,
     _spec_cognitive_budget,
     _spec_territorial_concentration,
+    _spec_regional_population,
+    _spec_regional_migration,
+    _spec_regional_destination_beliefs,
     _spec_prediction_calibration,
     _spec_belief_convergence,
     _spec_cultural_similarity,

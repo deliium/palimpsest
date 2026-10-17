@@ -38,13 +38,17 @@ class SubjectiveLabelReading:
             raise TypeError("objective_display_name must be str")
         if type(self.referent_kind) is not str or not self.referent_kind:
             raise TypeError("referent_kind must be non-empty str")
-        if type(self.label_token) is not str or _LABEL_TOKEN_RE.fullmatch(
-            self.label_token
-        ) is None:
+        if (
+            type(self.label_token) is not str
+            or _LABEL_TOKEN_RE.fullmatch(self.label_token) is None
+        ):
             raise TypeError("label_token must be a closed snake_case token")
         if type(self.label_display) is not str or not self.label_display:
             raise TypeError("label_display must be non-empty str")
-        if isinstance(self.sense_revision, bool) or type(self.sense_revision) is not int:
+        if (
+            isinstance(self.sense_revision, bool)
+            or type(self.sense_revision) is not int
+        ):
             raise TypeError("sense_revision must be int")
         if self.sense_revision < 0:
             raise ValueError("sense_revision must be non-negative")

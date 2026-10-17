@@ -78,8 +78,7 @@ async def test_identical_streams_no_divergence() -> None:
     assert result.diverge_tick is None
     assert result.reason_code is None
     assert (
-        result.left_post_fork_trajectory_hash
-        == result.right_post_fork_trajectory_hash
+        result.left_post_fork_trajectory_hash == result.right_post_fork_trajectory_hash
     )
     assert result.event_kind_counts is not None
 
@@ -109,6 +108,5 @@ async def test_post_fork_divergence_reported() -> None:
     assert result.diverge_tick == 2
     assert result.reason_code == "post_fork_payload_mismatch"
     assert (
-        result.left_post_fork_trajectory_hash
-        != result.right_post_fork_trajectory_hash
+        result.left_post_fork_trajectory_hash != result.right_post_fork_trajectory_hash
     )

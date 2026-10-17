@@ -236,9 +236,7 @@ def test_kinship_snapshot_codec_v8_round_trip_and_restore() -> None:
         child_agent_id="agent-b",
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=27, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=27, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-kinship-codec"),
         kinship_spec=kinship,

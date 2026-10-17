@@ -18,7 +18,5 @@ def test_cognition_and_llm_do_not_import_experiment_laws() -> None:
     hits: list[str] = []
     for folder in ("agents/cognition", "llm"):
         for path in (SRC / folder).rglob("*.py"):
-            hits.extend(
-                _module_imports_forbidden(path, ("world._experiment_laws",))
-            )
+            hits.extend(_module_imports_forbidden(path, ("world._experiment_laws",)))
     assert hits == []

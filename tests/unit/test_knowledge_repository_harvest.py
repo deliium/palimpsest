@@ -16,7 +16,11 @@ from experiments.composition import (
 )
 from experiments.metric_collection import inputs_with_opt_in_metric_rows
 from simulation.runner_models import example_knowledge_repositories_spec
-from world.events import RepositoryEstablished, RepositoryMemberDeposited, RepositoryNeglected
+from world.events import (
+    RepositoryEstablished,
+    RepositoryMemberDeposited,
+    RepositoryNeglected,
+)
 from world.identifiers import EntityId
 from world.repositories import (
     KnowledgeRepository,

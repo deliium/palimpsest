@@ -85,9 +85,7 @@ def test_evaluate_boolean_and_unknown_exclusion() -> None:
     )
     assert evaluate_claim_against_truth(correct, spec) is ClaimEvaluationOutcome.CORRECT
     assert evaluate_claim_against_truth(wrong, spec) is ClaimEvaluationOutcome.INCORRECT
-    assert (
-        evaluate_claim_against_truth(other, spec) is ClaimEvaluationOutcome.UNKNOWN
-    )
+    assert evaluate_claim_against_truth(other, spec) is ClaimEvaluationOutcome.UNKNOWN
 
 
 def test_belief_accuracy_known_answer() -> None:
@@ -124,9 +122,7 @@ def test_belief_accuracy_known_answer() -> None:
             bool_value=True,
         ),
     )
-    doc = compute_belief_accuracy(
-        claims, specs, run_id="run-b", input_revision="rev-1"
-    )
+    doc = compute_belief_accuracy(claims, specs, run_id="run-b", input_revision="rev-1")
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["evaluable_count"] == 2
     assert doc.values["unknown_excluded_count"] == 1
@@ -190,7 +186,10 @@ def test_false_belief_persistence_onset_correction_and_censor() -> None:
 
 
 def test_belief_metrics_permutation_invariant() -> None:
-    specs = (_spec("c1"), _spec("c2", kind=ClaimValueKind.CATEGORICAL, categorical="red"))
+    specs = (
+        _spec("c1"),
+        _spec("c2", kind=ClaimValueKind.CATEGORICAL, categorical="red"),
+    )
     claims = [
         BeliefClaimRow(
             owner_id="a",

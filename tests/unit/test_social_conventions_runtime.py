@@ -90,9 +90,7 @@ def test_runtime_slot_defaults_absent_and_owner_check_is_closed() -> None:
     )
     ledger = empty_convention_ledger(owner)
     assert (
-        require_owner_social_conventions(
-            ledger, owner, field_name="social_conventions"
-        )
+        require_owner_social_conventions(ledger, owner, field_name="social_conventions")
         is None
     )
     with pytest.raises(ValueError, match="owner_id mismatch"):

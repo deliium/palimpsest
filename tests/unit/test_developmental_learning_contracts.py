@@ -63,7 +63,7 @@ def test_forbidden_domain_and_source_aliases_rejected() -> None:
         "student",
         "elder_teacher",
     ):
-        with pytest.raises(ValueError, match="forbidden_domain_alias|unknown_domain"):
+        with pytest.raises(ValueError, match=r"forbidden_domain_alias|unknown_domain"):
             parse_developmental_domain_id(alias)
     for alias in (
         "society_download",
@@ -71,7 +71,7 @@ def test_forbidden_domain_and_source_aliases_rejected() -> None:
         "global_dictionary",
         "analysis_feedback",
     ):
-        with pytest.raises(ValueError, match="forbidden_source_alias|unknown_source"):
+        with pytest.raises(ValueError, match=r"forbidden_source_alias|unknown_source"):
             parse_developmental_source_id(alias)
 
 
@@ -80,7 +80,9 @@ def test_empty_ledger_construct_logs_domain_count_zero(
 ) -> None:
     _LOG.debug("case_id=empty_ledger_construct")
     owner = AgentId("learner-1")
-    with caplog.at_level(logging.DEBUG, logger="agents.cognition.developmental_learning"):
+    with caplog.at_level(
+        logging.DEBUG, logger="agents.cognition.developmental_learning"
+    ):
         ledger = empty_developmental_knowledge_ledger(owner)
     assert ledger.entries == ()
     assert ledger.policy_version == DEVELOPMENTAL_LEARNING_POLICY_VERSION
@@ -92,7 +94,9 @@ def test_empty_ledger_construct_logs_domain_count_zero(
 
 def test_provenance_less_entry_rejected(caplog: pytest.LogCaptureFixture) -> None:
     _LOG.debug("case_id=provenance_less_rejected")
-    with caplog.at_level(logging.ERROR, logger="agents.cognition.developmental_learning"):
+    with caplog.at_level(
+        logging.ERROR, logger="agents.cognition.developmental_learning"
+    ):
         with pytest.raises(ValueError, match="provenance_required"):
             DevelopmentalKnowledgeEntry(
                 domain_id=DevelopmentalDomainId.LOCATIONS,
@@ -119,7 +123,9 @@ def test_upsert_requires_provenance_and_writes_metadata(
         acquired_tick=3,
         evidence_refs=("evt:1",),
     )
-    with caplog.at_level(logging.DEBUG, logger="agents.cognition.developmental_learning"):
+    with caplog.at_level(
+        logging.DEBUG, logger="agents.cognition.developmental_learning"
+    ):
         updated = upsert_developmental_entry(ledger, entry)
     assert len(updated.entries) == 1
     assert updated.entries[0].concept_key == "res:berry"
@@ -129,7 +135,9 @@ def test_upsert_requires_provenance_and_writes_metadata(
 def test_domain_rate_defaults() -> None:
     _LOG.debug("case_id=domain_rate_defaults")
     rate = DevelopmentalDomainRate(base_rate=0.5)
-    assert rate.stage_compose is DevelopmentalStageCompose.MULTIPLY_LIFECYCLE_LEARNING_RATE
+    assert (
+        rate.stage_compose is DevelopmentalStageCompose.MULTIPLY_LIFECYCLE_LEARNING_RATE
+    )
     assert rate.min_exposures == 0
     assert rate.confidence_floor == 0.0
     with pytest.raises(ValueError, match="out_of_range"):
@@ -142,9 +150,7 @@ def test_blank_slate_includes_developmental_knowledge() -> None:
     assert "developmental_knowledge" in SUBJECTIVE_COPY_DENY_LIST
     for alias in ("society_download", "culture_pack", "encyclopedia", "language_pack"):
         assert alias in SUBJECTIVE_COPY_DENY_LIST
-    assert_blank_slate_subjective_state(
-        AgentId("entrant-dev"), BlankSlateStoreCounts()
-    )
+    assert_blank_slate_subjective_state(AgentId("entrant-dev"), BlankSlateStoreCounts())
     with pytest.raises(ValueError, match="subjective_copy_forbidden"):
         assert_blank_slate_subjective_state(
             AgentId("entrant-dev"),

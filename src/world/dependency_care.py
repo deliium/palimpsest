@@ -13,8 +13,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
-from agents.models import AgentId
-from world.identifiers import EntityId, require_exact_nonneg_int
+from world.identifiers import AgentId, EntityId, require_exact_nonneg_int
 from world.lifecycle import DependencyStatus
 
 _LOGGER: Final[logging.Logger] = logging.getLogger("world.dependency_care")
@@ -128,9 +127,7 @@ ALLOWED_CRITICAL_CONSEQUENCES: Final[Mapping[CareNeedId, frozenset[str]]] = {
     ),
     CareNeedId.SAFETY: frozenset({"health_damage", "no_extra"}),
     CareNeedId.MOVEMENT: frozenset({"no_extra"}),
-    CareNeedId.SHELTER: frozenset(
-        {"fatigue_accrual", "health_damage", "no_extra"}
-    ),
+    CareNeedId.SHELTER: frozenset({"fatigue_accrual", "health_damage", "no_extra"}),
     CareNeedId.LEARNING: frozenset({"learning_rate_zero", "no_extra"}),
 }
 
@@ -248,8 +245,7 @@ class DependencyNeedRegister:
                     raw_key,
                 )
                 raise ValueError(
-                    f"unknown need id {raw_key!r} "
-                    "(code=dependency_care_unknown_need)"
+                    f"unknown need id {raw_key!r} (code=dependency_care_unknown_need)"
                 ) from exc
             if need not in REGISTER_BACKED_NEEDS:
                 _LOGGER.error(

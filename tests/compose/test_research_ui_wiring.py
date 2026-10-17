@@ -61,9 +61,7 @@ def test_research_ui_matrix_metric_summary_when_mounted() -> None:
     base = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL", "").strip()
     if not base:
         pytest.skip("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL unset")
-    url = (
-        f"{base.rstrip('/')}/v1/research/matrices/v2-benchmark-suite/metric-summary"
-    )
+    url = f"{base.rstrip('/')}/v1/research/matrices/v2-benchmark-suite/metric-summary"
     response = httpx.get(url, timeout=5.0)
     if response.status_code == 404:
         pytest.skip("v2-benchmark-suite metric-summary not mounted in this stack")

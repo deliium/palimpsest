@@ -206,9 +206,7 @@ async def test_pending_accumulator_feeds_subjective_revision() -> None:
                     AgentId("agent-2")
                     if entity_id == EntityId("body-2")
                     else (
-                        AgentId("agent-3")
-                        if entity_id == EntityId("body-3")
-                        else None
+                        AgentId("agent-3") if entity_id == EntityId("body-3") else None
                     )
                 ),
                 pending=pending,

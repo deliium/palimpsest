@@ -64,11 +64,7 @@ def _agent(value: str) -> AgentId:
 
 def test_policy_locks_constants_and_modes_match() -> None:
     policy = default_semantic_naming_policy()
-    assert (
-        policy.version
-        == SEMANTIC_NAMING_POLICY_VERSION
-        == "semantic-naming.v1"
-    )
+    assert policy.version == SEMANTIC_NAMING_POLICY_VERSION == "semantic-naming.v1"
     assert policy.active_strength == 0.40
     assert policy.retire_strength == 0.20
     assert policy.decay == 0.05
@@ -109,9 +105,12 @@ def test_label_binding_id_and_stable8_are_digest_only() -> None:
     assert label_binding_id(owner, kind, token) == expected
     digest = stable8_digest(owner, kind, "location_17")
     assert len(digest) == 8
-    assert digest == hashlib.sha256(
-        f"{owner.value}|{kind.value}|location_17".encode()
-    ).hexdigest()[:8]
+    assert (
+        digest
+        == hashlib.sha256(
+            f"{owner.value}|{kind.value}|location_17".encode()
+        ).hexdigest()[:8]
+    )
     other = stable8_digest(_agent("bob"), kind, "location_17")
     assert digest != other
 
@@ -259,9 +258,7 @@ def test_transmission_and_status_enums_reject_unknown() -> None:
 
 def _identity(owner: str = "ada", *others: str) -> OwnerSafeSocialIdentity:
     counterparts = tuple(
-        CounterpartBinding(
-            agent_id=_agent(name), entity_id=EntityId(f"body-{name}")
-        )
+        CounterpartBinding(agent_id=_agent(name), entity_id=EntityId(f"body-{name}"))
         for name in others
     )
     return OwnerSafeSocialIdentity(
@@ -369,9 +366,7 @@ def test_memory_reinforces_only_existing_bindings() -> None:
         concepts=(SimpleNamespace(concept=token),),
         relations=(),
     )
-    reinforced = apply_naming_update(
-        _observe(4), identity, ledger, memories=(memory,)
-    )
+    reinforced = apply_naming_update(_observe(4), identity, ledger, memories=(memory,))
     match = next(item for item in reinforced.bindings if item.label_token == token)
     assert match.strength > before
     empty = apply_naming_update(
@@ -465,8 +460,7 @@ def test_hazard_mints_competing_dark_without_renaming_world() -> None:
     place = next(
         item
         for item in ledger.bindings
-        if item.label_token.startswith("place_")
-        and item.status is NamingStatus.ACTIVE
+        if item.label_token.startswith("place_") and item.status is NamingStatus.ACTIVE
     )
     digest = place.label_token.removeprefix("place_")
     for tick in (4, 5, 6):
@@ -477,7 +471,9 @@ def test_hazard_mints_competing_dark_without_renaming_world() -> None:
         )
     tokens = {item.label_token for item in ledger.bindings}
     assert f"dark_{digest}" in tokens
-    dark = next(item for item in ledger.bindings if item.label_token == f"dark_{digest}")
+    dark = next(
+        item for item in ledger.bindings if item.label_token == f"dark_{digest}"
+    )
     assert dark.candidates[0].entity_id == "clearing"
     # World location id is unchanged; only a competing private label was minted.
     assert place.candidates[0].entity_id == "clearing"

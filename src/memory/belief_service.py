@@ -56,6 +56,7 @@ class _SemanticBeliefServiceReader:
     def history(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
         return self._service.history_sync(belief_id)
 
+
 _LOG: Final[logging.Logger] = logging.getLogger("memory.belief_service")
 
 

@@ -152,9 +152,7 @@ def _apply(
         revision=state.revision,
         command=command,
     )
-    admitted = validate_action_request(
-        world_id=_WORLD, state=state, request=request
-    )
+    admitted = validate_action_request(world_id=_WORLD, state=state, request=request)
     assert type(admitted) is OperationAccepted
     return apply_operation(
         state,

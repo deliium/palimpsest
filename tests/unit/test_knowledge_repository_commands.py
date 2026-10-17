@@ -33,21 +33,15 @@ def test_establish_repository_defaults() -> None:
 
 def test_establish_repository_invalid_access_mode() -> None:
     with pytest.raises(ValueError, match="repository_access_mode_invalid"):
-        EstablishRepository(
-            location_id=_eid("loc-1"), access_mode="librarian"
-        )
+        EstablishRepository(location_id=_eid("loc-1"), access_mode="librarian")
 
 
 def test_deposit_retrieve_maintain_index_tags() -> None:
-    deposit = DepositRecord(
-        repository_id=_eid("repo-1"), artifact_id=_eid("art-1")
-    )
+    deposit = DepositRecord(repository_id=_eid("repo-1"), artifact_id=_eid("art-1"))
     retrieve = RetrieveRecord(
         repository_id=_eid("repo-1"), artifact_id=_eid("art-1"), hold=False
     )
-    maintain = MaintainRepository(
-        repository_id=_eid("repo-1"), mode="destroy"
-    )
+    maintain = MaintainRepository(repository_id=_eid("repo-1"), mode="destroy")
     index = IndexRepository(
         repository_id=_eid("repo-1"),
         entries=({"entry_id": "e1", "artifact_id": "art-1"},),
@@ -79,15 +73,11 @@ def test_command_json_round_trip_establish() -> None:
 
 
 def test_command_json_round_trip_deposit_retrieve_maintain_index() -> None:
-    deposit = DepositRecord(
-        repository_id=_eid("repo-1"), artifact_id=_eid("art-1")
-    )
+    deposit = DepositRecord(repository_id=_eid("repo-1"), artifact_id=_eid("art-1"))
     retrieve = RetrieveRecord(
         repository_id=_eid("repo-1"), artifact_id=_eid("art-1"), hold=True
     )
-    maintain = MaintainRepository(
-        repository_id=_eid("repo-1"), mode="maintain"
-    )
+    maintain = MaintainRepository(repository_id=_eid("repo-1"), mode="maintain")
     index = IndexRepository(
         repository_id=_eid("repo-1"),
         entries=({"entry_id": "e1", "label_tokens": ["token_a"]},),

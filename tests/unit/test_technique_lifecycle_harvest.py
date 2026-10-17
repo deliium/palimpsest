@@ -55,9 +55,7 @@ def test_zero_quantity_node_and_dead_holder_item() -> None:
 
 
 def test_channel_off_leaves_slices_absent() -> None:
-    base = MetricComputationInputs(
-        run_id="run-1", input_revision="rev-1", window_end=1
-    )
+    base = MetricComputationInputs(run_id="run-1", input_revision="rev-1", window_end=1)
     updated = inputs_with_opt_in_metric_rows(base)
     assert updated.technique_lifecycle_spec is None
     assert updated.technique_node_rows is None

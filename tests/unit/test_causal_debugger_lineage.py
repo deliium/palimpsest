@@ -32,8 +32,7 @@ from simulation import (
 
 def test_require_lineage_kind_closed() -> None:
     assert (
-        require_lineage_kind("belief_evidence")
-        is DebuggerLineageKind.BELIEF_EVIDENCE
+        require_lineage_kind("belief_evidence") is DebuggerLineageKind.BELIEF_EVIDENCE
     )
     with pytest.raises(CausalDebuggerError) as exc:
         require_lineage_kind("not_a_kind")

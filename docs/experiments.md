@@ -1,6 +1,6 @@
 # Experiments Framework
 
-[← Architecture](architecture.md) · [Simulation runner](simulation-runner.md) · [Back to README](../README.md)
+[← Previous Page](simulation-runner.md) · [Back to README](../README.md) · [Next Page →](v2-benchmark-suite.md)
 
 ## Trust boundary
 
@@ -130,6 +130,71 @@ Completed cells may write optional `cells/<cell_id>.metrics.json` sidecars (enco
 
 Composition/validation scenarios (`bench-01`…`bench-16`), observer graphical world, scientific invariants, and zero-install acceptance are documented in [V2 benchmark suite](v2-benchmark-suite.md). Example matrix fixture: `tests/fixtures/matrices/v2-benchmark-suite.json`. The suite stays off the V1 regression gate and does not own `multi_hop_testimony_tracking`.
 
+## Experiment AY: Regional migration
+
+AY (`regional_migration@1`) stays off the V1 gate. Its connected five-location graph spans three regions,
+with local water/food and contrasting temperatures; the remote endpoint requires
+multiple adjacent steps. Region labels do not determine costs or environments.
+
+| Arm | Treatment |
+| --- | --- |
+| `ay-channel-off` | Exact nonregional baseline configuration |
+| `ay-physics-only` | Regional durations/costs with destination bias disabled |
+| `ay-accurate-evidence` | Production cognition learns from normal perception and owner-scoped memory; no command override or initial goal injection |
+| `ay-false-stale-testimony` | Diagnostic encounter and historical false water report via admitted `Tell`; recipient decisions remain cognitive |
+| `ay-visit-return` | Explicit diagnostic commands demonstrate a short interregional visit and return |
+| `ay-blocked-arrival` | Explicit diagnostic departure toward a full destination demonstrates timeout |
+
+The coordinator and matrix assignment runner attach the same deterministic
+diagnostic arbiters; collectors only read detached outcomes. Scripts are
+diagnostic treatments, not evidence of emergent migration. Population entry,
+dependency care, and transport are separate composition factors; AY does not
+require them. There is no civilization-success threshold.
+
+Reproduce all arms with normal cognition and metrics:
+
+```python
+import asyncio
+from experiments.coordinator import ExperimentCoordinator
+from experiments.regional_migration_scenario import regional_migration_scenario
+
+definition = regional_migration_scenario(seed=11, max_ticks=8)
+results = asyncio.run(ExperimentCoordinator(definition).run_all())
+assert len(results) == 6
+```
+
+Same seeds and configurations reproduce normalized trajectories and results.
+For matrix operation use the existing [matrix workflow](#experiment-matrices-experiment-matrix-v1);
+the registered experiment ID is `regional_migration@1` and v44 round-trips through
+the matrix codec. Keep full config/factor identity when comparing arms.
+
+### Regional evidence and denominators
+
+- `regional_population@1`: completed-boundary **living** populations, person-ticks,
+  entries, deaths, and assigned/unassigned coverage. Travellers waiting at origin
+  count there; corpses are excluded from demographics but retain physical capacity.
+- `regional_migration@1`: raw origin–destination crossings separately from
+  dwell-qualified migrations. Arrivals, successful fleeing, and legacy movement
+  effects count once per person; departure, failed flee, timeout, and same-region
+  moves are not interregional arrivals. Transport counts each participant.
+- `regional_destination_beliefs@1`: available owner evidence and post-run
+  comparison coverage, never a destination oracle for cognition.
+
+Initial placement/entry establishes residence without migration. A different
+assigned-region boundary begins a candidate; the arrival boundary counts as
+dwell tick 1 if alive and still present. At `residence_min_ticks`, emit one
+migration from established residence and retain the candidate arrival tick.
+Without prior residence, qualification establishes a baseline only. A short
+visit followed by return cancels; a later return after qualification may qualify
+as a return migration. A third region replaces the candidate. Unassigned
+boundaries clear the candidate but retain residence; death cannot qualify dwell.
+
+Population conservation is arrivals minus departures plus entries minus deaths,
+with explicit assigned/unassigned transitions. Qualified migration need not equal
+raw crossings. Missing subjective evidence and incomplete prefixes expose
+coverage rather than invented zeros. Metric documents retain the numerical
+policy, numerators, denominators, and observation coverage.
+
 ## Logging
 
 DEBUG/INFO may include experiment/condition/run IDs, ordinals, counts, versions, and hash prefixes. Never log seeds, story content, truth labels, drive values, prompts, credentials, or canonical JSON payloads.
@@ -146,3 +211,9 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_v2_flag_defaults.py \
   tests/architecture/test_experiment_instrumentation_isolation.py -q
 ```
+
+## See also
+
+- [Physical simulation](physical-simulation.md#discrete-regional-journeys)
+- [Configuration](configuration.md#optional-regions-and-migration-runner-config-v44)
+- [Analysis metrics](analysis-metrics.md)

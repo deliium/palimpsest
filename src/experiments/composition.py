@@ -9,7 +9,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from analysis.offline_consolidation_metrics import OfflineConsolidationReport
+    from analysis.reflection_metrics import ReflectionReport
 
 from analysis.models import (
     MEMORY_DYNAMICS_METRIC_VERSION,
@@ -18,6 +22,13 @@ from analysis.models import (
     SubjectiveDerivationEdge,
 )
 from analysis.prediction_calibration_metrics import CalibrationRow
+from analysis.regional_destination_beliefs import RegionalDestinationEvidenceRow
+from analysis.regional_population import (
+    RegionalEventRow,
+    RegionalInitialPlacementRow,
+    RegionalLocationRow,
+    RegionalPopulationInput,
+)
 from analysis.sources import (
     InMemoryMemoryEvidenceSource,
     InMemoryObjectiveEventSource,
@@ -28,6 +39,9 @@ from analysis.territorial_concentration_metrics import TerritorialConcentrationR
 from experiments.persistence import (
     AnalysisEvidenceSnapshotReader,
     PersistedAnalysisSnapshot,
+    PersistedRegionalContext,
+    PersistedRegionalInitialPlacement,
+    PersistedRegionalLocation,
 )
 from simulation.evidence import (
     EvidenceManifest,
@@ -60,6 +74,12 @@ __all__ = [
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
     "norm_belief_rows_from_ledgers",
+    "regional_context_from_run",
+    "regional_destination_evidence_rows_from_traces",
+    "regional_metric_inputs_from_snapshots",
+    "regional_population_input_from_context",
+    "regional_population_input_from_snapshot",
+    "regional_population_rows_from_events",
     "repository_event_rows_from_events",
     "repository_event_rows_from_resolutions",
     "repository_objective_rows_from_repositories",
@@ -143,6 +163,63 @@ class EvidenceCompositionService:
             },
         )
         return sources
+
+    async def load_regional_metric_inputs(
+        self,
+        *,
+        run_id: str,
+        owner_id: str,
+        input_revision: str,
+        window_end: int,
+        experiment_id: str | None = None,
+        manifest: EvidenceManifest | None = None,
+        complete_through_boundary: int | None = None,
+    ) -> tuple[
+        RegionalPopulationInput | None,
+        tuple[RegionalDestinationEvidenceRow, ...] | None,
+        int | None,
+    ]:
+        """Load all owner-scoped evidence needed by read-only regional metrics."""
+        anchor = await self._reader.load(
+            run_id=run_id,
+            owner_id=owner_id,
+            experiment_id=experiment_id,
+            manifest=manifest,
+        )
+        if manifest is not None:
+            anchor = constrain_snapshot_to_manifest(anchor, manifest)
+        context = anchor.regional_context
+        if context is None:
+            return None, None, None
+        if owner_id not in context.owner_ids:
+            raise EvidenceCompositionError("regional_owner_not_registered")
+        snapshots = [anchor]
+        for current_owner_id in context.owner_ids:
+            if current_owner_id == owner_id:
+                continue
+            snapshot = await self._reader.load(
+                run_id=run_id,
+                owner_id=current_owner_id,
+                experiment_id=experiment_id,
+                manifest=manifest,
+            )
+            if manifest is not None:
+                snapshot = constrain_snapshot_to_manifest(snapshot, manifest)
+            snapshots.append(snapshot)
+        result = regional_metric_inputs_from_snapshots(
+            tuple(snapshots),
+            input_revision=input_revision,
+            window_end=window_end,
+            complete_through_boundary=complete_through_boundary,
+        )
+        _LOG.debug(
+            "regional_metric_evidence_loaded run_id=%s owner_count=%s "
+            "trace_count=%s region_enabled=true",
+            run_id,
+            len(context.owner_ids),
+            sum(len(snapshot.traces) for snapshot in snapshots),
+        )
+        return result
 
 
 def constrain_snapshot_to_manifest(
@@ -241,6 +318,10 @@ def constrain_snapshot_to_manifest(
         reconstructions=reconstructions,
         derivation_edges=filtered_edges,
         events=snapshot.events,
+        regional_context=snapshot.regional_context,
+        objective_complete_through_boundary=(
+            snapshot.objective_complete_through_boundary
+        ),
     )
 
 
@@ -312,6 +393,404 @@ def map_snapshot_to_analysis_sources(
     return objective, memory
 
 
+def regional_context_from_run(
+    *,
+    regions_spec: object | None,
+    bodies: Sequence[object],
+    known_location_ids: Sequence[object],
+    owner_ids: Sequence[object],
+    lifecycle_records: Sequence[object] = (),
+) -> PersistedRegionalContext | None:
+    """Project immutable bootstrap data into a neutral regional analysis DTO."""
+    from agents.models import AgentId
+    from world.identifiers import EntityId
+    from world.lifecycle import AgentLifecycleRecord
+    from world.models import AgentBody, LifeStatus
+    from world.regions import RegionsMigrationSpec
+
+    if regions_spec is None:
+        return None
+    if type(regions_spec) is not RegionsMigrationSpec:
+        raise TypeError("regions_spec must be RegionsMigrationSpec or None")
+    if isinstance(bodies, (str, bytes)) or not isinstance(bodies, Sequence):
+        raise TypeError("bodies must be an ordered sequence")
+    if isinstance(owner_ids, (str, bytes)) or not isinstance(owner_ids, Sequence):
+        raise TypeError("owner_ids must be an ordered sequence")
+    if isinstance(known_location_ids, (str, bytes)) or not isinstance(
+        known_location_ids, Sequence
+    ):
+        raise TypeError("known_location_ids must be an ordered sequence")
+    if isinstance(lifecycle_records, (str, bytes)) or not isinstance(
+        lifecycle_records, Sequence
+    ):
+        raise TypeError("lifecycle_records must be an ordered sequence")
+    stage_by_body: dict[str, tuple[str, str]] = {}
+    for record in lifecycle_records:
+        if type(record) is not AgentLifecycleRecord:
+            raise TypeError("lifecycle_records entries must be AgentLifecycleRecord")
+        stage_by_body[record.body_id.value] = (record.stage.value, record.cohort_id)
+    placements = []
+    for body in bodies:
+        if type(body) is not AgentBody:
+            raise TypeError("bodies entries must be AgentBody")
+        stage, cohort = stage_by_body.get(body.entity_id.value, (None, None))
+        placements.append(
+            PersistedRegionalInitialPlacement(
+                body_id=body.entity_id.value,
+                location_id=body.location_id.value,
+                alive=body.life_status is LifeStatus.ALIVE,
+                stage_id=stage,
+                cohort_id=cohort,
+            )
+        )
+    owners: list[str] = []
+    for item in owner_ids:
+        if type(item) is AgentId:
+            owners.append(item.value)
+        elif type(item) is str:
+            owners.append(item)
+        else:
+            raise TypeError("owner_ids entries must be AgentId or str")
+    known_locations: list[str] = []
+    for location in known_location_ids:
+        if type(location) is EntityId:
+            known_locations.append(location.value)
+        elif type(location) is str:
+            known_locations.append(location)
+        else:
+            raise TypeError("known_location_ids entries must be EntityId or str")
+    return PersistedRegionalContext(
+        region_ids=tuple(region.region_id for region in regions_spec.regions),
+        known_location_ids=tuple(known_locations),
+        locations=tuple(
+            PersistedRegionalLocation(
+                location_id=item.location_id.value,
+                region_id=item.region_id,
+            )
+            for item in regions_spec.location_regions
+        ),
+        initial_placements=tuple(placements),
+        owner_ids=tuple(owners),
+        residence_min_ticks=regions_spec.residence_min_ticks,
+    )
+
+
+def regional_population_rows_from_events(
+    events: Sequence[object],
+) -> tuple[RegionalEventRow, ...]:
+    """Project successful committed placement and lifecycle facts once."""
+    from world.events import (
+        AgentEnteredWorld,
+        Died,
+        Fled,
+        JourneyArrived,
+        LifecycleStageChanged,
+        Moved,
+        Transported,
+    )
+
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("regional_population_rows_from_events: invalid_events")
+    rows: list[RegionalEventRow] = []
+
+    def add_relocation(
+        event: WorldEvent,
+        *,
+        body_id: object,
+        origin: object | None,
+        destination: object | None,
+        kind: str,
+    ) -> None:
+        body = _id_text_or_none(body_id)
+        target = _id_text_or_none(destination)
+        if body is None or target is None:
+            raise EvidenceCompositionError("regional_relocation_identity_missing")
+        rows.append(
+            RegionalEventRow(
+                tick=event.tick,
+                sequence=event.sequence,
+                kind="relocation",
+                body_id=body,
+                origin_location_id=_id_text_or_none(origin),
+                destination_location_id=target,
+                relocation_kind=kind,
+            )
+        )
+
+    for event in events:
+        if type(event) is not WorldEvent:
+            raise EvidenceCompositionError("regional_event_type_invalid")
+        details = event.details
+        occurrence = event.occurrence
+        if type(details) is Moved:
+            origin = None if occurrence is None else occurrence.origin_location_id
+            add_relocation(
+                event,
+                body_id=event.actor_id,
+                origin=origin,
+                destination=details.resulting_location_id or details.destination_id,
+                kind="move",
+            )
+        elif type(details) is Transported:
+            destination = details.destination_id
+            origin = details.origin_location_id
+            for body_id in sorted(
+                (event.actor_id, details.target_id),
+                key=lambda item: "" if item is None else item.value,
+            ):
+                add_relocation(
+                    event,
+                    body_id=body_id,
+                    origin=origin,
+                    destination=destination,
+                    kind="transport",
+                )
+        elif type(details) is Fled:
+            if details.success is not True:
+                continue
+            origin = None if occurrence is None else occurrence.origin_location_id
+            add_relocation(
+                event,
+                body_id=event.actor_id,
+                origin=origin,
+                destination=details.destination_id,
+                kind="flee",
+            )
+        elif type(details) is JourneyArrived:
+            for body_id in details.participant_body_ids:
+                add_relocation(
+                    event,
+                    body_id=body_id,
+                    origin=details.origin_location_id,
+                    destination=details.destination_location_id,
+                    kind="journey",
+                )
+        elif type(details) is AgentEnteredWorld:
+            rows.append(
+                RegionalEventRow(
+                    tick=event.tick,
+                    sequence=event.sequence,
+                    kind="entry",
+                    body_id=details.body_id.value,
+                    destination_location_id=details.location_id.value,
+                )
+            )
+        elif type(details) is Died:
+            rows.append(
+                RegionalEventRow(
+                    tick=event.tick,
+                    sequence=event.sequence,
+                    kind="death",
+                    body_id=details.body_id.value,
+                )
+            )
+        elif type(details) is LifecycleStageChanged:
+            rows.append(
+                RegionalEventRow(
+                    tick=event.tick,
+                    sequence=event.sequence,
+                    kind="stage",
+                    body_id=details.body_id.value,
+                    stage_id=details.new_stage,
+                )
+            )
+    rows.sort(key=lambda row: (row.tick, row.sequence, row.body_id, row.kind))
+    _LOG.debug(
+        "regional_population_events_projected event_count=%s row_count=%s",
+        len(events),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def regional_population_input_from_snapshot(
+    snapshot: PersistedAnalysisSnapshot,
+    *,
+    input_revision: str,
+    window_end: int | None = None,
+    complete_through_boundary: int | None = None,
+) -> RegionalPopulationInput | None:
+    """Build analysis input from detached bootstrap context and ordered events."""
+    if type(snapshot) is not PersistedAnalysisSnapshot:
+        raise TypeError("snapshot must be PersistedAnalysisSnapshot")
+    context = snapshot.regional_context
+    if context is None:
+        return None
+    resolved_window_end = window_end
+    if resolved_window_end is None:
+        resolved_window_end = snapshot.objective_complete_through_boundary
+    if resolved_window_end is None:
+        raise EvidenceCompositionError("regional_window_end_unavailable")
+    resolved_complete_boundary = complete_through_boundary
+    if resolved_complete_boundary is None:
+        resolved_complete_boundary = snapshot.objective_complete_through_boundary
+    return regional_population_input_from_context(
+        context,
+        events=snapshot.events,
+        run_id=snapshot.run_id,
+        input_revision=input_revision,
+        window_end=resolved_window_end,
+        complete_through_boundary=resolved_complete_boundary,
+    )
+
+
+def regional_metric_inputs_from_snapshots(
+    snapshots: Sequence[PersistedAnalysisSnapshot],
+    *,
+    input_revision: str,
+    window_end: int | None = None,
+    complete_through_boundary: int | None = None,
+) -> tuple[
+    RegionalPopulationInput | None,
+    tuple[RegionalDestinationEvidenceRow, ...] | None,
+    int | None,
+]:
+    """Join owner-scoped detached slices without crossing objective authority."""
+    from memory.models import MemoryTrace
+
+    if isinstance(snapshots, (str, bytes)) or not isinstance(snapshots, Sequence):
+        raise TypeError("snapshots must be an ordered sequence")
+    if not snapshots:
+        return None, None, None
+    first = snapshots[0]
+    if type(first) is not PersistedAnalysisSnapshot:
+        raise TypeError("snapshot entries must be PersistedAnalysisSnapshot")
+    context = first.regional_context
+    if context is None:
+        return None, None, None
+    resolved_window_end = window_end
+    if resolved_window_end is None:
+        resolved_window_end = first.objective_complete_through_boundary
+    if resolved_window_end is None:
+        raise EvidenceCompositionError("regional_window_end_unavailable")
+    resolved_complete_boundary = complete_through_boundary
+    if resolved_complete_boundary is None:
+        resolved_complete_boundary = first.objective_complete_through_boundary
+    traces_by_owner_memory: dict[tuple[str, str], object] = {}
+    for snapshot in snapshots:
+        if type(snapshot) is not PersistedAnalysisSnapshot:
+            raise TypeError("snapshot entries must be PersistedAnalysisSnapshot")
+        if (
+            snapshot.run_id != first.run_id
+            or snapshot.regional_context != context
+            or snapshot.events != first.events
+            or snapshot.objective_complete_through_boundary
+            != first.objective_complete_through_boundary
+        ):
+            raise EvidenceCompositionError("regional_snapshot_scope_mismatch")
+        for trace in snapshot.traces:
+            if type(trace) is not MemoryTrace:
+                raise EvidenceCompositionError("regional_snapshot_trace_invalid")
+            if trace.owner_id.value != snapshot.owner_id:
+                raise EvidenceCompositionError("regional_snapshot_trace_owner_mismatch")
+            key = trace.owner_id.value, trace.memory_id.value
+            prior = traces_by_owner_memory.get(key)
+            if prior is not None and prior != trace:
+                raise EvidenceCompositionError("regional_snapshot_trace_conflict")
+            traces_by_owner_memory[key] = trace
+    traces = tuple(
+        traces_by_owner_memory[key] for key in sorted(traces_by_owner_memory)
+    )
+    regional_input = regional_population_input_from_snapshot(
+        first,
+        input_revision=input_revision,
+        window_end=resolved_window_end,
+        complete_through_boundary=resolved_complete_boundary,
+    )
+    evidence_rows = regional_destination_evidence_rows_from_traces(traces)
+    return regional_input, evidence_rows, len(context.owner_ids)
+
+
+def regional_population_input_from_context(
+    context: PersistedRegionalContext,
+    *,
+    events: Sequence[object],
+    run_id: str,
+    input_revision: str,
+    window_end: int,
+    complete_through_boundary: int | None = None,
+) -> RegionalPopulationInput:
+    if type(context) is not PersistedRegionalContext:
+        raise TypeError("context must be PersistedRegionalContext")
+    return RegionalPopulationInput(
+        run_id=run_id,
+        input_revision=input_revision,
+        region_ids=context.region_ids,
+        known_location_ids=context.known_location_ids,
+        location_rows=tuple(
+            RegionalLocationRow(item.location_id, item.region_id)
+            for item in context.locations
+        ),
+        initial_placements=tuple(
+            RegionalInitialPlacementRow(
+                body_id=item.body_id,
+                location_id=item.location_id,
+                alive=item.alive,
+                stage_id=item.stage_id,
+                cohort_id=item.cohort_id,
+            )
+            for item in context.initial_placements
+        ),
+        events=regional_population_rows_from_events(events),
+        residence_min_ticks=context.residence_min_ticks,
+        window_end=window_end,
+        complete_through_boundary=complete_through_boundary,
+    )
+
+
+def regional_destination_evidence_rows_from_traces(
+    traces: Sequence[object],
+) -> tuple[RegionalDestinationEvidenceRow, ...]:
+    """Project destination-labeled trace metadata without proposition text."""
+    from memory.models import MemoryTrace
+
+    if isinstance(traces, (str, bytes)) or not isinstance(traces, Sequence):
+        raise TypeError(
+            "regional_destination_evidence_rows_from_traces: invalid_traces"
+        )
+    rows: list[RegionalDestinationEvidenceRow] = []
+    for trace in traces:
+        if type(trace) is not MemoryTrace:
+            raise TypeError("regional destination traces must be MemoryTrace")
+        if "destination" not in trace.context.tags:
+            continue
+        destination_ids = tuple(
+            item.entity_id.value
+            for item in trace.entities
+            if item.label == "destination" and item.entity_id is not None
+        )
+        if not destination_ids:
+            continue
+        region_id = next(
+            (
+                item.concept.removeprefix("region_id:")
+                for item in trace.concepts
+                if item.concept.startswith("region_id:")
+            ),
+            None,
+        )
+        for destination_id in destination_ids:
+            rows.append(
+                RegionalDestinationEvidenceRow(
+                    owner_id=trace.owner_id.value,
+                    destination_id=destination_id,
+                    region_id=region_id,
+                    source_kind=trace.provenance.kind.value,
+                    source_tick=trace.provenance.source_tick,
+                    confidence=trace.confidence,
+                )
+            )
+    rows.sort(
+        key=lambda row: (
+            row.owner_id,
+            row.destination_id,
+            row.source_tick,
+            row.source_kind,
+        )
+    )
+    return tuple(rows)
+
+
 def map_recall_audits_to_dynamics_report(
     *,
     experiment_id: str,
@@ -374,7 +853,7 @@ def map_consolidation_audits_to_report(
     *,
     run_id: str,
     audits: tuple[object, ...],
-) -> object:
+) -> OfflineConsolidationReport:
     """Map in-run consolidation audits into count-only analysis inputs."""
     from analysis.offline_consolidation_metrics import OfflineConsolidationReport
     from memory.models import OfflineConsolidationAudit
@@ -418,10 +897,10 @@ def map_reflection_audits_to_report(
     *,
     run_id: str,
     audits: tuple[object, ...],
-) -> object:
+) -> ReflectionReport:
     """Map in-run reflection audits into count-only analysis inputs."""
-    from agents.cognition.reflection import ReflectionAudit
     from analysis.reflection_metrics import ReflectionReport
+    from simulation.cognition_contracts import ReflectionAudit
 
     kind_fields = {
         "revised_belief": "belief_revisions",
@@ -678,9 +1157,7 @@ def cultural_channel_rows_from_convention_habits(
 ) -> tuple[CulturalChannelRow, ...]:
     """Project detached convention habit dict/rows into cultural tokens."""
     if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
-        raise TypeError(
-            "cultural_channel_rows_from_convention_habits: invalid_rows"
-        )
+        raise TypeError("cultural_channel_rows_from_convention_habits: invalid_rows")
     out: list[CulturalChannelRow] = []
     for row in rows:
         owner = _cultural_owner(row)
@@ -758,9 +1235,7 @@ def norm_belief_rows_from_ledgers(
                     "response": response_text,
                 }
             )
-    _LOG.debug(
-        "norm_belief_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
-    )
+    _LOG.debug("norm_belief_rows_built ledgers=%s rows=%s", len(ledgers), len(rows))
     return tuple(rows)
 
 
@@ -802,9 +1277,7 @@ def convention_habit_rows_from_ledgers(
                         getattr(belief, "conceptualization", None)
                     ),
                     "duration_ticks": max(0, last_tick - first_tick),
-                    "variant_count": len(
-                        getattr(belief, "competing_variant_ids", ())
-                    ),
+                    "variant_count": len(getattr(belief, "competing_variant_ids", ())),
                 }
             )
     _LOG.debug(
@@ -852,9 +1325,7 @@ def artifact_objective_rows_from_artifacts(
             "tick": tick,
             "artifact_id": _id_text(getattr(artifact, "artifact_id", None)),
             "kind": kind_text,
-            "content_revision": int(
-                getattr(artifact, "content_revision", 0) or 0
-            ),
+            "content_revision": int(getattr(artifact, "content_revision", 0) or 0),
             "present": bool(present),
             "marks": marks,
         }
@@ -1020,9 +1491,10 @@ def durable_record_event_rows_from_events(
     rows: list[dict[str, object]] = []
     for event in events:
         details = _event_details(event)
-        kind = _id_text_or_none(getattr(details, "kind", None)) or _event_kind_name(
-            event
-        ).lower()
+        kind = (
+            _id_text_or_none(getattr(details, "kind", None))
+            or _event_kind_name(event).lower()
+        )
         if kind not in _DURABLE_EVENT_KINDS:
             continue
         tick = getattr(event, "tick", None)
@@ -1108,9 +1580,7 @@ def repository_objective_rows_from_repositories(
         values = repositories
     rows: list[dict[str, object]] = []
     for repository in values:
-        repository_id = _id_text_or_none(
-            getattr(repository, "repository_id", None)
-        )
+        repository_id = _id_text_or_none(getattr(repository, "repository_id", None))
         location_id = _id_text_or_none(getattr(repository, "location_id", None))
         if repository_id is None or location_id is None:
             continue
@@ -1122,9 +1592,7 @@ def repository_objective_rows_from_repositories(
         if isinstance(members, (str, bytes)) or not isinstance(members, Sequence):
             members = ()
         member_ids = tuple(
-            token
-            for item in members
-            if (token := _id_text_or_none(item)) is not None
+            token for item in members if (token := _id_text_or_none(item)) is not None
         )
         index_entries = getattr(repository, "index_entries", ())
         if isinstance(index_entries, (str, bytes)) or not isinstance(
@@ -1133,9 +1601,7 @@ def repository_objective_rows_from_repositories(
             index_entries = ()
         index_artifact_ids: list[str] = []
         for entry in index_entries:
-            artifact_token = _id_text_or_none(
-                getattr(entry, "artifact_id", None)
-            )
+            artifact_token = _id_text_or_none(getattr(entry, "artifact_id", None))
             if artifact_token is None and isinstance(entry, Mapping):
                 artifact_token = _id_text_or_none(entry.get("artifact_id"))
             if artifact_token is not None:
@@ -1160,9 +1626,7 @@ def repository_objective_rows_from_repositories(
         row: dict[str, object] = {
             "repository_id": repository_id,
             "location_id": location_id,
-            "structure_id": _id_text_or_none(
-                getattr(repository, "structure_id", None)
-            ),
+            "structure_id": _id_text_or_none(getattr(repository, "structure_id", None)),
             "status": status,
             "access_mode": access_mode,
             "member_count": len(member_ids),
@@ -1182,8 +1646,7 @@ def repository_objective_rows_from_repositories(
             ),
             "neglect_streak": (
                 neglect_streak
-                if type(neglect_streak) is int
-                and not isinstance(neglect_streak, bool)
+                if type(neglect_streak) is int and not isinstance(neglect_streak, bool)
                 else 0
             ),
         }
@@ -1206,9 +1669,10 @@ def repository_event_rows_from_events(
     rows: list[dict[str, object]] = []
     for event in events:
         details = _event_details(event)
-        kind = _id_text_or_none(getattr(details, "kind", None)) or _event_kind_name(
-            event
-        ).lower()
+        kind = (
+            _id_text_or_none(getattr(details, "kind", None))
+            or _event_kind_name(event).lower()
+        )
         if kind not in _REPOSITORY_EVENT_KINDS:
             continue
         tick = getattr(event, "tick", None)
@@ -1259,13 +1723,11 @@ def repository_event_rows_from_resolutions(
         raise TypeError("repository_event_rows_from_resolutions: invalid_resolutions")
     rows: list[dict[str, object]] = []
     for resolution in resolutions:
-        command_kind = _id_text_or_none(
-            getattr(resolution, "command_kind", None)
-        )
+        command_kind = _id_text_or_none(getattr(resolution, "command_kind", None))
         if command_kind is None:
             command = getattr(resolution, "command", None)
             command_kind = _id_text_or_none(getattr(command, "kind", None))
-        if command_kind not in _REPOSITORY_DENY_COMMANDS:
+        if command_kind is None or command_kind not in _REPOSITORY_DENY_COMMANDS:
             continue
         status_token = _id_text_or_none(getattr(resolution, "status", None))
         if status_token != "rejected":
@@ -1303,7 +1765,6 @@ def repository_event_rows_from_resolutions(
     return tuple(rows)
 
 
-
 def knowledge_genealogy_harvest_from_run(
     *,
     knowledge_genealogy_spec: object | None,
@@ -1317,11 +1778,11 @@ def knowledge_genealogy_harvest_from_run(
     when the genealogy object is absent.
     """
     if knowledge_genealogy_spec is None:
-        _LOG.debug(
-            "knowledge_genealogy_harvest_skip reason_code=genealogy_absent"
-        )
+        _LOG.debug("knowledge_genealogy_harvest_skip reason_code=genealogy_absent")
         return None
-    audits = () if practical_knowledge_audits is None else tuple(practical_knowledge_audits)
+    audits = (
+        () if practical_knowledge_audits is None else tuple(practical_knowledge_audits)
+    )
     deaths = dict(death_ticks or {})
     if events is not None:
         derived = _death_ticks_from_events(events)
@@ -1353,6 +1814,7 @@ def knowledge_genealogy_harvest_from_run(
         "origin_counts": origin_counts,
     }
 
+
 def knowledge_repository_harvest_from_run(
     *,
     knowledge_repositories_spec: object | None,
@@ -1366,18 +1828,14 @@ def knowledge_repository_harvest_from_run(
     Returns None when the repository object is absent. Never imports world._*.
     """
     if knowledge_repositories_spec is None:
-        _LOG.debug(
-            "knowledge_repository_harvest_skip reason_code=repository_absent"
-        )
+        _LOG.debug("knowledge_repository_harvest_skip reason_code=repository_absent")
         return None
     objective_rows = (
         ()
         if repositories is None
         else repository_objective_rows_from_repositories(repositories)
     )
-    event_rows = (
-        () if events is None else repository_event_rows_from_events(events)
-    )
+    event_rows = () if events is None else repository_event_rows_from_events(events)
     if resolutions is not None:
         event_rows = event_rows + repository_event_rows_from_resolutions(resolutions)
     deaths: dict[str, int] = (
@@ -1388,13 +1846,7 @@ def knowledge_repository_harvest_from_run(
             "knowledge_repository_harvest_empty "
             "reason_code=repository_enabled_rows_empty "
             "repository_count=%s event_count=%s",
-            0
-            if repositories is None
-            else (
-                len(repositories)
-                if not isinstance(repositories, Mapping)
-                else len(repositories)
-            ),
+            0 if repositories is None else len(repositories),
             0 if events is None else len(events),
         )
     _LOG.debug(
@@ -1435,9 +1887,7 @@ def durable_record_harvest_from_run(
         if artifacts is None
         else artifact_objective_rows_from_artifacts(artifacts, tick=tick)
     )
-    event_rows = (
-        () if events is None else durable_record_event_rows_from_events(events)
-    )
+    event_rows = () if events is None else durable_record_event_rows_from_events(events)
     deaths: dict[str, int] = (
         {} if events is None else death_ticks_by_body_from_events(events)
     )
@@ -1445,9 +1895,7 @@ def durable_record_harvest_from_run(
         _LOG.warning(
             "durable_record_harvest_empty reason_code=durable_enabled_rows_empty "
             "artifact_count=%s event_count=%s",
-            0 if artifacts is None else (
-                len(artifacts) if not isinstance(artifacts, Mapping) else len(artifacts)
-            ),
+            0 if artifacts is None else len(artifacts),
             0 if events is None else len(events),
         )
     _LOG.debug(
@@ -1497,8 +1945,9 @@ def artifact_memory_rows_from_traces(
                 for token in concept_tokens
             )
         forgotten = bool(getattr(trace, "forgotten", False))
-        if getattr(trace, "soft_forgotten", None) is not None:
-            forgotten = bool(trace.soft_forgotten)
+        soft_forgotten = getattr(trace, "soft_forgotten", None)
+        if soft_forgotten is not None:
+            forgotten = bool(soft_forgotten)
         strength = getattr(trace, "strength", None)
         if strength is not None:
             try:
@@ -1532,9 +1981,7 @@ def artifact_interpretation_rows_from_ledgers(
     rows: list[dict[str, object]] = []
     for ledger in ledgers:
         owner = _id_text(getattr(ledger, "owner_id", None))
-        entries = getattr(
-            ledger, "interpretations", getattr(ledger, "entries", ())
-        )
+        entries = getattr(ledger, "interpretations", getattr(ledger, "entries", ()))
         if not isinstance(entries, tuple):
             raise TypeError("artifact_interpretation_rows_from_ledgers: invalid_ledger")
         for entry in entries:
@@ -1582,9 +2029,7 @@ def claim_rows_from_ledgers(
                     strength=float(head.strength),
                 )
             )
-    _LOG.debug(
-        "spatial_claim_rows_built ledgers=%s rows=%s", len(ledgers), len(rows)
-    )
+    _LOG.debug("spatial_claim_rows_built ledgers=%s rows=%s", len(ledgers), len(rows))
     return tuple(rows)
 
 
@@ -1632,9 +2077,7 @@ def _event_location_id(event: object, details: object, kind: str) -> str | None:
     if occurrence is None:
         return None
     if kind == "move":
-        found = _id_text_or_none(
-            getattr(occurrence, "destination_location_id", None)
-        )
+        found = _id_text_or_none(getattr(occurrence, "destination_location_id", None))
         if found is not None:
             return found
     return _id_text_or_none(getattr(occurrence, "origin_location_id", None))
@@ -1782,17 +2225,13 @@ def historical_memory_harvest_from_run(
     )
 
     if layers_spec is None:
-        _LOG.debug(
-            "historical_memory_harvest_skip reason_code=layers_absent"
-        )
+        _LOG.debug("historical_memory_harvest_skip reason_code=layers_absent")
         return None
     if isinstance(as_of_tick, bool) or type(as_of_tick) is not int or as_of_tick < 0:
         raise ValueError("as_of_tick: out_of_range")
 
     audits = tuple(cultural_feature_audits or ())
-    include_cultural = bool(
-        getattr(layers_spec, "include_cultural_features", True)
-    )
+    include_cultural = bool(getattr(layers_spec, "include_cultural_features", True))
     if include_cultural and not audits:
         _LOG.warning(
             "historical_memory_harvest_empty_audits "
@@ -1867,9 +2306,13 @@ def historical_memory_harvest_from_run(
         elif digest is not None:
             _add_source(digest, cultural_digest_token=digest)
 
-    ticks = tuple(transition_ticks) if transition_ticks is not None else (
-        *sorted(set(deaths.values())),
-        as_of_tick,
+    ticks = (
+        tuple(transition_ticks)
+        if transition_ticks is not None
+        else (
+            *sorted(set(deaths.values())),
+            as_of_tick,
+        )
     )
     harvest = HistoricalMemoryHarvest(
         as_of_tick=as_of_tick,

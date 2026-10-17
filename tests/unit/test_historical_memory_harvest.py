@@ -71,9 +71,7 @@ def test_harvest_builds_from_audits_and_deaths(caplog) -> None:
                     source_event_id="evt-1", agent_id="w1", participant=True
                 ),
             ),
-            events=(
-                SimpleNamespace(kind="Died", agent_id="w1", tick=3, details=None),
-            ),
+            events=(SimpleNamespace(kind="Died", agent_id="w1", tick=3, details=None),),
             communication_edges=(
                 SimpleNamespace(speaker_id="w1", listener_id="c1", at_tick=2),
             ),
@@ -112,9 +110,7 @@ def test_opt_in_attaches_harvest_and_assemble_emits_families() -> None:
         layers_spec=layers,
         as_of_tick=3,
         witness_rows=(
-            SimpleNamespace(
-                source_event_id="evt-1", agent_id="w1", participant=True
-            ),
+            SimpleNamespace(source_event_id="evt-1", agent_id="w1", participant=True),
         ),
         cultural_feature_audits=(),
     )
@@ -124,9 +120,7 @@ def test_opt_in_attaches_harvest_and_assemble_emits_families() -> None:
         input_revision="rev-hm",
         window_end=3,
     )
-    updated = inputs_with_opt_in_metric_rows(
-        base, historical_memory_harvest=harvest
-    )
+    updated = inputs_with_opt_in_metric_rows(base, historical_memory_harvest=harvest)
     assert updated.historical_memory_harvest is harvest
     bundle = assemble_metric_documents(updated)
     families = {doc.metric_family for doc in bundle.documents}

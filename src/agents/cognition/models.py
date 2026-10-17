@@ -13,7 +13,18 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
+    from agents.cognition.competence import CompetenceSelfModel
+    from agents.cognition.consolidation import OfflineConsolidationPlan
+    from agents.cognition.production import RecipeBeliefSet
+    from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
+    from agents.cognition.subjective_value import SubjectiveValuationLedger
+    from agents.cognition.theory_of_mind import TheoryOfMind
+    from agents.cognition.world_model import CausalWorldModel
+    from social.relationships import DirectedRelationshipProfile
 
 from agents.cognition.identity import (
     IDENTITY_POLICY_ID,
@@ -709,14 +720,14 @@ class SubjectiveSnapshot:
     memories: tuple[MemoryTrace, ...]
     legacy_beliefs: tuple[Belief, ...]
     semantic_beliefs: tuple[SemanticBelief, ...]
-    relationships: tuple[object, ...] = ()
+    relationships: tuple[DirectedRelationshipProfile, ...] = ()
     goals: tuple[Goal, ...] = ()
     drives: DriveProfile | None = None
     inbox: tuple[CommunicationEnvelope, ...] = ()
     social_identity: OwnerSafeSocialIdentity | None = None
     emotional_state: AgentEmotionalState | None = None
-    causal_world_model: object | None = None
-    theory_of_mind: object | None = None
+    causal_world_model: CausalWorldModel | None = None
+    theory_of_mind: TheoryOfMind | None = None
     reputation: object | None = None
     territorial_claims: object | None = None
     group_formation: object | None = None
@@ -728,15 +739,15 @@ class SubjectiveSnapshot:
     developmental_knowledge: object | None = None
     mentorship: object | None = None
     cultural_features: object | None = None
-    competence_model: object | None = None
+    competence_model: CompetenceSelfModel | None = None
     practical_knowledge: object | None = None
     declarative_advice: object | None = None
-    recipe_beliefs: object | None = None
+    recipe_beliefs: RecipeBeliefSet | None = None
     possession_legitimacy: object | None = None
     structured_commitments: object | None = None
-    subjective_valuations: object | None = None
-    scarcity_beliefs: object | None = None
-    acceptance_memories: object | None = None
+    subjective_valuations: SubjectiveValuationLedger | None = None
+    scarcity_beliefs: ScarcityBeliefLedger | None = None
+    acceptance_memories: AcceptanceMemoryLedger | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -920,8 +931,10 @@ class SubjectiveSnapshot:
             self.owner_id,
             field_name="SubjectiveSnapshot.structured_commitments",
         )
-        from agents.cognition.subjective_value import require_owner_subjective_valuations
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+        from agents.cognition.subjective_value import (
+            require_owner_subjective_valuations,
+        )
 
         require_owner_subjective_valuations(
             self.subjective_valuations,
@@ -993,7 +1006,9 @@ class SubjectiveSnapshot:
             self.owner_id,
             field_name="SubjectiveSnapshot.cultural_features",
         )
-        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+        from agents.cognition.practical_knowledge import (
+            require_owner_practical_knowledge,
+        )
 
         require_owner_practical_knowledge(
             self.practical_knowledge,
@@ -1310,19 +1325,19 @@ def episode_facts(context: RetrievedMemoryContext) -> tuple[EpisodeFacts, ...]:
                 episode_id=item.episode_id,
             )
         )
-    for item in context.reconstructions:
+    for reconstructed in context.reconstructions:
         facts.append(
             EpisodeFacts(
-                owner_id=item.owner_id,
-                concepts=item.concepts,
-                entities=item.entities,
-                relations=item.relations,
-                confidence=item.confidence,
-                emotional_salience=item.emotional_salience,
-                source_memory_ids=item.source_memory_ids,
-                narrative=item.narrative,
+                owner_id=reconstructed.owner_id,
+                concepts=reconstructed.concepts,
+                entities=reconstructed.entities,
+                relations=reconstructed.relations,
+                confidence=reconstructed.confidence,
+                emotional_salience=reconstructed.emotional_salience,
+                source_memory_ids=reconstructed.source_memory_ids,
+                narrative=reconstructed.narrative,
                 episode_kind="reconstructed",
-                episode_id=item.reconstruction_id.value,
+                episode_id=reconstructed.reconstruction_id.value,
             )
         )
     return tuple(facts)
@@ -1481,13 +1496,13 @@ class RetrievedMemoryContext:
             raise ValueError(
                 "RetrievedMemoryContext.reference_episodes exceeds maximum length"
             )
-        for item in references:
-            if type(item) is not ReferenceEpisode:
+        for reference in references:
+            if type(reference) is not ReferenceEpisode:
                 raise TypeError(
                     "RetrievedMemoryContext.reference_episodes entries must be "
                     "ReferenceEpisode"
                 )
-            if item.owner_id != self.owner_id:
+            if reference.owner_id != self.owner_id:
                 raise ValueError(
                     "RetrievedMemoryContext reference episode owner mismatch"
                 )
@@ -3898,8 +3913,10 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.structured_commitments",
         )
-        from agents.cognition.subjective_value import require_owner_subjective_valuations
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+        from agents.cognition.subjective_value import (
+            require_owner_subjective_valuations,
+        )
 
         require_owner_subjective_valuations(
             self.subjective_valuations,
@@ -3971,7 +3988,9 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.cultural_features",
         )
-        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+        from agents.cognition.practical_knowledge import (
+            require_owner_practical_knowledge,
+        )
 
         require_owner_practical_knowledge(
             self.practical_knowledge,
@@ -4057,7 +4076,7 @@ class CognitiveLoopResult:
     pending_accesses: tuple[MemoryAccessReceipt, ...] = ()
     pending_reconsolidation: ReconsolidationIntent | None = None
     pending_semanticization: BeliefRevisionRequest | None = None
-    offline_consolidation: object | None = None
+    offline_consolidation: OfflineConsolidationPlan | None = None
     reflection: object | None = None
     identity_revisions: tuple[BeliefRevisionRequest, ...] = ()
     identity_dissonance: tuple[IdentityDissonanceNotice, ...] = ()
@@ -4155,8 +4174,10 @@ class CognitiveLoopResult:
             self.agent_id,
             field_name="CognitiveLoopResult.structured_commitments",
         )
-        from agents.cognition.subjective_value import require_owner_subjective_valuations
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
+        from agents.cognition.subjective_value import (
+            require_owner_subjective_valuations,
+        )
 
         require_owner_subjective_valuations(
             self.subjective_valuations,
@@ -4228,7 +4249,9 @@ class CognitiveLoopResult:
             self.agent_id,
             field_name="CognitiveLoopResult.cultural_features",
         )
-        from agents.cognition.practical_knowledge import require_owner_practical_knowledge
+        from agents.cognition.practical_knowledge import (
+            require_owner_practical_knowledge,
+        )
 
         require_owner_practical_knowledge(
             self.practical_knowledge,

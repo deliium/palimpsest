@@ -46,6 +46,7 @@ from simulation.inspection import (
     constrain_events_to_manifest,
 )
 from simulation.models import RunId
+from simulation.persistence import WorldEvent
 
 __all__ = [
     "SqlAlchemyInspectionEvidenceLoader",
@@ -124,7 +125,7 @@ class SqlAlchemyObjectiveEvidenceLoader:
                 .limit(limit + 1)
             )
             rows = list((await session.execute(stmt)).scalars().all())
-            decoded: list[object] = []
+            decoded: list[WorldEvent] = []
             for row in rows:
                 event = event_from_orm(row)
                 if type(event).__name__ != "WorldEvent":
@@ -438,7 +439,7 @@ class SqlAlchemySubjectiveEvidenceLoader:
                         created_tick=int(last.created_tick), row_id=last.memory_id
                     )
             else:
-                rows = list(
+                belief_rows = list(
                     (
                         await session.execute(
                             select(SemanticBeliefOrm)
@@ -455,13 +456,13 @@ class SqlAlchemySubjectiveEvidenceLoader:
                     .scalars()
                     .all()
                 )
-                filtered = [
+                filtered_beliefs = [
                     row
-                    for row in rows
+                    for row in belief_rows
                     if (int(row.created_tick), row.belief_id) > (after_tick, after_id)
                 ]
-                page_rows = filtered[:limit]
-                has_more = len(filtered) > limit
+                page_beliefs = filtered_beliefs[:limit]
+                has_more = len(filtered_beliefs) > limit
                 items = tuple(
                     SubjectiveGraphNodeSummary(
                         node_id=row.belief_id,
@@ -471,13 +472,14 @@ class SqlAlchemySubjectiveEvidenceLoader:
                         target_id=row.subject_agent_id or row.subject_entity_id,
                         lineage_ref_ids=(row.current_revision_id,),
                     )
-                    for row in page_rows
+                    for row in page_beliefs
                 )
                 next_cursor = None
-                if has_more and page_rows:
-                    last = page_rows[-1]
+                if has_more and page_beliefs:
+                    last_belief = page_beliefs[-1]
                     next_cursor = MemoryKeysetCursor(
-                        created_tick=int(last.created_tick), row_id=last.belief_id
+                        created_tick=int(last_belief.created_tick),
+                        row_id=last_belief.belief_id,
                     )
         page = SubjectiveGraphSummaryPage(
             run_id=run_id,
@@ -626,7 +628,7 @@ class SqlAlchemySubjectiveEvidenceLoader:
         after: MemoryKeysetCursor | None,
         limit: int,
         manifest: EvidenceManifest | None,
-        orm_cls: type,
+        orm_cls: type[SemanticBeliefOrm] | type[DirectedRelationshipOrm],
         id_attr: str,
         tick_attr: str,
         high_water_field: str,
@@ -646,7 +648,7 @@ class SqlAlchemySubjectiveEvidenceLoader:
             await _require_run(
                 session, run_id=run_id, operation=f"load_{query_type}_page"
             )
-            rows = list(
+            rows: list[object] = list(
                 (
                     await session.execute(
                         select(orm_cls)
@@ -753,9 +755,7 @@ def create_inspection_evidence_loader(
     return SqlAlchemyInspectionEvidenceLoader(session_factory)
 
 
-async def _require_run(
-    session: AsyncSession, *, run_id: str, operation: str
-) -> None:
+async def _require_run(session: AsyncSession, *, run_id: str, operation: str) -> None:
     row = await session.get(SimulationRunOrm, run_id)
     if row is None:
         _LOG.error(

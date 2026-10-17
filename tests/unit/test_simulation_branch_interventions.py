@@ -158,9 +158,7 @@ def test_agent_architecture_expands_without_architecture_id_key() -> None:
     document = json.loads(encode_runner_config(result.runner_config).decode("utf-8"))
     assert "architecture_id" not in document
     assert "architecture_id" not in document["agents"][0]["cognition"]
-    assert (
-        result.runner_config.agents[0].cognition.memory_mode is MemoryMode.REFERENCE
-    )
+    assert result.runner_config.agents[0].cognition.memory_mode is MemoryMode.REFERENCE
 
 
 def test_agent_architecture_unknown_fails_closed() -> None:
@@ -272,9 +270,7 @@ async def test_belief_patch_on_in_memory_clone_port() -> None:
             reconstruction_count=0,
         ),
     )
-    await port.clone_as_of(
-        parent_run_id=parent, child_run_id=child, fork_tick=3
-    )
+    await port.clone_as_of(parent_run_id=parent, child_run_id=child, fork_tick=3)
     child_snap = port.child_snapshot(run_id=child, owner_id=owner)
     assert child_snap is not None
     patched = apply_belief_patch(

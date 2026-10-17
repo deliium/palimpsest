@@ -125,9 +125,7 @@ def compute_causal_world_model_metrics(
         )
         return CausalWorldModelMetricResult(document=document, comparisons=())
     errors = [
-        item.absolute_error
-        for item in comparisons
-        if item.absolute_error is not None
+        item.absolute_error for item in comparisons if item.absolute_error is not None
     ]
     maximum = max(errors) if errors else 0.0
     values = {

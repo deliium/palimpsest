@@ -142,9 +142,7 @@ async def test_metric_document_idempotent_and_linked_to_manifest(
     database_resources: DatabaseResources,
 ) -> None:
     run_id = await _seed_run(database_resources)
-    evidence = create_scientific_evidence_repository(
-        database_resources.session_factory
-    )
+    evidence = create_scientific_evidence_repository(database_resources.session_factory)
     truth = create_truth_spec_repository(database_resources.session_factory)
     sets = create_metric_set_repository(database_resources.session_factory)
     docs = create_metric_document_repository(database_resources.session_factory)

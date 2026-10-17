@@ -12,7 +12,7 @@ import logging
 import math
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Final
+from typing import Final, Protocol, cast
 
 from analysis.models import (
     METRIC_DOCUMENT_SCHEMA_VERSION,
@@ -49,9 +49,7 @@ _LAYER: Final[str] = "research_analytics"
 class DevelopmentalLearningMetricError(ValueError):
     def __init__(self, reason_code: str) -> None:
         self.reason_code = reason_code
-        _LOG.error(
-            "developmental_learning_metric_invalid reason_code=%s", reason_code
-        )
+        _LOG.error("developmental_learning_metric_invalid reason_code=%s", reason_code)
         super().__init__(reason_code)
 
 
@@ -90,16 +88,28 @@ def _document(
     )
 
 
-def _audit_rows(audits: Sequence[object]) -> tuple[object, ...]:
+class _OwnerIdentity(Protocol):
+    @property
+    def value(self) -> str: ...
+
+
+class _AcquisitionRow(Protocol):
+    @property
+    def owner_id(self) -> _OwnerIdentity: ...
+    @property
+    def exposures_to_acquisition(self) -> int | None: ...
+
+
+def _audit_rows(audits: Sequence[object]) -> tuple[_AcquisitionRow, ...]:
     if isinstance(audits, (set, frozenset, Mapping, str)) or not isinstance(
         audits, Sequence
     ):
         raise DevelopmentalLearningMetricError("audits_not_ordered")
-    rows: list[object] = []
+    rows: list[_AcquisitionRow] = []
     for audit in audits:
         if type(audit).__name__ != "DevelopmentalAcquisitionAudit":
             raise DevelopmentalLearningMetricError("invalid_audit_type")
-        rows.append(audit)
+        rows.append(cast(_AcquisitionRow, audit))
     return tuple(rows)
 
 
@@ -153,20 +163,14 @@ def compute_developmental_acquisition(
         else sum(len(domains) for domains in agents.values()) / len(agents)
     )
     mean_conf = 0.0 if not acquired else band_mass / len(acquired)
-    mean_ttf = (
-        0.0
-        if not first_tick
-        else sum(first_tick.values()) / len(first_tick)
-    )
+    mean_ttf = 0.0 if not first_tick else sum(first_tick.values()) / len(first_tick)
     exposure_samples = [
-        int(row.exposures_to_acquisition)
+        row.exposures_to_acquisition
         for row in acquired
-        if getattr(row, "exposures_to_acquisition", None) is not None
+        if row.exposures_to_acquisition is not None
     ]
     mean_exposures = (
-        0.0
-        if not exposure_samples
-        else sum(exposure_samples) / len(exposure_samples)
+        0.0 if not exposure_samples else sum(exposure_samples) / len(exposure_samples)
     )
     values: dict[str, object] = {
         "layer": _LAYER,

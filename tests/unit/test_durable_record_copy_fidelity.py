@@ -13,7 +13,9 @@ from world.durable_copy import apply_copy_fidelity
 pytestmark = pytest.mark.unit
 
 
-def _content(*marks: str, relations: tuple[ArtifactRelation, ...] = ()) -> ArtifactContent:
+def _content(
+    *marks: str, relations: tuple[ArtifactRelation, ...] = ()
+) -> ArtifactContent:
     return ArtifactContent(marks=marks, relations=relations)
 
 

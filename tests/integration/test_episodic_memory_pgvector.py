@@ -455,6 +455,147 @@ async def test_retrieve_respects_candidate_cap(
     assert len(result.hits) <= 5
 
 
+async def test_sql_and_memory_destination_lane_recall_parity(
+    database_resources: DatabaseResources,
+) -> None:
+    from dataclasses import replace
+
+    from agents.cognition.memory import ScopedMemoryRetriever
+    from agents.cognition.models import (
+        CognitiveLoopInput,
+        InternalAgentState,
+        InterpretedPerception,
+    )
+    from agents.cognition.regional_migration import destination_memory_trace
+    from memory.models import MemoryReconstructionPolicy
+    from world.observations import (
+        Observation,
+        ObservedRegionalContext,
+        ObservedSelf,
+        VisibleExit,
+    )
+
+    run_id = await _prepare_run(database_resources)
+    owner = AgentId("agent-1")
+    scope = MemoryScope(run_id=MemoryRunId(run_id), owner_id=owner)
+    policy = _policy()
+    sql = create_memory_service(
+        scope=scope,
+        session_factory=database_resources.session_factory,
+        scoring_policy=policy,
+    )
+    reference = InMemoryMemoryService(scope)
+    body = _alive()
+    observation = Observation(
+        world_id=WorldId("world-1"),
+        observer_id=body.entity_id,
+        revision=WorldRevision(0),
+        tick=10,
+        self_body=ObservedSelf(
+            entity_id=body.entity_id,
+            location_id=body.location_id,
+            health=body.health,
+            hunger=body.hunger,
+            thirst=body.thirst,
+            fatigue=body.fatigue,
+            temperature=body.temperature,
+            inventory=body.inventory,
+            life_status=body.life_status,
+            carry_capacity=body.carry_capacity,
+        ),
+        exits=(
+            VisibleExit(
+                destination_id=EntityId("loc-2"),
+                name="Near",
+                travel_duration_ticks=2,
+                fatigue_cost=3.0,
+                destination_region_id="north",
+            ),
+        ),
+        regional_context=ObservedRegionalContext(None, None),
+    )
+    visited_body = replace(body, location_id=EntityId("loc-2"))
+    visited_observation = Observation(
+        world_id=observation.world_id,
+        observer_id=visited_body.entity_id,
+        revision=observation.revision,
+        tick=4,
+        self_body=ObservedSelf(
+            entity_id=visited_body.entity_id,
+            location_id=visited_body.location_id,
+            health=visited_body.health,
+            hunger=visited_body.hunger,
+            thirst=visited_body.thirst,
+            fatigue=visited_body.fatigue,
+            temperature=visited_body.temperature,
+            inventory=visited_body.inventory,
+            life_status=visited_body.life_status,
+            carry_capacity=visited_body.carry_capacity,
+        ),
+        exits=(
+            VisibleExit(
+                destination_id=EntityId("loc-3"),
+                name="Far",
+                travel_duration_ticks=4,
+                fatigue_cost=7.0,
+                destination_region_id="far",
+            ),
+        ),
+        regional_context=ObservedRegionalContext("north", "North"),
+    )
+    local_trace = _trace(
+        memory_id="local-lane", owner_id=owner.value, tick=9, concept="local shelter"
+    )
+    visited_trace = destination_memory_trace(
+        owner_id=owner,
+        observer_body_id=visited_body.entity_id,
+        observation=visited_observation,
+        exit_view=visited_observation.exits[0],
+    )
+    writes = MemoryMutationBatch(writes=(local_trace, visited_trace))
+    await sql.apply(writes)
+    await reference.apply(writes)
+    loop_input = CognitiveLoopInput(
+        agent_id=owner,
+        observation=observation,
+        internal_state=InternalAgentState(owner_id=owner),
+    )
+    perception = InterpretedPerception(
+        owner_id=owner,
+        observer_id=body.entity_id,
+        tick=observation.tick,
+        revision=observation.revision,
+        life_status=body.life_status,
+        location_id=body.location_id,
+        claim_codes=(),
+        counts={},
+        confidence=1.0,
+    )
+
+    async def retrieve(service):
+        retriever = ScopedMemoryRetriever(
+            service,
+            scoring_policy=policy,
+            reconstruction_policy=MemoryReconstructionPolicy(
+                policy_id="regional-recall", version="1", max_source_traces=4
+            ),
+            destination_memory_limit=2,
+            destination_hop_limit=1,
+        )
+        return await retriever.retrieve(loop_input, perception)
+
+    sql_context = await retrieve(sql)
+    memory_context = await retrieve(reference)
+    assert sql_context.memory_ids == memory_context.memory_ids
+    assert sql_context.ranked_hits == memory_context.ranked_hits
+    assert sql_context.reconstructions == memory_context.reconstructions
+    assert sql_context.pending_accesses == memory_context.pending_accesses
+    assert set(sql_context.memory_ids) == {
+        local_trace.memory_id,
+        visited_trace.memory_id,
+    }
+
+
 async def test_retrieve_rejects_limit_above_max_query_limit() -> None:
     with pytest.raises(ValueError, match="out_of_range"):
         MemoryRetrieveRequest(

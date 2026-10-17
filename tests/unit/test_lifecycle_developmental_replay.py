@@ -94,18 +94,14 @@ def _obs_lifecycle_payload(engine: WorldEngine) -> tuple[tuple, ...]:
 
 
 def _assigned_lifespans(engine: WorldEngine) -> tuple[int, ...]:
-    return tuple(
-        record.assigned_lifespan_ticks for record in engine.lifecycle_records
-    )
+    return tuple(record.assigned_lifespan_ticks for record in engine.lifecycle_records)
 
 
 @pytest.mark.asyncio
 async def test_developmental_live_vs_restored_observation_parity() -> None:
     _LOG.debug("case_id=dev_restore_observation_parity")
     config = _developmental_config(seed=101)
-    live = await SimulationRunner.from_config(
-        config, run_id=RunId("run-dev-live")
-    )
+    live = await SimulationRunner.from_config(config, run_id=RunId("run-dev-live"))
     for _ in range(7):
         await live.run_tick()
     live_payload = _obs_lifecycle_payload(live.engine)

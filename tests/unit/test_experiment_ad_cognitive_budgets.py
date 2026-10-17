@@ -36,8 +36,7 @@ def test_experiment_ad_arms_share_world_differ_only_by_limits() -> None:
     for agent in low.agents:
         assert agent.cognition.cognitive_budget_mode is CognitiveBudgetMode.ENFORCED
         assert (
-            agent.cognition.prospective_mode
-            is ProspectiveImaginationMode.DETERMINISTIC
+            agent.cognition.prospective_mode is ProspectiveImaginationMode.DETERMINISTIC
         )
         limits = agent.cognition.cognitive_budget_limits
         assert limits is not None
@@ -107,9 +106,9 @@ async def test_experiment_ad_arms_low_charges_strictly_fewer() -> None:
     # Objective receipt schema stays closed / compatible across arms.
     assert low_result.finalized_tick_receipts
     assert high_result.finalized_tick_receipts
-    assert {
-        type(item).__name__ for item in low_result.finalized_tick_receipts
-    } == {type(item).__name__ for item in high_result.finalized_tick_receipts}
+    assert {type(item).__name__ for item in low_result.finalized_tick_receipts} == {
+        type(item).__name__ for item in high_result.finalized_tick_receipts
+    }
     doc = compute_cognitive_budget_metrics(
         (),
         run_id="run-ad-compare",

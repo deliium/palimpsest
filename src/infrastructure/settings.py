@@ -173,9 +173,7 @@ class Settings(BaseSettings):
     api_agent_visible_credential: SecretStr | None = Field(default=None, repr=False)
     api_debug_enabled: bool = False
     api_debug_credential: SecretStr | None = Field(default=None, repr=False)
-    api_max_page_size: Annotated[
-        int, Field(ge=1, le=1000)
-    ] = _DEFAULT_API_MAX_PAGE_SIZE
+    api_max_page_size: Annotated[int, Field(ge=1, le=1000)] = _DEFAULT_API_MAX_PAGE_SIZE
     api_stream_queue_size: Annotated[int, Field(ge=1, le=10_000)] = (
         _DEFAULT_API_STREAM_QUEUE_SIZE
     )

@@ -91,9 +91,7 @@ def _engine() -> WorldEngine:
             locations=(make_location(),),
             bodies=(alice,),
             weather=(make_weather(),),
-            registrations=(
-                AgentRegistration(AgentId("agent-1"), alice.entity_id),
-            ),
+            registrations=(AgentRegistration(AgentId("agent-1"), alice.entity_id),),
         ),
         run_id=RunId(_RUN),
         collective_projects_active=True,

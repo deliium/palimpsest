@@ -61,13 +61,9 @@ def resolve_experiment(
     actor = state.bodies[actor_id]
     operand_a = _reachable_operand(state, actor, operand_a_id)
     operand_b = (
-        None
-        if operand_b_id is None
-        else _reachable_operand(state, actor, operand_b_id)
+        None if operand_b_id is None else _reachable_operand(state, actor, operand_b_id)
     )
-    missing = operand_a is None or (
-        operand_b_id is not None and operand_b is None
-    )
+    missing = operand_a is None or (operand_b_id is not None and operand_b is None)
     if missing:
         result_class = ExperimentOutcomeClass.FAILURE
         delta = ExperimentDeltaKind.NONE
@@ -84,11 +80,7 @@ def resolve_experiment(
         delta = law.delta
         product_id = law.product_id
         harm_band = law.harm_band
-    mode = (
-        DiscoveryMode.DELIBERATE
-        if hypothesis_id
-        else DiscoveryMode.ACCIDENTAL
-    )
+    mode = DiscoveryMode.DELIBERATE if hypothesis_id else DiscoveryMode.ACCIDENTAL
     next_state, created_id, health_delta, resulting_health, applied = _apply_delta(
         state,
         actor=actor,
@@ -303,13 +295,9 @@ def _consume(state: WorldState, entity_id: EntityId) -> WorldState:
             holder = bodies[item.holder_id]
             bodies[item.holder_id] = copy_body(
                 holder,
-                inventory=tuple(
-                    held for held in holder.inventory if held != entity_id
-                ),
+                inventory=tuple(held for held in holder.inventory if held != entity_id),
             )
-        return rebuild_world_state(
-            state, items=items, bodies=bodies, tool_marks=marks
-        )
+        return rebuild_world_state(state, items=items, bodies=bodies, tool_marks=marks)
     if entity_id in state.resources:
         resource = state.resources[entity_id]
         if resource.quantity <= 0.0:
@@ -348,15 +336,11 @@ def _emit_item(
     items[created_id] = created
     bodies = dict(state.bodies)
     actor = bodies[actor_id]
-    bodies[actor_id] = copy_body(
-        actor, inventory=(*actor.inventory, created_id)
-    )
+    bodies[actor_id] = copy_body(actor, inventory=(*actor.inventory, created_id))
     marks = dict(state.tool_marks)
     if output.tool_role is not None:
         marks[created_id] = ToolMark(created_id, output.tool_role)
-    return rebuild_world_state(
-        state, items=items, bodies=bodies, tool_marks=marks
-    )
+    return rebuild_world_state(state, items=items, bodies=bodies, tool_marks=marks)
 
 
 def _set_health(state: WorldState, actor_id: EntityId, resulting: float) -> WorldState:

@@ -293,14 +293,14 @@ def compute_belief_accuracy(
 def _kaplan_meier_median(
     durations: Sequence[float], censored: Sequence[bool]
 ) -> float | None:
-    """Kaplan–Meier median survival time; None if unidentified."""
+    """Kaplan-Meier median survival time; None if unidentified."""
     if not durations:
         return None
     pairs = sorted(zip(durations, censored, strict=True), key=lambda item: item[0])
     n = len(pairs)
     survival = 1.0
     at_risk = n
-    for index, (duration, is_censored) in enumerate(pairs):
+    for index, (duration, _is_censored) in enumerate(pairs):
         if at_risk <= 0:
             break
         # Events at this time: uncensored with this duration.

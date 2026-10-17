@@ -97,9 +97,7 @@ def _reject(reason: str, candidate_count: int) -> None:
     )
 
 
-async def _generate(
-    beliefs: RecipeBeliefSet, *, provider: object, tick: int
-) -> str:
+async def _generate(beliefs: RecipeBeliefSet, *, provider: object, tick: int) -> str:
     rendered = render_prompt(
         _PROMPT,
         _PROMPT_VERSION,

@@ -72,10 +72,7 @@ def test_v3_scaffolding_and_v2_regression_profiles_on_base() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "flag_name",
-    (
-        "multi_polity_migration",
-        "institutional_economy",
-    ),
+    ("institutional_economy",),
 )
 async def test_unowned_v3_flag_fails_closed_at_from_config_while_encode_decode_ok(
     flag_name: str,

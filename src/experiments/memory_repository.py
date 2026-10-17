@@ -5,6 +5,7 @@ from __future__ import annotations
 from experiments.persistence import (
     ExperimentAssignmentRecord,
     ExperimentDefinitionRecord,
+    ExperimentMembership,
     ExperimentResultRecord,
 )
 
@@ -75,7 +76,7 @@ class InMemoryExperimentRecordRepository:
 
     async def get_membership(
         self, *, experiment_id: str, run_id: str
-    ):
+    ) -> ExperimentMembership | None:
         from experiments.persistence import ExperimentMembership
 
         for record in self._assignments.values():
@@ -88,7 +89,9 @@ class InMemoryExperimentRecordRepository:
                 )
         return None
 
-    async def get_membership_for_run(self, *, run_id: str):
+    async def get_membership_for_run(
+        self, *, run_id: str
+    ) -> ExperimentMembership | None:
         from experiments.persistence import ExperimentMembership
 
         for record in self._assignments.values():

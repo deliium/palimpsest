@@ -132,7 +132,7 @@ async def test_unowned_v3_flags_still_fail_closed_with_durable(
         _durable_config(),
         v3_capability_flags=V3CapabilityFlags(
             cultural_historical_memory=True,
-            multi_polity_migration=True,
+            institutional_economy=True,
         ),
     )
     with pytest.raises(RunnerConstructionError):

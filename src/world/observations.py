@@ -35,6 +35,7 @@ memory. Provenance is narrow: source kind plus tick/event correlation only.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -51,8 +52,8 @@ from world.artifacts import (
     require_durable_record_genre,
     require_record_integrity,
 )
-from world.communications import StructuredUtterance
 from world.collective_projects import PublicGoodAct
+from world.communications import StructuredUtterance
 from world.environment import HazardKind, Season, TemperatureBand
 from world.identifiers import (
     EntityId,
@@ -60,6 +61,7 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
     require_exact_nonneg_int,
+    require_stable_id,
 )
 from world.models import (
     AgentBody,
@@ -86,6 +88,7 @@ __all__ = [
     "CONTENT_VISIBILITY_THRESHOLD",
     "PERCEPTION_FIELD_ACCESS",
     "CoarseHealth",
+    "ExchangeVisibleHolding",
     "Observation",
     "ObservationAudienceRole",
     "ObservationContext",
@@ -94,17 +97,16 @@ __all__ = [
     "ObservationSourceKind",
     "ObservedArtifact",
     "ObservedCollectiveProject",
-    "ObservedProjectContribution",
     "ObservedCommunication",
     "ObservedDependencyNeed",
     "ObservedDependencyNeeds",
-    "ExchangeVisibleHolding",
     "ObservedItem",
     "ObservedItemPlacement",
     "ObservedKinshipVisible",
     "ObservedLifecycle",
     "ObservedLocation",
     "ObservedOccurrence",
+    "ObservedProjectContribution",
     "ObservedRepository",
     "ObservedResource",
     "ObservedSelf",
@@ -280,15 +282,112 @@ class ObservationProvenance:
 
 @dataclass(frozen=True, slots=True)
 class VisibleExit:
-    """Adjacent destination identity and name only."""
+    """Adjacent destination; regional travel metadata is opt-in and local."""
 
     destination_id: EntityId
     name: str
+    travel_duration_ticks: int | None = None
+    fatigue_cost: float | None = None
+    destination_region_id: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.destination_id) is not EntityId:
             raise TypeError("VisibleExit.destination_id must be EntityId")
         require_non_empty("VisibleExit.name", self.name)
+        if (self.travel_duration_ticks is None) != (self.fatigue_cost is None):
+            raise ValueError("VisibleExit travel duration and cost must be paired")
+        if self.travel_duration_ticks is not None:
+            if (
+                isinstance(self.travel_duration_ticks, bool)
+                or type(self.travel_duration_ticks) is not int
+                or self.travel_duration_ticks < 1
+            ):
+                raise ValueError("VisibleExit.travel_duration_ticks must be positive")
+            cost = self.fatigue_cost
+            if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+                raise ValueError(
+                    "VisibleExit.fatigue_cost must be finite and non-negative"
+                )
+            number = float(cost)
+            if not math.isfinite(number) or number < 0:
+                raise ValueError(
+                    "VisibleExit.fatigue_cost must be finite and non-negative"
+                )
+            object.__setattr__(self, "fatigue_cost", 0.0 if number == 0 else number)
+        if self.destination_region_id is not None:
+            object.__setattr__(
+                self,
+                "destination_region_id",
+                require_stable_id(
+                    "VisibleExit.destination_region_id", self.destination_region_id
+                ),
+            )
+
+
+class ObservedJourneyPhase(StrEnum):
+    PREPARATION = "preparation"
+    ARRIVAL_PENDING = "arrival_pending"
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedRegionalContext:
+    """The observer's local assigned region, or explicit unassigned coverage."""
+
+    region_id: str | None
+    label: str | None
+
+    def __post_init__(self) -> None:
+        if (self.region_id is None) != (self.label is None):
+            raise ValueError("ObservedRegionalContext id and label must be paired")
+        if self.region_id is not None:
+            object.__setattr__(
+                self, "region_id", require_stable_id("region_id", self.region_id)
+            )
+            assert self.label is not None
+            object.__setattr__(
+                self, "label", require_stable_id("region_label", self.label)
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedJourney:
+    """Personal journey status without remote topology or hidden world facts."""
+
+    origin_location_id: EntityId
+    destination_location_id: EntityId
+    origin_region_id: str | None
+    destination_region_id: str | None
+    start_tick: int
+    due_tick: int
+    arrival_wait_deadline_tick: int
+    phase: ObservedJourneyPhase
+    participant_count: int
+
+    def __post_init__(self) -> None:
+        if type(self.origin_location_id) is not EntityId:
+            raise TypeError("ObservedJourney.origin_location_id must be EntityId")
+        if type(self.destination_location_id) is not EntityId:
+            raise TypeError("ObservedJourney.destination_location_id must be EntityId")
+        for name in ("origin_region_id", "destination_region_id"):
+            value = getattr(self, name)
+            if value is not None:
+                object.__setattr__(self, name, require_stable_id(name, value))
+        for name in ("start_tick", "due_tick", "arrival_wait_deadline_tick"):
+            object.__setattr__(
+                self, name, require_exact_nonneg_int(name, getattr(self, name))
+            )
+        if self.due_tick < self.start_tick:
+            raise ValueError("ObservedJourney due_tick precedes start_tick")
+        if self.arrival_wait_deadline_tick < self.due_tick:
+            raise ValueError("ObservedJourney deadline precedes due_tick")
+        if type(self.phase) is not ObservedJourneyPhase:
+            raise TypeError("ObservedJourney.phase must be ObservedJourneyPhase")
+        if (
+            isinstance(self.participant_count, bool)
+            or type(self.participant_count) is not int
+            or self.participant_count < 1
+        ):
+            raise ValueError("ObservedJourney.participant_count must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,8 +472,7 @@ class ObservedLifecycle:
         )
         if self.dependency_status not in {item.value for item in DependencyStatus}:
             raise ValueError(
-                "ObservedLifecycle.dependency_status must be a closed "
-                "DependencyStatus"
+                "ObservedLifecycle.dependency_status must be a closed DependencyStatus"
             )
 
 
@@ -466,7 +564,9 @@ class ObservedDependencyNeeds:
                     "ObservedDependencyNeed"
                 )
             if item.need_id in seen:
-                raise ValueError("ObservedDependencyNeeds.needs must be unique by need_id")
+                raise ValueError(
+                    "ObservedDependencyNeeds.needs must be unique by need_id"
+                )
             seen.add(item.need_id)
             cleaned.append(item)
         ordered = tuple(sorted(cleaned, key=lambda row: row.need_id))
@@ -621,13 +721,15 @@ class ObservedArtifact:
             require_durable_record_genre(
                 self.record_genre, field_name="ObservedArtifact.record_genre"
             )
-        if self.parent_artifact_id is not None and type(
-            self.parent_artifact_id
-        ) is not EntityId:
+        if (
+            self.parent_artifact_id is not None
+            and type(self.parent_artifact_id) is not EntityId
+        ):
             raise TypeError("ObservedArtifact.parent_artifact_id must be EntityId")
-        if self.source_artifact_id is not None and type(
-            self.source_artifact_id
-        ) is not EntityId:
+        if (
+            self.source_artifact_id is not None
+            and type(self.source_artifact_id) is not EntityId
+        ):
             raise TypeError("ObservedArtifact.source_artifact_id must be EntityId")
         if self.copy_generation is not None:
             if (
@@ -709,9 +811,7 @@ class ObservedRepository:
                 "ObservedRepository.access_mode must be a non-empty str or None"
             )
         if self.structure_id is not None and type(self.structure_id) is not EntityId:
-            raise TypeError(
-                "ObservedRepository.structure_id must be EntityId or None"
-            )
+            raise TypeError("ObservedRepository.structure_id must be EntityId or None")
         if self.founder_ids is not None:
             if isinstance(self.founder_ids, (str, bytes)) or not isinstance(
                 self.founder_ids, Sequence
@@ -780,6 +880,7 @@ class ObservedSelf:
     lifecycle: ObservedLifecycle | None = None
     kinship_visible: ObservedKinshipVisible | None = None
     dependency_needs: ObservedDependencyNeeds | None = None
+    journey: ObservedJourney | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -816,6 +917,8 @@ class ObservedSelf:
             raise TypeError(
                 "ObservedSelf.dependency_needs must be ObservedDependencyNeeds or None"
             )
+        if self.journey is not None and type(self.journey) is not ObservedJourney:
+            raise TypeError("ObservedSelf.journey must be ObservedJourney or None")
         if isinstance(self.inventory, (set, frozenset, Mapping)):
             raise TypeError("ObservedSelf.inventory must be an ordered sequence")
         if isinstance(self.inventory, (str, bytes, bytearray)) or not isinstance(
@@ -843,6 +946,7 @@ def observed_self_from_body(
     lifecycle: ObservedLifecycle | None = None,
     kinship_visible: ObservedKinshipVisible | None = None,
     dependency_needs: ObservedDependencyNeeds | None = None,
+    journey: ObservedJourney | None = None,
 ) -> ObservedSelf:
     """Project an authoritative body into the explicit self observation DTO."""
     if type(body) is not AgentBody:
@@ -861,6 +965,7 @@ def observed_self_from_body(
         lifecycle=lifecycle,
         kinship_visible=kinship_visible,
         dependency_needs=dependency_needs,
+        journey=journey,
     )
 
 
@@ -1000,9 +1105,7 @@ class ObservationContext:
                         "ObservedLifecycle"
                     )
                 frozen[body_id] = view
-            object.__setattr__(
-                self, "lifecycle_by_body", MappingProxyType(frozen)
-            )
+            object.__setattr__(self, "lifecycle_by_body", MappingProxyType(frozen))
         if self.kinship_self_by_body is not None:
             if isinstance(self.kinship_self_by_body, (str, bytes)) or not isinstance(
                 self.kinship_self_by_body, Mapping
@@ -1011,17 +1114,17 @@ class ObservationContext:
                     "ObservationContext.kinship_self_by_body must be a mapping or None"
                 )
             kin_frozen: dict[EntityId, ObservedKinshipVisible] = {}
-            for body_id, view in self.kinship_self_by_body.items():
+            for body_id, kinship_view in self.kinship_self_by_body.items():
                 if type(body_id) is not EntityId:
                     raise TypeError(
                         "ObservationContext.kinship_self_by_body keys must be EntityId"
                     )
-                if type(view) is not ObservedKinshipVisible:
+                if type(kinship_view) is not ObservedKinshipVisible:
                     raise TypeError(
                         "ObservationContext.kinship_self_by_body values must be "
                         "ObservedKinshipVisible"
                     )
-                kin_frozen[body_id] = view
+                kin_frozen[body_id] = kinship_view
             object.__setattr__(
                 self, "kinship_self_by_body", MappingProxyType(kin_frozen)
             )
@@ -1043,30 +1146,28 @@ class ObservationContext:
                         "ObservationContext.kinship_agent_by_body values must be str"
                     )
                 agents[body_id] = agent_id
-            object.__setattr__(
-                self, "kinship_agent_by_body", MappingProxyType(agents)
-            )
+            object.__setattr__(self, "kinship_agent_by_body", MappingProxyType(agents))
         if self.dependency_needs_by_body is not None:
-            if isinstance(self.dependency_needs_by_body, (str, bytes)) or not isinstance(
-                self.dependency_needs_by_body, Mapping
-            ):
+            if isinstance(
+                self.dependency_needs_by_body, (str, bytes)
+            ) or not isinstance(self.dependency_needs_by_body, Mapping):
                 raise TypeError(
                     "ObservationContext.dependency_needs_by_body must be a mapping "
                     "or None"
                 )
             need_frozen: dict[EntityId, ObservedDependencyNeeds] = {}
-            for body_id, view in self.dependency_needs_by_body.items():
+            for body_id, needs_view in self.dependency_needs_by_body.items():
                 if type(body_id) is not EntityId:
                     raise TypeError(
                         "ObservationContext.dependency_needs_by_body keys must be "
                         "EntityId"
                     )
-                if type(view) is not ObservedDependencyNeeds:
+                if type(needs_view) is not ObservedDependencyNeeds:
                     raise TypeError(
                         "ObservationContext.dependency_needs_by_body values must be "
                         "ObservedDependencyNeeds"
                     )
-                need_frozen[body_id] = view
+                need_frozen[body_id] = needs_view
             object.__setattr__(
                 self, "dependency_needs_by_body", MappingProxyType(need_frozen)
             )
@@ -1226,6 +1327,7 @@ class Observation:
     temperature_band: TemperatureBand | None = None
     hazard_kinds: Sequence[HazardKind] | None = None
     exchange_visible_holdings: Sequence[ExchangeVisibleHolding] | None = None
+    regional_context: ObservedRegionalContext | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -1241,6 +1343,13 @@ class Observation:
         )
         if self.self_body is not None and type(self.self_body) is not ObservedSelf:
             raise TypeError("Observation.self_body must be ObservedSelf or None")
+        if (
+            self.regional_context is not None
+            and type(self.regional_context) is not ObservedRegionalContext
+        ):
+            raise TypeError(
+                "Observation.regional_context must be ObservedRegionalContext or None"
+            )
         object.__setattr__(
             self,
             "locations",
@@ -1377,6 +1486,15 @@ class Observation:
         )
         if self.self_body is not None and self.self_body.entity_id != self.observer_id:
             raise ValueError("Observation.self_body must match observer_id")
+        if self.regional_context is None and (
+            (self.self_body is not None and self.self_body.journey is not None)
+            or any(
+                exit_view.travel_duration_ticks is not None for exit_view in self.exits
+            )
+        ):
+            raise ValueError(
+                "regional journey and route facts require regional_context"
+            )
         _validate_ordered_ids(
             "Observation.locations",
             tuple(location.entity_id for location in self.locations),

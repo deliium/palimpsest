@@ -43,17 +43,11 @@ def test_max_hops_out_of_range() -> None:
 
 
 def test_generation_weight_out_of_range() -> None:
-    with pytest.raises(
-        ValueError, match="historical_memory_generation_weight_invalid"
-    ):
+    with pytest.raises(ValueError, match="historical_memory_generation_weight_invalid"):
         HistoricalMemoryLayersSpec(generation_distance_weight=-0.1)
-    with pytest.raises(
-        ValueError, match="historical_memory_generation_weight_invalid"
-    ):
+    with pytest.raises(ValueError, match="historical_memory_generation_weight_invalid"):
         HistoricalMemoryLayersSpec(generation_distance_weight=1.1)
-    with pytest.raises(
-        ValueError, match="historical_memory_generation_weight_invalid"
-    ):
+    with pytest.raises(ValueError, match="historical_memory_generation_weight_invalid"):
         HistoricalMemoryLayersSpec(generation_distance_weight=float("nan"))
 
 
@@ -65,9 +59,7 @@ def test_witness_definition_invalid() -> None:
 
 
 def test_query_selector_invalid() -> None:
-    with pytest.raises(
-        ValueError, match="historical_memory_query_selector_invalid"
-    ):
+    with pytest.raises(ValueError, match="historical_memory_query_selector_invalid"):
         HistoricalMemoryLayersSpec(query_event_selector="first_event_only")
 
 
@@ -79,9 +71,7 @@ def test_transition_resolution_invalid() -> None:
 
 
 def test_applicability_invalid() -> None:
-    with pytest.raises(
-        ValueError, match="historical_memory_applicability_invalid"
-    ):
+    with pytest.raises(ValueError, match="historical_memory_applicability_invalid"):
         HistoricalMemoryLayersSpec(applicability="mid_run_new_agents")
 
 

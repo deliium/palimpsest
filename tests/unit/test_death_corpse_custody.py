@@ -239,9 +239,7 @@ def test_lifespan_death_opens_custody() -> None:
             tuple(
                 ActionSubmission(
                     batch.token,
-                    engine.registration_translator.to_agent_id(
-                        observation.observer_id
-                    ),
+                    engine.registration_translator.to_agent_id(observation.observer_id),
                     Wait(),
                 )
                 for observation in batch.observations

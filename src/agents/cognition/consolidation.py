@@ -23,7 +23,7 @@ from agents.cognition.models import (
     SelfModelProjectionPolicy,
     SubjectiveSnapshot,
 )
-from agents.models import AgentId, Goal, GoalStatus
+from agents.models import AgentId, Goal, GoalId, GoalStatus
 from llm import (
     LLMProvider,
     LLMRequest,
@@ -34,6 +34,7 @@ from llm import (
 from llm.errors import LLMError
 from memory.belief_formation import (
     DEFAULT_BELIEF_FORMATION_POLICY,
+    BeliefEvidenceCandidate,
     belief_id_for_claim,
     bundle_from_candidates,
     extract_evidence_candidates,
@@ -126,9 +127,7 @@ def orchestrate_offline_consolidation(
     if type(resolved_policy) is not OfflineConsolidationPolicy:
         raise TypeError("orchestrate_offline_consolidation: invalid_policy")
     projection_policy = (
-        DEFAULT_SELF_MODEL_POLICY
-        if self_model_policy is None
-        else self_model_policy
+        DEFAULT_SELF_MODEL_POLICY if self_model_policy is None else self_model_policy
     )
     if type(projection_policy) is not SelfModelProjectionPolicy:
         raise TypeError("orchestrate_offline_consolidation: invalid_self_policy")
@@ -294,27 +293,27 @@ def _belief_revisions(
         policy=DEFAULT_BELIEF_FORMATION_POLICY,
     )
     minimum = DEFAULT_BELIEF_FORMATION_POLICY.min_independent_observations
-    by_claim: dict[str, list[object]] = {}
+    by_claim: dict[str, list[BeliefEvidenceCandidate]] = {}
     for candidate in candidates:
         if candidate.memory_id not in wanted:
             continue
         by_claim.setdefault(canonical_claim_identity(candidate.claim), []).append(
             candidate
         )
-    by_belief: dict[str, list[object]] = {}
-    claims_for_belief: dict[str, object] = {}
+    by_belief: dict[str, list[BeliefEvidenceCandidate]] = {}
+    claims_for_belief: dict[str, SemanticClaim] = {}
     for identity in sorted(by_claim):
         group = by_claim[identity]
         memory_ids = {item.memory_id for item in group}
         if len(memory_ids) < minimum:
             continue
         claim = group[0].claim
-        belief_id = belief_id_for_claim(owner_id=owner_id, claim=claim).value
-        by_belief.setdefault(belief_id, []).extend(group)
-        claims_for_belief.setdefault(belief_id, claim)
+        belief_key = belief_id_for_claim(owner_id=owner_id, claim=claim).value
+        by_belief.setdefault(belief_key, []).extend(group)
+        claims_for_belief.setdefault(belief_key, claim)
     revisions: list[BeliefRevisionRequest] = []
     for belief_key in sorted(by_belief):
-        group = tuple(by_belief[belief_key])
+        group = by_belief[belief_key]
         claim = claims_for_belief[belief_key]
         bundle = bundle_from_candidates(group, target_claim=claim)
         belief_id = belief_id_for_claim(owner_id=owner_id, claim=claim)
@@ -460,7 +459,7 @@ def _goal_intents(
 
 
 def _owned_by_goal_manager(
-    goal: Goal, *, goals_by_id: dict[object, Goal], tick: int
+    goal: Goal, *, goals_by_id: dict[GoalId, Goal], tick: int
 ) -> bool:
     if goal.deadline_tick is not None and tick > goal.deadline_tick:
         return True
@@ -491,9 +490,7 @@ def _audit(
         mode=mode,
         memory_ids=tuple(memory_ids),
         belief_ids=tuple(
-            request.belief_id
-            for request in beliefs
-            if request.belief_id is not None
+            request.belief_id for request in beliefs if request.belief_id is not None
         ),
         relationship_ids=relationship_ids,
         goal_ids=tuple(intent.goal_id for intent in goals),
@@ -595,12 +592,8 @@ class LLMOfflineConsolidationSelector:
         payload = {
             "strengthen_ids": [item.value for item in selection.strengthen_ids],
             "soft_forget_ids": [item.value for item in selection.soft_forget_ids],
-            "merge_group_keys": [
-                _group_key(group) for group in selection.merge_groups
-            ],
-            "belief_source_ids": [
-                item.value for item in selection.belief_source_ids
-            ],
+            "merge_group_keys": [_group_key(group) for group in selection.merge_groups],
+            "belief_source_ids": [item.value for item in selection.belief_source_ids],
             "reason_codes": [code.value for code in selection.reason_codes],
         }
         rendered = render_prompt(

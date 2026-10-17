@@ -488,6 +488,18 @@ def _build_milestones(*, death_tick: int) -> tuple[MilestoneOverride, ...]:
             build_command=lambda: Eat(item_id=EntityId(ITEM_FOOD_MIRA)),
         ),
         MilestoneOverride(
+            milestone_id="ms-colocate-tell-speaker",
+            tick=7,
+            agent_id=soren,
+            build_command=lambda: Move(destination_id=EntityId(LOC_CAMP)),
+        ),
+        MilestoneOverride(
+            milestone_id="ms-colocate-tell-recipient",
+            tick=7,
+            agent_id=AgentId(AGENT_NYX),
+            build_command=lambda: Move(destination_id=EntityId(LOC_CAMP)),
+        ),
+        MilestoneOverride(
             milestone_id=MILESTONE_TELL_OBSERVE,
             tick=8,
             agent_id=soren,

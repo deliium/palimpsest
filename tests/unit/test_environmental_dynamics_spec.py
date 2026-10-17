@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,7 @@ _PHYSICAL_RULE_KEYS = {
 }
 
 
-def _isort_export_key(name: str) -> tuple[int, str]:
+def _isort_export_key(name: str) -> tuple[int, tuple[object, ...]]:
     """Match Ruff RUF022: constants, then classes, then functions."""
     if name.isupper():
         rank = 0
@@ -87,7 +88,13 @@ def _isort_export_key(name: str) -> tuple[int, str]:
         rank = 1
     else:
         rank = 2
-    return (rank, name)
+    # Ruff naturally orders version suffixes (V2 before V10).
+    return (
+        rank,
+        tuple(
+            int(part) if part.isdigit() else part for part in re.split(r"(\d+)", name)
+        ),
+    )
 
 
 def _spec(**overrides: object) -> EnvironmentalDynamicsSpec:
@@ -258,7 +265,11 @@ def test_physical_rules_gain_no_environment_keys() -> None:
     rules = default_physical_rules()
     assert rules.version == PHYSICAL_RULES_VERSION == "physical-v1"
     payload = json.loads(canonical_physical_rules_bytes(rules))
-    assert set(payload) == _PHYSICAL_RULE_KEYS
+    assert set(payload) == _PHYSICAL_RULE_KEYS | {
+        "feed_hunger_relief",
+        "feed_thirst_relief",
+        "transport_fatigue",
+    }
     assert "season_length_ticks" not in payload
     assert "season_offsets" not in payload
 

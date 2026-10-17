@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from agents.cognition.scarcity_beliefs import (
@@ -14,6 +15,7 @@ from agents.cognition.scarcity_beliefs import (
 )
 from agents.models import AgentId
 from world.identifiers import EntityId
+from world.observations import ObservedItemPlacement
 from world.values import ItemKind
 
 _LOG = logging.getLogger("agents.cognition.subjective_value")
@@ -274,9 +276,7 @@ def bundle_concession(
     return min(3, total)
 
 
-def bundle_acceptable(
-    *, received: int, given: int, concession: int = 0
-) -> bool:
+def bundle_acceptable(*, received: int, given: int, concession: int = 0) -> bool:
     """Local test only. The engine does not call this."""
     return received + concession >= given
 
@@ -339,6 +339,7 @@ def refresh_owner_ledgers(
                 ScarcityBelief(kind, visible.get(kind, 0), location_id, tick),
             )
     for kind in ItemKind:
+        others: int | None
         if location_id is not None:
             others = visible.get(kind, 0)
         else:
@@ -356,9 +357,7 @@ def refresh_owner_ledgers(
             risk_active=risk_active,
             expected_future_scarcity=kind in future_kinds,
             observed_acceptance=(
-                None
-                if acceptance_counts is None
-                else acceptance_counts.get(kind)
+                None if acceptance_counts is None else acceptance_counts.get(kind)
             ),
             tick=tick,
         )
@@ -472,7 +471,16 @@ def _bundle_value(
 
 def _perceived_proposal(
     observation: object, owner_entity_id: EntityId
-) -> tuple[object, ...] | None:
+) -> (
+    tuple[
+        EntityId,
+        tuple[EntityId, ...],
+        tuple[ItemKind, ...],
+        tuple[EntityId, ...],
+        tuple[ItemKind, ...],
+    ]
+    | None
+):
     from world.observations import ObservationAudienceRole
 
     found = None
@@ -496,17 +504,17 @@ def _perceived_proposal(
 
 
 def _fact_items(
-    facts: object, side: str
+    facts: Mapping[str, object], side: str
 ) -> tuple[tuple[EntityId, ...], tuple[ItemKind, ...]]:
-    ids = tuple(
-        EntityId(str(value)) for value in facts.get(f"{side}_item_ids", ()) or ()
-    )
+    raw_ids = facts.get(f"{side}_item_ids", ()) or ()
+    raw_kinds = facts.get(f"{side}_item_kinds", ()) or ()
+    if not isinstance(raw_ids, (tuple, list)) or not isinstance(
+        raw_kinds, (tuple, list)
+    ):
+        return (), ()
+    ids = tuple(EntityId(str(value)) for value in raw_ids)
     by_value = {kind.value: kind for kind in ItemKind}
-    kinds = tuple(
-        by_value[str(value)]
-        for value in facts.get(f"{side}_item_kinds", ()) or ()
-        if str(value) in by_value
-    )
+    kinds = tuple(by_value[str(value)] for value in raw_kinds if str(value) in by_value)
     if len(ids) != len(kinds):
         return (), ()
     return ids, kinds
@@ -565,10 +573,7 @@ def _counter_or_withdraw(
                 placement_type=ObservedItemPlacement,
             )
             filled = (
-                len(take) > 0
-                and len(give) > 0
-                and give_value >= count
-                and count > 0
+                len(take) > 0 and len(give) > 0 and give_value >= count and count > 0
             )
         else:
             _LOG.debug(
@@ -602,7 +607,7 @@ def _fill_reference_give(
     reference: ItemKind,
     target: int,
     max_bundle: int,
-    placement_type: type,
+    placement_type: type[ObservedItemPlacement],
 ) -> tuple[tuple[EntityId, ...], int]:
     """Spend remembered inert portable items, then reference items, up to the target."""
     from world.resource_profile import physical_profile
@@ -698,7 +703,9 @@ def _holding_ids(
 
 
 def _own_ids(
-    observation: object, kind: ItemKind | None, placement_type: type
+    observation: object,
+    kind: ItemKind | None,
+    placement_type: type[ObservedItemPlacement],
 ) -> tuple[EntityId, ...]:
     held = placement_type.HELD_BY_SELF
     return tuple(

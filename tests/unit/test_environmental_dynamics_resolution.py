@@ -65,9 +65,7 @@ def _state(
 ) -> WorldState:
     locations = (make_location("loc-1"),)
     chosen = (
-        (make_weather("loc-1", condition=tick_weather),)
-        if weather is None
-        else weather
+        (make_weather("loc-1", condition=tick_weather),) if weather is None else weather
     )
     return WorldState(
         WorldRevision(1),
@@ -500,9 +498,7 @@ def test_same_seed_keeps_weather_and_seeds_do_not_move_seasons(
     assert right[1] == other[1]
     assert right[1]
     assert left[0] != other[0]
-    assert any(
-        "family_season=" in record.getMessage() for record in caplog.records
-    )
+    assert any("family_season=" in record.getMessage() for record in caplog.records)
     assert any(
         "environment_event_committed" in record.getMessage()
         and record.levelno == logging.INFO

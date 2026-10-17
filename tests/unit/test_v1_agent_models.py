@@ -177,7 +177,8 @@ def test_winter_hierarchy_expressible_as_linked_immutable_goals() -> None:
         failure_conditions=(
             GoalCondition(
                 outcome=GoalOutcome(
-                    kind=GoalOutcomeKind.ACHIEVE_CODE, outcome_code="resource_impossible"
+                    kind=GoalOutcomeKind.ACHIEVE_CODE,
+                    outcome_code="resource_impossible",
                 )
             ),
         ),
@@ -334,9 +335,7 @@ def test_drive_profile_requires_canonical_complete_set() -> None:
         DriveProfile(
             owner_id=owner,
             dispositions=(
-                DriveDisposition(
-                    kind=DriveKind.HUNGER, baseline=0.1, sensitivity=0.2
-                ),
+                DriveDisposition(kind=DriveKind.HUNGER, baseline=0.1, sensitivity=0.2),
             ),
         )
 
@@ -347,27 +346,19 @@ def test_drive_state_allows_conflicting_activations() -> None:
     for kind in REQUIRED_DRIVE_KINDS:
         if kind is DriveKind.THIRST:
             activations.append(
-                DriveActivation(
-                    kind=kind, activation=0.9, urgency=0.95, confidence=0.8
-                )
+                DriveActivation(kind=kind, activation=0.9, urgency=0.95, confidence=0.8)
             )
         elif kind is DriveKind.SAFETY:
             activations.append(
-                DriveActivation(
-                    kind=kind, activation=0.85, urgency=0.9, confidence=0.7
-                )
+                DriveActivation(kind=kind, activation=0.85, urgency=0.9, confidence=0.7)
             )
         elif kind is DriveKind.BELONGING:
             activations.append(
-                DriveActivation(
-                    kind=kind, activation=0.8, urgency=0.6, confidence=0.5
-                )
+                DriveActivation(kind=kind, activation=0.8, urgency=0.6, confidence=0.5)
             )
         else:
             activations.append(
-                DriveActivation(
-                    kind=kind, activation=0.1, urgency=0.0, confidence=1.0
-                )
+                DriveActivation(kind=kind, activation=0.1, urgency=0.0, confidence=1.0)
             )
     state = DriveState(owner_id=owner, activations=tuple(activations))
     by_kind = {item.kind: item for item in state.activations}

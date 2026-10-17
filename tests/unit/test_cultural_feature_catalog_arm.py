@@ -56,10 +56,7 @@ def _base():
 def test_al_profile_and_arms() -> None:
     _LOG.debug("case_id=al_catalog_arms")
     definition = experiment_al_cultural_transmission_provenance(_base(), max_ticks=6)
-    assert (
-        definition.experiment_id
-        == "experiment-al-cultural-transmission-provenance"
-    )
+    assert definition.experiment_id == "experiment-al-cultural-transmission-provenance"
     condition_ids = tuple(item.condition_id for item in definition.conditions)
     assert condition_ids == (
         "al-channel-off",
@@ -83,6 +80,4 @@ def test_al_profile_and_arms() -> None:
     mutation = next(
         item for item in definition.conditions if item.condition_id == "al-mutation"
     ).runner_config
-    assert (
-        mutation.cultural_feature_provenance.mutation_policy.allow_mutation is True
-    )
+    assert mutation.cultural_feature_provenance.mutation_policy.allow_mutation is True

@@ -194,9 +194,7 @@ def test_hypothesis_id_is_stable_sha256_of_owner_atoms_and_outcome() -> None:
     assert first.startswith("ch-")
     assert len(first) == 3 + 48
     assert first != other_outcome
-    source = (
-        Path(__file__).resolve().parents[2] / "src/agents/cognition/world_model.py"
-    )
+    source = Path(__file__).resolve().parents[2] / "src/agents/cognition/world_model.py"
     assert "hash(" not in source.read_text(encoding="utf-8")
 
 
@@ -334,9 +332,7 @@ def test_salient_harm_persists_after_two_mild_counters() -> None:
     assert reasons[1:] == (CausalUpdateReason.COUNTER, CausalUpdateReason.COUNTER)
     quiet = _observation(tick=4, health=80.0)
     episodes = episodes_from_observation(quiet, _OWNER, model)
-    model = update_world_model(
-        model, episodes, policy, tick=4, observed_health=80.0
-    )
+    model = update_world_model(model, episodes, policy, tick=4, observed_health=80.0)
     faded = _matching(model, CausalOutcome.DANGER, ("location", "day_phase"))
     assert faded is not None
     assert faded.confidence == 0.5
@@ -345,9 +341,7 @@ def test_salient_harm_persists_after_two_mild_counters() -> None:
 
 def test_missing_weather_does_not_invent_a_weather_atom() -> None:
     observation = _observation(tick=1, weather=None, health=80.0)
-    cursor = CausalWorldModel(
-        owner_id=_OWNER, last_observed_health=100.0, last_tick=0
-    )
+    cursor = CausalWorldModel(owner_id=_OWNER, last_observed_health=100.0, last_tick=0)
     episodes = episodes_from_observation(observation, _OWNER, cursor)
     assert episodes
     assert all(

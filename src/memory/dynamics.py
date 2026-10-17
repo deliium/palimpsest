@@ -184,9 +184,7 @@ def retrieval_strength(
         confidence, age_ticks=age_ticks, salience=salience, policy=policy
     )
     sal = effective_salience(salience, age_ticks=age_ticks, policy=policy)
-    access_factor = quantize_score(
-        float(access_count) / (1.0 + float(access_count))
-    )
+    access_factor = quantize_score(float(access_count) / (1.0 + float(access_count)))
     age_factor = quantize_score(1.0 / (1.0 + float(age_ticks)))
     raw = 0.35 * conf + 0.35 * sal + 0.2 * access_factor + 0.1 * age_factor
     return quantize_score(max(0.0, min(1.0, raw)))
@@ -377,9 +375,7 @@ def confidence_degradation(
         policy.competition_blend * _clamp_unit("competition", competition_mass)
     )
     penalty = min(1.0, mix_penalty + age_penalty + comp_penalty)
-    degraded = quantize_score(
-        max(policy.confidence_floor, base * (1.0 - penalty))
-    )
+    degraded = quantize_score(max(policy.confidence_floor, base * (1.0 - penalty)))
     return quantize_score(min(base, degraded))
 
 
@@ -582,9 +578,7 @@ def reconstruct_v2(
     )
     if any(c.source.emotional_salience >= 0.5 for c in selected):
         distortion.append(MemoryDistortionCode.SALIENCE_BIAS)
-    concepts = salience_biased_survival(
-        concepts, salience=mean_salience, policy=policy
-    )
+    concepts = salience_biased_survival(concepts, salience=mean_salience, policy=policy)
     entities = _merge_entities(used_sources)
     relations = _merge_relations(used_sources, concepts=concepts, entities=entities)
     context = _merge_context(used_sources, recall_context=evidence.recall_context)
@@ -618,9 +612,7 @@ def reconstruct_v2(
     if deltas:
         distortion.append(MemoryDistortionCode.TESTING_EFFECT)
 
-    hint = semanticization_trigger(
-        used_sources, policy=policy, access_counts=counts
-    )
+    hint = semanticization_trigger(used_sources, policy=policy, access_counts=counts)
     if hint.should_revise:
         distortion.append(MemoryDistortionCode.SEMANTICIZATION)
 
@@ -688,7 +680,8 @@ def _content_tokens(source: RecallSourceEvidence | MemoryTrace) -> set[str]:
     for concept in source.concepts:
         tokens.add(f"concept:{concept.concept}")
     for entity in source.entities:
-        tokens.add(f"entity:{entity.entity_id.value}")
+        if entity.entity_id is not None:
+            tokens.add(f"entity:{entity.entity_id.value}")
         tokens.add(f"label:{entity.label}")
     for relation in source.relations:
         tokens.add(f"pred:{relation.predicate}")

@@ -243,4 +243,3 @@ async def test_absent_object_shares_flags_off_trajectory_hash() -> None:
     doc_first = build_runner_result_document(result=first, config=flags_off)
     doc_second = build_runner_result_document(result=second, config=flags_off)
     assert doc_first.exact_trajectory_hash == doc_second.exact_trajectory_hash
-

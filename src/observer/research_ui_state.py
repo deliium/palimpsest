@@ -1,6 +1,6 @@
 """Credential-free Research UI deep-link and epistemic chrome contracts.
 
-Closed UI classes extend Godot's three wire EvidenceClass values for
+Closed UI classes extend the three wire EvidenceClass values for
 researcher presentation only — they do not rename ``observer-protocol-v1``.
 
 Canonical query params: ``run_id``, ``tick``, ``event_id`` / ``sequence``,
@@ -79,7 +79,7 @@ EPISTEMIC_CLASSES: Final[frozenset[str]] = frozenset(
     }
 )
 
-# Godot / wire EvidenceClass values.
+# Observer wire EvidenceClass values.
 EVIDENCE_OBJECTIVE: Final[str] = "OBJECTIVE"
 EVIDENCE_SUBJECTIVE: Final[str] = "SUBJECTIVE_TO_SELECTED_AGENT"
 EVIDENCE_ANALYTICAL: Final[str] = "ANALYTICAL_INFERRED"

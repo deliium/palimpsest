@@ -225,9 +225,12 @@ def test_v3_snapshot_round_trips_the_three_production_collections() -> None:
         decoded,
         production_catalog=catalog,
     )
-    assert restored._snapshot.world.state.structures[
-        decoded.structures[0].entity_id
-    ].integrity == 0.75
+    assert (
+        restored._snapshot.world.state.structures[
+            decoded.structures[0].entity_id
+        ].integrity
+        == 0.75
+    )
 
 
 def test_v3_restore_without_a_catalog_fails_closed(
@@ -266,9 +269,7 @@ def test_v3_restore_without_a_catalog_fails_closed(
             ),
         ),
         production_jobs=(),
-        tool_marks=(
-            ToolMark(item_id=EntityId("unused-tool"), role=ToolRole.STRIKE),
-        ),
+        tool_marks=(ToolMark(item_id=EntityId("unused-tool"), role=ToolRole.STRIKE),),
     )
     snapshot = WorldSnapshot(
         snapshot_id=snapshot.snapshot_id,

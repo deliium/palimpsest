@@ -100,9 +100,7 @@ def _distributions(
     if not saw_objective:
         return None
     positive = {
-        agent: levels
-        for agent, levels in vectors.items()
-        if sum(levels.values()) > 0.0
+        agent: levels for agent, levels in vectors.items() if sum(levels.values()) > 0.0
     }
     if not positive:
         return {}

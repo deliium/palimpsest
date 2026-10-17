@@ -77,9 +77,7 @@ class KnowledgeGenealogyNode:
     kind_token: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "node_id", require_stable_id("node_id", self.node_id)
-        )
+        object.__setattr__(self, "node_id", require_stable_id("node_id", self.node_id))
         if type(self.kind) is not KnowledgeGenealogyNodeKind:
             raise TypeError("kind must be KnowledgeGenealogyNodeKind")
         object.__setattr__(
@@ -98,9 +96,7 @@ class KnowledgeGenealogyEdge:
     depth: int = 0
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "edge_id", require_stable_id("edge_id", self.edge_id)
-        )
+        object.__setattr__(self, "edge_id", require_stable_id("edge_id", self.edge_id))
         if type(self.kind) is not KnowledgeGenealogyEdgeKind:
             raise TypeError("kind must be KnowledgeGenealogyEdgeKind")
         object.__setattr__(
@@ -113,9 +109,7 @@ class KnowledgeGenealogyEdge:
             "target_node_id",
             require_stable_id("target_node_id", self.target_node_id),
         )
-        object.__setattr__(
-            self, "depth", require_exact_nonneg_int("depth", self.depth)
-        )
+        object.__setattr__(self, "depth", require_exact_nonneg_int("depth", self.depth))
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,9 +170,7 @@ class KnowledgeGenealogyQueryResult:
             self, "content_key", require_stable_id("content_key", self.content_key)
         )
         object.__setattr__(self, "items", tuple(self.items))
-        object.__setattr__(
-            self, "count", require_exact_nonneg_int("count", self.count)
-        )
+        object.__setattr__(self, "count", require_exact_nonneg_int("count", self.count))
         object.__setattr__(self, "notes", tuple(self.notes))
 
 

@@ -11,7 +11,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from itertools import combinations
-from typing import Final
+from typing import Final, cast
 
 import networkx as nx
 
@@ -103,7 +103,7 @@ def compute_emergent_group_candidates(
     values["signal_count"] = present
     values["cluster_count"] = cluster_count
     values["agent_count"] = len(agents)
-    values["shared_enemies"] = int(values["shared_harm_cluster_count"])
+    values["shared_enemies"] = int(cast(int, values["shared_harm_cluster_count"]))
     availability = (
         MetricAvailability.ABSENT if present == 0 else MetricAvailability.PRESENT
     )
@@ -158,22 +158,22 @@ def compute_group_persistence(
     seen_concept_keys: set[tuple[int, int]] = set()
     for index, document in enumerate(history):
         values = _values(document)
-        tick = int(values.get("tick", index))
+        tick = int(cast(int, values.get("tick", index)))
         tick_clusters: list[tuple[str, ...]] = []
         for signal in _SIGNALS:
-            members = _members_only(str(values.get(f"{signal}_clusters", "")))
-            tick_clusters.extend(members)
-            for left in range(len(members)):
+            signal_members = _members_only(str(values.get(f"{signal}_clusters", "")))
+            tick_clusters.extend(signal_members)
+            for left in range(len(signal_members)):
                 _find(parents, (index, signal, left))
             if index + 1 >= len(history):
                 continue
             later = _members_only(
                 str(_values(history[index + 1]).get(f"{signal}_clusters", ""))
             )
-            opportunities += len(members)
+            opportunities += len(signal_members)
             matched_later: dict[int, set[int]] = defaultdict(set)
             matched_earlier: dict[int, set[int]] = defaultdict(set)
-            for left, earlier in enumerate(members):
+            for left, earlier in enumerate(signal_members):
                 for right, nxt in enumerate(later):
                     if _jaccard(earlier, nxt) < _JACCARD:
                         continue

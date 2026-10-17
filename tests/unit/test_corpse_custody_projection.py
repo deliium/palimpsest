@@ -51,13 +51,18 @@ def _state_with_corpse():
         health=Health(0),
     )
     living = alive_body("body-live")
-    return WorldState(
-        WorldRevision(0),
-        locations=(make_location(),),
-        items=(item,),
-        bodies=(corpse, living),
-        weather=(make_weather(),),
-    ), item, corpse, living
+    return (
+        WorldState(
+            WorldRevision(0),
+            locations=(make_location(),),
+            items=(item,),
+            bodies=(corpse, living),
+            weather=(make_weather(),),
+        ),
+        item,
+        corpse,
+        living,
+    )
 
 
 def _system_event(event_id: str, details, *, revision: int, sequence: int = 0):

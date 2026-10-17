@@ -345,9 +345,7 @@ def _north_identity(owner: str = "north_a") -> OwnerSafeSocialIdentity:
         "south_a": "body-s",
         "south_b": "body-t",
     }
-    pairs = tuple(
-        (agent, body) for agent, body in entities.items() if agent != owner
-    )
+    pairs = tuple((agent, body) for agent, body in entities.items() if agent != owner)
     return _social(owner, entities[owner], pairs)
 
 
@@ -588,9 +586,7 @@ def test_help_exchange_and_communication_evidence(
     assert exclusive[0].social_evidence is True
     assert witnessed.concepts == ()
     assert "below_threshold" in witnessed.notices
-    talked = _update(
-        _observe(communications=(_talk("body-a", "body-b", "talk-1"),))
-    )
+    talked = _update(_observe(communications=(_talk("body-a", "body-b", "talk-1"),)))
     assert _active(talked, GroupStance.WE)[0].support == 0.2
     assert _active(talked, GroupStance.WE)[0].social_evidence is True
     dropped = _update(
@@ -696,9 +692,7 @@ def test_decay_split_and_merge() -> None:
     assert active[0].status is GroupStatus.ACTIVE
     assert ledger.concepts[0].status is GroupStatus.ACTIVE
     assert ledger.concepts[0].support == 0.25
-    low_belief, low_concept = _concept(
-        owner, GroupStance.OUR_GROUP, pair, support=0.2
-    )
+    low_belief, low_concept = _concept(owner, GroupStance.OUR_GROUP, pair, support=0.2)
     retired = _update(
         _observe(tick=9),
         ledger=GroupLedger(
@@ -728,9 +722,7 @@ def test_decay_split_and_merge() -> None:
         item for item in split.concepts if item.concept_id == parent_concept.concept_id
     )
     assert parent.status is GroupStatus.SPLIT
-    child = next(
-        item for item in split.concepts if item.status is GroupStatus.ACTIVE
-    )
+    child = next(item for item in split.concepts if item.status is GroupStatus.ACTIVE)
     assert {member.value for member in child.member_ids} == {"north_a", "lone"}
     assert child.parent_ids == (parent.concept_id,)
     left_members = _sorted_ids(owner, north_b, lone)

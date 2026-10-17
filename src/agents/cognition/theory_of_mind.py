@@ -14,7 +14,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from agents.cognition.epistemic import EpistemicAttribution
 
 from agents.cognition.models import (
     _EFFECT_QUANTUM,
@@ -447,7 +450,7 @@ class TheoryOfMind:
     last_tick: int | None = None
     preferred_ids: tuple[str, ...] = ()
     selection_fallback_used: bool = False
-    attributions: tuple[object, ...] = ()
+    attributions: tuple[EpistemicAttribution, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -648,9 +651,7 @@ def _history_tuple(
     return records
 
 
-def _attributions_tuple(
-    owner_id: AgentId, values: object
-) -> tuple[object, ...]:
+def _attributions_tuple(owner_id: AgentId, values: object) -> tuple[object, ...]:
     from agents.cognition.epistemic import EpistemicAttribution
 
     if isinstance(values, (str, bytes, set, frozenset)) or not isinstance(
@@ -2001,7 +2002,7 @@ def mind_direction_deltas(
     visible_destinations: frozenset[str],
     visible_entities: frozenset[str],
     policy: TheoryOfMindPolicy | None = None,
-) -> tuple[tuple[tuple[str, float], ...], str, str, float]:
+) -> tuple[tuple[tuple[str, float], ...], str, str, float, str, str]:
     """One bias for the best matching hypothesis, keyed by candidate id.
 
     The fourth and fifth return values are direction and confidence. Status is
@@ -2243,8 +2244,8 @@ class MindAudit:
         if isinstance(self.epistemic, (set, frozenset, str)):
             raise _fail("epistemic", "not_ordered")
         epistemic = tuple(self.epistemic)
-        for item in epistemic:
-            if type(item) is not EpistemicAuditSnapshot:
+        for attribution in epistemic:
+            if type(attribution) is not EpistemicAuditSnapshot:
                 raise _fail("epistemic", "invalid_type")
         object.__setattr__(self, "epistemic", epistemic)
 

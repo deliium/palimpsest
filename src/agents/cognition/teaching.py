@@ -638,15 +638,21 @@ def attach_teaching_act(
         band = band_for_belief(level, policy)
         obj = f"{domain.value}:{band.value}"
     from world.actions import Ask, Talk, Tell
-    from world.communications import CommunicationContent, CommunicationRelation
+    from world.communications import (
+        CommunicationContent,
+        CommunicationRelation,
+        StructuredUtterance,
+    )
 
     kind = type(command)
     if kind not in {Talk, Ask, Tell}:
         return command
+    assert isinstance(command, (Talk, Ask, Tell))
+    assert isinstance(utterance, StructuredUtterance)
     content = utterance.content
     replaced = kind(
         command.recipient_id,
-        type(utterance)(
+        StructuredUtterance(
             content=CommunicationContent(
                 text=content.text,
                 concepts=content.concepts,

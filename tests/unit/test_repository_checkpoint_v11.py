@@ -175,9 +175,7 @@ def test_v10_snapshot_synthesizes_empty_repositories() -> None:
 
 def test_live_establish_deposit_survives_codec_v11_restore() -> None:
     engine = _engine()
-    established = _act(
-        engine, EstablishRepository(location_id=EntityId("loc-1"))
-    )
+    established = _act(engine, EstablishRepository(location_id=EntityId("loc-1")))
     assert established.resolutions[0].status is ActionResolutionStatus.APPLIED
     repository_id = next(iter(engine._snapshot.world.state.repositories))
     inscribed = _act(
@@ -220,10 +218,9 @@ def test_live_establish_deposit_survives_codec_v11_restore() -> None:
     restored = WorldEngine.restore_from_snapshot(decoded)
     assert restored._artifacts_enabled is True
     assert repository_id in restored._snapshot.world.state.repositories
-    assert (
-        restored._snapshot.world.state.repositories[repository_id].member_artifact_ids
-        == (artifact_id,)
-    )
+    assert restored._snapshot.world.state.repositories[
+        repository_id
+    ].member_artifact_ids == (artifact_id,)
     assert (
         restored._snapshot.world.state.artifacts[artifact_id].custodian_repository_id
         == repository_id

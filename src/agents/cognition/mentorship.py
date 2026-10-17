@@ -68,6 +68,7 @@ __all__ = [
     "strength_band",
 ]
 
+
 class MentorshipContentKindId(StrEnum):
     """Closed content kinds mentorship may transmit via public teaching acts."""
 
@@ -243,9 +244,7 @@ class TaughtContentLineageEntry:
         object.__setattr__(self, "content_kind", kind)
         content_key = require_stable_id("content_key", self.content_key)
         object.__setattr__(self, "content_key", content_key)
-        fingerprint = require_stable_id(
-            "content_fingerprint", self.content_fingerprint
-        )
+        fingerprint = require_stable_id("content_fingerprint", self.content_fingerprint)
         object.__setattr__(self, "content_fingerprint", fingerprint)
         root_id = require_stable_id("lineage_root_id", self.lineage_root_id)
         object.__setattr__(self, "lineage_root_id", root_id)
@@ -264,9 +263,7 @@ class TaughtContentLineageEntry:
             raise _fail("mutated", "invalid_type")
         acquired = require_exact_nonneg_int("acquired_tick", self.acquired_tick)
         object.__setattr__(self, "acquired_tick", acquired)
-        updated = require_exact_nonneg_int(
-            "last_updated_tick", self.last_updated_tick
-        )
+        updated = require_exact_nonneg_int("last_updated_tick", self.last_updated_tick)
         object.__setattr__(self, "last_updated_tick", updated)
         if self.policy_version != MENTORSHIP_POLICY_VERSION:
             raise _fail("policy_version", "unsupported_policy")
@@ -282,14 +279,14 @@ class TaughtContentLineageEntry:
         parent = self.parent_lineage_id
         if parent is not None:
             object.__setattr__(
-                self, "parent_lineage_id", require_stable_id("parent_lineage_id", parent)
+                self,
+                "parent_lineage_id",
+                require_stable_id("parent_lineage_id", parent),
             )
         lineage_id = self.lineage_id
         if lineage_id is None:
             # Deterministic opaque id from root + hop + content key (no free text).
-            lineage_id = (
-                f"lin:{root_id}:h{hop}:{kind.value}:{content_key}"
-            )
+            lineage_id = f"lin:{root_id}:h{hop}:{kind.value}:{content_key}"
             object.__setattr__(
                 self, "lineage_id", require_stable_id("lineage_id", lineage_id)
             )
@@ -363,8 +360,7 @@ class MentorshipLedger:
             raise _fail("lineage", "cap_exceeded")
         object.__setattr__(self, "lineage", tuple(checked_lineage))
         _LOG.debug(
-            "mentorship_ledger_constructed owner_id=%s bond_count=%s "
-            "lineage_count=%s",
+            "mentorship_ledger_constructed owner_id=%s bond_count=%s lineage_count=%s",
             self.owner_id.value,
             len(checked_bonds),
             len(checked_lineage),
@@ -534,7 +530,9 @@ def collect_mentorship_adapter_keys(
             )
             hop = getattr(declared, "hop_count", 0)
             if claim is None:
-                claim = f"comm:{speaker_token}:{getattr(communication, 'event_id', hop)}"
+                claim = (
+                    f"comm:{speaker_token}:{getattr(communication, 'event_id', hop)}"
+                )
             claim_token = getattr(claim, "value", claim)
             if not isinstance(claim_token, str):
                 continue
@@ -740,9 +738,7 @@ def form_or_reinforce_mentorship_bond(
             min(1.0, strength + _unit_interval("reinforce_delta", reinforce_delta))
         )
         reason = "bond_reinforce"
-    merged_kinds = tuple(
-        dict.fromkeys([*current.content_kinds, *kinds])
-    )
+    merged_kinds = tuple(dict.fromkeys([*current.content_kinds, *kinds]))
     updated = MentorshipBond(
         partner_agent_id=current.partner_agent_id,
         role=current.role,
@@ -976,8 +972,7 @@ def record_taught_content_lineage(
             drop = rows_sorted[0]
             rows = [row for row in rows if row is not drop]
             _LOG.debug(
-                "mentorship_lineage_evict owner_id=%s content_kind=%s "
-                "reason_code=%s",
+                "mentorship_lineage_evict owner_id=%s content_kind=%s reason_code=%s",
                 ledger.owner_id.value,
                 drop.content_kind.value,
                 "max_lineage_cap",
@@ -1022,9 +1017,7 @@ def record_taught_content_lineage(
         mutated=current.mutated,
         acquired_tick=current.acquired_tick,
         last_updated_tick=tick_i,
-        evidence_refs=tuple(
-            dict.fromkeys([*current.evidence_refs, *checked_refs])
-        ),
+        evidence_refs=tuple(dict.fromkeys([*current.evidence_refs, *checked_refs])),
         lineage_id=current.lineage_id,
         policy_version=current.policy_version,
     )
@@ -1301,7 +1294,8 @@ def apply_mentorship_from_teaching(
             (
                 row_l
                 for row_l in current.lineage
-                if row_l.teacher_agent_id == teacher and row_l.content_key == content_key
+                if row_l.teacher_agent_id == teacher
+                and row_l.content_key == content_key
             ),
             None,
         )

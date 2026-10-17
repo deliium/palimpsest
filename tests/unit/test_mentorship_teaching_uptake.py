@@ -57,7 +57,9 @@ def test_teaching_advice_records_skills_recipes_warnings(
             ),
             advice_delta=advice,
             tick=3,
-            bond_policy=MentorshipBondPolicy(form_after_successful_acts=1, min_trust=0.1),
+            bond_policy=MentorshipBondPolicy(
+                form_after_successful_acts=1, min_trust=0.1
+            ),
             lineage_policy=MentorshipLineagePolicy(),
         )
     kinds = {entry.content_kind for entry in updated.lineage}

@@ -9,7 +9,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from simulation.runner_models import TechniqueLifecycleSpec
 
 from analysis.metric_service import (
     MetricBundle,
@@ -248,7 +251,7 @@ def inputs_with_opt_in_metric_rows(
     inaccessible_expectations: Sequence[object] | None = None,
     practical_knowledge_audits: Sequence[object] | None = None,
     death_ticks: Mapping[str, int] | None = None,
-    technique_lifecycle_spec: object | None = None,
+    technique_lifecycle_spec: TechniqueLifecycleSpec | None = None,
     technique_node_rows: Sequence[object] | None = None,
     technique_item_rows: Sequence[object] | None = None,
 ) -> MetricComputationInputs:
@@ -257,9 +260,7 @@ def inputs_with_opt_in_metric_rows(
     Missing harvests leave the corresponding family out of assembly (not
     zeros). Spatial rows still follow ``inputs_with_spatial_rows``.
     """
-    updated = inputs_with_spatial_rows(
-        inputs, events, claim_ledgers=claim_ledgers
-    )
+    updated = inputs_with_spatial_rows(inputs, events, claim_ledgers=claim_ledgers)
     from experiments.composition import (
         calibration_rows_from_world_model_audits,
         territorial_control_rows_from_spatial_actions,
@@ -313,9 +314,7 @@ def inputs_with_opt_in_metric_rows(
 
     if belief_convergence_claims is not None:
         attached["belief_convergence"] = len(belief_convergence_claims)
-        updated = replace(
-            updated, belief_convergence_claims=belief_convergence_claims
-        )
+        updated = replace(updated, belief_convergence_claims=belief_convergence_claims)
     if cultural_naming_rows is not None:
         attached["cultural_naming"] = len(cultural_naming_rows)
         updated = replace(updated, cultural_naming_rows=cultural_naming_rows)
@@ -324,14 +323,10 @@ def inputs_with_opt_in_metric_rows(
         updated = replace(updated, cultural_norms_rows=cultural_norms_rows)
     if cultural_conventions_rows is not None:
         attached["cultural_conventions"] = len(cultural_conventions_rows)
-        updated = replace(
-            updated, cultural_conventions_rows=cultural_conventions_rows
-        )
+        updated = replace(updated, cultural_conventions_rows=cultural_conventions_rows)
     if cultural_narratives_rows is not None:
         attached["cultural_narratives"] = len(cultural_narratives_rows)
-        updated = replace(
-            updated, cultural_narratives_rows=cultural_narratives_rows
-        )
+        updated = replace(updated, cultural_narratives_rows=cultural_narratives_rows)
     if reputation_ledgers is not None:
         attached["reputation"] = len(reputation_ledgers)
         updated = replace(
@@ -353,9 +348,7 @@ def inputs_with_opt_in_metric_rows(
     if historical_memory_harvest is not None:
         source_count = len(getattr(historical_memory_harvest, "sources", ()) or ())
         attached["historical_memory"] = source_count
-        updated = replace(
-            updated, historical_memory_harvest=historical_memory_harvest
-        )
+        updated = replace(updated, historical_memory_harvest=historical_memory_harvest)
     if durable_record_rows is not None or durable_record_event_rows is not None:
         record_count = 0 if durable_record_rows is None else len(durable_record_rows)
         event_count = (
@@ -369,10 +362,7 @@ def inputs_with_opt_in_metric_rows(
             death_ticks_by_body=death_ticks_by_body,
             false_record_expectations=false_record_expectations,
         )
-    if (
-        repository_objective_rows is not None
-        or repository_event_rows is not None
-    ):
+    if repository_objective_rows is not None or repository_event_rows is not None:
         repo_count = (
             0 if repository_objective_rows is None else len(repository_objective_rows)
         )
@@ -393,9 +383,7 @@ def inputs_with_opt_in_metric_rows(
             updated,
             practical_knowledge_audits=practical_knowledge_audits,
             death_ticks=(
-                dict(death_ticks)
-                if death_ticks is not None
-                else updated.death_ticks
+                dict(death_ticks) if death_ticks is not None else updated.death_ticks
             ),
         )
     if technique_lifecycle_spec is not None:

@@ -124,7 +124,9 @@ class _AsgiWebSocketSession:
                 return json.loads(message["text"])
 
 
-async def _run_websocket(app: Any, path: str) -> tuple[_AsgiWebSocketSession, asyncio.Task[None]]:
+async def _run_websocket(
+    app: Any, path: str
+) -> tuple[_AsgiWebSocketSession, asyncio.Task[None]]:
     session = _AsgiWebSocketSession()
     scope: Scope = {
         "type": "websocket",

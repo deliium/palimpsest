@@ -61,9 +61,7 @@ def test_uniform_int_draw_is_deterministic() -> None:
     second = assign_lifespan_ticks(**kwargs)
     assert first == second
     assert 10 <= first <= 20
-    other = assign_lifespan_ticks(
-        **{**kwargs, "run_config": _run_config(99)}
-    )
+    other = assign_lifespan_ticks(**{**kwargs, "run_config": _run_config(99)})
     # Different seed may diverge; allow equal by chance but prefer divergence proof
     # via stream identity when seeds differ enough.
     _LOG.debug("assigned_seed11=%s assigned_seed99=%s", first, other)

@@ -103,9 +103,7 @@ def test_empty_hypothesis_keeps_engine_accidental(
 
 
 def test_mismatched_prediction_marks_the_trial_accidental() -> None:
-    ledger = admit_hypothesis(
-        _ledger(), _hypothesis(predicted="success")
-    )
+    ledger = admit_hypothesis(_ledger(), _hypothesis(predicted="success"))
     occurrence = _occurrence(outcome="unexpected", mode="deliberate")
     scored = score_remembered_experiment(ledger, occurrence, tick=2)
     assert scored.trials[0].discovery_mode == "accidental"
@@ -114,9 +112,7 @@ def test_mismatched_prediction_marks_the_trial_accidental() -> None:
 
 
 def test_matching_unexpected_prediction_stays_deliberate() -> None:
-    ledger = admit_hypothesis(
-        _ledger(), _hypothesis(predicted="unexpected")
-    )
+    ledger = admit_hypothesis(_ledger(), _hypothesis(predicted="unexpected"))
     scored = score_remembered_experiment(
         ledger,
         _occurrence(outcome="unexpected", mode="deliberate"),

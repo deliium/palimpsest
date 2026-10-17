@@ -524,15 +524,17 @@ class NarrativeVariant:
         if quantized < 0.0 or quantized > 1.0:
             raise _fail("strength", "out_of_range")
         object.__setattr__(self, "strength", quantized)
-        if isinstance(self.repetition_count, bool) or type(
-            self.repetition_count
-        ) is not int:
+        if (
+            isinstance(self.repetition_count, bool)
+            or type(self.repetition_count) is not int
+        ):
             raise _fail("repetition_count", "invalid_type")
         if self.repetition_count < 0:
             raise _fail("repetition_count", "out_of_range")
-        if isinstance(self.mutation_generation, bool) or type(
-            self.mutation_generation
-        ) is not int:
+        if (
+            isinstance(self.mutation_generation, bool)
+            or type(self.mutation_generation) is not int
+        ):
             raise _fail("mutation_generation", "invalid_type")
         if self.mutation_generation < 0:
             raise _fail("mutation_generation", "out_of_range")
@@ -628,9 +630,7 @@ class NarrativeVariant:
             object.__setattr__(
                 self,
                 "last_tick",
-                require_exact_nonneg_int(
-                    "NarrativeVariant.last_tick", self.last_tick
-                ),
+                require_exact_nonneg_int("NarrativeVariant.last_tick", self.last_tick),
             )
         if (
             self.first_tick is not None
@@ -646,9 +646,10 @@ class NarrativeVariant:
                     "NarrativeVariant.last_utterance_tick", self.last_utterance_tick
                 ),
             )
-        if self.declared_source_basis is not None and type(
-            self.declared_source_basis
-        ) is not CommunicationSourceBasis:
+        if (
+            self.declared_source_basis is not None
+            and type(self.declared_source_basis) is not CommunicationSourceBasis
+        ):
             raise _fail("declared_source_basis", "unsupported_basis")
         notices = _require_tuple("notices", self.notices)
         checked_notices: list[str] = []
@@ -1359,9 +1360,7 @@ def _apply_observed_events(
             _log_drop("empty_content")
             continue
         event_id = occurrence.provenance.source_event_id
-        lineage = (
-            f"tick-{tick}-{index}" if event_id is None else event_id.value
-        )
+        lineage = f"tick-{tick}-{index}" if event_id is None else event_id.value
         _mint_variant(
             drafts=drafts,
             notices=notices,
@@ -1420,11 +1419,7 @@ def _apply_deliberate_lies(
             _log_drop("unresolved_entity")
             continue
         event_id = communication.provenance.source_event_id
-        lineage = (
-            f"tick-{tick}-lie-{index}"
-            if event_id is None
-            else event_id.value
-        )
+        lineage = f"tick-{tick}-lie-{index}" if event_id is None else event_id.value
         comm_id = communication.utterance.declared.communication_id.value
         root_id = communication.utterance.declared.root_communication_id.value
         _mint_variant(
@@ -1463,7 +1458,7 @@ def _apply_cues(
     for artifact_id, distorted, reading_count, mark_count in cues.distorted_artifacts:
         if not distorted:
             continue
-        concepts = (
+        concepts: tuple[str, ...] = (
             "artifact",
             f"mark_{min(mark_count, 99)}",
             f"reading_{min(reading_count, 99)}",
@@ -1519,8 +1514,7 @@ def _apply_cues(
             if (
                 draft.transmission_root_id is not None
                 and draft.content_fingerprint != fingerprint
-                and draft.status
-                in {NarrativeStatus.ACTIVE, NarrativeStatus.CANDIDATE}
+                and draft.status in {NarrativeStatus.ACTIVE, NarrativeStatus.CANDIDATE}
                 and draft.merged_into_id is None
             ):
                 # Branch only when an explicit parent link exists via shared root.
@@ -1609,9 +1603,7 @@ def _apply_memory_reinforcement(
             continue
         concepts: list[str] = []
         for item in getattr(trace, "concepts", ()) or ():
-            token = _endpoint_token(item) or (
-                item if isinstance(item, str) else None
-            )
+            token = _endpoint_token(item) or (item if isinstance(item, str) else None)
             if isinstance(token, str) and _TOKEN_RE.fullmatch(token):
                 concepts.append(token)
             concept = getattr(item, "concept", None)
@@ -1700,9 +1692,7 @@ def _apply_retells(
             basis = communication.utterance.declared.source_basis
             event_id = communication.provenance.source_event_id
             lineage = (
-                f"tick-{tick}-retell-{index}"
-                if event_id is None
-                else event_id.value
+                f"tick-{tick}-retell-{index}" if event_id is None else event_id.value
             )
             parent = None
             for draft in drafts:
@@ -1863,7 +1853,7 @@ def _merge(
                 continue
             left_id = _draft_variant_id(owner_id, left)
             right_id = _draft_variant_id(owner_id, right)
-            pair = tuple(sorted((left_id, right_id)))
+            pair = (min(left_id, right_id), max(left_id, right_id))
             if pair in merged_pairs:
                 continue
             if len(drafts) >= policy.max_variants:
@@ -2060,9 +2050,7 @@ def apply_narrative_update(
         raise TypeError("previous must be NarrativeLedger or None")
     if cues is not None and type(cues) is not NarrativeCueSummary:
         raise TypeError("cues must be NarrativeCueSummary or None")
-    active_policy = (
-        default_cultural_narrative_policy() if policy is None else policy
-    )
+    active_policy = default_cultural_narrative_policy() if policy is None else policy
     if type(active_policy) is not CulturalNarrativePolicy:
         raise TypeError("policy must be CulturalNarrativePolicy")
     owner_id = identity.owner_id
@@ -2139,10 +2127,7 @@ def _source_basis_for(variant: NarrativeVariant) -> CommunicationSourceBasis:
 
 
 def _predicate_for(variant: NarrativeVariant) -> str:
-    if (
-        variant.status is NarrativeStatus.MERGED
-        or len(variant.parent_variant_ids) >= 2
-    ):
+    if variant.status is NarrativeStatus.MERGED or len(variant.parent_variant_ids) >= 2:
         return "merge_story"
     if (
         variant.mutation_generation >= 1
@@ -2184,9 +2169,7 @@ def narrative_communicate_penalties(
             return {}
     if ledger is None or type(ledger) is not NarrativeLedger:
         return {}
-    active_policy = (
-        default_cultural_narrative_policy() if policy is None else policy
-    )
+    active_policy = default_cultural_narrative_policy() if policy is None else policy
     if type(active_policy) is not CulturalNarrativePolicy:
         raise TypeError("policy must be CulturalNarrativePolicy")
     communicate_ids = [
@@ -2362,9 +2345,7 @@ def narrative_semantic_evidence(
         return ()
     if ledger.owner_id != owner_id:
         raise ValueError("owner_id: owner_mismatch")
-    active_policy = (
-        default_cultural_narrative_policy() if policy is None else policy
-    )
+    active_policy = default_cultural_narrative_policy() if policy is None else policy
     if type(active_policy) is not CulturalNarrativePolicy:
         raise TypeError("policy must be CulturalNarrativePolicy")
     requests: list[BeliefRevisionRequest] = []

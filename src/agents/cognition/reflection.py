@@ -782,9 +782,7 @@ class ReflectionContext:
         ):
             raise TypeError("ReflectionContext.owner_entity_id: invalid_type")
         object.__setattr__(self, "memories", _owned_models(self.memories, MemoryTrace))
-        object.__setattr__(
-            self, "beliefs", _owned_models(self.beliefs, SemanticBelief)
-        )
+        object.__setattr__(self, "beliefs", _owned_models(self.beliefs, SemanticBelief))
         object.__setattr__(self, "goals", _owned_models(self.goals, Goal))
         object.__setattr__(
             self, "decisions", _owned_models(self.decisions, SubjectiveDecisionRecord)
@@ -859,9 +857,8 @@ def _select_memories(context: ReflectionContext) -> tuple[MemoryTrace, ...]:
     places = {
         record.place_id
         for record in context.decisions
-        if record.place_id is not None and record.outcome_code is not (
-            DecisionOutcomeCode.UNKNOWN
-        )
+        if record.place_id is not None
+        and record.outcome_code is not (DecisionOutcomeCode.UNKNOWN)
     }
     cited = set(context.cited_memory_ids)
 
@@ -940,9 +937,7 @@ def _relation_candidates(
                 belief_request=belief,
             )
         )
-        relationship = _relationship_request(
-            context, counterpart, members, pattern
-        )
+        relationship = _relationship_request(context, counterpart, members, pattern)
         if relationship is not None:
             emitted.append(
                 _candidate(
@@ -1269,10 +1264,7 @@ def _belief_kind(
     subject: ClaimSubject,
     existing: SemanticBelief | None,
 ) -> ReflectionConclusionKind:
-    if (
-        subject.kind is ClaimSubjectKind.AGENT
-        and subject.agent_id == owner_id
-    ):
+    if subject.kind is ClaimSubjectKind.AGENT and subject.agent_id == owner_id:
         return ReflectionConclusionKind.UPDATED_SELF_BELIEF
     if existing is None:
         return ReflectionConclusionKind.NEW_HYPOTHESIS
@@ -1396,8 +1388,8 @@ class ReflectionPlan:
         for request in self.belief_revisions:
             if request.owner_id != self.audit.owner_id:
                 raise ValueError("ReflectionPlan: owner_mismatch")
-        for request in self.relationship_revisions:
-            if request.source_id != self.audit.owner_id:
+        for relationship_request in self.relationship_revisions:
+            if relationship_request.source_id != self.audit.owner_id:
                 raise ValueError("ReflectionPlan: owner_mismatch")
         for intent in self.goal_intents:
             if intent.owner_id != self.audit.owner_id:
@@ -1443,9 +1435,7 @@ def plan_reflection(
     )
     if selected_ids is not None:
         kept = _select_candidate_ids(kept, selected_ids)
-    sibling = causal_counter_goal_candidate(
-        context, causal_world_model, existing=kept
-    )
+    sibling = causal_counter_goal_candidate(context, causal_world_model, existing=kept)
     if sibling is not None:
         kept = (*kept, sibling)
     counts: dict[str, int] = {}
@@ -1497,19 +1487,13 @@ def without_applied_operations(
     if type(plan) is not ReflectionPlan:
         raise TypeError("without_applied_operations: invalid_plan")
     beliefs = tuple(
-        item
-        for item in plan.belief_revisions
-        if item.operation_id not in applied
+        item for item in plan.belief_revisions if item.operation_id not in applied
     )
     relationships = tuple(
-        item
-        for item in plan.relationship_revisions
-        if item.operation_id not in applied
+        item for item in plan.relationship_revisions if item.operation_id not in applied
     )
     goals = tuple(
-        item
-        for item in plan.goal_intents
-        if _goal_operation_id(item) not in applied
+        item for item in plan.goal_intents if _goal_operation_id(item) not in applied
     )
     if (
         beliefs == plan.belief_revisions
@@ -1534,8 +1518,8 @@ def reflection_operation_ids(plan: ReflectionPlan) -> tuple[str, ...]:
     ordered: list[str] = []
     for request in plan.belief_revisions:
         _remember_operation(seen, ordered, request.operation_id)
-    for request in plan.relationship_revisions:
-        _remember_operation(seen, ordered, request.operation_id)
+    for relationship_request in plan.relationship_revisions:
+        _remember_operation(seen, ordered, relationship_request.operation_id)
     for intent in plan.goal_intents:
         _remember_operation(seen, ordered, _goal_operation_id(intent))
     return tuple(ordered)
@@ -1647,10 +1631,14 @@ def _drop_consolidation_overlaps(
         ):
             continue
         relationship = candidate.relationship_request
-        if relationship is not None and (
-            relationship.source_id.value,
-            relationship.target_id.value,
-        ) in pairs:
+        if (
+            relationship is not None
+            and (
+                relationship.source_id.value,
+                relationship.target_id.value,
+            )
+            in pairs
+        ):
             continue
         intent = candidate.goal_intent
         if intent is not None and intent.goal_id.value in goal_ids:
@@ -1820,9 +1808,7 @@ def remember_relationship_ordinals(
             continue
         known.add(key)
         added.append(
-            RelationshipOrdinalMark(
-                source_id=source, target_id=target, ordinal=ordinal
-            )
+            RelationshipOrdinalMark(source_id=source, target_id=target, ordinal=ordinal)
         )
     return replace(cursor, relationship_ordinals=tuple(added))
 
@@ -1973,9 +1959,7 @@ class LLMReflectionSelector:
             len(candidate_ids),
         )
         try:
-            output = await self._generate(
-                candidates, owner_id=owner_id, tick=tick
-            )
+            output = await self._generate(candidates, owner_id=owner_id, tick=tick)
             selected = _accepted_ids(candidate_ids, output.selected_ids)
         except asyncio.CancelledError:
             raise

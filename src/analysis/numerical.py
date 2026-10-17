@@ -192,6 +192,5 @@ SCIPY_DEGENERATE_POLICY: Final[str] = (
 
 # Accumulation policy: float64 intermediates, sort inputs, quantize on export.
 ACCUMULATION_POLICY: Final[str] = (
-    "float64_intermediate; sort_inputs_before_reduce; "
-    "quantize_on_canonical_export_only"
+    "float64_intermediate; sort_inputs_before_reduce; quantize_on_canonical_export_only"
 )

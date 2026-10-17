@@ -55,9 +55,7 @@ def test_lifecycle_snapshot_round_trip_and_restore() -> None:
         registrations=bootstrap.registrations, spec=spec
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=13, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=13, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-lifecycle-codec"),
         population_lifecycle=spec,
@@ -114,9 +112,7 @@ def test_lifecycle_snapshot_round_trip_and_restore() -> None:
     assert len(decoded.lifecycle_records) == 1
     assert decoded.lifecycle_records[0].cohort_id == "cohort-bootstrap"
 
-    restored = WorldEngine.restore_from_snapshot(
-        decoded, population_lifecycle=spec
-    )
+    restored = WorldEngine.restore_from_snapshot(decoded, population_lifecycle=spec)
     assert restored.lifecycle_channel_active is True
     assert len(restored.lifecycle_records) == 1
     assert restored.lifecycle_records[0].stage.value == "infant"
@@ -137,9 +133,7 @@ def _lifecycle_snapshot() -> tuple[WorldSnapshot, object]:
         registrations=bootstrap.registrations, spec=spec
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=19, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=19, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         run_id=RunId("run-lifecycle-fork-parent"),
         population_lifecycle=spec,
@@ -207,9 +201,7 @@ def test_research_fork_rematerialize_preserves_lifecycle_records() -> None:
     assert len(child.lifecycle_records) == len(parent.lifecycle_records)
     assert child.lifecycle_records[0].cohort_id == parent.lifecycle_records[0].cohort_id
     assert child.registrations == parent.registrations
-    restored = WorldEngine.restore_from_snapshot(
-        child, population_lifecycle=spec
-    )
+    restored = WorldEngine.restore_from_snapshot(child, population_lifecycle=spec)
     assert restored.lifecycle_channel_active is True
     assert len(restored.lifecycle_records) == 1
     assert restored.ordered_registrations == parent.registrations

@@ -15,7 +15,7 @@ from agents.models import AgentId
 from world.actions import AssertPossessionClaim, Take
 from world.identifiers import EntityId, require_exact_nonneg_int
 from world.models import LifeStatus
-from world.observations import Observation, ObservedItemPlacement
+from world.observations import Observation, ObservedItemPlacement, ObservedOccurrence
 from world.possession_succession import POSSESSION_DOCTRINES
 
 _LOG: Final[logging.Logger] = logging.getLogger(
@@ -114,8 +114,8 @@ class PossessionLegitimacyLedger:
             self.sanctions, tuple
         ):
             raise TypeError("sanctions must be a tuple")
-        for note in self.sanctions:
-            if type(note) is not PossessionSanctionNote:
+        for sanction in self.sanctions:
+            if type(sanction) is not PossessionSanctionNote:
                 raise TypeError("sanctions entries must be PossessionSanctionNote")
         if isinstance(self.witnessed_take_decedents, (str, bytes)) or not isinstance(
             self.witnessed_take_decedents, tuple
@@ -272,9 +272,7 @@ def apply_possession_legitimacy_update(
         raise ValueError("previous owner_id mismatch")
     if alignment is not None and type(alignment) is not PossessionAlignmentContext:
         raise TypeError("alignment must be PossessionAlignmentContext or None")
-    ledger = (
-        empty_possession_legitimacy(owner_id) if previous is None else previous
-    )
+    ledger = empty_possession_legitimacy(owner_id) if previous is None else previous
     seen_items: set[str] = set()
     for occurrence in observation.occurrences:
         kind = occurrence.kind
@@ -290,7 +288,12 @@ def apply_possession_legitimacy_update(
     return ledger
 
 
-def _apply_claim(ledger, observation, occurrence, facts):
+def _apply_claim(
+    ledger: PossessionLegitimacyLedger,
+    observation: Observation,
+    occurrence: ObservedOccurrence,
+    facts: Mapping[str, object],
+) -> PossessionLegitimacyLedger:
     doctrine = facts.get("doctrine")
     if type(doctrine) is not str or doctrine not in POSSESSION_DOCTRINES:
         return ledger
@@ -302,16 +305,20 @@ def _apply_claim(ledger, observation, occurrence, facts):
     item_id = None if not item_ids else EntityId(item_ids[0])
     ledger = append_possession_claim(
         ledger,
-        PossessionClaimNote(
-            observation.tick, decedent, claimant, doctrine, item_id
-        ),
+        PossessionClaimNote(observation.tick, decedent, claimant, doctrine, item_id),
     )
     ledger = note_doctrine_support(ledger, doctrine)
     _LOG.debug("possession_support doctrine=%s", doctrine)
     return ledger
 
 
-def _apply_take(ledger, observation, occurrence, facts, alignment):
+def _apply_take(
+    ledger: PossessionLegitimacyLedger,
+    observation: Observation,
+    occurrence: ObservedOccurrence,
+    facts: Mapping[str, object],
+    alignment: PossessionAlignmentContext | None,
+) -> PossessionLegitimacyLedger:
     decedent = _one_id(facts.get("decedent_id"))
     taker = occurrence.actor_id
     if decedent is None or taker is None:
@@ -335,16 +342,16 @@ def _apply_take(ledger, observation, occurrence, facts, alignment):
         return ledger
     ledger = append_possession_sanction(
         ledger,
-        PossessionSanctionNote(
-            observation.tick, decedent, taker, "criticism"
-        ),
+        PossessionSanctionNote(observation.tick, decedent, taker, "criticism"),
     )
     _LOG.debug("possession_sanction token=%s", "criticism")
     _LOG.info("possession_sanction token=%s", "criticism")
     return ledger
 
 
-def _note_given(facts, occurrence, seen_items: set[str]) -> None:
+def _note_given(
+    facts: Mapping[str, object], occurrence: ObservedOccurrence, seen_items: set[str]
+) -> None:
     item_id = facts.get("target_id")
     if type(item_id) is not str and occurrence.other_entity_id is not None:
         item_id = occurrence.other_entity_id.value
@@ -352,7 +359,13 @@ def _note_given(facts, occurrence, seen_items: set[str]) -> None:
         _LOG.debug("possession_given item_known=%s", "yes")
 
 
-def _take_aligned(doctrine, taker_id, decedent_id, ledger, alignment):
+def _take_aligned(
+    doctrine: str,
+    taker_id: str,
+    decedent_id: str,
+    ledger: PossessionLegitimacyLedger,
+    alignment: PossessionAlignmentContext | None,
+) -> bool | None:
     if doctrine == "first_claimant_owns":
         claimants = [
             note.claimant_id.value
@@ -396,16 +409,14 @@ def _highest_doctrine(ledger: PossessionLegitimacyLedger) -> str | None:
     if not ledger.supports:
         return None
     top = max(count for _doctrine, count in ledger.supports)
-    winners = sorted(
-        doctrine for doctrine, count in ledger.supports if count == top
-    )
+    winners = sorted(doctrine for doctrine, count in ledger.supports if count == top)
     if len(winners) != 1:
         _LOG.debug("possession_support doctrine=%s", "tie")
         return None
     return winners[0]
 
 
-def _fact_ids(facts, key: str) -> tuple[str, ...]:
+def _fact_ids(facts: Mapping[str, object], key: str) -> tuple[str, ...]:
     raw = facts.get(key)
     if isinstance(raw, (str, bytes)) or not isinstance(raw, (tuple, list)):
         return ()
@@ -440,11 +451,7 @@ def propose_possession_command(
         raise TypeError("ledger must be PossessionLegitimacyLedger or None")
     if owner_id is not None and type(owner_id) is not AgentId:
         raise TypeError("owner_id must be AgentId or None")
-    if (
-        ledger is not None
-        and owner_id is not None
-        and ledger.owner_id != owner_id
-    ):
+    if ledger is not None and owner_id is not None and ledger.owner_id != owner_id:
         ledger = None
     items = sorted(
         (

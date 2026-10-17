@@ -60,9 +60,7 @@ def test_bench_04_and_05_share_world_seed_matrix() -> None:
     failure = build_benchmark_scenario(
         BENCH_04_TOM_SOCIAL_FAILURE, base, seed_matrix=matrix
     )
-    coop = build_benchmark_scenario(
-        BENCH_05_TOM_COOPERATION, base, seed_matrix=matrix
-    )
+    coop = build_benchmark_scenario(BENCH_05_TOM_COOPERATION, base, seed_matrix=matrix)
     assert [item.condition_id for item in failure.definition.conditions] == [
         "l-enabled",
         "l-disabled",
@@ -102,9 +100,7 @@ def test_bench_06_composes_strategy_and_reputation() -> None:
     )
     assert combo.agents[0].cognition.reputation_mode is ReputationMode.DETERMINISTIC
     assert strategy_only.schema_version == RUNNER_SCHEMA_VERSION_V9
-    assert (
-        strategy_only.agents[0].cognition.reputation_mode is ReputationMode.DISABLED
-    )
+    assert strategy_only.agents[0].cognition.reputation_mode is ReputationMode.DISABLED
     assert disabled.agents[0].cognition.reputation_mode is ReputationMode.DISABLED
     # o-enabled alone is not this suite's reputation arm.
     assert "o-enabled" not in by_id

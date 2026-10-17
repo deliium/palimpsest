@@ -111,9 +111,10 @@ class ExperimentDefinition:
                 base_seed = cfg.seed
                 base_stochastic = cfg.stochastic_identity
             else:
-                if scenario_fingerprint(cfg) != base_scenario and _scenario_layout(
-                    cfg
-                ) != base_layout:
+                if (
+                    scenario_fingerprint(cfg) != base_scenario
+                    and _scenario_layout(cfg) != base_layout
+                ):
                     raise ValueError("paired conditions require identical scenario")
                 if cfg.seed != base_seed:
                     raise ValueError("paired conditions require identical seed")

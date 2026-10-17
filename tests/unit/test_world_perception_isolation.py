@@ -499,11 +499,16 @@ def test_hypothesis_visibility_never_exposes_remote_or_policy_fields(
     )
 
 
-def test_projection_is_log_free(caplog: pytest.LogCaptureFixture) -> None:
+def test_projection_logs_only_metadata(caplog: pytest.LogCaptureFixture) -> None:
+    state = _base_state()
     caplog.set_level(logging.DEBUG)
     with caplog.at_level(logging.DEBUG, logger="world._perception"):
-        _observe(_base_state(), tick=12)
-    assert caplog.records == []
+        _observe(state, tick=12)
+    assert all(record.levelno == logging.DEBUG for record in caplog.records)
+    assert all(record.name == "world._perception" for record in caplog.records)
+    assert all("count=" in record.getMessage() for record in caplog.records)
+    assert "body-secret" not in caplog.text
+    assert "item-secret" not in caplog.text
 
 
 def test_engine_debug_logs_omit_observation_payloads(

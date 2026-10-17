@@ -13,9 +13,11 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from agents.models import AgentId
+from simulation.registrations import AgentRegistration as AgentRegistration
 from world.artifacts import InformationArtifact
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, Item, Location, Resource, Weather
+from world.regions import Journey, RegionsMigrationSpec
 from world.repositories import KnowledgeRepository
 
 if TYPE_CHECKING:
@@ -30,20 +32,6 @@ __all__ = [
 
 _LOGGER = logging.getLogger("simulation.bootstrap")
 _ARTIFACT_ID_COLLISION = "artifact_id_collision"
-
-
-@dataclass(frozen=True, slots=True)
-class AgentRegistration:
-    """Ordered AgentId to body EntityId binding for one simulation participant."""
-
-    agent_id: AgentId
-    entity_id: EntityId
-
-    def __post_init__(self) -> None:
-        if type(self.agent_id) is not AgentId:
-            raise TypeError("AgentRegistration.agent_id must be AgentId")
-        if type(self.entity_id) is not EntityId:
-            raise TypeError("AgentRegistration.entity_id must be EntityId")
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +82,8 @@ class WorldBootstrap:
     registrations: Sequence[AgentRegistration] = field(default_factory=tuple)
     artifacts: Sequence[InformationArtifact] = field(default_factory=tuple)
     repositories: Sequence[KnowledgeRepository] = field(default_factory=tuple)
+    regions_migration: RegionsMigrationSpec | None = None
+    journeys: Sequence[Journey] | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -126,6 +116,26 @@ class WorldBootstrap:
             self.repositories,
             model_type=KnowledgeRepository,
         )
+        if (
+            self.regions_migration is not None
+            and type(self.regions_migration) is not RegionsMigrationSpec
+        ):
+            raise TypeError(
+                "WorldBootstrap.regions_migration must be RegionsMigrationSpec"
+            )
+        journeys = (
+            None
+            if self.journeys is None and self.regions_migration is None
+            else _copy_models(
+                "WorldBootstrap.journeys",
+                () if self.journeys is None else self.journeys,
+                model_type=Journey,
+            )
+        )
+        if journeys and self.regions_migration is None:
+            raise ValueError(
+                "journeys require regions_migration (code=journey_channel_off)"
+            )
         object.__setattr__(self, "locations", locations)
         object.__setattr__(self, "items", items)
         object.__setattr__(self, "resources", resources)
@@ -134,6 +144,7 @@ class WorldBootstrap:
         object.__setattr__(self, "registrations", registrations)
         object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(self, "repositories", repositories)
+        object.__setattr__(self, "journeys", journeys)
         _validate_registrations_against_models(
             locations=locations,
             items=items,
@@ -155,6 +166,8 @@ class WorldBootstrap:
                 weather=weather,
                 artifacts=artifacts,
                 repositories=repositories,
+                regions_migration=self.regions_migration,
+                journeys=journeys,
             )
         except ValueError as exc:
             message = str(exc)
@@ -182,7 +195,8 @@ class WorldBootstrap:
         _LOGGER.debug(
             "world_bootstrap_validated world_id=%s revision=%s "
             "location_count=%s item_count=%s resource_count=%s body_count=%s "
-            "weather_count=%s registration_count=%s artifact_count=%s",
+            "weather_count=%s registration_count=%s artifact_count=%s "
+            "region_count=%s journey_count=%s",
             self.world_id.value,
             self.revision.value,
             len(locations),
@@ -192,7 +206,20 @@ class WorldBootstrap:
             len(weather),
             len(registrations),
             len(artifacts),
+            (
+                0
+                if self.regions_migration is None
+                else len(self.regions_migration.regions)
+            ),
+            0 if journeys is None else len(journeys),
         )
+
+    def validate_finalized_boundary(self, completed_tick: int) -> None:
+        """Validate pending journey liveness at a durable tick boundary."""
+        if type(completed_tick) is not int or completed_tick < 0:
+            raise ValueError("completed_tick must be non-negative")
+        state = _materialize_world(self).state
+        state.validate_finalized_boundary(completed_tick)
 
 
 def registration_translator(bootstrap: WorldBootstrap) -> RegistrationTranslator:
@@ -222,6 +249,8 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             weather=bootstrap.weather,
             artifacts=bootstrap.artifacts,
             repositories=bootstrap.repositories,
+            regions_migration=bootstrap.regions_migration,
+            journeys=bootstrap.journeys,
         )
     except ValueError as exc:
         message = str(exc)
@@ -256,6 +285,8 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         registrations=snapshot.registrations,
         artifacts=snapshot.artifacts,
         repositories=snapshot.repositories,
+        regions_migration=getattr(snapshot, "regions_migration", None),
+        journeys=getattr(snapshot, "journeys", None),
     )
 
 

@@ -208,9 +208,7 @@ def test_damage_revision_bump_replaces_prior_clean_reading() -> None:
         _artifact(integrity=RecordIntegrity.DAMAGED, revision=1),
         tick=2,
     )
-    updated = apply_artifact_interpretation_update(
-        damaged, _agent(), previous=previous
-    )
+    updated = apply_artifact_interpretation_update(damaged, _agent(), previous=previous)
     assert updated.interpretations[0].distorted is True
     assert updated.interpretations[0].observed_revision == 1
 

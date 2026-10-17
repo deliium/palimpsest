@@ -32,12 +32,8 @@ def test_developmental_pack_enables_learner_modes(
 ) -> None:
     _LOG.debug("case_id=developmental_pack_modes_on")
     owner = AgentId("learner-pack-1")
-    with caplog.at_level(
-        logging.DEBUG, logger="simulation.new_agent_initialization"
-    ):
-        pack = species_defaults_for(
-            SPECIES_DEFAULT_DEVELOPMENTAL_V1, agent_id=owner
-        )
+    with caplog.at_level(logging.DEBUG, logger="simulation.new_agent_initialization"):
+        pack = species_defaults_for(SPECIES_DEFAULT_DEVELOPMENTAL_V1, agent_id=owner)
     assert pack.species_defaults_id == SPECIES_DEFAULT_DEVELOPMENTAL_V1
     cognition = pack.cognition
     assert cognition.skill_learning_mode is SkillLearningMode.DETERMINISTIC

@@ -21,8 +21,8 @@ from simulation.runner_models import (
     example_cultural_feature_provenance_spec,
     example_durable_records_spec,
     example_historical_memory_layers_spec,
-    example_knowledge_repositories_spec,
     example_kinship_spec,
+    example_knowledge_repositories_spec,
 )
 from simulation.runner_serialization import (
     RunnerSerializationError,
@@ -88,10 +88,7 @@ def test_v34_cultural_repository_round_trip() -> None:
     assert round_trip.knowledge_repositories is not None
     assert round_trip.historical_memory_layers is None
     assert round_trip.v3_capability_flags.cultural_historical_memory is True
-    assert (
-        round_trip.knowledge_repositories.access_policy.default_access_mode
-        == "open"
-    )
+    assert round_trip.knowledge_repositories.access_policy.default_access_mode == "open"
 
 
 def test_v34_repository_plus_layers_round_trip() -> None:
@@ -149,9 +146,7 @@ def test_repository_without_durable_rejected() -> None:
 
 def test_repository_on_v33_rejected() -> None:
     base = _plain_base()
-    with pytest.raises(
-        ValueError, match="knowledge_repositories_requires_v34"
-    ):
+    with pytest.raises(ValueError, match="knowledge_repositories_requires_v34"):
         replace(
             base,
             schema_version=RUNNER_SCHEMA_VERSION_V33,
@@ -164,9 +159,7 @@ def test_repository_on_v33_rejected() -> None:
 
 def test_repository_on_v32_rejected() -> None:
     base = _plain_base()
-    with pytest.raises(
-        ValueError, match="knowledge_repositories_requires_v34"
-    ):
+    with pytest.raises(ValueError, match="knowledge_repositories_requires_v34"):
         replace(
             base,
             schema_version=RUNNER_SCHEMA_VERSION_V32,
@@ -179,9 +172,7 @@ def test_repository_on_v32_rejected() -> None:
 
 def test_repository_on_v31_rejected() -> None:
     base = _plain_base()
-    with pytest.raises(
-        ValueError, match="knowledge_repositories_requires_v34"
-    ):
+    with pytest.raises(ValueError, match="knowledge_repositories_requires_v34"):
         replace(
             base,
             schema_version=RUNNER_SCHEMA_VERSION_V31,
@@ -193,9 +184,7 @@ def test_repository_on_v31_rejected() -> None:
 
 def test_v34_without_repository_rejected() -> None:
     base = _plain_base()
-    with pytest.raises(
-        ValueError, match="v34_requires_knowledge_repositories"
-    ):
+    with pytest.raises(ValueError, match="v34_requires_knowledge_repositories"):
         replace(
             base,
             schema_version=RUNNER_SCHEMA_VERSION_V34,

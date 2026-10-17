@@ -115,9 +115,7 @@ def compute_offline_consolidation(
                 notes_code="no_audits",
             ),
         )
-    values = {
-        key: quantize_float(float(getattr(report, key))) for key in _VALUE_KEYS
-    }
+    values = {key: quantize_float(float(getattr(report, key))) for key in _VALUE_KEYS}
     duration_ms = int((time.perf_counter() - started) * 1000)
     _LOG.debug(
         "offline_consolidation_metrics_assembled family_id=%s value_keys=%s "

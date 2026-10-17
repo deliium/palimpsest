@@ -34,6 +34,7 @@ from simulation.persistence import (
     PROJECTOR_VERSION,
     CommitHash,
     PayloadHash,
+    SnapshotExtensions,
     SnapshotId,
     TickAppendRequest,
     TickCommit,
@@ -76,6 +77,8 @@ def _snapshot_content_equal(left: WorldSnapshot, right: WorldSnapshot) -> bool:
         and left.projector_version == right.projector_version
         and left.persistence_codec_version == right.persistence_codec_version
         and left.derivation_version == right.derivation_version
+        and left.regions_migration == right.regions_migration
+        and left.journeys == right.journeys
     )
 
 
@@ -146,31 +149,149 @@ class PersistentSimulationService:
             subjective_valuation_active=self._engine.subjective_valuation_active,
             resource_exchange_profile_active=self._engine.resource_exchange_profile_active,
             collective_projects_active=self._engine.collective_projects_active,
+            public_goods_active=self._engine.public_goods_active,
+            regions_migration_active=state.regions_migration is not None,
         )
-        production_rows: dict[str, tuple[object, ...]] = {}
-        if codec_version in {"v3", "v4", "v5", "v6", "v7"}:
+        production_rows: SnapshotExtensions = {}
+        if codec_version in {
+            "v3",
+            "v4",
+            "v5",
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             production_rows = {
                 "structures": tuple(state.structures.values()),
                 "production_jobs": tuple(state.production_jobs.values()),
                 "tool_marks": tuple(state.tool_marks.values()),
             }
-        if codec_version in {"v4", "v5", "v6", "v7"}:
+        if codec_version in {
+            "v4",
+            "v5",
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             production_rows["active_hazards"] = tuple(state.active_hazards)
-        if codec_version in {"v5", "v6", "v7"}:
+        if codec_version in {
+            "v5",
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
             production_rows["artifacts"] = tuple(state.artifacts.values())
-        if codec_version in {"v6", "v7"}:
-            production_rows["lifecycle_records"] = tuple(
-                self._engine.lifecycle_records
+        if codec_version in {
+            "v6",
+            "v7",
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
+            production_rows["lifecycle_records"] = tuple(self._engine.lifecycle_records)
+        if codec_version in {
+            "v8",
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
+            graph = self._engine.kinship_graph
+            from world.kinship import KinshipGraph
+
+            if type(graph) is KinshipGraph:
+                production_rows["kinship_edges"] = graph.edges
+        if codec_version in {
+            "v9",
+            "v10",
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
+            production_rows["dependency_need_registers"] = tuple(
+                self._engine._dependency_need_registers.values()
             )
-        if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18"}:
+        if codec_version in {
+            "v11",
+            "v12",
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+        }:
+            production_rows["repositories"] = tuple(state.repositories.values())
+        if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}:
             production_rows["corpse_custody_item_ids"] = tuple(
                 sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
             )
-        if codec_version in {"v15", "v16", "v17", "v18"}:
+        if codec_version in {"v15", "v16", "v17", "v18", "v19"}:
             production_rows["exchange_offers"] = tuple(state.exchange_offers)
-        if codec_version in {"v17", "v18"}:
+        if codec_version in {"v17", "v18", "v19"}:
             production_rows["collective_projects"] = tuple(
                 state.collective_projects.values()
+            )
+        if codec_version == "v19":
+            production_rows["regions_migration"] = state.regions_migration
+            production_rows["journeys"] = (
+                None if state.journeys is None else tuple(state.journeys.values())
             )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
@@ -223,6 +344,8 @@ class PersistentSimulationService:
             corpse_custody_item_ids=draft.corpse_custody_item_ids,
             exchange_offers=draft.exchange_offers,
             collective_projects=draft.collective_projects,
+            regions_migration=draft.regions_migration,
+            journeys=draft.journeys,
         )
 
     async def resolve_tick(
@@ -334,6 +457,8 @@ class PersistentSimulationService:
                 derivation_version=snapshot.derivation_version,
                 integrity_hash=candidate_owned.integrity_hash,
                 predecessor_commit_hash=None,
+                regions_migration=snapshot.regions_migration,
+                journeys=snapshot.journeys,
             )
             if not _snapshot_content_equal(caller_normalized, candidate_owned):
                 _LOGGER.error(

@@ -87,21 +87,15 @@ def test_later_trade_and_quote_counts() -> None:
     views = classify_exchange_functions(
         events, spec=example_resource_exchange_profile_spec()
     )
-    generic = next(
-        row for row in views.acquisition_fate if row.item_kind == "generic"
-    )
+    generic = next(row for row in views.acquisition_fate if row.item_kind == "generic")
     assert generic.later_transferred_count >= 1
     assert generic.consumed_count == 0
-    share = next(
-        row for row in views.acceptance_share if row.item_kind == "generic"
-    )
+    share = next(row for row in views.acceptance_share if row.item_kind == "generic")
     assert share.kind_present_count >= 2
     quote_generic = next(
         row for row in views.quote_homogeneity if row.item_kind == "generic"
     )
-    quote_food = next(
-        row for row in views.quote_homogeneity if row.item_kind == "food"
-    )
+    quote_food = next(row for row in views.quote_homogeneity if row.item_kind == "food")
     assert quote_generic.homogeneous_side_count >= 1
     assert quote_food.homogeneous_side_count >= 1
     for row in (

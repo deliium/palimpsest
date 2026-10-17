@@ -85,8 +85,7 @@ def test_runtime_slot_defaults_absent_and_owner_check_is_closed() -> None:
     assert "_semantic_naming" in AgentRuntime.__slots__
     owner = AgentId("ada")
     assert (
-        require_owner_semantic_naming(None, owner, field_name="semantic_naming")
-        is None
+        require_owner_semantic_naming(None, owner, field_name="semantic_naming") is None
     )
     ledger = empty_terminology_ledger(owner)
     assert (

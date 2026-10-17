@@ -43,9 +43,7 @@ def test_missing_audit_is_absent(caplog: pytest.LogCaptureFixture) -> None:
         )
         is None
     )
-    document = compute_identity_dynamics(
-        None, input_revision="rev-1", run_id="run-1"
-    )
+    document = compute_identity_dynamics(None, input_revision="rev-1", run_id="run-1")
     assert document.availability is MetricAvailability.ABSENT
     assert document.values == {}
     assert document.metric_family == "identity_dynamics"

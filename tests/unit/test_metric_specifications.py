@@ -39,10 +39,10 @@ from tests.unit.metric_fixtures import (
 )
 
 
-def test_catalog_has_sixteen_unique_families() -> None:
+def test_catalog_has_94_unique_families() -> None:
     specs = validate_metric_catalog()
-    assert len(specs) == METRIC_FAMILY_COUNT == 91
-    assert len({spec.family_id for spec in specs}) == 91
+    assert len(specs) == METRIC_FAMILY_COUNT == 94
+    assert len({spec.family_id for spec in specs}) == 94
     assert frozenset(spec.family_id for spec in specs) == frozenset(MetricFamilyId)
     assert METRIC_CATALOG_VERSION.startswith("metric-catalog-")
 
@@ -116,9 +116,10 @@ def test_shared_action_resolution_never_infers_from_absent_events() -> None:
 
 def test_motif_and_adoption_policies() -> None:
     motifs = metric_specification(MetricFamilyId.REPEATED_CONVENTIONS)
-    assert "n-gram" in motifs.motif_tokenization.lower() or "n-gram" in motifs.formulas[
-        "ngram_support_table"
-    ]
+    assert (
+        "n-gram" in motifs.motif_tokenization.lower()
+        or "n-gram" in motifs.formulas["ngram_support_table"]
+    )
     assert motifs.motif_gap_policy != "not_applicable"
     assert motifs.motif_support_policy != "not_applicable"
     assert motifs.action_vocabulary == ACTION_VOCABULARY_V1
@@ -148,9 +149,11 @@ def test_signed_trust_and_community_projection() -> None:
     assert "mean_betweenness_centrality" in trust.value_keys
     assert "mean_closeness_centrality" in trust.value_keys
     assert community.community_algorithm == SUPPORTED_COMMUNITY_ALGORITHM
-    assert "max(trust,0)" in community.signed_trust_policy or "nonnegative" in (
-        community.signed_trust_policy + community.graph_projection
-    ).lower()
+    assert (
+        "max(trust,0)" in community.signed_trust_policy
+        or "nonnegative"
+        in (community.signed_trust_policy + community.graph_projection).lower()
+    )
     assert "lexicographic" in community.graph_projection.lower() or "sorted" in (
         community.graph_projection.lower()
     )

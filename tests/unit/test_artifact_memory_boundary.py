@@ -21,8 +21,8 @@ from agents.cognition.models import (
     CognitiveLoopInput,
     DecisionMetadata,
     IntentionCode,
-    InterpretedPerception,
     InternalAgentState,
+    InterpretedPerception,
     MotivationCode,
     PerceptionClaimCode,
     RetrievedMemoryContext,
@@ -158,7 +158,9 @@ def test_direct_observation_hook_omits_artifact_content() -> None:
         owner_id=_owner(),
         command=Wait(),
         confidence=1.0,
-        decision_metadata=DecisionMetadata(selection_codes=("wait",), candidate_count=1),
+        decision_metadata=DecisionMetadata(
+            selection_codes=("wait",), candidate_count=1
+        ),
     )
     memory = RetrievedMemoryContext(
         owner_id=_owner(),
@@ -171,7 +173,9 @@ def test_direct_observation_hook_omits_artifact_content() -> None:
         intention=IntentionCode.WAIT,
         source_motive=MotivationCode.WAIT,
         confidence=1.0,
-        decision_metadata=DecisionMetadata(selection_codes=("wait",), candidate_count=1),
+        decision_metadata=DecisionMetadata(
+            selection_codes=("wait",), candidate_count=1
+        ),
     )
     intents = asyncio.run(
         DirectObservationMemoryUpdateHook().propose_updates(

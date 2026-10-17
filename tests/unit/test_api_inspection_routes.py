@@ -11,8 +11,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from api.app import DatabaseResourcesLike, DisposableEngine, create_app
-from api.errors import forbidden
+from api.app import DisposableEngine, create_app
 from api.schemas import (
     AvailabilityOut,
     EventCursorIn,

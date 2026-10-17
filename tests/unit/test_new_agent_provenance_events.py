@@ -1,4 +1,4 @@
-"""Mid-run admit emits AgentCreated → AgentInitializationRecorded → AgentEnteredWorld."""
+"""Mid-run admission records creation, initialization, then world entry."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ from simulation.runner_models import (
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.events import (
+    EVENT_SCHEMA_REPLAY_V10,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
-    EVENT_SCHEMA_REPLAY_V10,
 )
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.lifecycle import OriginProvenance

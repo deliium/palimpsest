@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
+from analysis.evidence import EvidenceStage
 from analysis.models import (
     METRIC_DOCUMENT_SCHEMA_VERSION,
     MetricAvailability,
@@ -20,6 +21,7 @@ from analysis.models import (
 )
 from analysis.numerical import library_versions, quantize_float
 from analysis.specifications import MetricFamilyId, metric_specification
+from simulation.runner_models import SkillAudit
 from world.identifiers import require_stable_id
 
 __all__ = [
@@ -75,6 +77,7 @@ def compute_skill_learning(
     for audit in audits:
         if type(audit).__name__ != "SkillAudit":
             raise TypeError("audits: invalid_type")
+        audit = cast(SkillAudit, audit)
         agent = getattr(audit.agent_id, "value", None)
         side = getattr(audit.side, "value", None)
         domain = audit.domain
@@ -160,7 +163,7 @@ def _document(
     algorithm: str,
     run_id: str,
     revision: str,
-    evidence: frozenset[object],
+    evidence: frozenset[EvidenceStage],
     population: str,
     denominator: str,
     availability: MetricAvailability,

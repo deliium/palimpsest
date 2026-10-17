@@ -26,6 +26,9 @@ from world.values import WeatherCondition
 
 _LOGGER = logging.getLogger("simulation.randomness")
 
+# Public annotation for callers receiving isolated streams.
+RandomStream = random.Random
+
 
 @dataclass(frozen=True, slots=True)
 class StreamScope:

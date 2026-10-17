@@ -126,15 +126,9 @@ class CapabilityDeclaration:
     implementation_keys: Mapping[StageSlot, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "required_flags", frozenset(self.required_flags)
-        )
-        object.__setattr__(
-            self, "forbidden_flags", frozenset(self.forbidden_flags)
-        )
-        object.__setattr__(
-            self, "required_slots", frozenset(self.required_slots)
-        )
+        object.__setattr__(self, "required_flags", frozenset(self.required_flags))
+        object.__setattr__(self, "forbidden_flags", frozenset(self.forbidden_flags))
+        object.__setattr__(self, "required_slots", frozenset(self.required_slots))
         modes = {str(k): str(v) for k, v in dict(self.required_modes).items()}
         object.__setattr__(self, "required_modes", modes)
         forbidden: dict[str, frozenset[str]] = {}
@@ -153,8 +147,7 @@ class CapabilityDeclaration:
             token = str(impl).strip()
             if not token:
                 _LOG.error(
-                    "architecture_invalid reason_code=architecture_blank_impl "
-                    "slot=%s",
+                    "architecture_invalid reason_code=architecture_blank_impl slot=%s",
                     slot.value,
                 )
                 raise ValueError("architecture_blank_impl")
@@ -163,8 +156,7 @@ class CapabilityDeclaration:
         unknown_flags = (self.required_flags | self.forbidden_flags) - _ALL_FLAG_NAMES
         if unknown_flags:
             _LOG.error(
-                "architecture_invalid reason_code=architecture_unknown_flag "
-                "flags=%s",
+                "architecture_invalid reason_code=architecture_unknown_flag flags=%s",
                 ",".join(sorted(unknown_flags)),
             )
             raise ValueError("architecture_unknown_flag")
@@ -190,9 +182,7 @@ class ArchitectureDefinition:
     def __post_init__(self) -> None:
         arch_id = self.architecture_id.strip()
         if not arch_id:
-            _LOG.error(
-                "architecture_invalid reason_code=architecture_blank_id"
-            )
+            _LOG.error("architecture_invalid reason_code=architecture_blank_id")
             raise ValueError("architecture_blank_id")
         object.__setattr__(self, "architecture_id", arch_id)
         if type(self.capabilities) is not CapabilityDeclaration:
@@ -563,6 +553,10 @@ class _EnabledWorldModelStage:
         )
 
         _LOG.debug("world_model_stage_enabled tick=%s", tick)
+        from agents.cognition.world_model import CausalWorldModel
+
+        if not isinstance(model, CausalWorldModel):
+            raise TypeError("model must be CausalWorldModel")
         return await select_world_model_hypotheses(
             model, self._policy, provider=provider, tick=tick
         )
@@ -597,6 +591,10 @@ class _EnabledTheoryOfMindStage:
         )
 
         _LOG.debug("theory_of_mind_stage_enabled tick=%s", tick)
+        from agents.cognition.theory_of_mind import TheoryOfMind
+
+        if not isinstance(model, TheoryOfMind):
+            raise TypeError("model must be TheoryOfMind")
         return await select_theory_of_mind_hypotheses(
             model, self._policy, provider=provider, tick=tick
         )
@@ -645,7 +643,16 @@ class _DeterministicReflectionStage:
         fallback_used: bool = False,
         causal_world_model: object | None = None,
     ) -> object | None:
-        from agents.cognition.reflection import plan_reflection
+        from agents.cognition.reflection import (
+            ReflectionContext,
+            ReflectionTriggerResult,
+            plan_reflection,
+        )
+
+        if not isinstance(context, ReflectionContext):
+            raise TypeError("context must be ReflectionContext")
+        if not isinstance(triggers, ReflectionTriggerResult):
+            raise TypeError("triggers must be ReflectionTriggerResult")
 
         _LOG.debug("reflection_stage_deterministic mode=%s", mode)
         return plan_reflection(
@@ -800,8 +807,7 @@ def validate_architecture_compatibility(
     arch_id = definition.architecture_id
     caps = definition.capabilities
     _LOG.debug(
-        "architecture_validate_start architecture_id=%s flag_names=%s "
-        "mode_tokens=%s",
+        "architecture_validate_start architecture_id=%s flag_names=%s mode_tokens=%s",
         arch_id,
         ",".join(sorted(mode_snapshot.flags)) or "-",
         ",".join(f"{k}={v}" for k, v in sorted(mode_snapshot.modes.items())) or "-",
@@ -923,10 +929,8 @@ def architecture_definition_digest(definition: ArchitectureDefinition) -> str:
     lines = [
         f"architecture_id={definition.architecture_id}",
         f"schema_version={definition.schema_version}",
-        "required_flags="
-        + ",".join(sorted(caps.required_flags)),
-        "forbidden_flags="
-        + ",".join(sorted(caps.forbidden_flags)),
+        "required_flags=" + ",".join(sorted(caps.required_flags)),
+        "forbidden_flags=" + ",".join(sorted(caps.forbidden_flags)),
         "required_modes="
         + ";".join(
             f"{k}:{caps.required_modes[k]}" for k in sorted(caps.required_modes)
@@ -936,8 +940,7 @@ def architecture_definition_digest(definition: ArchitectureDefinition) -> str:
             f"{k}:{','.join(sorted(caps.forbidden_modes[k]))}"
             for k in sorted(caps.forbidden_modes)
         ),
-        "required_slots="
-        + ",".join(sorted(s.value for s in caps.required_slots)),
+        "required_slots=" + ",".join(sorted(s.value for s in caps.required_slots)),
         "implementation_keys="
         + ";".join(
             f"{slot.value}:{definition.implementation_keys[slot]}"

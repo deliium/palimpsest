@@ -6,7 +6,10 @@ import pytest
 
 from agents.models import AgentId
 from simulation.engine import WorldEngine
-from simulation.journal import _decode_information_artifact, _encode_information_artifact
+from simulation.journal import (
+    _decode_information_artifact,
+    _encode_information_artifact,
+)
 from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
 from simulation.runner_models import example_durable_records_spec
 from tests.physical_helpers import physical_config, two_location_fixture

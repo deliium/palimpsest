@@ -60,9 +60,7 @@ def test_maintenance_and_opposition_move_reputation_but_draw_does_not() -> None:
         social_identity=OwnerSafeSocialIdentity(
             owner_id=owner,
             owner_entity_id=EntityId("body-ada"),
-            counterparts=(
-                CounterpartBinding(target, EntityId("body-ben")),
-            ),
+            counterparts=(CounterpartBinding(target, EntityId("body-ben")),),
         ),
     )
     profile = ledger.profile_for(target)

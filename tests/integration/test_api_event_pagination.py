@@ -180,9 +180,7 @@ async def test_api_event_keyset_pagination_no_gaps_duplicates(
         run_id=run_id, after=second.next_cursor, limit=2
     )
     ids = [
-        event.event_id.value
-        for page in (first, second, third)
-        for event in page.events
+        event.event_id.value for page in (first, second, third) for event in page.events
     ]
     assert len(ids) == len(set(ids))
     assert len(ids) == 6

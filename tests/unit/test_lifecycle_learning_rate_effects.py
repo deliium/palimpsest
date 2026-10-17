@@ -42,9 +42,7 @@ def _world_state():
         registrations=(AgentRegistration(AgentId("agent-1"), body.entity_id),),
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=37, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=37, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
     )
     return engine._snapshot.world.state, EntityId("body-1")
@@ -158,22 +156,16 @@ def test_skill_mode_off_leaves_competence_self_model_untouched() -> None:
         registrations=bootstrap.registrations, spec=spec
     )
     engine = WorldEngine(
-        config=SimulationRunConfig(
-            seed=41, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=41, physical_rules=non_lethal_physical_rules()),
         bootstrap=bootstrap,
         population_lifecycle=spec,
         lifecycle_records=records,
     )
     # Skill learning disabled: no ledger growth path; SelfModel writers stay clean.
-    assert engine._skill_ledger is None or not hasattr(
-        engine, "_competence_self_model"
-    )
+    assert engine._skill_ledger is None or not hasattr(engine, "_competence_self_model")
     before = empty_competence_model(AgentId("agent-1"))
     assert type(before) is CompetenceSelfModel
     batch = engine.observe()
-    engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId("agent-1"), Wait()),)
-    )
+    engine.resolve_tick((ActionSubmission(batch.token, AgentId("agent-1"), Wait()),))
     after = empty_competence_model(AgentId("agent-1"))
     assert before == after

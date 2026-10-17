@@ -8,12 +8,11 @@ couple to ``new_agent_init`` order. Assigned lifespan is stored on
 from __future__ import annotations
 
 import logging
-import random
 from collections.abc import Mapping
-from typing import Final
+from typing import Final, cast
 
 from simulation.models import SimulationRunConfig
-from simulation.randomness import StreamScope, create_named_stream
+from simulation.randomness import RandomStream, StreamScope, create_named_stream
 from simulation.runner_models import (
     LifespanDistributionSpec,
     PopulationLifecycleSpec,
@@ -39,7 +38,7 @@ def lifespan_distribution_stream(
     world_id: str,
     agent_id: str,
     entry_tick: int,
-) -> random.Random:
+) -> RandomStream:
     """Named RNG stream scoped under ``lifespan_distribution`` (never wall clock)."""
     if type(run_config) is not SimulationRunConfig:
         raise TypeError("run_config must be SimulationRunConfig")
@@ -80,11 +79,7 @@ def assign_lifespan_ticks(
     """
     if type(spec) is not PopulationLifecycleSpec:
         raise TypeError("spec must be PopulationLifecycleSpec")
-    dist = (
-        spec.lifespan_distribution
-        if distribution is None
-        else distribution
-    )
+    dist = spec.lifespan_distribution if distribution is None else distribution
     if type(dist) is not LifespanDistributionSpec:
         raise TypeError("distribution must be LifespanDistributionSpec")
 
@@ -92,9 +87,7 @@ def assign_lifespan_ticks(
         assigned = require_assigned_lifespan_ticks(
             "assigned_lifespan_ticks", spec.lifespan_ticks
         )
-        validate_assigned_lifespan_stage_coverage(
-            assigned, spec.stage_thresholds
-        )
+        validate_assigned_lifespan_stage_coverage(assigned, spec.stage_thresholds)
         _LOGGER.info(
             "lifespan_assigned agent_id=%s distribution_id=fixed "
             "assigned_lifespan_ticks=%s",
@@ -122,8 +115,8 @@ def assign_lifespan_ticks(
         entry_tick=entry_tick,
     )
     if dist.distribution_id == "uniform_int":
-        min_ticks = int(dist.params["min_ticks"])
-        max_ticks = int(dist.params["max_ticks"])
+        min_ticks = int(cast(int, dist.params["min_ticks"]))
+        max_ticks = int(cast(int, dist.params["max_ticks"]))
         _LOGGER.debug(
             "lifespan_draw_inputs distribution_id=uniform_int "
             "min_ticks=%s max_ticks=%s agent_id=%s",
@@ -171,8 +164,7 @@ def assign_lifespan_ticks(
     assigned = require_assigned_lifespan_ticks("assigned_lifespan_ticks", assigned)
     validate_assigned_lifespan_stage_coverage(assigned, spec.stage_thresholds)
     _LOGGER.info(
-        "lifespan_assigned agent_id=%s distribution_id=%s "
-        "assigned_lifespan_ticks=%s",
+        "lifespan_assigned agent_id=%s distribution_id=%s assigned_lifespan_ticks=%s",
         agent_id,
         dist.distribution_id,
         assigned,

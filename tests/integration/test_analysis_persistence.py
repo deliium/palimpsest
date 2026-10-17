@@ -159,7 +159,7 @@ async def test_analysis_loader_applies_manifest_high_water(
     )
     manifest = build_evidence_manifest(
         run_id=run_id,
-        objective_commit_hash="b" * 64,
+        objective_commit_hash=bootstrap.integrity_hash.value,
         high_water=EvidenceHighWaterMarks(
             direct_memories=0,
             communicated_memories=0,
@@ -171,8 +171,6 @@ async def test_analysis_loader_applies_manifest_high_water(
             truth_specs=0,
         ),
     )
-    snapshot = await loader.load(
-        run_id=run_id, owner_id="agent-1", manifest=manifest
-    )
+    snapshot = await loader.load(run_id=run_id, owner_id="agent-1", manifest=manifest)
     assert snapshot.traces == ()
     assert snapshot.reconstructions == ()

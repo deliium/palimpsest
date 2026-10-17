@@ -94,7 +94,6 @@ def test_persistence_analysis_loader_stays_analysis_free() -> None:
     )
 
 
-
 def test_matrix_aggregate_and_collectors_not_imported_by_domain() -> None:
     markers = (
         "matrix_aggregate",

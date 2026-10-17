@@ -1,8 +1,9 @@
-"""Named builders for Experiments A-Z and additive Experiments AA-AC."""
+"""Named builders for Experiments A-AY and their additive validation arms."""
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import Final
 
@@ -30,8 +31,11 @@ from simulation.runner_models import (
     ConsolidationMode,
     CounterfactualMode,
     DriveOverrideSpec,
+    HistoricalMemoryLayersSpec,
     ImaginationMode,
+    KinshipSpec,
     MemoryMode,
+    MentorshipSpec,
     MortalityMode,
     ProspectiveImaginationMode,
     ReflectionMode,
@@ -47,6 +51,7 @@ from simulation.runner_models import (
     example_population_lifecycle_spec,
     v3_capability_flags_digest,
 )
+from world.collective_projects import CollectiveProject
 from world.values import Fatigue
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.catalog")
@@ -425,8 +430,7 @@ def experiment_f_sleep_consolidation(
         schema_version=RUNNER_SCHEMA_VERSION_V5,
     )
     _LOG.debug(
-        "experiment_f_built experiment_id=%s condition_ids=%s "
-        "consolidation_modes=%s",
+        "experiment_f_built experiment_id=%s condition_ids=%s consolidation_modes=%s",
         "experiment-f-sleep-consolidation",
         "f-disabled,f-deterministic",
         "disabled,deterministic",
@@ -461,8 +465,7 @@ def experiment_g_reflection(
         schema_version=RUNNER_SCHEMA_VERSION_V6,
     )
     _LOG.debug(
-        "experiment_g_built experiment_id=%s condition_ids=%s "
-        "reflection_modes=%s",
+        "experiment_g_built experiment_id=%s condition_ids=%s reflection_modes=%s",
         "experiment-g-reflection",
         "g-disabled,g-deterministic",
         "disabled,deterministic",
@@ -1322,12 +1325,10 @@ def experiment_aa_emergent_naming(
     ):
         raise ValueError("experiment aa identity mismatch")
     disabled_modes = {
-        agent.cognition.semantic_naming_mode
-        for agent in disabled.runner_config.agents
+        agent.cognition.semantic_naming_mode for agent in disabled.runner_config.agents
     }
     enabled_modes = {
-        agent.cognition.semantic_naming_mode
-        for agent in enabled.runner_config.agents
+        agent.cognition.semantic_naming_mode for agent in enabled.runner_config.agents
     }
     if disabled_modes != {SemanticNamingMode.DISABLED}:
         raise ValueError("experiment aa disabled mode mismatch")
@@ -1464,8 +1465,7 @@ def experiment_y_social_conventions(
         for agent in disabled.runner_config.agents
     }
     enabled_modes = {
-        agent.cognition.social_convention_mode
-        for agent in enabled.runner_config.agents
+        agent.cognition.social_convention_mode for agent in enabled.runner_config.agents
     }
     if disabled_modes != {SocialConventionMode.DISABLED}:
         raise ValueError("experiment y disabled mode mismatch")
@@ -1494,11 +1494,11 @@ def experiment_ad_cognitive_budgets(
     """
     import hashlib
 
-    from agents.cognition.budget import (
+    from experiments.architectures import expand_architecture
+    from simulation.cognition_contracts import (
         high_cost_budget_limits,
         low_cost_budget_limits,
     )
-    from experiments.architectures import expand_architecture
     from simulation.runner_models import (
         RUNNER_SCHEMA_VERSION_V22,
         CognitiveBudgetLimits,
@@ -1510,9 +1510,9 @@ def experiment_ad_cognitive_budgets(
     shared = replace(base, capability_flags=V2CapabilityFlags())
     expanded = expand_architecture(shared, "full_v2_agent")
 
-    def _arm(policy_factory: object, *, condition_id: str, label: str) -> (
-        tuple[str, str, SimulationRunnerConfig]
-    ):
+    def _arm(
+        policy_factory: object, *, condition_id: str, label: str
+    ) -> tuple[str, str, SimulationRunnerConfig]:
         policy = policy_factory()  # type: ignore[operator]
         limits = CognitiveBudgetLimits(
             max_llm_calls_per_tick=policy.max_llm_calls_per_tick,
@@ -1591,13 +1591,13 @@ def experiment_ac_cognitive_architectures(
     Arms share seed, scenario layout, and stochastic identity; they differ only
     by architecture expansion (modes/flags/schema). Off the V1 regression gate.
     """
-    from agents.cognition.architectures import (
-        architecture_definition_digest,
-        get_architecture,
-    )
     from experiments.architectures import (
         expand_architecture,
         registered_architecture_ids,
+    )
+    from simulation.cognition_contracts import (
+        architecture_definition_digest,
+        get_architecture,
     )
 
     matrix = seed_matrix or ExperimentSeedMatrix(seeds=(base.seed,))
@@ -1757,8 +1757,7 @@ def generational_population_profile(
             f"flag_count={len(other)})"
         )
     _LOG.debug(
-        "generational_population_profile_ok schema_version=%s "
-        "policy_id=%s",
+        "generational_population_profile_ok schema_version=%s policy_id=%s",
         config.schema_version,
         config.population_lifecycle.demographic_policy_id,
     )
@@ -2257,6 +2256,7 @@ def experiment_ah_kinship_genealogy(
         ),
     )
 
+
 def dependency_caregiving_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
@@ -2268,9 +2268,7 @@ def dependency_caregiving_profile(
     from simulation.runner_models import RUNNER_SCHEMA_VERSION_V28
 
     if type(config) is not SimulationRunnerConfig:
-        raise TypeError(
-            "dependency_caregiving_profile requires SimulationRunnerConfig"
-        )
+        raise TypeError("dependency_caregiving_profile requires SimulationRunnerConfig")
     if type(config.v3_capability_flags) is not V3CapabilityFlags:
         raise TypeError("v3_capability_flags must be V3CapabilityFlags")
     if config.v3_capability_flags.generational_population is not True:
@@ -2768,6 +2766,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "exchange_functions@1",
         "collective_projects@1",
         "public_goods@1",
+        "regional_migration@1",
     }
 )
 
@@ -2838,8 +2837,6 @@ def knowledge_repositories_profile(
     return config
 
 
-
-
 def knowledge_genealogy_profile(
     config: SimulationRunnerConfig,
 ) -> SimulationRunnerConfig:
@@ -2899,6 +2896,7 @@ def knowledge_genealogy_profile(
         config.knowledge_repositories is not None,
     )
     return config
+
 
 def developmental_learning_profile(
     config: SimulationRunnerConfig,
@@ -3206,7 +3204,7 @@ def experiment_ak_intergenerational_mentorship(
         )
     )
 
-    def _with_mentorship(spec: object) -> SimulationRunnerConfig:
+    def _with_mentorship(spec: MentorshipSpec) -> SimulationRunnerConfig:
         return replace(
             teaching_base,
             schema_version=RUNNER_SCHEMA_VERSION_V30,
@@ -3534,7 +3532,7 @@ def experiment_am_historical_memory_layers(
     def _v32_layers(
         *,
         with_lifecycle: bool,
-        layers_spec: object | None = None,
+        layers_spec: HistoricalMemoryLayersSpec | None = None,
         narrative_on: bool = False,
     ) -> SimulationRunnerConfig:
         flags = V3CapabilityFlags(
@@ -3705,9 +3703,7 @@ def experiment_an_durable_records(
         rebuilt = tuple(
             replace(
                 agent,
-                cognition=replace(
-                    agent.cognition, artifact_interpretation_mode=mode
-                ),
+                cognition=replace(agent.cognition, artifact_interpretation_mode=mode),
             )
             for agent in cfg.agents
         )
@@ -3953,11 +3949,7 @@ def experiment_ao_knowledge_repositories(
         provenance_obj = (
             provenance_spec
             if provenance_spec is not None
-            else (
-                provenance_repos
-                if uptake_repositories
-                else provenance
-            )
+            else (provenance_repos if uptake_repositories else provenance)
         )
         cfg = replace(
             base,
@@ -4469,9 +4461,7 @@ def experiment_aq_bounded_experimentation(
                 schema_version=RUNNER_SCHEMA_VERSION_V36,
                 mortality_mode=MortalityMode.DISABLED,
                 stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
-                v3_capability_flags=V3CapabilityFlags(
-                    cultural_historical_memory=True
-                ),
+                v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
                 cultural_feature_provenance=provenance,
                 bounded_experimentation=spec,
                 knowledge_genealogy=genealogy if with_genealogy else None,
@@ -4648,21 +4638,18 @@ def experiment_ar_technique_lifecycle(
             new_agent_initialization=None,
         )
 
-    def _v37(**extra: object) -> SimulationRunnerConfig:
+    def _v37() -> SimulationRunnerConfig:
         cfg = _clear(
             replace(
                 base,
                 schema_version=RUNNER_SCHEMA_VERSION_V37,
                 mortality_mode=MortalityMode.DISABLED,
                 stop_policy=RunnerStopPolicy(max_ticks=max_ticks),
-                v3_capability_flags=V3CapabilityFlags(
-                    cultural_historical_memory=True
-                ),
+                v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
                 cultural_feature_provenance=provenance,
                 knowledge_genealogy=genealogy,
                 technique_lifecycle=lifecycle,
                 bounded_experimentation=None,
-                **extra,
             )
         )
         return technique_lifecycle_profile(cfg)
@@ -4742,9 +4729,14 @@ def experiment_as_possession_succession(
     child = base.agents[-1].agent_id.value
     kinship = example_kinship_spec(parent_agent_id=parent, child_agent_id=child)
 
-    def _v38(**extra: object) -> SimulationRunnerConfig:
-        flags = extra.pop("v3_capability_flags", V3CapabilityFlags())
-        kinship = extra.pop("kinship", None)
+    def _v38(
+        *,
+        v3_capability_flags: V3CapabilityFlags | None = None,
+        kinship: KinshipSpec | None = None,
+    ) -> SimulationRunnerConfig:
+        flags = (
+            V3CapabilityFlags() if v3_capability_flags is None else v3_capability_flags
+        )
         return replace(
             base,
             schema_version=RUNNER_SCHEMA_VERSION_V38,
@@ -4754,7 +4746,6 @@ def experiment_as_possession_succession(
             possession_succession=succession,
             kinship=kinship,
             population_lifecycle=None,
-            **extra,
         )
 
     channel_off = replace(
@@ -5001,7 +4992,9 @@ _LEADER_ALIASES: Final[frozenset[str]] = frozenset(
 )
 
 
-def note_collective_project_arm(arm: str, projects: object) -> None:
+def note_collective_project_arm(
+    arm: str, projects: Sequence[CollectiveProject]
+) -> None:
     """Log outcome counts after a scripted arm. Counts are not a crew label."""
     rows = tuple(projects)
     completed = 0
@@ -5126,7 +5119,7 @@ def experiment_aw_collective_projects(
     )
 
 
-def note_public_good_arm(arm: str, events: object) -> None:
+def note_public_good_arm(arm: str, events: Sequence[object]) -> None:
     """Log objective public-act event counts after a scripted arm."""
     benefits = 0
     maintains = 0
@@ -5245,3 +5238,24 @@ def experiment_ax_public_goods(
         seed_matrix=matrix,
         arms=arms,
     )
+
+
+def experiment_ay_regional_migration(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 32,
+) -> ExperimentDefinition:
+    """Off-gate Experiment AY: optional regional travel and migration evidence."""
+    from experiments.regional_migration_scenario import regional_migration_scenario
+
+    definition = regional_migration_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=regional_migration@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition

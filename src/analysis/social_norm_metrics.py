@@ -66,11 +66,7 @@ def compute_emergent_social_norms(
         "spare_after_sleep": _spare_rate(behavior),
         "reciprocal_exchange": _reciprocal_rate(behavior),
     }
-    active = [
-        row
-        for row in beliefs
-        if _text(row, "status") == "active"
-    ]
+    active = [row for row in beliefs if _text(row, "status") == "active"]
     values: dict[str, object] = {
         "return_transfer_rate": _rate_value(rates["return_transfer"]),
         "share_under_scarcity_rate": _rate_value(rates["share_under_scarcity"]),
@@ -295,7 +291,7 @@ def _reciprocal_rate(rows: Sequence[object]) -> float | None:
         other = _text(row, "other_id")
         if actor is None or other is None or actor == other:
             continue
-        key = tuple(sorted((actor, other)))
+        key = (actor, other) if actor < other else (other, actor)
         directions = seen.setdefault(key, set())
         if actor in directions and other in directions:
             later += 1
@@ -314,9 +310,7 @@ def _rate_value(rate: float | None) -> object:
 
 def _mean_confidence(active: Sequence[object]) -> object:
     scores = [
-        score
-        for row in active
-        if (score := _number(row, "confidence")) is not None
+        score for row in active if (score := _number(row, "confidence")) is not None
     ]
     if not scores:
         return _ABSENT

@@ -148,9 +148,7 @@ def _communication(
 def test_policy_locks_constants_and_modes_match() -> None:
     policy = default_cultural_narrative_policy()
     assert (
-        policy.version
-        == CULTURAL_NARRATIVE_POLICY_VERSION
-        == "cultural-narratives.v1"
+        policy.version == CULTURAL_NARRATIVE_POLICY_VERSION == "cultural-narratives.v1"
     )
     assert policy.active_strength == 0.40
     assert policy.retire_strength == 0.20
@@ -187,9 +185,7 @@ def test_variant_id_and_fingerprint_are_digest_only() -> None:
     fingerprint = narrative_content_fingerprint(content)
     assert len(fingerprint) == 64
     variant_id = narrative_variant_id(owner, fingerprint, 0, "")
-    expected = hashlib.sha256(
-        f"{owner.value}|{fingerprint}|0|".encode()
-    ).hexdigest()
+    expected = hashlib.sha256(f"{owner.value}|{fingerprint}|0|".encode()).hexdigest()
     assert variant_id == expected
     other = narrative_variant_id(_agent("ben"), fingerprint, 0, "")
     assert variant_id != other
@@ -225,9 +221,7 @@ def test_require_owner_accepts_none_and_rejects_foreign() -> None:
     owner = _agent("alice")
     require_owner_cultural_narratives(None, owner, field_name="cultural_narratives")
     ledger = empty_narrative_ledger(owner)
-    require_owner_cultural_narratives(
-        ledger, owner, field_name="cultural_narratives"
-    )
+    require_owner_cultural_narratives(ledger, owner, field_name="cultural_narratives")
     with pytest.raises(ValueError, match="owner_id mismatch"):
         require_owner_cultural_narratives(
             ledger, _agent("ben"), field_name="cultural_narratives"
@@ -395,9 +389,7 @@ def test_deliberate_lie_from_unreferenced_tell() -> None:
         communication_id="comm-lie-1",
         concepts=("danger", "ridge"),
         relations=(
-            CommunicationRelation(
-                subject="danger", predicate="at", object="ridge"
-            ),
+            CommunicationRelation(subject="danger", predicate="at", object="ridge"),
         ),
         source_basis=CommunicationSourceBasis.UNREFERENCED,
     )
@@ -535,9 +527,7 @@ def test_founding_fingerprint_recovers_across_freeze() -> None:
     identity = _identity()
     owner = identity.owner_id
     parent_content = NarrativeContent(concepts=("water", "gone"), text="tell_story")
-    child_content = NarrativeContent(
-        concepts=("water", "poisoned"), text="retell"
-    )
+    child_content = NarrativeContent(concepts=("water", "poisoned"), text="retell")
     parent_fp = narrative_content_fingerprint(parent_content)
     child_fp = narrative_content_fingerprint(child_content)
     parent_id = narrative_variant_id(owner, parent_fp, 0, "")
@@ -574,9 +564,7 @@ def test_founding_fingerprint_recovers_across_freeze() -> None:
         previous=previous,
     )
     live_child = next(
-        variant
-        for variant in reloaded.variants
-        if variant.mutation_generation == 1
+        variant for variant in reloaded.variants if variant.mutation_generation == 1
     )
     assert live_child.variant_id == child_id
     assert live_child.content_fingerprint == child_fp

@@ -346,11 +346,7 @@ class TickBudgetLedger:
         for dimension in BudgetDimension:
             self._used.setdefault(dimension, 0)
         clock = self.policy.clock
-        if (
-            clock is not None
-            and callable(clock)
-            and self.policy.timeout_seconds > 0.0
-        ):
+        if clock is not None and callable(clock) and self.policy.timeout_seconds > 0.0:
             self._started_at = float(clock())
         _LOG.debug(
             "tick_budget_created agent_id=%s tick=%s mode=enforced "
@@ -577,11 +573,7 @@ class TickBudgetLedger:
     def snapshot(self) -> CognitiveBudgetAudit:
         """Frozen end-of-prepare audit."""
         reasons = tuple(reason.value for reason in self._exhausted)
-        first = (
-            None
-            if self._first_exhausted is None
-            else self._first_exhausted.value
-        )
+        first = None if self._first_exhausted is None else self._first_exhausted.value
         return CognitiveBudgetAudit(
             owner_id=self.owner_id,
             tick=self.tick,

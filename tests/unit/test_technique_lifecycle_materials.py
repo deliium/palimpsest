@@ -44,13 +44,9 @@ def test_depleted_nodes_are_absent() -> None:
 
 def test_missing_tool() -> None:
     catalog = example_production_catalog()
-    anchor = TechniqueMaterialAnchor(
-        content_key="tech:hafting", recipe_id="craft_tool"
-    )
+    anchor = TechniqueMaterialAnchor(content_key="tech:hafting", recipe_id="craft_tool")
     recipe = next(
-        recipe
-        for recipe in catalog.recipes
-        if recipe.recipe_id.value == "craft_tool"
+        recipe for recipe in catalog.recipes if recipe.recipe_id.value == "craft_tool"
     )
     assert any(type(item) is not ResourceNameInput for item in recipe.inputs) or True
     result = evaluate_technique_performable(
@@ -65,9 +61,7 @@ def test_missing_tool() -> None:
 
 def test_dead_holder_item_still_counts() -> None:
     catalog = example_production_catalog()
-    anchor = TechniqueMaterialAnchor(
-        content_key="tech:hafting", recipe_id="craft_tool"
-    )
+    anchor = TechniqueMaterialAnchor(content_key="tech:hafting", recipe_id="craft_tool")
     kind = ItemKind.MATERIAL.value
     for recipe in catalog.recipes:
         if recipe.recipe_id.value != "craft_tool":

@@ -115,11 +115,17 @@ async def test_experiment_a_arms_share_stochastic_identity() -> None:
     )
     definition = experiment_a_memory(base)
     results = await ExperimentCoordinator(definition).run_all()
-    assert len(results) == 2
+    assert len(results) == 3
     assert (
-        results[0].assignment.runner_config.stochastic_identity
-        == results[1].assignment.runner_config.stochastic_identity
+        len({item.assignment.runner_config.stochastic_identity for item in results})
+        == 1
     )
-    assert results[0].assignment.runner_config.agents[0].cognition.memory_mode != (
-        results[1].assignment.runner_config.agents[0].cognition.memory_mode
+    assert (
+        len(
+            {
+                item.assignment.runner_config.agents[0].cognition.memory_mode
+                for item in results
+            }
+        )
+        == 3
     )

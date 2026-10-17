@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from tests.integration.test_api_stream_resume import _seed_run
 
 from api.streaming import StreamFanout, StreamSessionConfig
 from infrastructure.database import DatabaseResources
@@ -16,7 +17,6 @@ from simulation.run_control import (
     StreamRecordKind,
     make_stream_envelope,
 )
-from tests.integration.test_api_stream_resume import _seed_run
 
 pytestmark = pytest.mark.integration
 

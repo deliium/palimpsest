@@ -46,6 +46,7 @@ class _RelationshipServiceReader:
     def history(self, relationship_id: RelationshipId) -> RelationshipHistory | None:
         return self._service.history_sync(relationship_id)
 
+
 _LOG: Final[logging.Logger] = logging.getLogger("social.service")
 
 

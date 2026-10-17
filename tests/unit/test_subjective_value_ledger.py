@@ -83,9 +83,7 @@ def test_v14_omits_ledgers_and_keeps_commitments() -> None:
     }
     scarcity = {owner.value: empty_scarcity_beliefs(owner)}
     commitments = {owner.value: empty_structured_commitments(owner)}
-    older = subjective_valuation_checkpoint_payload(
-        valuations, scarcity, codec="v14"
-    )
+    older = subjective_valuation_checkpoint_payload(valuations, scarcity, codec="v14")
     commitment_payload = structured_commitments_checkpoint_payload(
         commitments, codec="v14"
     )
@@ -121,9 +119,7 @@ def test_v15_round_trips_two_owners_tool_reservations() -> None:
             ScarcityBelief(ItemKind.TOOL, 1, EntityId("loc-1"), 1),
         ),
     }
-    payload = subjective_valuation_checkpoint_payload(
-        valuations, scarcity, codec="v15"
-    )
+    payload = subjective_valuation_checkpoint_payload(valuations, scarcity, codec="v15")
     assert "price" not in str(payload)
     restored = decode_subjective_valuation_checkpoint(payload, codec="v15")
     assert restored["subjective_valuations"][alice.value].kind_rows[0].reservation == 8

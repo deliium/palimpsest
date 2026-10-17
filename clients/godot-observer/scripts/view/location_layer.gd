@@ -127,6 +127,20 @@ func zone_center(location_id: String) -> Vector2:
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var font_size := ThemeDB.fallback_font_size
+	# Region envelopes group visual rectangles only; they never define adjacency.
+	var regions := {}
+	var labels := {}
+	for location in _locations:
+		if location.region_id == null:
+			continue
+		var key := str(location.region_id)
+		var rect := _rect_for(location)
+		regions[key] = regions[key].merge(rect) if regions.has(key) else rect
+		labels[key] = str(location.region_label)
+	for key in regions:
+		var envelope: Rect2 = regions[key].grow(16.0)
+		draw_rect(envelope, Color(0.5, 0.65, 0.8, 0.4), false, 1.0)
+		draw_string(font, envelope.position + Vector2(4, -4), labels[key], HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	for location in _locations:
 		var rect := _rect_for(location)
 		var theme = null if location.presentation == null else location.presentation.theme

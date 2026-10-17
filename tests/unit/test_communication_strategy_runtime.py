@@ -195,9 +195,7 @@ def _seen_event():
         details=Searched(success=False),
         actor_id=EntityId("body-1"),
         cause=ActionCause(request, EntityId("body-1")),
-        occurrence=OccurrenceContext(
-            destination_location_id=EntityId("loc-other")
-        ),
+        occurrence=OccurrenceContext(destination_location_id=EntityId("loc-other")),
     )
 
 
@@ -366,9 +364,7 @@ def _false_view():
         world_id=WorldId("world-1"),
         observer_id=EntityId("body-speaker"),
         revision=WorldRevision(0),
-        locations=(
-            ObservedLocation(entity_id=EntityId("loc-other"), name="other"),
-        ),
+        locations=(ObservedLocation(entity_id=EntityId("loc-other"), name="other"),),
     )
 
 

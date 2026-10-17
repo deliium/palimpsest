@@ -594,9 +594,9 @@ def _situation_atoms(
                 )
             )
         if observation.hazard_kinds is not None:
-            hazards = ",".join(
-                kind.value for kind in observation.hazard_kinds
-            ) or "none"
+            hazards = (
+                ",".join(kind.value for kind in observation.hazard_kinds) or "none"
+            )
             atoms.append(CausalAtom(slot=CausalSlot.HAZARD, value=hazards))
     if direction is ActionDirection.COMMUNICATE and target_id is not None:
         atoms.append(CausalAtom(slot=CausalSlot.COUNTERPART, value=target_id))

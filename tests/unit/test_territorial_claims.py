@@ -1020,15 +1020,18 @@ def test_respect_penalty_follows_trust_and_need(
         "reason=source_relationship_missing direction=move" in message
         for message in messages
     )
-    assert territorial_respect_penalties(
-        owner_id=owner,
-        futures=futures,
-        ledger=ledger,
-        relationships=(),
-        hunger=0.0,
-        thirst=0.0,
-        mode=CognitionTerritorialClaimMode.DISABLED,
-    ) == {}
+    assert (
+        territorial_respect_penalties(
+            owner_id=owner,
+            futures=futures,
+            ledger=ledger,
+            relationships=(),
+            hunger=0.0,
+            thirst=0.0,
+            mode=CognitionTerritorialClaimMode.DISABLED,
+        )
+        == {}
+    )
 
 
 def test_wait_becomes_claim_challenge_or_defense(
@@ -1191,8 +1194,7 @@ def test_wait_becomes_claim_challenge_or_defense(
     assert type(challenge) is Tell
     assert challenge.utterance.content.text == "disputes"
     assert (
-        challenge_audits is not None
-        and challenge_audits[0].reason_code == "challenge"
+        challenge_audits is not None and challenge_audits[0].reason_code == "challenge"
     )
     assert type(fled) is Flee
     assert fled_audits == ()
@@ -1205,8 +1207,7 @@ def test_wait_becomes_claim_challenge_or_defense(
         for message in messages
     )
     assert any(
-        "territorial_response owner_id=owner-a reason=defend command=Attack"
-        in message
+        "territorial_response owner_id=owner-a reason=defend command=Attack" in message
         for message in messages
     )
     assert any("reason=command_already_selected" in message for message in messages)

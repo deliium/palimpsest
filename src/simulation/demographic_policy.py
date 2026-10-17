@@ -10,7 +10,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    from simulation.new_agent_initialization import OriginRef
 
 from agents.models import AgentId
 from world.identifiers import EntityId, require_stable_id
@@ -41,7 +44,7 @@ class DemographicEntryCandidate:
     name_prefix: str
     sort_key: tuple[str, str]
     creation_reason: str = "demographic_policy"
-    origin_refs: tuple[object, ...] = ()
+    origin_refs: tuple[OriginRef, ...] = ()
     creation_config_id: str | None = None
     parent_agent_ids: tuple[AgentId, ...] = ()
 
@@ -103,8 +106,7 @@ class DemographicEntryCandidate:
                 raise TypeError("parent_agent_ids entries must be AgentId")
             if parent.value in seen:
                 raise ValueError(
-                    "duplicate parent_agent_ids "
-                    "(code=kinship_duplicate_parent_id)"
+                    "duplicate parent_agent_ids (code=kinship_duplicate_parent_id)"
                 )
             seen.add(parent.value)
             parents.append(parent)
@@ -125,7 +127,8 @@ class DemographicPopulationSnapshot:
 class DemographicPolicy(Protocol):
     """Closed policy port consulted once per tick after lifecycle progression."""
 
-    policy_id: str
+    @property
+    def policy_id(self) -> str: ...
 
     def propose_entries(
         self,
@@ -173,8 +176,8 @@ class FixedIntervalEntryPolicy:
         rng_draw: int,
     ) -> tuple[DemographicEntryCandidate, ...]:
         del rng_draw  # reserved for future seeded variance; schedule is exact
-        interval = int(params["interval_ticks"])
-        per_interval = int(params["entries_per_interval"])
+        interval = int(cast(int, params["interval_ticks"]))
+        per_interval = int(cast(int, params["entries_per_interval"]))
         if snapshot.tick < 1 or interval < 1 or snapshot.tick % interval != 0:
             _LOG.debug(
                 "demographic_policy_consult policy_id=fixed_interval_entry "
@@ -193,7 +196,7 @@ class FixedIntervalEntryPolicy:
         count = min(per_interval, capacity)
         name_prefix = str(params["name_prefix"])
         cohort_prefix = str(params["cohort_id_prefix"])
-        generation_index = int(params["generation_index"])
+        generation_index = int(cast(int, params["generation_index"]))
         spawn_location_id = EntityId(str(params["spawn_location_id"]))
         candidates: list[DemographicEntryCandidate] = []
         for ordinal in range(count):

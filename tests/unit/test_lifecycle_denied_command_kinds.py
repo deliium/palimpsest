@@ -26,6 +26,9 @@ def test_allowlist_membership_locked() -> None:
             "build",
             "repair",
             "flee",
+            "feed",
+            "transport",
+            "experiment",
         }
     )
     # Teaching is a cognition mode — not a deny token.

@@ -168,11 +168,7 @@ class _Future:
 
 def test_policy_locks_constants_and_modes_match() -> None:
     policy = default_social_convention_policy()
-    assert (
-        policy.version
-        == SOCIAL_CONVENTION_POLICY_VERSION
-        == "social-conventions.v1"
-    )
+    assert policy.version == SOCIAL_CONVENTION_POLICY_VERSION == "social-conventions.v1"
     assert policy.active_strength == 0.40
     assert policy.retire_strength == 0.20
     assert policy.decay == 0.05
@@ -285,9 +281,7 @@ def test_disabled_mode_accepts_none_ledger() -> None:
     ledger = empty_convention_ledger(owner)
     assert isinstance(ledger, ConventionLedger)
     assert ledger.beliefs == ()
-    require_owner_social_conventions(
-        ledger, owner, field_name="social_conventions"
-    )
+    require_owner_social_conventions(ledger, owner, field_name="social_conventions")
     with pytest.raises(ValueError, match="owner_id mismatch"):
         require_owner_social_conventions(
             ledger, _agent("ben"), field_name="social_conventions"
@@ -761,12 +755,8 @@ def test_habitual_exchange_promotes_and_links_competing_variant() -> None:
             identity,
             talk_ledger,
         )
-    wait_belief = _belief(
-        talk_ledger, ConventionSituation.COLOCATED_MEETING, "wait"
-    )
-    talk_belief = _belief(
-        talk_ledger, ConventionSituation.COLOCATED_MEETING, "talk"
-    )
+    wait_belief = _belief(talk_ledger, ConventionSituation.COLOCATED_MEETING, "wait")
+    talk_belief = _belief(talk_ledger, ConventionSituation.COLOCATED_MEETING, "talk")
     assert talk_belief.belief_id in wait_belief.competing_variant_ids
     assert wait_belief.belief_id in talk_belief.competing_variant_ids
 
@@ -884,9 +874,7 @@ def test_owners_keep_separate_ledgers_and_no_ritual_fields() -> None:
             life_status=LifeStatus.ALIVE,
             carry_capacity=CarryCapacity(10),
         ),
-        occurrences=(
-            _occur("wait", "body-ada", None, "sep-0", tick=0),
-        ),
+        occurrences=(_occur("wait", "body-ada", None, "sep-0", tick=0),),
         visible_bodies=(_body("body-ada"),),
     )
     ben_ledger = apply_convention_update(ben_observation, ben, None)

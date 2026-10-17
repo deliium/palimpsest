@@ -76,8 +76,7 @@ def test_chronological_age_derivation(
         current_tick,
     )
     assert (
-        chronological_age(entry_tick=entry_tick, current_tick=current_tick)
-        == expected
+        chronological_age(entry_tick=entry_tick, current_tick=current_tick) == expected
     )
 
 

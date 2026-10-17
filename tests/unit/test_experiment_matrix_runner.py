@@ -102,9 +102,7 @@ async def test_durable_rejects_concurrency_gt_one(tmp_path) -> None:
         execution=MatrixExecutionPolicy(max_concurrency=2),
     )
     store = FilesystemMatrixManifestStore(tmp_path)
-    runner = MatrixBatchRunner(
-        MatrixBatchDependencies(package_version="0.0.0-test")
-    )
+    runner = MatrixBatchRunner(MatrixBatchDependencies(package_version="0.0.0-test"))
     with pytest.raises(MatrixValidationError) as exc:
         await runner.run(spec, store)
     assert exc.value.code == "durable_requires_serial_matrix"

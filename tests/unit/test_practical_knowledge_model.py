@@ -35,9 +35,7 @@ def _entry(
     source: AgentId | None = None,
     refs: tuple[str, ...] = (),
 ) -> SubjectivePracticalKnowledge:
-    teacher = (
-        source if origin is KnowledgeTransmissionOrigin.TEACHING else None
-    )
+    teacher = source if origin is KnowledgeTransmissionOrigin.TEACHING else None
     return SubjectivePracticalKnowledge(
         entry_id=entry_id,
         owner_id=AgentId(owner),
@@ -47,8 +45,7 @@ def _entry(
         origin=origin,
         parent_entry_ids=parents,
         lineage_root_id=(
-            f"root:{owner}:{kind.value}:"
-            f"{practical_knowledge_content_key(token)}"
+            f"root:{owner}:{kind.value}:{practical_knowledge_content_key(token)}"
         ),
         hop_index=hop,
         mutated=False,

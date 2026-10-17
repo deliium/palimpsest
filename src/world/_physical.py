@@ -383,9 +383,7 @@ def apply_autonomous_physical_step(
             )
         )
         if spec is not None:
-            witness = node_quantity_witness(
-                resource_id, resource.quantity, resulting
-            )
+            witness = node_quantity_witness(resource_id, resource.quantity, resulting)
             if witness is not None:
                 node_ordinal = family_ordinals[SystemEffectFamily.RESOURCE_NODE]
                 family_ordinals[SystemEffectFamily.RESOURCE_NODE] = node_ordinal + 1
@@ -431,7 +429,9 @@ def apply_autonomous_physical_step(
                     body.hunger.value
                     + rules.metabolism_hunger
                     + float(
-                        (dependency_hunger_extra_by_entity or {}).get(body.entity_id, 0.0)
+                        (dependency_hunger_extra_by_entity or {}).get(
+                            body.entity_id, 0.0
+                        )
                     )
                 )
             )
@@ -442,7 +442,9 @@ def apply_autonomous_physical_step(
                     body.thirst.value
                     + rules.metabolism_thirst
                     + float(
-                        (dependency_thirst_extra_by_entity or {}).get(body.entity_id, 0.0)
+                        (dependency_thirst_extra_by_entity or {}).get(
+                            body.entity_id, 0.0
+                        )
                     )
                 )
             )
@@ -457,7 +459,7 @@ def apply_autonomous_physical_step(
         )
         fatigue_value = body.fatigue.value + fatigue_gain
         if public_goods_active:
-            from world.collective_projects import presence_relief
+            from world._collective_projects import presence_relief
 
             bridge_relief, _warning_scale = presence_relief(working, body.location_id)
             if bridge_relief:
@@ -574,7 +576,7 @@ def apply_autonomous_physical_step(
         if spec is not None and rules.exposure_damage != 0.0:
             hazard_extra = _hazard_extra(working, spec, body.location_id)
             if public_goods_active and hazard_extra:
-                from world.collective_projects import presence_relief
+                from world._collective_projects import presence_relief
 
                 _bridge_relief, warning_scale = presence_relief(
                     working, body.location_id
@@ -643,14 +645,12 @@ def apply_autonomous_physical_step(
 
     if possession_succession_active:
         died_ids = {
-            detail.details.body_id
-            for detail in pending
-            if type(detail.details) is Died
+            detail.details.body_id for detail in pending if type(detail.details) is Died
         }
         for body_id, body in bodies.items():
-            prior = state.bodies.get(body_id)
+            prior_body = state.bodies.get(body_id)
             became_dead = body.life_status is LifeStatus.DEAD and (
-                prior is None or prior.life_status is not LifeStatus.DEAD
+                prior_body is None or prior_body.life_status is not LifeStatus.DEAD
             )
             if became_dead and body_id not in died_ids:
                 _LOG.error(
@@ -662,7 +662,7 @@ def apply_autonomous_physical_step(
         working = rebuild_world_state(working, bodies=bodies)
 
     if public_goods_active:
-        from world.collective_projects import record_presence_benefits
+        from world._collective_projects import record_presence_benefits
 
         project_rows, benefit_details = record_presence_benefits(
             working, tick=tick_value, bodies=working.bodies

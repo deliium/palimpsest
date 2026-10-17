@@ -32,9 +32,7 @@ __all__ = [
     "compute_cultural_trait_diffusion",
 ]
 
-CULTURAL_FEATURE_PROVENANCE_METRIC_VERSION: Final[str] = (
-    "cultural_feature_provenance@1"
-)
+CULTURAL_FEATURE_PROVENANCE_METRIC_VERSION: Final[str] = "cultural_feature_provenance@1"
 CULTURAL_TRAIT_DIFFUSION_METRIC_VERSION: Final[str] = "cultural_trait_diffusion@1"
 CULTURAL_FEATURE_MUTATION_METRIC_VERSION: Final[str] = "cultural_feature_mutation@1"
 

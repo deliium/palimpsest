@@ -10,16 +10,15 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 from agents.models import AgentId, DriveKind, DriveProfile
 from simulation.models import SimulationRunConfig
-from simulation.randomness import StreamScope, create_named_stream
+from simulation.randomness import RandomStream, StreamScope, create_named_stream
 from simulation.runner_models import (
     AgentCognitionSpec,
     ArtifactInterpretationMode,
@@ -266,9 +265,7 @@ def _require_exact_keys(
         )
 
 
-def _freeze_str_mapping(
-    path: str, value: Mapping[str, object]
-) -> Mapping[str, object]:
+def _freeze_str_mapping(path: str, value: Mapping[str, object]) -> Mapping[str, object]:
     frozen: dict[str, object] = {}
     for key, item in value.items():
         if type(key) is not str:
@@ -399,8 +396,7 @@ class ParameterDistributionSpec:
                 DriveKind(drive_raw)
             except ValueError as exc:
                 raise ValueError(
-                    f"unknown drive_kind {drive_raw!r} "
-                    "(code=unknown_drive_kind)"
+                    f"unknown drive_kind {drive_raw!r} (code=unknown_drive_kind)"
                 ) from exc
             frozen["drive_kind"] = drive_raw
             min_delta = _exact_delta("params.min_delta", frozen["min_delta"])
@@ -551,9 +547,7 @@ class SpawnLocationPolicy:
                     "spawn_location_policy.params.location_ids must be a sequence"
                 )
             ids = tuple(
-                require_stable_id(
-                    "spawn_location_policy.params.location_ids[]", item
-                )
+                require_stable_id("spawn_location_policy.params.location_ids[]", item)
                 for item in raw_ids
             )
             if not ids:
@@ -718,23 +712,17 @@ class NewAgentInitializationSpec:
                 "(code=unknown_species_defaults_id)"
             )
         if type(self.parameter_distributions) is not ParameterDistributionSpec:
-            raise TypeError(
-                "parameter_distributions must be ParameterDistributionSpec"
-            )
+            raise TypeError("parameter_distributions must be ParameterDistributionSpec")
         if type(self.innate_drive_policy) is not InnateDrivePolicy:
             raise TypeError("innate_drive_policy must be InnateDrivePolicy")
         if type(self.physical_condition_policy) is not PhysicalConditionPolicy:
-            raise TypeError(
-                "physical_condition_policy must be PhysicalConditionPolicy"
-            )
+            raise TypeError("physical_condition_policy must be PhysicalConditionPolicy")
         if type(self.spawn_location_policy) is not SpawnLocationPolicy:
             raise TypeError("spawn_location_policy must be SpawnLocationPolicy")
         if type(self.dependency_binding) is not DependencyBindingPolicy:
             raise TypeError("dependency_binding must be DependencyBindingPolicy")
         if type(self.objective_inheritance) is not ObjectiveInheritancePolicy:
-            raise TypeError(
-                "objective_inheritance must be ObjectiveInheritancePolicy"
-            )
+            raise TypeError("objective_inheritance must be ObjectiveInheritancePolicy")
         if type(self.provenance_policy) is not ProvenancePolicy:
             raise TypeError("provenance_policy must be ProvenancePolicy")
         if isinstance(self.creation_reason_policy, (str, bytes)) or not isinstance(
@@ -822,9 +810,7 @@ def default_new_agent_initialization_spec() -> NewAgentInitializationSpec:
             CreationReasonCode.EXTERNAL_ENTRY.value,
             CreationReasonCode.EXPERIMENT_INJECT.value,
         ),
-        provenance_policy=ProvenancePolicy(
-            record_origin_refs=False, allowed_roles=()
-        ),
+        provenance_policy=ProvenancePolicy(record_origin_refs=False, allowed_roles=()),
     )
 
 
@@ -945,7 +931,7 @@ def _species_default_developmental_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     )
 
 
-_SPECIES_DEFAULTS: Final[Mapping[str, object]] = {
+_SPECIES_DEFAULTS: Final[Mapping[str, Callable[[AgentId], SpeciesDefaultsPack]]] = {
     SPECIES_DEFAULT_V1: _species_default_v1,
     SPECIES_DEFAULT_DEVELOPMENTAL_V1: _species_default_developmental_v1,
 }
@@ -969,7 +955,7 @@ def species_defaults_for(
             f"unknown species_defaults_id {object_id!r} "
             "(code=unknown_species_defaults_id)"
         )
-    pack = factory(agent_id)  # type: ignore[operator]
+    pack = factory(agent_id)
     _LOG.debug(
         "species_defaults_resolved species_defaults_id=%s agent_id=%s",
         object_id,
@@ -984,7 +970,7 @@ def new_agent_init_stream(
     run_id: str,
     agent_id: str,
     draw_name: str,
-) -> random.Random:
+) -> RandomStream:
     """Named RNG stream scoped under ``new_agent_init`` (never wall clock)."""
     if type(run_config) is not SimulationRunConfig:
         raise TypeError("run_config must be SimulationRunConfig")
@@ -1039,8 +1025,8 @@ def draw_parameter_distribution(
     )
     if distribution.distribution_id == "uniform_drive_delta":
         kind = DriveKind(str(distribution.params["drive_kind"]))
-        min_delta = float(distribution.params["min_delta"])
-        max_delta = float(distribution.params["max_delta"])
+        min_delta = float(cast(float, distribution.params["min_delta"]))
+        max_delta = float(cast(float, distribution.params["max_delta"]))
         delta = rng.uniform(min_delta, max_delta)
         _LOG.debug(
             "parameter_draw_complete distribution_id=uniform_drive_delta "
@@ -1086,7 +1072,7 @@ def resolve_spawn_location(
     policy: SpawnLocationPolicy,
     candidate_location_id: EntityId | None,
     provenance_is_demographic: bool,
-    rng: random.Random | None = None,
+    rng: RandomStream | None = None,
 ) -> EntityId:
     """Resolve spawn location per locked precedence rules."""
     if type(policy) is not SpawnLocationPolicy:
@@ -1119,8 +1105,7 @@ def resolve_spawn_location(
     if policy.policy_id == "seeded_allowlist":
         if rng is None:
             raise ValueError(
-                "seeded_allowlist requires rng "
-                "(code=spawn_location_rng_required)"
+                "seeded_allowlist requires rng (code=spawn_location_rng_required)"
             )
         ids = policy.params["location_ids"]
         assert isinstance(ids, tuple) and ids
@@ -1200,8 +1185,9 @@ def build_entrant_body_from_init(
     Shared by ``admit_population_entry`` and tick-path demographic admit.
     """
     from world.lifecycle import default_entrant_body
-    from world.models import AgentBody, CarryCapacity
+    from world.models import AgentBody
     from world.values import (
+        CarryCapacity,
         Fatigue,
         Health,
         Hunger,
@@ -1217,8 +1203,7 @@ def build_entrant_body_from_init(
             "(code=unknown_creation_reason_code)"
         )
     _LOG.debug(
-        "new_agent_init_stage stage=build_objective_body agent_id=- "
-        "reason_code=%s",
+        "new_agent_init_stage stage=build_objective_body agent_id=- reason_code=%s",
         creation_reason,
     )
     if init_spec.physical_condition_policy.policy_id != "default_entrant":
@@ -1258,9 +1243,7 @@ def build_entrant_body_from_init(
     assert type(body) is AgentBody
     summary = InitialConditionsSummary(
         location_id=location_id.value,
-        dependency_status=str(
-            getattr(dependency_status, "value", dependency_status)
-        ),
+        dependency_status=str(getattr(dependency_status, "value", dependency_status)),
         stage=str(getattr(stage, "value", stage)),
         health=float(body.health.value),
         hunger=float(body.hunger.value),

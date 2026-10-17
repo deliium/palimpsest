@@ -241,9 +241,8 @@ def test_mapping_order_independence_for_stream_scopes() -> None:
 
 
 def test_derivation_v3_requires_stochastic_identity() -> None:
-    from world.models import default_physical_rules
-
     from simulation.models import StochasticIdentity
+    from world.models import default_physical_rules
 
     with pytest.raises(ValueError, match="stochastic_identity_absent"):
         SimulationRunConfig(
@@ -267,13 +266,12 @@ def test_derivation_v3_requires_stochastic_identity() -> None:
 
 
 def test_stochastic_identity_equalizes_streams_across_run_ids() -> None:
-    from world.models import default_physical_rules
-
     from simulation.actions import physical_system_effect_scope
     from simulation.clock import Tick
     from simulation.models import RunId, StochasticIdentity
     from simulation.randomness import objective_stream_identity
     from world.identifiers import EntityId, WorldId
+    from world.models import default_physical_rules
 
     identity = StochasticIdentity("paired-world-1")
     rules = default_physical_rules()
@@ -344,12 +342,11 @@ def test_stochastic_identity_equalizes_streams_across_run_ids() -> None:
 
 
 def test_legacy_scopes_still_include_run_id() -> None:
-    from world.models import default_physical_rules
-
     from simulation.actions import physical_system_effect_scope
     from simulation.clock import Tick
     from simulation.models import RunId
     from world.identifiers import EntityId, WorldId
+    from world.models import default_physical_rules
 
     config = SimulationRunConfig(seed=5, physical_rules=default_physical_rules())
     scope_a = physical_system_effect_scope(

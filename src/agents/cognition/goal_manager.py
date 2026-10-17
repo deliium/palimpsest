@@ -168,9 +168,7 @@ _TEMPLATE_REGISTRY: Final[tuple[_DecompositionTemplate, ...]] = (
         parent_outcome_kinds=frozenset(
             (GoalOutcomeKind.SATISFY_DRIVE, GoalOutcomeKind.ACHIEVE_CODE)
         ),
-        parent_horizons=frozenset(
-            (GoalHorizon.LONG_TERM, GoalHorizon.MEDIUM_TERM)
-        ),
+        parent_horizons=frozenset((GoalHorizon.LONG_TERM, GoalHorizon.MEDIUM_TERM)),
         require_hunger_link=True,
         children=(
             _ChildSkeleton(
@@ -449,9 +447,7 @@ def _target_absent(target: str, tokens: frozenset[str]) -> bool:
     return False
 
 
-def _outcome_believed_impossible(
-    outcome: GoalOutcome, tokens: frozenset[str]
-) -> bool:
+def _outcome_believed_impossible(outcome: GoalOutcome, tokens: frozenset[str]) -> bool:
     if outcome.kind is GoalOutcomeKind.ACHIEVE_CODE:
         code = outcome.outcome_code
         if code is None:
@@ -475,9 +471,7 @@ def _outcome_believed_impossible(
     return False
 
 
-def _failure_condition_fires(
-    goal: Goal, tokens: frozenset[str]
-) -> bool:
+def _failure_condition_fires(goal: Goal, tokens: frozenset[str]) -> bool:
     for condition in goal.failure_conditions:
         if _outcome_believed_impossible(condition.outcome, tokens):
             return True
@@ -538,9 +532,7 @@ def _emit_transition(
     )
 
 
-def _identity_tokens(
-    identity: object, aspect: object, floor: float
-) -> frozenset[str]:
+def _identity_tokens(identity: object, aspect: object, floor: float) -> frozenset[str]:
     from agents.cognition.identity import IdentityAspect, IdentityBeliefView
 
     if type(aspect) is not IdentityAspect:
@@ -594,9 +586,7 @@ def _supporting_identity_refs(goal: Goal, identity: object) -> tuple[str, ...]:
         matched = (
             view.aspect is IdentityAspect.COMMITMENT
             and view.evidence_token == goal.goal_id.value
-        ) or (
-            view.aspect is IdentityAspect.COMPETENCE and view.evidence_token in kinds
-        )
+        ) or (view.aspect is IdentityAspect.COMPETENCE and view.evidence_token in kinds)
         if not matched or view.belief_id.value in seen:
             continue
         seen.add(view.belief_id.value)
@@ -780,15 +770,9 @@ def _dampen_parent_after_child_terminal(
             parent_progress = GoalProgress(
                 estimate=0.0, confidence=0.0, stall_count=0, horizon_ticks=0
             )
-        parent_confidence = (
-            0.0 if parent.confidence is None else parent.confidence
-        )
-        new_estimate = _unit_clamp(
-            parent_progress.estimate - _FAIL_PROGRESS_PENALTY
-        )
-        new_confidence = _unit_clamp(
-            parent_confidence - _FAIL_CONFIDENCE_PENALTY
-        )
+        parent_confidence = 0.0 if parent.confidence is None else parent.confidence
+        new_estimate = _unit_clamp(parent_progress.estimate - _FAIL_PROGRESS_PENALTY)
+        new_confidence = _unit_clamp(parent_confidence - _FAIL_CONFIDENCE_PENALTY)
         if (
             new_estimate == parent_progress.estimate
             and new_confidence == parent_confidence
@@ -958,11 +942,7 @@ def _mint_collective_project_goals(
     )
     projects = tuple(
         sorted(
-            (
-                item
-                for item in observation.collective_projects
-                if item.status == "open"
-            ),
+            (item for item in observation.collective_projects if item.status == "open"),
             key=lambda item: item.project_id.value,
         )
     )
@@ -1099,9 +1079,7 @@ def _goal_serves_drives(goal: Goal, drives: frozenset[DriveKind]) -> bool:
     return False
 
 
-def _competes_with_active_intention(
-    goal: Goal, by_id: Mapping[GoalId, Goal]
-) -> bool:
+def _competes_with_active_intention(goal: Goal, by_id: Mapping[GoalId, Goal]) -> bool:
     for edge in goal.relations:
         if edge.kind is not GoalRelationKind.COMPETES_WITH:
             continue
@@ -1440,8 +1418,10 @@ class HierarchicalGoalManager:
                 if edge.kind is GoalRelationKind.REINFORCES:
                     parent_ids.append(edge.target_goal_id)
             for parent_id in parent_ids:
-                parent = by_id.get(parent_id)
-                if parent is None or parent.status is not GoalStatus.ACTIVE:
+                if parent_id not in by_id:
+                    continue
+                parent = by_id[parent_id]
+                if parent.status is not GoalStatus.ACTIVE:
                     continue
                 parent_progress = parent.progress
                 if parent_progress is None:

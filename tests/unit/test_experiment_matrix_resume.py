@@ -88,16 +88,10 @@ def _spec() -> ExperimentMatrixSpec:
 def test_group_role_overlay_and_treatment_any() -> None:
     _definition, cells = expand_matrix(_spec())
     roles = {cell.condition_id: cell.group_role for cell in cells}
-    assert (
-        roles["memory_type-reference__imagination-disabled"] is GroupRole.CONTROL
-    )
-    assert (
-        roles["memory_type-reference__imagination-enabled"] is GroupRole.TREATMENT
-    )
+    assert roles["memory_type-reference__imagination-disabled"] is GroupRole.CONTROL
+    assert roles["memory_type-reference__imagination-enabled"] is GroupRole.TREATMENT
     # Overlay forces reconstructive+enabled → control despite treatment levels.
-    assert (
-        roles["memory_type-reconstructive__imagination-enabled"] is GroupRole.CONTROL
-    )
+    assert roles["memory_type-reconstructive__imagination-enabled"] is GroupRole.CONTROL
 
 
 @pytest.mark.asyncio
@@ -138,9 +132,7 @@ async def test_crash_running_resets_and_reruns(tmp_path) -> None:
     store.open()
     assert store.get_cell(stuck.cell_id).state is MatrixCellState.PENDING
 
-    runner = MatrixBatchRunner(
-        MatrixBatchDependencies(package_version="0.0.0-test")
-    )
+    runner = MatrixBatchRunner(MatrixBatchDependencies(package_version="0.0.0-test"))
     result = await runner.run(spec, store)
     assert result.skipped_valid >= 1
     assert result.completed >= 1

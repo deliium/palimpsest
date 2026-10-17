@@ -141,9 +141,7 @@ async def test_stream_publish_resume_and_finalized_boundary(
 ) -> None:
     run_id = await _seed_run(database_resources)
     stream = create_stream_repository(database_resources.session_factory)
-    evidence = create_scientific_evidence_repository(
-        database_resources.session_factory
-    )
+    evidence = create_scientific_evidence_repository(database_resources.session_factory)
     run = RunId(run_id)
 
     first = await stream.publish(

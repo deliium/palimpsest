@@ -15,6 +15,7 @@ from observer.contracts import (
     ObserverEvent,
     ObserverFrame,
     ObserverItem,
+    ObserverJourney,
     ObserverLocation,
     ObserverPlaybackCursor,
     ObserverPresentation,
@@ -144,7 +145,7 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
         )
     )
     assert names == expected
-    assert len(names) == 29
+    assert len(names) == 32
     assert _PRODUCTION_EVENT_NAMES < set(names)
     assert set(names) < set(SEMANTIC_EVENT_TYPES)
     assert _ARTIFACT_EVENT_NAMES < set(SEMANTIC_EVENT_TYPES)
@@ -159,6 +160,8 @@ def test_event_fixtures_cover_closed_semantic_types() -> None:
 def test_event_fixtures_construct_observer_events() -> None:
     for path in sorted(EVENTS.glob("*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if "journey" in payload:
+            payload["journey"] = ObserverJourney(**payload["journey"])
         event = ObserverEvent(**payload)
         assert event.type == path.stem
         assert event.protocol_version == OBSERVER_PROTOCOL_VERSION
@@ -239,9 +242,7 @@ def _world(payload: dict[str, object]) -> ObserverWorldState:
         items=tuple(_item(item) for item in _items(payload.get("items"))),
         resources=tuple(_resource(item) for item in _items(payload.get("resources"))),
         weather=tuple(_weather(item) for item in _items(payload.get("weather"))),
-        artifacts=tuple(
-            _artifact(item) for item in _items(payload.get("artifacts"))
-        ),
+        artifacts=tuple(_artifact(item) for item in _items(payload.get("artifacts"))),
     )
 
 

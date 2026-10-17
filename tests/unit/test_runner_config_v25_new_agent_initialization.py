@@ -82,8 +82,7 @@ def test_all_off_v25_round_trip() -> None:
     assert decoded.schema_version == RUNNER_SCHEMA_VERSION_V25
     assert decoded.new_agent_initialization is not None
     assert (
-        decoded.new_agent_initialization.canonical_payload()
-        == init.canonical_payload()
+        decoded.new_agent_initialization.canonical_payload() == init.canonical_payload()
     )
     assert runner_config_fingerprint(decoded) == runner_config_fingerprint(config)
 

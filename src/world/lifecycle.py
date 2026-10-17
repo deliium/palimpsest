@@ -92,9 +92,7 @@ class LifecycleStageThreshold:
 
     def __post_init__(self) -> None:
         if type(self.stage_id) is not LifecycleStageId:
-            raise TypeError(
-                "LifecycleStageThreshold.stage_id must be LifecycleStageId"
-            )
+            raise TypeError("LifecycleStageThreshold.stage_id must be LifecycleStageId")
         object.__setattr__(
             self,
             "inclusive_max_age",
@@ -134,8 +132,7 @@ def validate_assigned_lifespan_stage_coverage(
         raise TypeError("stage_thresholds must be a sequence")
     if len(stage_thresholds) == 0:
         raise ValueError(
-            "stage_thresholds must be non-empty "
-            "(code=lifecycle_stage_thresholds_empty)"
+            "stage_thresholds must be non-empty (code=lifecycle_stage_thresholds_empty)"
         )
     # Reuse ordering validation via age-0 resolve, then check coverage.
     resolve_lifecycle_stage(0, stage_thresholds)
@@ -210,9 +207,7 @@ class AgentLifecycleRecord:
             require_stable_id("AgentLifecycleRecord.cohort_id", self.cohort_id),
         )
         if type(self.provenance) is not OriginProvenance:
-            raise TypeError(
-                "AgentLifecycleRecord.provenance must be OriginProvenance"
-            )
+            raise TypeError("AgentLifecycleRecord.provenance must be OriginProvenance")
         object.__setattr__(
             self,
             "assigned_lifespan_ticks",
@@ -232,8 +227,7 @@ def chronological_age(*, entry_tick: int, current_tick: int) -> int:
     current = require_exact_nonneg_int("current_tick", current_tick)
     if current < entry:
         raise ValueError(
-            "current_tick must be >= entry_tick "
-            "(code=lifecycle_age_tick_order)"
+            "current_tick must be >= entry_tick (code=lifecycle_age_tick_order)"
         )
     return current - entry
 
@@ -276,17 +270,14 @@ def resolve_lifecycle_stage(
         raise TypeError("stage_thresholds must be a sequence")
     if len(stage_thresholds) == 0:
         raise ValueError(
-            "stage_thresholds must be non-empty "
-            "(code=lifecycle_stage_thresholds_empty)"
+            "stage_thresholds must be non-empty (code=lifecycle_stage_thresholds_empty)"
         )
     seen_stages: set[str] = set()
     previous_max: int | None = None
     validated: list[LifecycleStageThreshold] = []
     for index, threshold in enumerate(stage_thresholds):
         if type(threshold) is not LifecycleStageThreshold:
-            raise TypeError(
-                "stage_thresholds entries must be LifecycleStageThreshold"
-            )
+            raise TypeError("stage_thresholds entries must be LifecycleStageThreshold")
         stage_key = threshold.stage_id.value
         if stage_key in seen_stages:
             raise ValueError(
@@ -305,8 +296,7 @@ def resolve_lifecycle_stage(
         if age_value <= threshold.inclusive_max_age:
             return threshold.stage_id
     raise ValueError(
-        "age exceeds final stage threshold "
-        "(code=lifecycle_stage_uncovered)"
+        "age exceeds final stage threshold (code=lifecycle_stage_uncovered)"
     )
 
 

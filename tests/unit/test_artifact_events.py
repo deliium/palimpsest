@@ -155,7 +155,8 @@ def test_v8_accepts_artifact_details_and_logs_ids(
     assert any(
         record.levelno == logging.DEBUG
         and "artifact_event_built schema_version=8 kind=artifact_created "
-        "artifact_id=art-1" in record.getMessage()
+        "artifact_id=art-1"
+        in record.getMessage()
         for record in caplog.records
     )
 

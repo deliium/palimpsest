@@ -274,9 +274,7 @@ def test_persistence_continuation_split_merge_and_divergence(
 
     divergent = compute_group_persistence(
         (continued,),
-        (
-            (1, "north_a", "those_agents", ("south_a", "south_b"), "active"),
-        ),
+        ((1, "north_a", "those_agents", ("south_a", "south_b"), "active"),),
         run_id="run-p",
         input_revision="rev-p",
     )
@@ -329,9 +327,7 @@ def test_experiment_w_pairs_modes_off_the_v1_gate(
     assert places["north"].adjacent == (EntityId("south"),)
     assert places["south"].adjacent == (EntityId("north"),)
     location_index = {place.entity_id: place for place in disabled.scenario.locations}
-    weather_index = {
-        item.location_id: item for item in disabled.scenario.weather
-    }
+    weather_index = {item.location_id: item for item in disabled.scenario.weather}
     _validate_topology(location_index)
     _validate_weather_coverage(location_index, weather_index)
     starts = {
@@ -363,9 +359,7 @@ def test_experiment_w_pairs_modes_off_the_v1_gate(
         agent.cognition.group_formation_mode is GroupFormationMode.DETERMINISTIC
         for agent in enabled.agents
     )
-    assert "experiment-w-emergent-groups" not in {
-        item[0] for item in _CATALOG_BUILDERS
-    }
+    assert "experiment-w-emergent-groups" not in {item[0] for item in _CATALOG_BUILDERS}
     assert any(
         record.getMessage()
         == "experiment_w_built experiment_id=experiment-w-emergent-groups "

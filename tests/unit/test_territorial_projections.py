@@ -169,5 +169,5 @@ def test_stream_fixture_and_simulation_stay_free_of_claim_keys() -> None:
     inspection = (_ROOT / "src/simulation/inspection.py").read_text()
     assert "import observer" not in inspection
     contract = (_ROOT / "pyproject.toml").read_text()
-    assert 'forbidden_modules = [' in contract
+    assert "forbidden_modules = [" in contract
     assert '"observer"' in contract

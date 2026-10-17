@@ -69,7 +69,10 @@ def test_ag_profile_requires_v26_and_developmental_children() -> None:
         if item.condition_id == "ag-gradual-aging-off"
     )
     assert gradual_off.runner_config.schema_version == RUNNER_SCHEMA_VERSION_V26
-    assert developmental_stages_profile(gradual_off.runner_config) is gradual_off.runner_config
+    assert (
+        developmental_stages_profile(gradual_off.runner_config)
+        is gradual_off.runner_config
+    )
     lifecycle = gradual_off.runner_config.population_lifecycle
     assert lifecycle is not None
     stage_ids = tuple(item.stage_id.value for item in lifecycle.stage_thresholds)
@@ -109,11 +112,15 @@ def test_ag_arms_cover_gradual_and_skill_modes() -> None:
     }
     assert by_id["ag-gradual-aging-off"].population_lifecycle is not None
     assert (
-        by_id["ag-gradual-aging-off"].population_lifecycle.gradual_aging.intra_stage_interpolation
+        by_id[
+            "ag-gradual-aging-off"
+        ].population_lifecycle.gradual_aging.intra_stage_interpolation
         is False
     )
     assert (
-        by_id["ag-gradual-aging-on"].population_lifecycle.gradual_aging.intra_stage_interpolation
+        by_id[
+            "ag-gradual-aging-on"
+        ].population_lifecycle.gradual_aging.intra_stage_interpolation
         is True
     )
     skill = by_id["ag-skill-learning-on"].agents[0].cognition.skill_learning_mode
@@ -123,7 +130,7 @@ def test_ag_arms_cover_gradual_and_skill_modes() -> None:
     # AE/AF schema pins unchanged by AG presence.
     assert RUNNER_SCHEMA_VERSION_V24 != RUNNER_SCHEMA_VERSION_V26
     assert RUNNER_SCHEMA_VERSION_V25 != RUNNER_SCHEMA_VERSION_V26
-    assert len(SEMANTIC_EVENT_TYPES) == 69
+    assert len(SEMANTIC_EVENT_TYPES) == 72
 
 
 @pytest.mark.asyncio

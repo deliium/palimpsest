@@ -25,7 +25,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Final
+from typing import Final, Never
 
 from world._state import WorldState, rebuild_world_state
 from world.artifacts import ArtifactContent, InformationArtifact
@@ -54,6 +54,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V18,
     EVENT_SCHEMA_REPLAY_V19,
     EVENT_SCHEMA_REPLAY_V20,
+    EVENT_SCHEMA_REPLAY_V21,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -87,6 +88,9 @@ from world.events import (
     Helped,
     ItemCrafted,
     ItemStored,
+    JourneyArrived,
+    JourneyEnded,
+    JourneyStarted,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     Moved,
@@ -156,6 +160,8 @@ from world.production import (
     ToolMark,
     production_catalog_digest,
 )
+from world.regions import Journey
+from world.subjective_value import ExchangeOffer
 from world.values import (
     Fatigue,
     Health,
@@ -395,6 +401,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V18,
             EVENT_SCHEMA_REPLAY_V19,
             EVENT_SCHEMA_REPLAY_V20,
+            EVENT_SCHEMA_REPLAY_V21,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -456,7 +463,14 @@ def _project_tick_group(
         working = next_state
         mutated = mutated or changed
 
-    if schema_version == EVENT_SCHEMA_REPLAY_V20 and public_goods_decay_millis > 0:
+    if (
+        schema_version
+        in {
+            EVENT_SCHEMA_REPLAY_V20,
+            EVENT_SCHEMA_REPLAY_V21,
+        }
+        and public_goods_decay_millis > 0
+    ):
         decayed = _project_public_good_decay(
             working,
             group,
@@ -566,6 +580,12 @@ def _apply_event_effect(
             return _apply_legacy_transfer(state, event), True
         case Moved() as moved:
             return _project_move(state, event, moved), True
+        case JourneyStarted() as started:
+            return _project_journey_started(state, event, started), True
+        case JourneyArrived() as arrived:
+            return _project_journey_arrived(state, event, arrived), True
+        case JourneyEnded() as ended:
+            return _project_journey_ended(state, event, ended), True
         case Searched() as searched if searched.success is True:
             return _project_search_success(state, event, searched), True
         case Eaten() as eaten:
@@ -597,9 +617,7 @@ def _apply_event_effect(
         case ResourceHarvested() as harvested:
             return _project_harvest(state, event, harvested, production_catalog), True
         case CraftStarted() as started:
-            return _project_craft_started(
-                state, event, started, production_catalog
-            )
+            return _project_craft_started(state, event, started, production_catalog)
         case ItemCrafted() as crafted:
             return (
                 _project_item_crafted(state, event, crafted, production_catalog),
@@ -620,9 +638,7 @@ def _apply_event_effect(
         case SeasonChanged() as season:
             return _project_season(state, event, season, environmental_dynamics)
         case TemperatureBandChanged() as band:
-            return _project_temperature_band(
-                state, event, band, environmental_dynamics
-            )
+            return _project_temperature_band(state, event, band, environmental_dynamics)
         case ResourceNodeDepleted() | ResourceNodeRecovered() as witness:
             return _project_node_witness(state, event, witness)
         case EnvironmentalHazardStarted() as started:
@@ -668,9 +684,7 @@ def _apply_event_effect(
         case RepositoryNeglected() as neglected:
             return _project_repository_neglected(state, event, neglected), True
         case ExperimentResolved() as experiment:
-            return _project_experiment(
-                state, event, experiment, production_catalog
-            )
+            return _project_experiment(state, event, experiment, production_catalog)
         case CorpseCustodyOpened() as opened:
             return _project_corpse_custody_opened(state, opened), True
         case TakenFromCorpse() as taken:
@@ -713,7 +727,6 @@ def _apply_event_effect(
             return _project_public_good_integrity(state, event, opposed), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
-
 
 
 def _project_repository_established(
@@ -766,7 +779,7 @@ def _project_repository_member_deposited(
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
     updated_repo = replace(
         repository,
-        member_artifact_ids=repository.member_artifact_ids + (details.artifact_id,),
+        member_artifact_ids=(*repository.member_artifact_ids, details.artifact_id),
     )
     updated_artifact = replace(
         artifact,
@@ -906,7 +919,7 @@ def _project_repository_neglected(
     entries = repository.index_entries
     if details.index_entries_dropped and entries:
         ordered = tuple(sorted(entries, key=lambda item: item.entry_id))
-        entries = ordered[:- details.index_entries_dropped]
+        entries = ordered[: -details.index_entries_dropped]
     updated = replace(
         repository,
         status=RepositoryStatus(details.next_status),
@@ -921,7 +934,7 @@ def _project_repository_neglected(
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
-def _environment_mismatch(tick: int, kind: str) -> None:
+def _environment_mismatch(tick: int, kind: str) -> Never:
     _LOG.error("environment_witness_mismatch tick=%s kind=%s", tick, kind)
     raise ProjectionError(ProjectionErrorCode.ENVIRONMENT_WITNESS_MISMATCH)
 
@@ -1019,9 +1032,7 @@ def _project_hazard_started(
     if record.remaining_ticks(event.tick) != started.remaining_ticks:
         _environment_mismatch(event.tick, started.kind)
     return (
-        rebuild_world_state(
-            state, active_hazards=(*state.active_hazards, record)
-        ),
+        rebuild_world_state(state, active_hazards=(*state.active_hazards, record)),
         True,
     )
 
@@ -1533,6 +1544,136 @@ def _project_move(state: WorldState, event: WorldEvent, details: Moved) -> World
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
 
 
+def _project_journey_started(
+    state: WorldState, event: WorldEvent, details: JourneyStarted
+) -> WorldState:
+    journey = details.journey
+    if state.regions_migration is None or state.journeys is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if event.tick != journey.start_tick or event.actor_id != journey.actor_body_id:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if journey.journey_id in state.journeys:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if any(
+        participant_id
+        in {
+            body_id
+            for pending in state.journeys.values()
+            for body_id in pending.participant_body_ids
+        }
+        for participant_id in journey.participant_body_ids
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    actor = state.bodies.get(journey.actor_body_id)
+    if actor is None or actor.location_id != journey.origin_location_id:
+        raise ProjectionError(ProjectionErrorCode.ACTOR_MISSING)
+    if any(
+        participant_id not in state.bodies
+        or state.bodies[participant_id].life_status is not LifeStatus.ALIVE
+        or state.bodies[participant_id].location_id != journey.origin_location_id
+        for participant_id in journey.participant_body_ids
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if details.command_kind == "move" and len(journey.participant_body_ids) != 1:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    bodies = dict(state.bodies)
+    bodies[journey.actor_body_id] = copy_body(
+        actor, fatigue=Fatigue(details.resulting_actor_fatigue)
+    )
+    journeys = dict(state.journeys)
+    journeys[journey.journey_id] = journey
+    try:
+        return rebuild_world_state(
+            state, bodies=bodies, journeys=tuple(journeys.values())
+        )
+    except (TypeError, ValueError) as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _require_matching_journey(
+    state: WorldState,
+    *,
+    journey_id: str,
+    participant_body_ids: Sequence[EntityId],
+    origin_location_id: EntityId,
+    destination_location_id: EntityId,
+) -> Journey:
+    if state.journeys is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    journey = state.journeys.get(journey_id)
+    if journey is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if (
+        tuple(participant_body_ids) != tuple(journey.participant_body_ids)
+        or origin_location_id != journey.origin_location_id
+        or destination_location_id != journey.destination_location_id
+    ):
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    return journey
+
+
+def _project_journey_arrived(
+    state: WorldState, event: WorldEvent, details: JourneyArrived
+) -> WorldState:
+    journey = _require_matching_journey(
+        state,
+        journey_id=details.journey_id,
+        participant_body_ids=details.participant_body_ids,
+        origin_location_id=details.origin_location_id,
+        destination_location_id=details.destination_location_id,
+    )
+    if state.journeys is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if not journey.due_tick <= event.tick <= journey.arrival_wait_deadline_tick:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if details.destination_location_id not in state.locations:
+        raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+    bodies = dict(state.bodies)
+    for participant_id in journey.participant_body_ids:
+        body = bodies.get(participant_id)
+        if body is None or body.location_id != journey.origin_location_id:
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+        bodies[participant_id] = copy_body(
+            body, location_id=journey.destination_location_id
+        )
+    journeys = dict(state.journeys)
+    del journeys[journey.journey_id]
+    try:
+        return rebuild_world_state(
+            state, bodies=bodies, journeys=tuple(journeys.values())
+        )
+    except (TypeError, ValueError) as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
+def _project_journey_ended(
+    state: WorldState, event: WorldEvent, details: JourneyEnded
+) -> WorldState:
+    journey = _require_matching_journey(
+        state,
+        journey_id=details.journey_id,
+        participant_body_ids=details.participant_body_ids,
+        origin_location_id=details.origin_location_id,
+        destination_location_id=details.destination_location_id,
+    )
+    if state.journeys is None:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    if details.reason == "participant_dead":
+        if not any(
+            state.bodies[participant_id].life_status is LifeStatus.DEAD
+            for participant_id in journey.participant_body_ids
+        ):
+            raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    elif event.tick != journey.arrival_wait_deadline_tick:
+        raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
+    journeys = dict(state.journeys)
+    del journeys[journey.journey_id]
+    try:
+        return rebuild_world_state(state, journeys=tuple(journeys.values()))
+    except (TypeError, ValueError) as exc:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
+
+
 def _project_search_success(
     state: WorldState, event: WorldEvent, details: Searched
 ) -> WorldState:
@@ -1738,9 +1879,7 @@ def _project_transport(
         location_id=details.destination_id,
         fatigue=Fatigue(details.resulting_helper_fatigue),
     )
-    bodies[details.target_id] = copy_body(
-        target, location_id=details.destination_id
-    )
+    bodies[details.target_id] = copy_body(target, location_id=details.destination_id)
     try:
         return rebuild_world_state(state, bodies=bodies)
     except ValueError as exc:
@@ -1934,7 +2073,7 @@ def _project_taken_from_corpse(
 
 def _without_exchange_offer(
     state: WorldState, party_ids: tuple[EntityId, EntityId]
-) -> tuple:
+) -> tuple[ExchangeOffer, ...]:
     return tuple(
         offer for offer in state.exchange_offers if offer.party_ids != party_ids
     )
@@ -1950,7 +2089,10 @@ def _project_exchange_proposed(
     from world.subjective_value import ExchangeOffer, exchange_party_ids
 
     parties = exchange_party_ids(details.actor_id, details.counterparty_id)
-    if details.actor_id not in state.bodies or details.counterparty_id not in state.bodies:
+    if (
+        details.actor_id not in state.bodies
+        or details.counterparty_id not in state.bodies
+    ):
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
     offer = ExchangeOffer(
         party_ids=parties,
@@ -1959,7 +2101,7 @@ def _project_exchange_proposed(
         take_item_ids=details.take_item_ids,
         tick=event.tick,
     )
-    offers = _without_exchange_offer(state, parties) + (offer,)
+    offers = (*_without_exchange_offer(state, parties), offer)
     _LOG.debug(
         "exchange_projected act=%s give_len=%s take_len=%s",
         details.act,
@@ -1988,8 +2130,8 @@ def _project_exchange_withdrawn(
 
 
 def _move_held_item(
-    items: dict,
-    bodies: dict,
+    items: dict[EntityId, Item],
+    bodies: dict[EntityId, AgentBody],
     *,
     item_id: EntityId,
     source_id: EntityId,
@@ -2024,7 +2166,9 @@ def _project_exchange_completed(
     parties = exchange_party_ids(details.actor_id, details.counterparty_id)
     items = dict(state.items)
     bodies = dict(state.bodies)
-    for item_id, kind in zip(details.give_item_ids, details.give_item_kinds, strict=True):
+    for item_id, kind in zip(
+        details.give_item_ids, details.give_item_kinds, strict=True
+    ):
         held = items.get(item_id)
         if held is None or held.kind.value != kind:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
@@ -2035,7 +2179,9 @@ def _project_exchange_completed(
             source_id=details.actor_id,
             destination_id=details.counterparty_id,
         )
-    for item_id, kind in zip(details.take_item_ids, details.take_item_kinds, strict=True):
+    for item_id, kind in zip(
+        details.take_item_ids, details.take_item_kinds, strict=True
+    ):
         held = items.get(item_id)
         if held is None or held.kind.value != kind:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
@@ -2101,7 +2247,6 @@ def _project_died(state: WorldState, details: Died) -> WorldState:
         return rebuild_world_state(state, bodies=bodies)
     except ValueError as exc:
         raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED) from exc
-
 
     jobs = dict(state.production_jobs)
     jobs.pop(details.body_id, None)
@@ -2210,13 +2355,13 @@ def _project_craft_started(
     items, bodies = _drop_items(state, event.actor_id, details.consumed_item_ids)
     jobs = dict(state.production_jobs)
     if details.duration_ticks > 1:
-            jobs[event.actor_id] = ProductionJob(
-                actor_id=event.actor_id,
-                recipe_id=details.recipe_id,
-                due_tick=event.tick + 1,
-                created_item_id=EntityId(event.request_id.value),
-                duration_ticks=details.duration_ticks,
-            )
+        jobs[event.actor_id] = ProductionJob(
+            actor_id=event.actor_id,
+            recipe_id=details.recipe_id,
+            due_tick=event.tick + 1,
+            created_item_id=EntityId(event.request_id.value),
+            duration_ticks=details.duration_ticks,
+        )
     try:
         return (
             rebuild_world_state(
@@ -2383,13 +2528,13 @@ def _copy_body(body: AgentBody, *, inventory: tuple[EntityId, ...]) -> AgentBody
 
 def _project_project_created(
     state: WorldState, event: WorldEvent, details: ProjectCreated
-):
+) -> WorldState:
+    from world._collective_projects import _stores_at
     from world.collective_projects import (
         CollectiveProject,
         CollectiveProjectKind,
         CollectiveProjectStatus,
         ProjectContribution,
-        _stores_at,
     )
 
     if details.project_id in state.collective_projects:
@@ -2429,7 +2574,7 @@ def _project_project_created(
 
 def _project_project_contributed(
     state: WorldState, event: WorldEvent, details: ProjectContributed
-):
+) -> WorldState:
     from world.collective_projects import ProjectContribution, append_contribution
 
     project = state.collective_projects.get(details.project_id)
@@ -2481,7 +2626,9 @@ def _project_project_contributed(
     )
 
 
-def _project_project_shortage(state: WorldState, details: ProjectShortage):
+def _project_project_shortage(
+    state: WorldState, details: ProjectShortage
+) -> WorldState:
     from world.collective_projects import CollectiveProject
 
     project = state.collective_projects.get(details.project_id)
@@ -2494,7 +2641,9 @@ def _project_project_shortage(state: WorldState, details: ProjectShortage):
     return rebuild_world_state(state, collective_projects=projects)
 
 
-def _project_project_abandoned(state: WorldState, details: ProjectAbandoned):
+def _project_project_abandoned(
+    state: WorldState, details: ProjectAbandoned
+) -> WorldState:
     from world.collective_projects import CollectiveProjectStatus
 
     project = state.collective_projects.get(details.project_id)
@@ -2509,7 +2658,7 @@ def _project_project_abandoned(state: WorldState, details: ProjectAbandoned):
 
 def _project_project_completed(
     state: WorldState, details: ProjectCompleted, *, schema_version: int
-):
+) -> WorldState:
     from world.collective_projects import CollectiveProjectStatus, catalog_row
     from world.production import Structure
 
@@ -2522,7 +2671,7 @@ def _project_project_completed(
         status=CollectiveProjectStatus.COMPLETED,
         linked_structure_id=(
             details.structure_id
-            if schema_version == EVENT_SCHEMA_REPLAY_V20
+            if schema_version in {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21}
             and project.kind.value != "record_site"
             else project.linked_structure_id
         ),
@@ -2552,7 +2701,7 @@ def _project_project_completed(
 
 def _project_public_good_benefit(
     state: WorldState, event: WorldEvent, details: PublicGoodBenefit
-):
+) -> WorldState:
     state = _project_public_good_integrity(state, event, details)
     if details.benefit_code != "draw":
         return state
@@ -2587,7 +2736,7 @@ def _project_public_good_benefit(
 
 def _project_public_good_integrity(
     state: WorldState, event: WorldEvent, details: object
-):
+) -> WorldState:
     from world.collective_projects import (
         PublicGoodAct,
         PublicGoodActKind,
@@ -2606,7 +2755,8 @@ def _project_public_good_integrity(
     )
     if structure is not None:
         structures[structure.entity_id] = replace(
-            structure, integrity=details.integrity_millis / 1000  # type: ignore[attr-defined]
+            structure,
+            integrity=details.integrity_millis / 1000,  # type: ignore[attr-defined]
         )
     act_kind = {
         "public_good_benefit": PublicGoodActKind.BENEFIT

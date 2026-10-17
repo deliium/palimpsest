@@ -74,9 +74,7 @@ def _write_tree(root: Path, *, protocol: str = OBSERVER_PROTOCOL_VERSION) -> Non
     (root / "index.js").write_text("console.log('ready')", encoding="utf-8")
     (root / "index.wasm").write_bytes(b"\0asm" + b"x" * 32)
     (root / "index.pck").write_bytes(b"GDPC")
-    (root / "icon.png").write_bytes(
-        b"\x89PNG\r\n\x1a\n" + b"\0" * 16
-    )
+    (root / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0" * 16)
     (root / "nested").mkdir()
     (root / "build-info.json").write_text(
         (

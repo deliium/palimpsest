@@ -117,9 +117,10 @@ def test_establish_deposit_retrieve_maintain_index(
     assert member.custodian_repository_id == repository_id
     assert member.holder_id is None
     assert member.location_id == loc
-    assert artifact_id in engine._snapshot.world.state.repositories[
-        repository_id
-    ].member_artifact_ids
+    assert (
+        artifact_id
+        in engine._snapshot.world.state.repositories[repository_id].member_artifact_ids
+    )
 
     indexed = _act(
         engine,
@@ -131,8 +132,7 @@ def test_establish_deposit_retrieve_maintain_index(
     )
     assert indexed.resolutions[0].status is ActionResolutionStatus.APPLIED
     assert (
-        len(engine._snapshot.world.state.repositories[repository_id].index_entries)
-        == 1
+        len(engine._snapshot.world.state.repositories[repository_id].index_entries) == 1
     )
 
     maintained = _act(
@@ -145,9 +145,7 @@ def test_establish_deposit_retrieve_maintain_index(
     retrieved = _act(
         engine,
         "agent-1",
-        RetrieveRecord(
-            repository_id=repository_id, artifact_id=artifact_id, hold=True
-        ),
+        RetrieveRecord(repository_id=repository_id, artifact_id=artifact_id, hold=True),
     )
     assert retrieved.resolutions[0].status is ActionResolutionStatus.APPLIED
     held = engine._snapshot.world.state.artifacts[artifact_id]
@@ -199,9 +197,7 @@ def test_channel_off_rejects_repository_commands(
             EstablishRepository(location_id=EntityId("loc-1")),
         )
     assert result.resolutions[0].status is ActionResolutionStatus.REJECTED
-    assert (
-        result.resolutions[0].reason is ActionResolutionReason.STRUCTURAL_REJECTION
-    )
+    assert result.resolutions[0].reason is ActionResolutionReason.STRUCTURAL_REJECTION
     assert any(
         "knowledge_repositories_inactive" in r.getMessage() for r in caplog.records
     )

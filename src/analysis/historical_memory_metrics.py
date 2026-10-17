@@ -38,29 +38,21 @@ __all__ = [
     "compute_historical_memory_transitions",
 ]
 
-HISTORICAL_MEMORY_LAYERS_METRIC_VERSION: Final[str] = (
-    "historical_memory_layers@1"
-)
+HISTORICAL_MEMORY_LAYERS_METRIC_VERSION: Final[str] = "historical_memory_layers@1"
 HISTORICAL_MEMORY_TRANSITIONS_METRIC_VERSION: Final[str] = (
     "historical_memory_transitions@1"
 )
-HISTORICAL_MEMORY_QUERIES_METRIC_VERSION: Final[str] = (
-    "historical_memory_queries@1"
-)
+HISTORICAL_MEMORY_QUERIES_METRIC_VERSION: Final[str] = "historical_memory_queries@1"
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.historical_memory")
 _LAYER: Final[str] = "research_analytics"
-_CENSOR: Final[str] = (
-    "analysis-only historical memory; never cognition"
-)
+_CENSOR: Final[str] = "analysis-only historical memory; never cognition"
 
 
 class HistoricalMemoryMetricError(ValueError):
     def __init__(self, reason_code: str) -> None:
         self.reason_code = reason_code
-        _LOG.error(
-            "historical_memory_metric_invalid reason_code=%s", reason_code
-        )
+        _LOG.error("historical_memory_metric_invalid reason_code=%s", reason_code)
         super().__init__(reason_code)
 
 
@@ -157,9 +149,7 @@ def compute_historical_memory_layers(
         "communicative_count": layer_counts.get(
             HistoricalMemoryLayerId.COMMUNICATIVE.value, 0
         ),
-        "cultural_count": layer_counts.get(
-            HistoricalMemoryLayerId.CULTURAL.value, 0
-        ),
+        "cultural_count": layer_counts.get(HistoricalMemoryLayerId.CULTURAL.value, 0),
         "unattested_count": layer_counts.get(
             HistoricalMemoryLayerId.UNATTESTED.value, 0
         ),
@@ -167,12 +157,10 @@ def compute_historical_memory_layers(
             living_witness_total / source_count
         ),
         "communicative_carrier_share": quantize_float(
-            communicative_carriers
-            / max(1, communicative_carriers + cultural_carriers)
+            communicative_carriers / max(1, communicative_carriers + cultural_carriers)
         ),
         "cultural_carrier_share": quantize_float(
-            cultural_carriers
-            / max(1, communicative_carriers + cultural_carriers)
+            cultural_carriers / max(1, communicative_carriers + cultural_carriers)
         ),
     }
     return _document(

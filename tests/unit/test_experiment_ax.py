@@ -135,9 +135,7 @@ def _engine(
         for index, entity_id in enumerate(entity_ids, 1)
     )
     return WorldEngine(
-        config=SimulationRunConfig(
-            seed=21, physical_rules=non_lethal_physical_rules()
-        ),
+        config=SimulationRunConfig(seed=21, physical_rules=non_lethal_physical_rules()),
         bootstrap=WorldBootstrap(
             world_id=WorldId("world-ax-run"),
             revision=WorldRevision(0),
@@ -238,8 +236,7 @@ def test_ax_catalog_is_off_gate_and_v43_wins(
     enabled = _arm("ax-contribute-and-use")
     assert enabled.schema_version == RUNNER_SCHEMA_VERSION_V43
     assert (
-        finalize_matrix_cell_config(enabled).schema_version
-        == RUNNER_SCHEMA_VERSION_V43
+        finalize_matrix_cell_config(enabled).schema_version == RUNNER_SCHEMA_VERSION_V43
     )
     assert finalize_matrix_cell_config(off).schema_version == RUNNER_SCHEMA_VERSION_V42
     opposition = _arm("ax-oppose").collective_projects
@@ -355,9 +352,10 @@ def test_ax_noncontributor_draws_from_well_without_reputation() -> None:
     assert len(draws) == 1
     assert draws[0].resulting_thirst == thirst_before - 5.0
     assert not _events(engine, PublicGoodOpposed)
-    assert _arm("ax-use-without-contribution").agents[
-        1
-    ].cognition.reputation_mode is ReputationMode.DISABLED
+    assert (
+        _arm("ax-use-without-contribution").agents[1].cognition.reputation_mode
+        is ReputationMode.DISABLED
+    )
 
 
 def test_ax_low_use_contributor_leaves_before_draw() -> None:
@@ -370,9 +368,7 @@ def test_ax_low_use_contributor_leaves_before_draw() -> None:
     )
     bob = alive_body("body-b")
     locations = connected_locations(("loc-1", "Camp"), ("loc-2", "Hill"))
-    engine = _engine(
-        (alice, bob), items=foods, locations=locations, production=True
-    )
+    engine = _engine((alice, bob), items=foods, locations=locations, production=True)
     _step(engine, {"agent-1": Store(RecipeId("store_food"), foods[0].entity_id)})
     store = next(iter(engine._snapshot.world.state.structures.values()))
     assert store.stored_quantity == 1
@@ -428,9 +424,7 @@ def test_ax_accepted_maintenance_restores_one_decay_step(
     alice = alive_body(
         "body-a", inventory=(build_wood.entity_id, maintain_wood.entity_id)
     )
-    engine = _engine(
-        (alice,), items=(build_wood, maintain_wood), decay_millis=250
-    )
+    engine = _engine((alice,), items=(build_wood, maintain_wood), decay_millis=250)
     _step(engine, {"agent-1": StartCollectiveProject("warning_post")})
     project_id = next(iter(engine._snapshot.world.state.collective_projects))
     _step(
@@ -452,9 +446,7 @@ def test_ax_accepted_maintenance_restores_one_decay_step(
     maintained = _events(engine, PublicGoodMaintained)
     assert len(maintained) == 1
     assert maintained[0].accepted is True
-    assert maintained[0].integrity_millis == round(
-        (post_decay + 0.25) * 1000
-    )
+    assert maintained[0].integrity_millis == round((post_decay + 0.25) * 1000)
     assert "public_good_maintain_draw" not in caplog.text
     structure = engine._snapshot.world.state.structures[structure_id]
     assert structure.kind is StructureKind.WARNING_POST

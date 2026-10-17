@@ -19,7 +19,11 @@ from analysis.models import (
     MetricProvenance,
 )
 from analysis.numerical import library_versions, quantize_float, require_finite
-from analysis.specifications import MetricFamilyId, metric_specification
+from analysis.specifications import (
+    MetricFamilyId,
+    MetricSpecification,
+    metric_specification,
+)
 from world.identifiers import require_stable_id
 
 __all__ = [
@@ -127,8 +131,7 @@ def _channel_similarity(rows: Sequence[object], *, field: str) -> float | None:
     owner_tokens: dict[str, set[str]] = defaultdict(set)
     for index, row in enumerate(rows):
         owner = getattr(row, "owner_id", None)
-        if hasattr(owner, "value"):
-            owner = getattr(owner, "value")
+        owner = getattr(owner, "value", owner)
         if not isinstance(owner, str) or not owner:
             raise TypeError(f"{field}[{index}]: invalid_owner_id")
         token = _extract_token(row)
@@ -163,7 +166,7 @@ def _extract_token(row: object) -> str | None:
 
 
 def _document(
-    spec: object,
+    spec: MetricSpecification,
     run_id: str,
     revision: str,
     availability: MetricAvailability,
@@ -173,20 +176,20 @@ def _document(
     observed: int = 0,
     expected: int = 0,
 ) -> MetricDocument:
-    family = getattr(spec, "family_id")
+    family = spec.family_id
     coverage = None
     if availability is MetricAvailability.PRESENT:
         coverage = MetricCoverage(observed=observed, expected=expected)
     return MetricDocument(
         schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
         metric_family=family.value,
-        algorithm_version=getattr(spec, "algorithm_version"),
+        algorithm_version=spec.algorithm_version,
         library_versions=library_versions(),
         run_id=run_id,
         input_revision=revision,
-        evidence_stages=frozenset(getattr(spec, "evidence_inputs")),
-        population=getattr(spec, "population"),
-        denominator=getattr(spec, "denominator"),
+        evidence_stages=frozenset(spec.evidence_inputs),
+        population=spec.population,
+        denominator=spec.denominator,
         coverage=coverage,
         availability=availability,
         values=dict(values),

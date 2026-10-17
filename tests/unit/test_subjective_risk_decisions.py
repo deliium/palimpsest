@@ -55,9 +55,7 @@ async def test_safe_versus_dangerous_beliefs_diverge(
     danger = build_belief(
         predicate="is_dangerous", confidence=0.9, belief_id="belief-danger"
     )
-    safety = build_belief(
-        predicate="is_safe", confidence=0.9, belief_id="belief-safe"
-    )
+    safety = build_belief(predicate="is_safe", confidence=0.9, belief_id="belief-safe")
 
     futures_d, motivation_d, intention_d, plan_d = await run_deliberation(
         build_loop_input(observation, beliefs=(danger,))
@@ -382,9 +380,7 @@ async def test_caplog_excludes_semantic_payloads(
 
 @pytest.mark.asyncio
 async def test_inactive_belief_does_not_match_active_danger_path() -> None:
-    observation = build_observation(
-        with_water=True, with_threat=True, with_exit=True
-    )
+    observation = build_observation(with_water=True, with_threat=True, with_exit=True)
     active = build_belief(
         predicate="is_dangerous", confidence=0.9, belief_id="belief-active"
     )

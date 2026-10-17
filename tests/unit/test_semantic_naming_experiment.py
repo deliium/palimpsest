@@ -67,13 +67,15 @@ def test_experiment_aa_pairs_v4_and_v20(caplog: pytest.LogCaptureFixture) -> Non
     assert all(
         body.location_id == EntityId("loc-forest") for body in disabled.scenario.bodies
     )
-    assert {
-        agent.cognition.semantic_naming_mode for agent in disabled.agents
-    } == {SemanticNamingMode.DISABLED}
-    assert {
-        agent.cognition.semantic_naming_mode for agent in enabled.agents
-    } == {SemanticNamingMode.DETERMINISTIC}
-    assert any("experiment_aa_built" in record.getMessage() for record in caplog.records)
+    assert {agent.cognition.semantic_naming_mode for agent in disabled.agents} == {
+        SemanticNamingMode.DISABLED
+    }
+    assert {agent.cognition.semantic_naming_mode for agent in enabled.agents} == {
+        SemanticNamingMode.DETERMINISTIC
+    }
+    assert any(
+        "experiment_aa_built" in record.getMessage() for record in caplog.records
+    )
 
 
 def test_enabled_arm_metric_blocks_requested_when_rows_exist() -> None:

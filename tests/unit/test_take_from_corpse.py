@@ -154,9 +154,7 @@ def test_give_to_corpse_stays_dead_target() -> None:
             world_id=WorldId("world-1"),
             actor_id=EntityId("body-live"),
             revision=state.revision,
-            command=require_agent_command(
-                Give(EntityId("body-dead"), held.entity_id)
-            ),
+            command=require_agent_command(Give(EntityId("body-dead"), held.entity_id)),
         ),
     )
     assert type(outcome) is OperationAccepted

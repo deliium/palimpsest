@@ -86,13 +86,9 @@ def test_runtime_slot_defaults_absent_and_owner_check_is_closed() -> None:
     owner = AgentId("ada")
     assert require_owner_social_norms(None, owner, field_name="social_norms") is None
     ledger = empty_norm_ledger(owner)
-    assert (
-        require_owner_social_norms(ledger, owner, field_name="social_norms") is None
-    )
+    assert require_owner_social_norms(ledger, owner, field_name="social_norms") is None
     with pytest.raises(ValueError, match="owner_id mismatch"):
-        require_owner_social_norms(
-            ledger, AgentId("ben"), field_name="social_norms"
-        )
+        require_owner_social_norms(ledger, AgentId("ben"), field_name="social_norms")
 
 
 @pytest.mark.asyncio
@@ -159,9 +155,7 @@ def test_runtime_commits_enabled_ledgers_and_clears_disabled(
     owner = AgentId("agent-1")
     enabled = _runtime(
         build_cognitive_loop(
-            CognitionLoopConfig(
-                social_norm_mode=CognitionSocialNormMode.DETERMINISTIC
-            )
+            CognitionLoopConfig(social_norm_mode=CognitionSocialNormMode.DETERMINISTIC)
         )
     )
     assert enabled._social_norms is None

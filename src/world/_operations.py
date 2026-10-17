@@ -8,7 +8,7 @@ not stop hostile reflection.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Literal
@@ -19,26 +19,21 @@ from world.actions import (
     Amend,
     AnnotateRecord,
     Ask,
+    AssertPossessionClaim,
     Attack,
     Build,
+    ContributeCollectiveProject,
     CopyRecord,
     Craft,
     DamageRecord,
+    DeclareCommitment,
     DepositRecord,
     Drink,
     Drop,
     Eat,
     Erase,
-    AssertPossessionClaim,
-    DeclareCommitment,
-    ContributeCollectiveProject,
-    MaintainPublicGood,
-    NegotiateExchange,
-    OpposePublicGood,
-    StartCollectiveProject,
-    UsePublicGood,
-    Experiment,
     EstablishRepository,
+    Experiment,
     Feed,
     Flee,
     Give,
@@ -46,18 +41,23 @@ from world.actions import (
     Help,
     IndexRepository,
     Inscribe,
+    MaintainPublicGood,
     MaintainRepository,
     Move,
+    NegotiateExchange,
+    OpposePublicGood,
     Repair,
     RetrieveRecord,
     Search,
     Sleep,
+    StartCollectiveProject,
     Store,
     Take,
     Talk,
     Tell,
     TransferArtifact,
     Transport,
+    UsePublicGood,
     Wait,
     require_agent_command,
 )
@@ -66,8 +66,17 @@ from world.artifacts import (
     ArtifactKind,
     DurableRecordGenre,
 )
+from world.collective_projects import (
+    CollectiveProjectsRuleContext,
+    PublicGoodsRuleContext,
+)
 from world.communications import StructuredUtterance
-from world.effects import ActionCause, EventCause, require_event_cause
+from world.effects import (
+    ActionCause,
+    EventCause,
+    ResolvedFleeEffect,
+    require_event_cause,
+)
 from world.events import (
     CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
     EventDetails,
@@ -864,9 +873,7 @@ def validate_action_request(
             if rejected is not None:
                 return rejected
             return OperationAccepted(
-                _TransportOp(
-                    *base, target_id=target_id, destination_id=destination_id
-                )
+                _TransportOp(*base, target_id=target_id, destination_id=destination_id)
             )
         case Attack(target_id=target_id):
             if target_id == request.actor_id:
@@ -1009,15 +1016,11 @@ def validate_action_request(
             )
         case MaintainRepository(repository_id=repository_id, mode=mode):
             return OperationAccepted(
-                _MaintainRepositoryOp(
-                    *base, repository_id=repository_id, mode=mode
-                )
+                _MaintainRepositoryOp(*base, repository_id=repository_id, mode=mode)
             )
         case IndexRepository(repository_id=repository_id, entries=entries):
             return OperationAccepted(
-                _IndexRepositoryOp(
-                    *base, repository_id=repository_id, entries=entries
-                )
+                _IndexRepositoryOp(*base, repository_id=repository_id, entries=entries)
             )
         case AssertPossessionClaim(
             decedent_id=decedent_id, doctrine=doctrine, item_id=item_id
@@ -1076,19 +1079,13 @@ def validate_action_request(
                 )
             )
         case UsePublicGood(project_id=project_id):
-            return OperationAccepted(
-                _UsePublicGoodOp(*base, project_id=project_id)
-            )
+            return OperationAccepted(_UsePublicGoodOp(*base, project_id=project_id))
         case MaintainPublicGood(project_id=project_id, item_id=item_id):
             return OperationAccepted(
-                _MaintainPublicGoodOp(
-                    *base, project_id=project_id, item_id=item_id
-                )
+                _MaintainPublicGoodOp(*base, project_id=project_id, item_id=item_id)
             )
         case OpposePublicGood(project_id=project_id):
-            return OperationAccepted(
-                _OpposePublicGoodOp(*base, project_id=project_id)
-            )
+            return OperationAccepted(_OpposePublicGoodOp(*base, project_id=project_id))
         case NegotiateExchange(
             counterparty_id=counterparty_id,
             act=act,
@@ -1323,7 +1320,9 @@ def prepare_action_batch(
     skill_efficiency: object | None = None,
     witness_resource_nodes: bool = False,
     effective_carry_capacity: Mapping[EntityId, int] | None = None,
-    denied_command_kinds_by_entity: Mapping[EntityId, frozenset[str]] | None = None,
+    denied_command_kinds_by_entity: (
+        Mapping[EntityId, frozenset[str] | Mapping[str, str]] | None
+    ) = None,
     dependency_care_context: object | None = None,
     durable_records_context: object | None = None,
     knowledge_repositories_context: object | None = None,
@@ -1332,10 +1331,14 @@ def prepare_action_batch(
     possession_succession_context: object | None = None,
     structured_commitments_context: object | None = None,
     subjective_valuation_context: object | None = None,
-    collective_projects_context: object | None = None,
-    collective_project_draw: object | None = None,
-    public_goods_context: object | None = None,
-    public_good_maintain_draw: object | None = None,
+    collective_projects_context: CollectiveProjectsRuleContext | None = None,
+    collective_project_draw: Callable[[ActionRequest, WorldState], bool] | None = None,
+    public_goods_context: PublicGoodsRuleContext | None = None,
+    public_good_maintain_draw: Callable[[ActionRequest, WorldState], bool]
+    | None = None,
+    deferred_regional_flee_effect: (
+        Callable[[ActionRequest, WorldState], ResolvedFleeEffect | None] | None
+    ) = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1444,8 +1447,7 @@ def prepare_action_batch(
                 reject_reason = "lifecycle_stage_action_denied"
             if reject_reason is not None:
                 _LOG.warning(
-                    "command_kind_denied actor_id=%s kind=%s "
-                    "reason_code=%s",
+                    "command_kind_denied actor_id=%s kind=%s reason_code=%s",
                     request.actor_id.value,
                     kind,
                     reject_reason,
@@ -1504,11 +1506,24 @@ def prepare_action_batch(
                 "[FIX] collective_project_rule_state actor_id=%s working_batch=true",
                 request.actor_id.value,
             )
+        regional_flee = (
+            starting_state.regions_migration is not None
+            and type(start_validation.operation) is _FleeOp
+        )
+        opening_resolved = resolved
+        if regional_flee:
+            if deferred_regional_flee_effect is None:
+                raise ValueError("regional_flee_resolver_required")
+            opening_effects = {} if resolved is None else dict(resolved.by_request)
+            opening_effects[request.request_id] = ResolvedFleeEffect(
+                request.request_id, success=False
+            )
+            opening_resolved = ResolvedActionEffects(by_request=opening_effects)
         start_rule = evaluate_operation(
             rule_state,
             start_validation.operation,
             rules=physical_rules,
-            resolved=resolved,
+            resolved=opening_resolved,
             tick=tick,
             effective_carry_capacity=capacity_map,
             dependency_care_context=care_context,
@@ -1592,6 +1607,60 @@ def prepare_action_batch(
 
         assert type(work_validation) is OperationAccepted
         state_before = working
+        application_resolved = resolved
+        if regional_flee:
+            assert deferred_regional_flee_effect is not None
+            working_effects = {} if resolved is None else dict(resolved.by_request)
+            working_effects[request.request_id] = ResolvedFleeEffect(
+                request.request_id, success=False
+            )
+            working_resolved = ResolvedActionEffects(by_request=working_effects)
+            working_rule = evaluate_operation(
+                working,
+                work_validation.operation,
+                rules=physical_rules,
+                resolved=working_resolved,
+                tick=tick,
+                effective_carry_capacity=capacity_map,
+                dependency_care_context=care_context,
+                durable_records_context=durable_context,
+                knowledge_repositories_context=repository_context,
+                experiment_catalog=experiment_catalog,
+                possession_succession_context=possession_succession_context,
+                structured_commitments_context=structured_commitments_context,
+                subjective_valuation_context=subjective_valuation_context,
+                collective_projects_context=collective_projects_context,
+                public_goods_context=public_goods_context,
+            )
+            if working_rule.disposition is not RuleDisposition.EVENT_ONLY:
+                outcomes.append(
+                    BatchItemOutcome(
+                        ordinal=ordinal,
+                        request_id=request.request_id,
+                        status=BatchItemStatus.CONFLICTED,
+                        reason="conflict_with_prior",
+                        action_kind=working_rule.action_kind,
+                    )
+                )
+                continue
+            flee_effect = deferred_regional_flee_effect(request, working)
+            if flee_effect is None:
+                outcomes.append(
+                    BatchItemOutcome(
+                        ordinal=ordinal,
+                        request_id=request.request_id,
+                        status=BatchItemStatus.CONFLICTED,
+                        reason="conflict_with_prior",
+                        action_kind=working_rule.action_kind,
+                    )
+                )
+                continue
+            if type(flee_effect) is not ResolvedFleeEffect:
+                raise TypeError(
+                    "regional flee callback must return ResolvedFleeEffect or None"
+                )
+            working_effects[request.request_id] = flee_effect
+            application_resolved = ResolvedActionEffects(by_request=working_effects)
         actor_efficiency = None
         if efficiency_map is not None:
             actor_efficiency = efficiency_map.get(request.actor_id)
@@ -1601,8 +1670,9 @@ def prepare_action_batch(
             and start_rule.disposition is RuleDisposition.MUTATE
             and collective_project_draw is not None
         ):
-            from world.collective_projects import classify_collective_contribute
+            from world._collective_projects import classify_collective_contribute
 
+            assert isinstance(request.command, ContributeCollectiveProject)
             coded = classify_collective_contribute(
                 working,
                 actor_id=request.actor_id,
@@ -1618,8 +1688,9 @@ def prepare_action_batch(
             and start_rule.disposition is RuleDisposition.MUTATE
             and public_good_maintain_draw is not None
         ):
-            from world.collective_projects import classify_public_good
+            from world._collective_projects import classify_public_good
 
+            assert isinstance(request.command, MaintainPublicGood)
             coded_maintain = classify_public_good(
                 working,
                 actor_id=request.actor_id,
@@ -1635,7 +1706,7 @@ def prepare_action_batch(
             working,
             work_validation.operation,
             rules=physical_rules,
-            resolved=resolved,
+            resolved=application_resolved,
             tick=tick,
             skill_efficiency=actor_efficiency,
             witness_resource_nodes=witness_resource_nodes,
@@ -1718,7 +1789,8 @@ def prepare_action_batch(
         if application.result.action_kind in {"feed", "transport"}:
             target_id = getattr(work_validation.operation, "target_id", None)
             _LOG.info(
-                "dependency_care_mutate actor_id=%s target_id=%s assist_kind=%s tick=%s",
+                "dependency_care_mutate actor_id=%s target_id=%s "
+                "assist_kind=%s tick=%s",
                 request.actor_id.value,
                 getattr(target_id, "value", target_id),
                 application.result.action_kind,

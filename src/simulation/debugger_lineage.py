@@ -109,9 +109,7 @@ class DebuggerLineageEntry:
             object.__setattr__(
                 self,
                 "status_code",
-                require_stable_id(
-                    "DebuggerLineageEntry.status_code", self.status_code
-                ),
+                require_stable_id("DebuggerLineageEntry.status_code", self.status_code),
             )
         if self.counts is not None:
             normalized: dict[str, int] = {}
@@ -169,9 +167,7 @@ class DebuggerLineageResponse:
                 raise TypeError(
                     "DebuggerLineageResponse.entries must be DebuggerLineageEntry"
                 )
-        reject_forbidden_debugger_attributes(
-            self, type_name="DebuggerLineageResponse"
-        )
+        reject_forbidden_debugger_attributes(self, type_name="DebuggerLineageResponse")
         _LOG.debug(
             "debugger_lineage_response kind=%s run_id=%s owner_id=%s "
             "subject_id=%s entry_count=%s availability=%s",
@@ -605,9 +601,7 @@ def project_goal_ancestry_from_checkpoint(
                 related_ids=(subject_id,),
                 parent_ids=tuple(
                     pid
-                    for pid in [
-                        _stable_id(getattr(ancestor, "parent_goal_id", None))
-                    ]
+                    for pid in [_stable_id(getattr(ancestor, "parent_goal_id", None))]
                     if pid is not None
                 ),
                 status_code=_enum_code(getattr(ancestor, "status", None)),
@@ -637,9 +631,7 @@ class _InMemoryLineageStore:
 
     def __init__(self, kind: DebuggerLineageKind) -> None:
         self._kind = kind
-        self._items: dict[
-            tuple[str, str, str], DebuggerLineageResponse
-        ] = {}
+        self._items: dict[tuple[str, str, str], DebuggerLineageResponse] = {}
 
     def seed(self, response: DebuggerLineageResponse) -> None:
         if type(response) is not DebuggerLineageResponse:
@@ -701,9 +693,7 @@ class InMemoryBeliefEvidenceLineage:
     async def belief_evidence(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> BeliefEvidenceLineage:
-        return self._store.get(
-            run_id=run_id, owner_id=owner_id, subject_id=subject_id
-        )
+        return self._store.get(run_id=run_id, owner_id=owner_id, subject_id=subject_id)
 
 
 class InMemoryMemoryDerivationLineage:
@@ -718,9 +708,7 @@ class InMemoryMemoryDerivationLineage:
     async def memory_derivation(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> MemoryDerivationLineage:
-        return self._store.get(
-            run_id=run_id, owner_id=owner_id, subject_id=subject_id
-        )
+        return self._store.get(run_id=run_id, owner_id=owner_id, subject_id=subject_id)
 
 
 class InMemoryCommunicationLineage:
@@ -735,9 +723,7 @@ class InMemoryCommunicationLineage:
     async def communication_lineage(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> CommunicationLineage:
-        return self._store.get(
-            run_id=run_id, owner_id=owner_id, subject_id=subject_id
-        )
+        return self._store.get(run_id=run_id, owner_id=owner_id, subject_id=subject_id)
 
 
 class InMemoryNarrativeLineage:
@@ -752,9 +738,7 @@ class InMemoryNarrativeLineage:
     async def narrative_lineage(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> NarrativeLineage:
-        return self._store.get(
-            run_id=run_id, owner_id=owner_id, subject_id=subject_id
-        )
+        return self._store.get(run_id=run_id, owner_id=owner_id, subject_id=subject_id)
 
 
 class InMemoryGoalAncestryLineage:
@@ -769,9 +753,7 @@ class InMemoryGoalAncestryLineage:
     async def goal_ancestry(
         self, *, run_id: RunId, owner_id: AgentId, subject_id: str
     ) -> GoalAncestryLineage:
-        return self._store.get(
-            run_id=run_id, owner_id=owner_id, subject_id=subject_id
-        )
+        return self._store.get(run_id=run_id, owner_id=owner_id, subject_id=subject_id)
 
 
 class InMemoryPredictionProvenance:
@@ -780,12 +762,8 @@ class InMemoryPredictionProvenance:
     __slots__ = ("_harvests", "_invocations")
 
     def __init__(self) -> None:
-        self._invocations: dict[
-            tuple[str, str, str], CognitionTraceInvocation
-        ] = {}
-        self._harvests: dict[
-            tuple[str, str, str], CounterfactualNodeMaterial
-        ] = {}
+        self._invocations: dict[tuple[str, str, str], CognitionTraceInvocation] = {}
+        self._harvests: dict[tuple[str, str, str], CounterfactualNodeMaterial] = {}
 
     def seed_invocation(
         self,

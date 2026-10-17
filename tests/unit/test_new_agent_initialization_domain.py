@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from agents.models import AgentId, DriveKind
+from agents.models import DriveKind
 from simulation.new_agent_initialization import (
     ALLOWED_OBJECTIVE_INHERITANCE_KEYS,
     CreationProvenance,
@@ -130,9 +130,7 @@ def test_spawn_and_dependency_policies() -> None:
     _LOG.debug("case_id=spawn_and_dependency_policies")
     defer = SpawnLocationPolicy(policy_id="defer_to_candidate")
     assert defer.allowlist_ids() is None
-    fixed = SpawnLocationPolicy(
-        policy_id="fixed", params={"location_id": "loc-1"}
-    )
+    fixed = SpawnLocationPolicy(policy_id="fixed", params={"location_id": "loc-1"})
     assert fixed.allowlist_ids() == frozenset({"loc-1"})
     with pytest.raises(ValueError, match="unknown_dependency_binding_id"):
         DependencyBindingPolicy(policy_id="copy_from_parent")

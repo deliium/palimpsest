@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -39,6 +37,7 @@ from world.actions import (
     TransitionOutcome,
     Wait,
 )
+from world.communications import origin_utterance
 from world.events import (
     Asked,
     Attacked,
@@ -77,9 +76,13 @@ COMMAND_VARIANTS = (
     Eat(EntityId("item-1")),
     Drink(EntityId("res-1")),
     Sleep(),
-    Talk(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))),
+    Talk(
+        EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))
+    ),
     Ask(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))),
-    Tell(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))),
+    Tell(
+        EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))
+    ),
     Help(EntityId("body-2")),
     Attack(EntityId("body-2")),
     Flee(),
@@ -99,9 +102,15 @@ EVENT_DETAILS: tuple[EventDetails, ...] = (
     Eaten(EntityId("item-1")),
     Drunk(EntityId("res-1")),
     Slept(),
-    Talked(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))),
-    Asked(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))),
-    Told(EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))),
+    Talked(
+        EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))
+    ),
+    Asked(
+        EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))
+    ),
+    Told(
+        EntityId("body-2"), origin_utterance(text="hi", speaker_id=EntityId("body-1"))
+    ),
     Helped(EntityId("body-2")),
     Attacked(EntityId("body-2")),
     Fled(),

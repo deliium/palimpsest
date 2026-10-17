@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from world.lifecycle_effects import StageCapabilityEffect
 from world.lifecycle import LifecycleStageId
+from world.lifecycle_effects import StageCapabilityEffect
 
 pytestmark = pytest.mark.architecture
 

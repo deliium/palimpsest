@@ -218,10 +218,7 @@ def compute_repeated_conventions(
             opportunity_windows += eligible
             for index in range(eligible):
                 window_ticks = ticks[index : index + order]
-                gaps = [
-                    window_ticks[i + 1] - window_ticks[i]
-                    for i in range(order - 1)
-                ]
+                gaps = [window_ticks[i + 1] - window_ticks[i] for i in range(order - 1)]
                 # Contiguous when max_gap_ticks==0 means successive tokens in
                 # the actor stream (already consecutive indices); optional
                 # tick-gap filter for gapped motifs.
@@ -272,9 +269,7 @@ def compute_repeated_conventions(
     if opportunity_windows == 0:
         coverage_value: float | None = None
         availability = (
-            MetricAvailability.PARTIAL
-            if short_sequence
-            else MetricAvailability.UNKNOWN
+            MetricAvailability.PARTIAL if short_sequence else MetricAvailability.UNKNOWN
         )
     else:
         coverage_value = _q(matched_windows / float(opportunity_windows))

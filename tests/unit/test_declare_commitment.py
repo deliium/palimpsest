@@ -107,9 +107,10 @@ def test_food_now_speech_does_not_move_items() -> None:
     assert applied.result.disposition is RuleDisposition.EVENT_ONLY
     assert applied.next_state.items[food.entity_id].holder_id == EntityId("body-a")
     assert applied.next_state.items[material.entity_id].holder_id == EntityId("body-b")
-    assert applied.next_state.bodies[EntityId("body-a")].health == state.bodies[
-        EntityId("body-a")
-    ].health
+    assert (
+        applied.next_state.bodies[EntityId("body-a")].health
+        == state.bodies[EntityId("body-a")].health
+    )
 
 
 def test_same_tick_give_moves_only_the_given_item() -> None:

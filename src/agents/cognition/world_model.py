@@ -508,9 +508,7 @@ class WorldModelPolicy:
         object.__setattr__(
             self,
             "max_hypotheses",
-            _bounded_int(
-                "max_hypotheses", self.max_hypotheses, upper=_MAX_HYPOTHESES
-            ),
+            _bounded_int("max_hypotheses", self.max_hypotheses, upper=_MAX_HYPOTHESES),
         )
         object.__setattr__(
             self,

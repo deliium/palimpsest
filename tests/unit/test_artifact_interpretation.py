@@ -25,7 +25,7 @@ from agents.models import AgentId
 from world.actions import Inscribe, Talk, Wait
 from world.artifacts import ArtifactContent, ArtifactKind, ArtifactRelation
 from world.communications import origin_utterance
-from world.identifiers import EntityId, EventId, WorldId, WorldRevision
+from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import LifeStatus
 from world.observations import (
     CoarseHealth,
@@ -133,9 +133,7 @@ def test_clean_interpretation_copies_exact(caplog: pytest.LogCaptureFixture) -> 
     assert len(ledger.interpretations) == 1
     entry = ledger.interpretations[0]
     assert entry.reading_marks == ("water", "north")
-    assert entry.reading_relations == (
-        ArtifactReadingRelation("water", "at", "north"),
-    )
+    assert entry.reading_relations == (ArtifactReadingRelation("water", "at", "north"),)
     assert entry.distorted is False
     assert entry.confidence == 0.85
     assert entry.observed_revision == 0
@@ -159,9 +157,7 @@ def test_visibility_distortion_drops_last_relation() -> None:
     assert entry.distorted is True
     assert entry.confidence == 0.55
     assert entry.reading_marks == ("water", "north")
-    assert entry.reading_relations == (
-        ArtifactReadingRelation("water", "at", "north"),
-    )
+    assert entry.reading_relations == (ArtifactReadingRelation("water", "at", "north"),)
 
 
 def test_fatigue_distortion_and_empty_relations() -> None:
@@ -192,9 +188,7 @@ def test_fatigue_distortion_drops_last_relation() -> None:
     entry = ledger.interpretations[0]
     assert entry.distorted is True
     assert entry.confidence == 0.55
-    assert entry.reading_relations == (
-        ArtifactReadingRelation("water", "at", "north"),
-    )
+    assert entry.reading_relations == (ArtifactReadingRelation("water", "at", "north"),)
 
 
 def test_two_owners_one_fatigued_divergent_readings_observer_marks_identical() -> None:
@@ -227,7 +221,9 @@ def test_two_owners_one_fatigued_divergent_readings_observer_marks_identical() -
     assert fatigued_entry.reading_relations == (
         ArtifactReadingRelation("water", "at", "north"),
     )
-    assert clean_entry.reading_marks == fatigued_entry.reading_marks == ("water", "north")
+    assert (
+        clean_entry.reading_marks == fatigued_entry.reading_marks == ("water", "north")
+    )
     projected = ObserverArtifact(
         artifact_id="art-1",
         kind="sign",
@@ -293,9 +289,7 @@ def test_cap_exceeded_drops_further(
     )
     observation = _observe(_artifact(artifact_id="art-new"), tick=1)
     with caplog.at_level(logging.WARNING, logger="agents.cognition.artifacts"):
-        ledger = apply_artifact_interpretation_update(
-            observation, _agent(), previous
-        )
+        ledger = apply_artifact_interpretation_update(observation, _agent(), previous)
     assert len(ledger.interpretations) == 16
     assert "art-new" not in {item.artifact_id.value for item in ledger.interpretations}
     assert "cap_exceeded" in ledger.notices

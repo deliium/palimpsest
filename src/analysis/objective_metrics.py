@@ -335,9 +335,7 @@ def compute_resource_inequality(
         raise
 
     availability = (
-        MetricAvailability.PARTIAL
-        if unknown_count > 0
-        else MetricAvailability.PRESENT
+        MetricAvailability.PARTIAL if unknown_count > 0 else MetricAvailability.PRESENT
     )
     coverage = MetricCoverage(
         observed=len(observed),
@@ -464,9 +462,7 @@ def compute_cooperation(
         )
 
     occurrence = _q(len(coop) / float(len(applied)))
-    opportunity_rate = (
-        _q(len(coop) / float(opportunity)) if opportunity > 0 else None
-    )
+    opportunity_rate = _q(len(coop) / float(opportunity)) if opportunity > 0 else None
     availability = (
         MetricAvailability.PRESENT
         if opportunity_rate is not None
@@ -769,9 +765,9 @@ def compute_survival_cohort_contrast(
     empty_denominator = False
     for cohort_id in sorted(cohort_map):
         member_ids = cohort_map[cohort_id]
-        if isinstance(member_ids, (str, bytes, set, frozenset, Mapping)) or not isinstance(
-            member_ids, Sequence
-        ):
+        if isinstance(
+            member_ids, (str, bytes, set, frozenset, Mapping)
+        ) or not isinstance(member_ids, Sequence):
             raise TypeError("cohort_map: invalid_member_sequence")
         members = [by_id[agent_id] for agent_id in member_ids if agent_id in by_id]
         if not members:
@@ -877,9 +873,7 @@ def compute_goal_completion(
             notes_code="legacy_unavailable",
         )
 
-    ordered = sorted(
-        transitions, key=lambda row: (row.tick, row.goal_id, row.owner_id)
-    )
+    ordered = sorted(transitions, key=lambda row: (row.tick, row.goal_id, row.owner_id))
     if not ordered:
         return _document(
             family=spec.family_id.value,
@@ -1010,9 +1004,7 @@ def compute_action_resolution_rates(
             notes_code="legacy_unavailable",
         )
 
-    ordered = sorted(
-        resolutions, key=lambda row: (row.tick, row.ordinal, row.agent_id)
-    )
+    ordered = sorted(resolutions, key=lambda row: (row.tick, row.ordinal, row.agent_id))
     if not ordered:
         return _document(
             family=ACTION_RESOLUTION_RATES_FAMILY,
@@ -1040,9 +1032,7 @@ def compute_action_resolution_rates(
         "conflicted_rate": _q(conflicted / denom),
     }
     availability = (
-        MetricAvailability.PRESENT
-        if evidence_complete
-        else MetricAvailability.PARTIAL
+        MetricAvailability.PRESENT if evidence_complete else MetricAvailability.PARTIAL
     )
     doc = _document(
         family=ACTION_RESOLUTION_RATES_FAMILY,

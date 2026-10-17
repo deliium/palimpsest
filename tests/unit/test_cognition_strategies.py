@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from world.communications import origin_utterance
-
 import logging
 
 import pytest
@@ -26,6 +24,7 @@ from social.models import CommunicationEnvelope, EnvelopeId
 from tests.simulation_helpers import make_location, weather_for_locations
 from tests.typecheck.cognition_strategies import ScriptedCognitionStrategy
 from world.actions import Wait
+from world.communications import origin_utterance
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus
 from world.observations import Observation
@@ -167,7 +166,10 @@ def test_inbox_is_out_of_band_not_derived_from_communications() -> None:
             ActionSubmission(
                 batch.token,
                 AgentId("agent-1"),
-                Talk(EntityId("body-2"), origin_utterance(text="claim-only", speaker_id=EntityId("body-1"))),
+                Talk(
+                    EntityId("body-2"),
+                    origin_utterance(text="claim-only", speaker_id=EntityId("body-1")),
+                ),
             ),
         )
     )
@@ -182,7 +184,9 @@ def test_inbox_is_out_of_band_not_derived_from_communications() -> None:
         inbox=(),
     )
     assert perspective.inbox == ()
-    assert perspective.observation.communications[0].utterance.content.text == "claim-only"
+    assert (
+        perspective.observation.communications[0].utterance.content.text == "claim-only"
+    )
 
 
 def test_build_perspective_carries_goals_drives_and_counterpart_bindings(

@@ -206,7 +206,8 @@ def test_project_from_loop_result_hash_stable() -> None:
     b = project_cognition_trace_stages(loop_result=result)
     assert stage_summaries_content_hash(a) == stage_summaries_content_hash(b)
     assert a[0].stage_kind is CognitionTraceStageKind.OBSERVATION
-    assert a[-1].command_kind == "wait"
+    planning = next(stage for stage in a if stage.command_kind is not None)
+    assert planning.command_kind == "wait"
 
 
 def test_projected_summaries_forbid_payload_fields() -> None:
@@ -291,9 +292,7 @@ def test_goals_projection_prefers_goal_board_histograms() -> None:
     assert goals_stage.counts[CognitionTraceCountKey.GOAL_STATUS_SUSPENDED.value] == 1
     assert goals_stage.counts[CognitionTraceCountKey.GOAL_HORIZON_LONG_TERM.value] == 1
     assert (
-        goals_stage.counts[
-            CognitionTraceCountKey.GOAL_HORIZON_CURRENT_INTENTION.value
-        ]
+        goals_stage.counts[CognitionTraceCountKey.GOAL_HORIZON_CURRENT_INTENTION.value]
         == 1
     )
     assert any(ref.value == "ci-1" for ref in goals_stage.id_refs)

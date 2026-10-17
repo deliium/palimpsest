@@ -428,8 +428,7 @@ def test_communicate_stamps_existing_talk() -> None:
     assert relation.subject == "return_transfer"
     assert relation.object == "ben"
     assert (
-        stamped.utterance.declared.source_basis
-        is CommunicationSourceBasis.UNREFERENCED
+        stamped.utterance.declared.source_basis is CommunicationSourceBasis.UNREFERENCED
     )
 
 

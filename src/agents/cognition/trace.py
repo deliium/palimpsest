@@ -497,7 +497,7 @@ def _project_theory_of_mind(
         default_theory_of_mind_policy,
     )
 
-    carried = None if snap is None else snap.theory_of_mind
+    carried: object | None = None if snap is None else snap.theory_of_mind
     if carried is None and loop_result is not None:
         carried = loop_result.theory_of_mind
     owner = ""
@@ -1138,18 +1138,18 @@ def _project_beliefs(
 
     if snap is not None:
         if not refs:
-            for belief in snap.legacy_beliefs:
+            for legacy in snap.legacy_beliefs:
                 refs.append(
                     CognitionTraceIdRef(
                         kind=CognitionTraceRefKind.BELIEF,
-                        value=belief.belief_id.value,
+                        value=legacy.belief_id.value,
                     )
                 )
-            for belief in snap.semantic_beliefs:
+            for semantic in snap.semantic_beliefs:
                 refs.append(
                     CognitionTraceIdRef(
                         kind=CognitionTraceRefKind.SEMANTIC_BELIEF,
-                        value=belief.belief_id.value,
+                        value=semantic.belief_id.value,
                     )
                 )
         counts.setdefault(

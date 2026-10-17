@@ -52,9 +52,7 @@ def test_split_starts_pass_topology_and_weather() -> None:
     assert by_agent["focal"] == "body-focal"
     assert by_agent["east_a"].startswith("body-")
     assert by_agent["west_a"] != "west_a"
-    starts = {
-        body.entity_id.value: body.location_id.value for body in scenario.bodies
-    }
+    starts = {body.entity_id.value: body.location_id.value for body in scenario.bodies}
     assert starts["body-focal"] == "east"
     assert starts["body-east-a"] == "east"
     assert starts["body-east-b"] == "east"

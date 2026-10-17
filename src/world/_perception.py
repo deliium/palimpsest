@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Final
+from typing import Final, cast
 
 from world._state import WorldState
 from world.artifacts import InformationArtifact, RecordIntegrity
@@ -49,6 +49,9 @@ from world.events import (
     Given,
     ItemCrafted,
     ItemStored,
+    JourneyArrived,
+    JourneyEnded,
+    JourneyStarted,
     PossessionClaimAsserted,
     ProjectAbandoned,
     ProjectCompleted,
@@ -80,11 +83,17 @@ from world.observations import (
     ObservedArtifact,
     ObservedCollectiveProject,
     ObservedCommunication,
+    ObservedDependencyNeeds,
     ObservedItem,
     ObservedItemPlacement,
+    ObservedJourney,
+    ObservedJourneyPhase,
+    ObservedKinshipVisible,
+    ObservedLifecycle,
     ObservedLocation,
     ObservedOccurrence,
     ObservedProjectContribution,
+    ObservedRegionalContext,
     ObservedRepository,
     ObservedResource,
     ObservedStructure,
@@ -308,9 +317,7 @@ def _project_one(
         location_id=location_id,
         include_ground=content_visible,
         durable_perception_mode=durable_perception_mode,
-        include_custodian=(
-            repository_perception_mode == "container_and_meta"
-        ),
+        include_custodian=(repository_perception_mode == "container_and_meta"),
     )
     repositories = (
         _sorted_repositories(
@@ -373,6 +380,7 @@ def _project_one(
             lifecycle=_lifecycle_for(context, observer_id),
             kinship_visible=_kinship_self_for(context, observer_id),
             dependency_needs=_dependency_needs_for(context, observer_id),
+            journey=_observed_journey(state, observer_id, tick=context.tick),
         ),
         locations=_sorted_locations(state, location_id),
         items=_sorted_items(
@@ -387,7 +395,7 @@ def _project_one(
         artifacts=artifacts,
         repositories=repositories,
         collective_projects=collective_projects,
-        exits=_sorted_exits(state, location_id),
+        exits=_sorted_exits(state, location_id, physical_rules=context.physical_rules),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id, context=context)
             if content_visible
@@ -407,6 +415,7 @@ def _project_one(
             if subjective_valuation_active
             else None
         ),
+        regional_context=_regional_context(state, location_id),
     )
 
 
@@ -417,9 +426,7 @@ def _present_environment(
     context: ObservationContext,
     condition: WeatherCondition,
     spec: object | None,
-) -> tuple[
-    Season | None, TemperatureBand | None, tuple[HazardKind, ...] | None
-]:
+) -> tuple[Season | None, TemperatureBand | None, tuple[HazardKind, ...] | None]:
     if spec is None:
         return None, None, None
     if type(spec) is not EnvironmentalDynamicsSpec:
@@ -505,7 +512,52 @@ def _sorted_locations(
     return (ObservedLocation(entity_id=location.entity_id, name=location.name),)
 
 
-def _sorted_exits(state: WorldState, location_id: EntityId) -> tuple[VisibleExit, ...]:
+def _regional_context(
+    state: WorldState, location_id: EntityId
+) -> ObservedRegionalContext | None:
+    spec = state.regions_migration
+    if spec is None:
+        return None
+    region_by_id = {region.region_id: region for region in spec.regions}
+    memberships = {row.location_id: row.region_id for row in spec.location_regions}
+    region_id = memberships.get(location_id)
+    region = None if region_id is None else region_by_id[region_id]
+    return ObservedRegionalContext(
+        region_id=region_id,
+        label=None if region is None else region.label,
+    )
+
+
+def _observed_journey(
+    state: WorldState, observer_id: EntityId, *, tick: int
+) -> ObservedJourney | None:
+    if state.journeys is None:
+        return None
+    for journey in state.journeys.values():
+        if observer_id not in journey.participant_body_ids:
+            continue
+        phase = (
+            ObservedJourneyPhase.PREPARATION
+            if tick < journey.due_tick
+            else ObservedJourneyPhase.ARRIVAL_PENDING
+        )
+        return ObservedJourney(
+            origin_location_id=journey.origin_location_id,
+            destination_location_id=journey.destination_location_id,
+            origin_region_id=journey.origin_region_id,
+            destination_region_id=journey.destination_region_id,
+            start_tick=journey.start_tick,
+            due_tick=journey.due_tick,
+            arrival_wait_deadline_tick=journey.arrival_wait_deadline_tick,
+            phase=phase,
+            participant_count=len(journey.participant_body_ids),
+        )
+    return None
+
+
+def _sorted_exits(
+    state: WorldState, location_id: EntityId, *, physical_rules: object
+) -> tuple[VisibleExit, ...]:
     location = state.locations.get(location_id)
     if location is None:
         return ()
@@ -514,7 +566,40 @@ def _sorted_exits(state: WorldState, location_id: EntityId) -> tuple[VisibleExit
         destination = state.locations.get(destination_id)
         if destination is None:
             continue
-        exits.append(VisibleExit(destination_id=destination_id, name=destination.name))
+        spec = state.regions_migration
+        if spec is None:
+            exits.append(
+                VisibleExit(destination_id=destination_id, name=destination.name)
+            )
+            continue
+        route = next(
+            (
+                candidate
+                for candidate in spec.routes
+                if candidate.edge_key
+                == tuple(sorted((location_id.value, destination_id.value)))
+            ),
+            None,
+        )
+        from world.models import PhysicalRules, default_physical_rules
+
+        rules = (
+            physical_rules
+            if type(physical_rules) is PhysicalRules
+            else default_physical_rules()
+        )
+        memberships = {row.location_id: row.region_id for row in spec.location_regions}
+        exits.append(
+            VisibleExit(
+                destination_id=destination_id,
+                name=destination.name,
+                travel_duration_ticks=1 if route is None else route.duration_ticks,
+                fatigue_cost=(
+                    rules.move_fatigue if route is None else route.fatigue_cost
+                ),
+                destination_region_id=memberships.get(destination_id),
+            )
+        )
     exits.sort(key=lambda value: value.destination_id.value)
     return tuple(exits)
 
@@ -735,9 +820,7 @@ def _project_artifact(
             integrity.value if integrity is not None else "-",
             copy_generation if copy_generation is not None else "-",
         )
-    custodian = (
-        artifact.custodian_repository_id if include_custodian else None
-    )
+    custodian = artifact.custodian_repository_id if include_custodian else None
     return ObservedArtifact(
         entity_id=artifact.artifact_id,
         kind=artifact.kind,
@@ -788,7 +871,7 @@ def _sorted_visible_bodies(
 
 def _lifecycle_for(
     context: ObservationContext, body_id: EntityId
-) -> object | None:
+) -> ObservedLifecycle | None:
     views = context.lifecycle_by_body
     if views is None:
         return None
@@ -797,7 +880,7 @@ def _lifecycle_for(
 
 def _dependency_needs_for(
     context: ObservationContext, body_id: EntityId
-) -> object | None:
+) -> ObservedDependencyNeeds | None:
     views = context.dependency_needs_by_body
     if views is None:
         return None
@@ -809,7 +892,7 @@ def _dependency_needs_for(
 
 def _kinship_self_for(
     context: ObservationContext, body_id: EntityId
-) -> object | None:
+) -> ObservedKinshipVisible | None:
     views = context.kinship_self_by_body
     if views is None:
         return None
@@ -821,7 +904,7 @@ def _kinship_other_for(
     *,
     observer_id: EntityId,
     other_body_id: EntityId,
-) -> object | None:
+) -> ObservedKinshipVisible | None:
     """Expose only self-incident kin facts about a visible other body."""
     from world.observations import ObservedKinshipVisible
 
@@ -856,11 +939,11 @@ def _project_event_window(
     occurrences: list[ObservedOccurrence] = []
     communications: list[ObservedCommunication] = []
     for event in prior_events:
-        if (
-            not subjective_valuation_active
-            and type(event.details)
-            in {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
-        ):
+        if not subjective_valuation_active and type(event.details) in {
+            ExchangeProposed,
+            ExchangeWithdrawn,
+            ExchangeCompleted,
+        }:
             continue
         if not collective_projects_active and type(event.details) in {
             ProjectCreated,
@@ -895,11 +978,7 @@ def _project_event_window(
         if role is None:
             continue
         if type(event.details) is ExperimentResolved:
-            viewer = (
-                "actor"
-                if role is ObservationAudienceRole.ACTOR
-                else "bystander"
-            )
+            viewer = "actor" if role is ObservationAudienceRole.ACTOR else "bystander"
             _LOG.debug(
                 "experiment_occurrence_projected viewer_role=%s outcome_class=%s",
                 viewer,
@@ -1036,6 +1115,35 @@ def _public_facts_for_role(
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
 ) -> dict[str, object]:
+    if type(event.details) in {JourneyStarted, JourneyArrived, JourneyEnded}:
+        if role not in {
+            ObservationAudienceRole.ACTOR,
+            ObservationAudienceRole.TARGET,
+        }:
+            return {"kind": event.event_type}
+        if type(event.details) is JourneyStarted:
+            journey = event.details.journey
+            return {
+                "kind": event.event_type,
+                "journey_command_kind": event.details.command_kind,
+                "journey_destination_id": journey.destination_location_id.value,
+                "journey_due_tick": journey.due_tick,
+                "journey_id": journey.journey_id,
+            }
+        if type(event.details) is JourneyArrived:
+            return {
+                "kind": event.event_type,
+                "journey_destination_id": event.details.destination_location_id.value,
+                "journey_id": event.details.journey_id,
+                "journey_status": "arrived",
+            }
+        assert isinstance(event.details, JourneyEnded)
+        return {
+            "kind": event.event_type,
+            "journey_id": event.details.journey_id,
+            "journey_reason": event.details.reason,
+            "journey_status": "ended",
+        }
     experiment_facts = _experiment_public_facts(event, role)
     if experiment_facts is not None:
         return experiment_facts
@@ -1063,7 +1171,7 @@ def _public_facts_for_role(
         _LOG.debug(
             "possession_occurrence kind=%s item_count=%s",
             event.details.kind,
-            len(possession_facts["item_ids"]),
+            len(cast(Sequence[str], possession_facts["item_ids"])),
         )
     commitment_facts = _commitment_public_facts(event)
     if commitment_facts is not None:
@@ -1155,19 +1263,22 @@ def _project_public_facts(
     }:
         return None
     if type(details) in {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}:
+        assert isinstance(
+            details, (PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed)
+        )
         if not public_goods_active:
             return None
         project = (
-            None
-            if state is None
-            else state.collective_projects.get(details.project_id)
+            None if state is None else state.collective_projects.get(details.project_id)
         )
         facts: dict[str, object] = {
             "project_id": details.project_id.value,
             "kind": (
                 details.project_kind
                 if type(details) is PublicGoodBenefit
-                else None if project is None else project.kind.value
+                else None
+                if project is None
+                else project.kind.value
             ),
         }
         if type(details) is PublicGoodBenefit:
@@ -1180,6 +1291,7 @@ def _project_public_facts(
         elif type(details) is PublicGoodMaintained:
             facts["accepted"] = details.accepted
         else:
+            assert isinstance(details, PublicGoodOpposed)
             facts["status"] = details.status
         _LOG.debug(
             "public_good_occurrence_projected kind=%s project_id=%s",
@@ -1187,6 +1299,16 @@ def _project_public_facts(
             details.project_id.value,
         )
         return facts
+    assert isinstance(
+        details,
+        (
+            ProjectCreated,
+            ProjectContributed,
+            ProjectShortage,
+            ProjectAbandoned,
+            ProjectCompleted,
+        ),
+    )
     project = None
     if state is not None:
         project = state.collective_projects.get(details.project_id)
@@ -1255,6 +1377,7 @@ def _exchange_public_facts(
     details = event.details
     if type(details) not in {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}:
         return None
+    assert isinstance(details, (ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted))
     if not active:
         return None
     give_ids = tuple(item.value for item in details.give_item_ids)
@@ -1263,8 +1386,12 @@ def _exchange_public_facts(
         give_kinds = details.give_item_kinds
         take_kinds = details.take_item_kinds
     else:
-        give_kinds = tuple(_visible_item_kind(state, item) for item in details.give_item_ids)
-        take_kinds = tuple(_visible_item_kind(state, item) for item in details.take_item_ids)
+        give_kinds = tuple(
+            _visible_item_kind(state, item) for item in details.give_item_ids
+        )
+        take_kinds = tuple(
+            _visible_item_kind(state, item) for item in details.take_item_ids
+        )
     _LOG.debug(
         "exchange_occurrence act=%s role=%s give_len=%s take_len=%s",
         details.act,
@@ -1315,9 +1442,7 @@ def _exchange_visible_holdings(
     return tuple(rows)
 
 
-def _given_item_facts(
-    event: WorldEvent, state: WorldState | None
-) -> dict[str, object]:
+def _given_item_facts(event: WorldEvent, state: WorldState | None) -> dict[str, object]:
     details = event.details
     assert type(details) is Given
     item = None if state is None else state.items.get(details.item_id)
@@ -1398,9 +1523,7 @@ def _artifact_public_facts(event: WorldEvent) -> dict[str, object] | None:
         details.tombstone or details.integrity is not None
     ):
         facts["integrity"] = (
-            details.integrity
-            if details.integrity is not None
-            else "destroyed"
+            details.integrity if details.integrity is not None else "destroyed"
         )
         facts["record_genre"] = None
     return facts

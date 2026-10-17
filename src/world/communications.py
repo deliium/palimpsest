@@ -279,12 +279,13 @@ class DeclaredTransmission:
         ):
             raise ValueError("DeclaredTransmission.parent_communication_id: self_ref")
         if hop == 0 and self.root_communication_id != self.communication_id:
-            raise ValueError("DeclaredTransmission.root_communication_id: origin_mismatch")
-        if (
-            hop > 0
-            and self.root_communication_id == self.communication_id
-        ):
-            raise ValueError("DeclaredTransmission.root_communication_id: not_inherited")
+            raise ValueError(
+                "DeclaredTransmission.root_communication_id: origin_mismatch"
+            )
+        if hop > 0 and self.root_communication_id == self.communication_id:
+            raise ValueError(
+                "DeclaredTransmission.root_communication_id: not_inherited"
+            )
         object.__setattr__(self, "hop_count", hop)
         object.__setattr__(
             self,

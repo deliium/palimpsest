@@ -297,9 +297,7 @@ def compute_bounded_experiment_provenance(
             revision,
             "no_learned_entries",
         )
-    event_ids = {
-        _text(row, "event_id") for row in _rows(trials, "trials_not_ordered")
-    }
+    event_ids = {_text(row, "event_id") for row in _rows(trials, "trials_not_ordered")}
     cited = 0
     if genealogy_uptake:
         for entry in learned:

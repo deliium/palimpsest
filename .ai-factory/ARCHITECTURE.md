@@ -18,6 +18,7 @@ The layout exists to keep trust boundaries machine-checkable: `WorldEngine` is t
 ```text
 src/
   world/                 # agent-facing Observation/commands/events + communications.py
+                         # regions.py (optional immutable region/route/journey contracts)
                          # private _state/_perception/_rules/_operations/_replay (authority)
   agents/                # identity, Agent, goals
   agents/cognition/      # CognitiveLoop, stage protocols, architecture registry, imagination/motivation/deliberation
@@ -34,7 +35,8 @@ src/
                          # run_control.py (resume modes + finalization-command contracts)
                          # inspection.py (detached objective/agent-visible projection; no live observe)
                          # causal_debugger.py / debugger_lineage.py (read-only research debugger)
-  experiments/           # trusted experiment catalog/coordinator (A–Z plus AA–AD; F–AD off the V1 gate); never imported by domain
+  experiments/           # trusted experiment catalog/coordinator (A–E on V1; F–Z, AA–AY off V1); never imported by domain
+                          # regional_migration_scenario.py: Experiment AY / regional_migration@1
                          # benchmark_suite.py / benchmark_scenarios/ / benchmark_smoke.py: V2 validation suite (off V1 gate)
                          # observer_graphical_scenario.py: deterministic Godot validation world (off V1 gate)
                          # matrix_*.py: experiment-matrix-v1 expand/batch/aggregate (filesystem manifests)
@@ -45,6 +47,7 @@ src/
                          # inspection_sqlalchemy.py (keyset pagination + manifest-constrained reads)
                          # may implement experiments.persistence ports; transmission_mapping.py
   analysis/              # read-only analysis: drift/transmission, spatial_control@1,
+                          # regional_population@1 / regional_migration@1 / regional_destination_beliefs@1
                          # external_artifact_memory@1, metric DTOs, evidence stages, claim truth,
                          # numerical policy, canonical codecs, phenomenon-indicators-v1 panels,
                          # matrix-metric-summary-v1 (no cognition feedback)

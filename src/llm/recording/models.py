@@ -125,9 +125,7 @@ class SchemaIdentity:
 
     def __repr__(self) -> str:
         return (
-            "SchemaIdentity("
-            f"qualname={self.qualname!r}, "
-            f"digest={self.digest[:12]!r}…)"
+            f"SchemaIdentity(qualname={self.qualname!r}, digest={self.digest[:12]!r}…)"
         )
 
 

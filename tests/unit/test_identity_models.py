@@ -144,9 +144,7 @@ def test_rate_tracks_counts_and_claim_stays_true() -> None:
 
 def test_first_revision_is_less_stable_than_a_long_uncontradicted_chain() -> None:
     first = (_point(0, 1, 0.4),)
-    long_chain = tuple(
-        _point(index, index * 2, 0.4) for index in range(8)
-    )
+    long_chain = tuple(_point(index, index * 2, 0.4) for index in range(8))
     first_stability = derive_identity_stability(first)
     long_stability = derive_identity_stability(long_chain)
     assert derive_identity_stability(first) == first_stability

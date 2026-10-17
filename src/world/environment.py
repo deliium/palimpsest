@@ -497,9 +497,7 @@ def _freeze_yields(raw: object) -> tuple[SeasonalYield, ...]:
         if key in seen:
             raise _fail("EnvironmentalDynamicsSpec.yields", "yield_undefined")
         seen.add(key)
-    required = {
-        (kind, season) for kind in ResourceKind for season in _SEASON_ORDER
-    }
+    required = {(kind, season) for kind in ResourceKind for season in _SEASON_ORDER}
     if seen != required:
         raise _fail("EnvironmentalDynamicsSpec.yields", "yield_undefined")
     ordered = tuple(
