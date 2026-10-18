@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Final
 
@@ -43,6 +44,7 @@ class ExperimentArmResult:
     metrics: tuple[object, ...] = ()
     committed_events: tuple[object, ...] | None = None
     regional_destination_evidence: tuple[object, ...] | None = None
+    generation_index_by_owner: Mapping[str, int] | None = None
 
 
 def materialize_assignments(
@@ -73,6 +75,19 @@ def materialize_assignments(
                     )
                 )
     return tuple(assignments)
+
+
+def _generation_index_by_owner(
+    runner_result: SimulationRunnerResult,
+) -> dict[str, int] | None:
+    derived: dict[str, int] = {}
+    for record in runner_result.initial_lifecycle_records:
+        owner = getattr(record, "agent_id", None)
+        generation = getattr(record, "generation_index", None)
+        if isinstance(owner, str) and owner and isinstance(generation, int):
+            if not isinstance(generation, bool) and generation >= 0:
+                derived[owner] = generation
+    return derived or None
 
 
 class ExperimentCoordinator:
@@ -141,6 +156,16 @@ class ExperimentCoordinator:
                             assignment.condition_id, assignment.runner_config
                         )
                     )
+                if assignment.experiment_id == "semantic_drift@1":
+                    from experiments.semantic_drift_scenario import (
+                        semantic_drift_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        semantic_drift_arbiter(
+                            assignment.condition_id, assignment.runner_config
+                        )
+                    )
                 if assignment.experiment_id == "multiple_societies@1":
                     from experiments.multiple_societies_scenario import (
                         multiple_societies_arbiter,
@@ -179,6 +204,7 @@ class ExperimentCoordinator:
                 config_fingerprint=fingerprint,
                 committed_events=committed_events,
                 regional_destination_evidence=regional_destination_evidence,
+                generation_index_by_owner=_generation_index_by_owner(runner_result),
             )
             from experiments.collectors import collect_for_experiment
 
@@ -190,6 +216,7 @@ class ExperimentCoordinator:
                 metrics=metrics,
                 committed_events=committed_events,
                 regional_destination_evidence=regional_destination_evidence,
+                generation_index_by_owner=_generation_index_by_owner(runner_result),
             )
             results.append(arm)
             _LOG.info(

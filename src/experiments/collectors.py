@@ -81,6 +81,27 @@ def collect_trajectory_stats(arm: Any) -> CollectorMetricDocument:
     )
 
 
+def generation_index_from_lifecycle_records(
+    records: object,
+) -> dict[str, int] | None:
+    """Derive one generation index per owner from detached lifecycle records."""
+    from collections.abc import Sequence
+
+    derived: dict[str, int] = {}
+    values = records if isinstance(records, Sequence) else ()
+    for record in tuple(values):
+        owner = getattr(record, "agent_id", None)
+        generation = getattr(record, "generation_index", None)
+        if not isinstance(owner, str) or not owner:
+            continue
+        if isinstance(generation, bool) or not isinstance(generation, int):
+            continue
+        if generation < 0:
+            continue
+        derived[owner] = generation
+    return derived or None
+
+
 def assemble_arm_metric_bundle(
     arm: Any,
     *,
@@ -90,6 +111,7 @@ def assemble_arm_metric_bundle(
 ) -> MetricBundle:
     """Assemble run-level catalog metrics without requiring experiment membership."""
     from analysis.models import MemoryDynamicsReport
+    from analysis.semantic_drift_metrics import semantic_analysis_inputs_from_harvest
     from experiments.composition import (
         convention_habit_rows_from_ledgers,
         cultural_channel_rows_from_convention_habits,
@@ -127,6 +149,20 @@ def assemble_arm_metric_bundle(
         reflection_report=_optional_reflection_report(reflection_report),
     )
     regional_input = None
+    naming_ledgers = getattr(arm, "terminology_ledgers", None)
+    if naming_ledgers is None:
+        naming_ledgers = getattr(arm.runner_result, "terminology_ledgers", None)
+    symbolic_ledgers = getattr(arm, "symbolic_ledgers", None)
+    if symbolic_ledgers is None:
+        symbolic_ledgers = getattr(arm.runner_result, "symbolic_ledgers", None)
+    semantic_communities: tuple[object, ...] = ()
+    semantic_generation_map = getattr(arm, "generation_index_by_owner", None)
+    if semantic_generation_map is None:
+        semantic_generation_map = getattr(arm, "generation_index_by_agent", None)
+    if semantic_generation_map is None:
+        semantic_generation_map = generation_index_from_lifecycle_records(
+            getattr(arm.runner_result, "initial_lifecycle_records", ())
+        )
     events = getattr(arm, "committed_events", None)
     if events is None:
         events = getattr(arm.runner_result, "committed_events", None)
@@ -234,6 +270,10 @@ def assemble_arm_metric_bundle(
     generation_index = getattr(arm, "generation_index_by_owner", None)
     if generation_index is None:
         generation_index = getattr(arm, "generation_index_by_agent", None)
+    if generation_index is None:
+        generation_index = generation_index_from_lifecycle_records(
+            getattr(arm.runner_result, "initial_lifecycle_records", ())
+        )
     hm_harvest = historical_memory_harvest_from_run(
         layers_spec=layers_spec,
         as_of_tick=max(ticks - 1, 0),
@@ -472,9 +512,7 @@ def assemble_arm_metric_bundle(
             society_isolation=society.isolation,
             society_community_count=len(society.emission.communities),
         )
-        naming_ledgers = getattr(arm, "terminology_ledgers", None)
-        if naming_ledgers is None:
-            naming_ledgers = getattr(arm.runner_result, "terminology_ledgers", None)
+        semantic_communities = tuple(society.emission.communities)
         contact_rows = getattr(arm, "practical_knowledge_audits", None)
         if contact_rows is None:
             contact_rows = getattr(
@@ -502,21 +540,28 @@ def assemble_arm_metric_bundle(
             teaching_audits=teaching_audits,
         )
         inputs = replace(inputs, contact_analysis=contact)
-        symbolic_ledgers = getattr(arm, "symbolic_ledgers", None)
-        if symbolic_ledgers is None:
-            symbolic_ledgers = getattr(
-                arm.runner_result, "symbolic_ledgers", None
-            )
-        if symbolic_ledgers is not None:
-            inputs = replace(
-                inputs,
-                symbolic_analysis=symbolic_analysis_inputs_from_harvest(
-                    ledgers=symbolic_ledgers,
-                    events=events,
-                    communities=society.emission.communities,
-                    expected_owner_count=len(living),
-                ),
-            )
+    if symbolic_ledgers is not None:
+        inputs = replace(
+            inputs,
+            symbolic_analysis=symbolic_analysis_inputs_from_harvest(
+                ledgers=symbolic_ledgers,
+                events=events or (),
+                communities=semantic_communities,
+                expected_owner_count=len(agent_ids),
+            ),
+        )
+    if naming_ledgers is not None or symbolic_ledgers is not None:
+        inputs = replace(
+            inputs,
+            semantic_drift_analysis=semantic_analysis_inputs_from_harvest(
+                naming_ledgers=naming_ledgers,
+                symbolic_ledgers=symbolic_ledgers,
+                events=events or (),
+                communities=semantic_communities,
+                generation_index_by_owner=semantic_generation_map,
+                expected_owner_count=len(agent_ids),
+            ),
+        )
     return assemble_metric_documents(inputs)
 
 

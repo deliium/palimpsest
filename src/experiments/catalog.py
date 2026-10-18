@@ -2770,6 +2770,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "multiple_societies@1",
         "cultural_contact@1",
         "compositional_symbols@1",
+        "semantic_drift@1",
     }
 )
 
@@ -5280,6 +5281,27 @@ def experiment_ba_cultural_contact(
     )
     _LOG.info(
         "experiment_registered experiment_id=cultural_contact@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bc_semantic_drift(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 24,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BC: longitudinal owner-scoped semantic drift."""
+    from experiments.semantic_drift_scenario import semantic_drift_scenario
+
+    definition = semantic_drift_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=semantic_drift@1 arms=%s",
         len(definition.conditions),
     )
     return definition
