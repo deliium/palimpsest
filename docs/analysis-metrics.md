@@ -293,3 +293,25 @@ Three detached families cover translation at `METRIC_FAMILY_COUNT = 112`:
 
 Rows carry only surface/referent digests, statuses, bands, and counts. Candidate
 communities remain optional and analysis-only.
+
+## Generational narrative families
+
+Detached analysis registers three families at 112 → 115 total:
+
+- `generational_narrative_continuity@1` — active lineages, objective
+  generation span, multi-generation lineage rate, first-hand-to-retold rate,
+  all-witnesses-dead survival, record-backed survival, carrier turnover, mean
+  provenance hops, and theme counts.
+- `narrative_source_loss@1` — subjective and objective source-loss rates,
+  dead-witness share, all-witnesses-dead count, record-backed count, and
+  state/reason distributions. `unknown` is a coverage gap, never zero.
+- `narrative_historical_alignment@1` — source-event coverage, participant
+  coverage, location agreement, temporal distance, and analysis-only
+  aligned/partial/divergent/unverifiable rates within a locked ±2-tick window.
+  `unverifiable` is excluded from the alignment denominator and is never a
+  truth verdict.
+
+Rows are built from duck-typed ledgers plus objective lifecycle/event rows.
+Analysis imports no cognition, runtime, persistence, or private world types.
+Empty inputs yield `absent`, not zero. Documents contain counts, rates, bands,
+and opaque IDs only; story tokens and record text never enter a document or log.

@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
-from typing import Final
+from typing import Final, TypeGuard
 
 from agents.cognition.models import OwnerSafeSocialIdentity
 from agents.models import AgentId
@@ -37,6 +37,7 @@ from world.observations import Observation, ObservedCommunication, ObservedOccur
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.cultural_narratives")
 
 CULTURAL_NARRATIVE_POLICY_VERSION: Final[str] = "cultural-narratives.v1"
+CULTURAL_NARRATIVE_POLICY_VERSION_V2: Final[str] = "cultural-narratives.v2"
 _QUANTUM: Final[Decimal] = Decimal("0.000001")
 _ACTIVE_STRENGTH: Final[float] = 0.40
 _RETIRE_STRENGTH: Final[float] = 0.20
@@ -58,6 +59,12 @@ _MAX_CARRIERS: Final[int] = 8
 _MAX_LOCATIONS: Final[int] = 8
 _MAX_PARENTS: Final[int] = 4
 _MAX_COMPETITORS: Final[int] = 4
+_MAX_WITNESSES: Final[int] = 8
+_MAX_RECORDS: Final[int] = 8
+_MAX_TRANSITIONS: Final[int] = 16
+_MAX_DECLARED_CHAIN: Final[int] = 8
+_MAX_THEMES: Final[int] = 3
+_RECORD_READ_DELTA: Final[float] = 0.10
 _HEX: Final[frozenset[str]] = frozenset("0123456789abcdef")
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _NARRATIVE_PREDICATES: Final[frozenset[str]] = frozenset(
@@ -108,6 +115,12 @@ _FORBIDDEN_TYPES: Final[frozenset[str]] = frozenset(
         "ArtifactInterpretationLedger",
         "TerminologyLedger",
         "LabelBinding",
+        "HistoricalMemoryHarvest",
+        "NarrativeGenerationRow",
+        "NarrativeRecordRow",
+        "NarrativeSourceLossRow",
+        "NarrativeHistoryComparisonRow",
+        "GenerationalNarrativeInputs",
     }
 )
 type _ReconstructionCueRow = tuple[
@@ -132,25 +145,43 @@ _FORBIDDEN_CUE_TYPE_NAMES: Final[frozenset[str]] = frozenset(
 
 __all__ = [
     "CULTURAL_NARRATIVE_POLICY_VERSION",
+    "CULTURAL_NARRATIVE_POLICY_VERSION_V2",
     "CulturalNarrativePolicy",
+    "GenerationalNarrativePolicy",
     "NarrativeContent",
     "NarrativeCueSummary",
     "NarrativeEvidenceChannel",
     "NarrativeEvidenceItem",
     "NarrativeLedger",
     "NarrativeOrigin",
+    "NarrativeRecordCue",
+    "NarrativeRecordRef",
+    "NarrativeRecordRole",
+    "NarrativeSourceLoss",
+    "NarrativeSourceLossReason",
+    "NarrativeSourceLossState",
     "NarrativeStatus",
+    "NarrativeTheme",
+    "NarrativeThemeBasis",
+    "NarrativeTransition",
+    "NarrativeTransitionKind",
     "NarrativeUtterancePlan",
     "NarrativeVariant",
+    "NarrativeWitness",
+    "NarrativeWitnessKind",
     "apply_narrative_update",
     "default_cultural_narrative_policy",
+    "default_generational_narrative_policy",
     "empty_narrative_ledger",
     "narrative_communicate_penalties",
     "narrative_communicate_utterance",
     "narrative_content_fingerprint",
     "narrative_evidence_id",
+    "narrative_record_ref_id",
     "narrative_semantic_evidence",
+    "narrative_transition_id",
     "narrative_variant_id",
+    "narrative_witness_id",
     "require_owner_cultural_narratives",
 ]
 
@@ -163,6 +194,7 @@ class NarrativeOrigin(StrEnum):
     DELIBERATE_LIE = "deliberate_lie"
     MISREAD_ARTIFACT = "misread_artifact"
     RETOLD_STORY = "retold_story"
+    DURABLE_RECORD = "durable_record"
 
 
 class NarrativeStatus(StrEnum):
@@ -182,6 +214,379 @@ class NarrativeEvidenceChannel(StrEnum):
     RECONSTRUCTED = "reconstructed"
     COMMUNICATED = "communicated"
     ARTIFACT = "artifact"
+    RECORD = "record"
+
+
+class NarrativeWitnessKind(StrEnum):
+    """Closed provenance role for one known witness of a variant."""
+
+    FIRST_HAND = "first_hand"
+    DECLARED_SOURCE = "declared_source"
+    DECLARED_RETELLER = "declared_reteller"
+    RECORD_MEDIATED = "record_mediated"
+
+
+class NarrativeRecordRole(StrEnum):
+    """Closed observed role for a durable record reference."""
+
+    AUTHORED = "authored"
+    READ = "read"
+    COPIED = "copied"
+    AMENDED = "amended"
+    ANNOTATED = "annotated"
+    DAMAGED = "damaged"
+    PARTIALLY_LOST = "partially_lost"
+    DESTROYED = "destroyed"
+
+
+class NarrativeTransitionKind(StrEnum):
+    """Closed provenance transition for one narrative variant."""
+
+    MINTED = "minted"
+    RETOLD = "retold"
+    RECORD_READ = "record_read"
+    RECORD_COPIED = "record_copied"
+    RECORD_AMENDED = "record_amended"
+    RECORD_ANNOTATED = "record_annotated"
+    RECORD_DAMAGED = "record_damaged"
+    MERGED = "merged"
+    EDITED = "edited"
+    FIRST_HAND_WITNESS_DIED = "first_hand_witness_died"
+    ALL_WITNESSES_DEAD = "all_witnesses_dead"
+    SOURCE_LOST = "source_lost"
+    RETIRED = "retired"
+    REACTIVATED = "reactivated"
+
+
+class NarrativeSourceLossState(StrEnum):
+    """Owner-observed source preservation state. Never a truth value."""
+
+    INTACT = "intact"
+    PARTIAL = "partial"
+    LOST = "lost"
+    UNKNOWN = "unknown"
+
+
+class NarrativeSourceLossReason(StrEnum):
+    """Closed reason for the owner's subjective source-loss state."""
+
+    NONE = "none"
+    SOME_WITNESSES_DEAD = "some_witnesses_dead"
+    ALL_FIRST_HAND_WITNESSES_DEAD = "all_first_hand_witnesses_dead"
+    RECORD_DAMAGED = "record_damaged"
+    RECORD_DESTROYED = "record_destroyed"
+    WITNESS_AND_RECORD_LOSS = "witness_and_record_loss"
+    UNKNOWN = "unknown"
+
+
+class NarrativeTheme(StrEnum):
+    """Closed descriptive theme grouping. Not importance and not truth."""
+
+    FOUNDERS = "founders"
+    DISASTERS = "disasters"
+    DISCOVERIES = "discoveries"
+    CONFLICTS = "conflicts"
+    MIGRATIONS = "migrations"
+    INNOVATIONS = "innovations"
+    UNCLASSIFIED = "unclassified"
+
+
+class NarrativeThemeBasis(StrEnum):
+    """Closed basis for how a variant acquired its theme set."""
+
+    OBSERVED_OCCURRENCE_KIND = "observed_occurrence_kind"
+    INHERITED_LINEAGE = "inherited_lineage"
+    UNCLASSIFIED = "unclassified"
+
+
+_THEME_ORDER: Final[tuple[NarrativeTheme, ...]] = (
+    NarrativeTheme.FOUNDERS,
+    NarrativeTheme.DISASTERS,
+    NarrativeTheme.DISCOVERIES,
+    NarrativeTheme.CONFLICTS,
+    NarrativeTheme.MIGRATIONS,
+    NarrativeTheme.INNOVATIONS,
+    NarrativeTheme.UNCLASSIFIED,
+)
+_THEME_RANK: Final[dict[NarrativeTheme, int]] = {
+    theme: rank for rank, theme in enumerate(_THEME_ORDER)
+}
+
+
+def _require_nonneg_int(field_name: str, value: object) -> int:
+    if isinstance(value, bool) or type(value) is not int:
+        raise _fail(field_name, "invalid_type")
+    if value < 0:
+        raise _fail(field_name, "out_of_range")
+    return value
+
+
+def _require_optional_nonneg_int(field_name: str, value: object) -> int | None:
+    if value is None:
+        return None
+    return _require_nonneg_int(field_name, value)
+
+
+def _require_optional_text(field_name: str, value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise _fail(field_name, "invalid_type")
+    return value
+
+
+def _require_text(field_name: str, value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise _fail(field_name, "invalid_type")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeWitness:
+    """One agent the owner can bind as a witness for a narrative variant."""
+
+    witness_agent_id: AgentId
+    kind: NarrativeWitnessKind
+    hop_index: int
+    first_seen_tick: int
+    last_seen_tick: int
+    death_observed_tick: int | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.witness_agent_id) is not AgentId:
+            raise _fail("witness_agent_id", "invalid_type")
+        if type(self.kind) is not NarrativeWitnessKind:
+            raise _fail("witness.kind", "unknown_witness_kind")
+        object.__setattr__(
+            self, "hop_index", _require_nonneg_int("witness.hop_index", self.hop_index)
+        )
+        object.__setattr__(
+            self,
+            "first_seen_tick",
+            _require_nonneg_int("witness.first_seen_tick", self.first_seen_tick),
+        )
+        last_seen = _require_nonneg_int(
+            "witness.last_seen_tick", self.last_seen_tick
+        )
+        if last_seen < self.first_seen_tick:
+            raise _fail("witness.last_seen_tick", "before_first_seen_tick")
+        object.__setattr__(self, "last_seen_tick", last_seen)
+        death = _require_optional_nonneg_int(
+            "witness.death_observed_tick", self.death_observed_tick
+        )
+        if death is not None and death < self.first_seen_tick:
+            raise _fail("witness.death_observed_tick", "before_first_seen_tick")
+        object.__setattr__(self, "death_observed_tick", death)
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeRecordRef:
+    """Opaque durable-record reference. Never carries record text or marks."""
+
+    record_id: str
+    role: NarrativeRecordRole
+    observed_revision: int
+    tick: int
+    copy_generation: int | None = None
+    integrity: str | None = None
+    annotation_revisions: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "record_id",
+            _require_text("record_ref.record_id", self.record_id),
+        )
+        if type(self.role) is not NarrativeRecordRole:
+            raise _fail("record_ref.role", "unknown_record_role")
+        object.__setattr__(
+            self,
+            "observed_revision",
+            _require_nonneg_int(
+                "record_ref.observed_revision", self.observed_revision
+            ),
+        )
+        object.__setattr__(
+            self, "tick", _require_nonneg_int("record_ref.tick", self.tick)
+        )
+        copy_generation = _require_optional_nonneg_int(
+            "record_ref.copy_generation", self.copy_generation
+        )
+        object.__setattr__(self, "copy_generation", copy_generation)
+        annotation_revisions = _require_optional_nonneg_int(
+            "record_ref.annotation_revisions", self.annotation_revisions
+        )
+        object.__setattr__(self, "annotation_revisions", annotation_revisions)
+        object.__setattr__(
+            self,
+            "integrity",
+            _require_optional_text("record_ref.integrity", self.integrity),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeTransition:
+    """One provenance transition in a variant's owner-scoped history."""
+
+    transition_id: str
+    kind: NarrativeTransitionKind
+    tick: int
+    parent_variant_ids: tuple[str, ...] = ()
+    carrier_agent_id: AgentId | None = None
+    record_id: str | None = None
+    hop_index: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "transition_id",
+            _require_hex_id("transition_id", self.transition_id),
+        )
+        if type(self.kind) is not NarrativeTransitionKind:
+            raise _fail("transition.kind", "unknown_transition_kind")
+        object.__setattr__(
+            self, "tick", _require_nonneg_int("transition.tick", self.tick)
+        )
+        parents = _require_tuple(
+            "transition.parent_variant_ids", self.parent_variant_ids
+        )
+        checked: list[str] = []
+        for item in parents:
+            checked.append(_require_hex_id("transition.parent_variant_ids", item))
+        if len(checked) != len(set(checked)):
+            raise _fail("transition.parent_variant_ids", "duplicate_parent")
+        if len(checked) > _MAX_PARENTS:
+            raise _fail("transition.parent_variant_ids", "cap_exceeded")
+        object.__setattr__(self, "parent_variant_ids", tuple(checked))
+        if (
+            self.carrier_agent_id is not None
+            and type(self.carrier_agent_id) is not AgentId
+        ):
+            raise _fail("transition.carrier_agent_id", "invalid_type")
+        object.__setattr__(
+            self,
+            "record_id",
+            _require_optional_text("transition.record_id", self.record_id),
+        )
+        hop_index = _require_optional_nonneg_int(
+            "transition.hop_index", self.hop_index
+        )
+        object.__setattr__(self, "hop_index", hop_index)
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeSourceLoss:
+    """Owner-observed preservation state. Missing evidence is not loss."""
+
+    state: NarrativeSourceLossState
+    reason: NarrativeSourceLossReason
+    tick: int | None
+    known_witness_count: int
+    dead_witness_count: int
+    record_backed: bool
+
+    def __post_init__(self) -> None:
+        if type(self.state) is not NarrativeSourceLossState:
+            raise _fail("source_loss.state", "unknown_source_loss_state")
+        if type(self.reason) is not NarrativeSourceLossReason:
+            raise _fail("source_loss.reason", "unknown_source_loss_reason")
+        object.__setattr__(
+            self, "tick", _require_optional_nonneg_int("source_loss.tick", self.tick)
+        )
+        known = _require_nonneg_int(
+            "source_loss.known_witness_count", self.known_witness_count
+        )
+        dead = _require_nonneg_int(
+            "source_loss.dead_witness_count", self.dead_witness_count
+        )
+        if dead > known:
+            raise _fail("source_loss.dead_witness_count", "exceeds_known")
+        if type(self.record_backed) is not bool:
+            raise _fail("source_loss.record_backed", "invalid_type")
+        if self.state is NarrativeSourceLossState.UNKNOWN and dead != 0:
+            raise _fail("source_loss.state", "unknown_with_dead_witnesses")
+        if (
+            self.state is NarrativeSourceLossState.PARTIAL
+            and not (0 < dead < known)
+            and self.reason
+            is not NarrativeSourceLossReason.RECORD_DAMAGED
+        ):
+            raise _fail("source_loss.state", "partial_without_partial_death")
+        if self.state is NarrativeSourceLossState.LOST:
+            all_dead = known > 0 and dead == known
+            record_lost = self.reason in {
+                NarrativeSourceLossReason.RECORD_DESTROYED,
+                NarrativeSourceLossReason.WITNESS_AND_RECORD_LOSS,
+            }
+            if not all_dead and not record_lost:
+                raise _fail("source_loss.state", "lost_without_loss_evidence")
+        if (
+            self.state is NarrativeSourceLossState.INTACT
+            and known > 0
+            and dead == known
+            and not self.record_backed
+            and self.reason
+            not in {
+                NarrativeSourceLossReason.RECORD_DAMAGED,
+                NarrativeSourceLossReason.RECORD_DESTROYED,
+            }
+        ):
+            raise _fail("source_loss.state", "intact_without_source")
+
+
+def narrative_witness_id(
+    owner_id: AgentId,
+    variant_id: str,
+    witness_agent_id: AgentId,
+    kind: NarrativeWitnessKind,
+    hop_index: int,
+) -> str:
+    """Stable sha256 id for one witness row (owner/variant/witness/kind/hop)."""
+    if type(owner_id) is not AgentId or type(witness_agent_id) is not AgentId:
+        raise _fail("witness_id", "invalid_type")
+    head = _require_hex_id("variant_id", variant_id)
+    if type(kind) is not NarrativeWitnessKind:
+        raise _fail("witness_id", "unknown_witness_kind")
+    hop = _require_nonneg_int("hop_index", hop_index)
+    return _sha256_hex(
+        f"{owner_id.value}|{head}|{witness_agent_id.value}|{kind.value}|{hop}"
+    )
+
+
+def narrative_record_ref_id(
+    variant_id: str,
+    record_id: str,
+    observed_revision: int,
+    role: NarrativeRecordRole,
+) -> str:
+    """Stable sha256 id for one opaque record reference row."""
+    head = _require_hex_id("variant_id", variant_id)
+    record = _require_text("record_id", record_id)
+    revision = _require_nonneg_int("observed_revision", observed_revision)
+    if type(role) is not NarrativeRecordRole:
+        raise _fail("record_ref_id", "unknown_record_role")
+    return _sha256_hex(f"{head}|{record}|{revision}|{role.value}")
+
+
+def narrative_transition_id(
+    owner_id: AgentId,
+    variant_id: str,
+    kind: NarrativeTransitionKind,
+    tick: int,
+    reference: str,
+) -> str:
+    """Stable sha256 id for one transition (owner/variant/kind/tick/ref)."""
+    if type(owner_id) is not AgentId:
+        raise _fail("owner_id", "invalid_type")
+    head = _require_hex_id("variant_id", variant_id)
+    if type(kind) is not NarrativeTransitionKind:
+        raise _fail("transition_id", "unknown_transition_kind")
+    tick_value = _require_nonneg_int("tick", tick)
+    if not isinstance(reference, str):
+        raise _fail("transition_id", "invalid_type")
+    return _sha256_hex(
+        f"{owner_id.value}|{head}|{kind.value}|{tick_value}|{reference}"
+    )
 
 
 def _fail(field_name: str, code: str) -> ValueError:
@@ -498,6 +903,15 @@ class NarrativeVariant:
     carrier_agent_ids: tuple[str, ...] = ()
     notices: tuple[str, ...] = ()
     declared_source_basis: CommunicationSourceBasis | None = None
+    source_witnesses: tuple[NarrativeWitness, ...] = ()
+    declared_source_entity_ids: tuple[str, ...] = ()
+    declared_hop_count: int = 0
+    first_hand: bool = False
+    record_refs: tuple[NarrativeRecordRef, ...] = ()
+    transitions: tuple[NarrativeTransition, ...] = ()
+    source_loss: NarrativeSourceLoss | None = None
+    themes: tuple[NarrativeTheme, ...] = ()
+    theme_basis: NarrativeThemeBasis = NarrativeThemeBasis.UNCLASSIFIED
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -658,6 +1072,135 @@ class NarrativeVariant:
                 raise _fail("notices", "invalid_notice")
             if item not in checked_notices:
                 checked_notices.append(item)
+        witnesses = _require_tuple("source_witnesses", self.source_witnesses)
+        checked_witnesses: list[NarrativeWitness] = []
+        seen_witness_agents: set[str] = set()
+        for item in witnesses:
+            if type(item) is not NarrativeWitness:
+                raise _fail("source_witnesses", "invalid_type")
+            agent_value = item.witness_agent_id.value
+            if agent_value in seen_witness_agents:
+                raise _fail("source_witnesses", "duplicate_witness")
+            seen_witness_agents.add(agent_value)
+            checked_witnesses.append(item)
+        if len(checked_witnesses) > _MAX_WITNESSES:
+            raise _fail("source_witnesses", "cap_exceeded")
+        if self.first_hand:
+            if not any(
+                item.kind is NarrativeWitnessKind.FIRST_HAND
+                for item in checked_witnesses
+            ):
+                raise _fail("first_hand", "requires_first_hand_witness")
+        elif any(
+            item.kind is NarrativeWitnessKind.FIRST_HAND
+            for item in checked_witnesses
+        ):
+            raise _fail("first_hand", "first_hand_witness_without_flag")
+        declared_ids = _require_tuple(
+            "declared_source_entity_ids", self.declared_source_entity_ids
+        )
+        checked_declared: list[str] = []
+        for item in declared_ids:
+            value = _require_text("declared_source_entity_ids", item)
+            if value not in checked_declared:
+                checked_declared.append(value)
+        if len(checked_declared) > _MAX_DECLARED_CHAIN:
+            raise _fail("declared_source_entity_ids", "cap_exceeded")
+        hop_count = _require_nonneg_int(
+            "declared_hop_count", self.declared_hop_count
+        )
+        if hop_count > _MAX_DECLARED_CHAIN:
+            raise _fail("declared_hop_count", "cap_exceeded")
+        if type(self.first_hand) is not bool:
+            raise _fail("first_hand", "invalid_type")
+        records = _require_tuple("record_refs", self.record_refs)
+        checked_records: list[NarrativeRecordRef] = []
+        seen_records: set[tuple[str, int, str]] = set()
+        for item in records:
+            if type(item) is not NarrativeRecordRef:
+                raise _fail("record_refs", "invalid_type")
+            dedup = (item.record_id, item.observed_revision, item.role.value)
+            if dedup in seen_records:
+                raise _fail("record_refs", "duplicate_record")
+            seen_records.add(dedup)
+            checked_records.append(item)
+        if len(checked_records) > _MAX_RECORDS:
+            raise _fail("record_refs", "cap_exceeded")
+        transitions = _require_tuple("transitions", self.transitions)
+        checked_transitions: list[NarrativeTransition] = []
+        seen_transition_ids: set[str] = set()
+        for item in transitions:
+            if type(item) is not NarrativeTransition:
+                raise _fail("transitions", "invalid_type")
+            if item.transition_id in seen_transition_ids:
+                raise _fail("transitions", "duplicate_transition")
+            seen_transition_ids.add(item.transition_id)
+            if self.variant_id in item.parent_variant_ids:
+                raise _fail("transitions", "self_parent")
+            checked_transitions.append(item)
+        if len(checked_transitions) > _MAX_TRANSITIONS:
+            raise _fail("transitions", "cap_exceeded")
+        source_loss = self.source_loss
+        if source_loss is not None:
+            if type(source_loss) is not NarrativeSourceLoss:
+                raise _fail("source_loss", "invalid_type")
+            if (
+                source_loss.tick is not None
+                and self.first_tick is not None
+                and source_loss.tick < self.first_tick
+            ):
+                raise _fail("source_loss.tick", "before_first_tick")
+            first_hand_witnesses = [
+                item
+                for item in checked_witnesses
+                if item.kind is NarrativeWitnessKind.FIRST_HAND
+            ]
+            dead_count = sum(
+                1
+                for item in first_hand_witnesses
+                if item.death_observed_tick is not None
+            )
+            if source_loss.known_witness_count != len(first_hand_witnesses):
+                raise _fail(
+                    "source_loss.known_witness_count", "count_mismatch"
+                )
+            if source_loss.dead_witness_count != dead_count:
+                raise _fail(
+                    "source_loss.dead_witness_count", "count_mismatch"
+                )
+        themes = _require_tuple("themes", self.themes)
+        checked_themes: list[NarrativeTheme] = []
+        for item in themes:
+            if type(item) is not NarrativeTheme:
+                raise _fail("themes", "unknown_theme")
+            if item in checked_themes:
+                raise _fail("themes", "duplicate_theme")
+            checked_themes.append(item)
+        if len(checked_themes) > _MAX_THEMES:
+            raise _fail("themes", "cap_exceeded")
+        if (
+            NarrativeTheme.UNCLASSIFIED in checked_themes
+            and len(checked_themes) > 1
+        ):
+            raise _fail("themes", "unclassified_mixed")
+        if checked_themes != sorted(checked_themes, key=_THEME_RANK.__getitem__):
+            raise _fail("themes", "unordered")
+        if type(self.theme_basis) is not NarrativeThemeBasis:
+            raise _fail("theme_basis", "unknown_theme_basis")
+        theme_tuple = tuple(checked_themes)
+        if self.theme_basis is NarrativeThemeBasis.UNCLASSIFIED:
+            if theme_tuple not in {(), (NarrativeTheme.UNCLASSIFIED,)}:
+                raise _fail("theme_basis", "unclassified_with_themes")
+        elif theme_tuple == (NarrativeTheme.UNCLASSIFIED,):
+            raise _fail("theme_basis", "classified_basis_with_unclassified")
+        object.__setattr__(self, "source_witnesses", tuple(checked_witnesses))
+        object.__setattr__(
+            self, "declared_source_entity_ids", tuple(checked_declared)
+        )
+        object.__setattr__(self, "declared_hop_count", hop_count)
+        object.__setattr__(self, "record_refs", tuple(checked_records))
+        object.__setattr__(self, "transitions", tuple(checked_transitions))
+        object.__setattr__(self, "themes", tuple(checked_themes))
         object.__setattr__(self, "parent_variant_ids", tuple(checked_parents))
         object.__setattr__(self, "competing_variant_ids", tuple(checked_competitors))
         object.__setattr__(self, "evidence", tuple(checked_evidence))
@@ -679,7 +1222,10 @@ class NarrativeLedger:
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
             raise _fail("owner_id", "invalid_type")
-        if self.policy_version != CULTURAL_NARRATIVE_POLICY_VERSION:
+        if self.policy_version not in {
+            CULTURAL_NARRATIVE_POLICY_VERSION,
+            CULTURAL_NARRATIVE_POLICY_VERSION_V2,
+        }:
             raise _fail("policy_version", "unsupported_policy")
         variants = _require_tuple("variants", self.variants)
         checked: list[NarrativeVariant] = []
@@ -691,6 +1237,19 @@ class NarrativeLedger:
                 raise _fail("variants.owner_id", "owner_mismatch")
             if item.variant_id in seen:
                 raise _fail("variants", "duplicate_variant")
+            if self.policy_version == CULTURAL_NARRATIVE_POLICY_VERSION:
+                if (
+                    item.source_witnesses
+                    or item.declared_source_entity_ids
+                    or item.declared_hop_count
+                    or item.first_hand
+                    or item.record_refs
+                    or item.transitions
+                    or item.source_loss is not None
+                    or item.themes
+                    or item.theme_basis is not NarrativeThemeBasis.UNCLASSIFIED
+                ):
+                    raise _fail("policy_version", "v1_with_v2_fields")
             seen.add(item.variant_id)
             checked.append(item)
         if len(checked) > _MAX_VARIANTS:
@@ -716,6 +1275,104 @@ class NarrativeLedger:
             self.policy_version,
             len(self.variants),
         )
+        if self.policy_version == CULTURAL_NARRATIVE_POLICY_VERSION_V2:
+            _LOG.info(
+                "narrative_ledger_v2_constructed owner_id=%s variant_count=%s "
+                "witness_count=%s record_count=%s transition_count=%s",
+                self.owner_id.value,
+                len(self.variants),
+                sum(len(item.source_witnesses) for item in self.variants),
+                sum(len(item.record_refs) for item in self.variants),
+                sum(len(item.transitions) for item in self.variants),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class NarrativeRecordCue:
+    """Duck-typed owner-observed record cue built only by CognitiveLoop."""
+
+    record_id: str
+    observed_revision: int
+    source_tick: int
+    distorted: bool = False
+    copy_generation: int | None = None
+    integrity: str | None = None
+    annotation_revisions: int | None = None
+    lost_mark_count: int = 0
+    concepts: tuple[str, ...] = ()
+    relations: tuple[tuple[str, str, str], ...] = ()
+    authored: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "record_id",
+            _require_text("record_cue.record_id", self.record_id),
+        )
+        object.__setattr__(
+            self,
+            "observed_revision",
+            _require_nonneg_int(
+                "record_cue.observed_revision", self.observed_revision
+            ),
+        )
+        object.__setattr__(
+            self,
+            "source_tick",
+            _require_nonneg_int("record_cue.source_tick", self.source_tick),
+        )
+        if type(self.distorted) is not bool:
+            raise _fail("record_cue.distorted", "invalid_type")
+        object.__setattr__(
+            self,
+            "copy_generation",
+            _require_optional_nonneg_int(
+                "record_cue.copy_generation", self.copy_generation
+            ),
+        )
+        object.__setattr__(
+            self,
+            "integrity",
+            _require_optional_text("record_cue.integrity", self.integrity),
+        )
+        object.__setattr__(
+            self,
+            "annotation_revisions",
+            _require_optional_nonneg_int(
+                "record_cue.annotation_revisions", self.annotation_revisions
+            ),
+        )
+        object.__setattr__(
+            self,
+            "lost_mark_count",
+            _require_nonneg_int(
+                "record_cue.lost_mark_count", self.lost_mark_count
+            ),
+        )
+        concepts = _require_tuple("record_cue.concepts", self.concepts)
+        checked_concepts = tuple(
+            _require_token("record_cue.concepts", item) for item in concepts
+        )
+        relations = _require_tuple("record_cue.relations", self.relations)
+        checked_relations: list[tuple[str, str, str]] = []
+        for item in relations:
+            if (
+                not isinstance(item, tuple)
+                or len(item) != 3
+                or any(not isinstance(part, str) for part in item)
+            ):
+                raise _fail("record_cue.relations", "invalid_type")
+            checked_relations.append(
+                (
+                    _require_token("record_cue.relations", item[0]),
+                    _require_token("record_cue.relations", item[1]),
+                    _require_token("record_cue.relations", item[2]),
+                )
+            )
+        object.__setattr__(self, "concepts", checked_concepts)
+        object.__setattr__(self, "relations", tuple(checked_relations))
+        if type(self.authored) is not bool:
+            raise _fail("record_cue.authored", "invalid_type")
 
 
 @dataclass(frozen=True, slots=True)
@@ -729,6 +1386,7 @@ class NarrativeCueSummary:
 
     distorted_artifacts: tuple[tuple[str, bool, int, int], ...] = ()
     reconstructions: tuple[_ReconstructionCueRow, ...] = ()
+    records: tuple[NarrativeRecordCue, ...] = ()
 
     def __post_init__(self) -> None:
         artifacts = _require_tuple("distorted_artifacts", self.distorted_artifacts)
@@ -802,12 +1460,21 @@ class NarrativeCueSummary:
                     tuple(rel_tokens),
                 )
             )
+        records = _require_tuple("records", self.records)
+        checked_records: list[NarrativeRecordCue] = []
+        for item in records:
+            if type(item) is not NarrativeRecordCue:
+                raise _fail("records", "invalid_type")
+            checked_records.append(item)
         object.__setattr__(self, "distorted_artifacts", tuple(checked_artifacts))
         object.__setattr__(self, "reconstructions", tuple(checked_reconstructions))
+        object.__setattr__(self, "records", tuple(checked_records))
         _LOG.debug(
-            "narrative_cues_accepted artifact_count=%s reconstruction_count=%s",
+            "narrative_cues_accepted artifact_count=%s reconstruction_count=%s "
+            "record_count=%s",
             len(self.distorted_artifacts),
             len(self.reconstructions),
+            len(self.records),
         )
 
 
@@ -884,9 +1551,88 @@ def default_cultural_narrative_policy() -> CulturalNarrativePolicy:
     return CulturalNarrativePolicy()
 
 
-def empty_narrative_ledger(owner_id: AgentId) -> NarrativeLedger:
+@dataclass(frozen=True, slots=True)
+class GenerationalNarrativePolicy(CulturalNarrativePolicy):
+    """V2 policy: v1 constants plus witness/record/theme provenance caps."""
+
+    version: str = CULTURAL_NARRATIVE_POLICY_VERSION_V2
+    record_read_delta: float = _RECORD_READ_DELTA
+    max_witnesses: int = _MAX_WITNESSES
+    max_records: int = _MAX_RECORDS
+    max_transitions: int = _MAX_TRANSITIONS
+    max_declared_chain: int = _MAX_DECLARED_CHAIN
+
+    def __post_init__(self) -> None:
+        if self.version != CULTURAL_NARRATIVE_POLICY_VERSION_V2:
+            raise _fail("version", "unsupported_policy")
+        floats = (
+            ("active_strength", _ACTIVE_STRENGTH),
+            ("retire_strength", _RETIRE_STRENGTH),
+            ("decay", _DECAY),
+            ("observed_delta", _OBSERVED_DELTA),
+            ("remembered_delta", _REMEMBERED_DELTA),
+            ("communicated_delta", _COMMUNICATED_DELTA),
+            ("deliberate_lie_delta", _DELIBERATE_LIE_DELTA),
+            ("misread_artifact_delta", _MISREAD_ARTIFACT_DELTA),
+            ("penalty", _PENALTY),
+            ("semantic_uplift_strength", _SEMANTIC_UPLIFT_STRENGTH),
+            ("merge_token_overlap", _MERGE_TOKEN_OVERLAP),
+            ("record_read_delta", _RECORD_READ_DELTA),
+        )
+        for name, expected in floats:
+            object.__setattr__(
+                self, name, _locked_float(name, getattr(self, name), expected)
+            )
+        counts = (
+            ("promotion_count", _PROMOTION_COUNT),
+            ("semantic_uplift_repetitions", _SEMANTIC_UPLIFT_REPETITIONS),
+            ("utterance_interval", _UTTERANCE_INTERVAL),
+            ("max_variants", _MAX_VARIANTS),
+            ("max_evidence", _MAX_EVIDENCE),
+            ("max_carriers", _MAX_CARRIERS),
+            ("max_locations", _MAX_LOCATIONS),
+            ("max_parents", _MAX_PARENTS),
+            ("max_competitors", _MAX_COMPETITORS),
+            ("max_witnesses", _MAX_WITNESSES),
+            ("max_records", _MAX_RECORDS),
+            ("max_transitions", _MAX_TRANSITIONS),
+            ("max_declared_chain", _MAX_DECLARED_CHAIN),
+        )
+        for name, expected in counts:
+            object.__setattr__(
+                self, name, _locked_int(name, getattr(self, name), expected)
+            )
+        _LOG.debug(
+            "generational_narrative_policy_constructed policy_version=%s "
+            "max_witnesses=%s max_records=%s max_transitions=%s",
+            self.version,
+            self.max_witnesses,
+            self.max_records,
+            self.max_transitions,
+        )
+
+
+def default_generational_narrative_policy(
+    *,
+    max_witnesses: int = _MAX_WITNESSES,
+    max_records: int = _MAX_RECORDS,
+    max_transitions: int = _MAX_TRANSITIONS,
+    max_declared_chain: int = _MAX_DECLARED_CHAIN,
+) -> GenerationalNarrativePolicy:
+    """Return the only accepted V2 generational-narrative policy."""
+    return GenerationalNarrativePolicy(
+        max_witnesses=max_witnesses,
+        max_records=max_records,
+        max_transitions=max_transitions,
+        max_declared_chain=max_declared_chain,
+    )
+
+
+def empty_narrative_ledger(
+    owner_id: AgentId, *, policy_version: str = CULTURAL_NARRATIVE_POLICY_VERSION
+) -> NarrativeLedger:
     """Ledger with no variants. Disabled mode does not call this."""
-    return NarrativeLedger(owner_id=owner_id)
+    return NarrativeLedger(owner_id=owner_id, policy_version=policy_version)
 
 
 def require_owner_cultural_narratives(
@@ -983,6 +1729,15 @@ class _VariantDraft:
     carrier_agent_ids: list[str]
     notices: list[str] = field(default_factory=list)
     declared_source_basis: CommunicationSourceBasis | None = None
+    source_witnesses: list[NarrativeWitness] = field(default_factory=list)
+    declared_source_entity_ids: list[str] = field(default_factory=list)
+    declared_hop_count: int = 0
+    first_hand: bool = False
+    record_refs: list[NarrativeRecordRef] = field(default_factory=list)
+    transitions: list[NarrativeTransition] = field(default_factory=list)
+    source_loss: NarrativeSourceLoss | None = None
+    themes: list[NarrativeTheme] = field(default_factory=list)
+    theme_basis: NarrativeThemeBasis = NarrativeThemeBasis.UNCLASSIFIED
     founding_fingerprint: str = ""
     parent_salt: str = ""
     touched: bool = False
@@ -1056,6 +1811,17 @@ def _drafts_from(
                 carrier_agent_ids=list(variant.carrier_agent_ids),
                 notices=list(variant.notices),
                 declared_source_basis=variant.declared_source_basis,
+                source_witnesses=list(variant.source_witnesses),
+                declared_source_entity_ids=list(
+                    variant.declared_source_entity_ids
+                ),
+                declared_hop_count=variant.declared_hop_count,
+                first_hand=variant.first_hand,
+                record_refs=list(variant.record_refs),
+                transitions=list(variant.transitions),
+                source_loss=variant.source_loss,
+                themes=list(variant.themes),
+                theme_basis=variant.theme_basis,
                 founding_fingerprint=_recover_founding_fingerprint(variant, by_id),
                 parent_salt="|".join(variant.parent_variant_ids),
                 variant_id_override=variant.variant_id,
@@ -1117,6 +1883,180 @@ def _append_carrier(
         _log_drop("cap_exceeded")
         return
     draft.carrier_agent_ids.append(value)
+
+
+_THEME_BY_OCCURRENCE_KIND: Final[dict[str, tuple[NarrativeTheme, ...]]] = {
+    "agent_entered_world": (NarrativeTheme.FOUNDERS,),
+    "agent_created": (NarrativeTheme.FOUNDERS,),
+    "agent_initialization_recorded": (NarrativeTheme.FOUNDERS,),
+    "died": (NarrativeTheme.DISASTERS,),
+    "exposure_applied": (NarrativeTheme.DISASTERS,),
+    "environmental_hazard_started": (NarrativeTheme.DISASTERS,),
+    "resource_node_depleted": (NarrativeTheme.DISASTERS,),
+    "artifact_destroyed": (NarrativeTheme.DISASTERS,),
+    "artifact_damaged": (NarrativeTheme.DISASTERS,),
+    "artifact_partially_lost": (NarrativeTheme.DISASTERS,),
+    "attack": (NarrativeTheme.CONFLICTS,),
+    "flee": (NarrativeTheme.CONFLICTS,),
+    "move": (NarrativeTheme.MIGRATIONS,),
+    "transport": (NarrativeTheme.MIGRATIONS,),
+    "journey_started": (NarrativeTheme.MIGRATIONS,),
+    "journey_arrived": (NarrativeTheme.MIGRATIONS,),
+    "journey_ended": (NarrativeTheme.MIGRATIONS,),
+    "experiment_resolved": (
+        NarrativeTheme.DISCOVERIES,
+        NarrativeTheme.INNOVATIONS,
+    ),
+    "craft_started": (NarrativeTheme.INNOVATIONS,),
+    "item_crafted": (NarrativeTheme.INNOVATIONS,),
+    "structure_built": (NarrativeTheme.INNOVATIONS,),
+    "structure_repaired": (NarrativeTheme.INNOVATIONS,),
+    "resource_harvested": (NarrativeTheme.DISCOVERIES,),
+    "repository_established": (NarrativeTheme.DISCOVERIES,),
+}
+_DEATH_OCCURRENCE_KINDS: Final[frozenset[str]] = frozenset({"died"})
+_DAMAGED_RECORD_ROLES: Final[frozenset[NarrativeRecordRole]] = frozenset(
+    {
+        NarrativeRecordRole.DAMAGED,
+        NarrativeRecordRole.PARTIALLY_LOST,
+    }
+)
+_DESTROYED_RECORD_ROLES: Final[frozenset[NarrativeRecordRole]] = frozenset(
+    {NarrativeRecordRole.DESTROYED}
+)
+
+
+def _is_v2_policy(
+    policy: object,
+) -> TypeGuard[GenerationalNarrativePolicy]:
+    return type(policy) is GenerationalNarrativePolicy
+
+
+def _theme_set(
+    themes: list[NarrativeTheme],
+    additions: tuple[NarrativeTheme, ...],
+    *,
+    cap: int = _MAX_THEMES,
+) -> None:
+    if not additions:
+        return
+    if NarrativeTheme.UNCLASSIFIED in themes:
+        themes.clear()
+    for theme in additions:
+        if theme is NarrativeTheme.UNCLASSIFIED:
+            continue
+        if theme not in themes:
+            themes.append(theme)
+    themes.sort(key=_THEME_RANK.__getitem__)
+    del themes[cap:]
+
+
+def _append_transition(
+    *,
+    draft: _VariantDraft,
+    owner_id: AgentId,
+    kind: NarrativeTransitionKind,
+    tick: int,
+    reference: str,
+    policy: GenerationalNarrativePolicy,
+    carrier_agent_id: AgentId | None = None,
+    record_id: str | None = None,
+    hop_index: int | None = None,
+    parent_variant_ids: tuple[str, ...] = (),
+) -> None:
+    variant_id = _draft_variant_id(owner_id, draft)
+    transition_id = narrative_transition_id(
+        owner_id, variant_id, kind, tick, reference
+    )
+    if any(item.transition_id == transition_id for item in draft.transitions):
+        return
+    if len(draft.transitions) >= policy.max_transitions:
+        return
+    draft.transitions.append(
+        NarrativeTransition(
+            transition_id=transition_id,
+            kind=kind,
+            tick=tick,
+            parent_variant_ids=parent_variant_ids,
+            carrier_agent_id=carrier_agent_id,
+            record_id=record_id,
+            hop_index=hop_index,
+        )
+    )
+
+
+def _add_witness(
+    *,
+    draft: _VariantDraft,
+    owner_id: AgentId,
+    witness_agent_id: AgentId,
+    kind: NarrativeWitnessKind,
+    hop_index: int,
+    tick: int,
+    policy: GenerationalNarrativePolicy,
+) -> bool:
+    for index, existing in enumerate(draft.source_witnesses):
+        if existing.witness_agent_id != witness_agent_id:
+            continue
+        if (
+            existing.kind is kind
+            and existing.hop_index == hop_index
+            and existing.last_seen_tick >= tick
+        ):
+            return False
+        if (
+            existing.kind is NarrativeWitnessKind.FIRST_HAND
+            and kind is not NarrativeWitnessKind.FIRST_HAND
+        ):
+            return False
+        draft.source_witnesses[index] = NarrativeWitness(
+            witness_agent_id=witness_agent_id,
+            kind=kind,
+            hop_index=hop_index,
+            first_seen_tick=existing.first_seen_tick,
+            last_seen_tick=max(existing.last_seen_tick, tick),
+            death_observed_tick=existing.death_observed_tick,
+        )
+        return True
+    if len(draft.source_witnesses) >= policy.max_witnesses:
+        return False
+    draft.source_witnesses.append(
+        NarrativeWitness(
+            witness_agent_id=witness_agent_id,
+            kind=kind,
+            hop_index=hop_index,
+            first_seen_tick=tick,
+            last_seen_tick=tick,
+        )
+    )
+    return True
+
+
+def _record_is_intact(record: NarrativeRecordRef) -> bool:
+    if record.role in _DAMAGED_RECORD_ROLES | _DESTROYED_RECORD_ROLES:
+        return False
+    integrity = None if record.integrity is None else record.integrity.lower()
+    return integrity not in {
+        "damaged",
+        "partial",
+        "partially_lost",
+        "destroyed",
+        "lost",
+    }
+
+
+def _record_is_damaged(record: NarrativeRecordRef) -> bool:
+    if record.role in _DAMAGED_RECORD_ROLES:
+        return True
+    integrity = None if record.integrity is None else record.integrity.lower()
+    return integrity in {"damaged", "partial", "partially_lost"}
+
+
+def _record_is_destroyed(record: NarrativeRecordRef) -> bool:
+    if record.role in _DESTROYED_RECORD_ROLES:
+        return True
+    integrity = None if record.integrity is None else record.integrity.lower()
+    return integrity in {"destroyed", "lost"}
 
 
 def _record_on_draft(
@@ -1361,7 +2301,7 @@ def _apply_observed_events(
             continue
         event_id = occurrence.provenance.source_event_id
         lineage = f"tick-{tick}-{index}" if event_id is None else event_id.value
-        _mint_variant(
+        draft = _mint_variant(
             drafts=drafts,
             notices=notices,
             owner_id=owner_id,
@@ -1376,6 +2316,33 @@ def _apply_observed_events(
             source_event_id=None if event_id is None else event_id.value,
             location_id=location_value,
             carrier=owner_id,
+        )
+        if draft is None or not _is_v2_policy(policy):
+            continue
+        draft.first_hand = True
+        _add_witness(
+            draft=draft,
+            owner_id=owner_id,
+            witness_agent_id=owner_id,
+            kind=NarrativeWitnessKind.FIRST_HAND,
+            hop_index=0,
+            tick=tick,
+            policy=policy,
+        )
+        _theme_set(
+            draft.themes,
+            _THEME_BY_OCCURRENCE_KIND.get(occurrence.kind, ()),
+        )
+        if draft.themes:
+            draft.theme_basis = NarrativeThemeBasis.OBSERVED_OCCURRENCE_KIND
+        _append_transition(
+            draft=draft,
+            owner_id=owner_id,
+            kind=NarrativeTransitionKind.MINTED,
+            tick=tick,
+            reference=lineage,
+            policy=policy,
+            carrier_agent_id=owner_id,
         )
 
 
@@ -1522,7 +2489,7 @@ def _apply_cues(
                 break
         if parent is not None and parent.content_fingerprint != fingerprint:
             parent_id = _draft_variant_id(owner_id, parent)
-            _mint_variant(
+            reconstructed = _mint_variant(
                 drafts=drafts,
                 notices=notices,
                 owner_id=owner_id,
@@ -1545,6 +2512,16 @@ def _apply_cues(
                 or parent.content_fingerprint,
                 declared_source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
             )
+            if (
+                reconstructed is not None
+                and _is_v2_policy(policy)
+                and parent.themes
+            ):
+                _theme_set(reconstructed.themes, tuple(parent.themes))
+                if reconstructed.themes:
+                    reconstructed.theme_basis = (
+                        NarrativeThemeBasis.INHERITED_LINEAGE
+                    )
             _LOG.debug(
                 "narrative_variant_branched owner_id=%s tick=%s "
                 "status=%s generation=%s",
@@ -1554,7 +2531,7 @@ def _apply_cues(
                 parent.mutation_generation + 1,
             )
         else:
-            _mint_variant(
+            reconstructed = _mint_variant(
                 drafts=drafts,
                 notices=notices,
                 owner_id=owner_id,
@@ -1572,6 +2549,169 @@ def _apply_cues(
                 carrier=owner_id,
                 declared_source_basis=CommunicationSourceBasis.RECONSTRUCTED_MEMORY,
             )
+
+
+def _apply_record_cues(
+    *,
+    cues: NarrativeCueSummary | None,
+    drafts: list[_VariantDraft],
+    notices: list[str],
+    owner_id: AgentId,
+    tick: int,
+    policy: CulturalNarrativePolicy,
+    seen: set[tuple[str, str, str]],
+    location_id: str | None,
+) -> None:
+    if cues is None or not _is_v2_policy(policy) or not cues.records:
+        return
+    for cue in cues.records:
+        concepts = cue.concepts or (
+            "record",
+            f"revision_{min(cue.observed_revision, 99)}",
+        )
+        try:
+            content = NarrativeContent(
+                concepts=concepts,
+                relations=cue.relations,
+                text="tell_story",
+            )
+        except ValueError:
+            _notice(notices, "empty_content")
+            _log_drop("empty_content")
+            continue
+        draft = _mint_variant(
+            drafts=drafts,
+            notices=notices,
+            owner_id=owner_id,
+            content=content,
+            origin=NarrativeOrigin.DURABLE_RECORD,
+            delta=policy.record_read_delta,
+            channel=NarrativeEvidenceChannel.RECORD,
+            lineage_ref=f"record-{cue.record_id}-{cue.observed_revision}",
+            tick=tick,
+            policy=policy,
+            seen=seen,
+            location_id=location_id,
+            carrier=owner_id,
+            declared_source_basis=CommunicationSourceBasis.UNREFERENCED,
+        )
+        if draft is None:
+            continue
+        previous_revision = max(
+            (
+                ref.observed_revision
+                for ref in draft.record_refs
+                if ref.record_id == cue.record_id
+            ),
+            default=-1,
+        )
+        previous_annotations = max(
+            (
+                ref.annotation_revisions or 0
+                for ref in draft.record_refs
+                if ref.record_id == cue.record_id
+            ),
+            default=-1,
+        )
+        previous_copy_generation = max(
+            (
+                ref.copy_generation or 0
+                for ref in draft.record_refs
+                if ref.record_id == cue.record_id
+            ),
+            default=-1,
+        )
+        integrity = cue.integrity
+        integrity_value = None if integrity is None else integrity.lower()
+        damaged = integrity_value in {
+            "damaged",
+            "partial",
+            "partially_lost",
+        }
+        destroyed = integrity_value in {"destroyed", "lost"}
+        if destroyed:
+            role = NarrativeRecordRole.DESTROYED
+        elif damaged:
+            role = NarrativeRecordRole.DAMAGED
+        elif cue.authored:
+            role = NarrativeRecordRole.AUTHORED
+        elif (
+            cue.copy_generation is not None
+            and previous_copy_generation >= 0
+            and cue.copy_generation > previous_copy_generation
+        ):
+            role = NarrativeRecordRole.COPIED
+        elif (
+            cue.annotation_revisions is not None
+            and previous_annotations >= 0
+            and cue.annotation_revisions > previous_annotations
+        ):
+            role = NarrativeRecordRole.ANNOTATED
+        elif previous_revision >= 0 and cue.observed_revision > previous_revision:
+            role = NarrativeRecordRole.AMENDED
+        else:
+            role = NarrativeRecordRole.READ
+        if len(draft.record_refs) >= policy.max_records and not any(
+            ref.record_id == cue.record_id
+            and ref.observed_revision == cue.observed_revision
+            and ref.role is role
+            for ref in draft.record_refs
+        ):
+            continue
+        draft.record_refs.append(
+            NarrativeRecordRef(
+                record_id=cue.record_id,
+                role=role,
+                observed_revision=cue.observed_revision,
+                tick=tick,
+                copy_generation=cue.copy_generation,
+                integrity=integrity,
+                annotation_revisions=cue.annotation_revisions,
+            )
+        )
+        kind = {
+            NarrativeRecordRole.AUTHORED: NarrativeTransitionKind.RECORD_READ,
+            NarrativeRecordRole.READ: NarrativeTransitionKind.RECORD_READ,
+            NarrativeRecordRole.COPIED: NarrativeTransitionKind.RECORD_COPIED,
+            NarrativeRecordRole.AMENDED: NarrativeTransitionKind.RECORD_AMENDED,
+            NarrativeRecordRole.ANNOTATED: NarrativeTransitionKind.RECORD_ANNOTATED,
+            NarrativeRecordRole.DAMAGED: NarrativeTransitionKind.RECORD_DAMAGED,
+            NarrativeRecordRole.PARTIALLY_LOST: (
+                NarrativeTransitionKind.RECORD_DAMAGED
+            ),
+            NarrativeRecordRole.DESTROYED: NarrativeTransitionKind.RECORD_DAMAGED,
+        }[role]
+        _append_transition(
+            draft=draft,
+            owner_id=owner_id,
+            kind=kind,
+            tick=tick,
+            reference=f"{cue.record_id}:{cue.observed_revision}",
+            policy=policy,
+            carrier_agent_id=owner_id,
+            record_id=cue.record_id,
+        )
+        if role is NarrativeRecordRole.AMENDED:
+            _append_transition(
+                draft=draft,
+                owner_id=owner_id,
+                kind=NarrativeTransitionKind.EDITED,
+                tick=tick,
+                reference=f"record-edit-{cue.record_id}:{cue.observed_revision}",
+                policy=policy,
+                carrier_agent_id=owner_id,
+                record_id=cue.record_id,
+            )
+        _LOG.debug(
+            "narrative_record_cue owner_id=%s variant_id=%s role=%s "
+            "revision=%s transition=%s theme_count=%s",
+            owner_id.value,
+            _draft_variant_id(owner_id, draft),
+            role.value,
+            cue.observed_revision,
+            kind.value,
+            len(draft.themes),
+        )
 
 
 def _apply_memory_reinforcement(
@@ -1707,7 +2847,7 @@ def _apply_retells(
                     break
             if parent is not None:
                 parent_id = _draft_variant_id(owner_id, parent)
-                _mint_variant(
+                retold_draft = _mint_variant(
                     drafts=drafts,
                     notices=notices,
                     owner_id=owner_id,
@@ -1740,7 +2880,8 @@ def _apply_retells(
                     parent.mutation_generation + 1,
                 )
             else:
-                _mint_variant(
+                parent = None
+                retold_draft = _mint_variant(
                     drafts=drafts,
                     notices=notices,
                     owner_id=owner_id,
@@ -1760,12 +2901,271 @@ def _apply_retells(
                     predicate=str(predicate),
                     declared_source_basis=basis,
                 )
+            if retold_draft is not None and _is_v2_policy(policy):
+                declared = communication.utterance.declared
+                chain = tuple(declared.source_agent_chain)
+                for hop_index, entity_id in enumerate(chain):
+                    agent_id = _resolve_agent(identity, entity_id)
+                    if agent_id is None:
+                        entity_value = getattr(entity_id, "value", None)
+                        if (
+                            isinstance(entity_value, str)
+                            and entity_value
+                            and entity_value
+                            not in retold_draft.declared_source_entity_ids
+                            and len(retold_draft.declared_source_entity_ids)
+                            < policy.max_declared_chain
+                        ):
+                            retold_draft.declared_source_entity_ids.append(entity_value)
+                        continue
+                    kind = (
+                        NarrativeWitnessKind.DECLARED_SOURCE
+                        if hop_index == 0
+                        else NarrativeWitnessKind.DECLARED_RETELLER
+                    )
+                    _add_witness(
+                        draft=retold_draft,
+                        owner_id=owner_id,
+                        witness_agent_id=agent_id,
+                        kind=kind,
+                        hop_index=min(hop_index, policy.max_declared_chain),
+                        tick=tick,
+                        policy=policy,
+                    )
+                retold_draft.declared_source_entity_ids[:] = (
+                    retold_draft.declared_source_entity_ids[: policy.max_declared_chain]
+                )
+                retold_draft.declared_hop_count = max(
+                    retold_draft.declared_hop_count,
+                    min(declared.hop_count, policy.max_declared_chain),
+                )
+                _append_carrier(retold_draft, owner_id, notices)
+                if parent is not None and parent.themes:
+                    _theme_set(retold_draft.themes, tuple(parent.themes))
+                    if retold_draft.themes:
+                        retold_draft.theme_basis = parent.theme_basis
+                if parent is not None and parent.content_fingerprint != fingerprint:
+                    _append_transition(
+                        draft=retold_draft,
+                        owner_id=owner_id,
+                        kind=NarrativeTransitionKind.EDITED,
+                        tick=tick,
+                        reference=f"edit-{declared.communication_id.value}",
+                        policy=policy,
+                        carrier_agent_id=owner_id,
+                    )
+                _append_transition(
+                    draft=retold_draft,
+                    owner_id=owner_id,
+                    kind=NarrativeTransitionKind.RETOLD,
+                    tick=tick,
+                    reference=declared.communication_id.value,
+                    policy=policy,
+                    carrier_agent_id=owner_id,
+                    hop_index=min(declared.hop_count, policy.max_declared_chain),
+                )
             _LOG.debug(
                 "narrative_transmission_applied owner_id=%s tick=%s channel=%s",
                 owner_id.value,
                 tick,
                 "communicated",
             )
+
+
+def _apply_witness_deaths(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    drafts: list[_VariantDraft],
+    policy: CulturalNarrativePolicy,
+    tick: int,
+) -> None:
+    if not _is_v2_policy(policy):
+        return
+    dead_agents: set[AgentId] = set()
+    for occurrence in observation.occurrences:
+        if type(occurrence) is not ObservedOccurrence:
+            continue
+        if occurrence.kind not in _DEATH_OCCURRENCE_KINDS:
+            continue
+        for attribute in ("actor_id", "target_id", "other_entity_id"):
+            agent_id = _resolve_agent(
+                identity, getattr(occurrence, attribute, None)
+            )
+            if agent_id is not None:
+                dead_agents.add(agent_id)
+    if not dead_agents:
+        return
+    for draft in drafts:
+        for index, witness in enumerate(draft.source_witnesses):
+            if witness.witness_agent_id not in dead_agents:
+                continue
+            if witness.death_observed_tick is not None:
+                continue
+            draft.source_witnesses[index] = NarrativeWitness(
+                witness_agent_id=witness.witness_agent_id,
+                kind=witness.kind,
+                hop_index=witness.hop_index,
+                first_seen_tick=witness.first_seen_tick,
+                last_seen_tick=max(witness.last_seen_tick, tick),
+                death_observed_tick=tick,
+            )
+            if witness.kind is NarrativeWitnessKind.FIRST_HAND:
+                _append_transition(
+                    draft=draft,
+                    owner_id=identity.owner_id,
+                    kind=NarrativeTransitionKind.FIRST_HAND_WITNESS_DIED,
+                    tick=tick,
+                    reference=witness.witness_agent_id.value,
+                    policy=policy,
+                    carrier_agent_id=identity.owner_id,
+                )
+                _LOG.debug(
+                    "narrative_witness_died owner_id=%s variant_id=%s "
+                    "witness_id=%s hop_index=%s",
+                    identity.owner_id.value,
+                    _draft_variant_id(identity.owner_id, draft),
+                    witness.witness_agent_id.value,
+                    witness.hop_index,
+                )
+
+
+def _update_source_loss(
+    *,
+    drafts: list[_VariantDraft],
+    owner_id: AgentId,
+    policy: CulturalNarrativePolicy,
+    tick: int,
+) -> None:
+    if not _is_v2_policy(policy):
+        return
+    for draft in drafts:
+        first_hand = [
+            witness
+            for witness in draft.source_witnesses
+            if witness.kind is NarrativeWitnessKind.FIRST_HAND
+        ]
+        known = len(first_hand)
+        dead = sum(
+            1
+            for witness in first_hand
+            if witness.death_observed_tick is not None
+        )
+        intact_record = any(
+            _record_is_intact(record) for record in draft.record_refs
+        )
+        damaged_record = any(
+            _record_is_damaged(record) for record in draft.record_refs
+        )
+        destroyed_record = any(
+            _record_is_destroyed(record) for record in draft.record_refs
+        )
+        has_record = bool(draft.record_refs)
+        if intact_record:
+            state = NarrativeSourceLossState.INTACT
+            reason = NarrativeSourceLossReason.NONE
+        elif known == 0 and not has_record:
+            state = NarrativeSourceLossState.UNKNOWN
+            reason = NarrativeSourceLossReason.UNKNOWN
+        elif known > 0 and dead == 0:
+            state = NarrativeSourceLossState.INTACT
+            reason = NarrativeSourceLossReason.NONE
+        elif known > 0 and dead < known:
+            state = NarrativeSourceLossState.PARTIAL
+            reason = (
+                NarrativeSourceLossReason.RECORD_DAMAGED
+                if damaged_record
+                else NarrativeSourceLossReason.SOME_WITNESSES_DEAD
+            )
+        elif destroyed_record:
+            state = NarrativeSourceLossState.LOST
+            reason = (
+                NarrativeSourceLossReason.WITNESS_AND_RECORD_LOSS
+                if known > 0
+                else NarrativeSourceLossReason.RECORD_DESTROYED
+            )
+        elif damaged_record:
+            state = NarrativeSourceLossState.PARTIAL
+            reason = NarrativeSourceLossReason.RECORD_DAMAGED
+        elif known > 0:
+            state = NarrativeSourceLossState.LOST
+            reason = NarrativeSourceLossReason.ALL_FIRST_HAND_WITNESSES_DEAD
+        else:
+            state = NarrativeSourceLossState.UNKNOWN
+            reason = NarrativeSourceLossReason.UNKNOWN
+        previous = draft.source_loss
+        unchanged = (
+            previous is not None
+            and previous.state is state
+            and previous.reason is reason
+            and previous.known_witness_count == known
+            and previous.dead_witness_count == dead
+            and previous.record_backed == intact_record
+        )
+        if unchanged:
+            continue
+        draft.source_loss = NarrativeSourceLoss(
+            state=state,
+            reason=reason,
+            tick=tick,
+            known_witness_count=known,
+            dead_witness_count=dead,
+            record_backed=intact_record,
+        )
+        if previous is not None and previous.state is not state:
+            if state is NarrativeSourceLossState.LOST:
+                if known > 0 and dead == known:
+                    _append_transition(
+                        draft=draft,
+                        owner_id=owner_id,
+                        kind=NarrativeTransitionKind.ALL_WITNESSES_DEAD,
+                        tick=tick,
+                        reference=reason.value,
+                        policy=policy,
+                        carrier_agent_id=owner_id,
+                    )
+                _append_transition(
+                    draft=draft,
+                    owner_id=owner_id,
+                    kind=NarrativeTransitionKind.SOURCE_LOST,
+                    tick=tick,
+                    reference=reason.value,
+                    policy=policy,
+                    carrier_agent_id=owner_id,
+                )
+            elif previous.state is NarrativeSourceLossState.LOST:
+                _append_transition(
+                    draft=draft,
+                    owner_id=owner_id,
+                    kind=NarrativeTransitionKind.REACTIVATED,
+                    tick=tick,
+                    reference=state.value,
+                    policy=policy,
+                    carrier_agent_id=owner_id,
+                )
+        _LOG.info(
+            "narrative_source_loss_changed owner_id=%s variant_id=%s "
+            "state=%s reason=%s known_witness_count=%s "
+            "dead_witness_count=%s",
+            owner_id.value,
+            _draft_variant_id(owner_id, draft),
+            state.value,
+            reason.value,
+            known,
+            dead,
+        )
+        _LOG.debug(
+            "narrative_source_loss owner_id=%s variant_id=%s state=%s "
+            "reason=%s known_witness_count=%s dead_witness_count=%s "
+            "record_backed=%s",
+            owner_id.value,
+            _draft_variant_id(owner_id, draft),
+            state.value,
+            reason.value,
+            known,
+            dead,
+            intact_record,
+        )
 
 
 def _promote(
@@ -1924,6 +3324,25 @@ def _merge(
             if merged is None:
                 continue
             merged.status = NarrativeStatus.ACTIVE
+            if _is_v2_policy(policy):
+                _theme_set(
+                    merged.themes,
+                    tuple(left.themes) + tuple(right.themes),
+                )
+                if merged.themes:
+                    merged.theme_basis = (
+                        NarrativeThemeBasis.INHERITED_LINEAGE
+                    )
+                _append_transition(
+                    draft=merged,
+                    owner_id=owner_id,
+                    kind=NarrativeTransitionKind.MERGED,
+                    tick=tick,
+                    reference="-".join(parent_ids),
+                    policy=policy,
+                    carrier_agent_id=owner_id,
+                    parent_variant_ids=parent_ids,
+                )
             for loc in dict.fromkeys(left.location_ids + right.location_ids):
                 _append_location(merged, loc, notices)
             for carrier in dict.fromkeys(
@@ -1962,6 +3381,16 @@ def _decay(
         draft.strength = _apply_delta(before, -policy.decay)
         if draft.strength < policy.retire_strength:
             draft.status = NarrativeStatus.RETIRED
+            if _is_v2_policy(policy):
+                _append_transition(
+                    draft=draft,
+                    owner_id=owner_id,
+                    kind=NarrativeTransitionKind.RETIRED,
+                    tick=tick,
+                    reference="strength",
+                    policy=policy,
+                    carrier_agent_id=owner_id,
+                )
             _LOG.debug(
                 "narrative_variant_retired owner_id=%s tick=%s status=%s generation=%s",
                 owner_id.value,
@@ -1975,6 +3404,8 @@ def _freeze(
     owner_id: AgentId,
     drafts: list[_VariantDraft],
     notices: list[str],
+    *,
+    policy_version: str = CULTURAL_NARRATIVE_POLICY_VERSION,
 ) -> NarrativeLedger:
     variants: list[NarrativeVariant] = []
     for draft in drafts:
@@ -2008,12 +3439,26 @@ def _freeze(
                 carrier_agent_ids=tuple(draft.carrier_agent_ids[:_MAX_CARRIERS]),
                 notices=tuple(draft.notices),
                 declared_source_basis=draft.declared_source_basis,
+                source_witnesses=tuple(draft.source_witnesses[:_MAX_WITNESSES]),
+                declared_source_entity_ids=tuple(
+                    draft.declared_source_entity_ids[:_MAX_DECLARED_CHAIN]
+                ),
+                declared_hop_count=draft.declared_hop_count,
+                first_hand=draft.first_hand,
+                record_refs=tuple(draft.record_refs[:_MAX_RECORDS]),
+                transitions=tuple(draft.transitions[:_MAX_TRANSITIONS]),
+                source_loss=draft.source_loss,
+                themes=tuple(
+                    sorted(draft.themes, key=_THEME_RANK.__getitem__)[:_MAX_THEMES]
+                ),
+                theme_basis=draft.theme_basis,
             )
         )
     return NarrativeLedger(
         owner_id=owner_id,
         variants=tuple(variants),
         notices=tuple(notices),
+        policy_version=policy_version,
     )
 
 
@@ -2024,7 +3469,7 @@ def apply_narrative_update(
     previous: NarrativeLedger | None,
     memories: Sequence[object] | None = None,
     cues: NarrativeCueSummary | None = None,
-    policy: CulturalNarrativePolicy | None = None,
+    policy: CulturalNarrativePolicy | GenerationalNarrativePolicy | None = None,
 ) -> NarrativeLedger:
     """Apply one tick of narrative evidence for a single owner.
 
@@ -2051,8 +3496,19 @@ def apply_narrative_update(
     if cues is not None and type(cues) is not NarrativeCueSummary:
         raise TypeError("cues must be NarrativeCueSummary or None")
     active_policy = default_cultural_narrative_policy() if policy is None else policy
-    if type(active_policy) is not CulturalNarrativePolicy:
-        raise TypeError("policy must be CulturalNarrativePolicy")
+    if type(active_policy) not in {
+        CulturalNarrativePolicy,
+        GenerationalNarrativePolicy,
+    }:
+        raise TypeError(
+            "policy must be CulturalNarrativePolicy or "
+            "GenerationalNarrativePolicy"
+        )
+    policy_version = (
+        CULTURAL_NARRATIVE_POLICY_VERSION_V2
+        if type(active_policy) is GenerationalNarrativePolicy
+        else CULTURAL_NARRATIVE_POLICY_VERSION
+    )
     owner_id = identity.owner_id
     tick = observation.tick
     drafts = _drafts_from(previous, owner_id)
@@ -2088,6 +3544,16 @@ def apply_narrative_update(
         seen=seen,
         location_id=location_value,
     )
+    _apply_record_cues(
+        cues=cues,
+        drafts=drafts,
+        notices=notices,
+        owner_id=owner_id,
+        tick=tick,
+        policy=active_policy,
+        seen=seen,
+        location_id=location_value,
+    )
     _apply_memory_reinforcement(
         memories=memories,
         drafts=drafts,
@@ -2105,11 +3571,24 @@ def apply_narrative_update(
         policy=active_policy,
         seen=seen,
     )
+    _apply_witness_deaths(
+        observation=observation,
+        identity=identity,
+        drafts=drafts,
+        policy=active_policy,
+        tick=tick,
+    )
+    _update_source_loss(
+        drafts=drafts,
+        owner_id=owner_id,
+        policy=active_policy,
+        tick=tick,
+    )
     _promote(drafts, owner_id, tick, active_policy, notices)
     _link_competitors(drafts, owner_id, active_policy)
     _merge(drafts, owner_id, tick, active_policy, notices)
     _decay(drafts, owner_id, tick, active_policy)
-    ledger = _freeze(owner_id, drafts, notices)
+    ledger = _freeze(owner_id, drafts, notices, policy_version=policy_version)
     _LOG.info(
         "narrative_ledger_updated owner_id=%s variant_count=%s",
         owner_id.value,
@@ -2170,8 +3649,14 @@ def narrative_communicate_penalties(
     if ledger is None or type(ledger) is not NarrativeLedger:
         return {}
     active_policy = default_cultural_narrative_policy() if policy is None else policy
-    if type(active_policy) is not CulturalNarrativePolicy:
-        raise TypeError("policy must be CulturalNarrativePolicy")
+    if type(active_policy) not in {
+        CulturalNarrativePolicy,
+        GenerationalNarrativePolicy,
+    }:
+        raise TypeError(
+            "policy must be CulturalNarrativePolicy or "
+            "GenerationalNarrativePolicy"
+        )
     communicate_ids = [
         future_id
         for future in futures
@@ -2346,8 +3831,14 @@ def narrative_semantic_evidence(
     if ledger.owner_id != owner_id:
         raise ValueError("owner_id: owner_mismatch")
     active_policy = default_cultural_narrative_policy() if policy is None else policy
-    if type(active_policy) is not CulturalNarrativePolicy:
-        raise TypeError("policy must be CulturalNarrativePolicy")
+    if type(active_policy) not in {
+        CulturalNarrativePolicy,
+        GenerationalNarrativePolicy,
+    }:
+        raise TypeError(
+            "policy must be CulturalNarrativePolicy or "
+            "GenerationalNarrativePolicy"
+        )
     requests: list[BeliefRevisionRequest] = []
     for variant in ledger.variants:
         if variant.status is not NarrativeStatus.ACTIVE:

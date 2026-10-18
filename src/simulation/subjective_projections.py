@@ -22,6 +22,8 @@ Availability = Literal["available", "unavailable"]
 __all__ = [
     "EmotionIntensitySummary",
     "EmotionalStateProjection",
+    "GenerationalNarrativeItemSummary",
+    "GenerationalNarrativeProjection",
     "GoalSummary",
     "GoalsProjection",
     "GroupFormationProjection",
@@ -33,6 +35,7 @@ __all__ = [
     "TheoryOfMindProjection",
     "project_cultural_narratives",
     "project_emotional_state",
+    "project_generational_narratives",
     "project_goals",
     "project_group_formation",
     "project_self_model",
@@ -101,6 +104,35 @@ class LedgerItemSummary:
     strength: float | None
     target_id: str | None
     evidence_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationalNarrativeItemSummary:
+    variant_id: str
+    status: str | None
+    origin: str | None
+    themes: tuple[str, ...]
+    source_loss_state: str | None
+    source_loss_reason: str | None
+    witness_count: int
+    dead_witness_count: int
+    record_count: int
+    transition_count: int
+    carrier_count: int
+    hop_count: int
+    first_tick: int | None
+    last_tick: int | None
+    root_id: str | None
+    source_event_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationalNarrativeProjection:
+    schema_version: Literal["research-generational-narratives-v1"]
+    owner_id: str
+    availability: Availability
+    head_count: int
+    items: tuple[GenerationalNarrativeItemSummary, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,6 +592,94 @@ def project_cultural_narratives(
     )
     return NarrativeProjection(
         schema_version="research-cultural-narratives-v1",
+        owner_id=owner_id,
+        availability="available",
+        head_count=len(items),
+        items=tuple(items),
+    )
+
+
+def project_generational_narratives(
+    owner_id: str, checkpoint: AgentRuntimeCheckpoint | None
+) -> GenerationalNarrativeProjection:
+    if not _owner_ok(owner_id, checkpoint) or checkpoint is None:
+        return GenerationalNarrativeProjection(
+            schema_version="research-generational-narratives-v1",
+            owner_id=owner_id,
+            availability="unavailable",
+            head_count=0,
+            items=(),
+        )
+    ledger = checkpoint.cultural_narratives
+    if ledger is None:
+        return GenerationalNarrativeProjection(
+            schema_version="research-generational-narratives-v1",
+            owner_id=owner_id,
+            availability="unavailable",
+            head_count=0,
+            items=(),
+        )
+    items: list[GenerationalNarrativeItemSummary] = []
+    for variant in getattr(ledger, "variants", ()):
+        witnesses = tuple(getattr(variant, "source_witnesses", ()) or ())
+        first_hand = [
+            witness
+            for witness in witnesses
+            if str(getattr(getattr(witness, "kind", None), "value", ""))
+            == "first_hand"
+        ]
+        loss = getattr(variant, "source_loss", None)
+        status = getattr(variant, "status", None)
+        items.append(
+            GenerationalNarrativeItemSummary(
+                variant_id=str(getattr(variant, "variant_id", "")),
+                status=None
+                if status is None
+                else str(getattr(status, "value", status)),
+                origin=str(
+                    getattr(getattr(variant, "origin", None), "value", "unknown")
+                ),
+                themes=tuple(
+                    str(getattr(theme, "value", theme))
+                    for theme in getattr(variant, "themes", ()) or ()
+                ),
+                source_loss_state=(
+                    None
+                    if loss is None
+                    else str(getattr(getattr(loss, "state", None), "value", ""))
+                ),
+                source_loss_reason=(
+                    None
+                    if loss is None
+                    else str(getattr(getattr(loss, "reason", None), "value", ""))
+                ),
+                witness_count=len(first_hand),
+                dead_witness_count=sum(
+                    1
+                    for witness in first_hand
+                    if getattr(witness, "death_observed_tick", None) is not None
+                ),
+                record_count=len(getattr(variant, "record_refs", ()) or ()),
+                transition_count=len(
+                    getattr(variant, "transitions", ()) or ()
+                ),
+                carrier_count=len(
+                    getattr(variant, "carrier_agent_ids", ()) or ()
+                ),
+                hop_count=int(getattr(variant, "declared_hop_count", 0) or 0),
+                first_tick=getattr(variant, "first_tick", None),
+                last_tick=getattr(variant, "last_tick", None),
+                root_id=getattr(variant, "transmission_root_id", None),
+                source_event_id=getattr(variant, "source_event_id", None),
+            )
+        )
+    _LOG.info(
+        "subjective_projection kind=generational_narratives "
+        "availability=available head_count=%s",
+        len(items),
+    )
+    return GenerationalNarrativeProjection(
+        schema_version="research-generational-narratives-v1",
         owner_id=owner_id,
         availability="available",
         head_count=len(items),

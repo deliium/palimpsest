@@ -275,6 +275,7 @@ async def test_subjective_projection_routes_and_graph_summary_wire_safety(
             "/v1/simulations/run-1/owners/alice/social-norms",
             "/v1/simulations/run-1/owners/alice/social-conventions",
             "/v1/simulations/run-1/owners/alice/cultural-narratives",
+            "/v1/simulations/run-1/owners/alice/cultural-narratives/generational",
             "/v1/simulations/run-1/owners/alice/memories/summary",
             "/v1/simulations/run-1/owners/alice/beliefs/summary",
         ):

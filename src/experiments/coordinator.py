@@ -156,6 +156,16 @@ class ExperimentCoordinator:
                             assignment.condition_id, assignment.runner_config
                         )
                     )
+                if assignment.experiment_id == "generational_narratives@1":
+                    from experiments.generational_narratives_scenario import (
+                        generational_narrative_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        generational_narrative_arbiter(
+                            assignment.condition_id, assignment.runner_config
+                        )
+                    )
                 if assignment.experiment_id == "cross_cultural_translation@1":
                     from experiments.translation_scenario import (
                         translation_arbiter,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from asyncio import CancelledError
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
@@ -83,6 +84,8 @@ __all__ = [
     "CognitiveLoopError",
     "CognitiveLoopFailure",
 ]
+
+_NARRATIVE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.loop")
 COMPONENT_VERSION: Final[str] = "v1"
@@ -287,6 +290,7 @@ class CognitiveLoop:
         "_epistemic_policy",
         "_experiment_ledger",
         "_futures",
+        "_generational_narratives_spec",
         "_goal_manager",
         "_group_formation_mode",
         "_group_formation_policy",
@@ -395,6 +399,7 @@ class CognitiveLoop:
         developmental_stage_learning_rates: object | None = None,
         mentorship_spec: object | None = None,
         cultural_features_spec: object | None = None,
+        generational_narratives_spec: object | None = None,
         durable_records_active: bool = False,
         knowledge_repositories_active: bool = False,
         possession_succession_active: bool = False,
@@ -797,12 +802,16 @@ class CognitiveLoop:
             )
 
             narrative_policy = default_cultural_narrative_policy()
-        elif type(cultural_narrative_policy) is not CulturalNarrativePolicy:
-            raise TypeError("cultural_narrative_policy must be CulturalNarrativePolicy")
+        elif not isinstance(cultural_narrative_policy, CulturalNarrativePolicy):
+            raise TypeError(
+                "cultural_narrative_policy must be CulturalNarrativePolicy "
+                "or GenerationalNarrativePolicy"
+            )
         else:
             narrative_policy = cultural_narrative_policy
         self._cultural_narrative_mode = narrative_mode
         self._cultural_narrative_policy = narrative_policy
+        self._generational_narratives_spec = generational_narratives_spec
         from agents.cognition.budget import CognitiveBudgetPolicy
         from agents.cognition.configuration import CognitionBudgetMode
 
@@ -2562,6 +2571,8 @@ class CognitiveLoop:
         cues = _build_narrative_cue_summary(
             artifact_interpretations=artifact_interpretations,
             retrieve_context=retrieve_context,
+            observation=loop_input.observation,
+            durable_records_active=self._durable_records_active,
         )
         memories = () if snapshot is None else snapshot.memories
         updated = apply_narrative_update(
@@ -5048,9 +5059,14 @@ def _build_narrative_cue_summary(
     *,
     artifact_interpretations: object | None,
     retrieve_context: object | None,
+    observation: object | None = None,
+    durable_records_active: bool = False,
 ) -> NarrativeCueSummary:
     """Duck-typed cue bag from prepared artifacts and retrieve reconstructions."""
-    from agents.cognition.cultural_narratives import NarrativeCueSummary
+    from agents.cognition.cultural_narratives import (
+        NarrativeCueSummary,
+        NarrativeRecordCue,
+    )
 
     distorted: list[tuple[str, bool, int, int]] = []
     for entry in getattr(artifact_interpretations, "interpretations", ()) or ():
@@ -5114,9 +5130,109 @@ def _build_narrative_cue_summary(
                 tuple(relations),
             )
         )
+    records: list[NarrativeRecordCue] = []
+    if durable_records_active:
+        for entry in getattr(artifact_interpretations, "interpretations", ()) or ():
+            artifact_id = getattr(entry, "artifact_id", None)
+            record_id = getattr(artifact_id, "value", artifact_id)
+            if not isinstance(record_id, str) or not record_id:
+                continue
+            revision = getattr(entry, "observed_revision", None)
+            source_tick = getattr(entry, "source_tick", None)
+            if not isinstance(revision, int) or isinstance(revision, bool):
+                continue
+            if not isinstance(source_tick, int) or isinstance(source_tick, bool):
+                continue
+            record_concepts: list[str] = []
+            for mark in getattr(entry, "reading_marks", ()) or ():
+                token = getattr(mark, "value", mark)
+                if isinstance(token, str) and _NARRATIVE_TOKEN_RE.fullmatch(token):
+                    record_concepts.append(token)
+            record_relations: list[tuple[str, str, str]] = []
+            for relation in getattr(entry, "reading_relations", ()) or ():
+                subject = getattr(relation, "subject", None)
+                predicate = getattr(relation, "predicate", None)
+                obj = getattr(relation, "object", None)
+                if (
+                    isinstance(subject, str)
+                    and isinstance(predicate, str)
+                    and isinstance(obj, str)
+                    and _NARRATIVE_TOKEN_RE.fullmatch(subject)
+                    and _NARRATIVE_TOKEN_RE.fullmatch(predicate)
+                    and _NARRATIVE_TOKEN_RE.fullmatch(obj)
+                ):
+                    record_relations.append((subject, predicate, obj))
+            integrity = getattr(entry, "integrity", None)
+            integrity = getattr(integrity, "value", integrity)
+            copy_generation = getattr(entry, "copy_generation", None)
+            annotation_revisions = getattr(entry, "annotation_revisions", None)
+            if copy_generation is not None and (
+                not isinstance(copy_generation, int)
+                or isinstance(copy_generation, bool)
+                or copy_generation < 0
+            ):
+                copy_generation = None
+            if annotation_revisions is not None and (
+                not isinstance(annotation_revisions, int)
+                or isinstance(annotation_revisions, bool)
+                or annotation_revisions < 0
+            ):
+                annotation_revisions = None
+            if integrity is not None and not isinstance(integrity, str):
+                integrity = None
+            records.append(
+                NarrativeRecordCue(
+                    record_id=record_id,
+                    observed_revision=revision,
+                    source_tick=source_tick,
+                    distorted=bool(getattr(entry, "distorted", False)),
+                    copy_generation=copy_generation,
+                    integrity=integrity,
+                    annotation_revisions=annotation_revisions,
+                    lost_mark_count=max(
+                        0, int(getattr(entry, "lost_mark_count", 0) or 0)
+                    ),
+                    concepts=tuple(dict.fromkeys(record_concepts)),
+                    relations=tuple(dict.fromkeys(record_relations)),
+                    authored=bool(getattr(entry, "authored", False)),
+                )
+            )
+    for occurrence in getattr(observation, "occurrences", ()) or ():
+        kind = getattr(occurrence, "kind", None)
+        if kind not in {
+            "artifact_damaged",
+            "artifact_partially_lost",
+            "artifact_destroyed",
+        }:
+            continue
+        facts = getattr(occurrence, "public_facts", {}) or {}
+        record_id = facts.get("artifact_id")
+        revision = facts.get("content_revision")
+        integrity = facts.get("integrity")
+        integrity = getattr(integrity, "value", integrity)
+        if not isinstance(record_id, str) or not record_id:
+            continue
+        if not isinstance(revision, int) or isinstance(revision, bool):
+            continue
+        if integrity is None:
+            integrity = (
+                "destroyed" if kind == "artifact_destroyed" else "damaged"
+            )
+        if not isinstance(integrity, str):
+            continue
+        records.append(
+            NarrativeRecordCue(
+                record_id=record_id,
+                observed_revision=revision,
+                source_tick=max(0, revision),
+                integrity=integrity,
+                concepts=("record", f"revision_{min(revision, 99)}"),
+            )
+        )
     return NarrativeCueSummary(
         distorted_artifacts=tuple(distorted),
         reconstructions=tuple(reconstructions),
+        records=tuple(records),
     )
 
 

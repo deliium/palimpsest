@@ -179,3 +179,15 @@ ledgers when the mode is enabled. Ledgers stay out of event/replay/codec
 documents, and the write pair remains `replay-v22`/codec `v20`. New agents start
 with an empty translation ledger, and restore/fork preserves the owner ledger
 attachment without exposing raw foreign tokens in analysis documents.
+
+## Cultural narrative ledger export
+
+`SimulationRunnerResult.cultural_narrative_ledgers` exports owner-ordered
+owner-scoped narrative ledgers after finalization. Disabled owners contribute
+nothing. The field carries witnesses, opaque record references, transitions,
+source-loss state, and themes through the existing runtime checkpoint and
+subjective snapshot paths without a new store, table, codec, or migration.
+
+The versioned runner result document is unchanged; the tuple is available to
+detached analysis and researcher tooling only. Event/replay/codec documents and
+Alembic head `0017` are unaffected.

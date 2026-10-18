@@ -2772,6 +2772,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "compositional_symbols@1",
         "semantic_drift@1",
         "cross_cultural_translation@1",
+        "generational_narratives@1",
     }
 )
 
@@ -5324,6 +5325,30 @@ def experiment_bd_translation(
     )
     _LOG.info(
         "experiment_registered experiment_id=cross_cultural_translation@1 "
+        "arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_be_generational_narratives(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BE: multi-generational historical narratives."""
+    from experiments.generational_narratives_scenario import (
+        generational_narratives_scenario,
+    )
+
+    definition = generational_narratives_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=generational_narratives@1 "
         "arms=%s",
         len(definition.conditions),
     )

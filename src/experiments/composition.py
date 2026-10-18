@@ -3262,6 +3262,8 @@ def historical_memory_harvest_from_run(
     teaching_edges: Sequence[object] | None = None,
     death_ticks: Mapping[str, int] | None = None,
     generation_index_by_agent: Mapping[str, int] | None = None,
+    cultural_narrative_ledgers: Sequence[object] | None = None,
+    generational_narratives_spec: object | None = None,
     sources: Sequence[object] | None = None,
     living_roster: Sequence[str] | None = None,
     transition_ticks: Sequence[int] | None = None,
@@ -3276,14 +3278,16 @@ def historical_memory_harvest_from_run(
         HistoricalSourceRef,
     )
 
-    if layers_spec is None:
+    if layers_spec is None and generational_narratives_spec is None:
         _LOG.debug("historical_memory_harvest_skip reason_code=layers_absent")
         return None
     if isinstance(as_of_tick, bool) or type(as_of_tick) is not int or as_of_tick < 0:
         raise ValueError("as_of_tick: out_of_range")
 
     audits = tuple(cultural_feature_audits or ())
-    include_cultural = bool(getattr(layers_spec, "include_cultural_features", True))
+    include_cultural = bool(
+        getattr(layers_spec, "include_cultural_features", False)
+    )
     if include_cultural and not audits:
         _LOG.warning(
             "historical_memory_harvest_empty_audits "
@@ -3382,6 +3386,8 @@ def historical_memory_harvest_from_run(
         transition_ticks=ticks,
         generation_boundary_ticks=tuple(generation_boundary_ticks or ()),
         living_roster=tuple(living_roster) if living_roster is not None else None,
+        cultural_narrative_ledgers=tuple(cultural_narrative_ledgers or ()),
+        generational_narratives_spec=generational_narratives_spec,
     )
     _LOG.debug(
         "historical_memory_harvest_built source_count=%s "

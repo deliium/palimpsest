@@ -329,6 +329,8 @@ class HistoricalMemoryHarvest:
     transition_ticks: tuple[int, ...] = ()
     generation_boundary_ticks: tuple[int, ...] = ()
     living_roster: tuple[str, ...] | None = None
+    cultural_narrative_ledgers: tuple[object, ...] = ()
+    generational_narratives_spec: object | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.as_of_tick, bool) or type(self.as_of_tick) is not int:
@@ -345,6 +347,11 @@ class HistoricalMemoryHarvest:
             self, "cultural_feature_audits", tuple(self.cultural_feature_audits)
         )
         object.__setattr__(self, "artifact_rows", tuple(self.artifact_rows))
+        object.__setattr__(
+            self,
+            "cultural_narrative_ledgers",
+            tuple(self.cultural_narrative_ledgers),
+        )
         object.__setattr__(self, "transition_ticks", tuple(self.transition_ticks))
         object.__setattr__(
             self,

@@ -242,3 +242,34 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_experiment_bd.py \
   tests/unit/test_translation_overlay.py -q
 ```
+
+## Generational narrative verification
+
+Focused suites:
+
+```bash
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_generational_narrative_contracts.py \
+  tests/unit/test_runner_config_v48.py \
+  tests/unit/test_narrative_witnesses.py \
+  tests/unit/test_narrative_source_loss.py \
+  tests/unit/test_narrative_retellings.py \
+  tests/unit/test_narrative_records.py \
+  tests/unit/test_narrative_transitions.py \
+  tests/unit/test_narrative_themes.py \
+  tests/unit/test_generational_narrative_persistence.py \
+  tests/unit/test_generational_narrative_rows.py \
+  tests/unit/test_generational_narrative_harvest.py \
+  tests/unit/test_generational_narrative_continuity_metrics.py \
+  tests/unit/test_narrative_source_loss_metrics.py \
+  tests/unit/test_narrative_historical_alignment_metrics.py \
+  tests/unit/test_experiment_be.py \
+  tests/unit/test_generational_narrative_overlay.py \
+  tests/architecture/test_v3_generational_narratives_analysis_only.py
+```
+
+Also run the full pytest, Ruff, mypy, import-linter/architecture isolation, the
+compatibility matrix, V1 regression and V2 scientific invariant gates, and the
+BB/BC/BD experiment regressions. Confirm 43 commands, 73 observer semantic
+types, 115 metric families, runner schema v48 only with the spec, replay v22 /
+codec v20, and Alembic `0017`.

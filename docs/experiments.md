@@ -336,3 +336,20 @@ emit no mappings or overlays; enabled mappings are bounded and monotonic;
 isolated populations do not share mappings without a delivered/shared/artifact
 channel; ambiguous mappings are not forced to one answer; wrong mappings are not
 corrected; and no agent receives community labels or analysis results.
+
+## Experiment BE — multi-generational historical narratives
+
+Off-gate `generational_narratives@1` compares bounded owner-scoped lineage arms:
+
+- `be-off` — V2 narrative-only on the prior schema, no lifecycle or
+  generational spec;
+- `be-witness-death`, `be-record-backed`, `be-record-loss`, `be-merge-edit`,
+  `be-theme-coverage`, `be-objective-comparison`;
+- `be-unsupported` — missing lifecycle/provenance/flag fails closed with
+  `generational_narratives_requires_*`.
+
+The arbiter asserts only structural facts: off arms carry no V2 fields; on arms
+stay within witness/record/transition caps and require `runner-config-v48`.
+All-witnesses-dead lineages remain in living carrier ledgers and are never
+auto-retired. No arm injects objective truth, generation indices, metric rows,
+founder worship, heroization, moral verdicts, or forced convergence.

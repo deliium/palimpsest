@@ -166,3 +166,30 @@ contact, regions, public goods, collective projects, or symbolic language.
 Symbolic-only runs remain on `runner-config-v46`; the default write remains
 `runner-config-v4`. All weights, thresholds, caps, and channel deltas are locked
 in `translation.v1` and are not serialized in runner JSON.
+
+## Optional generational narratives (`runner-config-v48`)
+
+`generational_narratives` is an optional run-level sibling that alone selects
+`runner-config-v48`. It requires all of:
+
+- exact `cultural_feature_provenance`;
+- exact `population_lifecycle`;
+- `V3CapabilityFlags.generational_population`;
+- at least one deterministic `cultural_narrative_mode`.
+
+```yaml
+generational_narratives:
+  generational_narratives_mode: deterministic
+  source_loss_policy: observed_evidence_only
+  theme_policy: observed_kind_and_lineage
+  max_witnesses: 8
+  max_records: 8
+  max_transitions: 16
+  max_declared_chain: 8
+```
+
+`disabled` is rejected; omit the object for off. `durable_records`,
+`knowledge_repositories`, `historical_memory_layers`, and regional siblings are
+accepted when independently valid but are never implied. A run with lifecycle
+and cultural narratives but without this object stays on its prior highest
+schema and keeps the `cultural-narratives.v1` policy. Default writes stay `v4`.

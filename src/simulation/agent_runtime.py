@@ -3468,6 +3468,29 @@ class AgentRuntime:
     def export_offline_consolidation_audits(self) -> tuple[object, ...]:
         return tuple(self._offline_consolidation_audits)
 
+    def export_cultural_narratives(self) -> object | None:
+        """Return this owner's carried narrative ledger, or None when off."""
+        ledger = self._cultural_narratives
+        if ledger is None:
+            _LOG.debug(
+                "cultural_narratives_export agent_id=%s present=%s",
+                self._agent.agent_id.value,
+                False,
+            )
+            return None
+        variants = getattr(ledger, "variants", ())
+        _LOG.debug(
+            "cultural_narratives_export agent_id=%s present=%s variant_count=%s "
+            "witness_count=%s record_count=%s transition_count=%s",
+            self._agent.agent_id.value,
+            True,
+            len(variants),
+            sum(len(getattr(item, "source_witnesses", ())) for item in variants),
+            sum(len(getattr(item, "record_refs", ())) for item in variants),
+            sum(len(getattr(item, "transitions", ())) for item in variants),
+        )
+        return ledger
+
     def export_reflection_audits(self) -> tuple[object, ...]:
         return tuple(self._reflection_audits)
 

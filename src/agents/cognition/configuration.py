@@ -461,6 +461,7 @@ class CognitionLoopConfig:
         CognitionCulturalNarrativeMode.DISABLED
     )
     cultural_narrative_policy: CulturalNarrativePolicy | None = None
+    generational_narrative_spec_digest: str | None = None
     cognitive_budget_mode: CognitionBudgetMode = CognitionBudgetMode.DISABLED
     cognitive_budget_policy: CognitiveBudgetPolicy | None = None
     production_knowledge_mode: ProductionKnowledgeMode = (
@@ -824,13 +825,23 @@ class CognitionLoopConfig:
                 "cultural_narrative_policy",
                 default_cultural_narrative_policy(),
             )
-        elif type(self.cultural_narrative_policy) is not CulturalNarrativePolicy:
+        elif not isinstance(self.cultural_narrative_policy, CulturalNarrativePolicy):
             _LOG.error(
                 "invalid_enum path=cultural_narrative_policy reason_code=invalid_type"
             )
             raise TypeError(
                 "cultural_narrative_policy must be CulturalNarrativePolicy or None"
             )
+        if self.generational_narrative_spec_digest is not None:
+            digest = self.generational_narrative_spec_digest
+            if (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)
+            ):
+                raise TypeError(
+                    "generational_narrative_spec_digest must be sha256 hex or None"
+                )
         if type(self.cognitive_budget_mode) is not CognitionBudgetMode:
             _LOG.error(
                 "invalid_enum path=cognitive_budget_mode reason_code=invalid_mode"
@@ -993,6 +1004,9 @@ class CognitionLoopConfig:
                 else self.counterfactual_policy.version
             ),
             "communication_strategy_mode": self.communication_strategy_mode.value,
+            "generational_narrative_spec_digest": (
+                self.generational_narrative_spec_digest
+            ),
             "communication_strategy_policy_version": (
                 None
                 if self.communication_strategy_policy is None
@@ -1087,6 +1101,7 @@ def build_cognitive_loop(
     developmental_stage_learning_rates: object | None = None,
     mentorship_spec: object | None = None,
     cultural_features_spec: object | None = None,
+    generational_narratives_spec: object | None = None,
     durable_records_active: bool = False,
     knowledge_repositories_active: bool = False,
     possession_succession_active: bool = False,
@@ -1278,6 +1293,7 @@ def build_cognitive_loop(
         developmental_stage_learning_rates=developmental_stage_learning_rates,
         mentorship_spec=mentorship_spec,
         cultural_features_spec=cultural_features_spec,
+        generational_narratives_spec=generational_narratives_spec,
         durable_records_active=durable_records_active,
         knowledge_repositories_active=knowledge_repositories_active,
         possession_succession_active=possession_succession_active,

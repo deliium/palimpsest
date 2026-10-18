@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 112
+METRIC_FAMILY_COUNT: Final[int] = 115
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -178,6 +178,9 @@ class MetricFamilyId(StrEnum):
     CONTACT_KNOWLEDGE_TRANSFER = "contact_knowledge_transfer"
     CONTACT_LEXICAL_BORROWING = "contact_lexical_borrowing"
     CONTACT_REPUTATION_TRANSFER = "contact_reputation_transfer"
+    GENERATIONAL_NARRATIVE_CONTINUITY = "generational_narrative_continuity"
+    NARRATIVE_SOURCE_LOSS = "narrative_source_loss"
+    NARRATIVE_HISTORICAL_ALIGNMENT = "narrative_historical_alignment"
     SYMBOLIC_COMPOSITION = "symbolic_composition"
     SYMBOLIC_SOCIAL_DISTRIBUTION = "symbolic_social_distribution"
     SYMBOLIC_MESSAGE_FLOW = "symbolic_message_flow"
@@ -4954,6 +4957,148 @@ def _spec_semantic_divergence() -> MetricSpecification:
         ),
     )
 
+def _spec_generational_narrative_continuity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.GENERATIONAL_NARRATIVE_CONTINUITY,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="owner_scoped_narrative_variants_joined_to_objective_generations",
+        denominator="active_narrative_lineages",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="final committed tick with detached lifecycle rows",
+        deceased_policy="dead first-hand witnesses remain provenance, not truth",
+        zero_holding_policy="empty lineages -> availability=absent, never zero",
+        opportunity_vs_occurrence=(
+            "a lineage survives when a living owner carrier remains; witness "
+            "death alone never retires a narrative"
+        ),
+        self_edge_policy="self generation successors are ignored",
+        censoring_policy=(
+            "missing generation rows are coverage gaps and never fabricated "
+            "generations"
+        ),
+        formulas={
+            "active_lineage_count": "distinct active lineage roots",
+            "mean_generation_span": "mean objective generation span per lineage",
+            "multi_generation_lineage_rate": (
+                "lineages spanning at least two objective generations / lineages"
+            ),
+            "first_hand_to_retold_rate": (
+                "lineages with a retold transition / first-hand lineages"
+            ),
+            "all_witnesses_dead_survival_rate": (
+                "all-first-hand-dead lineages with a living carrier / such lineages"
+            ),
+            "record_backed_survival_rate": (
+                "lineages preserved by an intact record / record-backed lineages"
+            ),
+            "mean_carrier_turnover": "mean distinct carrier count per lineage",
+            "mean_provenance_hops": "mean declared hop count per lineage",
+            "theme_counts": "counts of observed/inherited descriptive themes",
+        },
+        value_keys=(
+            "active_lineage_count",
+            "mean_generation_span",
+            "max_generation_span",
+            "multi_generation_lineage_rate",
+            "first_hand_to_retold_rate",
+            "all_witnesses_dead_survival_rate",
+            "record_backed_survival_rate",
+            "mean_carrier_turnover",
+            "mean_provenance_hops",
+            "theme_counts",
+            "generation_boundary_transition_count",
+            "last_direct_witness_death_transition_count",
+        ),
+    )
+
+
+def _spec_narrative_source_loss() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.NARRATIVE_SOURCE_LOSS,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="owner_scoped_narrative_variants_with_observed_source_state",
+        denominator="known_first_hand_witnesses_or_record_backed_variants",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="final committed tick",
+        deceased_policy="observed deaths only; missing evidence stays unknown",
+        zero_holding_policy="no witnesses and no records -> unknown, never zero",
+        opportunity_vs_occurrence=(
+            "subjective source-loss state is compared with objective death and "
+            "record integrity without flowing back into cognition"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="unknown is a coverage gap, not a false claim",
+        formulas={
+            "subjective_source_loss_rate": (
+                "variants with subjective state lost / known variants"
+            ),
+            "objective_source_loss_rate": (
+                "variants whose known witnesses are all objectively dead and "
+                "have no intact record / known variants"
+            ),
+            "mean_dead_witness_share": "dead first-hand witnesses / known witnesses",
+            "all_witnesses_dead_count": "variants with every known first-hand dead",
+            "record_backed_count": "variants with an intact record reference",
+            "reason_counts": "distribution over closed source-loss reasons",
+        },
+        value_keys=(
+            "subjective_source_loss_rate",
+            "objective_source_loss_rate",
+            "mean_dead_witness_share",
+            "all_witnesses_dead_count",
+            "record_backed_count",
+            "reason_counts",
+            "state_counts",
+        ),
+    )
+
+
+def _spec_narrative_historical_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.NARRATIVE_HISTORICAL_ALIGNMENT,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="narrative claims compared with detached objective event rows",
+        denominator="verifiable_narrative_claims",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="locked plus/minus two ticks",
+        deceased_policy="not_applicable",
+        zero_holding_policy="unverifiable claims are excluded from the denominator",
+        opportunity_vs_occurrence=(
+            "alignment is an analysis-only classification and never a truth "
+            "label available to agents"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "missing source events or objective rows yield unverifiable, never "
+            "a zero alignment rate"
+        ),
+        formulas={
+            "source_event_coverage": (
+                "claims with a resolvable objective event / claims"
+            ),
+            "participant_coverage": "claims with participant evidence / claims",
+            "location_agreement": (
+                "claims with agreeing location / claims with location"
+            ),
+            "mean_temporal_distance": "mean absolute narrative-objective tick distance",
+            "aligned_rate": "aligned / verifiable claims",
+            "partial_rate": "partial / verifiable claims",
+            "divergent_rate": "divergent / verifiable claims",
+            "unverifiable_rate": "unverifiable / all claims",
+        },
+        value_keys=(
+            "source_event_coverage",
+            "participant_coverage",
+            "location_agreement",
+            "mean_temporal_distance",
+            "aligned_rate",
+            "partial_rate",
+            "divergent_rate",
+            "unverifiable_rate",
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -5067,6 +5212,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_translation_learning,
     _spec_cross_group_translation,
     _spec_translation_influence,
+    _spec_generational_narrative_continuity,
+    _spec_narrative_source_loss,
+    _spec_narrative_historical_alignment,
 )
 
 

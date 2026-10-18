@@ -555,6 +555,7 @@ class _ChannelLoopOptions(TypedDict, total=False):
     developmental_stage_learning_rates: object | None
     mentorship_spec: object | None
     cultural_features_spec: object | None
+    generational_narratives_spec: object | None
     durable_records_active: bool
     knowledge_repositories_active: bool
     possession_succession_active: bool
@@ -580,6 +581,7 @@ def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
         _developmental_learning_loop_kwargs,
         _mentorship_loop_kwargs,
         _cultural_features_loop_kwargs,
+        _generational_narratives_loop_kwargs,
         _durable_records_loop_kwargs,
         _knowledge_repositories_loop_kwargs,
         _possession_succession_loop_kwargs,
@@ -652,6 +654,14 @@ def _cultural_features_loop_kwargs(config: object) -> _ChannelLoopOptions:
     if spec is None:
         return {}
     return {"cultural_features_spec": spec}
+
+
+def _generational_narratives_loop_kwargs(config: object) -> _ChannelLoopOptions:
+    """Bind generational narratives (no AgentCognitionSpec enum)."""
+    spec = getattr(config, "generational_narratives", None)
+    if spec is None:
+        return {}
+    return {"generational_narratives_spec": spec}
 
 
 def _durable_records_loop_kwargs(config: object) -> _ChannelLoopOptions:
@@ -790,11 +800,27 @@ def _bounded_experimentation_loop_kwargs(config: object) -> _ChannelLoopOptions:
     return {"bounded_experimentation_spec": spec}
 
 
+def _generational_narrative_spec_digest(spec: object | None) -> str | None:
+    """Stable digest of the run-level generational narrative spec."""
+    if spec is None:
+        return None
+    payload = getattr(spec, "canonical_payload", None)
+    if not callable(payload):
+        raise TypeError(
+            "generational_narratives must provide canonical_payload()"
+        )
+    material = "|".join(
+        f"{key}={value}" for key, value in sorted(payload().items())
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def _cognition_config_for(
     spec: AgentCognitionSpec,
     *,
     mortality_mode: MortalityMode,
     capability_flags: V2CapabilityFlags,
+    generational_narratives: object | None = None,
 ) -> CognitionLoopConfig:
     emotional_flag = capability_flags.short_term_emotional_state
     emotional_mode = (
@@ -1038,12 +1064,19 @@ def _cognition_config_for(
         CognitionBudgetMode,
         CognitionCulturalNarrativeMode,
     )
-    from agents.cognition.cultural_narratives import default_cultural_narrative_policy
+    from agents.cognition.cultural_narratives import (
+        default_cultural_narrative_policy,
+        default_generational_narrative_policy,
+    )
 
     narrative_mode = CognitionCulturalNarrativeMode(spec.cultural_narrative_mode.value)
     narrative_policy = None
     if narrative_mode is CognitionCulturalNarrativeMode.DETERMINISTIC:
-        narrative_policy = default_cultural_narrative_policy()
+        narrative_policy = (
+            default_generational_narrative_policy()
+            if generational_narratives is not None
+            else default_cultural_narrative_policy()
+        )
     _LOG.debug(
         "cognition_config_cultural_narrative_mode mode=%s policy_version=%s",
         narrative_mode.value,
@@ -1120,6 +1153,9 @@ def _cognition_config_for(
         translation_policy=translation_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
+        generational_narrative_spec_digest=_generational_narrative_spec_digest(
+            generational_narratives
+        ),
         cognitive_budget_mode=budget_mode,
         cognitive_budget_policy=budget_policy,
         production_knowledge_mode=CognitionProductionKnowledgeMode(
@@ -1977,6 +2013,7 @@ class SimulationRunner:
                     agent_spec.cognition,
                     mortality_mode=config.mortality_mode,
                     capability_flags=config.capability_flags,
+                    generational_narratives=config.generational_narratives,
                 )
                 memory_retriever = _memory_retriever_for(
                     agent_spec.cognition.memory_mode,
@@ -2852,6 +2889,7 @@ class SimulationRunner:
             terminology_ledgers=self.export_terminology_ledgers(),
             symbolic_ledgers=self.export_symbolic_ledgers(),
             translation_ledgers=self.export_translation_ledgers(),
+            cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
         mentorship_audit_count = len(result.mentorship_audits)
@@ -3136,6 +3174,22 @@ class SimulationRunner:
                 continue
             ledgers.append(ledger)
         _LOG.info("runner_translation_ledger_export ledger_count=%s", len(ledgers))
+        return tuple(ledgers)
+
+    def export_cultural_narrative_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered cultural narrative ledgers. Off owners skip."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            ledger = runtime.export_cultural_narratives()
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_cultural_narrative_ledger_export ledger_count=%s "
+            "variant_count=%s",
+            len(ledgers),
+            sum(len(getattr(item, "variants", ())) for item in ledgers),
+        )
         return tuple(ledgers)
 
     def export_initial_lifecycle_records(self) -> tuple[object, ...]:
@@ -3568,6 +3622,7 @@ class SimulationRunner:
                 agent_spec.cognition,
                 mortality_mode=self._config.mortality_mode,
                 capability_flags=self._config.capability_flags,
+                generational_narratives=self._config.generational_narratives,
             )
             memory_retriever = _memory_retriever_for(
                 agent_spec.cognition.memory_mode,

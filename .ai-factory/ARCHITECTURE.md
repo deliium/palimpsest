@@ -228,3 +228,16 @@ llm_result.to_agent_command()               # does not exist
 - `.ai-factory/plans/v1-agent-runtime-cognitive-loop.md` — cognitive loop and AgentRuntime plan
 - `.ai-factory/plans/v1-llm-provider-abstraction.md` — provider-neutral LLM boundary plan
 - `.ai-factory/plans/v1-perception-observation-system.md` — perception plan
+
+## C-28 Multi-generational historical narratives
+
+Objective history and subjective narrative provenance remain separate. The
+owner-scoped narrative ledger may carry witnesses, retellings, opaque record
+references, transitions, a four-state observed source-loss value, and
+descriptive themes under `cultural-narratives.v2`. It has no truth field and
+never receives objective event bodies, generation indices, or analysis rows.
+Detached `analysis.generational_narratives` projects duck-typed ledger rows and
+compares claims with objective event rows without importing cognition, runtime,
+or persistence. Results never re-enter prompts, memory formation, admission, or
+observation. `runner-config-v48` is emitted only for the optional
+`generational_narratives` run-level sibling.

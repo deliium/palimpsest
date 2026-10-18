@@ -24,6 +24,8 @@ from api.schemas import (
     EventPageOut,
     EventSummaryOut,
     ExperimentalStateOut,
+    GenerationalNarrativeItemSummaryOut,
+    GenerationalNarrativesProjectionOut,
     GoalsProjectionOut,
     GoalSummaryOut,
     GroupFormationProjectionOut,
@@ -52,6 +54,7 @@ from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.subjective_projections import (
     project_cultural_narratives,
     project_emotional_state,
+    project_generational_narratives,
     project_goals,
     project_group_formation,
     project_self_model,
@@ -604,6 +607,57 @@ async def get_owner_cultural_narratives(
         availability=AvailabilityOut(document.availability),
         head_count=document.head_count,
         items=_ledger_items(document.items),
+    )
+
+
+@router.get(
+    "/{run_id}/owners/{owner_id}/cultural-narratives/generational",
+    response_model=GenerationalNarrativesProjectionOut,
+)
+async def get_owner_generational_narratives(
+    run_id: str,
+    owner_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> GenerationalNarrativesProjectionOut:
+    document = project_generational_narratives(
+        owner_id, _owner_checkpoint(request, run_id, owner_id)
+    )
+    _LOGGER.info(
+        "route_owner_generational_narratives",
+        route_template=(
+            "GET /v1/simulations/{run_id}/owners/{owner_id}/"
+            "cultural-narratives/generational"
+        ),
+        status=200,
+        run_id=run_id,
+        heads=document.head_count,
+    )
+    return GenerationalNarrativesProjectionOut(
+        owner_id=document.owner_id,
+        availability=AvailabilityOut(document.availability),
+        head_count=document.head_count,
+        items=tuple(
+            GenerationalNarrativeItemSummaryOut(
+                variant_id=item.variant_id,
+                status=item.status,
+                origin=item.origin,
+                themes=item.themes,
+                source_loss_state=item.source_loss_state,
+                source_loss_reason=item.source_loss_reason,
+                witness_count=item.witness_count,
+                dead_witness_count=item.dead_witness_count,
+                record_count=item.record_count,
+                transition_count=item.transition_count,
+                carrier_count=item.carrier_count,
+                hop_count=item.hop_count,
+                first_tick=item.first_tick,
+                last_tick=item.last_tick,
+                root_id=item.root_id,
+                source_event_id=item.source_event_id,
+            )
+            for item in document.items
+        ),
     )
 
 

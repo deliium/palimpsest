@@ -326,3 +326,38 @@ v44/v45/v46 family roots and implies no other channel. Translation requires
 deterministic semantic naming; symbolic language is optional. Detached analysis
 classifies outcomes against the speaker's own selected referent as an
 inter-subjective intent proxy and never feeds results back to cognition.
+
+## Multi-generational historical narratives
+
+Owned `cultural_historical_memory` / `generational_population` substrate only.
+A narrative variant remains an owner-scoped, revisable claim. Under the gated
+`cultural-narratives.v2` policy an owner may additionally record:
+
+- witnesses (`first_hand`, `declared_source`, `declared_reteller`,
+  `record_mediated`) with observed death ticks;
+- opaque durable-record references (role, revision, copy generation,
+  integrity, annotation count) with no record body or marks;
+- a bounded transition log (`minted`, `retold`, `record_read`, `record_copied`,
+  `record_amended`, `record_annotated`, `record_damaged`, `merged`, `edited`,
+  `first_hand_witness_died`, `all_witnesses_dead`, `source_lost`, `retired`,
+  `reactivated`);
+- a subjective four-state source-loss value (`intact`, `partial`, `lost`,
+  `unknown`) derived only from observed evidence;
+- descriptive themes (`founders`, `disasters`, `discoveries`, `conflicts`,
+  `migrations`, `innovations`, `unclassified`).
+
+There is no truth field. Witness death and source loss are provenance states,
+never falsity, and never retire a narrative by themselves. The current owner
+remains a living carrier, so a story survives while any owner carries it or an
+intact record remains readable through existing channels. New agents start
+blank-slate and acquire a story only through ordinary delivery, teaching,
+record reading, or reconstruction.
+
+Objective history (events, lifecycle records, generation indices, death ticks,
+record integrity) is joined only by detached analysis. Agents never receive
+generation indices, genealogy, candidate communities, or analysis rows.
+
+Compatibility: no new command (43), no new event or perception field, no new
+observer semantic type (73), replay stays `EVENT_SCHEMA_REPLAY_V22`,
+persistence codec stays `v20`, Alembic head stays `0017`, and
+`institutional_economy` / `multi_hop_testimony_tracking` remain fail-closed.

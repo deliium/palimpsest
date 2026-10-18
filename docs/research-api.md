@@ -132,3 +132,15 @@ source digest, target label digests, referent kinds/digests, status, fit,
 strength band, channel counts, usage count, and tick range. It reads the owner
 runtime checkpoint and never exposes raw foreign tokens, target tokens, message
 bodies, or another owner's mapping. It is not part of objective frames.
+
+## Researcher generational narrative overlay
+
+`GET /v1/simulations/{run_id}/owners/{owner_id}/cultural-narratives/generational`
+returns `research-generational-narratives-v1` behind the existing debug
+dependency. It exposes variant IDs, status, origin, themes, subjectively
+observed source-loss state/reason, witness/dead/record/transition counts,
+carrier count, hop count, first/last tick, and opaque root/source IDs.
+
+The existing `/cultural-narratives` route is unchanged. The overlay reads only
+the owner checkpoint, never another owner's ledger, record text, mark bodies,
+or story tokens. No observer semantic type, protocol, or Godot layout changes.

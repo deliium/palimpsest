@@ -264,6 +264,16 @@ def assemble_arm_metric_bundle(
     layers_spec = getattr(
         arm.assignment.runner_config, "historical_memory_layers", None
     )
+    generational_narratives_spec = getattr(
+        arm.assignment.runner_config, "generational_narratives", None
+    )
+    cultural_narrative_ledgers = getattr(
+        arm.runner_result, "cultural_narrative_ledgers", None
+    )
+    if cultural_narrative_ledgers is None:
+        cultural_narrative_ledgers = getattr(
+            arm, "cultural_narrative_ledgers", None
+        )
     cultural_audits = getattr(arm.runner_result, "cultural_feature_audits", None)
     if cultural_audits is not None and len(cultural_audits) == 0:
         cultural_audits = None
@@ -288,6 +298,8 @@ def assemble_arm_metric_bundle(
         artifact_rows=artifact_rows,
         teaching_audits=teaching_audits,
         generation_index_by_agent=generation_index,
+        cultural_narrative_ledgers=cultural_narrative_ledgers,
+        generational_narratives_spec=generational_narratives_spec,
         living_roster=agent_ids,
     )
 

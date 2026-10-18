@@ -53,6 +53,12 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
+from analysis.generational_narratives import (
+    compute_generational_narrative_continuity,
+    compute_narrative_historical_alignment,
+    compute_narrative_source_loss,
+    generational_narrative_inputs_from_harvest,
+)
 from analysis.historical_memory_metrics import (
     compute_historical_memory_layers,
     compute_historical_memory_queries,
@@ -720,30 +726,61 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         )
     if inputs.historical_memory_harvest is not None:
         hm_harvest = inputs.historical_memory_harvest
-        _safe(
-            "historical_memory_layers",
-            lambda: compute_historical_memory_layers(
-                hm_harvest,
-                run_id=run_id,
-                input_revision=revision,
-            ),
-        )
-        _safe(
-            "historical_memory_transitions",
-            lambda: compute_historical_memory_transitions(
-                hm_harvest,
-                run_id=run_id,
-                input_revision=revision,
-            ),
-        )
-        _safe(
-            "historical_memory_queries",
-            lambda: compute_historical_memory_queries(
-                hm_harvest,
-                run_id=run_id,
-                input_revision=revision,
-            ),
-        )
+        if getattr(hm_harvest, "layers_spec", None) is not None:
+            _safe(
+                "historical_memory_layers",
+                lambda: compute_historical_memory_layers(
+                    hm_harvest,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "historical_memory_transitions",
+                lambda: compute_historical_memory_transitions(
+                    hm_harvest,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "historical_memory_queries",
+                lambda: compute_historical_memory_queries(
+                    hm_harvest,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+        if getattr(hm_harvest, "cultural_narrative_ledgers", ()):
+            gen_inputs = generational_narrative_inputs_from_harvest(hm_harvest)
+            _safe(
+                "generational_narrative_continuity",
+                lambda: compute_generational_narrative_continuity(
+                    gen_inputs.generation_rows,
+                    run_id=run_id,
+                    input_revision=revision,
+                    tick=inputs.window_end,
+                    transition_counts=gen_inputs.transition_counts,
+                ),
+            )
+            _safe(
+                "narrative_source_loss",
+                lambda: compute_narrative_source_loss(
+                    gen_inputs.source_loss_rows,
+                    run_id=run_id,
+                    input_revision=revision,
+                    tick=inputs.window_end,
+                ),
+            )
+            _safe(
+                "narrative_historical_alignment",
+                lambda: compute_narrative_historical_alignment(
+                    gen_inputs.comparison_rows,
+                    run_id=run_id,
+                    input_revision=revision,
+                    tick=inputs.window_end,
+                ),
+            )
     if (
         inputs.durable_record_rows is not None
         or inputs.durable_record_event_rows is not None

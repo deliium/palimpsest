@@ -234,6 +234,35 @@ class LedgerItemSummaryOut(StrictModel):
     evidence_count: int = Field(ge=0)
 
 
+class GenerationalNarrativeItemSummaryOut(StrictModel):
+    variant_id: str
+    status: str | None = None
+    origin: str | None = None
+    themes: tuple[str, ...] = ()
+    source_loss_state: str | None = None
+    source_loss_reason: str | None = None
+    witness_count: int = Field(ge=0)
+    dead_witness_count: int = Field(ge=0)
+    record_count: int = Field(ge=0)
+    transition_count: int = Field(ge=0)
+    carrier_count: int = Field(ge=0)
+    hop_count: int = Field(ge=0)
+    first_tick: int | None = None
+    last_tick: int | None = None
+    root_id: str | None = None
+    source_event_id: str | None = None
+
+
+class GenerationalNarrativesProjectionOut(StrictModel):
+    schema_version: Literal["research-generational-narratives-v1"] = (
+        "research-generational-narratives-v1"
+    )
+    owner_id: str
+    availability: AvailabilityOut
+    head_count: int = Field(ge=0)
+    items: tuple[GenerationalNarrativeItemSummaryOut, ...] = ()
+
+
 class TheoryOfMindProjectionOut(StrictModel):
     schema_version: Literal["research-theory-of-mind-v1"] = "research-theory-of-mind-v1"
     owner_id: str

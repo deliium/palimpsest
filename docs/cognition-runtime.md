@@ -462,3 +462,19 @@ Validation reason codes: `architecture_missing_flag`, `architecture_forbidden_fl
 - [Physical simulation](physical-simulation.md)
 - [LLM providers](llm-providers.md)
 - [Development](development.md)
+
+## Generational narrative carry
+
+`AgentRuntime` carries the owner's `NarrativeLedger` through commit, restore,
+fork, checkpoints, and perspective building. The ledger policy is `v1` unless
+the run-level `generational_narratives` spec is active, in which case the loop
+uses `cultural-narratives.v2` and the run-level spec digest participates in the
+cognition condition fingerprint.
+
+V2 updates add first-hand and declared witnesses, observed witness deaths,
+declared retelling hops, opaque record cues, edits/merges, descriptive themes,
+and a four-state subjective source-loss value. A first-hand owner remains alive
+by definition; observing the death of every other known first-hand witness
+yields `lost` provenance without retiring the story. Blank-slate agents inherit
+no ledger and must acquire the story through existing delivery, teaching,
+record reading, or reconstruction.

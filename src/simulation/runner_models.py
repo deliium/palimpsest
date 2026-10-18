@@ -134,6 +134,7 @@ RUNNER_SCHEMA_VERSION_V44: Final[str] = "runner-config-v44"
 RUNNER_SCHEMA_VERSION_V45: Final[str] = "runner-config-v45"
 RUNNER_SCHEMA_VERSION_V46: Final[str] = "runner-config-v46"
 RUNNER_SCHEMA_VERSION_V47: Final[str] = "runner-config-v47"
+RUNNER_SCHEMA_VERSION_V48: Final[str] = "runner-config-v48"
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -184,6 +185,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 RESULT_SCHEMA_VERSION_V1: Final[str] = "runner-result-v1"
@@ -761,6 +763,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 
@@ -2880,6 +2883,7 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2899,6 +2903,7 @@ _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2919,6 +2924,7 @@ _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2937,6 +2943,7 @@ _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -2954,6 +2961,7 @@ _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V45,
         RUNNER_SCHEMA_VERSION_V46,
         RUNNER_SCHEMA_VERSION_V47,
+        RUNNER_SCHEMA_VERSION_V48,
     }
 )
 
@@ -3096,6 +3104,114 @@ def example_historical_memory_layers_spec(
         max_communicative_hops=max_communicative_hops,
         witness_definition=witness_definition,
         applicability=applicability,
+    )
+
+
+_GENERATIONAL_NARRATIVES_MODE: Final[frozenset[str]] = frozenset(
+    {"deterministic"}
+)
+_GENERATIONAL_SOURCE_LOSS_POLICIES: Final[frozenset[str]] = frozenset(
+    {"observed_evidence_only"}
+)
+_GENERATIONAL_THEME_POLICIES: Final[frozenset[str]] = frozenset(
+    {"observed_kind_and_lineage"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationalNarrativesSpec:
+    """Optional run-level multi-generational narrative channel (v48).
+
+    Not an ``AgentCognitionSpec`` enum. Requires an exact cultural provenance,
+    population lifecycle, the owned ``generational_population`` flag, and at
+    least one deterministic cultural narrative mode.
+    """
+
+    generational_narratives_mode: str = "deterministic"
+    source_loss_policy: str = "observed_evidence_only"
+    theme_policy: str = "observed_kind_and_lineage"
+    max_witnesses: int = 8
+    max_records: int = 8
+    max_transitions: int = 16
+    max_declared_chain: int = 8
+
+    def __post_init__(self) -> None:
+        mode = require_stable_id(
+            "GenerationalNarrativesSpec.generational_narratives_mode",
+            self.generational_narratives_mode,
+        )
+        if mode == "disabled":
+            raise ValueError(
+                "generational_narratives_mode=disabled is rejected; omit the "
+                "object for off (code=generational_narratives_mode_invalid)"
+            )
+        if mode not in _GENERATIONAL_NARRATIVES_MODE:
+            raise ValueError(
+                f"unknown generational_narratives_mode {mode!r} "
+                "(code=generational_narratives_mode_invalid)"
+            )
+        object.__setattr__(self, "generational_narratives_mode", mode)
+
+        source_loss = require_stable_id(
+            "GenerationalNarrativesSpec.source_loss_policy",
+            self.source_loss_policy,
+        )
+        if source_loss not in _GENERATIONAL_SOURCE_LOSS_POLICIES:
+            raise ValueError(
+                f"unknown source_loss_policy {source_loss!r} "
+                "(code=generational_narratives_source_loss_policy_invalid)"
+            )
+        object.__setattr__(self, "source_loss_policy", source_loss)
+
+        theme = require_stable_id(
+            "GenerationalNarrativesSpec.theme_policy", self.theme_policy
+        )
+        if theme not in _GENERATIONAL_THEME_POLICIES:
+            raise ValueError(
+                f"unknown theme_policy {theme!r} "
+                "(code=generational_narratives_theme_policy_invalid)"
+            )
+        object.__setattr__(self, "theme_policy", theme)
+
+        for name, low, high in (
+            ("max_witnesses", 1, 8),
+            ("max_records", 1, 8),
+            ("max_transitions", 1, 16),
+            ("max_declared_chain", 1, 8),
+        ):
+            value = require_exact_nonneg_int(name, getattr(self, name))
+            if value < low or value > high:
+                raise ValueError(
+                    f"{name} must be in [{low}, {high}] "
+                    f"(code=generational_narratives_{name}_invalid)"
+                )
+            object.__setattr__(self, name, value)
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "generational_narratives_mode": self.generational_narratives_mode,
+            "source_loss_policy": self.source_loss_policy,
+            "theme_policy": self.theme_policy,
+            "max_witnesses": self.max_witnesses,
+            "max_records": self.max_records,
+            "max_transitions": self.max_transitions,
+            "max_declared_chain": self.max_declared_chain,
+        }
+
+
+def example_generational_narratives_spec(
+    *,
+    max_witnesses: int = 8,
+    max_records: int = 8,
+    max_transitions: int = 16,
+    max_declared_chain: int = 8,
+) -> GenerationalNarrativesSpec:
+    """Reference generational narrative spec for tests and Experiment BE."""
+    return GenerationalNarrativesSpec(
+        max_witnesses=max_witnesses,
+        max_records=max_records,
+        max_transitions=max_transitions,
+        max_declared_chain=max_declared_chain,
     )
 
 
@@ -5808,6 +5924,7 @@ class SimulationRunnerResult:
     terminology_ledgers: tuple[object, ...] = ()
     symbolic_ledgers: tuple[object, ...] = ()
     translation_ledgers: tuple[object, ...] = ()
+    cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
@@ -6002,6 +6119,15 @@ class SimulationRunnerResult:
             if type(ledger) is not TranslationLedger:
                 raise TypeError("translation_ledgers: invalid_item")
         object.__setattr__(self, "translation_ledgers", translation)
+        if isinstance(self.cultural_narrative_ledgers, (set, frozenset)):
+            raise TypeError("cultural_narrative_ledgers must be ordered")
+        narrative_ledgers = tuple(self.cultural_narrative_ledgers)
+        for ledger_item in narrative_ledgers:
+            if ledger_item is None:
+                raise TypeError("cultural_narrative_ledgers: invalid_item")
+        object.__setattr__(
+            self, "cultural_narrative_ledgers", narrative_ledgers
+        )
         if isinstance(self.initial_lifecycle_records, (set, frozenset)):
             raise TypeError("initial_lifecycle_records must be ordered")
         from world.lifecycle import AgentLifecycleRecord
@@ -6816,6 +6942,7 @@ class SimulationRunnerConfig:
     public_goods: PublicGoodsSpec | None = None
     regions_migration: RegionsMigrationSpec | None = None
     cultural_contact: CulturalContactSpec | None = None
+    generational_narratives: GenerationalNarrativesSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -7017,6 +7144,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -7056,6 +7184,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -7112,6 +7241,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -7175,6 +7305,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -7250,6 +7381,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -7365,6 +7497,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "technique_lifecycle_requires_v37 schema_version=%s "
@@ -7449,6 +7582,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -7731,6 +7865,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if self.bounded_experimentation is not None:
             if self.schema_version not in _experiment_schemas:
@@ -7866,6 +8001,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "possession_succession_requires_v38 schema_version=%s "
@@ -7908,6 +8044,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "structured_commitments_requires_v39 schema_version=%s "
@@ -7950,6 +8087,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.error(
                     "subjective_valuation_requires_v40 schema_version=%s "
@@ -7992,6 +8130,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.info(
                     "resource_exchange_profile_requires_v41 schema_version=%s "
@@ -8075,6 +8214,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.info(
                     "collective_projects_requires_v42 schema_version=%s "
@@ -8120,6 +8260,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 _LOGGER.info(
                     "public_goods_requires_v43 schema_version=%s "
@@ -8214,6 +8355,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 raise ValueError(
                     "regions_migration requires runner-config-v44 "
@@ -8231,6 +8373,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }:
                 raise ValueError(
                     "cultural_contact requires runner-config-v45 "
@@ -8254,6 +8397,97 @@ class SimulationRunnerConfig:
                 "runner-config-v45 requires cultural_contact "
                 "(code=v45_requires_cultural_contact)"
             )
+        if self.generational_narratives is not None:
+            if (
+                type(self.generational_narratives)
+                is not GenerationalNarrativesSpec
+            ):
+                raise TypeError(
+                    "generational_narratives must be GenerationalNarrativesSpec "
+                    "or None"
+                )
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V48:
+                _LOGGER.error(
+                    "generational_narratives_requires_v48 schema_version=%s "
+                    "reason_code=generational_narratives_requires_v48",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "generational_narratives requires runner-config-v48 "
+                    "(code=generational_narratives_requires_v48)"
+                )
+            if not self.v3_capability_flags.generational_population:
+                _LOGGER.error(
+                    "generational_narratives_requires_flag schema_version=%s "
+                    "reason_code=generational_narratives_requires_flag",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "generational_narratives requires generational_population "
+                    "(code=generational_narratives_requires_flag)"
+                )
+            if self.population_lifecycle is None:
+                _LOGGER.error(
+                    "generational_narratives_requires_lifecycle schema_version=%s "
+                    "reason_code=generational_narratives_requires_lifecycle",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "generational_narratives requires population_lifecycle "
+                    "(code=generational_narratives_requires_lifecycle)"
+                )
+            if self.cultural_feature_provenance is None:
+                _LOGGER.error(
+                    "generational_narratives_requires_cultural_provenance "
+                    "schema_version=%s "
+                    "reason_code=generational_narratives_requires_cultural_provenance",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "generational_narratives requires "
+                    "cultural_feature_provenance "
+                    "(code=generational_narratives_requires_cultural_provenance)"
+                )
+            if not any(
+                agent.cognition.cultural_narrative_mode
+                is CulturalNarrativeMode.DETERMINISTIC
+                for agent in self.agents
+            ):
+                _LOGGER.error(
+                    "generational_narratives_requires_narrative_mode "
+                    "schema_version=%s "
+                    "reason_code=generational_narratives_requires_narrative_mode",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "generational_narratives requires at least one deterministic "
+                    "cultural_narrative_mode "
+                    "(code=generational_narratives_requires_narrative_mode)"
+                )
+            _LOGGER.info(
+                "generational_narratives_schema_select schema_version=%s "
+                "mode=%s max_witnesses=%s max_records=%s max_transitions=%s "
+                "max_declared_chain=%s",
+                self.schema_version,
+                self.generational_narratives.generational_narratives_mode,
+                self.generational_narratives.max_witnesses,
+                self.generational_narratives.max_records,
+                self.generational_narratives.max_transitions,
+                self.generational_narratives.max_declared_chain,
+            )
+        if (
+            self.schema_version == RUNNER_SCHEMA_VERSION_V48
+            and self.generational_narratives is None
+        ):
+            _LOGGER.error(
+                "v48_requires_generational_narratives schema_version=%s "
+                "reason_code=v48_requires_generational_narratives",
+                self.schema_version,
+            )
+            raise ValueError(
+                "runner-config-v48 requires generational_narratives "
+                "(code=v48_requires_generational_narratives)"
+            )
         if migration_enabled and self.regions_migration is None:
             raise ValueError(
                 "multi_polity_migration requires regions_migration "
@@ -8266,6 +8500,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }
             and self.regions_migration is not None
         ):
@@ -8315,6 +8550,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -8435,6 +8671,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V45,
                     RUNNER_SCHEMA_VERSION_V46,
                     RUNNER_SCHEMA_VERSION_V47,
+                    RUNNER_SCHEMA_VERSION_V48,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -8513,6 +8750,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }
         ):
             _LOGGER.error(
@@ -8551,6 +8789,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V45,
                 RUNNER_SCHEMA_VERSION_V46,
                 RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -8704,6 +8943,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -8777,6 +9017,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -8850,6 +9091,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -8922,6 +9164,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -8993,6 +9236,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -9062,6 +9306,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -9173,6 +9418,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -9233,6 +9479,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -9288,6 +9535,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -9347,6 +9595,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -9402,6 +9651,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -9460,6 +9710,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -9523,6 +9774,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -9582,6 +9834,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -9613,6 +9866,7 @@ class SimulationRunnerConfig:
         if symbolic_on and self.schema_version not in {
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.symbolic_language_mode "
@@ -9660,7 +9914,10 @@ class SimulationRunnerConfig:
         translation_on = any(
             mode is TranslationMode.DETERMINISTIC for mode in translation_modes
         )
-        if translation_on and self.schema_version != RUNNER_SCHEMA_VERSION_V47:
+        if translation_on and self.schema_version not in {
+            RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
+        }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.translation_mode "
                 "reason_code=translation_requires_v47 schema_version=%s",
@@ -9731,6 +9988,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -9763,6 +10021,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }
         budget_schemas.add(RUNNER_SCHEMA_VERSION_V44)
         budget_schemas.add(RUNNER_SCHEMA_VERSION_V45)
@@ -9891,6 +10150,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -9939,6 +10199,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             from world.production import production_catalog_digest
 
@@ -10041,6 +10302,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V45,
             RUNNER_SCHEMA_VERSION_V46,
             RUNNER_SCHEMA_VERSION_V47,
+            RUNNER_SCHEMA_VERSION_V48,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(
