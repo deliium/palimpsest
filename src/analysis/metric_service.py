@@ -166,6 +166,14 @@ from analysis.symbolic_language_metrics import (
 )
 from analysis.technique_lifecycle_metrics import assemble_technique_lifecycle_metrics
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
+from analysis.translation_metrics import (
+    compute_cross_group_translation,
+    compute_cross_group_translation_metric,
+    compute_translation_influence,
+    compute_translation_influence_metric,
+    compute_translation_learning,
+    compute_translation_learning_metric,
+)
 from analysis.transmission_metrics import (
     compute_knowledge_diffusion,
     compute_rumor_distortion,
@@ -279,6 +287,7 @@ class MetricComputationInputs:
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
+    translation_analysis: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1150,6 +1159,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "society_divergence": inputs.society_divergence is not None,
         "society_isolation": inputs.society_isolation is not None,
         "contact_analysis": inputs.contact_analysis is not None,
+        "translation_analysis": inputs.translation_analysis is not None,
     }
     _LOG.debug(
         "metric_optional_inputs",
@@ -1383,6 +1393,36 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 "symbolic_message_flow",
                 lambda: compute_symbolic_message_flow_metric(
                     flow,
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+
+    if inputs.translation_analysis is not None:
+        from analysis.translation_metrics import TranslationAnalysisInputs
+
+        if type(inputs.translation_analysis) is TranslationAnalysisInputs:
+            translation_inputs = inputs.translation_analysis
+            _safe(
+                "translation_learning",
+                lambda: compute_translation_learning_metric(
+                    compute_translation_learning(translation_inputs),
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "cross_group_translation",
+                lambda: compute_cross_group_translation_metric(
+                    compute_cross_group_translation(translation_inputs),
+                    run_id=run_id,
+                    input_revision=revision,
+                ),
+            )
+            _safe(
+                "translation_influence",
+                lambda: compute_translation_influence_metric(
+                    compute_translation_influence(translation_inputs),
                     run_id=run_id,
                     input_revision=revision,
                 ),

@@ -112,6 +112,7 @@ def assemble_arm_metric_bundle(
     """Assemble run-level catalog metrics without requiring experiment membership."""
     from analysis.models import MemoryDynamicsReport
     from analysis.semantic_drift_metrics import semantic_analysis_inputs_from_harvest
+    from analysis.translation_metrics import translation_analysis_inputs_from_harvest
     from experiments.composition import (
         convention_habit_rows_from_ledgers,
         cultural_channel_rows_from_convention_habits,
@@ -155,6 +156,9 @@ def assemble_arm_metric_bundle(
     symbolic_ledgers = getattr(arm, "symbolic_ledgers", None)
     if symbolic_ledgers is None:
         symbolic_ledgers = getattr(arm.runner_result, "symbolic_ledgers", None)
+    translation_ledgers = getattr(arm, "translation_ledgers", None)
+    if translation_ledgers is None:
+        translation_ledgers = getattr(arm.runner_result, "translation_ledgers", None)
     semantic_communities: tuple[object, ...] = ()
     semantic_generation_map = getattr(arm, "generation_index_by_owner", None)
     if semantic_generation_map is None:
@@ -560,6 +564,22 @@ def assemble_arm_metric_bundle(
                 communities=semantic_communities,
                 generation_index_by_owner=semantic_generation_map,
                 expected_owner_count=len(agent_ids),
+            ),
+        )
+    if translation_ledgers is not None:
+        owner_entity_ids = {
+            agent.agent_id.value: agent.entity_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        inputs = replace(
+            inputs,
+            translation_analysis=translation_analysis_inputs_from_harvest(
+                translation_ledgers=translation_ledgers,
+                naming_ledgers=naming_ledgers or (),
+                events=events or (),
+                communities=semantic_communities,
+                expected_owner_count=len(agent_ids),
+                owner_entity_ids=owner_entity_ids,
             ),
         )
     return assemble_metric_documents(inputs)

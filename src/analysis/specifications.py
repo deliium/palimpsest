@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 109
+METRIC_FAMILY_COUNT: Final[int] = 112
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -184,6 +184,9 @@ class MetricFamilyId(StrEnum):
     SEMANTIC_STABILITY = "semantic_stability"
     SEMANTIC_DRIFT = "semantic_drift"
     SEMANTIC_DIVERGENCE = "semantic_divergence"
+    TRANSLATION_LEARNING = "translation_learning"
+    CROSS_GROUP_TRANSLATION = "cross_group_translation"
+    TRANSLATION_INFLUENCE = "translation_influence"
 
 
 class DenominatorKind(StrEnum):
@@ -2250,6 +2253,150 @@ def _spec_inheritance_convention_distribution() -> MetricSpecification:
         },
         value_keys=("contested_count", "convention_histogram", "unformed_count"),
         empty_case="availability=absent; no_possession_succession",
+    )
+
+
+def _spec_translation_learning() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TRANSLATION_LEARNING,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_translation_ledgers",
+        denominator="owner_mapping_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick owner translation ledger",
+        deceased_policy="dead owners keep their stored mappings",
+        zero_holding_policy="no mapping -> availability=absent",
+        opportunity_vs_occurrence="stored hypotheses only; never a dictionary",
+        self_edge_policy="not_applicable",
+        censoring_policy="mapping tokens are digests; no raw term is exported",
+        formulas={
+            "mapping_count": "mappings in detached owner ledgers",
+            "active_count": "mappings whose status is active",
+            "candidate_count": "mappings whose status is candidate",
+            "retired_count": "mappings whose status is retired",
+            "fit_counts": "owner structural self-assessment histogram",
+            "target_count": "sum of bounded targets",
+            "multi_target_count": "mappings with more than one target",
+            "evidence_count": "sum of bounded evidence items",
+            "usage_count": "sum of bounded application uses",
+            "channel_counts": "closed evidence channel histogram",
+            "strength_band_counts": "closed strength band histogram",
+        },
+        value_keys=(
+            "mapping_count",
+            "active_count",
+            "candidate_count",
+            "retired_count",
+            "fit_counts",
+            "target_count",
+            "multi_target_count",
+            "evidence_count",
+            "usage_count",
+            "channel_counts",
+            "strength_band_counts",
+        ),
+        empty_case="availability=absent; no translation mappings",
+    )
+
+
+def _spec_cross_group_translation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CROSS_GROUP_TRANSLATION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.COMMUNICATED_TRACE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="cross_community_delivered_foreign_terms",
+        denominator="classified_cross_community_terms",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick delivered call relations",
+        deceased_policy="stored rows remain analysable",
+        zero_holding_policy="no delivered term -> availability=absent",
+        opportunity_vs_occurrence="speaker intent is an inter-subjective proxy",
+        self_edge_policy="same community is not a cross-group pair",
+        censoring_policy="unresolved and unresolved_intent are coverage gaps",
+        formulas={
+            "delivered_count": "cross-community delivered foreign terms",
+            "mapped_count": "interpreted through an owner mapping",
+            "unmapped_count": "interpreted without any mapping or own binding",
+            "mapping_source_count": "interpretations from a mapping",
+            "own_binding_source_count": "same-surface own binding interpretations",
+            "exact_count": "same kind and opaque referent as speaker intent",
+            "partial_count": "speaker referent among alternatives but not top",
+            "ambiguous_count": "multiple eligible targets remain",
+            "wrong_count": "a resolved target points elsewhere",
+            "unresolved_count": "no active mapping and no own binding",
+            "unresolved_intent_count": "speaker intent unavailable (coverage gap)",
+            "rates": "rates use exact+partial+ambiguous+wrong denominator",
+            "dominant_channel_counts": "channel histogram for classified terms",
+            "cross_community_pair_count": "distinct cross-community pairs",
+        },
+        value_keys=(
+            "delivered_count",
+            "mapped_count",
+            "unmapped_count",
+            "mapping_source_count",
+            "own_binding_source_count",
+            "exact_count",
+            "partial_count",
+            "ambiguous_count",
+            "wrong_count",
+            "unresolved_count",
+            "unresolved_intent_count",
+            "cross_community_pair_count",
+            "community_pair_count",
+            "dominant_channel_counts",
+            "rates",
+        ),
+        empty_case="availability=absent; no cross-community terms",
+    )
+
+
+def _spec_translation_influence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TRANSLATION_INFLUENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.COMMUNICATED_TRACE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="owner_translation_applications",
+        denominator="mapping_application_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick recorded applications",
+        deceased_policy="stored applications remain analysable",
+        zero_holding_policy="no application -> availability=absent",
+        opportunity_vs_occurrence="descriptive association; never causal",
+        self_edge_policy="not_applicable",
+        censoring_policy="wrong mappings are not corrected by the engine",
+        formulas={
+            "overlay_count": "communicated-memory overlay relations",
+            "translated_relation_count": "translated relation copies",
+            "symbolic_interpretation_count": "symbolic part substitutions",
+            "outbound_rewrite_count": "ordinary speech rewrites",
+            "talk_rewrite_count": "Talk rewrites",
+            "ask_rewrite_count": "Ask rewrites",
+            "tell_rewrite_count": "Tell rewrites",
+            "wrong_mapping_influence_count": "applications of later-wrong mappings",
+            "ambiguous_skip_count": "ambiguous applications/skips",
+            "affected_owner_count": "owners with at least one application",
+        },
+        value_keys=(
+            "overlay_count",
+            "translated_relation_count",
+            "symbolic_interpretation_count",
+            "outbound_rewrite_count",
+            "talk_rewrite_count",
+            "ask_rewrite_count",
+            "tell_rewrite_count",
+            "wrong_mapping_influence_count",
+            "ambiguous_skip_count",
+            "affected_owner_count",
+        ),
+        empty_case="availability=absent; no translation applications",
     )
 
 
@@ -4917,6 +5064,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_semantic_stability,
     _spec_semantic_drift,
     _spec_semantic_divergence,
+    _spec_translation_learning,
+    _spec_cross_group_translation,
+    _spec_translation_influence,
 )
 
 
