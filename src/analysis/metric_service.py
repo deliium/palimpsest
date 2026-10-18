@@ -123,6 +123,15 @@ from analysis.regional_population import (
 )
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.reputation_metrics import compute_distributed_reputation
+from analysis.semantic_drift_metrics import (
+    SemanticAnalysisInputs,
+    compute_semantic_divergence,
+    compute_semantic_divergence_metric,
+    compute_semantic_drift,
+    compute_semantic_drift_metric,
+    compute_semantic_stability,
+    compute_semantic_stability_metric,
+)
 from analysis.serialization import (
     encode_metric_document,
     metric_document_fingerprint,
@@ -269,6 +278,7 @@ class MetricComputationInputs:
     society_community_count: int = 0
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
+    semantic_drift_analysis: SemanticAnalysisInputs | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1377,6 +1387,33 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     input_revision=revision,
                 ),
             )
+
+    if inputs.semantic_drift_analysis is not None:
+        semantic = inputs.semantic_drift_analysis
+        _safe(
+            "semantic_stability",
+            lambda: compute_semantic_stability_metric(
+                compute_semantic_stability(semantic),
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "semantic_drift",
+            lambda: compute_semantic_drift_metric(
+                compute_semantic_drift(semantic),
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "semantic_divergence",
+            lambda: compute_semantic_divergence_metric(
+                compute_semantic_divergence(semantic),
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
 
     if inputs.regional_population is not None:
         regional_inputs = inputs.regional_population

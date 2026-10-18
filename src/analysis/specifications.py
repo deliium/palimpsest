@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 106
+METRIC_FAMILY_COUNT: Final[int] = 109
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -181,6 +181,9 @@ class MetricFamilyId(StrEnum):
     SYMBOLIC_COMPOSITION = "symbolic_composition"
     SYMBOLIC_SOCIAL_DISTRIBUTION = "symbolic_social_distribution"
     SYMBOLIC_MESSAGE_FLOW = "symbolic_message_flow"
+    SEMANTIC_STABILITY = "semantic_stability"
+    SEMANTIC_DRIFT = "semantic_drift"
+    SEMANTIC_DIVERGENCE = "semantic_divergence"
 
 
 class DenominatorKind(StrEnum):
@@ -4682,6 +4685,128 @@ def _spec_symbolic_message_flow() -> MetricSpecification:
     )
 
 
+def _spec_semantic_stability() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SEMANTIC_STABILITY,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_semantic_sense_rows",
+        denominator="terms_with_two_or_more_sense_records",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="owner-scoped sense history ordered by logical tick",
+        deceased_policy="sense history remains after death",
+        zero_holding_policy="no term with two senses -> availability=absent",
+        opportunity_vs_occurrence="each recorded sense pair is one transition",
+        self_edge_policy="owner and term digests identify one private sense history",
+        censoring_policy="missing generation rows are coverage gaps, not zeros",
+        formulas={
+            "retention_rate": "retained transitions / observed transitions",
+            "cross_generation_stability_rate": (
+                "stable cross-generation terms / observed cross-generation terms"
+            ),
+            "mean_sense_revision": "mean of each term's maximum sense revision",
+        },
+        value_keys=(
+            "cross_generation_stability_rate",
+            "cross_generation_stable_count",
+            "cross_generation_term_count",
+            "mean_sense_revision",
+            "observed_term_count",
+            "retained_transition_count",
+            "retention_rate",
+            "stable_association_count",
+            "stable_referent_count",
+            "term_count",
+            "transition_count",
+        ),
+        empty_case="no term with two sense records -> availability=absent",
+        one_case="one two-sense term reports its own retention",
+        unknown_case=(
+            "missing referents are unknown coverage gaps, never treated as shared"
+        ),
+    )
+
+
+def _spec_semantic_drift() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SEMANTIC_DRIFT,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_semantic_sense_and_usage_rows",
+        denominator="consecutive_sense_transition_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="owner-scoped sense history ordered by logical tick",
+        deceased_policy="sense and usage rows remain after death",
+        zero_holding_policy="zero transitions report zero counts and no rate",
+        opportunity_vs_occurrence="usage contexts never double-count transitions",
+        self_edge_policy="each transition joins two records of the same owner term",
+        censoring_policy="unknown referents are excluded from referent switches",
+        formulas={
+            "drift_rate": "referent switches / observed transitions",
+            "mean_jaccard_distance": "mean 1 - Jaccard of adjacent association sets",
+            "mean_ticks_between_changes": "mean tick gap where a sense changed",
+        },
+        value_keys=(
+            "association_change_count",
+            "channel_communicated_count",
+            "channel_observed_count",
+            "channel_remembered_count",
+            "channel_self_use_count",
+            "drift_rate",
+            "mean_jaccard_distance",
+            "mean_ticks_between_changes",
+            "multi_referent_term_count",
+            "referent_switch_count",
+            "revision_count",
+            "transition_count",
+            "usage_context_count",
+        ),
+        empty_case="no sense or usage rows -> availability=absent",
+        one_case="one transition reports only its recorded change",
+        unknown_case=(
+            "unknown referents are excluded; zero change is not a success failure"
+        ),
+    )
+
+
+def _spec_semantic_divergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.SEMANTIC_DIVERGENCE,
+        evidence_inputs=frozenset({EvidenceStage.RECONSTRUCTION}),
+        population="detached_semantic_and_candidate_group_rows",
+        denominator="assigned_semantic_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="referent distributions by candidate group and generation",
+        deceased_policy="owner sense rows remain after death",
+        zero_holding_policy="no communities and no generations -> availability=absent",
+        opportunity_vs_occurrence="each referent digest contributes one observation",
+        self_edge_policy="owner-scoped senses are grouped only by detached membership",
+        censoring_policy="unknown referents are coverage gaps, never shared zeros",
+        formulas={
+            "pairwise_divergence": (
+                "mean Jensen-Shannon divergence over referent distributions"
+            ),
+            "cross_generation_continuity": (
+                "terms with the same referent in the first and last observed generation"
+            ),
+        },
+        value_keys=(
+            "between_generation_divergence",
+            "between_group_divergence",
+            "cross_generation_continuity",
+            "generation_count",
+            "group_count",
+            "pairwise_divergence",
+            "unknown_referent_count",
+            "within_generation_divergence",
+            "within_group_divergence",
+        ),
+        empty_case="no groups or generations -> availability=absent",
+        one_case="one group reports no pairwise divergence",
+        unknown_case=(
+            "unknown referents are coverage gaps; "
+            "divergence is not a correctness verdict"
+        ),
+    )
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -4789,6 +4914,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_symbolic_composition,
     _spec_symbolic_social_distribution,
     _spec_symbolic_message_flow,
+    _spec_semantic_stability,
+    _spec_semantic_drift,
+    _spec_semantic_divergence,
 )
 
 
