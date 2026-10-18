@@ -49,6 +49,7 @@ _MERGE_JACCARD: Final[float] = 0.50
 _UTTERANCE_INTERVAL: Final[int] = 4
 _MAX_BINDINGS: Final[int] = 16
 _MAX_EVIDENCE: Final[int] = 32
+_MAX_SENSE_HISTORY: Final[int] = 16
 _MAX_CANDIDATES: Final[int] = 4
 _MAX_COMPETITORS: Final[int] = 4
 _MAX_MERGE_FAN_IN: Final[int] = 4
@@ -108,6 +109,8 @@ __all__ = [
     "NamingEvidenceChannel",
     "NamingEvidenceItem",
     "NamingReferentKind",
+    "NamingSenseRecord",
+    "NamingSenseTrigger",
     "NamingStatus",
     "NamingStrengthBand",
     "NamingTransmission",
@@ -170,6 +173,14 @@ class NamingStrengthBand(StrEnum):
     LOW = "low"
     MID = "mid"
     HIGH = "high"
+
+
+class NamingSenseTrigger(StrEnum):
+    """Closed reason a sense record was appended."""
+
+    PROMOTED = "promoted"
+    SHIFTED = "shifted"
+    MERGED = "merged"
 
 
 def _fail(field_name: str, code: str) -> ValueError:
@@ -374,6 +385,53 @@ class NamingEvidenceItem:
 
 
 @dataclass(frozen=True, slots=True)
+class NamingSenseRecord:
+    """One bounded observation of what a label meant to its owner."""
+
+    ordinal: int
+    tick: int
+    trigger: NamingSenseTrigger
+    referent_kind: NamingReferentKind
+    referent_id: str
+    associated_ids: tuple[str, ...] = ()
+    confidence: float = 0.0
+
+    def __post_init__(self) -> None:
+        if isinstance(self.ordinal, bool) or type(self.ordinal) is not int:
+            raise _fail("sense.ordinal", "invalid_type")
+        if self.ordinal < 0:
+            raise _fail("sense.ordinal", "out_of_range")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("NamingSenseRecord.tick", self.tick),
+        )
+        if type(self.trigger) is not NamingSenseTrigger:
+            raise _fail("sense.trigger", "unknown_trigger")
+        if type(self.referent_kind) is not NamingReferentKind:
+            raise _fail("sense.referent_kind", "unknown_kind")
+        if not isinstance(self.referent_id, str) or not self.referent_id:
+            raise _fail("sense.referent_id", "invalid_type")
+        confidence = _finite("sense.confidence", self.confidence)
+        quantized = _quantize(confidence)
+        if quantized < 0.0 or quantized > 1.0:
+            raise _fail("sense.confidence", "out_of_range")
+        object.__setattr__(self, "confidence", quantized)
+        associated: list[str] = []
+        seen: set[str] = set()
+        for item in _require_tuple("sense.associated_ids", self.associated_ids):
+            if not isinstance(item, str) or not item:
+                raise _fail("sense.associated_ids", "invalid_type")
+            if item == self.referent_id:
+                raise _fail("sense.associated_ids", "referent_included")
+            if item in seen:
+                raise _fail("sense.associated_ids", "duplicate_associated")
+            seen.add(item)
+            associated.append(item)
+        object.__setattr__(self, "associated_ids", tuple(associated))
+
+
+@dataclass(frozen=True, slots=True)
 class NamingUtterancePlan:
     """Relation recipe the planner may place on an existing talk future."""
 
@@ -419,6 +477,7 @@ class LabelBinding:
     meaning_shift_streak: int = 0
     pending_top_id: str | None = None
     notices: tuple[str, ...] = ()
+    sense_history: tuple[NamingSenseRecord, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -541,10 +600,28 @@ class LabelBinding:
                 raise _fail("notices", "invalid_notice")
             if item not in checked_notices:
                 checked_notices.append(item)
+        history: list[NamingSenseRecord] = []
+        previous_ordinal = -1
+        previous_tick = -1
+        for item in _require_tuple("sense_history", self.sense_history):
+            if type(item) is not NamingSenseRecord:
+                raise _fail("sense_history", "invalid_type")
+            if item.ordinal <= previous_ordinal:
+                raise _fail("sense_history.ordinal", "not_monotonic")
+            if item.tick < previous_tick:
+                raise _fail("sense_history.tick", "not_monotonic")
+            if item.referent_kind is not self.referent_kind:
+                raise _fail("sense_history.referent_kind", "kind_mismatch")
+            previous_ordinal = item.ordinal
+            previous_tick = item.tick
+            history.append(item)
+        if len(history) > _MAX_SENSE_HISTORY:
+            raise _fail("sense_history", "cap_exceeded")
         object.__setattr__(self, "candidates", tuple(checked_candidates))
         object.__setattr__(self, "competing_label_ids", tuple(checked_competitors))
         object.__setattr__(self, "evidence", tuple(checked_evidence))
         object.__setattr__(self, "notices", tuple(checked_notices))
+        object.__setattr__(self, "sense_history", tuple(history))
 
 
 @dataclass(frozen=True, slots=True)
@@ -816,6 +893,7 @@ class _BindingDraft:
     evidence: list[NamingEvidenceItem]
     last_utterance_tick: int | None
     meaning_shift_streak: int
+    sense_history: list[NamingSenseRecord] = field(default_factory=list)
     notices: list[str] = field(default_factory=list)
     touched: bool = False
     pending_top_id: str | None = None
@@ -911,6 +989,7 @@ def _drafts_from(
                 evidence=list(binding.evidence),
                 last_utterance_tick=binding.last_utterance_tick,
                 meaning_shift_streak=binding.meaning_shift_streak,
+                sense_history=list(binding.sense_history),
                 notices=list(binding.notices),
                 pending_top_id=binding.pending_top_id,
             )
@@ -944,6 +1023,48 @@ def _top_candidate(draft: _BindingDraft) -> NamingCandidate | None:
     if not draft.candidates:
         return None
     return max(draft.candidates, key=lambda item: (item.confidence, item.entity_id))
+
+
+def _associated_candidate_ids(
+    candidates: Sequence[NamingCandidate], referent_id: str
+) -> tuple[str, ...]:
+    ordered = sorted(candidates, key=lambda item: (-item.confidence, item.entity_id))
+    return tuple(
+        dict.fromkeys(
+            item.entity_id for item in ordered if item.entity_id != referent_id
+        )
+    )
+
+
+def _append_sense(
+    draft: _BindingDraft,
+    *,
+    owner_id: AgentId,
+    tick: int,
+    trigger: NamingSenseTrigger,
+    referent_kind: NamingReferentKind,
+    referent_id: str,
+    associated_ids: Sequence[str],
+    confidence: float,
+) -> None:
+    ordinal = 0 if not draft.sense_history else draft.sense_history[-1].ordinal + 1
+    record = NamingSenseRecord(
+        ordinal=ordinal,
+        tick=tick,
+        trigger=trigger,
+        referent_kind=referent_kind,
+        referent_id=referent_id,
+        associated_ids=tuple(associated_ids),
+        confidence=confidence,
+    )
+    draft.sense_history = [*draft.sense_history, record][-_MAX_SENSE_HISTORY:]
+    _LOG.debug(
+        "naming_sense_appended owner_id=%s trigger=%s tick=%s record_count=%s",
+        owner_id.value,
+        trigger.value,
+        tick,
+        len(draft.sense_history),
+    )
 
 
 def _upsert_candidate(
@@ -1580,6 +1701,16 @@ def _promote(
             _LOG.warning("naming_binding_withheld reason=%s", "below_strength")
             continue
         draft.status = NamingStatus.ACTIVE
+        _append_sense(
+            draft,
+            owner_id=owner_id,
+            tick=tick,
+            trigger=NamingSenseTrigger.PROMOTED,
+            referent_kind=top.kind,
+            referent_id=top.entity_id,
+            associated_ids=_associated_candidate_ids(draft.candidates, top.entity_id),
+            confidence=top.confidence,
+        )
         _LOG.debug(
             "naming_binding_promoted owner_id=%s tick=%s status=%s",
             owner_id.value,
@@ -1681,6 +1812,20 @@ def _merge(
                     continue
                 stronger.evidence.append(item)
             stronger.touched = True
+            stronger_top = _top_candidate(stronger)
+            if stronger_top is not None:
+                _append_sense(
+                    stronger,
+                    owner_id=owner_id,
+                    tick=tick,
+                    trigger=NamingSenseTrigger.MERGED,
+                    referent_kind=stronger_top.kind,
+                    referent_id=stronger_top.entity_id,
+                    associated_ids=_associated_candidate_ids(
+                        weaker.candidates, stronger_top.entity_id
+                    ),
+                    confidence=stronger_top.confidence,
+                )
             _LOG.debug(
                 "naming_labels_merged owner_id=%s tick=%s status=%s",
                 owner_id.value,
@@ -1727,6 +1872,18 @@ def _meaning_shift(
                 draft.sense_revision += 1
                 draft.meaning_shift_streak = 0
                 draft.candidates = list(ordered)
+                _append_sense(
+                    draft,
+                    owner_id=owner_id,
+                    tick=tick,
+                    trigger=NamingSenseTrigger.SHIFTED,
+                    referent_kind=top.kind,
+                    referent_id=top.entity_id,
+                    associated_ids=_associated_candidate_ids(
+                        draft.candidates, top.entity_id
+                    ),
+                    confidence=top.confidence,
+                )
                 _LOG.debug(
                     "naming_meaning_shifted owner_id=%s tick=%s status=%s",
                     owner_id.value,
@@ -1816,6 +1973,7 @@ def _freeze(
                 meaning_shift_streak=draft.meaning_shift_streak,
                 pending_top_id=draft.pending_top_id,
                 notices=tuple(draft.notices),
+                sense_history=tuple(draft.sense_history),
             )
         )
     return TerminologyLedger(
@@ -1897,9 +2055,10 @@ def apply_naming_update(
     _decay(drafts, owner_id, tick, active_policy)
     ledger = _freeze(owner_id, drafts, notices)
     _LOG.info(
-        "naming_ledger_updated owner_id=%s binding_count=%s",
+        "naming_ledger_updated owner_id=%s binding_count=%s sense_count=%s",
         owner_id.value,
         len(ledger.bindings),
+        sum(len(binding.sense_history) for binding in ledger.bindings),
     )
     return ledger
 

@@ -2836,6 +2836,9 @@ class SimulationRunner:
             mentorship_audits=self.export_mentorship_audits(),
             cultural_feature_audits=self.export_cultural_feature_audits(),
             practical_knowledge_audits=self.export_practical_knowledge_audits(),
+            terminology_ledgers=self.export_terminology_ledgers(),
+            symbolic_ledgers=self.export_symbolic_ledgers(),
+            initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
         mentorship_audit_count = len(result.mentorship_audits)
         cultural_audit_count = len(result.cultural_feature_audits)
@@ -3081,6 +3084,38 @@ class SimulationRunner:
             len(collected),
         )
         return tuple(collected)
+
+    def export_terminology_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered naming ledgers. Disabled owners contribute nothing."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "semantic_naming", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("runner_terminology_ledger_export ledger_count=%s", len(ledgers))
+        return tuple(ledgers)
+
+    def export_symbolic_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered symbolic ledgers. Disabled owners contribute nothing."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "symbolic_language", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("runner_symbolic_ledger_export ledger_count=%s", len(ledgers))
+        return tuple(ledgers)
+
+    def export_initial_lifecycle_records(self) -> tuple[object, ...]:
+        """Export the engine's authoritative lifecycle ledger in insertion order."""
+        records = tuple(self._engine.lifecycle_records)
+        _LOG.info(
+            "runner_lifecycle_record_export record_count=%s", len(records)
+        )
+        return records
 
     def export_skill_audits(self) -> tuple[SkillAudit, ...]:
         """Harvest objective and subjective skill rows. Not part of result JSON."""

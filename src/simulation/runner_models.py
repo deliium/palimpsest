@@ -5785,6 +5785,9 @@ class SimulationRunnerResult:
     mentorship_audits: tuple[object, ...] = ()
     cultural_feature_audits: tuple[object, ...] = ()
     practical_knowledge_audits: tuple[object, ...] = ()
+    terminology_ledgers: tuple[object, ...] = ()
+    symbolic_ledgers: tuple[object, ...] = ()
+    initial_lifecycle_records: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
         from simulation.models import RunId
@@ -5951,6 +5954,33 @@ class SimulationRunnerResult:
             if type(row) is not PracticalKnowledgeAudit:
                 raise TypeError("practical_knowledge_audits: invalid_item")
         object.__setattr__(self, "practical_knowledge_audits", pk_rows)
+        if isinstance(self.terminology_ledgers, (set, frozenset)):
+            raise TypeError("terminology_ledgers must be ordered")
+        from agents.cognition.semantic_naming import TerminologyLedger
+
+        terminology = tuple(self.terminology_ledgers)
+        for ledger in terminology:
+            if type(ledger) is not TerminologyLedger:
+                raise TypeError("terminology_ledgers: invalid_item")
+        object.__setattr__(self, "terminology_ledgers", terminology)
+        if isinstance(self.symbolic_ledgers, (set, frozenset)):
+            raise TypeError("symbolic_ledgers must be ordered")
+        from agents.cognition.symbolic_language import SymbolicLedger
+
+        symbolic = tuple(self.symbolic_ledgers)
+        for ledger in symbolic:
+            if type(ledger) is not SymbolicLedger:
+                raise TypeError("symbolic_ledgers: invalid_item")
+        object.__setattr__(self, "symbolic_ledgers", symbolic)
+        if isinstance(self.initial_lifecycle_records, (set, frozenset)):
+            raise TypeError("initial_lifecycle_records must be ordered")
+        from world.lifecycle import AgentLifecycleRecord
+
+        lifecycle = tuple(self.initial_lifecycle_records)
+        for record in lifecycle:
+            if type(record) is not AgentLifecycleRecord:
+                raise TypeError("initial_lifecycle_records: invalid_item")
+        object.__setattr__(self, "initial_lifecycle_records", lifecycle)
 
 
 class CognitionFailurePolicy(StrEnum):

@@ -46,6 +46,7 @@ _SELF_USE_DELTA: Final[float] = 0.06
 _PROMOTION_COUNT: Final[int] = 3
 _MAX_COMPOSITIONS: Final[int] = 8
 _MAX_EVIDENCE: Final[int] = 24
+_MAX_SENSE_HISTORY: Final[int] = 16
 _MAX_PER_MESSAGE: Final[int] = 2
 _MAX_INTERPRETATIONS: Final[int] = 32
 _MEANING_SHIFT_TICKS: Final[int] = 6
@@ -116,6 +117,8 @@ __all__ = [
     "SymbolicLedger",
     "SymbolicParseOutcome",
     "SymbolicReferentHypothesis",
+    "SymbolicSenseRecord",
+    "SymbolicSenseTrigger",
     "SymbolicStatus",
     "SymbolicStrengthBand",
     "SymbolicUtterancePlan",
@@ -171,6 +174,13 @@ class SymbolicStrengthBand(StrEnum):
     LOW = "low"
     MID = "mid"
     HIGH = "high"
+
+
+class SymbolicSenseTrigger(StrEnum):
+    """Closed reason a symbolic sense record was appended."""
+
+    PROMOTED = "promoted"
+    SHIFTED = "shifted"
 
 
 def _fail(field_name: str, code: str) -> ValueError:
@@ -376,6 +386,49 @@ class SymbolicEvidenceItem:
 
 
 @dataclass(frozen=True, slots=True)
+class SymbolicSenseRecord:
+    """One bounded observation of what a composition meant to its owner."""
+
+    ordinal: int
+    tick: int
+    trigger: SymbolicSenseTrigger
+    referent_kind: NamingReferentKind | None
+    confidence: float | None
+    associated_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if isinstance(self.ordinal, bool) or type(self.ordinal) is not int:
+            raise _fail("sense.ordinal", "invalid_type")
+        if self.ordinal < 0:
+            raise _fail("sense.ordinal", "out_of_range")
+        object.__setattr__(
+            self,
+            "tick",
+            require_exact_nonneg_int("SymbolicSenseRecord.tick", self.tick),
+        )
+        if type(self.trigger) is not SymbolicSenseTrigger:
+            raise _fail("sense.trigger", "unknown_trigger")
+        if self.referent_kind is not None:
+            if type(self.referent_kind) is not NamingReferentKind:
+                raise _fail("sense.referent_kind", "unknown_kind")
+        if self.confidence is not None:
+            quantized = _quantize(_finite("sense.confidence", self.confidence))
+            if quantized < 0.0 or quantized > 1.0:
+                raise _fail("sense.confidence", "out_of_range")
+            object.__setattr__(self, "confidence", quantized)
+        associated: list[str] = []
+        seen: set[str] = set()
+        for item in _require_tuple("sense.associated_ids", self.associated_ids):
+            if not isinstance(item, str) or not item:
+                raise _fail("sense.associated_ids", "invalid_type")
+            if item in seen:
+                raise _fail("sense.associated_ids", "duplicate_associated")
+            seen.add(item)
+            associated.append(item)
+        object.__setattr__(self, "associated_ids", tuple(associated))
+
+
+@dataclass(frozen=True, slots=True)
 class SymbolicComposition:
     """One owner's private binary composition of two active labels."""
 
@@ -396,6 +449,7 @@ class SymbolicComposition:
     evidence: tuple[SymbolicEvidenceItem, ...] = ()
     pending_referent_kind: NamingReferentKind | None = None
     meaning_shift_streak: int = 0
+    sense_history: tuple[SymbolicSenseRecord, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -461,6 +515,22 @@ class SymbolicComposition:
             if item not in checked_notices:
                 checked_notices.append(item)
         object.__setattr__(self, "notices", tuple(checked_notices))
+        history: list[SymbolicSenseRecord] = []
+        previous_ordinal = -1
+        previous_tick = -1
+        for item in _require_tuple("sense_history", self.sense_history):
+            if type(item) is not SymbolicSenseRecord:
+                raise _fail("sense_history", "invalid_type")
+            if item.ordinal <= previous_ordinal:
+                raise _fail("sense_history.ordinal", "not_monotonic")
+            if item.tick < previous_tick:
+                raise _fail("sense_history.tick", "not_monotonic")
+            previous_ordinal = item.ordinal
+            previous_tick = item.tick
+            history.append(item)
+        if len(history) > _MAX_SENSE_HISTORY:
+            raise _fail("sense_history", "cap_exceeded")
+        object.__setattr__(self, "sense_history", tuple(history))
         expected = composition_id(self.owner_id, self.kind, parts)
         if self.composition_id != expected:
             raise _fail("composition_id", "id_mismatch")
@@ -701,6 +771,7 @@ class _CompositionDraft:
     last_utterance_tick: int | None
     sense_revision: int
     evidence: list[SymbolicEvidenceItem]
+    sense_history: list[SymbolicSenseRecord] = field(default_factory=list)
     pending_referent_kind: NamingReferentKind | None = None
     meaning_shift_streak: int = 0
     notices: list[str] = field(default_factory=list)
@@ -727,6 +798,7 @@ def _drafts_from(
             last_utterance_tick=item.last_utterance_tick,
             sense_revision=item.sense_revision,
             evidence=list(item.evidence),
+            sense_history=list(item.sense_history),
             pending_referent_kind=item.pending_referent_kind,
             meaning_shift_streak=item.meaning_shift_streak,
             notices=list(item.notices),
@@ -781,6 +853,52 @@ def _top_entity(binding: LabelBinding) -> tuple[NamingReferentKind, str] | None:
         binding.candidates, key=lambda item: (-item.confidence, item.entity_id)
     )
     return ordered[0].kind, ordered[0].entity_id
+
+
+def _part_associated_ids(
+    parts: tuple[str, str], bindings: Mapping[str, LabelBinding]
+) -> tuple[str, ...]:
+    found: list[str] = []
+    for part in parts:
+        binding = bindings.get(part)
+        if binding is None:
+            continue
+        top = _top_entity(binding)
+        if top is None:
+            continue
+        found.append(top[1])
+    return tuple(dict.fromkeys(found))
+
+
+def _append_sense(
+    draft: _CompositionDraft,
+    *,
+    owner_id: AgentId,
+    tick: int,
+    trigger: SymbolicSenseTrigger,
+    referent_kind: NamingReferentKind | None,
+    confidence: float | None,
+    associated_ids: Sequence[str],
+) -> None:
+    ordinal = 0 if not draft.sense_history else draft.sense_history[-1].ordinal + 1
+    draft.sense_history = [
+        *draft.sense_history,
+        SymbolicSenseRecord(
+            ordinal=ordinal,
+            tick=tick,
+            trigger=trigger,
+            referent_kind=referent_kind,
+            confidence=confidence,
+            associated_ids=tuple(associated_ids),
+        ),
+    ][-_MAX_SENSE_HISTORY:]
+    _LOG.debug(
+        "symbolic_sense_appended owner_id=%s trigger=%s tick=%s record_count=%s",
+        owner_id.value,
+        trigger.value,
+        tick,
+        len(draft.sense_history),
+    )
 
 
 def _record_evidence(
@@ -1146,6 +1264,7 @@ def _promote(
     tick: int,
     policy: SymbolicLanguagePolicy,
     notices: list[str],
+    bindings: Mapping[str, LabelBinding],
 ) -> None:
     for draft in drafts:
         if draft.status is not SymbolicStatus.CANDIDATE:
@@ -1157,6 +1276,18 @@ def _promote(
             _notice(notices, "below_strength")
             continue
         draft.status = SymbolicStatus.ACTIVE
+        hypothesis = draft.referent_hypothesis
+        referent_kind = None if hypothesis is None else hypothesis.referent_kind
+        confidence = None if hypothesis is None else hypothesis.confidence
+        _append_sense(
+            draft,
+            owner_id=owner_id,
+            tick=tick,
+            trigger=SymbolicSenseTrigger.PROMOTED,
+            referent_kind=referent_kind,
+            confidence=confidence,
+            associated_ids=_part_associated_ids(draft.parts, bindings),
+        )
         _LOG.debug(
             "symbolic_composition_promoted owner_id=%s tick=%s status=%s",
             owner_id.value,
@@ -1170,6 +1301,7 @@ def _meaning_shift(
     owner_id: AgentId,
     tick: int,
     policy: SymbolicLanguagePolicy,
+    bindings: Mapping[str, LabelBinding],
 ) -> None:
     for draft in drafts:
         if draft.status is not SymbolicStatus.ACTIVE:
@@ -1191,6 +1323,15 @@ def _meaning_shift(
             draft.pending_referent_kind = hypothesis.referent_kind
             draft.sense_revision += 1
             draft.meaning_shift_streak = 0
+            _append_sense(
+                draft,
+                owner_id=owner_id,
+                tick=tick,
+                trigger=SymbolicSenseTrigger.SHIFTED,
+                referent_kind=hypothesis.referent_kind,
+                confidence=hypothesis.confidence,
+                associated_ids=_part_associated_ids(draft.parts, bindings),
+            )
             _LOG.debug(
                 "symbolic_meaning_shifted owner_id=%s tick=%s",
                 owner_id.value,
@@ -1242,6 +1383,7 @@ def _freeze(
                 sense_revision=draft.sense_revision,
                 notices=tuple(draft.notices),
                 evidence=tuple(draft.evidence[-_MAX_EVIDENCE:]),
+                sense_history=tuple(draft.sense_history),
                 pending_referent_kind=draft.pending_referent_kind,
                 meaning_shift_streak=draft.meaning_shift_streak,
             )
@@ -1327,14 +1469,15 @@ def apply_symbolic_update(
         tick=tick,
         policy=active_policy,
     )
-    _promote(drafts, owner_id, tick, active_policy, notices)
-    _meaning_shift(drafts, owner_id, tick, active_policy)
+    _promote(drafts, owner_id, tick, active_policy, notices, bindings)
+    _meaning_shift(drafts, owner_id, tick, active_policy, bindings)
     _decay(drafts, owner_id, tick, active_policy)
     ledger = _freeze(owner_id, drafts, notices, interpretations)
     _LOG.info(
-        "symbolic_ledger_updated owner_id=%s composition_count=%s",
+        "symbolic_ledger_updated owner_id=%s composition_count=%s sense_count=%s",
         owner_id.value,
         len(ledger.compositions),
+        sum(len(item.sense_history) for item in ledger.compositions),
     )
     return ledger
 
