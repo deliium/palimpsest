@@ -22,6 +22,8 @@ from api.observer_schemas import (
     ObserverSymbolicCompositionOut,
     ObserverSymbolicOverlayOut,
     ObserverTickPageOut,
+    ObserverTranslationMappingOut,
+    ObserverTranslationOverlayOut,
     StrategyAuditEntryOut,
     StrategyAuditOverlayOut,
 )
@@ -32,6 +34,7 @@ from infrastructure.settings import Settings
 from observer.labels import (
     project_subjective_label_overlay,
     project_symbolic_overlay,
+    project_translation_overlay,
 )
 from observer.narrative_hops import project_narrative_hop_overlay
 from observer.version import DEFAULT_LAYOUT_ID
@@ -545,5 +548,57 @@ async def get_observer_symbolic_language(
                 sense_revision=item.sense_revision,
             )
             for item in overlay.compositions
+        ),
+    )
+
+
+@router.get(
+    "/{run_id}/observer/agents/{agent_id}/translation",
+    response_model=ObserverTranslationOverlayOut,
+)
+async def get_observer_translation(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+) -> ObserverTranslationOverlayOut:
+    started = time.perf_counter()
+    manager = getattr(request.app.state, "simulation_manager", None)
+    checkpoint = None
+    if manager is not None and hasattr(manager, "owner_runtime_checkpoint"):
+        checkpoint = manager.owner_runtime_checkpoint(run_id, agent_id)
+    ledger = None if checkpoint is None else getattr(checkpoint, "translation", None)
+    overlay = project_translation_overlay(agent_id, ledger)
+    _LOGGER.info(
+        "route_observer_translation",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/translation"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=len(overlay.mappings),
+    )
+    return ObserverTranslationOverlayOut(
+        run_id=run_id,
+        agent_id=overlay.agent_id,
+        layer=overlay.layer,
+        protocol_version=overlay.protocol_version,
+        count=len(overlay.mappings),
+        mappings=tuple(
+            ObserverTranslationMappingOut(
+                source_digest=item.source_digest,
+                target_label_digests=item.target_label_digests,
+                target_referent_kinds=item.target_referent_kinds,
+                target_referent_digests=item.target_referent_digests,
+                status=item.status,  # type: ignore[arg-type]
+                fit=item.fit,  # type: ignore[arg-type]
+                strength_band=item.strength_band,  # type: ignore[arg-type]
+                channel_counts=item.channel_counts,
+                usage_count=item.usage_count,
+                first_tick=item.first_tick,
+                last_tick=item.last_tick,
+            )
+            for item in overlay.mappings
         ),
     )

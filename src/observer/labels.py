@@ -277,11 +277,132 @@ def project_symbolic_overlay(agent_id: str, ledger: object | None) -> SymbolicOv
     return overlay
 
 
+@dataclass(frozen=True, slots=True)
+class TranslationMappingReading:
+    """Digest-only projection of one owner translation hypothesis."""
+
+    source_digest: str
+    target_label_digests: tuple[str, ...]
+    target_referent_kinds: tuple[str, ...]
+    target_referent_digests: tuple[str, ...]
+    status: str
+    fit: str
+    strength_band: str
+    channel_counts: tuple[str, ...]
+    usage_count: int
+    first_tick: int
+    last_tick: int
+
+    def __post_init__(self) -> None:
+        if type(self.source_digest) is not str or not self.source_digest:
+            raise TypeError("source_digest must be non-empty str")
+        for name in (
+            "target_label_digests",
+            "target_referent_kinds",
+            "target_referent_digests",
+            "channel_counts",
+        ):
+            values = tuple(getattr(self, name))
+            if any(type(item) is not str or not item for item in values):
+                raise TypeError(f"{name} entries must be non-empty str")
+            object.__setattr__(self, name, values)
+        if self.status not in {"candidate", "active", "retired"}:
+            raise ValueError("status must be a closed status")
+        if self.fit not in {"resolved", "partial", "ambiguous", "unresolved"}:
+            raise ValueError("fit must be a closed fit")
+        if self.strength_band not in _STRENGTH_BANDS:
+            raise ValueError("strength_band must be a closed band")
+        for name in ("usage_count", "first_tick", "last_tick"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or type(value) is not int or value < 0:
+                raise TypeError(f"{name} must be non-negative int")
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationOverlay:
+    """Additive researcher-only translation layer over one owner checkpoint."""
+
+    agent_id: str
+    mappings: tuple[TranslationMappingReading, ...]
+    layer: Literal["subjective_translation"] = "subjective_translation"
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+
+    def __post_init__(self) -> None:
+        if type(self.agent_id) is not str or not self.agent_id:
+            raise TypeError("agent_id must be non-empty str")
+        if self.layer != "subjective_translation":
+            raise ValueError("layer must be subjective_translation")
+        if self.protocol_version != OBSERVER_PROTOCOL_VERSION:
+            raise ValueError("unsupported_observer_protocol")
+        object.__setattr__(self, "mappings", tuple(self.mappings))
+        for item in self.mappings:
+            if type(item) is not TranslationMappingReading:
+                raise TypeError("mappings entries must be TranslationMappingReading")
+
+
+def project_translation_overlay(
+    agent_id: str, ledger: object | None
+) -> TranslationOverlay:
+    """Project duck-typed owner mappings without exposing raw tokens."""
+    if type(agent_id) is not str or not agent_id:
+        raise TypeError("agent_id must be non-empty str")
+    readings: list[TranslationMappingReading] = []
+    for mapping in getattr(ledger, "mappings", ()) or ():
+        source = getattr(mapping, "source_token", None)
+        if type(source) is not str or not source:
+            continue
+        targets = tuple(getattr(mapping, "targets", ()) or ())
+        labels: list[str] = []
+        kinds: list[str] = []
+        referents: list[str] = []
+        for target in targets:
+            token = getattr(target, "label_token", None)
+            if type(token) is not str or not token:
+                continue
+            labels.append(_surface_digest(f"label|{token}"))
+            kinds.append(_enum_value(getattr(target, "referent_kind", "location")))
+            referents.append(_surface_digest(f"target|{token}"))
+        channel_counts = sorted(
+            {
+                _enum_value(getattr(item, "channel", "context"))
+                for item in getattr(mapping, "evidence", ()) or ()
+            }
+        )
+        readings.append(
+            TranslationMappingReading(
+                source_digest=_surface_digest(f"translation|{source}"),
+                target_label_digests=tuple(labels),
+                target_referent_kinds=tuple(kinds),
+                target_referent_digests=tuple(referents),
+                status=_enum_value(getattr(mapping, "status", "candidate")),
+                fit=_enum_value(getattr(mapping, "fit", "unresolved")),
+                strength_band=_strength_band(
+                    _enum_value(getattr(mapping, "status", "candidate")),
+                    float(getattr(mapping, "strength", 0.0)),
+                ),
+                channel_counts=tuple(channel_counts),
+                usage_count=int(getattr(mapping, "usage_count", 0)),
+                first_tick=int(getattr(mapping, "first_tick", 0)),
+                last_tick=int(getattr(mapping, "last_tick", 0)),
+            )
+        )
+    overlay = TranslationOverlay(agent_id=agent_id, mappings=tuple(readings))
+    _LOGGER.debug(
+        "translation_overlay_projected agent_id=%s row_count=%s",
+        agent_id,
+        len(overlay.mappings),
+    )
+    return overlay
+
+
 __all__ = [
     "SubjectiveLabelOverlay",
     "SubjectiveLabelReading",
     "SymbolicCompositionReading",
     "SymbolicOverlay",
+    "TranslationMappingReading",
+    "TranslationOverlay",
     "project_subjective_label_overlay",
     "project_symbolic_overlay",
+    "project_translation_overlay",
 ]

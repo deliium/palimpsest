@@ -156,6 +156,16 @@ class ExperimentCoordinator:
                             assignment.condition_id, assignment.runner_config
                         )
                     )
+                if assignment.experiment_id == "cross_cultural_translation@1":
+                    from experiments.translation_scenario import (
+                        translation_arbiter,
+                    )
+
+                    runner.set_intervention_arbiter(
+                        translation_arbiter(
+                            assignment.condition_id, assignment.runner_config
+                        )
+                    )
                 if assignment.experiment_id == "semantic_drift@1":
                     from experiments.semantic_drift_scenario import (
                         semantic_drift_arbiter,

@@ -395,6 +395,29 @@ class ObserverSymbolicOverlayOut(StrictModel):
     compositions: tuple[ObserverSymbolicCompositionOut, ...]
 
 
+class ObserverTranslationMappingOut(StrictModel):
+    source_digest: str
+    target_label_digests: tuple[str, ...]
+    target_referent_kinds: tuple[str, ...]
+    target_referent_digests: tuple[str, ...]
+    status: Literal["candidate", "active", "retired"]
+    fit: Literal["resolved", "partial", "ambiguous", "unresolved"]
+    strength_band: Literal["candidate", "low", "mid", "high"]
+    channel_counts: tuple[str, ...]
+    usage_count: int = Field(ge=0)
+    first_tick: int = Field(ge=0)
+    last_tick: int = Field(ge=0)
+
+
+class ObserverTranslationOverlayOut(StrictModel):
+    run_id: str
+    agent_id: str
+    layer: Literal["subjective_translation"] = "subjective_translation"
+    protocol_version: str = OBSERVER_PROTOCOL_VERSION
+    count: int
+    mappings: tuple[ObserverTranslationMappingOut, ...]
+
+
 class StrategyAuditEntryOut(StrictModel):
     event_id: str
     category: str
