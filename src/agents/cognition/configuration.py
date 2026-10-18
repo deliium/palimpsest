@@ -78,6 +78,10 @@ from agents.cognition.theory_of_mind import (
     TheoryOfMindPolicy,
     default_theory_of_mind_policy,
 )
+from agents.cognition.translation import (
+    TranslationPolicy,
+    default_translation_policy,
+)
 from agents.cognition.world_model import WorldModelPolicy, default_world_model_policy
 from agents.models import (
     REQUIRED_DRIVE_KINDS,
@@ -313,6 +317,17 @@ class CognitionSymbolicLanguageMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionTranslationMode(StrEnum):
+    """Owner-scoped translation hypotheses. Disabled allocates nothing.
+
+    Lockstep with ``simulation.TranslationMode``. Requires deterministic
+    semantic naming. This is not a capability flag.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -440,6 +455,8 @@ class CognitionLoopConfig:
         CognitionSymbolicLanguageMode.DISABLED
     )
     symbolic_language_policy: SymbolicLanguagePolicy | None = None
+    translation_mode: CognitionTranslationMode = CognitionTranslationMode.DISABLED
+    translation_policy: TranslationPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -761,6 +778,36 @@ class CognitionLoopConfig:
             )
             raise TypeError(
                 "symbolic_language_policy must be SymbolicLanguagePolicy or None"
+            )
+        if type(self.translation_mode) is not CognitionTranslationMode:
+            _LOG.error(
+                "invalid_enum path=translation_mode reason_code=invalid_mode"
+            )
+            raise TypeError("translation_mode must be CognitionTranslationMode")
+        if self.translation_mode is CognitionTranslationMode.DISABLED:
+            object.__setattr__(self, "translation_policy", None)
+        elif self.translation_policy is None:
+            object.__setattr__(
+                self, "translation_policy", default_translation_policy()
+            )
+        elif type(self.translation_policy) is not TranslationPolicy:
+            _LOG.error(
+                "invalid_enum path=translation_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "translation_policy must be TranslationPolicy or None"
+            )
+        if (
+            self.translation_mode is CognitionTranslationMode.DETERMINISTIC
+            and self.semantic_naming_mode
+            is not CognitionSemanticNamingMode.DETERMINISTIC
+        ):
+            _LOG.error(
+                "invalid_enum path=translation_mode "
+                "reason_code=translation_requires_semantic_naming"
+            )
+            raise ValueError(
+                "translation_requires_semantic_naming"
             )
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
