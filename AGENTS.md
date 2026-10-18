@@ -43,6 +43,24 @@ agent's permissions permit it. Keep any such inspection narrowly scoped.
   archives, patches, and references only when required by the skill or task.
 - Reuse information already in context. Summarize command results; request more
   output only when needed to diagnose a failure.
+- Treat tests, documentation, migrations, and infrastructure as task-specific
+  context, not default bulk context:
+  - Find relevant tests by filename or symbol; read only the cases and fixtures
+    needed for the change. Keep test coverage enabled.
+  - Read only relevant documentation sections; do not preload `docs/` or the
+    entire README for unrelated implementation tasks.
+  - Inspect `alembic/versions/` only for migration work, schema history, or a
+    relevant regression. Models alone do not describe migration dependencies.
+  - Read Docker/Compose files, launch scripts, `.github/`, and `.python-version`
+    only for relevant runtime, packaging, CI, or development-environment tasks.
+  - Do not scan `scripts/` or assistant configuration directories by default;
+    load a specific script, skill, or configuration only when needed.
+- Keep required `.ai-factory/` rules, project context, and the active plan
+  accessible. Do not exclude useful first-party files through `.gitignore` or
+  blanket read denials just to reduce context.
+- Keep tool output bounded: request matching filenames or short excerpts first,
+  use targeted Git diffs, and summarize test/linter output. If output is
+  truncated, narrow the request rather than dumping the full result.
 
 OpenCode enforces direct-read exclusions in `opencode.json`. These instructions
 also cover searches and shell access; they are behavioral rules for other agents.
