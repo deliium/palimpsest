@@ -170,3 +170,12 @@ uv run --frozen --python 3.12.14 pytest -m integration tests/integration
 - [Experiments](experiments.md)
 - [Architecture](architecture.md)
 - [Development](development.md)
+
+
+## Translation ledger export
+
+`SimulationRunnerResult.translation_ledgers` carries owner-ordered translation
+ledgers when the mode is enabled. Ledgers stay out of event/replay/codec
+documents, and the write pair remains `replay-v22`/codec `v20`. New agents start
+with an empty translation ledger, and restore/fork preserves the owner ledger
+attachment without exposing raw foreign tokens in analysis documents.

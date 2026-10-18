@@ -122,3 +122,13 @@ It exposes composition ids, part digests, operator, status, strength band, usage
 count, and meaning revision. It never returns raw symbol tokens, referent entity
 labels, message bodies, or objective-frame fields. Objective observer frames
 still reject symbolic fields; no Godot protocol or semantic type changes.
+
+
+### Translation overlay
+
+`GET /v1/simulations/{run_id}/observer/agents/{agent_id}/translation` returns a
+researcher-only, digest-only overlay of one owner's translation mappings:
+source digest, target label digests, referent kinds/digests, status, fit,
+strength band, channel counts, usage count, and tick range. It reads the owner
+runtime checkpoint and never exposes raw foreign tokens, target tokens, message
+bodies, or another owner's mapping. It is not part of objective frames.

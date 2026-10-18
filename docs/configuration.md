@@ -154,3 +154,15 @@ regions root; with contact present it carries the exact v45 root including
 memory by itself. Disabled mode keeps the prior highest-active schema and the
 default write remains `runner-config-v4`. Replay stays `replay-v22`, the
 persistence codec stays `v20`, and `communication.v1` is unchanged.
+
+
+## Translation mode
+
+`translation_mode` defaults to `disabled`. `deterministic` requires
+`runner-config-v47` and deterministic `semantic_naming_mode`; it is a per-agent
+cognition treatment, not a capability flag. `runner-config-v47` adds only the
+per-agent mode, reuses the active v44/v45/v46 family roots, and never implies
+contact, regions, public goods, collective projects, or symbolic language.
+Symbolic-only runs remain on `runner-config-v46`; the default write remains
+`runner-config-v4`. All weights, thresholds, caps, and channel deltas are locked
+in `translation.v1` and are not serialized in runner JSON.

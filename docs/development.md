@@ -227,5 +227,18 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_experiment_bc.py -q
 ```
 
-Expected selectors: 43 commands, 73 observer semantic types, 109 metric families,
-`runner-config-v46`, `replay-v22`/codec `v20`, and Alembic `0017`.
+Expected selectors: 43 commands, 73 observer semantic types, 112 metric families,
+`runner-config-v47` as the latest accepted schema (v46 remains valid for
+symbolic-only runs), `replay-v22`/codec `v20`, and Alembic `0017`.
+
+Translation verification:
+
+```bash
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_translation_contracts.py \
+  tests/unit/test_runner_config_v47.py \
+  tests/unit/test_translation_learning.py \
+  tests/unit/test_translation_rows.py \
+  tests/unit/test_experiment_bd.py \
+  tests/unit/test_translation_overlay.py -q
+```

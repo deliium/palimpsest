@@ -324,3 +324,15 @@ Reproduce with the standard experiment coordinator:
 ```bash
 uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_ba.py -q
 ```
+
+
+## Experiment BD — cross-cultural translation
+
+`cross_cultural_translation@1` is registered off the V1 gate. Arms: `bd-off`,
+`bd-naming-only`, `bd-shared-observation`, `bd-demonstration`,
+`bd-repeated-teaching-artifact`, `bd-ambiguous-wrong`, plus the non-run
+`bd-unsupported` fixture. The arbiter asserts only structural facts: off arms
+emit no mappings or overlays; enabled mappings are bounded and monotonic;
+isolated populations do not share mappings without a delivered/shared/artifact
+channel; ambiguous mappings are not forced to one answer; wrong mappings are not
+corrected; and no agent receives community labels or analysis results.

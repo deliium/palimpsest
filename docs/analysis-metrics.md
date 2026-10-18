@@ -275,3 +275,21 @@ ids are replaced by stable 16-character surface and referent digests.
 Generation indexes are derived from detached lifecycle records. Communities and
 generations are joined only at analysis time; they are never stored in a
 terminology or symbolic ledger.
+
+
+## Translation families
+
+Three detached families cover translation at `METRIC_FAMILY_COUNT = 112`:
+
+- `translation_learning@1` inventories mappings, statuses, fits, targets,
+  evidence, usage, channels, and confidence bands. No mappings means `absent`.
+- `cross_group_translation@1` classifies cross-community delivered foreign terms
+  as `exact`, `partial`, `ambiguous`, `wrong`, `unresolved`, or
+  `unresolved_intent`. Accuracy denominators exclude coverage gaps, and
+  `unresolved_intent` is never zero or wrong.
+- `translation_influence@1` counts communicated-memory overlays, symbolic
+  interpretation applications, and outbound rewrites as descriptive
+  association, never causation.
+
+Rows carry only surface/referent digests, statuses, bands, and counts. Candidate
+communities remain optional and analysis-only.

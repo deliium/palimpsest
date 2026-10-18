@@ -126,3 +126,24 @@ referent digests across owners, but owner-scoped ids are never treated as shared
 identity, and analysis never re-enters cognition. The policy versions remain
 `semantic-naming.v1` and `symbolic-language.v1`, and the 16-record cap is not
 configurable.
+
+
+## Cross-cultural translation
+
+Translation is an owner-scoped hypothesis, not a dictionary. A listener may
+infer that a foreign surface term corresponds to one or more of its own active
+`LabelBinding` values from shared observation, demonstration, repeated
+interaction, teaching, observed artifacts, or context. Every mapping records
+bounded targets, confidence, provenance, and an owner structural fit
+(`resolved`, `partial`, `ambiguous`, `unresolved`). `exact`, `partial`,
+`ambiguous`, and `wrong` exist only in detached analysis; the engine never
+corrects a mapping and never lets one owner read another owner's mapping.
+
+Active unambiguous mappings may add a bounded translated copy of a delivered
+relation to the listener's own communicated memory, substitute foreign
+composition parts during symbolic interpretation, and rewrite at most two own
+`call` terms in an ordinary `Talk`/`Ask`/`Tell` toward the recipient who taught
+the foreign term. These paths are ordinary owner-scoped testimony and social
+action; a wrong mapping can therefore support a wrong belief or a
+misunderstanding without any engine correction. Disabled translation allocates
+no ledger and leaves traces byte-identical.

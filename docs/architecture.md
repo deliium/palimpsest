@@ -312,3 +312,17 @@ semantic types stay **73**, replay stays `v22`, and the codec stays `v20`. Only
 `runner-config-v46` advances, and only as a per-agent mode increment with no new
 root sibling. Composition ids are owner-scoped; surface digests are analysis-only
 and never fed back to agents.
+
+
+## Cross-cultural translation
+
+`agents.cognition.translation` adds an owner-scoped translation ledger over the
+existing terminology ledger. Mappings are private hypotheses with confidence,
+provenance, bounded targets, and structural fit; there is no shared mapping
+store, objective dictionary, new command, new event, new perception field, new
+observer semantic type, new replay/codec pair, or Alembic migration.
+`runner-config-v47` is a mode-only per-agent increment that reuses the active
+v44/v45/v46 family roots and implies no other channel. Translation requires
+deterministic semantic naming; symbolic language is optional. Detached analysis
+classifies outcomes against the speaker's own selected referent as an
+inter-subjective intent proxy and never feeds results back to cognition.

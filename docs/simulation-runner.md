@@ -155,3 +155,13 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_v2_golden_runner_configs.py \
   tests/unit/test_v1_regression_gate.py -q
 ```
+
+
+## Translation export
+
+Enabled runs export owner-ordered `translation_ledgers` alongside terminology
+and symbolic ledgers. The runner logs only ledger and mapping counts. Each
+mapping holds digest-derived identity, bounded targets, evidence, applications,
+status, fit, strength, and tick bounds; no raw foreign or own token is required
+outside the owner ledger. Disabled runs export an empty tuple and remain
+byte-identical.
