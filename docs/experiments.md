@@ -282,6 +282,27 @@ convergence, agreement, or a "better language".
 uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_bb.py -q
 ```
 
+## Experiment BC: Longitudinal semantic drift
+
+`semantic_drift@1` exercises bounded sense history and detached semantic
+metrics off the V1 gate. Arms: `bc-off` (v4 baseline, naming and symbolic
+disabled), `bc-stable` (one population, both modes deterministic),
+`bc-isolated` (two region-separated populations without contact), `bc-contact`
+(two region-separated populations with owned contact), and `bc-generation`
+(generational population with a bounded lifespan and explicit blank-slate
+bootstrap). The non-run `bc-unsupported` fixture asserts that symbolic mode
+without semantic naming fails closed.
+
+The arbiter asserts structural facts only: off arms have no sense history;
+enabled histories are ordered, capped at 16 records, and never exceed the
+recorded sense revision; isolated populations acquire no cross-group meaning
+without delivered communication; generations start blank-slate. It never
+asserts that drift, stability, or divergence "should" occur.
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_bc.py -q
+```
+
 ## Experiment BA: Cultural contact
 
 `cultural_contact@1` composes the owned regions/migration substrate with a

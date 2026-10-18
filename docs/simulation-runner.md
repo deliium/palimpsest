@@ -86,7 +86,10 @@ optional on later schemas. `runner-config-v45` is the v44 family root plus the
 required neutral `cultural_contact` sibling (`mode` only); contact requires both
 `regions_migration` and `multi_polity_migration`, and v45 is rejected without
 contact. `runner-config-v46` is mode-only: it reuses the active v44/v45 family
-root (no new root sibling) and adds per-agent `symbolic_language_mode`. A
+root (no new root sibling) and adds per-agent `symbolic_language_mode`. The
+result also exposes detached `terminology_ledgers`, `symbolic_ledgers`, and
+`initial_lifecycle_records` tuples in owner order; these are not part of the
+runner result document and do not change replay or the codec. A
 deterministic symbolic mode requires the same agent's deterministic
 `semantic_naming_mode` and v46, and v46 is rejected when every agent is
 disabled. Contact-active runs use the `(replay-v22, codec v20)` write pair;

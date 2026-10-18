@@ -209,3 +209,23 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_symbolic_language_observer.py \
   tests/unit/test_experiment_bb.py -q
 ```
+
+## Semantic-drift verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_semantic_sense_history.py \
+  tests/unit/test_symbolic_sense_history.py \
+  tests/unit/test_runner_ledger_export.py \
+  tests/unit/test_runner_lifecycle_export.py \
+  tests/unit/test_semantic_drift_rows.py \
+  tests/unit/test_semantic_stability_metrics.py \
+  tests/unit/test_semantic_drift_metrics.py \
+  tests/unit/test_semantic_divergence_metrics.py \
+  tests/unit/test_metric_specifications.py \
+  tests/unit/test_metric_service.py \
+  tests/unit/test_experiment_bc.py -q
+```
+
+Expected selectors: 43 commands, 73 observer semantic types, 109 metric families,
+`runner-config-v46`, `replay-v22`/codec `v20`, and Alembic `0017`.

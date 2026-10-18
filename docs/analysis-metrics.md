@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **106** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **109** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -244,3 +244,34 @@ kinship is reported only from objective parent→child edges.
 All three use opaque owner/composition ids and 16-character surface digests.
 Raw symbol tokens, message bodies, and referent entity labels never enter a
 metric document or log.
+
+## Semantic drift families
+
+`semantic_stability@1`, `semantic_drift@1`, and `semantic_divergence@1` read
+detached sense and usage rows derived from bounded owner-scoped sense history.
+They describe recorded changes only; they never force convergence or declare a
+meaning correct. Raw label tokens, composition text, message bodies, and referent
+ids are replaced by stable 16-character surface and referent digests.
+
+- `semantic_stability@1` — term count, two-or-more-observation terms, stable
+  referent and association counts, adjacent retention, mean sense revision,
+  cross-generation stability (when a generation map exists), and coverage.
+  Zero-transition histories report full stability where defined; terms with one
+  sense do not enter stability denominators. No two-observation term yields
+  `absent`.
+- `semantic_drift@1` — transition, referent-switch, and association-change
+  counts; drift rate; mean Jaccard distance between adjacent association sets;
+  mean ticks between changes; revision count; multi-referent terms; and usage
+  contexts by channel (`observed`, `communicated`, `remembered`, `self_use`).
+  Zero transitions report zero counts and no fabricated rate. Usage rows never
+  double-count transitions.
+- `semantic_divergence@1` — referent-digest distributions across candidate
+  communities and generations using Jensen-Shannon divergence: between/within
+  group and generation means, cross-generation continuity, pairwise divergence,
+  unknown-referent count, and coverage. Unknown referents are excluded from
+  every distribution and reported as coverage gaps. Missing communities and
+  generations yield `absent`, never zero.
+
+Generation indexes are derived from detached lifecycle records. Communities and
+generations are joined only at analysis time; they are never stored in a
+terminology or symbolic ledger.

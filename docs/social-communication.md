@@ -106,3 +106,23 @@ and contact borrowing requires ordinary delivered communication. There is no
 global lexicon, no grammar induction, no free-form text, and no convergence
 success condition. Analysis is detached and digest-only. The policy version is
 `symbolic-language.v1`.
+
+## Sense history and semantic drift
+
+A label binding or symbolic composition may retain a bounded history of at most
+16 sense records. Records are appended only when the locked policy promotes a
+sense, records a meaning shift, or absorbs associations through an exact merge.
+Each record carries the logical tick, ordinal, closed trigger, referent kind,
+opaque referent id, associated ids, and quantized confidence. Ordinary
+observation, memory reinforcement, and decay add no sense record. Disabled modes
+create no history.
+
+History remains owner-scoped. A term may keep one meaning for the whole run,
+shift once, or differ between populations; all outcomes are valid. Contact can
+change a meaning only through existing delivered communication. There is no
+shared dictionary, no world authority for meaning, and no convergence success
+condition. Detached analysis may compare 16-character surface digests and
+referent digests across owners, but owner-scoped ids are never treated as shared
+identity, and analysis never re-enters cognition. The policy versions remain
+`semantic-naming.v1` and `symbolic-language.v1`, and the 16-record cap is not
+configurable.

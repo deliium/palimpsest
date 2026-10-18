@@ -284,9 +284,24 @@ Contact adds one neutral objective event, `ContactRecorded`, emitted by the
 engine after a qualifying cross-region relocation. It records co-presence only:
 not a relationship, trust update, reputation claim, group identity, migration
 label, or policy. Command count stays **43**, observer semantic types are **73**,
-and metric families are **106**. Contact-active runs use `(replay-v22, codec v20)`;
+and metric families are **109**. Contact-active runs use `(replay-v22, codec v20)`;
 contact-off regional runs keep `(replay-v21, codec v19)`. No Alembic migration is
 required and intermarriage is unsupported.
+
+## Semantic-drift boundary
+
+Bounded sense history adds no command, event, perception field, RNG stream,
+identifier namespace, or Alembic migration. Each label binding and symbolic
+composition retains at most 16 owner-scoped sense records appended only when the
+existing policy promotes, shifts, or merges a sense. `sense_revision` remains
+authoritative; a `shifted` record exists only when that count increments.
+Objective referents and owner hypotheses stay separate: analysis rows carry an
+opaque referent kind and digest, never a truth claim that two owners share a
+belief. Meaning is not objective world state. The closed command count stays
+**43**, observer semantic types stay **73**, and metric families move **106 →
+109**. Replay stays `replay-v22`, the persistence codec stays `v20`, the runner
+configuration stays `runner-config-v46`, and Alembic head stays `0017`.
+Detached stability, drift, and divergence documents never re-enter cognition.
 
 ## Symbolic-language boundary
 

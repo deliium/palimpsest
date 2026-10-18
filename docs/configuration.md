@@ -141,7 +141,10 @@ and `deterministic` (default `disabled`). It is not a `V2CapabilityFlags` or
 mode requires the same agent's `semantic_naming_mode=deterministic`; symbolic
 mode on any schema below v46 rejects with `symbolic_language_requires_v46`, and
 symbolic mode without naming rejects with
-`symbolic_language_requires_semantic_naming`. `runner-config-v46` is emitted
+`symbolic_language_requires_semantic_naming`. Bounded sense history is an
+additive part of these modes: it adds no capability flag, no runner-config key,
+and no configurable cap. Each binding or composition retains at most 16 sense
+records, and disabled modes create none. `runner-config-v46` is emitted
 only when at least one agent is deterministic, and it requires at least one such
 agent (`v46_requires_symbolic_language`).
 
