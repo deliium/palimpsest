@@ -736,6 +736,7 @@ class SubjectiveSnapshot:
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
     symbolic_language: object | None = None
+    translation: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -983,6 +984,13 @@ class SubjectiveSnapshot:
             self.symbolic_language,
             self.owner_id,
             field_name="SubjectiveSnapshot.symbolic_language",
+        )
+        from agents.cognition.translation import require_owner_translation
+
+        require_owner_translation(
+            self.translation,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.translation",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
@@ -3818,6 +3826,7 @@ class CognitiveLoopProposal:
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
     symbolic_language: object | None = None
+    translation: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -4112,6 +4121,7 @@ class CognitiveLoopResult:
     artifact_interpretations: object | None = None
     semantic_naming: object | None = None
     symbolic_language: object | None = None
+    translation: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None

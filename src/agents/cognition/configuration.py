@@ -1021,6 +1021,12 @@ class CognitionLoopConfig:
                 if self.symbolic_language_policy is None
                 else self.symbolic_language_policy.version
             ),
+            "translation_mode": self.translation_mode.value,
+            "translation_policy_version": (
+                None
+                if self.translation_policy is None
+                else self.translation_policy.version
+            ),
             "cultural_narrative_mode": self.cultural_narrative_mode.value,
             "cultural_narrative_policy_version": (
                 None
@@ -1301,6 +1307,8 @@ def build_cognitive_loop(
         semantic_naming_policy=resolved.semantic_naming_policy,
         symbolic_language_mode=resolved.symbolic_language_mode,
         symbolic_language_policy=resolved.symbolic_language_policy,
+        translation_mode=resolved.translation_mode,
+        translation_policy=resolved.translation_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

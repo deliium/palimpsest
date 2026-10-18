@@ -66,6 +66,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "relationships",
         "semantic_naming",
         "symbolic_language",
+        "translation",
         "social_norms",
         "social_conventions",
         "skill_ledger",

@@ -5807,6 +5807,7 @@ class SimulationRunnerResult:
     practical_knowledge_audits: tuple[object, ...] = ()
     terminology_ledgers: tuple[object, ...] = ()
     symbolic_ledgers: tuple[object, ...] = ()
+    translation_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
@@ -5992,6 +5993,15 @@ class SimulationRunnerResult:
             if type(ledger) is not SymbolicLedger:
                 raise TypeError("symbolic_ledgers: invalid_item")
         object.__setattr__(self, "symbolic_ledgers", symbolic)
+        if isinstance(self.translation_ledgers, (set, frozenset)):
+            raise TypeError("translation_ledgers must be ordered")
+        from agents.cognition.translation import TranslationLedger
+
+        translation = tuple(self.translation_ledgers)
+        for ledger in translation:
+            if type(ledger) is not TranslationLedger:
+                raise TypeError("translation_ledgers: invalid_item")
+        object.__setattr__(self, "translation_ledgers", translation)
         if isinstance(self.initial_lifecycle_records, (set, frozenset)):
             raise TypeError("initial_lifecycle_records must be ordered")
         from world.lifecycle import AgentLifecycleRecord

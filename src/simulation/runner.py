@@ -2851,6 +2851,7 @@ class SimulationRunner:
             practical_knowledge_audits=self.export_practical_knowledge_audits(),
             terminology_ledgers=self.export_terminology_ledgers(),
             symbolic_ledgers=self.export_symbolic_ledgers(),
+            translation_ledgers=self.export_translation_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
         mentorship_audit_count = len(result.mentorship_audits)
@@ -3120,6 +3121,21 @@ class SimulationRunner:
                 continue
             ledgers.append(ledger)
         _LOG.info("runner_symbolic_ledger_export ledger_count=%s", len(ledgers))
+        return tuple(ledgers)
+
+    def export_translation_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered translation ledgers.
+
+        Disabled owners contribute nothing.
+        """
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "translation", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("runner_translation_ledger_export ledger_count=%s", len(ledgers))
         return tuple(ledgers)
 
     def export_initial_lifecycle_records(self) -> tuple[object, ...]:

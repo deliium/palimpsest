@@ -858,3 +858,888 @@ class TranslationResolution:
                 raise _fail("resolution", "unexpected_binding")
 
 
+def _active_bindings(terminology: TerminologyLedger) -> tuple[LabelBinding, ...]:
+    return tuple(
+        binding
+        for binding in terminology.bindings
+        if binding.status is NamingStatus.ACTIVE and binding.merged_into is None
+    )
+
+
+def _own_token(
+    terminology: TerminologyLedger, token: str
+) -> LabelBinding | None:
+    for binding in _active_bindings(terminology):
+        if binding.label_token == token:
+            return binding
+    return None
+
+
+def _top_candidate(binding: LabelBinding) -> Any:
+    if not binding.candidates:
+        return None
+    return max(
+        binding.candidates,
+        key=lambda candidate: (candidate.confidence, candidate.entity_id),
+    )
+
+
+def _resolution_sort_key(mapping: TranslationMapping) -> tuple[float, str]:
+    return (mapping.strength, mapping.mapping_id)
+
+
+def translation_targets_for_kind(
+    terminology: TerminologyLedger, referent_kind: NamingReferentKind
+) -> tuple[LabelBinding, ...]:
+    """Active own bindings of one kind, strongest first with a stable tie-break."""
+    if type(terminology) is not TerminologyLedger:
+        raise TypeError("terminology must be TerminologyLedger")
+    if type(referent_kind) is not NamingReferentKind:
+        raise TypeError("referent_kind must be NamingReferentKind")
+    matches = [
+        binding
+        for binding in _active_bindings(terminology)
+        if binding.referent_kind is referent_kind
+    ]
+    matches.sort(key=lambda binding: (-binding.strength, binding.binding_id))
+    return tuple(matches)
+
+
+def resolve_translation_token(
+    ledger: TranslationLedger | None,
+    terminology: TerminologyLedger,
+    source_token: str,
+) -> TranslationResolution:
+    """Resolve a foreign token from the owner's own translation hypothesis."""
+    if type(terminology) is not TerminologyLedger:
+        raise TypeError("terminology must be TerminologyLedger")
+    if not isinstance(source_token, str) or not _LABEL_TOKEN_RE.fullmatch(source_token):
+        return TranslationResolution(status="unresolved")
+    if ledger is None:
+        return TranslationResolution(status="unresolved")
+    if type(ledger) is not TranslationLedger:
+        raise TypeError("ledger must be TranslationLedger or None")
+    if ledger.owner_id != terminology.owner_id:
+        raise _fail("ledger.owner_id", "owner_mismatch")
+    candidates = [
+        mapping
+        for mapping in ledger.mappings
+        if mapping.source_token == source_token
+        and mapping.status is TranslationMappingStatus.ACTIVE
+    ]
+    if not candidates:
+        return TranslationResolution(status="unresolved")
+    mapping = max(candidates, key=_resolution_sort_key)
+    bindings = {binding.binding_id: binding for binding in terminology.bindings}
+    if mapping.fit is TranslationFit.AMBIGUOUS or len(mapping.targets) > 1:
+        return TranslationResolution(
+            status="ambiguous", mapping=mapping
+        )
+    if mapping.fit is not TranslationFit.RESOLVED or not mapping.targets:
+        return TranslationResolution(
+            status="ambiguous"
+            if mapping.fit is TranslationFit.PARTIAL
+            else "unresolved",
+            mapping=mapping,
+        )
+    target = mapping.targets[0]
+    binding = bindings.get(target.binding_id)
+    if (
+        binding is None
+        or binding.status is not NamingStatus.ACTIVE
+        or binding.label_token != target.label_token
+    ):
+        return TranslationResolution(status="unresolved", mapping=mapping)
+    return TranslationResolution(
+        status="resolved", binding=binding, mapping=mapping, target=target
+    )
+
+
+def _kind_of_object(value: object) -> NamingReferentKind | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return NamingReferentKind(value)
+    except ValueError:
+        return None
+
+
+def _observed_entities(observation: Observation, kind: NamingReferentKind) -> set[str]:
+    if kind is NamingReferentKind.LOCATION:
+        return {item.entity_id.value for item in observation.locations}
+    if kind is NamingReferentKind.AGENT:
+        return {item.entity_id.value for item in observation.visible_bodies}
+    if kind is NamingReferentKind.DANGEROUS_RESOURCE:
+        return {item.entity_id.value for item in observation.resources}
+    return set()
+
+
+def _call_atoms(communication: ObservedCommunication) -> list[tuple[str, str, str]]:
+    atoms: list[tuple[str, str, str]] = []
+    for relation in communication.utterance.content.relations:
+        subject = getattr(relation, "subject", None)
+        predicate = getattr(relation, "predicate", None)
+        obj = getattr(relation, "object", None)
+        if (
+            isinstance(subject, str)
+            and isinstance(predicate, str)
+            and isinstance(obj, str)
+        ):
+            atoms.append((subject, predicate, obj))
+    return atoms
+
+
+def _speaker_agent(
+    identity: OwnerSafeSocialIdentity, speaker_id: EntityId
+) -> AgentId | None:
+    for item in identity.counterparts:
+        if item.entity_id == speaker_id:
+            return item.agent_id
+    return None
+
+
+def _teacher_ids(
+    advice_delta: Sequence[object] | None,
+    mentorship: object | None,
+    tick: int,
+    window: int,
+) -> set[AgentId]:
+    teachers: set[AgentId] = set()
+    for item in advice_delta or ():
+        if getattr(item, "act", None) is not None and str(
+            getattr(item, "act", "")
+        ) not in {"explain", "demonstrate", "warn"}:
+            continue
+        delivery = getattr(item, "delivery_tick", None)
+        if isinstance(delivery, int) and tick - delivery > window:
+            continue
+        for attribute in ("source_agent_id", "teacher_agent_id", "actor_id"):
+            candidate = getattr(item, attribute, None)
+            if type(candidate) is AgentId:
+                teachers.add(candidate)
+                break
+    bonds = getattr(mentorship, "bonds", ()) or ()
+    for bond in bonds:
+        role = getattr(bond, "role", None)
+        role_value = getattr(role, "value", role)
+        if role_value != "mentor":
+            continue
+        partner = getattr(bond, "partner_agent_id", None)
+        if type(partner) is AgentId:
+            teachers.add(partner)
+    return teachers
+
+
+@dataclass
+class _TargetDraft:
+    binding_id: str
+    label_token: str
+    referent_kind: NamingReferentKind
+    weight: float
+
+
+@dataclass
+class _MappingDraft:
+    source_token: str
+    source_digest: str
+    targets: list[_TargetDraft] = field(default_factory=list)
+    status: TranslationMappingStatus = TranslationMappingStatus.CANDIDATE
+    strength: float = 0.0
+    evidence: list[TranslationEvidenceItem] = field(default_factory=list)
+    applications: list[TranslationApplication] = field(default_factory=list)
+    notices: list[str] = field(default_factory=list)
+    first_tick: int = 0
+    last_tick: int = 0
+    last_use_tick: int | None = None
+    usage_count: int = 0
+    touched: bool = False
+
+
+def _drafts_from(
+    previous: TranslationLedger | None, owner_id: AgentId
+) -> dict[str, _MappingDraft]:
+    drafts: dict[str, _MappingDraft] = {}
+    if previous is None:
+        return drafts
+    for mapping in previous.mappings:
+        if mapping.owner_id != owner_id:
+            raise _fail("previous.owner_id", "owner_mismatch")
+        drafts[mapping.source_token] = _MappingDraft(
+            source_token=mapping.source_token,
+            source_digest=mapping.source_digest,
+            targets=[
+                _TargetDraft(
+                    binding_id=target.binding_id,
+                    label_token=target.label_token,
+                    referent_kind=target.referent_kind,
+                    weight=target.weight,
+                )
+                for target in mapping.targets
+            ],
+            status=mapping.status,
+            strength=mapping.strength,
+            evidence=list(mapping.evidence),
+            applications=list(mapping.applications),
+            notices=list(mapping.notices),
+            first_tick=mapping.first_tick,
+            last_tick=mapping.last_tick,
+            last_use_tick=mapping.last_use_tick,
+            usage_count=mapping.usage_count,
+        )
+    return drafts
+
+
+def _notice(notices: list[str], reason: str) -> None:
+    if reason in _NOTICE_REASONS and reason not in notices:
+        notices.append(reason)
+
+
+def _target_for(
+    draft: _MappingDraft, binding: LabelBinding
+) -> _TargetDraft | None:
+    for target in draft.targets:
+        if target.binding_id == binding.binding_id:
+            return target
+    return None
+
+
+def _bump_target(
+    draft: _MappingDraft, binding: LabelBinding, delta: float, policy: TranslationPolicy
+) -> tuple[_TargetDraft | None, bool]:
+    target = _target_for(draft, binding)
+    if target is None:
+        if len(draft.targets) >= policy.max_targets:
+            return None, False
+        target = _TargetDraft(
+            binding_id=binding.binding_id,
+            label_token=binding.label_token,
+            referent_kind=binding.referent_kind,
+            weight=0.0,
+        )
+        draft.targets.append(target)
+    target.weight = _apply_delta(target.weight, delta)
+    return target, True
+
+
+def _record_evidence(
+    draft: _MappingDraft,
+    mapping_id: str,
+    channel: TranslationEvidenceChannel,
+    lineage_ref: str,
+    tick: int,
+    actor_id: AgentId | None,
+    target_binding_ids: tuple[str, ...],
+    policy: TranslationPolicy,
+    seen: set[tuple[str, str, str, str, str]],
+) -> bool:
+    if not target_binding_ids:
+        return False
+    fresh = tuple(
+        binding_id
+        for binding_id in target_binding_ids
+        if (
+            channel.value,
+            lineage_ref,
+            str(tick),
+            actor_id.value if actor_id else "-",
+            binding_id,
+        )
+        not in seen
+    )
+    if not fresh:
+        return False
+    if len(draft.evidence) >= policy.max_evidence:
+        _notice(draft.notices, "cap_exceeded")
+        return False
+    for binding_id in fresh:
+        seen.add(
+            (
+                channel.value,
+                lineage_ref,
+                str(tick),
+                actor_id.value if actor_id else "-",
+                binding_id,
+            )
+        )
+    ordinal = len(draft.evidence)
+    draft.evidence.append(
+        TranslationEvidenceItem(
+            evidence_id=translation_evidence_id(
+                mapping_id, ordinal, channel, lineage_ref
+            ),
+            ordinal=ordinal,
+            channel=channel,
+            lineage_ref=lineage_ref,
+            tick=tick,
+            actor_id=actor_id,
+            target_binding_ids=fresh,
+        )
+    )
+    return True
+
+
+def _binding_map(terminology: TerminologyLedger) -> dict[str, LabelBinding]:
+    return {binding.binding_id: binding for binding in terminology.bindings}
+
+
+def _compute_fit(
+    draft: _MappingDraft,
+    terminology: TerminologyLedger,
+    policy: TranslationPolicy,
+) -> TranslationFit:
+    if not draft.targets:
+        return TranslationFit.UNRESOLVED
+    ordered = sorted(draft.targets, key=lambda item: (-item.weight, item.binding_id))
+    if len(ordered) > 1:
+        if ordered[0].weight - ordered[1].weight <= policy.ambiguity_margin:
+            return TranslationFit.AMBIGUOUS
+        return TranslationFit.PARTIAL
+    binding = _binding_map(terminology).get(ordered[0].binding_id)
+    if binding is None or binding.status is not NamingStatus.ACTIVE:
+        return TranslationFit.UNRESOLVED
+    candidates = binding.candidates
+    if not candidates:
+        return TranslationFit.PARTIAL
+    top = _top_candidate(binding)
+    if top is None:
+        return TranslationFit.PARTIAL
+    tied = [
+        candidate
+        for candidate in candidates
+        if _quantize(candidate.confidence) == _quantize(top.confidence)
+    ]
+    if len(tied) > 1:
+        return TranslationFit.PARTIAL
+    return TranslationFit.RESOLVED
+
+
+def _freeze_mapping(
+    draft: _MappingDraft,
+    owner_id: AgentId,
+    terminology: TerminologyLedger,
+    tick: int,
+    policy: TranslationPolicy,
+) -> TranslationMapping | None:
+    if not draft.targets:
+        return None
+    bindings = _binding_map(terminology)
+    valid_targets: list[_TargetDraft] = []
+    for target in sorted(
+        draft.targets, key=lambda item: (-item.weight, item.binding_id)
+    ):
+        binding = bindings.get(target.binding_id)
+        if binding is None or binding.status is not NamingStatus.ACTIVE:
+            _notice(draft.notices, "no_candidate")
+            continue
+        if binding.owner_id != owner_id or binding.merged_into is not None:
+            _notice(draft.notices, "owner_mismatch")
+            continue
+        if binding.label_token == draft.source_token:
+            _notice(draft.notices, "source_self_target")
+            continue
+        valid_targets.append(target)
+    if not valid_targets:
+        return None
+    targets = tuple(
+        TranslationTarget(
+            binding_id=item.binding_id,
+            label_token=item.label_token,
+            referent_kind=item.referent_kind,
+            weight=item.weight,
+        )
+        for item in valid_targets
+    )
+    strength = max((item.weight for item in valid_targets), default=0.0)
+    evidence_count = len(draft.evidence)
+    if strength >= policy.active_strength and evidence_count >= policy.promotion_count:
+        status = TranslationMappingStatus.ACTIVE
+    elif strength < policy.retire_strength:
+        status = TranslationMappingStatus.RETIRED
+    elif draft.status is TranslationMappingStatus.ACTIVE:
+        status = TranslationMappingStatus.ACTIVE
+    else:
+        status = TranslationMappingStatus.CANDIDATE
+    fit = _compute_fit(draft, terminology, policy)
+    mapping_id = translation_mapping_id(owner_id, draft.source_digest)
+    mapping = TranslationMapping(
+        mapping_id=mapping_id,
+        owner_id=owner_id,
+        source_token=draft.source_token,
+        source_digest=draft.source_digest,
+        source_kind=TranslationSourceKind.LABEL,
+        targets=targets,
+        status=status,
+        fit=fit,
+        strength=strength,
+        evidence_count=evidence_count,
+        first_tick=draft.first_tick,
+        last_tick=max(draft.last_tick, tick),
+        last_use_tick=draft.last_use_tick,
+        usage_count=draft.usage_count,
+        evidence=tuple(draft.evidence),
+        applications=tuple(draft.applications),
+        notices=tuple(draft.notices),
+    )
+    mapping.validate_against(terminology)
+    return mapping
+
+
+def _decay_drafts(
+    drafts: dict[str, _MappingDraft],
+    tick: int,
+    policy: TranslationPolicy,
+) -> None:
+    for draft in drafts.values():
+        if draft.touched or draft.last_tick >= tick:
+            continue
+        for target in draft.targets:
+            target.weight = _apply_delta(target.weight, -policy.decay)
+        draft.targets = [target for target in draft.targets if target.weight > 0.0]
+        draft.strength = max((item.weight for item in draft.targets), default=0.0)
+        if draft.strength < policy.retire_strength:
+            draft.status = TranslationMappingStatus.RETIRED
+        draft.last_tick = tick
+
+
+def apply_translation_update(
+    observation: object,
+    identity: object,
+    previous: object = None,
+    terminology: object = None,
+    symbolic: object = None,
+    memories: Sequence[object] = (),
+    advice_delta: Sequence[object] = (),
+    mentorship: object | None = None,
+    policy: TranslationPolicy | None = None,
+) -> TranslationLedger | None:
+    """Apply one tick of owner-scoped translation evidence.
+
+    Disabled callers do not call this function. Foreign terms are inferred only
+    from delivered communication, shared observation, observed artifacts, and
+    owner-scoped teaching/context. The owner's own terminology ledger is the
+    only source of target labels.
+    """
+    _LOG.debug(
+        "apply_translation_update owner_id=%s tick=%s",
+        getattr(getattr(identity, "owner_id", None), "value", None),
+        getattr(observation, "tick", None),
+    )
+    for value in (
+        observation,
+        identity,
+        previous,
+        terminology,
+        symbolic,
+        policy,
+        memories,
+        advice_delta,
+        mentorship,
+    ):
+        _reject_forbidden(value)
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    if type(identity) is not OwnerSafeSocialIdentity:
+        raise TypeError("identity must be OwnerSafeSocialIdentity")
+    if previous is not None and type(previous) is not TranslationLedger:
+        raise TypeError("previous must be TranslationLedger or None")
+    if type(terminology) is not TerminologyLedger:
+        raise TypeError("terminology must be TerminologyLedger")
+    if terminology.owner_id != identity.owner_id:
+        raise _fail("terminology.owner_id", "owner_mismatch")
+    require_owner_semantic_naming(
+        terminology, identity.owner_id, field_name="translation.terminology"
+    )
+    if previous is not None and previous.owner_id != identity.owner_id:
+        raise _fail("previous.owner_id", "owner_mismatch")
+    active_policy = default_translation_policy() if policy is None else policy
+    if type(active_policy) is not TranslationPolicy:
+        raise TypeError("policy must be TranslationPolicy")
+
+    owner_id = identity.owner_id
+    tick = observation.tick
+    drafts = _drafts_from(previous, owner_id)
+    notices: list[str] = []
+    seen: set[tuple[str, str, str, str, str]] = set()
+    bindings = _active_bindings(terminology)
+    teachers = _teacher_ids(
+        advice_delta, mentorship, tick, active_policy.teaching_window
+    )
+
+    for index, communication in enumerate(observation.communications):
+        if type(communication) is not ObservedCommunication:
+            continue
+        if communication.listener_id != identity.owner_entity_id:
+            continue
+        speaker = _speaker_agent(identity, communication.speaker_id)
+        lineage = f"tick-{tick}-c{index}"
+        atoms = _call_atoms(communication)
+        if not atoms:
+            continue
+        foreign: list[tuple[str, NamingReferentKind]] = []
+        own_by_kind: dict[NamingReferentKind, list[LabelBinding]] = {}
+        for subject, predicate, obj in atoms:
+            if predicate not in {"attributive", "relational"}:
+                continue
+            for own_part, other_part in ((subject, obj), (obj, subject)):
+                own_binding = _own_token(terminology, own_part)
+                if own_binding is None:
+                    continue
+                if not isinstance(other_part, str) or not _LABEL_TOKEN_RE.fullmatch(
+                    other_part
+                ):
+                    continue
+                if _own_token(terminology, other_part) is not None:
+                    continue
+                composition_kind = own_binding.referent_kind
+                if not any(
+                    binding.binding_id == own_binding.binding_id
+                    for binding in own_by_kind.get(composition_kind, ())
+                ):
+                    own_by_kind.setdefault(composition_kind, []).append(own_binding)
+                if not any(token == other_part for token, _ in foreign):
+                    foreign.append((other_part, composition_kind))
+        for subject, predicate, obj in atoms:
+            if predicate != "call":
+                continue
+            if not isinstance(subject, str) or not _LABEL_TOKEN_RE.fullmatch(subject):
+                _notice(notices, "illegal_token")
+                continue
+            kind = _kind_of_object(obj)
+            if kind is None:
+                continue
+            own_binding = _own_token(terminology, subject)
+            if own_binding is not None:
+                own_by_kind.setdefault(kind, []).append(own_binding)
+                continue
+            if any(token == subject for token, _ in foreign):
+                continue
+            foreign.append((subject, kind))
+
+        evidenced_tokens: set[str] = set()
+        for source_token, kind in foreign:
+            source_digest = translation_source_digest(source_token)
+            mapping_id = translation_mapping_id(owner_id, source_digest)
+            draft = drafts.get(source_token)
+            if draft is None:
+                if len(drafts) >= active_policy.max_mappings:
+                    _notice(notices, "cap_exceeded")
+                    continue
+                draft = _MappingDraft(
+                    source_token=source_token,
+                    source_digest=source_digest,
+                    first_tick=tick,
+                    last_tick=tick,
+                )
+                draft.notices = []
+                drafts[source_token] = draft
+            own = [binding for binding in bindings if binding.referent_kind is kind]
+            if not own:
+                _notice(notices, "no_candidate")
+                continue
+            own.sort(key=lambda binding: (-binding.strength, binding.binding_id))
+
+            # shared observation
+            observed = _observed_entities(observation, kind)
+            shared_targets = []
+            for binding in own:
+                top = _top_candidate(binding)
+                if top is not None and top.entity_id in observed:
+                    shared_targets.append(binding)
+            if shared_targets:
+                bumped: list[str] = []
+                for binding in shared_targets[: active_policy.max_targets]:
+                    target, ok = _bump_target(
+                        draft,
+                        binding,
+                        active_policy.shared_observation_delta,
+                        active_policy,
+                    )
+                    if ok and target is not None:
+                        bumped.append(target.binding_id)
+                if bumped and _record_evidence(
+                    draft,
+                    mapping_id,
+                    TranslationEvidenceChannel.SHARED_OBSERVATION,
+                    lineage,
+                    tick,
+                    speaker,
+                    tuple(bumped),
+                    active_policy,
+                    seen,
+                ):
+                    evidenced_tokens.add(source_token)
+                    draft.touched = True
+
+            # demonstration
+            demonstration = [
+                binding
+                for binding in own_by_kind.get(kind, [])
+                if binding.label_token != source_token
+            ]
+            if demonstration:
+                bumped = []
+                for binding in demonstration[: active_policy.max_targets]:
+                    target, ok = _bump_target(
+                        draft, binding, active_policy.demonstration_delta, active_policy
+                    )
+                    if ok and target is not None:
+                        bumped.append(target.binding_id)
+                if bumped and _record_evidence(
+                    draft,
+                    mapping_id,
+                    TranslationEvidenceChannel.DEMONSTRATION,
+                    lineage,
+                    tick,
+                    speaker,
+                    tuple(bumped),
+                    active_policy,
+                    seen,
+                ):
+                    evidenced_tokens.add(source_token)
+                    draft.touched = True
+
+            # repeated interaction
+            prior_ticks = {
+                item.tick
+                for item in draft.evidence
+                if item.actor_id is not None
+                and speaker is not None
+                and item.actor_id == speaker
+                and item.tick < tick
+            }
+            if len(prior_ticks) >= 2:
+                bumped = []
+                for binding in own[: min(2, active_policy.max_targets)]:
+                    target, ok = _bump_target(
+                        draft,
+                        binding,
+                        active_policy.repeated_interaction_delta,
+                        active_policy,
+                    )
+                    if ok and target is not None:
+                        bumped.append(target.binding_id)
+                if bumped and _record_evidence(
+                    draft,
+                    mapping_id,
+                    TranslationEvidenceChannel.REPEATED_INTERACTION,
+                    lineage,
+                    tick,
+                    speaker,
+                    tuple(bumped),
+                    active_policy,
+                    seen,
+                ):
+                    evidenced_tokens.add(source_token)
+                    draft.touched = True
+
+            # teaching
+            if speaker is not None and speaker in teachers:
+                bumped = []
+                for binding in own[: active_policy.max_targets]:
+                    target, ok = _bump_target(
+                        draft, binding, active_policy.teaching_delta, active_policy
+                    )
+                    if ok and target is not None:
+                        bumped.append(target.binding_id)
+                if bumped and _record_evidence(
+                    draft,
+                    mapping_id,
+                    TranslationEvidenceChannel.TEACHING,
+                    lineage,
+                    tick,
+                    speaker,
+                    tuple(bumped),
+                    active_policy,
+                    seen,
+                ):
+                    evidenced_tokens.add(source_token)
+                    draft.touched = True
+
+            # context fallback
+            if (
+                source_token not in evidenced_tokens
+                and len(own) == 1
+            ):
+                target, ok = _bump_target(
+                    draft, own[0], active_policy.context_delta, active_policy
+                )
+                if ok and target is not None and _record_evidence(
+                    draft,
+                    mapping_id,
+                    TranslationEvidenceChannel.CONTEXT,
+                    lineage,
+                    tick,
+                    speaker,
+                    (target.binding_id,),
+                    active_policy,
+                    seen,
+                ):
+                    evidenced_tokens.add(source_token)
+                    draft.touched = True
+
+    # artifact channel
+    for artifact in observation.artifacts:
+        if type(artifact) is not ObservedArtifact:
+            continue
+        entity_value = artifact.entity_id.value
+        lineage = f"artifact-{entity_value}"
+        for relation in artifact.content.relations:
+            if relation.predicate != "call":
+                continue
+            source_token = relation.subject
+            if not isinstance(source_token, str) or not _LABEL_TOKEN_RE.fullmatch(
+                source_token
+            ):
+                continue
+            if _own_token(terminology, source_token) is not None:
+                continue
+            kind = _kind_of_object(relation.object)
+            if kind is None:
+                continue
+            own = [
+                binding
+                for binding in bindings
+                if binding.referent_kind is kind
+            ]
+            if not own:
+                continue
+            own.sort(key=lambda binding: (-binding.strength, binding.binding_id))
+            source_digest = translation_source_digest(source_token)
+            mapping_id = translation_mapping_id(owner_id, source_digest)
+            draft = drafts.get(source_token)
+            if draft is None:
+                if len(drafts) >= active_policy.max_mappings:
+                    _notice(notices, "cap_exceeded")
+                    continue
+                draft = _MappingDraft(
+                    source_token=source_token,
+                    source_digest=source_digest,
+                    first_tick=tick,
+                    last_tick=tick,
+                )
+                drafts[source_token] = draft
+            bumped = []
+            for binding in own[: active_policy.max_targets]:
+                target, ok = _bump_target(
+                    draft, binding, active_policy.artifact_delta, active_policy
+                )
+                if ok and target is not None:
+                    bumped.append(target.binding_id)
+            if bumped and _record_evidence(
+                draft,
+                mapping_id,
+                TranslationEvidenceChannel.ARTIFACT,
+                lineage,
+                tick,
+                None,
+                tuple(bumped),
+                active_policy,
+                seen,
+            ):
+                draft.touched = True
+
+    _decay_drafts(drafts, tick, active_policy)
+    mappings: list[TranslationMapping] = []
+    for draft in drafts.values():
+        mapping = _freeze_mapping(
+            draft, owner_id, terminology, tick, active_policy
+        )
+        if mapping is not None:
+            mappings.append(mapping)
+    ledger = TranslationLedger(
+        owner_id=owner_id,
+        mappings=tuple(mappings),
+        notices=tuple(notices),
+    )
+    ledger.validate_against(terminology)
+    active_count = sum(
+        1
+        for mapping in ledger.mappings
+        if mapping.status is TranslationMappingStatus.ACTIVE
+    )
+    ambiguous = sum(
+        1 for mapping in ledger.mappings if mapping.fit is TranslationFit.AMBIGUOUS
+    )
+    _LOG.info(
+        "translation_ledger_updated owner_id=%s mapping_count=%s active_count=%s "
+        "ambiguous_count=%s",
+        owner_id.value,
+        len(ledger.mappings),
+        active_count,
+        ambiguous,
+    )
+    return ledger
+def record_translation_application(
+    ledger: TranslationLedger,
+    terminology: TerminologyLedger,
+    *,
+    mapping_id: str,
+    kind: TranslationApplicationKind,
+    outcome: TranslationApplicationOutcome,
+    tick: int,
+    message_id: str | None = None,
+    target_binding_id: str | None = None,
+    actor_id: AgentId | None = None,
+    command_kind: str | None = None,
+) -> TranslationLedger:
+    """Append one bounded application row. Returns the ledger unchanged at cap."""
+    if type(ledger) is not TranslationLedger:
+        raise TypeError("ledger must be TranslationLedger")
+    if type(terminology) is not TerminologyLedger:
+        raise TypeError("terminology must be TerminologyLedger")
+    updated: list[TranslationMapping] = []
+    changed = False
+    for mapping in ledger.mappings:
+        if mapping.mapping_id != mapping_id:
+            updated.append(mapping)
+            continue
+        applications = list(mapping.applications)
+        if len(applications) < _MAX_APPLICATIONS:
+            ordinal = len(applications)
+            applications.append(
+                TranslationApplication(
+                    application_id=translation_application_id(
+                        mapping.mapping_id, ordinal, kind, message_id
+                    ),
+                    ordinal=ordinal,
+                    tick=tick,
+                    kind=kind,
+                    mapping_id=mapping.mapping_id,
+                    outcome=outcome,
+                    message_id=message_id,
+                    target_binding_id=target_binding_id,
+                    actor_id=actor_id,
+                    command_kind=command_kind,
+                )
+            )
+        updated.append(
+            TranslationMapping(
+                mapping_id=mapping.mapping_id,
+                owner_id=mapping.owner_id,
+                source_token=mapping.source_token,
+                source_digest=mapping.source_digest,
+                source_kind=mapping.source_kind,
+                targets=mapping.targets,
+                status=mapping.status,
+                fit=mapping.fit,
+                strength=mapping.strength,
+                evidence_count=mapping.evidence_count,
+                first_tick=mapping.first_tick,
+                last_tick=mapping.last_tick,
+                last_use_tick=mapping.last_use_tick,
+                usage_count=mapping.usage_count,
+                evidence=mapping.evidence,
+                applications=tuple(applications),
+                notices=mapping.notices,
+            )
+        )
+        changed = True
+    if not changed:
+        return ledger
+    result = TranslationLedger(
+        owner_id=ledger.owner_id,
+        mappings=tuple(updated),
+        notices=ledger.notices,
+    )
+    result.validate_against(terminology)
+    return result

@@ -746,6 +746,12 @@ from agents.cognition.translation import (
     translation_source_digest,
     translation_strength_band,
 )
+from agents.cognition.translation import (
+    apply_translation_update,
+    record_translation_application,
+    resolve_translation_token,
+    translation_targets_for_kind,
+)
 from agents.cognition.world_model import (
     WORLD_MODEL_POLICY_VERSION,
     CausalAtom,
@@ -1236,6 +1242,7 @@ __all__ = [
     "apply_reputation_update",
     "apply_symbolic_update",
     "apply_territorial_update",
+    "apply_translation_update",
     "appraise_identity",
     "architecture_definition_digest",
     "artifact_inscribe_command",
@@ -1389,6 +1396,7 @@ __all__ = [
     "project_trust_inputs",
     "propose_possession_command",
     "receiver_confidence_for_transmission",
+    "record_translation_application",
     "record_trial",
     "reject_empty_refusal_render",
     "reject_forbidden_trace_attributes",

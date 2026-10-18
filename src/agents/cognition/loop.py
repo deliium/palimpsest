@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from asyncio import CancelledError
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, Final, Never, Protocol, TypeVar, cast
@@ -336,6 +336,7 @@ class CognitiveLoop:
         "_subjective_valuation_max_bundle",
         "_symbolic_language_mode",
         "_symbolic_language_policy",
+        "_symbolic_translation_applications",
         "_teaching_mode",
         "_teaching_policy",
         "_territorial_claim_mode",
@@ -343,6 +344,8 @@ class CognitiveLoop:
         "_theory_of_mind_mode",
         "_theory_of_mind_policy",
         "_tick_budget_ledger",
+        "_translation_mode",
+        "_translation_policy",
         "_world_model_mode",
         "_world_model_policy",
         "_world_model_provider",
@@ -421,6 +424,8 @@ class CognitiveLoop:
         semantic_naming_policy: object | None = None,
         symbolic_language_mode: object | None = None,
         symbolic_language_policy: object | None = None,
+        translation_mode: object | None = None,
+        translation_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -751,6 +756,27 @@ class CognitiveLoop:
             symbolic_policy = symbolic_language_policy
         self._symbolic_language_mode = symbolic_mode
         self._symbolic_language_policy = symbolic_policy
+        from agents.cognition.configuration import CognitionTranslationMode
+        from agents.cognition.translation import TranslationPolicy
+
+        translation_mode_value = (
+            CognitionTranslationMode.DISABLED
+            if translation_mode is None
+            else translation_mode
+        )
+        if type(translation_mode_value) is not CognitionTranslationMode:
+            raise TypeError("translation_mode must be CognitionTranslationMode")
+        if translation_mode_value is CognitionTranslationMode.DISABLED:
+            translation_policy = None
+        elif translation_policy is None:
+            from agents.cognition.translation import default_translation_policy
+
+            translation_policy = default_translation_policy()
+        elif type(translation_policy) is not TranslationPolicy:
+            raise TypeError("translation_policy must be TranslationPolicy")
+        self._translation_mode = translation_mode_value
+        self._translation_policy = translation_policy
+        self._symbolic_translation_applications: list[dict[str, object]] = []
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -1750,6 +1776,87 @@ class CognitiveLoop:
             "symbolic_language_carried owner_id=%s composition_count=%s",
             owner_id,
             0 if updated is None else len(updated.compositions),
+        )
+        return updated
+
+    def _prepare_translation(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        semantic_naming: object | None,
+        symbolic_language: object | None,
+        advice_delta: Sequence[object] = (),
+        mentorship: object | None = None,
+    ) -> object | None:
+        """Refresh one owner's foreign-term hypotheses after naming/symbolic."""
+        from agents.cognition.configuration import CognitionTranslationMode
+        from agents.cognition.semantic_naming import TerminologyLedger
+        from agents.cognition.translation import (
+            TranslationLedger,
+            apply_translation_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if self._translation_mode is not CognitionTranslationMode.DETERMINISTIC:
+            return None
+        if type(semantic_naming) is not TerminologyLedger:
+            _LOG.warning(
+                "translation_carry_rejected reason=%s",
+                "constituent_missing",
+            )
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.translation
+        ledger = carried if type(carried) is TranslationLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "translation_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        updated = apply_translation_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            semantic_naming,
+            symbolic_language,
+            memories=snapshot.memories,
+            advice_delta=advice_delta,
+            mentorship=mentorship,
+            policy=self._translation_policy,
+        )
+        if updated is not None and self._symbolic_translation_applications:
+            from agents.cognition.translation import (
+                TranslationApplicationKind,
+                TranslationApplicationOutcome,
+                record_translation_application,
+            )
+
+            for row in self._symbolic_translation_applications:
+                try:
+                    updated = record_translation_application(
+                        updated,
+                        semantic_naming,
+                        mapping_id=str(row.get("mapping_id")),
+                        kind=TranslationApplicationKind.SYMBOLIC_INTERPRETATION,
+                        outcome=TranslationApplicationOutcome(
+                            str(row.get("outcome"))
+                        ),
+                        tick=loop_input.observation.tick,
+                        message_id=row.get("message_id"),  # type: ignore[arg-type]
+                        target_binding_id=row.get("target_binding_id"),  # type: ignore[arg-type]
+                    )
+                except (TypeError, ValueError):
+                    _LOG.warning(
+                        "translation_application_rejected reason=%s",
+                        "invalid_application",
+                    )
+            self._symbolic_translation_applications = []
+        _LOG.debug(
+            "translation_carried owner_id=%s mapping_count=%s",
+            owner_id,
+            0 if updated is None else len(updated.mappings),
         )
         return updated
 
@@ -3460,6 +3567,13 @@ class CognitiveLoop:
             social_conventions=social_conventions,
             cultural_narratives=cultural_narratives,
         )
+        translation = self._prepare_translation(
+            loop_input,
+            semantic_naming=semantic_naming,
+            symbolic_language=symbolic_language,
+            advice_delta=advice_delta,
+            mentorship=mentorship,
+        )
         cultural_features = self._prepare_cultural_features(
             loop_input,
             advice_delta=advice_delta,
@@ -3702,6 +3816,8 @@ class CognitiveLoop:
                     semantic_naming_mode=self._semantic_naming_mode,
                     symbolic_language=symbolic_language,
                     symbolic_language_mode=self._symbolic_language_mode,
+                    translation=translation,
+                    translation_mode=self._translation_mode,
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -3766,6 +3882,7 @@ class CognitiveLoop:
             artifact_interpretations=artifact_interpretations,
             semantic_naming=semantic_naming,
             symbolic_language=symbolic_language,
+            translation=translation,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -3948,6 +4065,7 @@ class CognitiveLoop:
             artifact_interpretations=proposal.artifact_interpretations,
             semantic_naming=proposal.semantic_naming,
             symbolic_language=proposal.symbolic_language,
+            translation=proposal.translation,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,
