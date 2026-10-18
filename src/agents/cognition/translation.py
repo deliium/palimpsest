@@ -1669,6 +1669,240 @@ def apply_translation_update(
         ambiguous,
     )
     return ledger
+def _is_communication_command(command: object) -> bool:
+    from world.actions import Ask, Talk, Tell
+
+    return type(command) in {Talk, Ask, Tell}
+
+
+def _rebuild_command_with_relations(
+    command: Any, relations: Sequence[Any]
+) -> object:
+    from world.actions import Ask, Talk, Tell
+    from world.communications import CommunicationContent, StructuredUtterance
+
+    content = command.utterance.content
+    utterance = StructuredUtterance(
+        content=CommunicationContent(
+            text=content.text,
+            concepts=content.concepts,
+            relations=tuple(relations),
+        ),
+        declared=command.utterance.declared,
+    )
+    if type(command) is Talk:
+        return Talk(recipient_id=command.recipient_id, utterance=utterance)
+    if type(command) is Ask:
+        return Ask(recipient_id=command.recipient_id, utterance=utterance)
+    if type(command) is Tell:
+        return Tell(recipient_id=command.recipient_id, utterance=utterance)
+    return command  # pragma: no cover - guarded by caller
+
+
+def _recipient_agent(
+    identity: OwnerSafeSocialIdentity, recipient_id: EntityId
+) -> AgentId | None:
+    for item in identity.counterparts:
+        if item.entity_id == recipient_id:
+            return item.agent_id
+    return None
+
+
+def translation_communicate_utterance(
+    command: Any,
+    *,
+    owner_id: AgentId,
+    tick: int,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity | None,
+    translation: object | None,
+    terminology: object | None,
+    mode: object | None,
+    policy: TranslationPolicy | None = None,
+) -> object:
+    """Rewrite at most two own ``call`` terms to a foreign term for the recipient.
+
+    Returns the command unchanged unless an active, unambiguous mapping was
+    learned from the exact current recipient. Never chooses a new recipient,
+    mints a command kind, or adds a relation.
+    """
+    from agents.cognition.configuration import CognitionTranslationMode
+    from world.communications import CommunicationRelation
+
+    if mode is not CognitionTranslationMode.DETERMINISTIC:
+        return command
+    if type(observation) is not Observation or observation.tick != tick:
+        return command
+    if not _is_communication_command(command):
+        return command
+    command = cast(Any, command)
+    if type(translation) is not TranslationLedger or not translation.mappings:
+        return command
+    if type(terminology) is not TerminologyLedger or identity is None:
+        return command
+    if translation.owner_id != owner_id or terminology.owner_id != owner_id:
+        return command
+    recipient_agent = _recipient_agent(identity, command.recipient_id)
+    if recipient_agent is None:
+        return command
+    active_policy = default_translation_policy() if policy is None else policy
+    selected: list[TranslationMapping] = []
+    for mapping in translation.mappings:
+        if mapping.status is not TranslationMappingStatus.ACTIVE:
+            continue
+        if mapping.strength < active_policy.active_strength:
+            continue
+        if mapping.fit is not TranslationFit.RESOLVED or len(mapping.targets) != 1:
+            continue
+        if (
+            mapping.last_use_tick is not None
+            and tick - mapping.last_use_tick < active_policy.outbound_interval
+        ):
+            continue
+        if not any(
+            item.actor_id is not None and item.actor_id == recipient_agent
+            for item in mapping.evidence
+        ):
+            continue
+        selected.append(mapping)
+    if not selected:
+        return command
+    selected.sort(key=lambda mapping: (-mapping.strength, mapping.mapping_id))
+    replacements: dict[str, str] = {}
+    for mapping in selected:
+        if len(replacements) >= 2:
+            break
+        replacements[mapping.targets[0].label_token] = mapping.source_token
+    if not replacements:
+        return command
+    rebuilt: list[Any] = []
+    rewrite_count = 0
+    for relation in command.utterance.content.relations:
+        subject = getattr(relation, "subject", None)
+        predicate = getattr(relation, "predicate", None)
+        obj = getattr(relation, "object", None)
+        if (
+            predicate == "call"
+            and isinstance(subject, str)
+            and subject in replacements
+            and rewrite_count < 2
+        ):
+            rebuilt.append(
+                CommunicationRelation(
+                    subject=replacements[subject],
+                    predicate="call",
+                    object=cast(str, obj),
+                )
+            )
+            rewrite_count += 1
+            continue
+        rebuilt.append(relation)
+    if rewrite_count == 0:
+        return command
+    _LOG.debug(
+        "translation_outbound_selected owner_id=%s tick=%s recipient_id=%s "
+        "mapping_status=%s rewrite_count=%s",
+        owner_id.value,
+        tick,
+        command.recipient_id.value,
+        "active",
+        rewrite_count,
+    )
+    return _rebuild_command_with_relations(command, tuple(rebuilt))
+
+
+def translation_usage_update(
+    ledger: object,
+    command: Any,
+    *,
+    tick: int,
+    terminology: object | None,
+    mode: object | None,
+    policy: TranslationPolicy | None = None,
+) -> object:
+    """Commit usage for mappings whose foreign source term appears in ``command``."""
+    from agents.cognition.configuration import CognitionTranslationMode
+
+    if mode is not CognitionTranslationMode.DETERMINISTIC:
+        return ledger
+    if type(ledger) is not TranslationLedger or not _is_communication_command(command):
+        return ledger
+    command = cast(Any, command)
+    if type(terminology) is not TerminologyLedger:
+        return ledger
+    active_policy = default_translation_policy() if policy is None else policy
+    used_tokens = {
+        relation.subject
+        for relation in command.utterance.content.relations
+        if getattr(relation, "predicate", None) == "call"
+        and isinstance(getattr(relation, "subject", None), str)
+    }
+    changed = False
+    updated: list[TranslationMapping] = []
+    for mapping in ledger.mappings:
+        if mapping.source_token not in used_tokens:
+            updated.append(mapping)
+            continue
+        applications = list(mapping.applications)
+        if len(applications) < active_policy.max_applications:
+            ordinal = len(applications)
+            target = mapping.targets[0] if mapping.targets else None
+            applications.append(
+                TranslationApplication(
+                    application_id=translation_application_id(
+                        mapping.mapping_id,
+                        ordinal,
+                        TranslationApplicationKind.OUTBOUND_TERM,
+                        None,
+                    ),
+                    ordinal=ordinal,
+                    tick=tick,
+                    kind=TranslationApplicationKind.OUTBOUND_TERM,
+                    mapping_id=mapping.mapping_id,
+                    outcome=TranslationApplicationOutcome.APPLIED,
+                    target_binding_id=None if target is None else target.binding_id,
+                    command_kind=str(getattr(command, "kind", "talk")),
+                )
+            )
+        updated.append(
+            TranslationMapping(
+                mapping_id=mapping.mapping_id,
+                owner_id=mapping.owner_id,
+                source_token=mapping.source_token,
+                source_digest=mapping.source_digest,
+                source_kind=mapping.source_kind,
+                targets=mapping.targets,
+                status=mapping.status,
+                fit=mapping.fit,
+                strength=mapping.strength,
+                evidence_count=mapping.evidence_count,
+                first_tick=mapping.first_tick,
+                last_tick=mapping.last_tick,
+                last_use_tick=tick,
+                usage_count=mapping.usage_count + 1,
+                evidence=mapping.evidence,
+                applications=tuple(applications),
+                notices=mapping.notices,
+            )
+        )
+        changed = True
+    if not changed:
+        return ledger
+    result = TranslationLedger(
+        owner_id=ledger.owner_id,
+        mappings=tuple(updated),
+        notices=ledger.notices,
+    )
+    result.validate_against(terminology)
+    _LOG.info(
+        "translation_usage_committed owner_id=%s tick=%s usage_count=%s",
+        ledger.owner_id.value,
+        tick,
+        sum(mapping.usage_count for mapping in result.mappings),
+    )
+    return result
+
+
 def record_translation_application(
     ledger: TranslationLedger,
     terminology: TerminologyLedger,

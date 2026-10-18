@@ -18,7 +18,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
 from agents.cognition.models import OwnerSafeSocialIdentity
 from agents.cognition.semantic_naming import (
@@ -1147,6 +1147,37 @@ def _operator_atoms(communication: ObservedCommunication) -> list[tuple[str, str
     return atoms
 
 
+def _resolve_symbol_part(
+    bindings: Mapping[str, LabelBinding],
+    terminology: TerminologyLedger,
+    token: str,
+    translation: object | None,
+) -> tuple[LabelBinding | None, str, str, Any]:
+    binding = _active_binding(bindings, token)
+    if binding is not None:
+        return binding, token, "own", None
+    if translation is None:
+        return None, token, "missing", None
+    from agents.cognition.translation import (
+        TranslationLedger,
+        resolve_translation_token,
+    )
+
+    if type(translation) is not TranslationLedger:
+        return None, token, "missing", None
+    resolution = resolve_translation_token(translation, terminology, token)
+    if resolution.status == "resolved" and resolution.binding is not None:
+        return (
+            resolution.binding,
+            resolution.binding.label_token,
+            "translated",
+            resolution,
+        )
+    if resolution.status == "ambiguous":
+        return None, token, "ambiguous", resolution
+    return None, token, "missing", resolution
+
+
 def _apply_transmission(
     *,
     observation: Observation,
@@ -1155,7 +1186,10 @@ def _apply_transmission(
     notices: list[str],
     interpretations: list[SymbolicInterpretation],
     bindings: Mapping[str, LabelBinding],
+    terminology: TerminologyLedger,
     policy: SymbolicLanguagePolicy,
+    translation: object | None = None,
+    translation_applications: list[dict[str, object]] | None = None,
 ) -> None:
     owner_id = identity.owner_id
     tick = observation.tick
@@ -1189,9 +1223,52 @@ def _apply_transmission(
             except ValueError:
                 _notice(notices, "illegal_token")
                 continue
-            first = _active_binding(bindings, parts[0])
-            second = _active_binding(bindings, parts[1])
-            if first is None or second is None:
+            first, first_token, first_status, first_res = _resolve_symbol_part(
+                bindings, terminology, parts[0], translation
+            )
+            second, second_token, second_status, second_res = _resolve_symbol_part(
+                bindings, terminology, parts[1], translation
+            )
+            for status, resolution in (
+                (first_status, first_res),
+                (second_status, second_res),
+            ):
+                if status == "ambiguous":
+                    _notice(notices, "ambiguous_translation")
+                    if (
+                        translation_applications is not None
+                        and resolution is not None
+                        and resolution.mapping is not None
+                    ):
+                        translation_applications.append(
+                            {
+                                "mapping_id": resolution.mapping.mapping_id,
+                                "outcome": "ambiguous",
+                                "target_binding_id": None,
+                                "message_id": message_id,
+                            }
+                        )
+                elif status == "translated" and resolution is not None:
+                    if (
+                        translation_applications is not None
+                        and resolution.mapping is not None
+                    ):
+                        translation_applications.append(
+                            {
+                                "mapping_id": resolution.mapping.mapping_id,
+                                "outcome": "applied",
+                                "target_binding_id": (
+                                    None
+                                    if resolution.target is None
+                                    else resolution.target.binding_id
+                                ),
+                                "message_id": message_id,
+                            }
+                        )
+            if first is None or second is None or "ambiguous" in {
+                first_status,
+                second_status,
+            }:
                 outcome = (
                     SymbolicParseOutcome.UNRESOLVED
                     if first is None and second is None
@@ -1218,6 +1295,7 @@ def _apply_transmission(
                         )
                     )
                 continue
+            stored_parts = (first_token, second_token)
             first_kind = _top_kind(first)
             second_kind = _top_kind(second)
             hypothesis = None
@@ -1230,7 +1308,7 @@ def _apply_transmission(
                 notices=notices,
                 owner_id=owner_id,
                 kind=kind,
-                parts=parts,
+                parts=stored_parts,
                 delta=policy.communicated_delta,
                 channel=SymbolicEvidenceChannel.COMMUNICATED,
                 lineage_ref=f"{lineage}-{kind.value}",
@@ -1239,7 +1317,7 @@ def _apply_transmission(
                 speaker_id=speaker_agent,
                 hypothesis=hypothesis,
             )
-            composition_value = composition_id(owner_id, kind, parts)
+            composition_value = composition_id(owner_id, kind, stored_parts)
             if message_id is not None and len(interpretations) < _MAX_INTERPRETATIONS:
                 interpretations.append(
                     SymbolicInterpretation(
@@ -1404,6 +1482,8 @@ def apply_symbolic_update(
     memories: Sequence[object] | None = None,
     cues: SymbolicCueSummary | None = None,
     policy: SymbolicLanguagePolicy | None = None,
+    translation: object | None = None,
+    translation_applications: list[dict[str, object]] | None = None,
 ) -> SymbolicLedger:
     """Apply one tick of owner-scoped composition evidence.
 
@@ -1459,7 +1539,10 @@ def apply_symbolic_update(
         notices=notices,
         interpretations=interpretations,
         bindings=bindings,
+        terminology=terminology,
         policy=active_policy,
+        translation=translation,
+        translation_applications=translation_applications,
     )
     _apply_memory(
         memories=memories,

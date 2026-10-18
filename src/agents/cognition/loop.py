@@ -1763,6 +1763,7 @@ class CognitiveLoop:
             return None
         cues = self._build_symbolic_cue_summary(loop_input.observation)
         memories = () if snapshot is None else snapshot.memories
+        self._symbolic_translation_applications = []
         updated = apply_symbolic_update(
             loop_input.observation,
             identity,
@@ -1771,6 +1772,8 @@ class CognitiveLoop:
             memories=memories,
             cues=cues,
             policy=self._symbolic_language_policy,
+            translation=None if snapshot is None else snapshot.translation,
+            translation_applications=self._symbolic_translation_applications,
         )
         _LOG.debug(
             "symbolic_language_carried owner_id=%s composition_count=%s",
@@ -3849,6 +3852,22 @@ class CognitiveLoop:
                 command,
                 tick=loop_input.observation.tick,
                 policy=self._symbolic_language_policy,
+            )
+        from agents.cognition.configuration import CognitionTranslationMode
+
+        if (
+            self._translation_mode is CognitionTranslationMode.DETERMINISTIC
+            and translation is not None
+        ):
+            from agents.cognition.translation import translation_usage_update
+
+            translation = translation_usage_update(
+                translation,
+                command,
+                tick=loop_input.observation.tick,
+                terminology=semantic_naming,
+                mode=self._translation_mode,
+                policy=self._translation_policy,
             )
         proposal = CognitiveLoopProposal(
             invocation_id=invocation_id,

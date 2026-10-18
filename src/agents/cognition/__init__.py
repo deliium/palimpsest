@@ -737,20 +737,20 @@ from agents.cognition.translation import (
     TranslationSourceKind,
     TranslationStrengthBand,
     TranslationTarget,
+    apply_translation_update,
     default_translation_policy,
     empty_translation_ledger,
+    record_translation_application,
     require_owner_translation,
+    resolve_translation_token,
     translation_application_id,
+    translation_communicate_utterance,
     translation_evidence_id,
     translation_mapping_id,
     translation_source_digest,
     translation_strength_band,
-)
-from agents.cognition.translation import (
-    apply_translation_update,
-    record_translation_application,
-    resolve_translation_token,
     translation_targets_for_kind,
+    translation_usage_update,
 )
 from agents.cognition.world_model import (
     WORLD_MODEL_POLICY_VERSION,

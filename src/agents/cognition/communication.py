@@ -211,6 +211,57 @@ def _memory_id_for_communication(
     return MemoryId(raw)
 
 
+def _translated_relations(
+    relations: Sequence[object], translation: object | None
+) -> tuple[CommunicationRelation, ...]:
+    """Bounded owner-local translated copies of delivered relations."""
+    from agents.cognition.translation import (
+        TranslationFit,
+        TranslationLedger,
+        TranslationMappingStatus,
+    )
+    from world.communications import CommunicationRelation
+
+    if translation is None:
+        return ()
+    if type(translation) is not TranslationLedger:
+        return ()
+    resolved: dict[str, str] = {}
+    for mapping in translation.mappings:
+        if mapping.status is not TranslationMappingStatus.ACTIVE:
+            continue
+        if mapping.fit is not TranslationFit.RESOLVED or len(mapping.targets) != 1:
+            continue
+        resolved[mapping.source_token] = mapping.targets[0].label_token
+    if not resolved:
+        return ()
+    translated: list[CommunicationRelation] = []
+    for relation in relations:
+        if len(translated) >= 4:
+            break
+        subject = getattr(relation, "subject", None)
+        obj = getattr(relation, "object", None)
+        predicate = getattr(relation, "predicate", None)
+        if not isinstance(subject, str) or not isinstance(obj, str):
+            continue
+        new_subject = resolved.get(subject, subject)
+        new_object = resolved.get(obj, obj)
+        if new_subject == subject and new_object == obj:
+            continue
+        translated.append(
+            CommunicationRelation(
+                subject=new_subject, predicate=str(predicate), object=new_object
+            )
+        )
+    if translated:
+        _LOG.debug(
+            "translation_memory_overlay owner_id=%s translated_relation_count=%s",
+            translation.owner_id.value,
+            len(translated),
+        )
+    return tuple(translated)
+
+
 def build_communicated_memory_trace(
     *,
     owner_id: AgentId,
@@ -219,6 +270,7 @@ def build_communicated_memory_trace(
     message: ObservedCommunication,
     location_id: EntityId | None,
     receiver_confidence: float | None = None,
+    translation: object | None = None,
 ) -> MemoryTrace:
     """Build a fresh communicated trace from one owned observation delivery."""
     if type(message) is not ObservedCommunication:
@@ -278,6 +330,30 @@ def build_communicated_memory_trace(
         relations.append(
             MemoryRelation(
                 relation_id=MentionId(f"r-{index}"),
+                predicate=relation.predicate,
+                subject=RelationEndpoint(
+                    kind=RelationEndpointKind.CONCEPT,
+                    mention_id=subject_mention,
+                ),
+                object=RelationEndpoint(
+                    kind=RelationEndpointKind.CONCEPT,
+                    mention_id=object_mention,
+                ),
+            )
+        )
+    translated = _translated_relations(content.relations, translation)
+    for index, relation in enumerate(translated):
+        subject_mention = MentionId(f"t-rel-s-{index}")
+        object_mention = MentionId(f"t-rel-o-{index}")
+        concepts.append(
+            ConceptMention(mention_id=subject_mention, concept=relation.subject)
+        )
+        concepts.append(
+            ConceptMention(mention_id=object_mention, concept=relation.object)
+        )
+        relations.append(
+            MemoryRelation(
+                relation_id=MentionId(f"tr-{index}"),
                 predicate=relation.predicate,
                 subject=RelationEndpoint(
                     kind=RelationEndpointKind.CONCEPT,
@@ -437,6 +513,11 @@ class CommunicatedMemoryUpdateHook:
                     observation_revision=observation.revision,
                     message=message,
                     location_id=perception.location_id,
+                    translation=(
+                        None
+                        if loop_input.snapshot is None
+                        else loop_input.snapshot.translation
+                    ),
                 )
             except (TypeError, ValueError) as exc:
                 _LOG.error(
