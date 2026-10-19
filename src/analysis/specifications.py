@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 115
+METRIC_FAMILY_COUNT: Final[int] = 117
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -190,6 +190,8 @@ class MetricFamilyId(StrEnum):
     TRANSLATION_LEARNING = "translation_learning"
     CROSS_GROUP_TRANSLATION = "cross_group_translation"
     TRANSLATION_INFLUENCE = "translation_influence"
+    INSTITUTION_EMERGENCE = "institution_emergence"
+    INSTITUTIONAL_PERSISTENCE = "institutional_persistence"
 
 
 class DenominatorKind(StrEnum):
@@ -4957,6 +4959,87 @@ def _spec_semantic_divergence() -> MetricSpecification:
         ),
     )
 
+
+def _spec_institution_emergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTION_EMERGENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_institution_lane_rows",
+        denominator="known_person_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="as_of tick detached lanes",
+        deceased_policy="dead owners keep contributed evidence",
+        zero_holding_policy="no lane rows -> availability=absent",
+        opportunity_vs_occurrence="pattern bundles, never institution types",
+        self_edge_policy="not_applicable",
+        censoring_policy="actors and evidence are digests; no labels exported",
+        formulas={
+            "candidate_count": "bundles at or above the locked pattern floor",
+            "sub_threshold_count": "bundles below the locked floor",
+            "lane_row_counts": "closed lane histogram of harvested rows",
+            "max_tick_span": "longest candidate tick span",
+            "multi_generation_candidate_count": "candidates with continuity lane",
+            "max_generation_span": "longest candidate generation span",
+            "as_of_tick": "evidence cutoff tick",
+        },
+        value_keys=(
+            "candidate_count",
+            "sub_threshold_count",
+            "lane_row_counts",
+            "max_tick_span",
+            "multi_generation_candidate_count",
+            "max_generation_span",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no institution lane rows",
+    )
+
+
+def _spec_institutional_persistence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTIONAL_PERSISTENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_institution_candidates",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick candidate evidence",
+        deceased_policy="post-death survival is measured, never imputed",
+        zero_holding_policy="no candidates -> availability=absent",
+        opportunity_vs_occurrence="temporary coordination stays reported",
+        self_edge_policy="not_applicable",
+        censoring_policy="logical ticks only; no wall clock",
+        formulas={
+            "candidate_count": "candidates considered",
+            "persistent_institution_like_count": "persistent classification count",
+            "temporary_coordination_count": "temporary classification count",
+            "survival_curve": "tick -> surviving candidate share",
+            "mean_lifetime_ticks": "mean candidate tick span",
+            "succession_survival_ratio": "lanes continuing past a death",
+            "cross_generational_ratio": "evidence across lifecycle generations",
+        },
+        value_keys=(
+            "candidate_count",
+            "persistent_institution_like_count",
+            "temporary_coordination_count",
+            "survival_curve",
+            "mean_lifetime_ticks",
+            "succession_survival_ratio",
+            "cross_generational_ratio",
+        ),
+        empty_case="availability=absent; no institution candidates",
+    )
+
+
 def _spec_generational_narrative_continuity() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.GENERATIONAL_NARRATIVE_CONTINUITY,
@@ -4973,8 +5056,7 @@ def _spec_generational_narrative_continuity() -> MetricSpecification:
         ),
         self_edge_policy="self generation successors are ignored",
         censoring_policy=(
-            "missing generation rows are coverage gaps and never fabricated "
-            "generations"
+            "missing generation rows are coverage gaps and never fabricated generations"
         ),
         formulas={
             "active_lineage_count": "distinct active lineage roots",
@@ -5212,6 +5294,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_translation_learning,
     _spec_cross_group_translation,
     _spec_translation_influence,
+    _spec_institution_emergence,
+    _spec_institutional_persistence,
     _spec_generational_narrative_continuity,
     _spec_narrative_source_loss,
     _spec_narrative_historical_alignment,

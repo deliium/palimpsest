@@ -198,6 +198,22 @@ from analysis.identity_dynamics_metrics import (
     build_identity_audit,
     compute_identity_dynamics,
 )
+from analysis.institution_emergence import (
+    InstitutionAnalysisError,
+    InstitutionCandidateRow,
+    InstitutionEmergenceResult,
+    InstitutionLane,
+    InstitutionLaneRow,
+    compute_institution_candidates,
+    compute_institution_emergence,
+)
+from analysis.institutional_persistence import (
+    InstitutionalPersistenceResult,
+    InstitutionPersistenceClassification,
+    InstitutionPersistenceRow,
+    compute_institutional_persistence,
+    compute_institutional_persistence_metric,
+)
 from analysis.kinship_genealogy_metrics import (
     KINSHIP_GENEALOGY_METRIC_VERSION,
     KinshipEdgeRow,
@@ -773,6 +789,14 @@ __all__ = [
     "GoalTransitionRow",
     "InMemoryMemoryEvidenceSource",
     "InMemoryObjectiveEventSource",
+    "InstitutionAnalysisError",
+    "InstitutionCandidateRow",
+    "InstitutionEmergenceResult",
+    "InstitutionLane",
+    "InstitutionLaneRow",
+    "InstitutionPersistenceClassification",
+    "InstitutionPersistenceRow",
+    "InstitutionalPersistenceResult",
     "KinshipEdgeRow",
     "KnowledgeGenealogyGraph",
     "KnowledgeGenealogyQueryId",
@@ -958,6 +982,10 @@ __all__ = [
     "compute_historical_memory_queries",
     "compute_historical_memory_transitions",
     "compute_identity_dynamics",
+    "compute_institution_candidates",
+    "compute_institution_emergence",
+    "compute_institutional_persistence",
+    "compute_institutional_persistence_metric",
     "compute_intergenerational_cooperation",
     "compute_kinship_genealogy",
     "compute_knowledge_diffusion",

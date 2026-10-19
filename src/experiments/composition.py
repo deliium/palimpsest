@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
@@ -39,6 +40,7 @@ from analysis.contact_reputation_transfer import (
     ContactReputationEvidenceRow,
     compute_contact_reputation_transfer,
 )
+from analysis.institution_emergence import InstitutionLane, InstitutionLaneRow
 from analysis.models import (
     MEMORY_DYNAMICS_METRIC_VERSION,
     MemoryDynamicsAuditRow,
@@ -3285,9 +3287,7 @@ def historical_memory_harvest_from_run(
         raise ValueError("as_of_tick: out_of_range")
 
     audits = tuple(cultural_feature_audits or ())
-    include_cultural = bool(
-        getattr(layers_spec, "include_cultural_features", False)
-    )
+    include_cultural = bool(getattr(layers_spec, "include_cultural_features", False))
     if include_cultural and not audits:
         _LOG.warning(
             "historical_memory_harvest_empty_audits "
@@ -3444,9 +3444,7 @@ def symbolic_composition_rows_from_ledgers(
                         symbolic_surface_digest(composition.parts[1]),
                     ),
                     referent_kind=(
-                        None
-                        if hypothesis is None
-                        else hypothesis.referent_kind.value
+                        None if hypothesis is None else hypothesis.referent_kind.value
                     ),
                     status=composition.status.value,
                     strength_band=_symbolic_band(
@@ -3512,9 +3510,7 @@ def symbolic_message_rows_from_events(
     from world.communications import confidence_band
     from world.events import Asked, Talked, Told
 
-    outcome_by_message = {
-        item.message_id: item.outcome for item in interpretations
-    }
+    outcome_by_message = {item.message_id: item.outcome for item in interpretations}
     rows: list[SymbolicMessageRow] = []
     for event in events:
         details = getattr(event, "details", None)
@@ -3571,3 +3567,446 @@ def symbolic_analysis_inputs_from_harvest(
         communities=communities,
         expected_owner_count=expected_owner_count,
     )
+
+
+def _institution_get(row: object, key: str, default: object = None) -> object:
+    if isinstance(row, Mapping):
+        return row.get(key, default)
+    return getattr(row, key, default)
+
+
+def _institution_int(value: object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if type(value) is int:
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _institution_digest(material: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(f"institution|{material}".encode()).hexdigest()[:16]
+
+
+_ROLE_EVENT_FUNCTIONS: Final[dict[str, str]] = {
+    "ProjectCreated": "project_initiator",
+    "project_created": "project_initiator",
+    "ProjectContributed": "project_contributor",
+    "project_contributed": "project_contributor",
+    "PublicGoodMaintained": "public_good_maintainer",
+    "public_good_maintained": "public_good_maintainer",
+    "RepositoryEstablished": "repository_founder",
+    "repository_established": "repository_founder",
+    "RepositoryMemberDeposited": "repository_depositor",
+    "repository_member_deposited": "repository_depositor",
+    "RepositoryMemberRetrieved": "repository_retriever",
+    "repository_member_retrieved": "repository_retriever",
+    "RepositoryMaintained": "repository_maintainer",
+    "repository_maintained": "repository_maintainer",
+    "Helped": "helper",
+    "helped": "helper",
+}
+
+
+def _institution_rows_by_subject(
+    rows: list[InstitutionLaneRow],
+) -> tuple[InstitutionLaneRow, ...]:
+    grouped: dict[tuple[str, str], list[InstitutionLaneRow]] = {}
+    for row in rows:
+        grouped.setdefault((row.lane.value, row.subject_digest), []).append(row)
+    out: list[InstitutionLaneRow] = []
+    for (_, _), items in sorted(grouped.items()):
+        actors = sorted({actor for item in items for actor in item.actor_digests})
+        out.append(
+            InstitutionLaneRow(
+                lane=items[0].lane,
+                subject_digest=items[0].subject_digest,
+                evidence_digest=items[0].evidence_digest,
+                tick_start=min(item.tick_start for item in items),
+                tick_end=max(item.tick_end for item in items),
+                occurrence_count=sum(item.occurrence_count for item in items),
+                actor_digests=tuple(actors),
+                function_token=items[0].function_token,
+            )
+        )
+    return tuple(out)
+
+
+def institution_role_rows_from_events(
+    events: Sequence[object],
+    *,
+    teaching_edges: Sequence[object] = (),
+) -> tuple[InstitutionLaneRow, ...]:
+    """Project function-bearing objective roles into analytical rows."""
+
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("institution_role_rows_from_events: invalid_events")
+    rows: list[InstitutionLaneRow] = []
+    for event in events:
+        details = _event_details(event)
+        name = type(details).__name__
+        kind = _id_text_or_none(getattr(details, "kind", None)) or name
+        function = _ROLE_EVENT_FUNCTIONS.get(name) or _ROLE_EVENT_FUNCTIONS.get(kind)
+        if function is None:
+            continue
+        tick = getattr(event, "tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int or tick < 0:
+            tick = 0
+        actors: list[str] = []
+        if function == "repository_founder":
+            founders = getattr(details, "founder_ids", ())
+            actors = [
+                token
+                for item in founders
+                if (token := _id_text_or_none(item)) is not None
+            ]
+        else:
+            actor = _id_text_or_none(
+                getattr(details, "actor_id", None) or getattr(event, "actor_id", None)
+            )
+            if actor is not None:
+                actors = [actor]
+        for actor in actors:
+            actor_digest = _institution_digest(f"actor|{actor}")
+            rows.append(
+                InstitutionLaneRow(
+                    lane=InstitutionLane.ROLE,
+                    subject_digest=_institution_digest(f"role|{function}|{actor}"),
+                    evidence_digest=_institution_digest(
+                        f"role-evidence|{function}|{actor}"
+                    ),
+                    tick_start=tick,
+                    tick_end=tick,
+                    occurrence_count=1,
+                    actor_digests=(actor_digest,),
+                    function_token=function,
+                )
+            )
+    for edge in teaching_edges or ():
+        teacher = _id_text_or_none(getattr(edge, "teacher_id", None))
+        if teacher is None:
+            continue
+        tick = getattr(edge, "at_tick", None)
+        if isinstance(tick, bool) or type(tick) is not int or tick < 0:
+            tick = 0
+        rows.append(
+            InstitutionLaneRow(
+                lane=InstitutionLane.ROLE,
+                subject_digest=_institution_digest(f"role|teaching|{teacher}"),
+                evidence_digest=_institution_digest(
+                    f"role-evidence|teaching|{teacher}"
+                ),
+                tick_start=tick,
+                tick_end=tick,
+                occurrence_count=1,
+                actor_digests=(_institution_digest(f"actor|{teacher}"),),
+                function_token="teaching_source",
+            )
+        )
+    result = _institution_rows_by_subject(rows)
+    _LOG.debug(
+        "institution_role_rows_built event_count=%s row_count=%s",
+        len(events),
+        len(result),
+    )
+    return result
+
+
+def institution_procedure_rows_from_events(
+    events: Sequence[object],
+) -> tuple[InstitutionLaneRow, ...]:
+    """Project closed action-sequence digests per location and day-phase bucket."""
+
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("institution_procedure_rows_from_events: invalid_events")
+    by_slot: dict[tuple[str, int], list[tuple[int, str]]] = {}
+    for event in events:
+        details = _event_details(event)
+        kind = _id_text_or_none(getattr(details, "kind", None))
+        if kind is None:
+            kind = type(details).__name__.lower()
+        tick = getattr(event, "tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int or tick < 0:
+            tick = 0
+        location = (
+            _id_text_or_none(
+                getattr(details, "location_id", None)
+                or getattr(details, "resulting_location_id", None)
+            )
+            or "unknown"
+        )
+        phase = tick % 8
+        by_slot.setdefault((location, phase), []).append((tick, kind))
+    rows: list[InstitutionLaneRow] = []
+    for (location, phase), items in sorted(by_slot.items()):
+        sequence = "|".join(kind for _, kind in sorted(items))
+        tick_values = [tick for tick, _ in items]
+        rows.append(
+            InstitutionLaneRow(
+                lane=InstitutionLane.PROCEDURE,
+                subject_digest=_institution_digest(
+                    f"procedure|{location}|{phase}|{sequence}"
+                ),
+                evidence_digest=_institution_digest(
+                    f"procedure-evidence|{location}|{phase}|{sequence}"
+                ),
+                tick_start=min(tick_values),
+                tick_end=max(tick_values),
+                occurrence_count=len(items),
+            )
+        )
+    _LOG.debug(
+        "institution_procedure_rows_built event_count=%s row_count=%s",
+        len(events),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def institution_expectation_rows_from_channel_rows(
+    rows: Sequence[object],
+) -> tuple[InstitutionLaneRow, ...]:
+    """Convert detached norm/convention channel rows into expectation lanes."""
+
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise TypeError("institution_expectation_rows_from_channel_rows: invalid")
+    out: list[InstitutionLaneRow] = []
+    for row in rows:
+        token = _id_text_or_none(
+            row.get("token")
+            if isinstance(row, Mapping)
+            else getattr(row, "token", None)
+        )
+        if token is None:
+            continue
+        tick = 0
+        if isinstance(row, Mapping):
+            raw_tick = row.get("tick", 0)
+        else:
+            raw_tick = getattr(row, "tick", 0)
+        if type(raw_tick) is int and not isinstance(raw_tick, bool) and raw_tick >= 0:
+            tick = raw_tick
+        out.append(
+            InstitutionLaneRow(
+                lane=InstitutionLane.EXPECTATION,
+                subject_digest=_institution_digest(f"expectation|{token}"),
+                evidence_digest=_institution_digest(f"expectation-evidence|{token}"),
+                tick_start=tick,
+                tick_end=tick,
+                occurrence_count=1,
+            )
+        )
+    _LOG.debug(
+        "institution_expectation_rows_built source_rows=%s row_count=%s",
+        len(rows),
+        len(out),
+    )
+    return tuple(out)
+
+
+def institution_legitimacy_rows_from_norm_and_possession_rows(
+    norm_rows: Sequence[object],
+    possession_rows: Sequence[object],
+) -> tuple[InstitutionLaneRow, ...]:
+    """Project support/sanction evidence into legitimacy lanes."""
+    for _name, rows in (("norm", norm_rows), ("possession", possession_rows)):
+        if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+            raise TypeError(
+                "institution_legitimacy_rows_from_norm_and_possession_rows: invalid"
+            )
+    out: list[InstitutionLaneRow] = []
+    for row in norm_rows:
+        get = partial(_institution_get, row)
+        supporters = _institution_int(get("supporter_count", 0))
+        raw_sanctions = get("consequences", ()) or ()
+        sanctions = (
+            tuple(raw_sanctions)
+            if isinstance(raw_sanctions, Sequence)
+            and not isinstance(raw_sanctions, (str, bytes))
+            else ()
+        )
+        if supporters < 2 and not sanctions:
+            continue
+        pattern = _id_text_or_none(get("pattern", None)) or "unknown"
+        token = f"{pattern}|{supporters}|{len(sanctions)}"
+        out.append(
+            InstitutionLaneRow(
+                lane=InstitutionLane.LEGITIMACY,
+                subject_digest=_institution_digest(f"legitimacy|{token}"),
+                evidence_digest=_institution_digest(f"legitimacy-evidence|{token}"),
+                tick_start=_institution_int(get("tick", 0)),
+                tick_end=_institution_int(get("tick", 0)),
+                occurrence_count=max(1, supporters),
+            )
+        )
+    for row in possession_rows:
+        get = partial(_institution_get, row)
+        doctrine = _id_text_or_none(get("doctrine", None))
+        count = _institution_int(get("count", 0))
+        if doctrine is None or count < 1:
+            continue
+        token = f"{doctrine}|{count}"
+        out.append(
+            InstitutionLaneRow(
+                lane=InstitutionLane.LEGITIMACY,
+                subject_digest=_institution_digest(f"legitimacy|{token}"),
+                evidence_digest=_institution_digest(f"legitimacy-evidence|{token}"),
+                tick_start=_institution_int(get("tick", 0)),
+                tick_end=_institution_int(get("tick", 0)),
+                occurrence_count=count,
+            )
+        )
+    _LOG.debug(
+        "institution_legitimacy_rows_built norm_rows=%s possession_rows=%s "
+        "row_count=%s",
+        len(norm_rows),
+        len(possession_rows),
+        len(out),
+    )
+    return tuple(out)
+
+
+def institution_succession_rows_from_events(
+    events: Sequence[object],
+    *,
+    death_ticks: Mapping[str, int] | None = None,
+) -> tuple[InstitutionLaneRow, ...]:
+    """Project a function resumed by a different actor after a death event."""
+    if isinstance(events, (str, bytes)) or not isinstance(events, Sequence):
+        raise TypeError("institution_succession_rows_from_events: invalid_events")
+    deaths = dict(death_ticks or {})
+    if not deaths:
+        for event in events:
+            details = _event_details(event)
+            if type(details).__name__ not in {"Died", "DiedEvent"} and (
+                _id_text_or_none(getattr(details, "kind", None)) != "died"
+            ):
+                continue
+            dead = _id_text_or_none(
+                getattr(details, "body_id", None) or getattr(details, "agent_id", None)
+            )
+            tick = getattr(event, "tick", 0)
+            if dead is not None and type(tick) is int and not isinstance(tick, bool):
+                deaths[dead] = tick
+    history: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    rows: list[InstitutionLaneRow] = []
+    for event in events:
+        details = _event_details(event)
+        name = type(details).__name__
+        kind = _id_text_or_none(getattr(details, "kind", None)) or name
+        function = _ROLE_EVENT_FUNCTIONS.get(name) or _ROLE_EVENT_FUNCTIONS.get(kind)
+        if function is None:
+            continue
+        tick = getattr(event, "tick", 0)
+        if isinstance(tick, bool) or type(tick) is not int or tick < 0:
+            tick = 0
+        actor = _id_text_or_none(
+            getattr(details, "actor_id", None) or getattr(event, "actor_id", None)
+        )
+        if actor is None:
+            continue
+        target = (
+            _id_text_or_none(
+                getattr(details, "repository_id", None)
+                or getattr(details, "project_id", None)
+                or "general"
+            )
+            or "general"
+        )
+        key = (function, target)
+        prior = history.setdefault(key, [])
+        for actor_id, death_tick in deaths.items():
+            if actor_id == actor or death_tick > tick:
+                continue
+            if not any(item_actor == actor_id for _, item_actor in prior):
+                continue
+            rows.append(
+                InstitutionLaneRow(
+                    lane=InstitutionLane.SUCCESSION,
+                    subject_digest=_institution_digest(
+                        f"succession|{function}|{target}"
+                    ),
+                    evidence_digest=_institution_digest(
+                        f"succession-evidence|{function}|{target}|{actor_id}|{actor}"
+                    ),
+                    tick_start=death_tick,
+                    tick_end=tick,
+                    occurrence_count=1,
+                    actor_digests=(
+                        _institution_digest(f"actor|{actor_id}"),
+                        _institution_digest(f"actor|{actor}"),
+                    ),
+                    function_token=function,
+                )
+            )
+        prior.append((tick, actor))
+    _LOG.debug(
+        "institution_succession_rows_built event_count=%s row_count=%s",
+        len(events),
+        len(rows),
+    )
+    return tuple(rows)
+
+
+def institution_continuity_rows_from_channel_rows(
+    rows: Sequence[object],
+) -> tuple[InstitutionLaneRow, ...]:
+    """Project kinship/mentorship spans into cross-generational lanes."""
+
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise TypeError("institution_continuity_rows_from_channel_rows: invalid")
+    out: list[InstitutionLaneRow] = []
+    for row in rows:
+        get = partial(_institution_get, row)
+        source = _id_text_or_none(
+            get("parent_id", None)
+            or get("teacher_id", None)
+            or get("mentor_id", None)
+            or get("source_id", None)
+        )
+        target = _id_text_or_none(
+            get("child_id", None)
+            or get("learner_id", None)
+            or get("mentee_id", None)
+            or get("target_id", None)
+        )
+        if source is None or target is None:
+            continue
+        generation_start = get("generation_start", None)
+        generation_end = get("generation_end", None)
+        if type(generation_start) is not int or isinstance(generation_start, bool):
+            generation_start = 0
+        if type(generation_end) is not int or isinstance(generation_end, bool):
+            generation_end = generation_start + 1
+        tick = get("tick", get("at_tick", 0))
+        if type(tick) is not int or isinstance(tick, bool) or tick < 0:
+            tick = 0
+        token = f"{source}|{target}"
+        out.append(
+            InstitutionLaneRow(
+                lane=InstitutionLane.CONTINUITY,
+                subject_digest=_institution_digest(f"continuity|{token}"),
+                evidence_digest=_institution_digest(f"continuity-evidence|{token}"),
+                tick_start=tick,
+                tick_end=tick,
+                occurrence_count=1,
+                actor_digests=(
+                    _institution_digest(f"actor|{source}"),
+                    _institution_digest(f"actor|{target}"),
+                ),
+                generation_start=generation_start,
+                generation_end=generation_end,
+            )
+        )
+    _LOG.debug(
+        "institution_continuity_rows_built source_rows=%s row_count=%s",
+        len(rows),
+        len(out),
+    )
+    return tuple(out)

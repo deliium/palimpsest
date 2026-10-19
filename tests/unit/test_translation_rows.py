@@ -133,7 +133,7 @@ def _influence(
 
 
 def test_metric_families_are_registered_at_115() -> None:
-    assert METRIC_FAMILY_COUNT == 115
+    assert METRIC_FAMILY_COUNT == 117
     for family, version in (
         (MetricFamilyId.TRANSLATION_LEARNING, TRANSLATION_LEARNING_METRIC_VERSION),
         (
@@ -151,9 +151,9 @@ def test_metric_families_are_registered_at_115() -> None:
 
 def test_mapping_rows_are_digest_only_and_round_trip() -> None:
     row = _mapping()
-    assert row.source_digest == hashlib.sha256(
-        b"translation|foreign_a"
-    ).hexdigest()[:16]
+    assert (
+        row.source_digest == hashlib.sha256(b"translation|foreign_a").hexdigest()[:16]
+    )
     assert "foreign_a" not in repr(row)
     assert "own_a" not in repr(row)
 
@@ -210,9 +210,7 @@ def test_cross_group_accuracy_denominator_excludes_coverage_gaps() -> None:
     document = compute_cross_group_translation_metric(
         result, run_id="run-1", input_revision="rev-1"
     )
-    ratios = dict(
-        item.split(":") for item in document.values["ratios"].split(";")
-    )
+    ratios = dict(item.split(":") for item in document.values["ratios"].split(";"))
     assert float(ratios["exact_rate"]) == 0.5
     assert float(ratios["wrong_rate"]) == 0.5
 
@@ -301,9 +299,7 @@ def test_message_harvest_reads_world_event_details() -> None:
     speaker_binding = SimpleNamespace(
         label_token="foreign_a",
         referent_kind=SimpleNamespace(value="location"),
-        candidates=(
-            SimpleNamespace(confidence=0.8, entity_id="loc-1"),
-        ),
+        candidates=(SimpleNamespace(confidence=0.8, entity_id="loc-1"),),
     )
     speaker_ledger = SimpleNamespace(
         owner_id=AgentId("alice"), bindings=(speaker_binding,)
@@ -324,9 +320,7 @@ def test_message_harvest_reads_world_event_details() -> None:
         event_id=SimpleNamespace(value="evt-1"),
         actor_id=EntityId("body-alice"),
         tick=2,
-        details=SimpleNamespace(
-            utterance=utterance, recipient_id=EntityId("body-bob")
-        ),
+        details=SimpleNamespace(utterance=utterance, recipient_id=EntityId("body-bob")),
     )
     rows = translation_message_rows_from_events(
         (event,),

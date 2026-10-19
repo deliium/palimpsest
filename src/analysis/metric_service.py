@@ -294,6 +294,13 @@ class MetricComputationInputs:
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
     translation_analysis: object | None = None
+    institution_role_rows: Sequence[object] | None = None
+    institution_procedure_rows: Sequence[object] | None = None
+    institution_expectation_rows: Sequence[object] | None = None
+    institution_legitimacy_rows: Sequence[object] | None = None
+    institution_succession_rows: Sequence[object] | None = None
+    institution_continuity_rows: Sequence[object] | None = None
+    institution_known_person_ids: Sequence[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1197,6 +1204,17 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "society_isolation": inputs.society_isolation is not None,
         "contact_analysis": inputs.contact_analysis is not None,
         "translation_analysis": inputs.translation_analysis is not None,
+        "institution_analysis": any(
+            block is not None
+            for block in (
+                inputs.institution_role_rows,
+                inputs.institution_procedure_rows,
+                inputs.institution_expectation_rows,
+                inputs.institution_legitimacy_rows,
+                inputs.institution_succession_rows,
+                inputs.institution_continuity_rows,
+            )
+        ),
     }
     _LOG.debug(
         "metric_optional_inputs",
@@ -1404,9 +1422,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             composition = compute_symbolic_composition(
                 symbolic.compositions,
                 symbolic.interpretations,
-                expected_owner_count=(
-                    symbolic.expected_owner_count or None
-                ),
+                expected_owner_count=(symbolic.expected_owner_count or None),
             )
             _safe(
                 "symbolic_composition",
@@ -1464,6 +1480,54 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                     input_revision=revision,
                 ),
             )
+
+    if any(
+        block is not None
+        for block in (
+            inputs.institution_role_rows,
+            inputs.institution_procedure_rows,
+            inputs.institution_expectation_rows,
+            inputs.institution_legitimacy_rows,
+            inputs.institution_succession_rows,
+            inputs.institution_continuity_rows,
+        )
+    ):
+        from analysis.institution_emergence import (
+            compute_institution_candidates,
+            compute_institution_emergence,
+        )
+        from analysis.institutional_persistence import (
+            compute_institutional_persistence,
+            compute_institutional_persistence_metric,
+        )
+
+        institution_result = compute_institution_candidates(
+            role_rows=inputs.institution_role_rows,
+            procedure_rows=inputs.institution_procedure_rows,
+            expectation_rows=inputs.institution_expectation_rows,
+            legitimacy_rows=inputs.institution_legitimacy_rows,
+            succession_rows=inputs.institution_succession_rows,
+            continuity_rows=inputs.institution_continuity_rows,
+            known_person_ids=inputs.institution_known_person_ids or (),
+            tick=window_end,
+        )
+        _safe(
+            "institution_emergence",
+            lambda: compute_institution_emergence(
+                institution_result,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+        _safe(
+            "institutional_persistence",
+            lambda: compute_institutional_persistence_metric(
+                compute_institutional_persistence(institution_result),
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
 
     if inputs.semantic_drift_analysis is not None:
         semantic = inputs.semantic_drift_analysis
