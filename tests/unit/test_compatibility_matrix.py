@@ -45,6 +45,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V20,
     RUNNER_SCHEMA_VERSION_V21,
     RUNNER_SCHEMA_VERSION_V22,
+    RUNNER_SCHEMA_VERSION_V49,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 
@@ -155,6 +156,10 @@ def test_runner_config_write_is_v4_with_legacy_accepted() -> None:
     assert "extended_self_model" in entry.v1_fixture_impact
     assert "V1 gate" in entry.v1_fixture_impact
     assert "V3 flags" in entry.v1_fixture_impact
+    assert RUNNER_SCHEMA_VERSION_V49 == "runner-config-v49"
+    assert RUNNER_SCHEMA_VERSION_V49 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v49" in entry.accepted_restore
+    assert "institution_concept_mode" in entry.bump_trigger
     assert entry.write_version == "runner-config-v4"
 
 

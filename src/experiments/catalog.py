@@ -2773,6 +2773,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "semantic_drift@1",
         "cross_cultural_translation@1",
         "generational_narratives@1",
+        "institutionalization@1",
     }
 )
 
@@ -5324,8 +5325,7 @@ def experiment_bd_translation(
         max_ticks=max_ticks,
     )
     _LOG.info(
-        "experiment_registered experiment_id=cross_cultural_translation@1 "
-        "arms=%s",
+        "experiment_registered experiment_id=cross_cultural_translation@1 arms=%s",
         len(definition.conditions),
     )
     return definition
@@ -5348,8 +5348,30 @@ def experiment_be_generational_narratives(
         max_ticks=max_ticks,
     )
     _LOG.info(
-        "experiment_registered experiment_id=generational_narratives@1 "
-        "arms=%s",
+        "experiment_registered experiment_id=generational_narratives@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bf_institutionalization(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BF: analytical institution emergence and persistence."""
+    from experiments.institutionalization_scenario import (
+        institutionalization_scenario,
+    )
+
+    definition = institutionalization_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=institutionalization@1 arms=%s",
         len(definition.conditions),
     )
     return definition

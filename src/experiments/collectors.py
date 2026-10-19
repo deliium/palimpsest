@@ -119,6 +119,12 @@ def assemble_arm_metric_bundle(
         cultural_channel_rows_from_norm_beliefs,
         durable_record_harvest_from_run,
         historical_memory_harvest_from_run,
+        institution_continuity_rows_from_channel_rows,
+        institution_expectation_rows_from_channel_rows,
+        institution_legitimacy_rows_from_norm_and_possession_rows,
+        institution_procedure_rows_from_events,
+        institution_role_rows_from_events,
+        institution_succession_rows_from_events,
         knowledge_genealogy_harvest_from_run,
         knowledge_repository_harvest_from_run,
         norm_belief_rows_from_ledgers,
@@ -271,9 +277,7 @@ def assemble_arm_metric_bundle(
         arm.runner_result, "cultural_narrative_ledgers", None
     )
     if cultural_narrative_ledgers is None:
-        cultural_narrative_ledgers = getattr(
-            arm, "cultural_narrative_ledgers", None
-        )
+        cultural_narrative_ledgers = getattr(arm, "cultural_narrative_ledgers", None)
     cultural_audits = getattr(arm.runner_result, "cultural_feature_audits", None)
     if cultural_audits is not None and len(cultural_audits) == 0:
         cultural_audits = None
@@ -593,6 +597,58 @@ def assemble_arm_metric_bundle(
                 expected_owner_count=len(agent_ids),
                 owner_entity_ids=owner_entity_ids,
             ),
+        )
+    norm_ledgers = getattr(arm.runner_result, "social_norm_ledgers", None)
+    convention_ledgers = getattr(arm.runner_result, "social_convention_ledgers", None)
+    possession_ledgers = getattr(
+        arm.runner_result, "possession_legitimacy_ledgers", None
+    )
+    role_rows = institution_role_rows_from_events(events or ())
+    procedure_rows = institution_procedure_rows_from_events(events or ())
+    expectation_rows = list(
+        institution_expectation_rows_from_channel_rows(cultural_norms or ())
+    ) + list(institution_expectation_rows_from_channel_rows(cultural_conventions or ()))
+    norm_support_rows = (
+        () if norm_ledgers is None else norm_belief_rows_from_ledgers(norm_ledgers)
+    )
+    possession_rows = []
+    for ledger in possession_ledgers or ():
+        for doctrine, count in getattr(ledger, "supports", ()):
+            possession_rows.append(
+                {"doctrine": str(doctrine), "count": int(count), "tick": ticks}
+            )
+    legitimacy_rows = institution_legitimacy_rows_from_norm_and_possession_rows(
+        norm_support_rows, tuple(possession_rows)
+    )
+    succession_rows = institution_succession_rows_from_events(
+        events or (),
+        death_ticks=getattr(inputs, "death_ticks_by_body", None),
+    )
+    continuity_inputs: list[dict[str, object]] = []
+    for event in events or ():
+        details = getattr(event, "details", event)
+        kind = getattr(details, "kind", None)
+        if kind == "kinship_edge_recorded":
+            continuity_inputs.append(
+                {
+                    "parent_id": getattr(details, "parent_agent_id", None),
+                    "child_id": getattr(details, "child_agent_id", None),
+                    "tick": getattr(event, "tick", 0),
+                }
+            )
+    continuity_rows = institution_continuity_rows_from_channel_rows(
+        tuple(continuity_inputs)
+    )
+    if role_rows or procedure_rows or expectation_rows or legitimacy_rows:
+        inputs = replace(
+            inputs,
+            institution_role_rows=role_rows,
+            institution_procedure_rows=procedure_rows,
+            institution_expectation_rows=tuple(expectation_rows),
+            institution_legitimacy_rows=legitimacy_rows,
+            institution_succession_rows=succession_rows,
+            institution_continuity_rows=continuity_rows,
+            institution_known_person_ids=agent_ids,
         )
     return assemble_metric_documents(inputs)
 
