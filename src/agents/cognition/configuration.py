@@ -46,6 +46,10 @@ from agents.cognition.group_formation import (
     GroupFormationPolicy,
     default_group_formation_policy,
 )
+from agents.cognition.institution_concepts import (
+    InstitutionConceptPolicy,
+    default_institution_concept_policy,
+)
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
@@ -328,6 +332,17 @@ class CognitionTranslationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionInstitutionConceptMode(StrEnum):
+    """Owner-scoped institution concepts. Disabled allocates nothing.
+
+    Lockstep with ``simulation.InstitutionConceptMode``. This is not a
+    capability flag and requires no semantic naming mode.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -457,6 +472,10 @@ class CognitionLoopConfig:
     symbolic_language_policy: SymbolicLanguagePolicy | None = None
     translation_mode: CognitionTranslationMode = CognitionTranslationMode.DISABLED
     translation_policy: TranslationPolicy | None = None
+    institution_concept_mode: CognitionInstitutionConceptMode = (
+        CognitionInstitutionConceptMode.DISABLED
+    )
+    institution_concept_policy: InstitutionConceptPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -781,22 +800,36 @@ class CognitionLoopConfig:
                 "symbolic_language_policy must be SymbolicLanguagePolicy or None"
             )
         if type(self.translation_mode) is not CognitionTranslationMode:
-            _LOG.error(
-                "invalid_enum path=translation_mode reason_code=invalid_mode"
-            )
+            _LOG.error("invalid_enum path=translation_mode reason_code=invalid_mode")
             raise TypeError("translation_mode must be CognitionTranslationMode")
         if self.translation_mode is CognitionTranslationMode.DISABLED:
             object.__setattr__(self, "translation_policy", None)
         elif self.translation_policy is None:
-            object.__setattr__(
-                self, "translation_policy", default_translation_policy()
-            )
+            object.__setattr__(self, "translation_policy", default_translation_policy())
         elif type(self.translation_policy) is not TranslationPolicy:
+            _LOG.error("invalid_enum path=translation_policy reason_code=invalid_type")
+            raise TypeError("translation_policy must be TranslationPolicy or None")
+        if type(self.institution_concept_mode) is not CognitionInstitutionConceptMode:
             _LOG.error(
-                "invalid_enum path=translation_policy reason_code=invalid_type"
+                "invalid_enum path=institution_concept_mode reason_code=invalid_mode"
             )
             raise TypeError(
-                "translation_policy must be TranslationPolicy or None"
+                "institution_concept_mode must be CognitionInstitutionConceptMode"
+            )
+        if self.institution_concept_mode is CognitionInstitutionConceptMode.DISABLED:
+            object.__setattr__(self, "institution_concept_policy", None)
+        elif self.institution_concept_policy is None:
+            object.__setattr__(
+                self,
+                "institution_concept_policy",
+                default_institution_concept_policy(),
+            )
+        elif type(self.institution_concept_policy) is not InstitutionConceptPolicy:
+            _LOG.error(
+                "invalid_enum path=institution_concept_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "institution_concept_policy must be InstitutionConceptPolicy or None"
             )
         if (
             self.translation_mode is CognitionTranslationMode.DETERMINISTIC
@@ -807,9 +840,7 @@ class CognitionLoopConfig:
                 "invalid_enum path=translation_mode "
                 "reason_code=translation_requires_semantic_naming"
             )
-            raise ValueError(
-                "translation_requires_semantic_naming"
-            )
+            raise ValueError("translation_requires_semantic_naming")
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1040,6 +1071,12 @@ class CognitionLoopConfig:
                 None
                 if self.translation_policy is None
                 else self.translation_policy.version
+            ),
+            "institution_concept_mode": self.institution_concept_mode.value,
+            "institution_concept_policy_version": (
+                None
+                if self.institution_concept_policy is None
+                else self.institution_concept_policy.version
             ),
             "cultural_narrative_mode": self.cultural_narrative_mode.value,
             "cultural_narrative_policy_version": (
@@ -1325,6 +1362,8 @@ def build_cognitive_loop(
         symbolic_language_policy=resolved.symbolic_language_policy,
         translation_mode=resolved.translation_mode,
         translation_policy=resolved.translation_policy,
+        institution_concept_mode=resolved.institution_concept_mode,
+        institution_concept_policy=resolved.institution_concept_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

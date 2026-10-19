@@ -44,9 +44,11 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V46,
     RUNNER_SCHEMA_VERSION_V47,
     RUNNER_SCHEMA_VERSION_V48,
+    RUNNER_SCHEMA_VERSION_V49,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
+    InstitutionConceptMode,
     ReflectionMode,
     SemanticNamingMode,
     SimulationRunnerConfig,
@@ -87,6 +89,10 @@ def finalize_matrix_cell_config(
         agent.cognition.translation_mode is TranslationMode.DETERMINISTIC
         for agent in agents
     )
+    institution_concepts_on = any(
+        agent.cognition.institution_concept_mode is InstitutionConceptMode.DETERMINISTIC
+        for agent in agents
+    )
     artifacts_on = any(
         agent.cognition.artifact_interpretation_mode
         is ArtifactInterpretationMode.DETERMINISTIC
@@ -124,7 +130,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if generational_narratives_on:
+    if institution_concepts_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V49,
+            "institution_concepts_on",
+        )
+    elif generational_narratives_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V48,
             "generational_narratives_on",

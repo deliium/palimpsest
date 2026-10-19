@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from agents.models import AgentId, DriveKind
@@ -447,7 +449,7 @@ def test_counterfactual_mode_requires_v8_and_v7_stays_prospective(
 
     base = _config()
 
-    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+    def configured(schema_version: str, **cognition: Any) -> SimulationRunnerConfig:
         agent = base.agents[0]
         spec = replace(agent.cognition, **cognition)
         return replace(
@@ -511,7 +513,7 @@ def test_communication_strategy_mode_requires_v9(
 
     base = _config()
 
-    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+    def configured(schema_version: str, **cognition: Any) -> SimulationRunnerConfig:
         agent = base.agents[0]
         spec = replace(agent.cognition, **cognition)
         return replace(
@@ -562,7 +564,7 @@ def test_reputation_mode_requires_v10(caplog: pytest.LogCaptureFixture) -> None:
 
     base = _config()
 
-    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+    def configured(schema_version: str, **cognition: Any) -> SimulationRunnerConfig:
         agent = base.agents[0]
         spec = replace(agent.cognition, **cognition)
         return replace(
@@ -613,7 +615,7 @@ def test_skill_learning_mode_requires_v11_and_shared_rates(
 
     base = _config()
 
-    def configured(schema_version: str, **cognition: object) -> SimulationRunnerConfig:
+    def configured(schema_version: str, **cognition: Any) -> SimulationRunnerConfig:
         agent = base.agents[0]
         spec = replace(agent.cognition, **cognition)
         return replace(

@@ -439,6 +439,7 @@ class AgentRuntime:
         "_group_formation",
         "_identity_cursor",
         "_inbox",
+        "_institution_concepts",
         "_internal_state",
         "_invocation_ids",
         "_last_observation_key",
@@ -590,6 +591,7 @@ class AgentRuntime:
         self._semantic_naming: object | None = None
         self._symbolic_language: object | None = None
         self._translation: object | None = None
+        self._institution_concepts: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
@@ -1108,6 +1110,35 @@ class AgentRuntime:
             "translation_carried owner_id=%s mapping_count=%s tick=%s",
             owner.value,
             len(ledger.mappings),
+            tick,
+        )
+
+    def _commit_institution_concepts(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionInstitutionConceptMode
+        from agents.cognition.institution_concepts import InstitutionConceptLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_institution_concept_mode",
+            CognitionInstitutionConceptMode.DISABLED,
+        )
+        if mode is not CognitionInstitutionConceptMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionInstitutionConceptMode.DETERMINISTIC:
+                self._institution_concepts = None
+            return
+        if type(ledger) is not InstitutionConceptLedger:
+            raise TypeError("institution_concepts must be InstitutionConceptLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._institution_concepts = ledger
+        _LOG.debug(
+            "institution_concepts_carried owner_id=%s concept_count=%s tick=%s",
+            owner.value,
+            len(ledger.concepts),
             tick,
         )
 
@@ -1901,6 +1932,7 @@ class AgentRuntime:
                 semantic_naming=self._semantic_naming,
                 symbolic_language=self._symbolic_language,
                 translation=self._translation,
+                institution_concepts=self._institution_concepts,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
@@ -2360,6 +2392,9 @@ class AgentRuntime:
         self._commit_translation(
             getattr(pending.loop_result, "translation", None), pending.tick
         )
+        self._commit_institution_concepts(
+            getattr(pending.loop_result, "institution_concepts", None), pending.tick
+        )
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick
         )
@@ -2795,6 +2830,7 @@ class AgentRuntime:
         self._semantic_naming = getattr(checkpoint, "semantic_naming", None)
         self._symbolic_language = getattr(checkpoint, "symbolic_language", None)
         self._translation = getattr(checkpoint, "translation", None)
+        self._institution_concepts = getattr(checkpoint, "institution_concepts", None)
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -2871,6 +2907,7 @@ class AgentRuntime:
             semantic_naming=self._semantic_naming,
             symbolic_language=self._symbolic_language,
             translation=self._translation,
+            institution_concepts=self._institution_concepts,
             cultural_narratives=self._cultural_narratives,
             developmental_knowledge=self._developmental_knowledge,
             mentorship=self._mentorship,

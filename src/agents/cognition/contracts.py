@@ -169,6 +169,7 @@ class Perspective:
     semantic_naming: object | None = None
     symbolic_language: object | None = None
     translation: object | None = None
+    institution_concepts: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -374,6 +375,15 @@ class Perspective:
             self.translation,
             self.agent_id,
             field_name="Perspective.translation",
+        )
+        from agents.cognition.institution_concepts import (
+            require_owner_institution_concepts,
+        )
+
+        require_owner_institution_concepts(
+            self.institution_concepts,
+            self.agent_id,
+            field_name="Perspective.institution_concepts",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,

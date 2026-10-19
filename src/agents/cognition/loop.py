@@ -295,6 +295,8 @@ class CognitiveLoop:
         "_group_formation_mode",
         "_group_formation_policy",
         "_identity_mode",
+        "_institution_concept_mode",
+        "_institution_concept_policy",
         "_intention",
         "_knowledge_genealogy_seed_material",
         "_knowledge_genealogy_spec",
@@ -431,6 +433,8 @@ class CognitiveLoop:
         symbolic_language_policy: object | None = None,
         translation_mode: object | None = None,
         translation_policy: object | None = None,
+        institution_concept_mode: object | None = None,
+        institution_concept_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -754,9 +758,7 @@ class CognitiveLoop:
 
             symbolic_policy = default_symbolic_language_policy()
         elif type(symbolic_language_policy) is not SymbolicLanguagePolicy:
-            raise TypeError(
-                "symbolic_language_policy must be SymbolicLanguagePolicy"
-            )
+            raise TypeError("symbolic_language_policy must be SymbolicLanguagePolicy")
         else:
             symbolic_policy = symbolic_language_policy
         self._symbolic_language_mode = symbolic_mode
@@ -782,6 +784,32 @@ class CognitiveLoop:
         self._translation_mode = translation_mode_value
         self._translation_policy = translation_policy
         self._symbolic_translation_applications: list[dict[str, object]] = []
+        from agents.cognition.configuration import CognitionInstitutionConceptMode
+        from agents.cognition.institution_concepts import InstitutionConceptPolicy
+
+        institution_mode = (
+            CognitionInstitutionConceptMode.DISABLED
+            if institution_concept_mode is None
+            else institution_concept_mode
+        )
+        if type(institution_mode) is not CognitionInstitutionConceptMode:
+            raise TypeError(
+                "institution_concept_mode must be CognitionInstitutionConceptMode"
+            )
+        if institution_mode is CognitionInstitutionConceptMode.DISABLED:
+            institution_concept_policy = None
+        elif institution_concept_policy is None:
+            from agents.cognition.institution_concepts import (
+                default_institution_concept_policy,
+            )
+
+            institution_concept_policy = default_institution_concept_policy()
+        elif type(institution_concept_policy) is not InstitutionConceptPolicy:
+            raise TypeError(
+                "institution_concept_policy must be InstitutionConceptPolicy"
+            )
+        self._institution_concept_mode = institution_mode
+        self._institution_concept_policy = institution_concept_policy
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -1852,9 +1880,7 @@ class CognitiveLoop:
                         semantic_naming,
                         mapping_id=str(row.get("mapping_id")),
                         kind=TranslationApplicationKind.SYMBOLIC_INTERPRETATION,
-                        outcome=TranslationApplicationOutcome(
-                            str(row.get("outcome"))
-                        ),
+                        outcome=TranslationApplicationOutcome(str(row.get("outcome"))),
                         tick=loop_input.observation.tick,
                         message_id=row.get("message_id"),  # type: ignore[arg-type]
                         target_binding_id=row.get("target_binding_id"),  # type: ignore[arg-type]
@@ -1869,6 +1895,60 @@ class CognitiveLoop:
             "translation_carried owner_id=%s mapping_count=%s",
             owner_id,
             0 if updated is None else len(updated.mappings),
+        )
+        return updated
+
+    def _prepare_institution_concepts(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        social_norms: object | None,
+        social_conventions: object | None,
+        group_formation: object | None,
+        possession_legitimacy: object | None,
+        advice_delta: Sequence[object] = (),
+        mentorship: object | None = None,
+    ) -> object | None:
+        """Refresh one owner's subjective institution concepts after ledgers."""
+        from agents.cognition.configuration import CognitionInstitutionConceptMode
+        from agents.cognition.institution_concepts import (
+            InstitutionConceptLedger,
+            apply_institution_concept_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if (
+            self._institution_concept_mode
+            is not CognitionInstitutionConceptMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else snapshot.institution_concepts
+        ledger = carried if type(carried) is InstitutionConceptLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "institution_concept_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        updated = apply_institution_concept_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            norms=social_norms,
+            conventions=social_conventions,
+            groups=group_formation,
+            possession=possession_legitimacy,
+            memories=snapshot.memories,
+            advice_delta=advice_delta,
+            mentorship=mentorship,
+            policy=self._institution_concept_policy,
+        )
+        _LOG.debug(
+            "institution_concepts_carried owner_id=%s concept_count=%s",
+            owner_id,
+            0 if updated is None else len(updated.concepts),
         )
         return updated
 
@@ -3588,6 +3668,15 @@ class CognitiveLoop:
             advice_delta=advice_delta,
             mentorship=mentorship,
         )
+        institution_concepts = self._prepare_institution_concepts(
+            loop_input,
+            social_norms=social_norms,
+            social_conventions=social_conventions,
+            group_formation=group_formation,
+            possession_legitimacy=possession_legitimacy,
+            advice_delta=advice_delta,
+            mentorship=mentorship,
+        )
         cultural_features = self._prepare_cultural_features(
             loop_input,
             advice_delta=advice_delta,
@@ -3832,6 +3921,8 @@ class CognitiveLoop:
                     symbolic_language_mode=self._symbolic_language_mode,
                     translation=translation,
                     translation_mode=self._translation_mode,
+                    institution_concepts=institution_concepts,
+                    institution_concept_mode=self._institution_concept_mode,
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -3852,8 +3943,7 @@ class CognitiveLoop:
         from agents.cognition.configuration import CognitionSymbolicLanguageMode
 
         if (
-            self._symbolic_language_mode
-            is CognitionSymbolicLanguageMode.DETERMINISTIC
+            self._symbolic_language_mode is CognitionSymbolicLanguageMode.DETERMINISTIC
             and symbolic_language is not None
         ):
             from agents.cognition.symbolic_language import symbolic_usage_update
@@ -3913,6 +4003,7 @@ class CognitiveLoop:
             semantic_naming=semantic_naming,
             symbolic_language=symbolic_language,
             translation=translation,
+            institution_concepts=institution_concepts,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -4096,6 +4187,7 @@ class CognitiveLoop:
             semantic_naming=proposal.semantic_naming,
             symbolic_language=proposal.symbolic_language,
             translation=proposal.translation,
+            institution_concepts=proposal.institution_concepts,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,
@@ -5215,9 +5307,7 @@ def _build_narrative_cue_summary(
         if not isinstance(revision, int) or isinstance(revision, bool):
             continue
         if integrity is None:
-            integrity = (
-                "destroyed" if kind == "artifact_destroyed" else "damaged"
-            )
+            integrity = "destroyed" if kind == "artifact_destroyed" else "damaged"
         if not isinstance(integrity, str):
             continue
         records.append(

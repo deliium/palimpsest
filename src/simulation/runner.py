@@ -806,12 +806,8 @@ def _generational_narrative_spec_digest(spec: object | None) -> str | None:
         return None
     payload = getattr(spec, "canonical_payload", None)
     if not callable(payload):
-        raise TypeError(
-            "generational_narratives must provide canonical_payload()"
-        )
-    material = "|".join(
-        f"{key}={value}" for key, value in sorted(payload().items())
-    )
+        raise TypeError("generational_narratives must provide canonical_payload()")
+    material = "|".join(f"{key}={value}" for key, value in sorted(payload().items()))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -1017,9 +1013,13 @@ def _cognition_config_for(
     )
     from agents.cognition.artifacts import ArtifactInterpretationMode
     from agents.cognition.configuration import (
+        CognitionInstitutionConceptMode,
         CognitionSemanticNamingMode,
         CognitionSymbolicLanguageMode,
         CognitionTranslationMode,
+    )
+    from agents.cognition.institution_concepts import (
+        default_institution_concept_policy,
     )
     from agents.cognition.semantic_naming import default_semantic_naming_policy
     from agents.cognition.symbolic_language import (
@@ -1058,6 +1058,17 @@ def _cognition_config_for(
         "cognition_config_translation_mode mode=%s policy_version=%s",
         translation_mode.value,
         None if translation_policy is None else translation_policy.version,
+    )
+    institution_mode = CognitionInstitutionConceptMode(
+        spec.institution_concept_mode.value
+    )
+    institution_policy = None
+    if institution_mode is CognitionInstitutionConceptMode.DETERMINISTIC:
+        institution_policy = default_institution_concept_policy()
+    _LOG.debug(
+        "cognition_config_institution_concept_mode mode=%s policy_version=%s",
+        institution_mode.value,
+        None if institution_policy is None else institution_policy.version,
     )
     from agents.cognition.budget import policy_from_limits
     from agents.cognition.configuration import (
@@ -1151,6 +1162,8 @@ def _cognition_config_for(
         symbolic_language_policy=symbolic_policy,
         translation_mode=translation_mode,
         translation_policy=translation_policy,
+        institution_concept_mode=institution_mode,
+        institution_concept_policy=institution_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2889,6 +2902,10 @@ class SimulationRunner:
             terminology_ledgers=self.export_terminology_ledgers(),
             symbolic_ledgers=self.export_symbolic_ledgers(),
             translation_ledgers=self.export_translation_ledgers(),
+            social_norm_ledgers=self.export_social_norm_ledgers(),
+            social_convention_ledgers=self.export_social_convention_ledgers(),
+            possession_legitimacy_ledgers=(self.export_possession_legitimacy_ledgers()),
+            institution_concept_ledgers=self.export_institution_concept_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
@@ -3176,6 +3193,66 @@ class SimulationRunner:
         _LOG.info("runner_translation_ledger_export ledger_count=%s", len(ledgers))
         return tuple(ledgers)
 
+    def export_social_norm_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered social-norm ledgers. Disabled owners contribute none."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "social_norms", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("runner_social_norm_ledger_export ledger_count=%s", len(ledgers))
+        return tuple(ledgers)
+
+    def export_social_convention_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered social-convention ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "social_conventions", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_social_convention_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_possession_legitimacy_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered possession-legitimacy ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "possession_legitimacy", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_possession_legitimacy_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_institution_concept_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered institution-concept ledgers.
+
+        Disabled owners contribute nothing.
+        """
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "institution_concepts", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_institution_concept_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
     def export_cultural_narrative_ledgers(self) -> tuple[object, ...]:
         """Export owner-ordered cultural narrative ledgers. Off owners skip."""
         ledgers: list[object] = []
@@ -3185,8 +3262,7 @@ class SimulationRunner:
                 continue
             ledgers.append(ledger)
         _LOG.info(
-            "runner_cultural_narrative_ledger_export ledger_count=%s "
-            "variant_count=%s",
+            "runner_cultural_narrative_ledger_export ledger_count=%s variant_count=%s",
             len(ledgers),
             sum(len(getattr(item, "variants", ())) for item in ledgers),
         )
@@ -3195,9 +3271,7 @@ class SimulationRunner:
     def export_initial_lifecycle_records(self) -> tuple[object, ...]:
         """Export the engine's authoritative lifecycle ledger in insertion order."""
         records = tuple(self._engine.lifecycle_records)
-        _LOG.info(
-            "runner_lifecycle_record_export record_count=%s", len(records)
-        )
+        _LOG.info("runner_lifecycle_record_export record_count=%s", len(records))
         return records
 
     def export_skill_audits(self) -> tuple[SkillAudit, ...]:

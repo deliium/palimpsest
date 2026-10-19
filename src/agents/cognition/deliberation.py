@@ -845,6 +845,8 @@ class CommandPlanner:
         symbolic_language_mode: object | None = None,
         translation: object | None = None,
         translation_mode: object | None = None,
+        institution_concepts: object | None = None,
+        institution_concept_mode: object | None = None,
         cultural_narratives: object | None = None,
         cultural_narrative_mode: object | None = None,
     ) -> ActionPlan:
@@ -1092,6 +1094,22 @@ class CommandPlanner:
             translation=prepared_translation,
             terminology=prepared_naming,
             mode=translation_mode,
+        )
+        from agents.cognition.institution_concepts import (
+            institution_communicate_utterance,
+        )
+
+        prepared_institutions = institution_concepts
+        if prepared_institutions is None and snapshot is not None:
+            prepared_institutions = snapshot.institution_concepts
+        command = institution_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_institutions,
+            mode=institution_concept_mode,
         )
         from agents.cognition.cultural_narratives import (
             narrative_communicate_utterance,

@@ -39,6 +39,8 @@ def test_blank_slate_module_documents_mode_vs_content() -> None:
     assert "practical_knowledge" in text
     assert '"knowledge_genealogy"' in text or "'knowledge_genealogy'" in text
     assert "technique_pack" in text
+    assert '"institution_concepts"' in text
+    assert "institution_concept_ledger" in text
 
 
 def test_mid_run_sync_must_not_invoke_forbidden_copy_helpers() -> None:
