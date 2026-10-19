@@ -117,3 +117,12 @@ under the existing `research_inference` / `analytical_inference` chrome. It
 renders digests, bands, counts, and operator mix only; it never displays raw
 tokens, message bodies, or prompts, and it does not claim semantic correctness
 or convergence.
+
+## Analytical institution panel
+
+`InstitutionsPanel.svelte` reads `institution_emergence` and
+`institutional_persistence` through the existing family-agnostic metric
+endpoints. Both families map through `ANALYTICAL_OVERLAYS` to
+`research_inference` chrome. No backend API, observer protocol, Godot semantic
+type, or subjective endpoint changes. Candidates and persistence
+classifications are never presented as agent-visible facts.

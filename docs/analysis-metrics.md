@@ -296,7 +296,7 @@ communities remain optional and analysis-only.
 
 ## Generational narrative families
 
-Detached analysis registers three families at 112 → 115 total:
+Detached analysis registers three families at 112 → 115 total (the catalog is now 117 after the institution families below):
 
 - `generational_narrative_continuity@1` — active lineages, objective
   generation span, multi-generation lineage rate, first-hand-to-retold rate,
@@ -315,3 +315,19 @@ Rows are built from duck-typed ledgers plus objective lifecycle/event rows.
 Analysis imports no cognition, runtime, persistence, or private world types.
 Empty inputs yield `absent`, not zero. Documents contain counts, rates, bands,
 and opaque IDs only; story tokens and record text never enter a document or log.
+
+
+## Institution families (off the V1 gate)
+
+- `institution_emergence@1` bundles detached role, procedure, expectation,
+  legitimacy, succession, and continuity rows into opaque analytical
+  candidates at a locked pattern floor. Sub-threshold bundles are reported, not
+  dropped; missing lanes are `absent`, never zero.
+- `institutional_persistence@1` reports each candidate's lifetime, quantized
+  survival curve, succession survival, cross-generational ratio, and the
+  closed `temporary_coordination` / `persistent_institution_like`
+  classification with explicit numerators and denominators.
+
+Neither family declares an institution type, reads subjective ledgers, or feeds
+cognition. Metric families are **117** total. Experiment BF stays off the V1
+gate.

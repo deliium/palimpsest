@@ -284,7 +284,7 @@ Contact adds one neutral objective event, `ContactRecorded`, emitted by the
 engine after a qualifying cross-region relocation. It records co-presence only:
 not a relationship, trust update, reputation claim, group identity, migration
 label, or policy. Command count stays **43**, observer semantic types are **73**,
-and metric families are **109**. Contact-active runs use `(replay-v22, codec v20)`;
+and metric families are **117**. Contact-active runs use `(replay-v22, codec v20)`;
 contact-off regional runs keep `(replay-v21, codec v19)`. No Alembic migration is
 required and intermarriage is unsupported.
 
@@ -361,3 +361,17 @@ Compatibility: no new command (43), no new event or perception field, no new
 observer semantic type (73), replay stays `EVENT_SCHEMA_REPLAY_V22`,
 persistence codec stays `v20`, Alembic head stays `0017`, and
 `institutional_economy` / `multi_hop_testimony_tracking` remain fail-closed.
+
+## Institution emergence boundary
+
+`analysis.institution_emergence` and `analysis.institutional_persistence` are
+read-only and import no cognition, runtime, persistence, or experiment module.
+The cognition side (`agents.cognition.institution_concepts`) imports no analysis
+module. `experiments.composition` harvests analysis-owned lane rows from detached
+events and owner-ordered norm/convention/possession/institution exports; the
+import direction never reverses. Analytical candidates and the
+`temporary_coordination` / `persistent_institution_like` classification are
+researcher-facing only. No predefined institution type exists anywhere.
+Closed commands stay **43**, observer semantic types stay **73**, replay stays
+`EVENT_SCHEMA_REPLAY_V22`, codec stays `v20`, Alembic head stays `0017`, metric
+families are **117**, and the latest runner schema is `runner-config-v49`.

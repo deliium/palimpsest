@@ -193,3 +193,17 @@ generational_narratives:
 accepted when independently valid but are never implied. A run with lifecycle
 and cultural narratives but without this object stays on its prior highest
 schema and keeps the `cultural-narratives.v1` policy. Default writes stay `v4`.
+
+
+## Optional institution concepts (`runner-config-v49`)
+
+`runner-config-v49` is emitted only when some agent's
+`institution_concept_mode` is `deterministic`, and it requires at least one such
+agent. It adds no root sibling and no write-pair: the per-agent mode reuses the
+active lower family roots. `disabled` allocates no ledger, keeps every run
+byte-identical, and the default write remains `runner-config-v4`.
+
+`institution_concepts` is owner-scoped, opt-in, and not a capability flag. It
+requires no semantic naming mode. Concepts carry only six closed pattern-strength
+channels and opaque evidence; there is no world dictionary and no institution
+type.

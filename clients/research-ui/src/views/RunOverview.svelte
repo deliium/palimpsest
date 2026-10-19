@@ -24,6 +24,7 @@
   import GraphsPanel from './GraphsPanel.svelte'
   import ObjSubjComparePanel from './ObjSubjComparePanel.svelte'
   import SocietiesPanel from './SocietiesPanel.svelte'
+  import InstitutionsPanel from './InstitutionsPanel.svelte'
   import ContactPanel from './ContactPanel.svelte'
 
   interface Props {
@@ -184,6 +185,8 @@
     <AnalyticsPanel {runId} agentId={deepLink.agentId} />
   {:else if view === 'societies'}
     <SocietiesPanel {runId} />
+  {:else if view === 'institutions'}
+    <InstitutionsPanel {runId} />
   {:else if view === 'contact'}
     <ContactPanel {runId} />
   {:else if view === 'traces'}

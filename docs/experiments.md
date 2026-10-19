@@ -353,3 +353,31 @@ stay within witness/record/transition caps and require `runner-config-v48`.
 All-witnesses-dead lineages remain in living carrier ledgers and are never
 auto-retired. No arm injects objective truth, generation indices, metric rows,
 founder worship, heroization, moral verdicts, or forced convergence.
+
+## Experiment BF — analytical institution emergence
+
+Off-gate `institutionalization@1` composes already-owned generational, kinship,
+mentorship, repository, collective-project, public-good, norm, convention, and
+exchange channels. Arms:
+
+- `bf-baseline` — flags-off `runner-config-v4`, byte-identical to the pre-plan
+  baseline trajectory;
+- `bf-institution-off` — same composed channels on the highest active non-v49
+  schema with `institution_concept_mode=disabled`;
+- `bf-institution-on` — `runner-config-v49` with a deterministic owner-scoped
+  `institution_concept_mode`.
+
+The arbiter asserts structural facts only: at least one institution candidate is
+computable, persistence documents emit for every candidate, owner-scoped concept
+ids never cross owners, restored checkpoints match pre-save ledgers, and the
+flags-off baseline keeps its trajectory. No government, religion, court, police,
+corporation, or political party exists; candidates are opaque analytical pattern
+bundles and persistence classifications.
+
+```python
+from experiments.coordinator import ExperimentCoordinator
+from experiments.institutionalization_scenario import institutionalization_scenario
+
+definition = institutionalization_scenario(seed=23, max_ticks=16)
+results = await ExperimentCoordinator(definition).run_all()
+```

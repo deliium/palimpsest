@@ -165,3 +165,13 @@ mapping holds digest-derived identity, bounded targets, evidence, applications,
 status, fit, strength, and tick bounds; no raw foreign or own token is required
 outside the owner ledger. Disabled runs export an empty tuple and remain
 byte-identical.
+
+## Owner-ordered subjective exports
+
+`SimulationRunnerResult` exports owner-ordered `social_norm_ledgers`,
+`social_convention_ledgers`, `possession_legitimacy_ledgers`, and
+`institution_concept_ledgers` alongside terminology, symbolic, translation, and
+cultural-narrative ledgers. Disabled owners contribute nothing, so flags-off
+bytes are unchanged. `runner-config-v49` adds only the per-agent
+`institution_concept_mode`; the reverse gate requires a deterministic mode.
+Exports never flow back into cognition.

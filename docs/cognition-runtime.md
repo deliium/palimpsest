@@ -478,3 +478,18 @@ by definition; observing the death of every other known first-hand witness
 yields `lost` provenance without retiring the story. Blank-slate agents inherit
 no ledger and must acquire the story through existing delivery, teaching,
 record reading, or reconstruction.
+
+## Owner-scoped institution concepts
+
+`institution_concepts.py` (locked policy `institution-concepts.v1`) lets an owner
+form private concepts of persistent recurring patterns. Each concept carries six
+closed strength channels — role recognition, procedure recurrence, social
+expectation, legitimacy belief, succession observed, and generational continuity
+— plus observed/communicated/remembered evidence with opaque lineage refs.
+Concept ids are sha256 over the owner and sorted evidence anchors; there is no
+`hash()`, no global dictionary, and no cross-owner copy. The lifecycle is
+candidate → recognized → fading → retired under locked thresholds.
+`institution_concept_mode` defaults to `disabled`; the ledger carries through
+runtime checkpoints with the same owner guard as translation and requires no
+codec marker or semantic naming mode. `named_custom` is self-contained
+communicated evidence. No world entity or institution type exists.

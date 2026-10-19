@@ -84,6 +84,8 @@ const ANALYTICAL_OVERLAYS = new Set([
   'society_emergence',
   'society_divergence',
   'society_isolation',
+  'institution_emergence',
+  'institutional_persistence',
   'metric',
   'phenomenon_panel',
   'matrix_stats',
