@@ -250,6 +250,30 @@ def _answered_proposal(observation: object) -> tuple[ItemKind | None, EntityId |
     return judgment, counterparty
 
 
+def _project_speaker_trust(
+    snapshot: object,
+    identity: object,
+) -> dict[str, float]:
+    """Project owner-local directed trust to a conservative [0, 1] value."""
+    from social.relationships import RelationshipDimension
+
+    relationships = getattr(snapshot, "relationships", ()) or ()
+    trust_by_target: dict[str, float] = {}
+    for profile in relationships:
+        for dimension in getattr(profile, "dimensions", ()):
+            if dimension.dimension is RelationshipDimension.TRUST:
+                trust_by_target[profile.target_id.value] = max(
+                    0.0, min(1.0, (float(dimension.value) + 1.0) / 2.0)
+                )
+    projected: dict[str, float] = {}
+    counterparts = getattr(identity, "counterparts", ())
+    for binding in counterparts:
+        projected[binding.agent_id.value] = trust_by_target.get(
+            binding.agent_id.value, 0.5
+        )
+    return projected
+
+
 class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
@@ -312,6 +336,8 @@ class CognitiveLoop:
         "_memory_updates",
         "_mentorship_spec",
         "_motivation",
+        "_office_concept_policy",
+        "_office_succession_mode",
         "_perception",
         "_planner",
         "_possession_succession_active",
@@ -435,6 +461,8 @@ class CognitiveLoop:
         translation_policy: object | None = None,
         institution_concept_mode: object | None = None,
         institution_concept_policy: object | None = None,
+        office_succession_mode: object | None = None,
+        office_concept_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -810,6 +838,28 @@ class CognitiveLoop:
             )
         self._institution_concept_mode = institution_mode
         self._institution_concept_policy = institution_concept_policy
+        from agents.cognition.configuration import CognitionOfficeSuccessionMode
+        from agents.cognition.offices import OfficeConceptPolicy
+
+        office_mode = (
+            CognitionOfficeSuccessionMode.DISABLED
+            if office_succession_mode is None
+            else office_succession_mode
+        )
+        if type(office_mode) is not CognitionOfficeSuccessionMode:
+            raise TypeError(
+                "office_succession_mode must be CognitionOfficeSuccessionMode"
+            )
+        if office_mode is CognitionOfficeSuccessionMode.DISABLED:
+            office_concept_policy = None
+        elif office_concept_policy is None:
+            from agents.cognition.offices import default_office_concept_policy
+
+            office_concept_policy = default_office_concept_policy()
+        elif type(office_concept_policy) is not OfficeConceptPolicy:
+            raise TypeError("office_concept_policy must be OfficeConceptPolicy")
+        self._office_succession_mode = office_mode
+        self._office_concept_policy = office_concept_policy
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -1947,6 +1997,58 @@ class CognitiveLoop:
         )
         _LOG.debug(
             "institution_concepts_carried owner_id=%s concept_count=%s",
+            owner_id,
+            0 if updated is None else len(updated.concepts),
+        )
+        return updated
+
+    def _prepare_office_concepts(
+        self,
+        loop_input: CognitiveLoopInput,
+        memory: object | None,
+        *,
+        norms: object | None = None,
+        conventions: object | None = None,
+        institution_concepts: object | None = None,
+    ) -> object | None:
+        """Refresh one owner's subjective offices from prepared owner inputs."""
+        from agents.cognition.configuration import CognitionOfficeSuccessionMode
+        from agents.cognition.offices import (
+            OfficeConceptLedger,
+            apply_office_concept_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if (
+            self._office_succession_mode
+            is not CognitionOfficeSuccessionMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None if snapshot is None else getattr(snapshot, "office_concepts", None)
+        )
+        ledger = carried if type(carried) is OfficeConceptLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "office_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        updated = apply_office_concept_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            retrieved_memory_context=memory,
+            speaker_trust=_project_speaker_trust(snapshot, identity),
+            policy=self._office_concept_policy,
+            norms=norms,
+            conventions=conventions,
+            institution_concepts=institution_concepts,
+        )
+        _LOG.debug(
+            "office_concepts_carried owner_id=%s office_count=%s",
             owner_id,
             0 if updated is None else len(updated.concepts),
         )
@@ -3677,6 +3779,13 @@ class CognitiveLoop:
             advice_delta=advice_delta,
             mentorship=mentorship,
         )
+        office_concepts = self._prepare_office_concepts(
+            loop_input,
+            memory,
+            norms=social_norms,
+            conventions=social_conventions,
+            institution_concepts=institution_concepts,
+        )
         cultural_features = self._prepare_cultural_features(
             loop_input,
             advice_delta=advice_delta,
@@ -3866,6 +3975,8 @@ class CognitiveLoop:
                     ),
                     regional_migration_hop_limit=self._regional_migration_hop_limit,
                     regional_memory=memory,
+                    office_concepts=office_concepts,
+                    office_succession_mode=self._office_succession_mode,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -3923,6 +4034,8 @@ class CognitiveLoop:
                     translation_mode=self._translation_mode,
                     institution_concepts=institution_concepts,
                     institution_concept_mode=self._institution_concept_mode,
+                    office_concepts=office_concepts,
+                    office_succession_mode=self._office_succession_mode,
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -4004,6 +4117,7 @@ class CognitiveLoop:
             symbolic_language=symbolic_language,
             translation=translation,
             institution_concepts=institution_concepts,
+            office_concepts=office_concepts,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -4188,6 +4302,7 @@ class CognitiveLoop:
             symbolic_language=proposal.symbolic_language,
             translation=proposal.translation,
             institution_concepts=proposal.institution_concepts,
+            office_concepts=proposal.office_concepts,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,

@@ -450,6 +450,7 @@ class AgentRuntime:
         "_mentorship",
         "_mentorship_audits",
         "_mind_audits",
+        "_office_concepts",
         "_offline_consolidation_audits",
         "_pending",
         "_possession_legitimacy",
@@ -592,6 +593,7 @@ class AgentRuntime:
         self._symbolic_language: object | None = None
         self._translation: object | None = None
         self._institution_concepts: object | None = None
+        self._office_concepts: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
@@ -1137,6 +1139,35 @@ class AgentRuntime:
         self._institution_concepts = ledger
         _LOG.debug(
             "institution_concepts_carried owner_id=%s concept_count=%s tick=%s",
+            owner.value,
+            len(ledger.concepts),
+            tick,
+        )
+
+    def _commit_office_concepts(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionOfficeSuccessionMode
+        from agents.cognition.offices import OfficeConceptLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_office_succession_mode",
+            CognitionOfficeSuccessionMode.DISABLED,
+        )
+        if mode is not CognitionOfficeSuccessionMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionOfficeSuccessionMode.DETERMINISTIC:
+                self._office_concepts = None
+            return
+        if type(ledger) is not OfficeConceptLedger:
+            raise TypeError("office_concepts must be OfficeConceptLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._office_concepts = ledger
+        _LOG.debug(
+            "office_concepts_carried owner_id=%s office_count=%s tick=%s",
             owner.value,
             len(ledger.concepts),
             tick,
@@ -1933,6 +1964,7 @@ class AgentRuntime:
                 symbolic_language=self._symbolic_language,
                 translation=self._translation,
                 institution_concepts=self._institution_concepts,
+                office_concepts=self._office_concepts,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
@@ -2395,6 +2427,9 @@ class AgentRuntime:
         self._commit_institution_concepts(
             getattr(pending.loop_result, "institution_concepts", None), pending.tick
         )
+        self._commit_office_concepts(
+            getattr(pending.loop_result, "office_concepts", None), pending.tick
+        )
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick
         )
@@ -2831,6 +2866,15 @@ class AgentRuntime:
         self._symbolic_language = getattr(checkpoint, "symbolic_language", None)
         self._translation = getattr(checkpoint, "translation", None)
         self._institution_concepts = getattr(checkpoint, "institution_concepts", None)
+        self._office_concepts = getattr(checkpoint, "office_concepts", None)
+        if (
+            self._office_concepts is not None
+            and getattr(self._office_concepts, "owner_id", None) != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -2898,6 +2942,7 @@ class AgentRuntime:
             emotional_state=self._emotional_state,
             causal_world_model=self._causal_world_model,
             theory_of_mind=self._theory_of_mind,
+            office_concepts=self._office_concepts,
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
             group_formation=self._group_formation,

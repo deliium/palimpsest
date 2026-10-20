@@ -167,6 +167,8 @@ class MultiCriteriaIntentionSelector:
         regional_migration_cognition_mode: str | None = None,
         regional_migration_hop_limit: int = 1,
         regional_memory: RetrievedMemoryContext | None = None,
+        office_concepts: object | None = None,
+        office_succession_mode: object | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -320,6 +322,33 @@ class MultiCriteriaIntentionSelector:
         after_pareto = len(undominated)
         if not undominated:
             undominated = surviving
+        office_direction = None
+        if getattr(office_succession_mode, "value", None) == "deterministic":
+            from agents.cognition.offices import (
+                OfficeConceptLedger,
+                office_direction_preference,
+            )
+
+            prepared_offices = office_concepts
+            if prepared_offices is None and loop_input.snapshot is not None:
+                prepared_offices = getattr(loop_input.snapshot, "office_concepts", None)
+            if type(prepared_offices) is OfficeConceptLedger:
+                office_direction = office_direction_preference(prepared_offices)
+                if office_direction is not None:
+                    office_filtered = [
+                        item
+                        for item in undominated
+                        if item.future_id in futures_by_id
+                        and futures_by_id[item.future_id].direction is office_direction
+                    ]
+                    if office_filtered:
+                        undominated = office_filtered
+                        _LOG.debug(
+                            "office_direction_bias owner_id=%s tick=%s direction=%s",
+                            owner.value,
+                            tick,
+                            office_direction.value,
+                        )
 
         identity_costs = _identity_direction_costs(
             owner=owner,
@@ -849,6 +878,8 @@ class CommandPlanner:
         institution_concept_mode: object | None = None,
         cultural_narratives: object | None = None,
         cultural_narrative_mode: object | None = None,
+        office_concepts: object | None = None,
+        office_succession_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -1126,6 +1157,20 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_narratives,
             mode=cultural_narrative_mode,
+        )
+        from agents.cognition.offices import office_communicate_utterance
+
+        prepared_offices = office_concepts
+        if prepared_offices is None and snapshot is not None:
+            prepared_offices = getattr(snapshot, "office_concepts", None)
+        command = office_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_offices,
+            mode=office_succession_mode,
         )
         from agents.cognition.artifacts import (
             artifact_inscribe_command,

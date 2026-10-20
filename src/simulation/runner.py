@@ -1014,6 +1014,7 @@ def _cognition_config_for(
     from agents.cognition.artifacts import ArtifactInterpretationMode
     from agents.cognition.configuration import (
         CognitionInstitutionConceptMode,
+        CognitionOfficeSuccessionMode,
         CognitionSemanticNamingMode,
         CognitionSymbolicLanguageMode,
         CognitionTranslationMode,
@@ -1021,6 +1022,7 @@ def _cognition_config_for(
     from agents.cognition.institution_concepts import (
         default_institution_concept_policy,
     )
+    from agents.cognition.offices import default_office_concept_policy
     from agents.cognition.semantic_naming import default_semantic_naming_policy
     from agents.cognition.symbolic_language import (
         default_symbolic_language_policy,
@@ -1069,6 +1071,15 @@ def _cognition_config_for(
         "cognition_config_institution_concept_mode mode=%s policy_version=%s",
         institution_mode.value,
         None if institution_policy is None else institution_policy.version,
+    )
+    office_mode = CognitionOfficeSuccessionMode(spec.office_succession_mode.value)
+    office_policy = None
+    if office_mode is CognitionOfficeSuccessionMode.DETERMINISTIC:
+        office_policy = default_office_concept_policy()
+    _LOG.debug(
+        "cognition_config_office_succession_mode mode=%s policy_version=%s",
+        office_mode.value,
+        None if office_policy is None else office_policy.version,
     )
     from agents.cognition.budget import policy_from_limits
     from agents.cognition.configuration import (
@@ -1164,6 +1175,8 @@ def _cognition_config_for(
         translation_policy=translation_policy,
         institution_concept_mode=institution_mode,
         institution_concept_policy=institution_policy,
+        office_succession_mode=office_mode,
+        office_concept_policy=office_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2808,12 +2821,22 @@ class SimulationRunner:
             raise TypeError("checkpoint must be RunnerRuntimeCheckpoint")
         if checkpoint.run_id != self._run_id:
             raise ValueError("run_id mismatch")
+        for state in checkpoint.runtime_states:
+            ledger = getattr(state, "office_concepts", None)
+            if (
+                ledger is not None
+                and getattr(ledger, "owner_id", None) != state.agent_id
+            ):
+                raise ValueError("office ledger owner_id mismatch")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
+        if len(by_agent) != len(checkpoint.runtime_states):
+            raise ValueError("duplicate runtime state owner")
+        self._engine.restore_runtime_cursor(next_tick=checkpoint.engine_tick)
         for runtime in self._runtimes:
-            state = by_agent.get(runtime.agent_id)
-            if state is None:
+            runtime_state = by_agent.get(runtime.agent_id)
+            if runtime_state is None:
                 continue
-            runtime.restore_runtime_checkpoint(state)
+            runtime.restore_runtime_checkpoint(runtime_state)
         self._ticks_committed = checkpoint.ticks_committed
         self._finalized_tick_receipts = list(checkpoint.finalized_tick_receipts)
         self._goal_transition_receipts = list(checkpoint.goal_transition_receipts)
@@ -2906,6 +2929,7 @@ class SimulationRunner:
             social_convention_ledgers=self.export_social_convention_ledgers(),
             possession_legitimacy_ledgers=(self.export_possession_legitimacy_ledgers()),
             institution_concept_ledgers=self.export_institution_concept_ledgers(),
+            office_concept_ledgers=self.export_office_concept_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
@@ -3249,6 +3273,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_institution_concept_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_office_concept_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered office ledgers. Disabled owners contribute none."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "office_concepts", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_office_concept_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)

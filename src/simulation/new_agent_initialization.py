@@ -38,6 +38,7 @@ __all__ = [
     "CREATION_REASON_CODES",
     "NEW_AGENT_INITIALIZATION_KEYS",
     "SPECIES_DEFAULT_DEVELOPMENTAL_V1",
+    "SPECIES_DEFAULT_OFFICES_V1",
     "SPECIES_DEFAULT_V1",
     "SUBJECTIVE_COPY_DENY_LIST",
     "BlankSlateStoreCounts",
@@ -68,6 +69,7 @@ _LOG = logging.getLogger("simulation.new_agent_initialization")
 
 SPECIES_DEFAULT_V1: Final[str] = "species_default_v1"
 SPECIES_DEFAULT_DEVELOPMENTAL_V1: Final[str] = "species_default_developmental_v1"
+SPECIES_DEFAULT_OFFICES_V1: Final[str] = "species_default_offices_v1"
 
 _NEW_AGENT_INIT_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -119,6 +121,8 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "translation_ledger",
         "institution_concepts",
         "institution_concept_ledger",
+        "office_concepts",
+        "office_concept_ledger",
         "social_norms",
         "social_conventions",
         "skill_ledger",
@@ -173,6 +177,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "symbolic_language",
     "translation",
     "institution_concepts",
+    "office_concepts",
     "social_norms",
     "social_conventions",
     "skill_ledger",
@@ -230,7 +235,11 @@ _PROVENANCE_POLICY_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 _KNOWN_SPECIES_DEFAULT_IDS: Final[frozenset[str]] = frozenset(
-    {SPECIES_DEFAULT_V1, SPECIES_DEFAULT_DEVELOPMENTAL_V1}
+    {
+        SPECIES_DEFAULT_V1,
+        SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+        SPECIES_DEFAULT_OFFICES_V1,
+    }
 )
 
 
@@ -839,6 +848,7 @@ class BlankSlateStoreCounts:
     symbolic_language: int = 0
     translation: int = 0
     institution_concepts: int = 0
+    office_concepts: int = 0
     social_norms: int = 0
     social_conventions: int = 0
     skill_ledger: int = 0
@@ -943,9 +953,26 @@ def _species_default_developmental_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     )
 
 
+def _species_default_offices_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
+    """Office-capable pack with empty office content and default other modes."""
+    from simulation.runner_models import OfficeSuccessionMode
+
+    cognition = AgentCognitionSpec(
+        agent_id=agent_id,
+        office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
+    )
+    drive_profile = cognition.resolve_drive_profile()
+    return SpeciesDefaultsPack(
+        species_defaults_id=SPECIES_DEFAULT_OFFICES_V1,
+        cognition=cognition,
+        drive_profile=drive_profile,
+    )
+
+
 _SPECIES_DEFAULTS: Final[Mapping[str, Callable[[AgentId], SpeciesDefaultsPack]]] = {
     SPECIES_DEFAULT_V1: _species_default_v1,
     SPECIES_DEFAULT_DEVELOPMENTAL_V1: _species_default_developmental_v1,
+    SPECIES_DEFAULT_OFFICES_V1: _species_default_offices_v1,
 }
 
 

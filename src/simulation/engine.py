@@ -1421,6 +1421,24 @@ class WorldEngine:
     def tick(self) -> Tick:
         return self._snapshot.tick
 
+    def restore_runtime_cursor(self, *, next_tick: int) -> None:
+        """Restore the engine tick cursor after runtime-checkpoint rehydration.
+
+        This is a simulation-only carry for runtime checkpoint continuation. It
+        does not restore objective events, snapshots, or replay cursors; durable
+        objective restart must still go through the snapshot contract.
+        """
+        if isinstance(next_tick, bool) or type(next_tick) is not int:
+            raise TypeError("next_tick must be int")
+        if next_tick < self._snapshot.tick.value:
+            raise ValueError("next_tick must not move the cursor backwards")
+        self._snapshot = replace(self._snapshot, tick=Tick(next_tick))
+        _LOGGER.debug(
+            "engine_runtime_cursor_restored next_tick=%s revision=%s",
+            self._snapshot.tick.value,
+            self.revision.value,
+        )
+
     @property
     def revision(self) -> WorldRevision:
         return self._snapshot.world.state.revision

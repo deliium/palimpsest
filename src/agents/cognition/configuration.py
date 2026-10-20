@@ -51,6 +51,10 @@ from agents.cognition.institution_concepts import (
     default_institution_concept_policy,
 )
 from agents.cognition.loop import CognitiveLoop
+from agents.cognition.offices import (
+    OfficeConceptPolicy,
+    default_office_concept_policy,
+)
 from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
@@ -343,6 +347,17 @@ class CognitionInstitutionConceptMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionOfficeSuccessionMode(StrEnum):
+    """Owner-scoped office concepts. Disabled allocates nothing.
+
+    Lockstep with ``simulation.OfficeSuccessionMode``. This is not a
+    capability flag and requires no institution mode.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -476,6 +491,10 @@ class CognitionLoopConfig:
         CognitionInstitutionConceptMode.DISABLED
     )
     institution_concept_policy: InstitutionConceptPolicy | None = None
+    office_succession_mode: CognitionOfficeSuccessionMode = (
+        CognitionOfficeSuccessionMode.DISABLED
+    )
+    office_concept_policy: OfficeConceptPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -831,6 +850,26 @@ class CognitionLoopConfig:
             raise TypeError(
                 "institution_concept_policy must be InstitutionConceptPolicy or None"
             )
+        if type(self.office_succession_mode) is not CognitionOfficeSuccessionMode:
+            _LOG.error(
+                "invalid_enum path=office_succession_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "office_succession_mode must be CognitionOfficeSuccessionMode"
+            )
+        if self.office_succession_mode is CognitionOfficeSuccessionMode.DISABLED:
+            object.__setattr__(self, "office_concept_policy", None)
+        elif self.office_concept_policy is None:
+            object.__setattr__(
+                self,
+                "office_concept_policy",
+                default_office_concept_policy(),
+            )
+        elif type(self.office_concept_policy) is not OfficeConceptPolicy:
+            _LOG.error(
+                "invalid_enum path=office_concept_policy reason_code=invalid_type"
+            )
+            raise TypeError("office_concept_policy must be OfficeConceptPolicy or None")
         if (
             self.translation_mode is CognitionTranslationMode.DETERMINISTIC
             and self.semantic_naming_mode
@@ -1077,6 +1116,12 @@ class CognitionLoopConfig:
                 None
                 if self.institution_concept_policy is None
                 else self.institution_concept_policy.version
+            ),
+            "office_succession_mode": self.office_succession_mode.value,
+            "office_concept_policy_version": (
+                None
+                if self.office_concept_policy is None
+                else self.office_concept_policy.version
             ),
             "cultural_narrative_mode": self.cultural_narrative_mode.value,
             "cultural_narrative_policy_version": (
@@ -1364,6 +1409,8 @@ def build_cognitive_loop(
         translation_policy=resolved.translation_policy,
         institution_concept_mode=resolved.institution_concept_mode,
         institution_concept_policy=resolved.institution_concept_policy,
+        office_succession_mode=resolved.office_succession_mode,
+        office_concept_policy=resolved.office_concept_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

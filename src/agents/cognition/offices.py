@@ -22,7 +22,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Any, Final, cast
 
-from agents.cognition.models import OwnerSafeSocialIdentity
+from agents.cognition.models import ActionDirection, OwnerSafeSocialIdentity
 from agents.models import AgentId
 from world.identifiers import EntityId, require_exact_nonneg_int
 from world.observations import Observation
@@ -52,7 +52,9 @@ __all__ = [
     "appraise_office_recognition",
     "default_office_concept_policy",
     "empty_office_concept_ledger",
+    "office_communicate_utterance",
     "office_concept_id",
+    "office_direction_preference",
     "office_evidence_id",
     "office_inception_digest",
     "office_role_signature",
@@ -1191,6 +1193,48 @@ def appraise_office_recognition(
         independent_root_count=independent_root_count,
         qualifying_evidence_count=qualifying_evidence_count,
     )
+
+
+_DUTY_DIRECTION: Final[Mapping[OfficeDutyKind, ActionDirection]] = {
+    OfficeDutyKind.PERFORM: ActionDirection.HELP,
+    OfficeDutyKind.COORDINATE: ActionDirection.COMMUNICATE,
+    OfficeDutyKind.MAINTAIN: ActionDirection.SEARCH,
+    OfficeDutyKind.TRANSMIT: ActionDirection.COMMUNICATE,
+    OfficeDutyKind.MEDIATE: ActionDirection.COMMUNICATE,
+}
+
+
+def office_direction_preference(
+    ledger: object | None,
+    *,
+    policy: OfficeConceptPolicy | None = None,
+) -> ActionDirection | None:
+    """Bounded direction bias from a recognized office, never an obligation.
+
+    Only an already-recognized role can bias selection among admissible
+    existing futures. Influence-only proposals return ``None``. The result is a
+    preference, not a permission, veto, or forced action.
+    """
+    if type(ledger) is not OfficeConceptLedger:
+        return None
+    active = default_office_concept_policy() if policy is None else policy
+    if type(active) is not OfficeConceptPolicy:
+        raise TypeError("policy must be OfficeConceptPolicy or None")
+    for concept in sorted(ledger.concepts, key=lambda item: item.office_id):
+        if not concept.recognized:
+            continue
+        duties = sorted(
+            concept.duties, key=lambda item: (-item.strength, item.kind.value)
+        )
+        for duty in duties:
+            if duty.strength < active.channel_floor:
+                continue
+            direction = _DUTY_DIRECTION.get(duty.kind)
+            if direction is not None:
+                return direction
+        if concept.preferred_occupant is not None and concept.supporters:
+            return ActionDirection.COMMUNICATE
+    return None
 
 
 def default_office_concept_policy() -> OfficeConceptPolicy:
@@ -2574,3 +2618,163 @@ def _normalize_trust(speaker_trust: Mapping[str, float] | None) -> dict[str, flo
             raise ValueError("speaker_trust key invalid")
         normalized[key] = _require_strength(f"speaker_trust.{key}", value)
     return normalized
+
+
+# ---------------------------------------------------------------------------
+# Structured role communication
+# ---------------------------------------------------------------------------
+
+_COMMUNICATION_PREDICATES: Final[dict[str, str]] = {
+    "role": _OFFICE_PREDICATE,
+    "duty": _OFFICE_DUTY_PREDICATE,
+    "authority": _OFFICE_AUTHORITY_PREDICATE,
+    "endorse": _OFFICE_ENDORSE_PREDICATE,
+    "dispute": _OFFICE_DISPUTE_PREDICATE,
+    "relinquish": _OFFICE_RELINQUISH_PREDICATE,
+    "succession": _OFFICE_SUCCESSION_PREDICATE,
+}
+
+
+def _entity_for_agent(
+    identity: OwnerSafeSocialIdentity, agent_id: AgentId
+) -> EntityId | None:
+    if agent_id == identity.owner_id:
+        return identity.owner_entity_id
+    for binding in identity.counterparts:
+        if binding.agent_id == agent_id:
+            return binding.entity_id
+    return None
+
+
+def _is_communication_command(command: object) -> bool:
+    from world.actions import Talk, Tell
+
+    return type(command) in {Talk, Tell}
+
+
+def _select_office_for_speech(
+    ledger: OfficeConceptLedger,
+    tick: int,
+    policy: OfficeConceptPolicy,
+) -> tuple[OfficeConcept, OfficeDutyKind | None, OfficeAuthorityKind | None] | None:
+    for concept in sorted(ledger.concepts, key=lambda item: item.office_id):
+        if not concept.recognized:
+            continue
+        if (
+            concept.last_utterance_tick is not None
+            and tick - concept.last_utterance_tick < policy.utterance_interval
+        ):
+            continue
+        duty = max(
+            concept.duties,
+            key=lambda item: (item.strength, item.kind.value),
+            default=None,
+        )
+        authority = max(
+            concept.authorities,
+            key=lambda item: (item.strength, item.kind.value),
+            default=None,
+        )
+        return (
+            concept,
+            (None if duty is None else duty.kind),
+            (None if authority is None else authority.kind),
+        )
+    return None
+
+
+def office_communicate_utterance(
+    command: object,
+    *,
+    owner_id: AgentId,
+    tick: int,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity | None,
+    ledger: object | None,
+    mode: object | None,
+    policy: OfficeConceptPolicy | None = None,
+) -> object:
+    """Stamp an existing Talk/Tell with one owner-scoped role relation recipe.
+
+    Only a recognized office may speak. The recipient forms fresh local
+    evidence; no ledger row, occupant choice, or supporter count is copied.
+    """
+    from world.communications import (
+        CommunicationRelation,
+        CommunicationSourceBasis,
+        origin_utterance,
+    )
+
+    if getattr(mode, "value", None) != "deterministic":
+        return command
+    if type(observation) is not Observation or observation.tick != tick:
+        return command
+    if not _is_communication_command(command):
+        return command
+    if type(ledger) is not OfficeConceptLedger or not ledger.concepts:
+        return command
+    if identity is None or ledger.owner_id != owner_id:
+        return command
+    active_policy = default_office_concept_policy() if policy is None else policy
+    if type(active_policy) is not OfficeConceptPolicy:
+        raise TypeError("policy must be OfficeConceptPolicy or None")
+    selected = _select_office_for_speech(ledger, tick, active_policy)
+    if selected is None:
+        return command
+    concept, duty_kind, authority_kind = selected
+    preferred = concept.preferred_occupant
+    preferred_entity = (
+        None if preferred is None else _entity_for_agent(identity, preferred)
+    )
+    occupant_token = "-" if preferred_entity is None else preferred_entity.value
+    relations = [
+        CommunicationRelation(
+            subject=concept.function.value,
+            predicate=_OFFICE_PREDICATE,
+            object=f"{concept.context_key}|{occupant_token}|-",
+        )
+    ]
+    if duty_kind is not None:
+        relations.append(
+            CommunicationRelation(
+                subject=concept.function.value,
+                predicate=_OFFICE_DUTY_PREDICATE,
+                object=f"{concept.context_key}|{duty_kind.value}|-",
+            )
+        )
+    if authority_kind is not None:
+        relations.append(
+            CommunicationRelation(
+                subject=concept.function.value,
+                predicate=_OFFICE_AUTHORITY_PREDICATE,
+                object=f"{concept.context_key}|{authority_kind.value}|-",
+            )
+        )
+    if preferred is not None and any(item.resolved for item in concept.supporters):
+        speaker_entity = identity.owner_entity_id
+        relations.append(
+            CommunicationRelation(
+                subject=concept.function.value,
+                predicate=_OFFICE_ENDORSE_PREDICATE,
+                object=f"{concept.context_key}|{occupant_token}|{speaker_entity.value}",
+            )
+        )
+    utterance = origin_utterance(
+        text="office_role",
+        speaker_id=identity.owner_entity_id,
+        communication_id=f"office-{owner_id.value}-{tick}-{concept.office_id[:8]}",
+        relations=tuple(relations),
+        source_basis=CommunicationSourceBasis.UNREFERENCED,
+    )
+    _LOG.debug(
+        "office_response_selected owner_id=%s tick=%s office_id=%s relation_count=%s",
+        owner_id.value,
+        tick,
+        concept.office_id[:8],
+        len(relations),
+    )
+    typed_command = cast(Any, command)
+    return typed_command.__class__(
+        recipient_id=typed_command.recipient_id,
+        utterance=utterance,
+    )

@@ -604,6 +604,7 @@ class AgentRuntimeCheckpoint:
     symbolic_language: object | None = None
     translation: object | None = None
     institution_concepts: object | None = None
+    office_concepts: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -738,6 +739,13 @@ class AgentRuntimeCheckpoint:
             self.institution_concepts,
             self.agent_id,
             field_name="institution_concepts",
+        )
+        from agents.cognition.offices import require_owner_offices
+
+        require_owner_offices(
+            self.office_concepts,
+            self.agent_id,
+            field_name="office_concepts",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
