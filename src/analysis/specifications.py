@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 117
+METRIC_FAMILY_COUNT: Final[int] = 119
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -192,6 +192,8 @@ class MetricFamilyId(StrEnum):
     TRANSLATION_INFLUENCE = "translation_influence"
     INSTITUTION_EMERGENCE = "institution_emergence"
     INSTITUTIONAL_PERSISTENCE = "institutional_persistence"
+    OFFICE_CONTINUITY = "office_continuity"
+    OFFICE_SUCCESSION = "office_succession"
 
 
 class DenominatorKind(StrEnum):
@@ -5040,6 +5042,99 @@ def _spec_institutional_persistence() -> MetricSpecification:
     )
 
 
+def _spec_office_continuity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.OFFICE_CONTINUITY,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_owner_office_rows",
+        denominator="office_role_row_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of tick exported office ledgers",
+        deceased_policy="retained owner beliefs remain analytical evidence",
+        zero_holding_policy="no rows -> availability=absent",
+        opportunity_vs_occurrence="recognized roles, not actor recurrence",
+        self_edge_policy="not_applicable",
+        censoring_policy="owner ids retained; pruned history marks partial coverage",
+        formulas={
+            "recognized_role_count": "owner rows with a retained office lifecycle",
+            "continuous_count": "recognized roles without a recorded change",
+            "replaced_count": "roles with a loss and successor proposal",
+            "disputed_count": "roles with unresolved competing occupant claims",
+            "abandoned_count": "roles this owner no longer recognizes",
+            "revised_count": "roles with retained duty/authority revisions",
+            "partial_coverage": "any retained row reports pruning",
+        },
+        value_keys=(
+            "recognized_role_count",
+            "role_row_count",
+            "roles_with_occupant_count",
+            "continuous_count",
+            "replaced_count",
+            "disputed_count",
+            "vacant_count",
+            "abandoned_count",
+            "revised_count",
+            "role_changed_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no owner office rows",
+    )
+
+
+def _spec_office_succession() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.OFFICE_SUCCESSION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_aligned_office_roles",
+        denominator="dispute_denominator",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="contemporaneous aligned role claims",
+        deceased_policy="loss testimony is fallible; return remains representable",
+        zero_holding_policy="no rows -> availability=absent",
+        opportunity_vs_occurrence="no globally legitimate winner",
+        self_edge_policy="not_applicable",
+        censoring_policy="ambiguous/unmatched alignments excluded and counted",
+        formulas={
+            "successor_proposed_count": "retained successor proposals",
+            "occupant_lost_count": "observed or reported occupant loss",
+            "disagreement_count": "aligned roles with differing occupant claims",
+            "dispute_denominator": "sufficiently aligned contemporaneous roles",
+            "excluded_alignment_count": "ambiguous or unmatched role alignments",
+        },
+        value_keys=(
+            "role_row_count",
+            "successor_proposed_count",
+            "occupant_lost_count",
+            "occupant_absent_count",
+            "occupant_returned_count",
+            "occupant_relinquished_count",
+            "abandoned_count",
+            "role_changed_count",
+            "aligned_role_count",
+            "disagreement_count",
+            "dispute_denominator",
+            "excluded_alignment_count",
+            "ambiguous_alignment_count",
+            "unaligned_role_count",
+            "objective_death_match_count",
+            "objective_join_available",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no office succession rows",
+    )
+
+
 def _spec_generational_narrative_continuity() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.GENERATIONAL_NARRATIVE_CONTINUITY,
@@ -5296,6 +5391,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_translation_influence,
     _spec_institution_emergence,
     _spec_institutional_persistence,
+    _spec_office_continuity,
+    _spec_office_succession,
     _spec_generational_narrative_continuity,
     _spec_narrative_source_loss,
     _spec_narrative_historical_alignment,

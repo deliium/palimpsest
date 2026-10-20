@@ -331,3 +331,18 @@ and opaque IDs only; story tokens and record text never enter a document or log.
 Neither family declares an institution type, reads subjective ledgers, or feeds
 cognition. Metric families are **117** total. Experiment BF stays off the V1
 gate.
+
+## Office families (off the V1 gate)
+
+`office_continuity@1` and `office_succession@1` bring the catalog to 119
+families. Rows are harvested from exported owner-local office ledgers after the
+run; missing or disabled input is absent, and pruned history is partial
+coverage, never fabricated zero. Continuity separates recognized-role survival
+from actor recurrence. Cross-owner alignment is detached inference by
+function/context evidence: owner-local ids are not shared keys, identical
+labels or occupants alone do not establish equivalence, and ambiguous or
+unmatched roles are excluded from dispute denominators and counted explicitly.
+An optional post-run objective join compares retained loss rows with committed
+death facts after the run; it measures correspondence only, never legitimacy,
+and never feeds live cognition. No global legitimate winner or
+majority-is-truth rule exists.

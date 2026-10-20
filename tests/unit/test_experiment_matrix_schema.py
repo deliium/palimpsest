@@ -16,6 +16,10 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V22,
     RUNNER_SCHEMA_VERSION_V24,
     RUNNER_SCHEMA_VERSION_V44,
+    RUNNER_SCHEMA_VERSION_V49,
+    RUNNER_SCHEMA_VERSION_V50,
+    InstitutionConceptMode,
+    OfficeSuccessionMode,
     V3CapabilityFlags,
 )
 from world.regions import (
@@ -161,3 +165,49 @@ def test_historical_memory_finalize_beats_cultural_feature() -> None:
     assert filled.schema_version == RUNNER_SCHEMA_VERSION_V32
     assert filled.population_lifecycle is not None
     assert filled.new_agent_initialization is not None
+
+
+def test_office_mode_takes_precedence_over_institution() -> None:
+    from experiments.institutionalization_scenario import institutionalization_scenario
+
+    definition = institutionalization_scenario(max_ticks=2)
+    base = next(
+        condition.runner_config
+        for condition in definition.conditions
+        if condition.condition_id == "bf-institution-on"
+    )
+    office_agents = tuple(
+        replace(
+            agent,
+            cognition=replace(
+                agent.cognition,
+                office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
+            ),
+        )
+        for agent in base.agents
+    )
+    finalized = finalize_matrix_cell_config(
+        replace(base, schema_version=RUNNER_SCHEMA_VERSION_V50, agents=office_agents)
+    )
+    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V50
+    assert all(
+        agent.cognition.institution_concept_mode is InstitutionConceptMode.DETERMINISTIC
+        for agent in finalized.agents
+    )
+
+
+def test_institution_only_still_finalizes_to_v49() -> None:
+    from experiments.institutionalization_scenario import institutionalization_scenario
+
+    definition = institutionalization_scenario(max_ticks=2)
+    base = next(
+        condition.runner_config
+        for condition in definition.conditions
+        if condition.condition_id == "bf-institution-on"
+    )
+    finalized = finalize_matrix_cell_config(base)
+    assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V49
+    assert all(
+        agent.cognition.office_succession_mode is OfficeSuccessionMode.DISABLED
+        for agent in finalized.agents
+    )

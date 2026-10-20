@@ -207,3 +207,15 @@ byte-identical, and the default write remains `runner-config-v4`.
 requires no semantic naming mode. Concepts carry only six closed pattern-strength
 channels and opaque evidence; there is no world dictionary and no institution
 type.
+
+## Optional office succession (`runner-config-v50`)
+
+`runner-config-v50` adds only the per-agent `office_succession_mode`
+(`disabled` default, `deterministic` opt-in) and the explicit
+`species_default_offices_v1` initialization profile. V50 is required when any
+owner enables offices and is rejected when no owner does. Institution mode may
+be enabled or disabled on v50. V49 keeps its exact keyset; adding
+`office_succession_mode` to v49 rejects. Default runner writes remain
+`runner-config-v4`, and replay/codec/migration pins are unchanged. Existing
+species profiles stay office-disabled; the office profile is v50-only and
+starts with empty office content.

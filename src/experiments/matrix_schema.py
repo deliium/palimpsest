@@ -45,10 +45,12 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V47,
     RUNNER_SCHEMA_VERSION_V48,
     RUNNER_SCHEMA_VERSION_V49,
+    RUNNER_SCHEMA_VERSION_V50,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CulturalNarrativeMode,
     InstitutionConceptMode,
+    OfficeSuccessionMode,
     ReflectionMode,
     SemanticNamingMode,
     SimulationRunnerConfig,
@@ -87,6 +89,10 @@ def finalize_matrix_cell_config(
     )
     translation_on = any(
         agent.cognition.translation_mode is TranslationMode.DETERMINISTIC
+        for agent in agents
+    )
+    office_concepts_on = any(
+        agent.cognition.office_succession_mode is OfficeSuccessionMode.DETERMINISTIC
         for agent in agents
     )
     institution_concepts_on = any(
@@ -130,7 +136,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if institution_concepts_on:
+    if office_concepts_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V50,
+            "office_concepts_on",
+        )
+    elif institution_concepts_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V49,
             "institution_concepts_on",

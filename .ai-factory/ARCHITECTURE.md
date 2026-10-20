@@ -249,8 +249,8 @@ remain separate authorities. The opt-in per-agent `institution_concept_mode`
 (`runner-config-v49`) carries an owner-scoped `InstitutionConceptLedger` under
 locked policy `institution-concepts.v1`; concepts have six closed pattern
 channels, opaque content-derived ids, and private custom labels but no
-institution type, office, state, government, religion, court, police,
-corporation, or political party. The ledger round-trips through the existing
+institution type, objective office registry, state, government, religion,
+court, police, corporation, or political party. The ledger round-trips through the existing
 subjective checkpoint seams with no codec marker or write-pair bump.
 Detached `analysis.institution_emergence` and
 `analysis.institutional_persistence` consume analysis-owned lane rows harvested
@@ -260,3 +260,23 @@ never return data to prompts, memory formation, admission, or observation.
 Temporary coordination and persistent institution-like structure are reported
 classifications, not world rules. Experiment BF (`institutionalization@1`)
 stays off the V1 regression gate; `institutional_economy` remains unowned.
+
+## C-30 Subjective offices and succession
+
+Office cognition is a separate optional primitive from institution concepts.
+`runner-config-v50` adds only a per-agent `office_succession_mode`; the
+owner-scoped `OfficeConceptLedger` under locked policy `offices-succession.v1`
+tracks a stable role identity fixed at inception, revisable duty/authority
+beliefs, attributed supporter rows, competing occupant claims, and bounded
+succession/revision history. Occupants are never globally authoritative, and
+duties or expected authority never become world permissions. Evidence comes
+only from the owner's observation, owner-safe identity projection, prepared
+`RetrievedMemoryContext` episode facts, and delivered structured testimony.
+Newborn capability is explicit (`species_default_offices_v1`, v50 only) and
+starts empty; parent cognition and ledgers are never copied. Office state
+round-trips through existing runtime checkpoints, not a new durable subjective
+codec. Detached `analysis.offices` harvests exported owner-local rows and aligns
+roles by function/context inference, retaining ambiguity and excluded-case
+counts; it imports no cognition/runtime/persistence modules and never re-enters
+cognition. Experiment BG (`offices_succession@1`) stays off the V1 gate;
+`institutional_economy` remains unowned.

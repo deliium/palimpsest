@@ -381,3 +381,14 @@ from experiments.institutionalization_scenario import institutionalization_scena
 definition = institutionalization_scenario(seed=23, max_ticks=16)
 results = await ExperimentCoordinator(definition).run_all()
 ```
+
+## Experiment BG — subjective offices and succession
+
+`offices_succession@1` is an off-gate experiment with a flags-off v4 golden
+baseline, a composed office-mode-off control at v49, and v50 office-on arms.
+It seeds no office, legitimate successor, desired consensus, or actor script.
+Arms use the existing physical and communication channels; `office-on-contested`
+is a matched repeat intended to expose divergence rather than force it. The
+scenario reports whatever appears, including no recognized office, replacement,
+split, vacancy, abandonment, or role change. Arbiter checks assert structure,
+owner privacy, availability, and reproducibility, not political success.

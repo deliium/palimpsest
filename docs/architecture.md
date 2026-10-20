@@ -375,3 +375,16 @@ researcher-facing only. No predefined institution type exists anywhere.
 Closed commands stay **43**, observer semantic types stay **73**, replay stays
 `EVENT_SCHEMA_REPLAY_V22`, codec stays `v20`, Alembic head stays `0017`, metric
 families are **117**, and the latest runner schema is `runner-config-v49`.
+
+## Office boundary
+
+`agents.cognition.offices` is owner-scoped subjective cognition; it imports no
+world authority, analysis, experiments, infrastructure, or persistence. Office
+ids and occupant/supporter claims never become an objective registry or
+permission. `analysis.offices` is detached: it harvests exported rows after the
+run and infers cross-owner alignment by function/context, retaining ambiguity
+and exclusion counts. It imports no cognition/runtime/persistence module and
+never re-enters prompts, memory formation, admission, or observation. Observer
+and API layers may expose owner-scoped office state only behind existing debug
+permissions and may not grant authority from it. Experiment BG stays off the V1
+gate; `institutional_economy` remains unowned.

@@ -2774,6 +2774,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "cross_cultural_translation@1",
         "generational_narratives@1",
         "institutionalization@1",
+        "offices_succession@1",
     }
 )
 
@@ -5372,6 +5373,27 @@ def experiment_bf_institutionalization(
     )
     _LOG.info(
         "experiment_registered experiment_id=institutionalization@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bg_offices_succession(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BG: owner-scoped offices and disputed succession."""
+    from experiments.offices_succession_scenario import office_succession_scenario
+
+    definition = office_succession_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=offices_succession@1 arms=%s",
         len(definition.conditions),
     )
     return definition

@@ -493,3 +493,37 @@ candidate → recognized → fading → retired under locked thresholds.
 runtime checkpoints with the same owner guard as translation and requires no
 codec marker or semantic naming mode. `named_custom` is self-contained
 communicated evidence. No world entity or institution type exists.
+
+## Owner-scoped office concepts
+
+`office_succession_mode` is an opt-in per-agent mode (`runner-config-v50`,
+locked policy `offices-succession.v1`). An office is a persistent recognized
+role, not a person's influence and not an objective institution. Its
+owner-local identity is fixed once at inception from function, context, first
+qualifying evidence, and an owner-local collision discriminator; it is never
+rehashed from the current occupant, supporters, label, or growing evidence.
+Duties and expected authority are revisable beliefs and never world
+permissions. Occupant claims may be vacant, uncertain, contested, lost,
+relinquished, or disputed, and no `current_occupant` is globally authoritative.
+
+Recognition requires recurring function evidence plus distinct role-directed
+expectation or endorsement with independent provenance. Repeated influence by
+one actor, same-root retellings, or a single message cannot promote a role.
+Updates read the owner's observation, owner-safe identity projection, prepared
+`RetrievedMemoryContext` episode facts, and delivered structured testimony.
+They never read `WorldState`, `WorldEvent`, another owner's ledger, or analysis
+rows. Bare `COMMUNICATE` is not testimony; only structured Talk/Tell relations
+carry office speech, and receivers create fresh local evidence rather than
+copying sender rows.
+
+Recognized duties may apply a bounded selection bias among already-admissible
+futures (perform -> help, maintain -> search, coordinate/transmit/mediate ->
+communicate). The preference never forces obedience, bypasses physiology,
+budgets, communication eligibility, or admission, and influence-only proposals
+activate no bias. Bounded history retains succession and revision records with
+explicit pruned coverage. Loss evidence is fallible: an observed death can be recorded as loss,
+departure is only reduced availability, and a presumed-dead occupant may return.
+Abandonment ends this owner's recognition without deleting anyone else's
+concept. Runtime checkpoints carry office state; they are not a durable
+subjective process-restart codec. Admitted newborns under
+`species_default_offices_v1` start with empty office content.

@@ -639,6 +639,11 @@ def assemble_arm_metric_bundle(
     continuity_rows = institution_continuity_rows_from_channel_rows(
         tuple(continuity_inputs)
     )
+    office_ledgers = getattr(arm.runner_result, "office_concept_ledgers", None)
+    if office_ledgers:
+        from analysis.offices import harvest_office_rows
+
+        inputs = replace(inputs, office_rows=harvest_office_rows(office_ledgers))
     if role_rows or procedure_rows or expectation_rows or legitimacy_rows:
         inputs = replace(
             inputs,

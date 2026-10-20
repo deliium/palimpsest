@@ -301,6 +301,7 @@ class MetricComputationInputs:
     institution_succession_rows: Sequence[object] | None = None
     institution_continuity_rows: Sequence[object] | None = None
     institution_known_person_ids: Sequence[str] | None = None
+    office_rows: Sequence[object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1526,6 +1527,38 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 compute_institutional_persistence(institution_result),
                 run_id=run_id,
                 input_revision=revision,
+            ),
+        )
+
+    if inputs.office_rows is not None:
+        from typing import cast
+
+        from analysis.offices import (
+            OfficeSnapshotRow,
+            align_office_roles,
+            compute_office_continuity,
+            compute_office_succession,
+        )
+
+        office_rows = cast("tuple[OfficeSnapshotRow, ...]", tuple(inputs.office_rows))
+        office_alignments = align_office_roles(office_rows)
+        _safe(
+            "office_continuity",
+            lambda: compute_office_continuity(
+                office_rows,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+        _safe(
+            "office_succession",
+            lambda: compute_office_succession(
+                office_rows,
+                office_alignments,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
             ),
         )
 

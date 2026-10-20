@@ -175,3 +175,15 @@ cultural-narrative ledgers. Disabled owners contribute nothing, so flags-off
 bytes are unchanged. `runner-config-v49` adds only the per-agent
 `institution_concept_mode`; the reverse gate requires a deterministic mode.
 Exports never flow back into cognition.
+
+## Office checkpoint and export
+
+`office_concept_ledgers` is owner-ordered in runner results. Enabled owners
+export exactly one ledger each (including an empty ledger for an admitted
+learner); disabled owners export none. Runtime checkpoints validate ledger
+ownership, restore office state alongside other subjective ledgers, restore the
+engine tick cursor for continuation parity, and reject cross-owner or duplicate
+runtime state. Checkpoint round-trips are runtime-object equality and required
+for fork isolation; they do not claim durable process restart or subjective
+replay. Objective events and durable snapshots remain a separate contract. See `docs/configuration.md` for
+`runner-config-v50` and `species_default_offices_v1`.
