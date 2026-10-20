@@ -219,3 +219,16 @@ be enabled or disabled on v50. V49 keeps its exact keyset; adding
 `runner-config-v4`, and replay/codec/migration pins are unchanged. Existing
 species profiles stay office-disabled; the office profile is v50-only and
 starts with empty office content.
+
+## Optional collective decisions (`runner-config-v51`)
+
+`runner-config-v51` adds only the per-agent `collective_decision_mode`
+(`disabled` default, `deterministic` opt-in) to the exact v50 cognition keyset.
+V51 is required when any owner enables collective decisions and is rejected when
+no owner does. Offices, institutions, narratives, regions, and lifecycle modes
+remain composable on v51, and decisions work without offices or institutions.
+V50 rejects the `collective_decision_mode` key and a non-disabled mode. Default
+runner writes remain `runner-config-v4`; replay stays
+`EVENT_SCHEMA_REPLAY_V22`, codec `v20`, and Alembic `0017`. There is no new
+capability flag and no new newborn profile; existing initialization profiles
+stay decision-disabled.

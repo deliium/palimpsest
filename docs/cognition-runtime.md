@@ -527,3 +527,23 @@ Abandonment ends this owner's recognition without deleting anyone else's
 concept. Runtime checkpoints carry office state; they are not a durable
 subjective process-restart codec. Admitted newborns under
 `species_default_offices_v1` start with empty office content.
+
+## Owner-scoped collective decisions
+
+`collective_decision_mode` is an opt-in per-agent mode on
+`runner-config-v51` under locked policy `collective-decisions.v1`. An owner
+tracks bounded proposal revisions, expressed positions, one-hop delegations,
+retractions, claimed outcomes, descriptive compliance, and local influence
+attributions. Proposal references are testimony, not a canonical social entity;
+owner-local identity stays separate from the claimed originator reference.
+Supporting an old revision does not endorse changed terms.
+
+Updates consume the owner's observation, prepared recalled-episode facts, and
+delivered structured testimony. Silence is unknown, not consent or opposition.
+Recognition of a shared course requires no majority, quorum, or binding winner;
+existing multi-criteria deliberation still chooses one admissible command.
+Recognized duties or a supported preference may bias selection among
+already-admissible futures but never bypass physiology, goals, budgets,
+communication eligibility, or world admission. `oppose` is verbal only and
+never compiles `OpposePublicGood`. Runtime ledgers carry through checkpoint and
+fork; disabled mode is a strict passthrough and allocates nothing.

@@ -280,3 +280,14 @@ roles by function/context inference, retaining ambiguity and excluded-case
 counts; it imports no cognition/runtime/persistence modules and never re-enters
 cognition. Experiment BG (`offices_succession@1`) stays off the V1 gate;
 `institutional_economy` remains unowned.
+
+## Collective decisions (V3-31)
+
+Owner-scoped collective decisions live in `agents.cognition` as immutable
+subjective ledgers. Proposals, positions, delegations, retractions, outcomes,
+compliance, and influence rows never become world authority or a canonical
+electorate. Cognition consumes only owner-safe observations, prepared recalled
+episodes, and delivered testimony; analysis harvests exported rows after the
+run and aligns local courses only by detached topic/action/window evidence.
+No analysis row feeds runtime, and delivery proves speech rather than
+legitimacy or compliance.

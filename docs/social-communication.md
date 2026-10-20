@@ -147,3 +147,15 @@ the foreign term. These paths are ordinary owner-scoped testimony and social
 action; a wrong mapping can therefore support a wrong belief or a
 misunderstanding without any engine correction. Disabled translation allocates
 no ledger and leaves traces byte-identical.
+
+## Collective-decision relation recipe
+
+Collective-decision acts use a namespaced closed recipe over the existing
+`CommunicationRelation` atoms: `collective_propose`, `collective_support`,
+`collective_oppose`, `collective_delegate`, `collective_withdraw`, and
+`collective_coordinate`, plus a `collective_policy` marker naming
+`collective-decisions.v1`. The topic is the relation subject; the proposal
+reference, revision, and act payload are bounded tokens in the object. The
+verified observed speaker is the actor. Payload actors and declared roots are
+never authentication, and a relay is testimony rather than direct support.
+Ordinary conversation is unaffected, and no broadcast is introduced.

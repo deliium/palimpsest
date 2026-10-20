@@ -388,3 +388,14 @@ never re-enters prompts, memory formation, admission, or observation. Observer
 and API layers may expose owner-scoped office state only behind existing debug
 permissions and may not grant authority from it. Experiment BG stays off the V1
 gate; `institutional_economy` remains unowned.
+
+Collective decisions (V3-31) add a separate owner-scoped
+`CollectiveDecisionLedger` under `agents.cognition`. Proposals, positions,
+delegations, retractions, outcomes, compliance, and influence rows are private
+beliefs; there is no objective proposal registry, electorate, quorum, majority,
+binding resolution, or authoritative decision. Cognition reads only owner-safe
+inputs and never analysis rows; analysis aligns independently created local
+courses by detached topic/action/window evidence and never feeds runtime.
+Delivery proves speech only, and each actor still emits at most one ordinary
+admitted command per tick. Experiment BH and the three analytical families stay
+off the V1 gate.

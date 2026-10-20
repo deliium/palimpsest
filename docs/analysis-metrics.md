@@ -346,3 +346,21 @@ An optional post-run objective join compares retained loss rows with committed
 death facts after the run; it measures correspondence only, never legitimacy,
 and never feeds live cognition. No global legitimate winner or
 majority-is-truth rule exists.
+
+## Collective-decision families (off the V1 gate)
+
+`collective_decision_process@1`, `collective_decision_outcomes@1`, and
+`collective_decision_disagreement@1` bring the catalog to 122 families. Rows are
+harvested from exported owner-local decision ledgers after the run. Direct and
+reported positions stay distinguishable; withdrawal does not erase history;
+influence reports preference change, final-command change, executed influence,
+and unavailable comparisons separately. Compliance denominators count only
+matched and contrary opportunities; blocked, unknown, right-censored, and
+pruned cases are reported explicitly. Optional detached effect joins count
+committed effects that fall inside a supported course window; they measure
+correspondence only and never establish acceptance or legitimacy. Cross-owner
+disagreement uses only
+sufficiently aligned contemporaneous courses by detached topic/action/window
+evidence. Owner-local proposal references are not shared keys, and ambiguous or
+unmatched cases are excluded and counted. Missing or disabled input is absent,
+not zero.

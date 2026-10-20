@@ -392,3 +392,14 @@ is a matched repeat intended to expose divergence rather than force it. The
 scenario reports whatever appears, including no recognized office, replacement,
 split, vacancy, abandonment, or role change. Arbiter checks assert structure,
 owner privacy, availability, and reproducibility, not political success.
+
+## Experiment BH — collective decisions
+
+`collective_decisions@1` is an off-gate experiment with an unchanged flags-off
+v4 baseline, a composed decisions-off control at v49, decisions-on v51 arms, and
+a matched opportunity-limited v51 arm. It seeds no opinions, delegates,
+winners, institutions, or successful decisions. The scenario uses existing
+physical and communication channels and reports whatever appears, including no
+proposal, no consensus, disagreement, blocked attempts, noncompliance, or
+silence. Arbitration checks structure, owner privacy, availability, and
+reproducibility, never a political outcome.
