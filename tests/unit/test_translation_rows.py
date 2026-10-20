@@ -133,7 +133,7 @@ def _influence(
 
 
 def test_metric_families_are_registered_at_115() -> None:
-    assert METRIC_FAMILY_COUNT == 122
+    assert METRIC_FAMILY_COUNT == 124
     for family, version in (
         (MetricFamilyId.TRANSLATION_LEARNING, TRANSLATION_LEARNING_METRIC_VERSION),
         (

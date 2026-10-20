@@ -644,6 +644,25 @@ def assemble_arm_metric_bundle(
         from analysis.offices import harvest_office_rows
 
         inputs = replace(inputs, office_rows=harvest_office_rows(office_ledgers))
+    mediation_ledgers = getattr(arm.runner_result, "mediation_ledgers", None)
+    if mediation_ledgers:
+        from analysis.mediation import (
+            harvest_mediation_rows,
+            mediation_effect_rows_from_events,
+        )
+
+        entity_to_agent = {
+            agent.entity_id.value: agent.agent_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        inputs = replace(
+            inputs,
+            mediation_rows=harvest_mediation_rows(mediation_ledgers),
+            mediation_effects=mediation_effect_rows_from_events(
+                events or (),
+                entity_to_agent=entity_to_agent,
+            ),
+        )
     decision_ledgers = getattr(arm.runner_result, "collective_decision_ledgers", None)
     if decision_ledgers is not None:
         from analysis.collective_decisions import (

@@ -303,6 +303,8 @@ class MetricComputationInputs:
     institution_known_person_ids: Sequence[str] | None = None
     office_rows: Sequence[object] | None = None
     collective_decision_rows: Sequence[object] | None = None
+    mediation_rows: Sequence[object] | None = None
+    mediation_effects: Sequence[object] | None = None
     collective_decision_effects: Sequence[object] | None = None
 
 
@@ -1558,6 +1560,43 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             lambda: compute_office_succession(
                 office_rows,
                 office_alignments,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+
+    if inputs.mediation_rows is not None:
+        from typing import cast
+
+        from analysis.mediation import (
+            MediationEffectRow,
+            MediationSnapshot,
+            compute_conflict_mediation,
+            compute_mediation_role_emergence,
+        )
+
+        mediation_rows = cast(
+            "tuple[MediationSnapshot, ...]", tuple(inputs.mediation_rows)
+        )
+        mediation_effects = cast(
+            "tuple[MediationEffectRow, ...]",
+            tuple(inputs.mediation_effects or ()),
+        )
+        _safe(
+            "conflict_mediation",
+            lambda: compute_conflict_mediation(
+                mediation_rows,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+                effects=mediation_effects,
+            ),
+        )
+        _safe(
+            "mediation_role_emergence",
+            lambda: compute_mediation_role_emergence(
+                mediation_rows,
                 run_id=run_id,
                 input_revision=revision,
                 tick=window_end,

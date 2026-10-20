@@ -2776,6 +2776,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "institutionalization@1",
         "offices_succession@1",
         "collective_decisions@1",
+        "mediation_opportunities@1",
     }
 )
 
@@ -5395,6 +5396,27 @@ def experiment_bg_offices_succession(
     )
     _LOG.info(
         "experiment_registered experiment_id=offices_succession@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bi_mediation_opportunities(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BI: optional owner-scoped conflict mediation."""
+    from experiments.mediation_scenario import mediation_opportunities_scenario
+
+    definition = mediation_opportunities_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=mediation_opportunities@1 arms=%s",
         len(definition.conditions),
     )
     return definition

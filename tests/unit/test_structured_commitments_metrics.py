@@ -46,7 +46,7 @@ def _event():
 
 
 def test_family_count_is_77() -> None:
-    assert METRIC_FAMILY_COUNT == 122
+    assert METRIC_FAMILY_COUNT == 124
     assert MetricFamilyId.COMMITMENT_TERM_DIVERGENCE.value == (
         "commitment_term_divergence"
     )

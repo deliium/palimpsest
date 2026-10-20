@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 122
+METRIC_FAMILY_COUNT: Final[int] = 124
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -197,6 +197,8 @@ class MetricFamilyId(StrEnum):
     COLLECTIVE_DECISION_PROCESS = "collective_decision_process"
     COLLECTIVE_DECISION_OUTCOMES = "collective_decision_outcomes"
     COLLECTIVE_DECISION_DISAGREEMENT = "collective_decision_disagreement"
+    CONFLICT_MEDIATION = "conflict_mediation"
+    MEDIATION_ROLE_EMERGENCE = "mediation_role_emergence"
 
 
 class DenominatorKind(StrEnum):
@@ -5285,6 +5287,124 @@ def _spec_collective_decision_disagreement() -> MetricSpecification:
     )
 
 
+def _spec_conflict_mediation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.CONFLICT_MEDIATION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_owner_mediation_rows",
+        denominator="enabled_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="as_of tick exported mediation ledgers",
+        deceased_policy="retained owner beliefs remain analytical evidence",
+        zero_holding_policy="no enabled owners -> availability=absent",
+        opportunity_vs_occurrence="attempts are distinct from observed effects",
+        self_edge_policy="not_applicable",
+        censoring_policy="pruned histories mark partial; open windows are censored",
+        formulas={
+            "distinct_case_count": "distinct claimed case lineages across owners",
+            "recommendation_count": "retained recommendation revisions",
+            "compromise_count": "recommendations without restorative terms",
+            "restitution_recommendation_count": "recommendations with terms",
+            "account_count": "active attributed account responses",
+            "accept_count": "active revision-scoped acceptances",
+            "refuse_count": "active refusals",
+            "defer_count": "active deferrals",
+            "counterproposal_count": "active counterproposals",
+            "withdraw_count": "active withdrawals",
+            "settlement_claim_count": "claimed settlements; never authoritative",
+            "attempted_follow_through_count": "recorded attempt rows",
+            "effected_follow_through_count": "exact-scope effect matches",
+            "ambiguous_effect_count": "effects matching competing recommendations",
+            "unresolved_case_count": "local cases still unresolved",
+            "partial_case_count": "locally partially addressed cases",
+            "disputed_case_count": "locally disputed cases",
+            "apparently_settled_case_count": "locally apparent settlements",
+            "ignored_or_unknown_count": "cases with no direct active response",
+            "enabled_owner_count": "owners with mediation enabled",
+            "partial_coverage": "any enabled snapshot pruned history",
+            "as_of_tick": "logical tick of the measurement",
+        },
+        value_keys=(
+            "distinct_case_count",
+            "recommendation_count",
+            "compromise_count",
+            "restitution_recommendation_count",
+            "account_count",
+            "accept_count",
+            "refuse_count",
+            "defer_count",
+            "counterproposal_count",
+            "withdraw_count",
+            "settlement_claim_count",
+            "attempted_follow_through_count",
+            "effected_follow_through_count",
+            "ambiguous_effect_count",
+            "unresolved_case_count",
+            "partial_case_count",
+            "disputed_case_count",
+            "apparently_settled_case_count",
+            "ignored_or_unknown_count",
+            "enabled_owner_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no enabled mediation owners",
+    )
+
+
+def _spec_mediation_role_emergence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MEDIATION_ROLE_EMERGENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="detached_owner_mediation_role_rows",
+        denominator="enabled_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="as_of tick exported mediation ledgers",
+        deceased_policy="retained owner beliefs remain analytical evidence",
+        zero_holding_policy="no enabled owners -> availability=absent",
+        opportunity_vs_occurrence="recurrence and recognition are distinct",
+        self_edge_policy="not_applicable",
+        censoring_policy="short spans cannot prove stable recognition",
+        formulas={
+            "recurring_mediator_count": "repeated activity without recognition",
+            "transient_assistance_count": "single grounded case",
+            "candidate_role_count": "recurrence plus independent support",
+            "stable_role_count": "3 cases, 2 independent supporters, span >= 2",
+            "independent_invitation_count": "active invitations",
+            "independent_endorsement_count": "active endorsements",
+            "contested_recognition_count": "assessments with disputed evidence",
+            "lost_support_count": "active withdrawal expressions",
+            "enabled_owner_count": "owners with mediation enabled",
+            "partial_coverage": "any enabled snapshot pruned history",
+            "as_of_tick": "logical tick of the measurement",
+        },
+        value_keys=(
+            "recurring_mediator_count",
+            "transient_assistance_count",
+            "candidate_role_count",
+            "stable_role_count",
+            "independent_invitation_count",
+            "independent_endorsement_count",
+            "contested_recognition_count",
+            "lost_support_count",
+            "enabled_owner_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no enabled mediation owners",
+    )
+
+
 def _spec_generational_narrative_continuity() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.GENERATIONAL_NARRATIVE_CONTINUITY,
@@ -5546,6 +5666,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_collective_decision_process,
     _spec_collective_decision_outcomes,
     _spec_collective_decision_disagreement,
+    _spec_conflict_mediation,
+    _spec_mediation_role_emergence,
     _spec_generational_narrative_continuity,
     _spec_narrative_source_loss,
     _spec_narrative_historical_alignment,
