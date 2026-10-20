@@ -171,6 +171,7 @@ class Perspective:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    collective_decisions: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -393,6 +394,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.office_concepts",
         )
+        from agents.cognition.collective_decisions import (
+            require_owner_collective_decisions,
+        )
+
+        require_owner_collective_decisions(
+            self.collective_decisions,
+            self.agent_id,
+            field_name="Perspective.collective_decisions",
+        )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
         )
@@ -525,6 +535,7 @@ class Perspective:
             artifact_interpretations=self.artifact_interpretations,
             semantic_naming=self.semantic_naming,
             symbolic_language=self.symbolic_language,
+            collective_decisions=self.collective_decisions,
             cultural_narratives=self.cultural_narratives,
             developmental_knowledge=self.developmental_knowledge,
             mentorship=self.mentorship,

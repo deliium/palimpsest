@@ -169,6 +169,9 @@ class MultiCriteriaIntentionSelector:
         regional_memory: RetrievedMemoryContext | None = None,
         office_concepts: object | None = None,
         office_succession_mode: object | None = None,
+        collective_decisions: object | None = None,
+        collective_decision_mode: object | None = None,
+        decision_audit: list[object] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -348,6 +351,63 @@ class MultiCriteriaIntentionSelector:
                             owner.value,
                             tick,
                             office_direction.value,
+                        )
+        if getattr(collective_decision_mode, "value", None) == "deterministic":
+            from agents.cognition.collective_decisions import (
+                CollectiveDecisionBiasAudit,
+                CollectiveDecisionLedger,
+                collective_decision_preference,
+            )
+
+            prepared_decisions = collective_decisions
+            if prepared_decisions is None and loop_input.snapshot is not None:
+                prepared_decisions = getattr(
+                    loop_input.snapshot, "collective_decisions", None
+                )
+            if type(prepared_decisions) is CollectiveDecisionLedger:
+                preference = collective_decision_preference(
+                    prepared_decisions, tick=tick
+                )
+                if preference is not None:
+                    baseline_directions = tuple(
+                        dict.fromkeys(
+                            futures_by_id[item.future_id].direction
+                            for item in undominated
+                            if item.future_id in futures_by_id
+                        )
+                    )
+                    decision_filtered = [
+                        item
+                        for item in undominated
+                        if item.future_id in futures_by_id
+                        and futures_by_id[item.future_id].direction
+                        is preference.direction
+                    ]
+                    if decision_filtered:
+                        undominated = decision_filtered
+                        biased_directions = tuple(
+                            dict.fromkeys(
+                                futures_by_id[item.future_id].direction
+                                for item in undominated
+                                if item.future_id in futures_by_id
+                            )
+                        )
+                        if decision_audit is not None:
+                            decision_audit.append(
+                                CollectiveDecisionBiasAudit(
+                                    proposal_ref=preference.proposal_ref,
+                                    revision=preference.revision,
+                                    preferred_direction=preference.direction,
+                                    baseline_directions=baseline_directions,
+                                    biased_directions=biased_directions,
+                                )
+                            )
+                        _LOG.debug(
+                            "collective_decision_direction_bias owner_id=%s tick=%s "
+                            "direction=%s",
+                            owner.value,
+                            tick,
+                            preference.direction.value,
                         )
 
         identity_costs = _identity_direction_costs(
@@ -880,6 +940,8 @@ class CommandPlanner:
         cultural_narrative_mode: object | None = None,
         office_concepts: object | None = None,
         office_succession_mode: object | None = None,
+        collective_decisions: object | None = None,
+        collective_decision_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -1171,6 +1233,22 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_offices,
             mode=office_succession_mode,
+        )
+        from agents.cognition.collective_decision_communication import (
+            collective_decision_communicate_utterance,
+        )
+
+        prepared_decisions = collective_decisions
+        if prepared_decisions is None and snapshot is not None:
+            prepared_decisions = getattr(snapshot, "collective_decisions", None)
+        command = collective_decision_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_decisions,
+            mode=collective_decision_mode,
         )
         from agents.cognition.artifacts import (
             artifact_inscribe_command,

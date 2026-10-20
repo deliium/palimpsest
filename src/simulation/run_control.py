@@ -605,6 +605,7 @@ class AgentRuntimeCheckpoint:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    collective_decisions: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -746,6 +747,15 @@ class AgentRuntimeCheckpoint:
             self.office_concepts,
             self.agent_id,
             field_name="office_concepts",
+        )
+        from agents.cognition.collective_decisions import (
+            require_owner_collective_decisions,
+        )
+
+        require_owner_collective_decisions(
+            self.collective_decisions,
+            self.agent_id,
+            field_name="collective_decisions",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,

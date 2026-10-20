@@ -46,8 +46,10 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V48,
     RUNNER_SCHEMA_VERSION_V49,
     RUNNER_SCHEMA_VERSION_V50,
+    RUNNER_SCHEMA_VERSION_V51,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
+    CollectiveDecisionMode,
     CulturalNarrativeMode,
     InstitutionConceptMode,
     OfficeSuccessionMode,
@@ -99,6 +101,10 @@ def finalize_matrix_cell_config(
         agent.cognition.institution_concept_mode is InstitutionConceptMode.DETERMINISTIC
         for agent in agents
     )
+    collective_decisions_on = any(
+        agent.cognition.collective_decision_mode is CollectiveDecisionMode.DETERMINISTIC
+        for agent in agents
+    )
     artifacts_on = any(
         agent.cognition.artifact_interpretation_mode
         is ArtifactInterpretationMode.DETERMINISTIC
@@ -136,7 +142,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if office_concepts_on:
+    if collective_decisions_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V51,
+            "collective_decisions_on",
+        )
+    elif office_concepts_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V50,
             "office_concepts_on",

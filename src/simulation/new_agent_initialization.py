@@ -123,6 +123,8 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "institution_concept_ledger",
         "office_concepts",
         "office_concept_ledger",
+        "collective_decisions",
+        "collective_decision_ledger",
         "social_norms",
         "social_conventions",
         "skill_ledger",

@@ -739,6 +739,7 @@ class SubjectiveSnapshot:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    collective_decisions: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -1009,6 +1010,15 @@ class SubjectiveSnapshot:
             self.office_concepts,
             self.owner_id,
             field_name="SubjectiveSnapshot.office_concepts",
+        )
+        from agents.cognition.collective_decisions import (
+            require_owner_collective_decisions,
+        )
+
+        require_owner_collective_decisions(
+            self.collective_decisions,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.collective_decisions",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
@@ -3847,6 +3857,8 @@ class CognitiveLoopProposal:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    collective_decisions: object | None = None
+    collective_decision_audit: tuple[object, ...] = ()
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -4144,6 +4156,7 @@ class CognitiveLoopResult:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    collective_decisions: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None

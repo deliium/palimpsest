@@ -18,6 +18,10 @@ from agents.cognition.budget import (
     CognitiveBudgetPolicy,
     default_cognitive_budget_policy,
 )
+from agents.cognition.collective_decisions import (
+    CollectiveDecisionPolicy,
+    default_collective_decision_policy,
+)
 from agents.cognition.communication_strategy import (
     CommunicationStrategyPolicy,
     default_communication_strategy_policy,
@@ -358,6 +362,17 @@ class CognitionOfficeSuccessionMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionCollectiveDecisionMode(StrEnum):
+    """Owner-scoped collective decisions. Disabled allocates nothing.
+
+    Lockstep with ``simulation.CollectiveDecisionMode``. This is not a
+    capability flag and requires no office or institution mode.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -495,6 +510,10 @@ class CognitionLoopConfig:
         CognitionOfficeSuccessionMode.DISABLED
     )
     office_concept_policy: OfficeConceptPolicy | None = None
+    collective_decision_mode: CognitionCollectiveDecisionMode = (
+        CognitionCollectiveDecisionMode.DISABLED
+    )
+    collective_decision_policy: CollectiveDecisionPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -870,6 +889,28 @@ class CognitionLoopConfig:
                 "invalid_enum path=office_concept_policy reason_code=invalid_type"
             )
             raise TypeError("office_concept_policy must be OfficeConceptPolicy or None")
+        if type(self.collective_decision_mode) is not CognitionCollectiveDecisionMode:
+            _LOG.error(
+                "invalid_enum path=collective_decision_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "collective_decision_mode must be CognitionCollectiveDecisionMode"
+            )
+        if self.collective_decision_mode is CognitionCollectiveDecisionMode.DISABLED:
+            object.__setattr__(self, "collective_decision_policy", None)
+        elif self.collective_decision_policy is None:
+            object.__setattr__(
+                self,
+                "collective_decision_policy",
+                default_collective_decision_policy(),
+            )
+        elif type(self.collective_decision_policy) is not CollectiveDecisionPolicy:
+            _LOG.error(
+                "invalid_enum path=collective_decision_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "collective_decision_policy must be CollectiveDecisionPolicy or None"
+            )
         if (
             self.translation_mode is CognitionTranslationMode.DETERMINISTIC
             and self.semantic_naming_mode
@@ -1122,6 +1163,12 @@ class CognitionLoopConfig:
                 None
                 if self.office_concept_policy is None
                 else self.office_concept_policy.version
+            ),
+            "collective_decision_mode": self.collective_decision_mode.value,
+            "collective_decision_policy_version": (
+                None
+                if self.collective_decision_policy is None
+                else self.collective_decision_policy.version
             ),
             "cultural_narrative_mode": self.cultural_narrative_mode.value,
             "cultural_narrative_policy_version": (
@@ -1411,6 +1458,8 @@ def build_cognitive_loop(
         institution_concept_policy=resolved.institution_concept_policy,
         office_succession_mode=resolved.office_succession_mode,
         office_concept_policy=resolved.office_concept_policy,
+        collective_decision_mode=resolved.collective_decision_mode,
+        collective_decision_policy=resolved.collective_decision_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

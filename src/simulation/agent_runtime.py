@@ -422,6 +422,7 @@ class AgentRuntime:
         "_cognition_trace_repository",
         "_cognition_trace_spec",
         "_cognitive_budget_audits",
+        "_collective_decisions",
         "_communication_intent_audits",
         "_competence",
         "_counterfactual_audits",
@@ -594,6 +595,7 @@ class AgentRuntime:
         self._translation: object | None = None
         self._institution_concepts: object | None = None
         self._office_concepts: object | None = None
+        self._collective_decisions: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
@@ -1170,6 +1172,35 @@ class AgentRuntime:
             "office_concepts_carried owner_id=%s office_count=%s tick=%s",
             owner.value,
             len(ledger.concepts),
+            tick,
+        )
+
+    def _commit_collective_decisions(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.collective_decisions import CollectiveDecisionLedger
+        from agents.cognition.configuration import CognitionCollectiveDecisionMode
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_collective_decision_mode",
+            CognitionCollectiveDecisionMode.DISABLED,
+        )
+        if mode is not CognitionCollectiveDecisionMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionCollectiveDecisionMode.DETERMINISTIC:
+                self._collective_decisions = None
+            return
+        if type(ledger) is not CollectiveDecisionLedger:
+            raise TypeError("collective_decisions must be CollectiveDecisionLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._collective_decisions = ledger
+        _LOG.debug(
+            "collective_decisions_carried owner_id=%s proposal_count=%s tick=%s",
+            owner.value,
+            len(ledger.proposals),
             tick,
         )
 
@@ -1965,6 +1996,7 @@ class AgentRuntime:
                 translation=self._translation,
                 institution_concepts=self._institution_concepts,
                 office_concepts=self._office_concepts,
+                collective_decisions=self._collective_decisions,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
@@ -2430,6 +2462,9 @@ class AgentRuntime:
         self._commit_office_concepts(
             getattr(pending.loop_result, "office_concepts", None), pending.tick
         )
+        self._commit_collective_decisions(
+            getattr(pending.loop_result, "collective_decisions", None), pending.tick
+        )
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick
         )
@@ -2875,6 +2910,16 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        self._collective_decisions = getattr(checkpoint, "collective_decisions", None)
+        if (
+            self._collective_decisions is not None
+            and getattr(self._collective_decisions, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -2943,6 +2988,7 @@ class AgentRuntime:
             causal_world_model=self._causal_world_model,
             theory_of_mind=self._theory_of_mind,
             office_concepts=self._office_concepts,
+            collective_decisions=self._collective_decisions,
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
             group_formation=self._group_formation,

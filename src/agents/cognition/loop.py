@@ -287,6 +287,8 @@ class CognitiveLoop:
         "_caregiving_cognition_mode",
         "_cognitive_budget_mode",
         "_cognitive_budget_policy",
+        "_collective_decision_mode",
+        "_collective_decision_policy",
         "_collective_projects_active",
         "_commitment_horizon_ticks",
         "_communication_strategy_mode",
@@ -463,6 +465,8 @@ class CognitiveLoop:
         institution_concept_policy: object | None = None,
         office_succession_mode: object | None = None,
         office_concept_policy: object | None = None,
+        collective_decision_mode: object | None = None,
+        collective_decision_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -860,6 +864,32 @@ class CognitiveLoop:
             raise TypeError("office_concept_policy must be OfficeConceptPolicy")
         self._office_succession_mode = office_mode
         self._office_concept_policy = office_concept_policy
+        from agents.cognition.collective_decisions import CollectiveDecisionPolicy
+        from agents.cognition.configuration import CognitionCollectiveDecisionMode
+
+        decision_mode = (
+            CognitionCollectiveDecisionMode.DISABLED
+            if collective_decision_mode is None
+            else collective_decision_mode
+        )
+        if type(decision_mode) is not CognitionCollectiveDecisionMode:
+            raise TypeError(
+                "collective_decision_mode must be CognitionCollectiveDecisionMode"
+            )
+        if decision_mode is CognitionCollectiveDecisionMode.DISABLED:
+            collective_decision_policy = None
+        elif collective_decision_policy is None:
+            from agents.cognition.collective_decisions import (
+                default_collective_decision_policy,
+            )
+
+            collective_decision_policy = default_collective_decision_policy()
+        elif type(collective_decision_policy) is not CollectiveDecisionPolicy:
+            raise TypeError(
+                "collective_decision_policy must be CollectiveDecisionPolicy"
+            )
+        self._collective_decision_mode = decision_mode
+        self._collective_decision_policy = collective_decision_policy
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -2051,6 +2081,69 @@ class CognitiveLoop:
             "office_concepts_carried owner_id=%s office_count=%s",
             owner_id,
             0 if updated is None else len(updated.concepts),
+        )
+        return updated
+
+    def _prepare_collective_decisions(
+        self,
+        loop_input: CognitiveLoopInput,
+        memory: object | None,
+    ) -> object | None:
+        """Refresh one owner's collective decisions from prepared owner inputs."""
+        from agents.cognition.collective_decisions import (
+            CollectiveDecisionLedger,
+            apply_collective_decision_update,
+        )
+        from agents.cognition.configuration import CognitionCollectiveDecisionMode
+
+        if (
+            self._collective_decision_mode
+            is not CognitionCollectiveDecisionMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "collective_decisions", None)
+        )
+        ledger = carried if type(carried) is CollectiveDecisionLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "collective_decision_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        updated = apply_collective_decision_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            retrieved_memory_context=memory,
+            speaker_trust=_project_speaker_trust(snapshot, identity),
+            policy=self._collective_decision_policy,
+        )
+        from agents.cognition.collective_decisions import (
+            appraise_collective_compliance,
+            generate_collective_decision_proposal,
+        )
+
+        updated = generate_collective_decision_proposal(
+            updated,
+            loop_input.observation,
+            identity,
+            policy=self._collective_decision_policy,
+        )
+        updated = appraise_collective_compliance(
+            updated,
+            loop_input.observation,
+            identity,
+            policy=self._collective_decision_policy,
+        )
+        _LOG.debug(
+            "collective_decisions_carried owner_id=%s proposal_count=%s",
+            loop_input.agent_id.value,
+            0 if updated is None else len(updated.proposals),
         )
         return updated
 
@@ -3786,6 +3879,8 @@ class CognitiveLoop:
             conventions=social_conventions,
             institution_concepts=institution_concepts,
         )
+        collective_decisions = self._prepare_collective_decisions(loop_input, memory)
+        decision_audit: list[object] = []
         cultural_features = self._prepare_cultural_features(
             loop_input,
             advice_delta=advice_delta,
@@ -3977,6 +4072,9 @@ class CognitiveLoop:
                     regional_memory=memory,
                     office_concepts=office_concepts,
                     office_succession_mode=self._office_succession_mode,
+                    collective_decisions=collective_decisions,
+                    collective_decision_mode=self._collective_decision_mode,
+                    decision_audit=decision_audit,
                 ),
             ),
             expected_type=SelectedIntention,
@@ -4036,6 +4134,8 @@ class CognitiveLoop:
                     institution_concept_mode=self._institution_concept_mode,
                     office_concepts=office_concepts,
                     office_succession_mode=self._office_succession_mode,
+                    collective_decisions=collective_decisions,
+                    collective_decision_mode=self._collective_decision_mode,
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -4118,6 +4218,8 @@ class CognitiveLoop:
             translation=translation,
             institution_concepts=institution_concepts,
             office_concepts=office_concepts,
+            collective_decisions=collective_decisions,
+            collective_decision_audit=tuple(decision_audit),
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -4266,6 +4368,29 @@ class CognitiveLoop:
                 for memory_id in consolidation.selection.strengthen_ids
                 if memory_id in stored_ids
             )
+        collective_decisions = proposal.collective_decisions
+        if proposal.collective_decision_audit:
+            from agents.cognition.collective_decision_actions import (
+                collective_decision_command_direction,
+            )
+            from agents.cognition.collective_decisions import (
+                CollectiveDecisionBiasAudit,
+                CollectiveDecisionLedger,
+                append_collective_decision_influence,
+            )
+
+            if type(collective_decisions) is CollectiveDecisionLedger:
+                final_direction = collective_decision_command_direction(command)
+                for audit in proposal.collective_decision_audit:
+                    if type(audit) is not CollectiveDecisionBiasAudit:
+                        continue
+                    collective_decisions = append_collective_decision_influence(
+                        collective_decisions,
+                        audit=audit,
+                        final_direction=final_direction,
+                        tick=loop_input.observation.tick,
+                        policy=self._collective_decision_policy,
+                    )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -4303,6 +4428,7 @@ class CognitiveLoop:
             translation=proposal.translation,
             institution_concepts=proposal.institution_concepts,
             office_concepts=proposal.office_concepts,
+            collective_decisions=collective_decisions,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,

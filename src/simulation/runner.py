@@ -1012,7 +1012,11 @@ def _cognition_config_for(
         None if convention_policy is None else convention_policy.version,
     )
     from agents.cognition.artifacts import ArtifactInterpretationMode
+    from agents.cognition.collective_decisions import (
+        default_collective_decision_policy,
+    )
     from agents.cognition.configuration import (
+        CognitionCollectiveDecisionMode,
         CognitionInstitutionConceptMode,
         CognitionOfficeSuccessionMode,
         CognitionSemanticNamingMode,
@@ -1080,6 +1084,17 @@ def _cognition_config_for(
         "cognition_config_office_succession_mode mode=%s policy_version=%s",
         office_mode.value,
         None if office_policy is None else office_policy.version,
+    )
+    collective_mode = CognitionCollectiveDecisionMode(
+        spec.collective_decision_mode.value
+    )
+    collective_policy = None
+    if collective_mode is CognitionCollectiveDecisionMode.DETERMINISTIC:
+        collective_policy = default_collective_decision_policy()
+    _LOG.debug(
+        "cognition_config_collective_decision_mode mode=%s policy_version=%s",
+        collective_mode.value,
+        None if collective_policy is None else collective_policy.version,
     )
     from agents.cognition.budget import policy_from_limits
     from agents.cognition.configuration import (
@@ -1177,6 +1192,8 @@ def _cognition_config_for(
         institution_concept_policy=institution_policy,
         office_succession_mode=office_mode,
         office_concept_policy=office_policy,
+        collective_decision_mode=collective_mode,
+        collective_decision_policy=collective_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2828,6 +2845,12 @@ class SimulationRunner:
                 and getattr(ledger, "owner_id", None) != state.agent_id
             ):
                 raise ValueError("office ledger owner_id mismatch")
+            decision_ledger = getattr(state, "collective_decisions", None)
+            if (
+                decision_ledger is not None
+                and getattr(decision_ledger, "owner_id", None) != state.agent_id
+            ):
+                raise ValueError("collective decision ledger owner_id mismatch")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
         if len(by_agent) != len(checkpoint.runtime_states):
             raise ValueError("duplicate runtime state owner")
@@ -2930,6 +2953,7 @@ class SimulationRunner:
             possession_legitimacy_ledgers=(self.export_possession_legitimacy_ledgers()),
             institution_concept_ledgers=self.export_institution_concept_ledgers(),
             office_concept_ledgers=self.export_office_concept_ledgers(),
+            collective_decision_ledgers=self.export_collective_decision_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
@@ -3288,6 +3312,25 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_office_concept_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_collective_decision_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered collective-decision ledgers.
+
+        Enabled owners contribute even when their ledger has no proposals;
+        disabled owners contribute nothing.
+        """
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "collective_decisions", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_collective_decision_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
