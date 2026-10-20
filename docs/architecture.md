@@ -399,3 +399,16 @@ courses by detached topic/action/window evidence and never feeds runtime.
 Delivery proves speech only, and each actor still emits at most one ordinary
 admitted command per tick. Experiment BH and the three analytical families stay
 off the V1 gate.
+
+## Conflict mediation boundary
+
+`agents.cognition.MediationLedger` is an owner-scoped subjective contract under
+locked policy `mediation.v1`. The six mediation acts are speech primitives
+inside existing `Talk`/`Ask`/`Tell`; they add no world command or event. Cases,
+accounts, recommendations, responses, role expressions, authority appraisal,
+attempts, and outcomes are private beliefs. `WorldEngine` remains the sole
+mutation authority, and a mediator cannot transfer another actor's property or
+execute another actor's action. Voluntary follow-through compiles only the
+acting owner's selected supported undertaking through `mediation_actions.py`.
+Detached analysis is read-only and never feeds cognition. See
+[Conflict mediation](mediation.md).

@@ -403,3 +403,13 @@ physical and communication channels and reports whatever appears, including no
 proposal, no consensus, disagreement, blocked attempts, noncompliance, or
 silence. Arbitration checks structure, owner privacy, availability, and
 reproducibility, never a political outcome.
+
+## Experiment BI — mediation opportunities (`mediation_opportunities@1`)
+
+Off the V1 gate. Arms cover the default-v4 baseline, a prior-schema
+mediation-disabled control, mediation-on, relationship/reputation contrast,
+accepted-role/norm/institution contrast, and an opportunity-limited condition.
+No dispute, account, mediator occupation, acceptance, or settlement is seeded.
+The mode-off arm uses the highest legal prior schema for the same non-mediation
+modes. Detached metrics are `conflict_mediation@1` and
+`mediation_role_emergence@1`; successful mediation is not required.

@@ -159,3 +159,18 @@ reference, revision, and act payload are bounded tokens in the object. The
 verified observed speaker is the actor. Payload actors and declared roots are
 never authentication, and a relay is testimony rather than direct support.
 Ordinary conversation is unaffected, and no broadcast is introduced.
+
+## Conflict mediation relations
+
+Optional mediation speech uses bounded namespaced relations inside existing
+`Talk`/`Ask`/`Tell`: `mediation_hear`, `mediation_request`,
+`mediation_compromise`, `mediation_vouch`, `mediation_mediate`,
+`mediation_restitution`, plus the closed response and role-expression
+predicates. The wire shape and relation caps are unchanged. Delivery proves
+speech only; a relayed account, acceptance, vouch, or role remains testimony.
+A mediation-disabled recipient treats these relations as ordinary unparsed
+communication and never mutates a ledger. Enabled selection answers fresh
+account requests, responds to owner-directed recommendations using the
+recipient's own appraisal, and otherwise chooses hearing, account requests,
+vouching, mediation, or bounded terms from delivered evidence. See
+[Conflict mediation](mediation.md).

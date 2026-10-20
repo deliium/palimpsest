@@ -232,3 +232,17 @@ runner writes remain `runner-config-v4`; replay stays
 `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, and Alembic `0017`. There is no new
 capability flag and no new newborn profile; existing initialization profiles
 stay decision-disabled.
+
+## Conflict mediation (`runner-config-v52`)
+
+`mediation_mode` is per-agent and defaults to `disabled`. When at least one
+agent sets `deterministic`, the runner emits `runner-config-v52` with the exact
+v51 cognition keyset plus `mediation_mode`. Historical schemas reject the key
+and any non-disabled mode. Disabled compositions keep their prior writer,
+fingerprints, bytes, RNG use, and command stream. Mediation requires no
+capability flag or unrelated root specification. `mediation.v1` is locked in
+code and is not serialized as runner JSON.
+
+Mediation state is owner-scoped: each enabled owner carries one immutable
+`MediationLedger`. Runtime checkpoints and forks preserve it, but there is no
+durable SQL restart and a disabled owner rejects non-`None` mediation state.

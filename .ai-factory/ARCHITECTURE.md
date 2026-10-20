@@ -291,3 +291,13 @@ episodes, and delivered testimony; analysis harvests exported rows after the
 run and aligns local courses only by detached topic/action/window evidence.
 No analysis row feeds runtime, and delivery proves speech rather than
 legitimacy or compliance.
+
+## V3-32 conflict mediation
+
+Optional owner-scoped mediation lives in `agents.cognition.mediation` with
+namespaced speech in `mediation_communication` and typed command compilation in
+`mediation_actions`. It is gated by per-agent `mediation_mode` on
+`runner-config-v52`, carries through snapshots/checkpoints/results, and exposes
+only detached read-only analysis families. It introduces no court, verdict,
+binding settlement, global dispute registry, forced transfer, new world command,
+event, observer semantic type, API route, or migration.

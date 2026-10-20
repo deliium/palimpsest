@@ -227,7 +227,7 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_experiment_bc.py -q
 ```
 
-Expected selectors: 43 commands, 73 observer semantic types, 122 metric families,
+Expected selectors: 43 commands, 73 observer semantic types, 124 metric families,
 `runner-config-v47` as the latest accepted schema (v46 remains valid for
 symbolic-only runs), `replay-v22`/codec `v20`, and Alembic `0017`.
 
@@ -271,7 +271,7 @@ uv run --frozen --python 3.12.14 pytest \
 Also run the full pytest, Ruff, mypy, import-linter/architecture isolation, the
 compatibility matrix, V1 regression and V2 scientific invariant gates, and the
 BB/BC/BD experiment regressions. Confirm 43 commands, 73 observer semantic
-types, 122 metric families, runner schema v49 only with the deterministic mode, replay v22 /
+types, 124 metric families, runner schema v49 only with the deterministic mode, replay v22 /
 codec v20, and Alembic `0017`.
 
 
@@ -285,6 +285,6 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_institution_concepts_con
   tests/architecture/test_v3_institution_emergence_analysis_only.py -q
 ```
 
-Expected: 43 commands, 73 observer semantic types, 122 metric families,
+Expected: 43 commands, 73 observer semantic types, 124 metric families,
 `runner-config-v49` only when a deterministic institution mode is present,
 replay `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, Alembic `0017`.

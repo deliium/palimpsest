@@ -547,3 +547,13 @@ already-admissible futures but never bypass physiology, goals, budgets,
 communication eligibility, or world admission. `oppose` is verbal only and
 never compiles `OpposePublicGood`. Runtime ledgers carry through checkpoint and
 fork; disabled mode is a strict passthrough and allocates nothing.
+
+## Mediation carry and restart limits
+
+An enabled owner carries an immutable `MediationLedger` through prepared
+snapshots, proposals, results, runtime commits, and in-memory
+checkpoints/forks. Restore validates exact type, ownership, and target-owner
+mode before mutating runtime state or runner cursors; disabled owners reject
+non-`None` mediation state. Pruned evidence remains non-actionable history, and
+restore never recomputes acceptance or role support. Durable SQL restart is not
+provided.

@@ -347,10 +347,23 @@ death facts after the run; it measures correspondence only, never legitimacy,
 and never feeds live cognition. No global legitimate winner or
 majority-is-truth rule exists.
 
+## Mediation families (off the V1 gate)
+
+`conflict_mediation@1` and `mediation_role_emergence@1` bring the catalog from
+122 to 124 families. `conflict_mediation@1` counts distinct claimed case
+lineages, recommendation revisions, actor-scoped responses, attempted versus
+exactly matched follow-through, ambiguous effect matches, and unresolved /
+partial / disputed / apparently settled outcomes. `mediation_role_emergence@1`
+classifies transient assistance, repeated activity, candidate recognition, and
+stable recognition with declared thresholds (three distinct cases, two
+independent supporters, temporal span >= 2); repeated activity alone cannot
+produce a stable role. Pruned histories and open action windows are published
+as partial coverage or right-censoring, never as proof of settlement.
+
 ## Collective-decision families (off the V1 gate)
 
 `collective_decision_process@1`, `collective_decision_outcomes@1`, and
-`collective_decision_disagreement@1` bring the catalog to 122 families. Rows are
+`collective_decision_disagreement@1` bring the catalog from 122 to 124 families. Rows are
 harvested from exported owner-local decision ledgers after the run. Direct and
 reported positions stay distinguishable; withdrawal does not erase history;
 influence reports preference change, final-command change, executed influence,
