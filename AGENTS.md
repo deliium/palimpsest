@@ -65,6 +65,12 @@ agent's permissions permit it. Keep any such inspection narrowly scoped.
 OpenCode enforces direct-read exclusions in `opencode.json`. These instructions
 also cover searches and shell access; they are behavioral rules for other agents.
 
+## AI Context Files
+
+| Path | Description |
+| --- | --- |
+| `.ai-factory/ARCHITECTURE.md` | Bounded-package architecture, trust boundaries, and versioned extension rules |
+
 ## Documentation
 
 | Document | Path | Description |

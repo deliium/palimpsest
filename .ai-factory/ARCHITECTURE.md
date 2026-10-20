@@ -2,302 +2,330 @@
 
 ## Overview
 
-Palimpsest uses a modular-monolith layout of bounded packages under `src/`. Each package owns a clear responsibility and a public facade (`__init__.py` / `__all__`). This is Structured Modules organized by technical concern at package granularity (world authority, cognition, memory, social, simulation, persistence, analysis), adapted to Python research-simulation needs rather than Controllers/Services folders.
+Palimpsest is a Python modular monolith for reproducible multi-agent society
+experiments. Its technical concerns are bounded packages, not per-feature
+Controllers/Services/Repositories folders. This document deliberately describes
+the existing layout; it does not prescribe a package migration.
 
-The layout exists to keep trust boundaries machine-checkable: `WorldEngine` is the only objective mutation authority; agents receive immutable observations only; cognition and memory stay owner-scoped and never dereference `WorldEvent` stores; LLM output is shape-validated and non-authoritative; read-only `analysis` may join objective events with subjective evidence after the fact.
+The Structured Modules label describes organization, not weaker dependency
+rules. Palimpsest additionally enforces inward-facing ports, framework-free
+domain policy, and machine-checked authority boundaries. `WorldEngine` alone
+mutates objective state; cognition receives owner-safe observations; subjective
+beliefs, analysis, and presentation never acquire world authority.
 
 ## Decision Rationale
 
-- **Project type:** Research / multi-agent society simulation (contracts-first)
-- **Tech stack:** Python ≥3.12, FastAPI, SQLAlchemy async, PostgreSQL/pgvector, uv
-- **Key factor:** Hard dependency and trust-stage boundaries must be enforceable before and during simulation behavior (import-linter + AST checks)
-- **Organization variant:** Technical Layer at package level — adapted to existing bounded packages (not Controllers/Services/Repositories folders)
+- **Project type:** Contracts-first research simulation with complex objective
+  and subjective state, deterministic replay, and optional cognitive channels.
+- **Tech stack:** Python >=3.12, uv/Hatchling, FastAPI, async SQLAlchemy,
+  PostgreSQL/pgvector; separate Godot observer and Svelte research clients.
+- **Key factor:** Preserve enforceable trust boundaries and reproducibility
+  without introducing distributed services or unrelated structural rewrites.
+- **Selected organization:** Existing bounded packages by technical concern,
+  with domain rules in their owning models/policies and orchestration in runtime
+  services. Immutable DTOs do not need artificial behavior to fit a template.
 
 ## Folder Structure
 
 ```text
 src/
-  world/                 # agent-facing Observation/commands/events + communications.py
-                         # regions.py (optional immutable region/route/journey contracts)
-                         # private _state/_perception/_rules/_operations/_replay (authority)
-  agents/                # identity, Agent, goals
-  agents/cognition/      # CognitiveLoop, stage protocols, architecture registry, imagination/motivation/deliberation
-                         # communication.py (communicated memory + social-message policy)
-  memory/                # owner-scoped MemoryTrace, semantic beliefs, recall, formation
-  social/                # envelopes + directed relationship profiles (no friend/enemy labels)
-  llm/                   # provider-neutral StructuredOutput / LLMResult (no vendor SDKs)
-  llm/prompts/           # immutable versioned prompt package resources
-  llm/providers/         # OpenAI-compatible HTTP adapter + pure codec
-  llm/recording/         # exchange records, safe cache keys, filesystem store, recording provider
-  observer/              # read-only presentation: contracts, layouts, frames, semantic events
-                         # no tick authority; must not import the engine or private world
-  simulation/            # WorldEngine, AgentRuntime, SimulationRunner, codecs, replay
-                         # run_control.py (resume modes + finalization-command contracts)
-                         # inspection.py (detached objective/agent-visible projection; no live observe)
-                         # causal_debugger.py / debugger_lineage.py (read-only research debugger)
-  experiments/           # trusted experiment catalog/coordinator (A–E on V1; F–Z, AA–AY off V1); never imported by domain
-                          # regional_migration_scenario.py: Experiment AY / regional_migration@1
-                         # benchmark_suite.py / benchmark_scenarios/ / benchmark_smoke.py: V2 validation suite (off V1 gate)
-                         # observer_graphical_scenario.py: deterministic Godot validation world (off V1 gate)
-                         # matrix_*.py: experiment-matrix-v1 expand/batch/aggregate (filesystem manifests)
-                         # composition.py maps neutral persistence snapshots → analysis sources
-                         # reference_scenario.py: canonical five-agent / 48-tick fixture + milestone arbiter
-  research_runner/       # thin CLI composition for matrix batches (forbids api); palimpsest-matrix entry
-  persistence/           # SQLAlchemy adapters (simulation, memory, subjective, analysis loaders)
-                         # inspection_sqlalchemy.py (keyset pagination + manifest-constrained reads)
-                         # may implement experiments.persistence ports; transmission_mapping.py
-  analysis/              # read-only analysis: drift/transmission, spatial_control@1,
-                          # regional_population@1 / regional_migration@1 / regional_destination_beliefs@1
-                         # external_artifact_memory@1, metric DTOs, evidence stages, claim truth,
-                         # numerical policy, canonical codecs, phenomenon-indicators-v1 panels,
-                         # matrix-metric-summary-v1 (no cognition feedback)
-                         # MemoryDriftAnalysisService + SocialTransmissionAnalysisService
-                         # historical_memory.py / historical_memory_metrics.py (Assmann layers analysis-only)
-  api/                   # FastAPI composition root: /health + /v1 simulation
-                         # control/inspection/replay/observer + WebSocket stream
-                         # security.py (capability credentials), simulation_manager.py
-                         # streaming.py (durable outbox catch-up + live handoff)
-                         # research_static.py mounts /research/ before presentation /
-                         # research_matrix.py: read-only experiment-matrix-v1 FS allowlist
-  infrastructure/        # settings (PALIMPSEST_*), logging, database adapters
-clients/godot-observer/  # read-only presentation client; not a Python package; the API serves its prebuilt tree
-                         # HTTP GET + observer WebSocket only; no import from src/
-clients/research-ui/     # researcher Svelte SPA (not a Python package); built dist served at /research/
-                         # graphs/metrics/matrix/traces; HTTP to /v1 only; no import from src/
-alembic/versions/        # migrations through 0017 (memory HNSW; 0016 event indexes; 0015 branch lineage; 0013 cognition-trace)
-                         # V2/V3 capability flags stay runner JSON only (not Alembic columns; no 0018 in V3 scaffolding)
-docs/                    # contributor docs (architecture, memory, social-communication, …)
-tests/
-  unit/ architecture/ integration/ compose/ typecheck/ fakes/
+  world/                 # public observations, commands, events, IDs, communication
+                         # private _* state, perception, rules, operations, replay
+  agents/                # identity and hierarchical goals
+    cognition/           # CognitiveLoop, stage policies, owner-scoped ledgers
+  memory/                # episodic traces, reconstructive recall, semantic beliefs
+  social/                # communication envelopes and directed relationships
+  llm/                   # validated provider-neutral output, prompts, recording
+  simulation/            # WorldEngine, AgentRuntime, runner, codecs, replay, ports
+  observer/              # detached frames, layouts, semantic event presentation
+  experiments/           # trusted scenarios, collection, matrices, composition
+  research_runner/       # palimpsest-matrix CLI composition; no HTTP
+  persistence/           # SQLAlchemy adapters implementing inner ports
+  analysis/              # detached metrics and retrospective evidence joins
+  api/                   # FastAPI composition, control, inspection, streaming
+  infrastructure/        # settings, logging, database resource lifecycle
+clients/
+  godot-observer/        # read-only Godot client; not a Python package
+  research-ui/           # Svelte research SPA; not a Python package
+alembic/versions/        # durable schema migrations
+tests/                   # unit, architecture, integration, compose, typecheck, fakes
+docs/                    # contributor-facing contracts and operational guidance
 ```
 
 ## Dependency Rules
 
-- ✅ `world` imports no other bounded module (structured communication lives in `world.communications`)
-- ✅ Base `agents` may import agent-facing `world` only; never `agents.cognition`
-- ✅ `memory` / `social` may import `world` + `agents`; remain independent of each other
-- ✅ `llm` imports no domain, simulation, API, persistence, or infrastructure module
-- ✅ `llm` uses stdlib `logging` only (metadata allowlist; no `exc_info` / structlog / payload fields)
-- ✅ `agents.cognition` may import public contracts from agents/world/memory/social/llm
-- ✅ `simulation` may import domain public contracts; must not import `api`, `analysis`, `experiments`, `infrastructure`, `persistence`, or `observer`
-- ✅ `observer` may import public `world` and detached simulation facts; must not import `simulation.engine`, private `world._*` modules, `api`, `persistence`, or frameworks
-- ✅ Simulation owns immutable `EvidenceManifest` high-water marks (counts/hashes only — never truth payloads)
-- ✅ `experiments` may import public `simulation`, read-only `analysis`, and `memory` contracts; must not import `api`, `infrastructure`, or concrete SQLAlchemy/`persistence`
-- ✅ `research_runner` may import `experiments`, `simulation`, `persistence`, `infrastructure`, and `analysis`; must not import `api` or start an HTTP server
-- ✅ `experiments.composition` is the legal outer composition boundary that maps neutral detached persistence rows into analysis sources; persistence adapters implement `experiments.persistence` ports only
-- ✅ `persistence` may import public `simulation` contracts, public `memory` and `social` facades, `infrastructure`, and `experiments.persistence` ports only
-- ✅ `persistence` identity types for subjective/transmission mapping come from `memory.models` (re-exported `EntityId`) — never import `world` from persistence
-- ✅ `api` may import `simulation`, `infrastructure`, `persistence`, and `observer`
-- ✅ `analysis` is read-only; may import `world`, `simulation`, and `memory` contracts (not live infra/agents/persistence)
-- ✅ `infrastructure` imports no domain policy
-- ❌ `analysis` and `persistence` must not import each other
-- ❌ `api` must not import `analysis`
-- ❌ Domain packages must not import `infrastructure`, FastAPI, or ORM stacks
-- ❌ `world`, `agents`, `agents.cognition`, `memory`, and `social` must not import `experiments`
-- ❌ Non-simulation packages must not import private `world._*` authority modules
-- ❌ Only `simulation.engine` / `simulation.bootstrap` and private `world._*` may import world authority internals
-- ❌ Only `infrastructure` and `persistence` may import SQLAlchemy/Alembic/asyncpg
-- ❌ Vendor LLM SDKs (`openai`, `anthropic`, …) are forbidden everywhere in `src/`
-- ❌ Cross-module imports of private modules or transitive re-exports
-- ❌ Agents, cognition, memory, reconstruction protocols, and runtime composition must not import, receive, or dereference `WorldEvent`, event repositories, replay services, snapshots, or private world state (opaque `EventId` only)
-- ❌ Cognition must not feed analysis results back into live planning or memory formation
-- ❌ Experiment collectors, truth specifications, and objective snapshots must never flow into cognition, memory formation, prompts, or action selection
-- ❌ `src/` must not import `clients/godot-observer` or `clients/research-ui` (or contain those client package paths). The API serves prebuilt trees and still does not import the clients
-- ❌ `api` must not import `analysis` when serving Research UI matrix FS JSON (allowlisted files only; no batch starts)
+The following are allowlists, not permissions to expose another agent's data or
+private authority. Cross-package imports use declared public facades / `__all__`;
+documented public submodules remain valid, private or transitive exports do not.
+
+| Package | Allowed first-party dependencies |
+| --- | --- |
+| `world` | No other bounded package |
+| base `agents` | Agent-facing `world`; never `agents.cognition` |
+| `memory`, `social` | `world`, base `agents`; independent of each other |
+| `llm` | No domain, simulation, API, persistence, or infrastructure package |
+| `agents.cognition` | Public `agents`, `world`, `memory`, `social`, `llm` |
+| `simulation` | Public domain/cognition/LLM contracts; no outer adapters |
+| `observer` | Public `world` and detached `simulation` facts; not the engine |
+| `experiments` | Public simulation/domain contracts and read-only analysis |
+| `research_runner` | `experiments`, `simulation`, `persistence`, `infrastructure`, `analysis` |
+| `persistence` | Public `simulation`, `memory`, `social`, `infrastructure`, `experiments.persistence` ports |
+| `analysis` | Read-only `world`, `simulation`, `memory` contracts |
+| `api` | `simulation`, `infrastructure`, `persistence`, `observer` |
+| `infrastructure` | No domain policy |
+
+- Only `simulation.engine`, `simulation.bootstrap`, and private `world._*`
+  modules may import private world authority. Do not re-export those internals.
+- `simulation` must not import `api`, `analysis`, `experiments`,
+  `infrastructure`, `persistence`, or `observer`.
+- `experiments` must not import API, infrastructure, or concrete persistence.
+  `experiments.composition` maps neutral detached persistence snapshots into
+  analysis-owned sources; adapters implement experiment ports, not the reverse.
+- `research_runner` must not import `api` or start an HTTP server.
+- `analysis` and `persistence` must not import each other; API must not import
+  analysis. Analysis results never feed live cognition, prompts, or memory.
+- Persistence obtains subjective identity types from `memory.models` (including
+  re-exported `EntityId`), not by importing `world`.
+- Domain packages import neither infrastructure nor FastAPI/Pydantic/ORM stacks.
+  Pydantic structured-output validation belongs at the LLM boundary.
+- Only infrastructure and persistence may import SQLAlchemy/Alembic/asyncpg.
+  Vendor LLM SDKs are forbidden throughout `src/`; use the HTTP adapter.
+- Python code never imports either client. API serves their prebuilt trees;
+  research static routing mounts `/research/` before the Godot root.
+
+Import-linter contracts in `pyproject.toml` and AST checks under
+`tests/architecture/` enforce these boundaries. The reference architecture's
+generic permission for modules to import infrastructure does **not** apply here.
 
 ## Layer/Module Communication
 
-- Composition root (`api`) loads settings, configures logging, owns database lifespan, recoverable `SimulationManager`, and resumable stream fan-out
-- Research API capabilities: `simulation_control`, `objective_inspection` (incl. WebSocket stream), `agent_visible`, `subjective_debug` (disabled by default); credentials via header / WS subprotocol only — never query strings
-- LLM settings exist under `PALIMPSEST_LLM_*`; factory construction stays standalone in `llm.factory` until a cognition consumer owns lifecycle composition
-- `WorldEngine` owns observation tokens, ordered admission, private batch preparation, and atomic commit
-- Communication (`Talk` / `Ask` / `Tell`) is event-only: world verifies delivery eligibility and records `Talked` / `Asked` / `Told`; content truth is never world-owned. Declared lineage on `StructuredUtterance` is speaker testimony. Writes use event schema **replay-v5**; legacy replay-v2/v3/v4 text-only records decode into an explicit unreferenced structured form. WorldEngine-owned information artifacts are a separate physical channel (replay-v8 / codec `v5` when active); objective marks never download meaning into memory
+### Objective authority and runtime
 
-- Private communication eligibility policy (living sender/recipient, colocation/range, visibility) is shared by admission and perception; delivery is recipient-private on the next observation window
-- `AgentRuntime` owns per-agent cognition invocation, deferred subjective commits (episodic + beliefs + relationships) via `SubjectiveStateService`, and `ActionSubmission` construction from an engine-issued token; cognition never sees `TickToken` or `WorldState`
-- Communicated observations become **fresh** owner-scoped `MemoryTrace` values with `CommunicatedTransmissionMeta` (never copy sender memory/reconstruction/belief/relationship state). `DeterministicSocialMessagePolicy` selects talk/ask/tell from subjective evidence; belief-grounded `Tell` requires explicit selected belief IDs (bare `COMMUNICATE` does not auto-testify)
-- Trust-aware belief updates treat testimony as evidence (`accept` / `discount` / `contradict` / `defer`); cognition projects relationship trust into neutral floats so `memory` stays independent of `social`
-- Owner-scoped episodic memory uses structured `MemoryTrace` values and reconstructive `MemoryService.recall`; durable adapter is `persistence.create_memory_service(scope=..., ...)`; semantic beliefs and directed relationships use `persistence.create_subjective_state_service(...)`; subjective tables (`0005`–`0008`) stay outside append-only authoritative history
-- Emergent `SelfModel` is a deterministic projection over owner-relevant semantic beliefs — no predefined personality traits, archetypes, or role classes
-- Directed relationship profiles are independent `source → target` assessments across fixed low-level dimensions; no friend/enemy/leader/group/morality/culture/rumor labels
-- Private `PerceptionService` projects one agent-specific `Observation` from tick-start state + prior committed events; cognition receives it only via `observation_for` / `AgentRuntime` / `build_perspective`
-- Async `LLMProvider.generate(LLMRequest[T]) -> LLMResult[T]` returns only strict `StructuredOutput` plus normalized metadata; raw provider text/mappings never leave the adapter
-- Structurally valid LLM output remains non-authoritative. Cognition must translate an exact decision schema into a fresh `AgentCommand`, then use normal `ActionSubmission` / admission / world-operation gates
-- Analysis consumes immutable exports/events and may join subjective reconstruction **and** communicated-transmission evidence after the fact (`MemoryDriftAnalysisService`, `SocialTransmissionAnalysisService`); it never feeds objective events or analysis reports into agents, memory, or reconstructors
+```text
+WorldEngine.observe() -> detached observations + engine-issued token
+  -> AgentRuntime -> owner-safe perspective -> CognitiveLoop
+  -> one AgentCommand -> ActionSubmission(token, actor, command)
+  -> ordered engine admission/resolution -> atomic objective commit
+  -> next observation window / detached exports / read-only consumers
+```
+
+Private perception uses tick-start state and prior committed events. Repeated
+observation within an open tick is stable. Cognition never receives `WorldState`,
+an engine snapshot, the token, another owner's observation, or an all-agent batch.
+Ordered submissions resolve against evolving state; autonomous physical effects
+follow. `AgentRuntime` owns invocation, command submission, and deferred
+owner-scoped subjective finalization through `SubjectiveStateService`.
+
+### Memory, testimony, and subjective concepts
+
+- Perception does not itself form memories or beliefs. Recall reconstructs
+  owner-scoped traces; reconsolidation appends lineage without overwriting sources.
+- Agents, cognition, memory, and reconstructors may carry opaque `EventId`
+  correlation, never `WorldEvent` bodies, event repositories, or replay services.
+- `Talk`/`Ask`/`Tell` prove eligible delivery only. Declared source lineage is
+  testimony. Every receiver creates a fresh communicated trace, not a copy of a
+  sender's memory, belief, reconstruction, or relationship state.
+- Reports sharing one root are not independent corroboration. Bare
+  `COMMUNICATE` does not silently become belief-grounded `Tell`.
+- Relationships are directed low-level assessments, not predefined friend,
+  enemy, leader, group, morality, or culture labels. `SelfModel` is an emergent,
+  revisable projection rather than a personality class or second belief store.
+- Cultural features, terminology, narratives, translation, norms, offices,
+  collective decisions, and mediation remain owner-scoped beliefs. Analytical
+  classifications do not install global cultural or institutional registries.
+
+### LLM and outer composition
+
+`LLMProvider.generate(LLMRequest[T])` returns strict `StructuredOutput` plus safe
+normalized metadata. Validation proves shape, not truth, identity, policy, or
+authority. Cognition translates validated decision schemas into fresh commands;
+ordinary admission still applies. The LLM package never performs that translation.
+Use HTTP transport, versioned prompt resources, deterministic fakes, or recorded
+exchanges; exact external-LLM reproduction requires recorded outputs or stubs.
+
+API owns settings, database lifespan, recoverable simulation management, and
+durable-outbox WebSocket catch-up. Provider construction remains standalone in
+`llm.factory`; API provider lifecycle composition is deferred until owned by a
+cognition consumer. Matrix batches compose through `research_runner`, not HTTP.
+
+Research capabilities separate control, objective inspection, agent-visible
+projection, and default-disabled subjective debug. Credentials use headers or
+WebSocket subprotocols, never query strings. Observer coordinates and overlays
+are presentation only; neither client advances the simulation.
 
 ## Key Principles
 
-1. World state is authoritative; agents receive immutable, agent-specific observations only
-2. Objective and subjective state remain separate; perception does not form memories or beliefs; reconstruction and testimony evaluation are explicitly subjective
-3. A delivered utterance proves delivery, not truth; declared lineage is distrustable testimony
-4. Randomness and IDs derive from an explicit seed (no Python `hash()`, no global RNG)
-5. Operational metadata (HTTP request IDs, log timestamps) never become domain IDs or seeds
-6. Enforce boundaries with import-linter + AST checks, not convention alone
-7. LLM validation proves shape only—never truth, policy, actor identity, or world authority
-8. Logs expose IDs, counts, hops, confidence bands, and reason codes — never message text, propositions, narratives, prompts, or fingerprints as payload surrogates
+1. Objective state, owner-scoped belief, and retrospective analysis are different
+   authorities; never collapse them into one truth model.
+2. Deterministic seeds, namespaced IDs, and injected logical clocks define domain
+   identity. No global RNG, Python `hash()`, wall-clock, or UUID defaults in domain
+   behavior. Operational timestamps/request IDs remain infrastructure metadata.
+3. Domain contracts are frozen or defensively detached; boundary schemas reject
+   unknown fields and fail closed on unsupported modes or ambiguous targets.
+4. Optional channels default off and must leave off-path behavior unchanged.
+   Do not script civilization, kinship affection, caregiving, culture, leadership,
+   or institutions into existence.
+5. Operational logs contain safe IDs, counts, reason codes, and bounded metadata;
+   never credentials, DSNs, prompts, messages, propositions, narratives, memories,
+   embeddings, or fingerprints used as payload surrogates. LLM uses stdlib logging
+   with a metadata allowlist, not payload-bearing exceptions or structlog.
+6. Eleven drives, hierarchical goals, emotion, and multi-criteria selection remain
+   distinct mechanisms, not a single reward scalar or permanent death penalty.
+
+## Versioned Extension Contract
+
+### Current baseline through V3-32
+
+| Surface | Current contract |
+| --- | --- |
+| Default runner write | `runner-config-v4`; newer writes selected by enabled features |
+| Latest feature runner | `runner-config-v52` for per-agent `mediation_mode` |
+| Closed commands / observer semantic types | 43 / 73 |
+| Metric families | 124 (including the two V3-32 mediation families) |
+| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
+| Alembic head | `0017` |
+| Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
+
+These are a dated baseline, not grounds to rewrite legacy runs. The executable
+version taxonomy is `simulation.compatibility`; version-specific codecs and
+feature gates determine accepted inputs and actual writes. Older sections of
+`docs/architecture.md` and the roadmap retain historical counts; do not treat
+those as current pins or silently drop their legacy accepted versions.
+
+### Capability ownership
+
+- Owned V2 flags: `extended_self_model`, `predictive_world_model`,
+  `short_term_emotional_state`, `advanced_social_inference`.
+  `multi_hop_testimony_tracking` remains unowned and fails closed with
+  `capability_unimplemented`.
+- Owned V3 flags: `generational_population`, `kinship_inheritance`,
+  `cultural_historical_memory`, `multi_polity_migration`.
+  `institutional_economy` remains unowned and fails closed.
+- Per-agent modes and optional run-level specs are not automatically capability
+  flags. New behavior must use its owned, versioned configuration seam.
+
+### Important V3 seams
+
+- Population entry is engine-admitted with blank-slate initialization. Development
+  and objective stages do not auto-write identity or social authority. Dependency
+  care permits shared/non-kin care and neglect; parenthood is not a care mandate.
+- Kinship is objective genealogy, not affection, trust, inheritance rights, or
+  automatic knowledge transfer. Kinship cultural handoff remains deferred.
+- Physical records/repositories preserve marks, custody, access, and lineage,
+  never guaranteed meaning or truth. Practical knowledge remains distinct from
+  objective capability and retrospective research lineage; no global encyclopedia.
+- Possession succession is corpse custody, not inheritance law. Commitments are
+  speech, not enforced debt. Valuations are private; exchanges move named items.
+- Collective projects and public goods record work and benefits, not leadership,
+  moral roles, or automatic access grants. Regional journeys and cultural contact
+  model movement/co-presence, not citizenship, borders, or polities.
+- Symbolic composition, semantic drift, translation, and generational narratives
+  use owner evidence. Historical alignment and cross-owner comparisons are
+  analysis-only; agents never receive ground truth from those reports.
+- V3-29 institution concepts (`v49`) carry six closed pattern channels under
+  `institution-concepts.v1`, not predefined institution types or objective offices.
+- V3-30 offices (`v50`, `offices-succession.v1`) maintain stable owner-local role
+  identity and revisable occupant/support claims. Duties and expected authority
+  are not permissions. Explicit `species_default_offices_v1` newborns start empty;
+  existing species profiles remain office-disabled.
+- V3-31 decisions (`v51`, `collective-decisions.v1`) carry proposals, positions,
+  one-hop delegation, withdrawal, coordination, and claimed outcomes in existing
+  speech. No objective electorate, quorum, majority, or binding resolution exists.
+- V3-32 mediation (`v52`, `mediation.v1`) carries cases/accounts, six speech acts,
+  responses, and recommendations in existing communication. No court, verdict,
+  binding settlement, forced transfer, or global dispute registry exists.
+  `mediation_actions` compiles only the acting owner's independently selected,
+  exactly supported undertaking (initially `Give`).
+- V3-28 through V3-32 add no world command, event, observer semantic type, replay
+  marker, codec marker, or migration. Their experiments remain off the V1 gate.
+
+### Requirements for later changes
+
+1. Use accepted-set and exact-key-set schema evolution. A new write version must
+   preserve legacy decoding; never silently widen an existing schema identifier.
+2. Command changes co-land admission, operation rules, event details, replay
+   codecs, and tests. Observation changes require explicit versioned seams and
+   live/restored canonical observation parity, including prior-event windows.
+3. Keep `tests/unit/test_v1_regression_gate.py` and
+   `tests/unit/test_v2_scientific_invariants.py` green with later flags off.
+   Keep feature experiments reproducible and separate from the V1 A–E gate.
+4. Subjective checkpoints, optional cognition traces, analytical rows, and
+   control-plane branch lineage stay outside the objective event fold. Preserve
+   append-only authoritative history and evidence high-water boundaries.
+5. V3 flags remain runner JSON. Add SQL columns/migrations only for a proven
+   persistence or indexed-inspection need, not automatically for each feature.
+6. Preserve `prepare_parallel=False`, API/protocol identity, and observer
+   read-only behavior unless an explicitly scoped plan changes the contract.
+7. Register roadmap milestones through `/aif-roadmap`; architectural guidance
+   does not independently create or close milestones. Later V3 plan stems use
+   the `v3-` prefix. See the downstream checklists in `docs/architecture.md`.
 
 ## Code Organization Note
 
-- **New Features:** Follow the bounded-package rules and facades in this document and `docs/architecture.md` where practical
-- **Existing Code:** Document the current structure as-is (including reconstructive memory and social transmission). When modifying existing code, prefer these conventions without forcing unrelated rewrites
-- **Interoperability:** Wire infrastructure only at the API/composition boundary; do not allocate LLM providers in API lifespan until cognition consumers own them
-- **Domain-contract evolution:** Observation, closed `AgentCommand` (29 variants including `Feed`/`Transport` plus durable `CopyRecord`/`AnnotateRecord`/`DamageRecord`), and `world.communications` follow accepted-set discipline (see `docs/architecture.md`). Channel-off Observation wire stays unchanged; channel-on adds closed optional `lifecycle` on `ObservedSelf` / `VisibleBody` (`chronological_age`, `stage`, `dependency_status` only); dependency-care may add optional need-deficit summaries when `perception_mode=self_and_colocated`. Mid-run roster, kinship-visible, and dependency-need facts still require versioned seams + live/restored observation parity. Version taxonomy: `simulation.compatibility`
-- **V2 extension seams:** Later plans plug into CognitiveLoop stage protocols, `AgentCognitionSpec` modes, run-level `V2CapabilityFlags` (default-off = V1 wiring; **owned** flags `advanced_social_inference`, `predictive_world_model`, `extended_self_model`, and `short_term_emotional_state` may enable; `multi_hop_testimony_tracking` still fails closed with `capability_unimplemented`), optional `CognitionTraceSpec` / Alembic `0013` (default-off; non-authoritative; observational debugger HTTP under `subjective_debug` — see `docs/research-causal-debugger.md`), research branch lineage on Alembic `0015` (`simulation_branches`, control-plane only; no new capability flag), `AgentRuntime` subjective finalization, observe-only perception, event-only communication eligibility, `experiments.catalog` arms (A–E on the V1 gate; Experiments F–Z and AA–AE stay off that gate), analysis-only evidence stages, and API/`llm.factory` LLM lifecycle composition (not a runner flag). `extended_self_model` is history-derived revisable self-beliefs, not a person class or a second belief store. `advanced_social_inference` is an owner-scoped first-order mind plus a flat epistemic ledger (`max_depth` default 2, hard cap 3). Judgments are new, already known, secret, uncertain, or contradictory; secret is not a stored attitude. One agent does not receive another's private cognition, and `theory_of_mind@1` is analysis-only. Experiment M stays off the V1 regression gate. `CommunicationStrategyMode` defaults to `DISABLED` and is not a capability flag. `runner-config-v9` carries every `runner-config-v8` cognition key plus `communication_strategy_mode` and is emitted only when that mode is `DETERMINISTIC`. `communication_strategy@1` is analysis-only and assigns `memory_error` only when `cited_event_id` names a committed occurrence whose public tokens do not cover the source tokens. Experiments N, O, and P stay off the V1 regression gate. `ReputationMode` defaults to `DISABLED` and is not a capability flag. `runner-config-v10` carries every `runner-config-v9` cognition key plus `reputation_mode` and is emitted only when that mode is `DETERMINISTIC`. `distributed_reputation@1` is analysis-only. Experiment Q stays off the V1 regression gate. `SkillLearningMode` defaults to `DISABLED` and is not a capability flag. `runner-config-v11` carries every `runner-config-v10` cognition key plus `skill_learning_mode` and the locked rate keys, and is emitted only when that mode is `DETERMINISTIC`. `skill_learning@1` is analysis-only. Experiment R stays off the V1 regression gate. `TeachingInteractionMode` defaults to `DISABLED` and is not a capability flag. `runner-config-v12` carries every `runner-config-v11` cognition key plus `teaching_interaction_mode` and the locked teaching weights, and is emitted only when that mode is `DETERMINISTIC`. `cultural_transmission@1` is analysis-only. Experiments S and T stay off the V1 regression gate. `TerritorialClaimMode` defaults to `DISABLED` and is not a capability flag. `runner-config-v15` is emitted only when some agent's mode is `DETERMINISTIC`. Experiment V and `spatial_control@1` stay off the V1 regression gate. The metric is analysis-only and is not an input to cognition. `ArtifactInterpretationMode` defaults to `DISABLED` and is not a capability flag. `runner-config-v19` is emitted only when some agent's mode is `DETERMINISTIC`. Replay-v8 / codec `v5` write only when artifacts are active at run start; default event write stays replay-v5. Experiment Z and `external_artifact_memory@1` stay off the V1 regression gate. Closed `AgentCommand` count is 29 (`Feed`/`Transport` with dependency care; `CopyRecord`/`AnnotateRecord`/`DamageRecord` with durable records). `v1_regression_profile` is unchanged. `multi_hop_testimony_tracking` remains unowned. Off-limits: WorldEngine admission, event immutability, Observation trust boundaries. See `docs/architecture.md` and `docs/cognition-runtime.md`.
-- **Downstream V2 plan contract:** Every later V2 feature plan must keep V1 invariants, opt-in fail-closed flags, V1 regression gate green (flags-off and tracing-off), accepted-set + exact key-set schema bumps, no scripted emergence, no LLM→world shortcuts, reproducible experiments, and optional tracing outside the objective fold. Checklist: `docs/architecture.md` (Downstream V2 plan contract). Roadmap milestones via `/aif-roadmap` only.
-- **V3 extension seams:** Closed `V3CapabilityFlags` on `runner-config-v23`+ (sibling `v3_capability_flags`; default-off = V2 wiring). **Owned by v3-02–v3-08:** `generational_population` on `runner-config-v24|…|v35` with `population_lifecycle`, `admit_population_entry`, lifecycle events (replay-v9 / codec v6), Observation `lifecycle` object, Experiments AE–AK; v3-06 `dependency_care` on **v28+**; v3-07 `developmental_learning` on **v29+**; v3-08 `mentorship` on **v30+** (never internal-state copy). **Owned by v3-05:** `kinship_inheritance` on `runner-config-v27|…|v35` with exact `kinship`, objective parent→child graph (`world.kinship`), `KinshipEdgeRecorded` (replay-v11 / codec v8), Experiment AH — never auto-writes social valence; kinship-only forbids lifecycle siblings but may co-exist with cultural on v31–v35. **Owned by v3-09 (deepened by v3-10/v3-11/v3-12/v3-13/v3-14/v3-15):** `cultural_historical_memory` on **`runner-config-v31|…|v37`**. v3-15 adds analysis-only `technique_lifecycle` (no new flag, no command or semantic-count change, no write-pair bump). v3-16 adds optional `possession_succession` on **runner-config-v38** (no new flag; corpse custody is physical possession; doctrines are owner-scoped beliefs; write-pair replay-v16/codec v13 only when the channel is on). v3-17 adds optional `structured_commitments` on **runner-config-v39** (no new flag; `DeclareCommitment` is speech; the engine does not collect a debt; write-pair replay-v17/codec v14 only when the channel is on). v3-18 adds optional `subjective_valuation` on **runner-config-v40** (no new flag; a reservation is a private belief; the engine swaps named item ids; write-pair replay-v18/codec v15 only when the channel is on; codec v15 still carries v14 payloads; `exchange_offers` has no reservation field). Closed `AgentCommand` count is **38**. SEMANTIC observer types are **61**. Kinship still does not grant inheritance rights. **Owned by v3-09 (deepened by v3-10/v3-11/v3-12/v3-13/v3-14):** `cultural_historical_memory` on **`runner-config-v31|…|v36`** with exact `cultural_feature_provenance`, owner-scoped `agents.cognition.cultural_features` (`SubjectiveCulturalBelief`) vs analysis-only `AnalyticalCulturalTrait`, Experiment AL — no global Culture controller; kinship cultural inheritance handoff still deferred. v3-10 adds sibling `historical_memory_layers` on **v32** (optional on v33–v35; analysis-only Assmann layers + Experiment AM — never cognition/Observation). v3-11 adds sibling `durable_records` on **`{v33..v35}`** (no new flag; physical genres/lineage/imperfect copy; write-pair replay-v13/codec v10; Experiment AN; marks ≠ truth). v3-12 adds sibling `knowledge_repositories` on **`{v34,v35}`** (requires durable + provenance; no new flag; no LibraryInstitution; write-pair replay-v14/codec v11; Experiment AO; cultural archive/library labels subjective only). v3-13 adds sibling `knowledge_genealogy` on **v35** (requires provenance; no new flag; no write-pair; owner-scoped practical-knowledge DAG + analysis queries; Experiment AP; triple representation; no `GlobalTechniqueRegistry`). v3-14 adds `bounded_experimentation` on **v36** with no new flag. Closed `AgentCommand` count is **38** (`NegotiateExchange`). SEMANTIC observer types are **61** (`EXCHANGE_PROPOSED`, `EXCHANGE_WITHDRAWN`, `EXCHANGE_COMPLETED`). Protocol id stays `observer-protocol-v1`. Unowned V3 flags still fail closed at `from_config`. Pins: `prepare_parallel=False`; no scripted civilization helpers; no Alembic `0018` by default. Current v3-29 institution-emergence state: closed command count **43**, observer semantic types **73**, metric families **117**, `runner-config-v49`, replay-v22/codec v20 when contact is active. See `docs/architecture.md` (V3 extension seams + Downstream V3 plan contract). Milestone: **M7 — V3 Generational Civilization** in `.ai-factory/ROADMAP.md`.
+- **New features:** Follow these package boundaries and public interfaces; keep
+  policy with its owning domain/cognitive module, not API or persistence glue.
+- **Existing code:** Prefer these conventions when changing relevant code; do
+  not refactor unrelated packages merely to match a textbook folder tree.
+- **Interoperability:** Inject adapters through existing ports at composition
+  roots. Do not allocate providers or open database connections at import time.
+- **Tests:** Add focused tests with changes, including Hypothesis invariants when
+  useful. Default unit tests are network-free and require neither Docker nor
+  PostgreSQL. Integration tests use disposable database names containing
+  `palimpsest_test` and fail closed on ambiguous migration targets. Keep coverage
+  enabled when running the project's coverage checks.
 
 ## Code Examples
 
-### Public facade import
+### Public facades and explicit public contracts
 
 ```python
-from simulation import (
-    ActionSubmission,
-    SimulationRunConfig,
-    WorldBootstrap,
-    WorldEngine,
-    build_perspective,
-)
+from agents.cognition import CognitiveLoop
+from llm import LLMProvider, LLMRequest, LLMResult, StructuredOutput
+from memory import MemoryRecallRequest, MemoryService
+from simulation import AgentRuntime, WorldEngine, build_perspective
 from world import Observation, Talk, Tell, Wait
 from world.communications import origin_utterance, retell_utterance
-from llm import LLMProvider, LLMRequest, LLMResult, StructuredOutput
-from memory import MemoryRecallRequest, MemoryService, DeterministicMemoryReconstructor
-from analysis import MemoryDriftAnalysisService, SocialTransmissionAnalysisService
-from agents.cognition import DeterministicSocialMessagePolicy
 ```
 
-### Forbidden authority import outside simulation
+### Authority stays private
 
 ```python
-# Not allowed from agents/memory/api/analysis/llm:
-from world._state import WorldState  # private authority
-from world._perception import PerceptionService  # private projector
+# Forbidden outside simulation.engine/bootstrap and private world internals:
+from world._state import WorldState
+from world._perception import PerceptionService
+
+# Persistence identity mapping uses the documented memory export:
+from memory.models import EntityId
 ```
 
-### Forbidden objective events in subjective paths
-
-```python
-# Not allowed — reconstructors, MemoryService, and cognition never take WorldEvent:
-reconstructor.reconstruct(world_event)  # no such API
-MemoryRecallRequest(..., world_event=...)  # does not exist
-# SocialTransmissionAnalysisService may join events only under analysis/
-```
-
-### Forbidden persistence → world import
-
-```python
-# Not allowed in persistence adapters:
-from world.identifiers import EntityId
-# Use the memory facade re-export instead:
-from memory.models import EntityId, CommunicatedTransmissionMeta
-```
-
-### Forbidden LLM trust bypass
-
-```python
-# Not allowed — no direct conversion; cognition translation is a separate stage:
-require_agent_command(llm_result)           # TypeError
-require_action_submission(structured_output)  # TypeError
-llm_result.to_agent_command()               # does not exist
-```
+Cognition consumes `Observation` and owner-scoped recalled evidence; a memory
+reconstructor does not accept `WorldEvent`. LLM results have no authoritative
+`to_agent_command()` shortcut. Detached analysis may correlate events and
+subjective exports after the run, never while forming the owner's beliefs.
 
 ## Anti-Patterns
 
-- Passing `LLMResult` / `StructuredOutput` / model dumps into `WorldEngine`, `ActionSubmission`, admission, or world operations
-- Treating `ActionRequest` as authoritative without private world validation
-- Handing an all-agent `ObservationBatch` or another agent's observation to cognition
-- Sharing mutable memory payloads across agents, or copying sender `MemoryTrace` / reconstruction IDs into a listener's lineage
-- Treating delivered `Tell` content or declared source chains as world-verified truth
-- Auto-upgrading bare `COMMUNICATE` to belief-grounded `Tell` without explicit selected belief IDs
-- Equating repeated reports that share one transmission root with independent corroboration
-- Injecting `WorldEvent` or event repositories into agents, cognition, `MemoryService`, or reconstruction policies
-- Feeding `SocialTransmissionAnalysisService` / drift reports back into live cognition
-- Treating reconstructions as objective truth or correcting agents against ground truth during recall
-- Destructively overwriting source traces when reconsolidating
-- Reading `PALIMPSEST_` secrets or opening DB connections at import time
-- Importing vendor LLM SDKs or logging prompt/output/schema/endpoint/memory/narrative/communication content
-- Using Docker/PostgreSQL inside default unit tests
+- Passing structured LLM output directly to admission or world operations.
+- Treating an `ActionRequest`, delivered testimony, cultural label, office claim,
+  collective outcome, or mediation recommendation as world-verified authority.
+- Sharing mutable or copied subjective state across owners, including newborns.
+- Exposing private events, all-agent observations, objective collectors, or
+  analysis truth specifications to cognition or reconstructive memory.
+- Correcting recall against ground truth or overwriting source traces.
+- Letting analysis/observer commit ticks, or client layout affect physics.
+- Putting domain policy in HTTP handlers, SQLAlchemy adapters, or logging glue.
+- Introducing vendor SDKs, global RNG, import-time secrets, or infrastructure
+  dependencies into the domain.
+- Introducing microservices, Kafka, Celery, or extra vector databases without an
+  explicitly authorized architectural change.
 
 ## See Also
 
-- `docs/architecture.md` — contributor-facing matrix, WorldEngine lifecycle, perception boundary, and invariants
-- `docs/memory-reconstruction.md` — reconstructive recall, reconsolidation, drift analysis, logging allowlists
-- `docs/social-communication.md` — objective delivery vs declared testimony vs owner-scoped derivation vs analysis
-- `.ai-factory/plans/v1-agent-social-communication-transmission.md` — social communication and transmission plan
-- `.ai-factory/plans/v1-reconstructive-memory-reconsolidation.md` — reconstructive memory plan
-- `.ai-factory/plans/v1-agent-runtime-cognitive-loop.md` — cognitive loop and AgentRuntime plan
-- `.ai-factory/plans/v1-llm-provider-abstraction.md` — provider-neutral LLM boundary plan
-- `.ai-factory/plans/v1-perception-observation-system.md` — perception plan
-
-## C-28 Multi-generational historical narratives
-
-Objective history and subjective narrative provenance remain separate. The
-owner-scoped narrative ledger may carry witnesses, retellings, opaque record
-references, transitions, a four-state observed source-loss value, and
-descriptive themes under `cultural-narratives.v2`. It has no truth field and
-never receives objective event bodies, generation indices, or analysis rows.
-Detached `analysis.generational_narratives` projects duck-typed ledger rows and
-compares claims with objective event rows without importing cognition, runtime,
-or persistence. Results never re-enter prompts, memory formation, admission, or
-observation. `runner-config-v48` is emitted only for the optional
-`generational_narratives` run-level sibling.
-
-## C-29 Institution emergence
-
-Subjective institution concepts and detached analytical institution detection
-remain separate authorities. The opt-in per-agent `institution_concept_mode`
-(`runner-config-v49`) carries an owner-scoped `InstitutionConceptLedger` under
-locked policy `institution-concepts.v1`; concepts have six closed pattern
-channels, opaque content-derived ids, and private custom labels but no
-institution type, objective office registry, state, government, religion,
-court, police, corporation, or political party. The ledger round-trips through the existing
-subjective checkpoint seams with no codec marker or write-pair bump.
-Detached `analysis.institution_emergence` and
-`analysis.institutional_persistence` consume analysis-owned lane rows harvested
-in `experiments.composition` from objective events and exported subjective
-ledgers; they import no cognition, runtime, ledger, or persistence modules and
-never return data to prompts, memory formation, admission, or observation.
-Temporary coordination and persistent institution-like structure are reported
-classifications, not world rules. Experiment BF (`institutionalization@1`)
-stays off the V1 regression gate; `institutional_economy` remains unowned.
-
-## C-30 Subjective offices and succession
-
-Office cognition is a separate optional primitive from institution concepts.
-`runner-config-v50` adds only a per-agent `office_succession_mode`; the
-owner-scoped `OfficeConceptLedger` under locked policy `offices-succession.v1`
-tracks a stable role identity fixed at inception, revisable duty/authority
-beliefs, attributed supporter rows, competing occupant claims, and bounded
-succession/revision history. Occupants are never globally authoritative, and
-duties or expected authority never become world permissions. Evidence comes
-only from the owner's observation, owner-safe identity projection, prepared
-`RetrievedMemoryContext` episode facts, and delivered structured testimony.
-Newborn capability is explicit (`species_default_offices_v1`, v50 only) and
-starts empty; parent cognition and ledgers are never copied. Office state
-round-trips through existing runtime checkpoints, not a new durable subjective
-codec. Detached `analysis.offices` harvests exported owner-local rows and aligns
-roles by function/context inference, retaining ambiguity and excluded-case
-counts; it imports no cognition/runtime/persistence modules and never re-enters
-cognition. Experiment BG (`offices_succession@1`) stays off the V1 gate;
-`institutional_economy` remains unowned.
-
-## Collective decisions (V3-31)
-
-Owner-scoped collective decisions live in `agents.cognition` as immutable
-subjective ledgers. Proposals, positions, delegations, retractions, outcomes,
-compliance, and influence rows never become world authority or a canonical
-electorate. Cognition consumes only owner-safe observations, prepared recalled
-episodes, and delivered testimony; analysis harvests exported rows after the
-run and aligns local courses only by detached topic/action/window evidence.
-No analysis row feeds runtime, and delivery proves speech rather than
-legitimacy or compliance.
-
-## V3-32 conflict mediation
-
-Optional owner-scoped mediation lives in `agents.cognition.mediation` with
-namespaced speech in `mediation_communication` and typed command compilation in
-`mediation_actions`. It is gated by per-agent `mediation_mode` on
-`runner-config-v52`, carries through snapshots/checkpoints/results, and exposes
-only detached read-only analysis families. It introduces no court, verdict,
-binding settlement, global dispute registry, forced transfer, new world command,
-event, observer semantic type, API route, or migration.
+- `docs/architecture.md` — contributor contracts and downstream checklists
+- `docs/configuration.md` — exact configuration versions and feature gates
+- `docs/persistence.md` — event history, codecs, checkpoints, and migrations
+- `docs/cognition-runtime.md` — runtime stages and subjective finalization
+- `docs/memory-reconstruction.md` — recall, reconsolidation, and evidence
+- `docs/social-communication.md` — delivery, testimony, and owner derivation
+- `docs/mediation.md` — owner-scoped mediation and voluntary follow-through
+- `docs/development.md` — verification commands and client checks

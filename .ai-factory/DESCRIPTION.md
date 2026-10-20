@@ -54,7 +54,7 @@ Modular monolith with explicit bounded packages under `src/`. Domain modules do 
 
 Detailed architecture guidelines live in `.ai-factory/ARCHITECTURE.md`.
 
-**Pattern:** Structured Modules (Technical Layer / Bounded Packages)
+**Pattern:** Structured Modules (Technical Layer / Bounded Packages), adapted to the existing package layout with enforced domain and authority boundaries.
 
 ## Non-Functional Requirements
 
