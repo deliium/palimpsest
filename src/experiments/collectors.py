@@ -644,6 +644,44 @@ def assemble_arm_metric_bundle(
         from analysis.offices import harvest_office_rows
 
         inputs = replace(inputs, office_rows=harvest_office_rows(office_ledgers))
+    decision_ledgers = getattr(arm.runner_result, "collective_decision_ledgers", None)
+    if decision_ledgers is not None:
+        from analysis.collective_decisions import (
+            CollectiveEffectRow,
+            harvest_collective_decision_rows,
+        )
+
+        effect_rows: list[object] = []
+        for event in events or ():
+            details = getattr(event, "details", event)
+            kind = getattr(details, "kind", None) or type(details).__name__.lower()
+            actor = getattr(details, "actor_id", None)
+            if actor is None:
+                continue
+            effect_tick = getattr(event, "tick", 0)
+            if isinstance(effect_tick, bool) or not isinstance(effect_tick, int):
+                continue
+            target = getattr(details, "destination_id", None) or getattr(
+                details, "project_id", None
+            )
+            target_token = (
+                None
+                if target is None
+                else str(getattr(target, "value", target)).lower()
+            )
+            effect_rows.append(
+                CollectiveEffectRow(
+                    actor_id=str(getattr(actor, "value", actor)),
+                    kind=str(kind).lower(),
+                    tick=effect_tick,
+                    target_token=target_token,
+                )
+            )
+        inputs = replace(
+            inputs,
+            collective_decision_rows=harvest_collective_decision_rows(decision_ledgers),
+            collective_decision_effects=tuple(effect_rows),
+        )
     if role_rows or procedure_rows or expectation_rows or legitimacy_rows:
         inputs = replace(
             inputs,

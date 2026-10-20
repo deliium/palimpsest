@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 119
+METRIC_FAMILY_COUNT: Final[int] = 122
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -194,6 +194,9 @@ class MetricFamilyId(StrEnum):
     INSTITUTIONAL_PERSISTENCE = "institutional_persistence"
     OFFICE_CONTINUITY = "office_continuity"
     OFFICE_SUCCESSION = "office_succession"
+    COLLECTIVE_DECISION_PROCESS = "collective_decision_process"
+    COLLECTIVE_DECISION_OUTCOMES = "collective_decision_outcomes"
+    COLLECTIVE_DECISION_DISAGREEMENT = "collective_decision_disagreement"
 
 
 class DenominatorKind(StrEnum):
@@ -5135,6 +5138,153 @@ def _spec_office_succession() -> MetricSpecification:
     )
 
 
+def _spec_collective_decision_process() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COLLECTIVE_DECISION_PROCESS,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_owner_collective_decision_rows",
+        denominator="enabled_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="as_of tick exported collective-decision ledgers",
+        deceased_policy="retained owner beliefs remain analytical evidence",
+        zero_holding_policy="no enabled owners -> availability=absent",
+        opportunity_vs_occurrence="expressed acts, not delivery frequency",
+        self_edge_policy="not_applicable",
+        censoring_policy="pruned histories mark partial coverage",
+        formulas={
+            "proposal_count": "retained local proposal revisions",
+            "direct_position_count": "positions grounded in the owner's observation",
+            "reported_position_count": "positions grounded in testimony or memory",
+            "withdrawal_count": "retained inactive positions",
+            "delegation_count": "retained one-hop delegations",
+            "coordination_count": "claimed coordination acts",
+            "preference_changed_count": "local preference-change attributions",
+            "final_command_changed_count": "local final-command-change attributions",
+            "executed_influence_count": "local execution attributions",
+            "unavailable_attribution_count": "unsupported comparisons",
+        },
+        value_keys=(
+            "proposal_count",
+            "revision_count",
+            "direct_position_count",
+            "reported_position_count",
+            "withdrawal_count",
+            "delegation_count",
+            "coordination_count",
+            "preference_changed_count",
+            "final_command_changed_count",
+            "executed_influence_count",
+            "unavailable_attribution_count",
+            "enabled_owner_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no enabled collective-decision owners",
+    )
+
+
+def _spec_collective_decision_outcomes() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COLLECTIVE_DECISION_OUTCOMES,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_owner_collective_decision_courses",
+        denominator="compliance_denominator",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        cohort_window="explicit proposal and action windows",
+        deceased_policy="death leaves compliance unknown, never defiance",
+        zero_holding_policy="no outcome rows -> availability=absent",
+        opportunity_vs_occurrence="matched and contrary courses are opportunity-scoped",
+        self_edge_policy="not_applicable",
+        censoring_policy="open windows are right-censored and counted separately",
+        formulas={
+            "claimed_count": "claimed course states",
+            "adopted_count": "locally adopted course states",
+            "attempted_count": "attempted course states",
+            "effected_count": "observed completed course states",
+            "abandoned_count": "abandoned course states",
+            "expired_count": "expired proposal revisions",
+            "disputed_count": "disputed course states",
+            "matched_count": "descriptively matched compliance opportunities",
+            "contrary_count": "observable contrary actions",
+            "blocked_count": "infeasible or blocked attempts",
+            "unknown_count": "unknown compliance opportunities",
+            "censored_count": "open windows at run end",
+            "compliance_denominator": "matched plus contrary opportunities",
+            "objective_effect_count": "committed effects supplied to the join",
+            "objective_matched_count": "effects matching a supported course window",
+        },
+        value_keys=(
+            "claimed_count",
+            "adopted_count",
+            "attempted_count",
+            "effected_count",
+            "abandoned_count",
+            "expired_count",
+            "disputed_count",
+            "unknown_outcome_count",
+            "matched_count",
+            "contrary_count",
+            "blocked_count",
+            "unknown_count",
+            "censored_count",
+            "compliance_denominator",
+            "objective_effect_count",
+            "objective_matched_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no collective-decision outcome rows",
+    )
+
+
+def _spec_collective_decision_disagreement() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.COLLECTIVE_DECISION_DISAGREEMENT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_aligned_collective_courses",
+        denominator="aligned_course_count",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="contemporaneous aligned course windows",
+        deceased_policy="silence is excluded, not dissent",
+        zero_holding_policy="no aligned rows -> availability=absent",
+        opportunity_vs_occurrence="only sufficient alignments enter the denominator",
+        self_edge_policy="not_applicable",
+        censoring_policy="ambiguous and unmatched cases are excluded and counted",
+        formulas={
+            "within_owner_contradiction_count": "same owner/revision, stance split",
+            "cross_owner_disagreement_count": "aligned courses with varying stances",
+            "aligned_course_count": "sufficiently aligned contemporaneous courses",
+            "excluded_alignment_count": "ambiguous or unmatched alignments",
+            "ambiguous_alignment_count": "alignments with ambiguous evidence",
+        },
+        value_keys=(
+            "within_owner_contradiction_count",
+            "cross_owner_disagreement_count",
+            "aligned_course_count",
+            "excluded_alignment_count",
+            "ambiguous_alignment_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+        empty_case="availability=absent; no aligned collective-decision courses",
+    )
+
+
 def _spec_generational_narrative_continuity() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.GENERATIONAL_NARRATIVE_CONTINUITY,
@@ -5393,6 +5543,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_institutional_persistence,
     _spec_office_continuity,
     _spec_office_succession,
+    _spec_collective_decision_process,
+    _spec_collective_decision_outcomes,
+    _spec_collective_decision_disagreement,
     _spec_generational_narrative_continuity,
     _spec_narrative_source_loss,
     _spec_narrative_historical_alignment,

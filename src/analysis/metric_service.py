@@ -302,6 +302,8 @@ class MetricComputationInputs:
     institution_continuity_rows: Sequence[object] | None = None
     institution_known_person_ids: Sequence[str] | None = None
     office_rows: Sequence[object] | None = None
+    collective_decision_rows: Sequence[object] | None = None
+    collective_decision_effects: Sequence[object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1556,6 +1558,54 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             lambda: compute_office_succession(
                 office_rows,
                 office_alignments,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+
+    if inputs.collective_decision_rows is not None:
+        from typing import cast
+
+        from analysis.collective_decisions import (
+            CollectiveDecisionSnapshot,
+            CollectiveEffectRow,
+            compute_collective_decision_disagreement,
+            compute_collective_decision_outcomes,
+            compute_collective_decision_process,
+        )
+
+        decision_rows = cast(
+            "tuple[CollectiveDecisionSnapshot, ...]",
+            tuple(inputs.collective_decision_rows),
+        )
+        decision_effects = cast(
+            "tuple[CollectiveEffectRow, ...]",
+            tuple(inputs.collective_decision_effects or ()),
+        )
+        _safe(
+            "collective_decision_process",
+            lambda: compute_collective_decision_process(
+                decision_rows,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+        _safe(
+            "collective_decision_outcomes",
+            lambda: compute_collective_decision_outcomes(
+                decision_rows,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+                effects=decision_effects,
+            ),
+        )
+        _safe(
+            "collective_decision_disagreement",
+            lambda: compute_collective_decision_disagreement(
+                decision_rows,
                 run_id=run_id,
                 input_revision=revision,
                 tick=window_end,

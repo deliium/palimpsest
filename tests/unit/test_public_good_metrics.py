@@ -25,7 +25,7 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 
 
 def test_public_good_families_extend_catalog() -> None:
-    assert METRIC_FAMILY_COUNT == 119
+    assert METRIC_FAMILY_COUNT == 122
     assert MetricFamilyId.PUBLIC_GOOD_COOPERATION_STABILITY.value == (
         "public_good_cooperation_stability"
     )

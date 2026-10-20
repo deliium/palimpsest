@@ -2775,6 +2775,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "generational_narratives@1",
         "institutionalization@1",
         "offices_succession@1",
+        "collective_decisions@1",
     }
 )
 
@@ -5394,6 +5395,29 @@ def experiment_bg_offices_succession(
     )
     _LOG.info(
         "experiment_registered experiment_id=offices_succession@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bh_collective_decisions(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BH: owner-scoped collective decisions."""
+    from experiments.collective_decisions_scenario import (
+        collective_decisions_scenario,
+    )
+
+    definition = collective_decisions_scenario(
+        base=base,
+        seed_matrix=seed_matrix,
+        max_ticks=max_ticks,
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=collective_decisions@1 arms=%s",
         len(definition.conditions),
     )
     return definition
