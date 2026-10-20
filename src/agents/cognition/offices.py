@@ -1445,6 +1445,8 @@ def _signals_from_local_ledger(
     if ledger_owner is not None and ledger_owner != owner_id:
         raise ValueError("local office evidence owner_id mismatch")
     rows: list[object] = []
+    if isinstance(ledger, Sequence) and not isinstance(ledger, (str, bytes)):
+        rows.extend(ledger)
     for attribute in ("concepts", "norms", "conventions", "beliefs"):
         value = getattr(ledger, attribute, None)
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
@@ -2482,6 +2484,7 @@ def apply_office_concept_update(
     norms: object | None = None,
     conventions: object | None = None,
     institution_concepts: object | None = None,
+    mediation_roles: object | None = None,
 ) -> OfficeConceptLedger:
     """Apply one tick of owner-scoped office evidence.
 
@@ -2500,6 +2503,7 @@ def apply_office_concept_update(
         norms,
         conventions,
         institution_concepts,
+        mediation_roles,
     ):
         _reject_forbidden(value)
     if type(observation) is not Observation:
@@ -2541,6 +2545,14 @@ def apply_office_concept_update(
             institution_concepts,
             owner_id=owner_id,
             channel="institution",
+            fallback_context=context_key,
+        )
+    )
+    signals.extend(
+        _signals_from_local_ledger(
+            mediation_roles,
+            owner_id=owner_id,
+            channel="mediation",
             fallback_context=context_key,
         )
     )

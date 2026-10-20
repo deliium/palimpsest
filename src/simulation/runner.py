@@ -1018,6 +1018,7 @@ def _cognition_config_for(
     from agents.cognition.configuration import (
         CognitionCollectiveDecisionMode,
         CognitionInstitutionConceptMode,
+        CognitionMediationMode,
         CognitionOfficeSuccessionMode,
         CognitionSemanticNamingMode,
         CognitionSymbolicLanguageMode,
@@ -1026,6 +1027,7 @@ def _cognition_config_for(
     from agents.cognition.institution_concepts import (
         default_institution_concept_policy,
     )
+    from agents.cognition.mediation import default_mediation_policy
     from agents.cognition.offices import default_office_concept_policy
     from agents.cognition.semantic_naming import default_semantic_naming_policy
     from agents.cognition.symbolic_language import (
@@ -1095,6 +1097,15 @@ def _cognition_config_for(
         "cognition_config_collective_decision_mode mode=%s policy_version=%s",
         collective_mode.value,
         None if collective_policy is None else collective_policy.version,
+    )
+    mediation_mode = CognitionMediationMode(spec.mediation_mode.value)
+    mediation_policy = None
+    if mediation_mode is CognitionMediationMode.DETERMINISTIC:
+        mediation_policy = default_mediation_policy()
+    _LOG.debug(
+        "cognition_config_mediation_mode mode=%s policy_version=%s",
+        mediation_mode.value,
+        None if mediation_policy is None else mediation_policy.version,
     )
     from agents.cognition.budget import policy_from_limits
     from agents.cognition.configuration import (
@@ -1194,6 +1205,8 @@ def _cognition_config_for(
         office_concept_policy=office_policy,
         collective_decision_mode=collective_mode,
         collective_decision_policy=collective_policy,
+        mediation_mode=mediation_mode,
+        mediation_policy=mediation_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2226,17 +2239,18 @@ class SimulationRunner:
         except RunnerConstructionError:
             await _cleanup_created(created_closables, stage=stage)
             raise
-        except Exception:
+        except Exception as exc:
             _LOG.error(
-                "runner_construction_failed code=%s stage=%s",
+                "runner_construction_failed code=%s stage=%s error_type=%s",
                 RunnerConstructionErrorCode.FACTORY_FAILED.value,
                 stage,
+                type(exc).__name__,
             )
             await _cleanup_created(created_closables, stage=stage)
             raise RunnerConstructionError(
                 RunnerConstructionErrorCode.FACTORY_FAILED,
                 stage=stage,
-            ) from None
+            ) from exc
 
     def request_stop(self) -> None:
         """Request stop at the next fully finalized committed boundary."""
@@ -2851,6 +2865,36 @@ class SimulationRunner:
                 and getattr(decision_ledger, "owner_id", None) != state.agent_id
             ):
                 raise ValueError("collective decision ledger owner_id mismatch")
+            mediation_ledger = getattr(state, "mediation", None)
+            if mediation_ledger is not None:
+                from agents.cognition.configuration import CognitionMediationMode
+                from agents.cognition.mediation import MediationLedger
+
+                if type(mediation_ledger) is not MediationLedger:
+                    raise TypeError("mediation ledger invalid type")
+                if mediation_ledger.owner_id != state.agent_id:
+                    raise ValueError("mediation ledger owner_id mismatch")
+                runtime = next(
+                    (
+                        item
+                        for item in self._runtimes
+                        if item.agent_id == state.agent_id
+                    ),
+                    None,
+                )
+                mode = getattr(
+                    getattr(runtime, "cognitive_loop", None),
+                    "_mediation_mode",
+                    None,
+                )
+                if mode is None:
+                    mode = getattr(
+                        getattr(runtime, "_loop", None),
+                        "_mediation_mode",
+                        CognitionMediationMode.DISABLED,
+                    )
+                if mode is not CognitionMediationMode.DETERMINISTIC:
+                    raise ValueError("mediation ledger for disabled owner")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
         if len(by_agent) != len(checkpoint.runtime_states):
             raise ValueError("duplicate runtime state owner")
@@ -2954,6 +2998,7 @@ class SimulationRunner:
             institution_concept_ledgers=self.export_institution_concept_ledgers(),
             office_concept_ledgers=self.export_office_concept_ledgers(),
             collective_decision_ledgers=self.export_collective_decision_ledgers(),
+            mediation_ledgers=self.export_mediation_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
@@ -3333,6 +3378,18 @@ class SimulationRunner:
             "runner_collective_decision_ledger_export ledger_count=%s",
             len(ledgers),
         )
+        return tuple(ledgers)
+
+    def export_mediation_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered mediation ledgers, including empty enabled state."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "mediation", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("runner_mediation_ledger_export ledger_count=%s", len(ledgers))
         return tuple(ledgers)
 
     def export_cultural_narrative_ledgers(self) -> tuple[object, ...]:

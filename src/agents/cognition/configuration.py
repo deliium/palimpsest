@@ -55,6 +55,10 @@ from agents.cognition.institution_concepts import (
     default_institution_concept_policy,
 )
 from agents.cognition.loop import CognitiveLoop
+from agents.cognition.mediation import (
+    MediationPolicy,
+    default_mediation_policy,
+)
 from agents.cognition.offices import (
     OfficeConceptPolicy,
     default_office_concept_policy,
@@ -373,6 +377,17 @@ class CognitionCollectiveDecisionMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionMediationMode(StrEnum):
+    """Owner-scoped voluntary mediation. Disabled allocates nothing.
+
+    Lockstep with ``simulation.MediationMode``. This is not a capability flag
+    and requires no office, institution, or collective-decision mode.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -514,6 +529,8 @@ class CognitionLoopConfig:
         CognitionCollectiveDecisionMode.DISABLED
     )
     collective_decision_policy: CollectiveDecisionPolicy | None = None
+    mediation_mode: CognitionMediationMode = CognitionMediationMode.DISABLED
+    mediation_policy: MediationPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -911,6 +928,16 @@ class CognitionLoopConfig:
             raise TypeError(
                 "collective_decision_policy must be CollectiveDecisionPolicy or None"
             )
+        if type(self.mediation_mode) is not CognitionMediationMode:
+            _LOG.error("invalid_enum path=mediation_mode reason_code=invalid_mode")
+            raise TypeError("mediation_mode must be CognitionMediationMode")
+        if self.mediation_mode is CognitionMediationMode.DISABLED:
+            object.__setattr__(self, "mediation_policy", None)
+        elif self.mediation_policy is None:
+            object.__setattr__(self, "mediation_policy", default_mediation_policy())
+        elif type(self.mediation_policy) is not MediationPolicy:
+            _LOG.error("invalid_enum path=mediation_policy reason_code=invalid_type")
+            raise TypeError("mediation_policy must be MediationPolicy or None")
         if (
             self.translation_mode is CognitionTranslationMode.DETERMINISTIC
             and self.semantic_naming_mode
@@ -1169,6 +1196,10 @@ class CognitionLoopConfig:
                 None
                 if self.collective_decision_policy is None
                 else self.collective_decision_policy.version
+            ),
+            "mediation_mode": self.mediation_mode.value,
+            "mediation_policy_version": (
+                None if self.mediation_policy is None else self.mediation_policy.version
             ),
             "cultural_narrative_mode": self.cultural_narrative_mode.value,
             "cultural_narrative_policy_version": (
@@ -1460,6 +1491,8 @@ def build_cognitive_loop(
         office_concept_policy=resolved.office_concept_policy,
         collective_decision_mode=resolved.collective_decision_mode,
         collective_decision_policy=resolved.collective_decision_policy,
+        mediation_mode=resolved.mediation_mode,
+        mediation_policy=resolved.mediation_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

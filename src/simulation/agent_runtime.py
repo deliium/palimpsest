@@ -445,6 +445,7 @@ class AgentRuntime:
         "_invocation_ids",
         "_last_observation_key",
         "_loop",
+        "_mediation",
         "_memory_reader",
         "_memory_service",
         "_memory_writer",
@@ -596,6 +597,7 @@ class AgentRuntime:
         self._institution_concepts: object | None = None
         self._office_concepts: object | None = None
         self._collective_decisions: object | None = None
+        self._mediation: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
@@ -1201,6 +1203,35 @@ class AgentRuntime:
             "collective_decisions_carried owner_id=%s proposal_count=%s tick=%s",
             owner.value,
             len(ledger.proposals),
+            tick,
+        )
+
+    def _commit_mediation(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import MediationLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_mediation_mode",
+            CognitionMediationMode.DISABLED,
+        )
+        if mode is not CognitionMediationMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionMediationMode.DETERMINISTIC:
+                self._mediation = None
+            return
+        if type(ledger) is not MediationLedger:
+            raise TypeError("mediation must be MediationLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._mediation = ledger
+        _LOG.debug(
+            "mediation_carried owner_id=%s case_count=%s tick=%s",
+            owner.value,
+            len(ledger.cases),
             tick,
         )
 
@@ -1997,6 +2028,7 @@ class AgentRuntime:
                 institution_concepts=self._institution_concepts,
                 office_concepts=self._office_concepts,
                 collective_decisions=self._collective_decisions,
+                mediation=self._mediation,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
@@ -2115,7 +2147,13 @@ class AgentRuntime:
                 self._counterfactual_state = state()
         except CognitiveLoopError as exc:
             _LOG.error(
-                "runtime_cognition_failed",
+                "runtime_cognition_failed agent_id=%s tick=%s reason=%s "
+                "component_kind=%s ordinal=%s",
+                agent_id.value,
+                tick,
+                exc.failure.reason.value,
+                exc.failure.component_kind.value,
+                exc.failure.ordinal,
                 extra={
                     "runtime": {
                         "code": AgentRuntimeErrorCode.COGNITION_FAILED.value,
@@ -2464,6 +2502,9 @@ class AgentRuntime:
         )
         self._commit_collective_decisions(
             getattr(pending.loop_result, "collective_decisions", None), pending.tick
+        )
+        self._commit_mediation(
+            getattr(pending.loop_result, "mediation", None), pending.tick
         )
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick
@@ -2854,6 +2895,37 @@ class AgentRuntime:
         )
         return pending
 
+    def _preflight_checkpoint_mediation(self, checkpoint: object) -> None:
+        """Validate the mediation field before mutating any runtime state."""
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import (
+            MediationLedger,
+            require_owner_mediation,
+        )
+
+        value = getattr(checkpoint, "mediation", None)
+        mode = getattr(
+            self._loop,
+            "_mediation_mode",
+            CognitionMediationMode.DISABLED,
+        )
+        if value is None:
+            return
+        if mode is not CognitionMediationMode.DETERMINISTIC:
+            _LOG.warning("mediation_restore_rejected reason=%s", "disabled_target")
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+        if type(value) is not MediationLedger:
+            _LOG.warning("mediation_restore_rejected reason=%s", "invalid_type")
+            raise TypeError("checkpoint mediation must be MediationLedger")
+        require_owner_mediation(
+            value,
+            self._agent.agent_id,
+            field_name="checkpoint.mediation",
+        )
+
     def restore_runtime_checkpoint(self, checkpoint: object) -> None:
         """Restore status/internal state/goals from a detached checkpoint."""
         from agents.models import Agent, Goal
@@ -2866,6 +2938,7 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        self._preflight_checkpoint_mediation(checkpoint)
         goals = tuple(checkpoint.goals)
         for goal in goals:
             if type(goal) is not Goal:
@@ -2920,6 +2993,7 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        self._mediation = getattr(checkpoint, "mediation", None)
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -2989,6 +3063,7 @@ class AgentRuntime:
             theory_of_mind=self._theory_of_mind,
             office_concepts=self._office_concepts,
             collective_decisions=self._collective_decisions,
+            mediation=self._mediation,
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
             group_formation=self._group_formation,

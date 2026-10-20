@@ -464,6 +464,10 @@ from agents.cognition.mediation import (
     mediation_role_expression_id,
     require_owner_mediation,
 )
+from agents.cognition.mediation_actions import (
+    compile_mediation_undertaking,
+    record_mediation_attempt,
+    selected_mediation_recommendation,
 )
 from agents.cognition.mediation_communication import (
     MEDIATION_COMMUNICATION_POLICY_VERSION,
@@ -1547,6 +1551,7 @@ __all__ = [
     "communication_intent",
     "communication_intent_id",
     "compile_experiment_command",
+    "compile_mediation_undertaking",
     "component_kinds_for_stage",
     "compose_developmental_effective_rate",
     "compose_loop_config_from_snapshot",
@@ -1715,6 +1720,7 @@ __all__ = [
     "project_trust_inputs",
     "propose_possession_command",
     "receiver_confidence_for_transmission",
+    "record_mediation_attempt",
     "record_translation_application",
     "record_trial",
     "reject_empty_refusal_render",
@@ -1751,6 +1757,7 @@ __all__ = [
     "rollout_prospective",
     "scarcity_row",
     "scenario_id_for",
+    "selected_mediation_recommendation",
     "stable8_digest",
     "stage_summaries_content_hash",
     "store_kind_valuation",

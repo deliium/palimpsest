@@ -76,7 +76,7 @@ from agents.cognition.models import (
     SelfModel,
     SituationModel,
 )
-from world.actions import AgentCommand, require_agent_command
+from world.actions import AgentCommand, Give, require_agent_command
 
 __all__ = [
     "COMPONENT_VERSION",
@@ -334,6 +334,8 @@ class CognitiveLoop:
         "_last_mentorship_audits",
         "_last_practical_knowledge_audits",
         "_max_open_interpretations",
+        "_mediation_mode",
+        "_mediation_policy",
         "_memory",
         "_memory_updates",
         "_mentorship_spec",
@@ -467,6 +469,8 @@ class CognitiveLoop:
         office_concept_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
+        mediation_mode: object | None = None,
+        mediation_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -890,6 +894,26 @@ class CognitiveLoop:
             )
         self._collective_decision_mode = decision_mode
         self._collective_decision_policy = collective_decision_policy
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import MediationPolicy
+
+        mediation = (
+            CognitionMediationMode.DISABLED
+            if mediation_mode is None
+            else mediation_mode
+        )
+        if type(mediation) is not CognitionMediationMode:
+            raise TypeError("mediation_mode must be CognitionMediationMode")
+        if mediation is CognitionMediationMode.DISABLED:
+            mediation_policy = None
+        elif mediation_policy is None:
+            from agents.cognition.mediation import default_mediation_policy
+
+            mediation_policy = default_mediation_policy()
+        elif type(mediation_policy) is not MediationPolicy:
+            raise TypeError("mediation_policy must be MediationPolicy")
+        self._mediation_mode = mediation
+        self._mediation_policy = mediation_policy
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -2066,6 +2090,14 @@ class CognitiveLoop:
                 "invalid_type" if snapshot is None else "owner_mismatch",
             )
             return None
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import mediation_function_evidence
+
+        mediation_roles = None
+        if self._mediation_mode is CognitionMediationMode.DETERMINISTIC:
+            mediation_roles = mediation_function_evidence(
+                loop_input.observation, identity
+            )
         updated = apply_office_concept_update(
             loop_input.observation,
             identity,
@@ -2076,6 +2108,7 @@ class CognitiveLoop:
             norms=norms,
             conventions=conventions,
             institution_concepts=institution_concepts,
+            mediation_roles=mediation_roles,
         )
         _LOG.debug(
             "office_concepts_carried owner_id=%s office_count=%s",
@@ -2146,6 +2179,137 @@ class CognitiveLoop:
             0 if updated is None else len(updated.proposals),
         )
         return updated
+
+    def _prepare_mediation(
+        self,
+        loop_input: CognitiveLoopInput,
+        memory: object | None,
+    ) -> object | None:
+        """Refresh one owner's mediation ledger from prepared owner inputs."""
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import (
+            MediationLedger,
+            apply_mediation_update,
+            generate_mediation_opportunities,
+        )
+
+        if self._mediation_mode is not CognitionMediationMode.DETERMINISTIC:
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else getattr(snapshot, "mediation", None)
+        ledger = carried if type(carried) is MediationLedger else None
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            _LOG.warning(
+                "mediation_carry_rejected reason=%s",
+                "invalid_type" if snapshot is None else "owner_mismatch",
+            )
+            return None
+        updated = apply_mediation_update(
+            loop_input.observation,
+            identity,
+            ledger,
+            retrieved_memory_context=memory,
+            speaker_trust=_project_speaker_trust(snapshot, identity),
+            policy=self._mediation_policy,
+        )
+        updated = generate_mediation_opportunities(
+            updated,
+            loop_input.observation,
+            identity,
+            policy=self._mediation_policy,
+        )
+        _LOG.debug(
+            "mediation_carried owner_id=%s case_count=%s",
+            loop_input.agent_id.value,
+            len(updated.cases),
+        )
+        return updated
+
+    def _prepare_mediation_authority(
+        self,
+        loop_input: CognitiveLoopInput,
+        mediation: object | None,
+        *,
+        social_norms: object | None,
+        office_concepts: object | None,
+        institution_concepts: object | None,
+    ) -> tuple[object, ...]:
+        """Project recipient-relative mediators from owner-safe sources.
+
+        This runs after office/institution preparation so newly recognized
+        mediation-function evidence can inform same-tick appraisal. Missing or
+        disabled sources remain unavailable; nothing here grants authority.
+        """
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import (
+            MediationLedger,
+            appraise_mediation_authority,
+            mediation_context_key,
+        )
+
+        if self._mediation_mode is not CognitionMediationMode.DETERMINISTIC:
+            return ()
+        if type(mediation) is not MediationLedger:
+            return ()
+        snapshot = loop_input.snapshot
+        identity = None if snapshot is None else snapshot.social_identity
+        if snapshot is None or identity is None:
+            return ()
+        actors: list[AgentId] = []
+        for case in mediation.cases:
+            for actor in (*case.party_ids, case.origin_id):
+                if actor is not None and actor not in actors:
+                    actors.append(actor)
+        for recommendation in mediation.recommendations:
+            for actor in (
+                recommendation.originator_id,
+                recommendation.proposed_actor_id,
+            ):
+                if actor is not None and actor not in actors:
+                    actors.append(actor)
+        for expression in mediation.role_expressions:
+            if expression.actor_id not in actors:
+                actors.append(expression.actor_id)
+        context_key = mediation_context_key(loop_input.observation)
+        relationships = tuple(getattr(snapshot, "relationships", ()))
+        reputation = getattr(snapshot, "reputation", None)
+        appraisals: list[object] = []
+        for actor in actors[:8]:
+            if actor == identity.owner_id:
+                continue
+            try:
+                appraisals.append(
+                    appraise_mediation_authority(
+                        identity.owner_id,
+                        actor,
+                        context_key,
+                        relationships=relationships,
+                        reputation=reputation,
+                        social_norms=social_norms,
+                        office_concepts=office_concepts,
+                        institution_concepts=institution_concepts,
+                    )
+                )
+            except (TypeError, ValueError):
+                _LOG.warning(
+                    "mediation_authority_rejected reason=%s mediator_id=%s",
+                    "invalid_source",
+                    actor.value,
+                )
+        _LOG.debug(
+            "mediation_authority_prepared owner_id=%s appraisal_count=%s",
+            identity.owner_id.value,
+            len(appraisals),
+        )
+        return tuple(
+            sorted(
+                appraisals,
+                key=lambda item: getattr(
+                    getattr(item, "mediator_id", None), "value", ""
+                ),
+            )
+        )
 
     def _bind_bounded_experimentation(self, spec: object | None) -> None:
         """Keep caps only. Law rows stay on the world engine."""
@@ -3880,6 +4044,14 @@ class CognitiveLoop:
             institution_concepts=institution_concepts,
         )
         collective_decisions = self._prepare_collective_decisions(loop_input, memory)
+        mediation = self._prepare_mediation(loop_input, memory)
+        mediation_authority = self._prepare_mediation_authority(
+            loop_input,
+            mediation,
+            social_norms=social_norms,
+            office_concepts=office_concepts,
+            institution_concepts=institution_concepts,
+        )
         decision_audit: list[object] = []
         cultural_features = self._prepare_cultural_features(
             loop_input,
@@ -4074,6 +4246,9 @@ class CognitiveLoop:
                     office_succession_mode=self._office_succession_mode,
                     collective_decisions=collective_decisions,
                     collective_decision_mode=self._collective_decision_mode,
+                    mediation=mediation,
+                    mediation_authority=mediation_authority,
+                    mediation_mode=self._mediation_mode,
                     decision_audit=decision_audit,
                 ),
             ),
@@ -4136,6 +4311,8 @@ class CognitiveLoop:
                     office_succession_mode=self._office_succession_mode,
                     collective_decisions=collective_decisions,
                     collective_decision_mode=self._collective_decision_mode,
+                    mediation=mediation,
+                    mediation_mode=self._mediation_mode,
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -4220,6 +4397,8 @@ class CognitiveLoop:
             office_concepts=office_concepts,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
+            mediation=mediation,
+            mediation_authority=mediation_authority,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -4391,6 +4570,35 @@ class CognitiveLoop:
                         tick=loop_input.observation.tick,
                         policy=self._collective_decision_policy,
                     )
+        mediation = proposal.mediation
+        from agents.cognition.configuration import CognitionMediationMode
+        from agents.cognition.mediation import MediationLedger
+
+        if (
+            self._mediation_mode is CognitionMediationMode.DETERMINISTIC
+            and type(mediation) is MediationLedger
+        ):
+            from agents.cognition.mediation_actions import (
+                record_mediation_attempt,
+                selected_mediation_recommendation,
+            )
+
+            recommendation = selected_mediation_recommendation(
+                mediation, loop_input.agent_id, loop_input.observation.tick
+            )
+            if recommendation is not None and type(command) is Give:
+                snapshot = loop_input.snapshot
+                identity = (
+                    None if snapshot is None else snapshot.social_identity
+                )
+                mediation = record_mediation_attempt(
+                    mediation,
+                    recommendation,
+                    owner_id=loop_input.agent_id,
+                    tick=loop_input.observation.tick,
+                    final_command=command,
+                    identity=identity,
+                )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -4429,6 +4637,8 @@ class CognitiveLoop:
             institution_concepts=proposal.institution_concepts,
             office_concepts=proposal.office_concepts,
             collective_decisions=collective_decisions,
+            mediation=mediation,
+            mediation_authority=proposal.mediation_authority,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,

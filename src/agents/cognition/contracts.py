@@ -172,6 +172,7 @@ class Perspective:
     institution_concepts: object | None = None
     office_concepts: object | None = None
     collective_decisions: object | None = None
+    mediation: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -403,6 +404,13 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.collective_decisions",
         )
+        from agents.cognition.mediation import require_owner_mediation
+
+        require_owner_mediation(
+            self.mediation,
+            self.agent_id,
+            field_name="Perspective.mediation",
+        )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
         )
@@ -536,6 +544,7 @@ class Perspective:
             semantic_naming=self.semantic_naming,
             symbolic_language=self.symbolic_language,
             collective_decisions=self.collective_decisions,
+            mediation=self.mediation,
             cultural_narratives=self.cultural_narratives,
             developmental_knowledge=self.developmental_knowledge,
             mentorship=self.mentorship,

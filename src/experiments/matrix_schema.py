@@ -47,11 +47,13 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V49,
     RUNNER_SCHEMA_VERSION_V50,
     RUNNER_SCHEMA_VERSION_V51,
+    RUNNER_SCHEMA_VERSION_V52,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CollectiveDecisionMode,
     CulturalNarrativeMode,
     InstitutionConceptMode,
+    MediationMode,
     OfficeSuccessionMode,
     ReflectionMode,
     SemanticNamingMode,
@@ -105,6 +107,10 @@ def finalize_matrix_cell_config(
         agent.cognition.collective_decision_mode is CollectiveDecisionMode.DETERMINISTIC
         for agent in agents
     )
+    mediation_on = any(
+        agent.cognition.mediation_mode is MediationMode.DETERMINISTIC
+        for agent in agents
+    )
     artifacts_on = any(
         agent.cognition.artifact_interpretation_mode
         is ArtifactInterpretationMode.DETERMINISTIC
@@ -142,7 +148,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if collective_decisions_on:
+    if mediation_on:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V52,
+            "mediation_on",
+        )
+    elif collective_decisions_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V51,
             "collective_decisions_on",

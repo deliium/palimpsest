@@ -125,6 +125,8 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "office_concept_ledger",
         "collective_decisions",
         "collective_decision_ledger",
+        "mediation",
+        "mediation_ledger",
         "social_norms",
         "social_conventions",
         "skill_ledger",
@@ -180,6 +182,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "translation",
     "institution_concepts",
     "office_concepts",
+    "mediation",
     "social_norms",
     "social_conventions",
     "skill_ledger",
@@ -851,6 +854,7 @@ class BlankSlateStoreCounts:
     translation: int = 0
     institution_concepts: int = 0
     office_concepts: int = 0
+    mediation: int = 0
     social_norms: int = 0
     social_conventions: int = 0
     skill_ledger: int = 0

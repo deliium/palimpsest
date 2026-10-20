@@ -171,6 +171,9 @@ class MultiCriteriaIntentionSelector:
         office_succession_mode: object | None = None,
         collective_decisions: object | None = None,
         collective_decision_mode: object | None = None,
+        mediation: object | None = None,
+        mediation_authority: object | None = None,
+        mediation_mode: object | None = None,
         decision_audit: list[object] | None = None,
     ) -> SelectedIntention:
         owner = loop_input.agent_id
@@ -409,7 +412,6 @@ class MultiCriteriaIntentionSelector:
                             tick,
                             preference.direction.value,
                         )
-
         identity_costs = _identity_direction_costs(
             owner=owner,
             identity=None if self_state is None else self_state.identity,
@@ -942,6 +944,9 @@ class CommandPlanner:
         office_succession_mode: object | None = None,
         collective_decisions: object | None = None,
         collective_decision_mode: object | None = None,
+        mediation: object | None = None,
+        mediation_authority: object | None = None,
+        mediation_mode: object | None = None,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -1250,6 +1255,27 @@ class CommandPlanner:
             ledger=prepared_decisions,
             mode=collective_decision_mode,
         )
+        from agents.cognition.mediation_communication import (
+            mediation_communicate_utterance,
+        )
+
+        prepared_mediation = mediation
+        if prepared_mediation is None and snapshot is not None:
+            prepared_mediation = getattr(snapshot, "mediation", None)
+        command = mediation_communicate_utterance(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            identity=None if snapshot is None else snapshot.social_identity,
+            ledger=prepared_mediation,
+            authority=(
+                ()
+                if mediation_authority is None
+                else tuple(mediation_authority)  # type: ignore[arg-type]
+            ),
+            mode=mediation_mode,
+        )
         from agents.cognition.artifacts import (
             artifact_inscribe_command,
             artifact_inscribe_preferred,
@@ -1394,6 +1420,35 @@ class CommandPlanner:
                 channel_on=True,
                 owner_id=owner,
             )
+        if (
+            getattr(mediation_mode, "value", None) == "deterministic"
+            and snapshot is not None
+            and snapshot.social_identity is not None
+            and intention.direction is ActionDirection.HELP
+        ):
+            from agents.cognition.mediation import MediationLedger
+            from agents.cognition.mediation_actions import (
+                compile_mediation_undertaking,
+            )
+
+            prepared = mediation
+            if prepared is None:
+                prepared = getattr(snapshot, "mediation", None)
+            if type(prepared) is MediationLedger:
+                compiled_undertaking = compile_mediation_undertaking(
+                    prepared,
+                    owner_id=owner,
+                    tick=tick,
+                    identity=snapshot.social_identity,
+                    inventory=tuple(
+                        loop_input.observation.self_body.inventory
+                        if loop_input.observation.self_body is not None
+                        else ()
+                    ),
+                )
+                if compiled_undertaking is not None:
+                    _recommendation, compiled_command = compiled_undertaking
+                    command = compiled_command
         command_type = type(command).__name__
 
         confidence = intention.confidence if not used_fallback else 1.0
