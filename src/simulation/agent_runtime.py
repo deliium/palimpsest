@@ -441,6 +441,7 @@ class AgentRuntime:
         "_identity_cursor",
         "_inbox",
         "_institution_concepts",
+        "_institutional_memory",
         "_internal_state",
         "_invocation_ids",
         "_last_observation_key",
@@ -598,6 +599,7 @@ class AgentRuntime:
         self._office_concepts: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
+        self._institutional_memory: object | None = None
         self._cultural_narratives: object | None = None
         self._developmental_knowledge: object | None = None
         self._mentorship: object | None = None
@@ -1232,6 +1234,39 @@ class AgentRuntime:
             "mediation_carried owner_id=%s case_count=%s tick=%s",
             owner.value,
             len(ledger.cases),
+            tick,
+        )
+
+    def _commit_institutional_memory(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import (
+            CognitionInstitutionalMemoryMode,
+        )
+        from agents.cognition.institutional_memory import InstitutionalMemoryLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_institutional_memory_mode",
+            CognitionInstitutionalMemoryMode.DISABLED,
+        )
+        if mode is not CognitionInstitutionalMemoryMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionInstitutionalMemoryMode.DETERMINISTIC:
+                self._institutional_memory = None
+            return
+        if type(ledger) is not InstitutionalMemoryLedger:
+            raise TypeError("institutional_memory must be InstitutionalMemoryLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._institutional_memory = ledger
+        _LOG.debug(
+            "institutional_memory_carried owner_id=%s entry_count=%s use_count=%s "
+            "tick=%s",
+            owner.value,
+            len(ledger.entries),
+            len(ledger.uses),
             tick,
         )
 
@@ -2029,6 +2064,7 @@ class AgentRuntime:
                 office_concepts=self._office_concepts,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
+                institutional_memory=self._institutional_memory,
                 cultural_narratives=self._cultural_narratives,
                 developmental_knowledge=self._developmental_knowledge,
                 mentorship=self._mentorship,
@@ -2505,6 +2541,9 @@ class AgentRuntime:
         )
         self._commit_mediation(
             getattr(pending.loop_result, "mediation", None), pending.tick
+        )
+        self._commit_institutional_memory(
+            getattr(pending.loop_result, "institutional_memory", None), pending.tick
         )
         self._commit_cultural_narratives(
             getattr(pending.loop_result, "cultural_narratives", None), pending.tick

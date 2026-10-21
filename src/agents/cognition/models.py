@@ -741,6 +741,7 @@ class SubjectiveSnapshot:
     office_concepts: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
+    institutional_memory: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -1027,6 +1028,15 @@ class SubjectiveSnapshot:
             self.mediation,
             self.owner_id,
             field_name="SubjectiveSnapshot.mediation",
+        )
+        from agents.cognition.institutional_memory import (
+            require_owner_institutional_memory,
+        )
+
+        require_owner_institutional_memory(
+            self.institutional_memory,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.institutional_memory",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
@@ -3527,6 +3537,7 @@ class ActionPlan:
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
     territorial_audits: tuple[object, ...] | None = None
+    institutional_memory_selection: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -3560,6 +3571,21 @@ class ActionPlan:
             intent = self.communication_intent
             if intent is not None and intent.owner_id != self.owner_id:
                 raise ValueError("owner_mismatch")
+        if self.institutional_memory_selection is not None:
+            from agents.cognition.institutional_memory import (
+                InstitutionalMemorySelection,
+            )
+
+            if (
+                type(self.institutional_memory_selection)
+                is not InstitutionalMemorySelection
+            ):
+                raise TypeError(
+                    "institutional_memory_selection must be "
+                    "InstitutionalMemorySelection or None"
+                )
+            if self.institutional_memory_selection.owner_id != self.owner_id:
+                raise ValueError("institutional_memory_selection owner mismatch")
         if self.territorial_audits is not None:
             from agents.cognition.territorial import TerritorialClaimAudit
 
@@ -3868,6 +3894,7 @@ class CognitiveLoopProposal:
     collective_decisions: object | None = None
     collective_decision_audit: tuple[object, ...] = ()
     mediation: object | None = None
+    institutional_memory: object | None = None
     mediation_authority: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
@@ -4036,6 +4063,15 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.cultural_narratives",
         )
+        from agents.cognition.institutional_memory import (
+            require_owner_institutional_memory,
+        )
+
+        require_owner_institutional_memory(
+            self.institutional_memory,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.institutional_memory",
+        )
         from agents.cognition.developmental_learning import (
             require_owner_developmental_knowledge,
         )
@@ -4169,6 +4205,7 @@ class CognitiveLoopResult:
     collective_decisions: object | None = None
     mediation: object | None = None
     mediation_authority: object | None = None
+    institutional_memory: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -4312,6 +4349,15 @@ class CognitiveLoopResult:
             self.cultural_narratives,
             self.agent_id,
             field_name="CognitiveLoopResult.cultural_narratives",
+        )
+        from agents.cognition.institutional_memory import (
+            require_owner_institutional_memory,
+        )
+
+        require_owner_institutional_memory(
+            self.institutional_memory,
+            self.agent_id,
+            field_name="CognitiveLoopResult.institutional_memory",
         )
         from agents.cognition.developmental_learning import (
             require_owner_developmental_knowledge,

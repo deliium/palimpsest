@@ -82,6 +82,7 @@ __all__ = [
     "record_institutional_acquisition_receipt",
     "require_owner_institutional_memory",
     "require_owner_institutional_memory_selection",
+    "set_institutional_entry_ignored",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.institutional_memory")
@@ -2205,3 +2206,29 @@ def _speech_acquisitions(
             )
         )
     return acquired
+
+
+def set_institutional_entry_ignored(
+    ledger: InstitutionalMemoryLedger,
+    entry_id: str,
+    *,
+    ignored: bool,
+    tick: int,
+) -> InstitutionalMemoryLedger:
+    """Pure owner policy: mark one retained entry ignored or unignored."""
+    if type(ledger) is not InstitutionalMemoryLedger:
+        raise _fail("ledger", "invalid_type")
+    target = _require_hex_id("entry_id", entry_id)
+    if type(ignored) is not bool:
+        raise _fail("ignored", "invalid_type")
+    _require_nonneg_int("tick", tick)
+    for entry in ledger.entries:
+        if entry.entry_id == target:
+            return replace(
+                ledger,
+                entries=tuple(
+                    replace(item, ignored=ignored) if item.entry_id == target else item
+                    for item in ledger.entries
+                ),
+            )
+    raise _fail("entry_id", "unknown_entry")

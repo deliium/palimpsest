@@ -4082,6 +4082,13 @@ class CognitiveLoop:
             office_concepts=office_concepts,
             institution_concepts=institution_concepts,
         )
+        institutional_memory = self._prepare_institutional_memory(
+            loop_input,
+            office_concepts=office_concepts,
+            institution_concepts=institution_concepts,
+            artifact_interpretations=artifact_interpretations,
+            retrieved_memory_context=memory,
+        )
         decision_audit: list[object] = []
         cultural_features = self._prepare_cultural_features(
             loop_input,
@@ -4343,6 +4350,13 @@ class CognitiveLoop:
                     collective_decision_mode=self._collective_decision_mode,
                     mediation=mediation,
                     mediation_mode=self._mediation_mode,
+                    institutional_memory=institutional_memory,
+                    institutional_memory_mode=self._institutional_memory_mode,
+                    institutional_teaching_enabled=(
+                        self._teaching_mode is not None
+                        and getattr(self._teaching_mode, "value", None)
+                        == "deterministic"
+                    ),
                     cultural_narratives=cultural_narratives,
                     cultural_narrative_mode=self._cultural_narrative_mode,
                 ),
@@ -4429,6 +4443,7 @@ class CognitiveLoop:
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
             mediation_authority=mediation_authority,
+            institutional_memory=institutional_memory,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -4457,6 +4472,70 @@ class CognitiveLoop:
             },
         )
         return proposal
+
+    def _prepare_institutional_memory(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        office_concepts: object | None,
+        institution_concepts: object | None,
+        artifact_interpretations: object | None,
+        retrieved_memory_context: object | None,
+    ) -> object | None:
+        from agents.cognition.configuration import (
+            CognitionInstitutionalMemoryMode,
+        )
+
+        if (
+            self._institutional_memory_mode
+            is not CognitionInstitutionalMemoryMode.DETERMINISTIC
+        ):
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "institutional_memory", None)
+        )
+        identity = None if snapshot is None else snapshot.social_identity
+        if identity is None:
+            return carried
+        from agents.cognition.institution_concepts import InstitutionConceptLedger
+        from agents.cognition.institutional_memory import (
+            InstitutionalMemoryLedger,
+            apply_institutional_memory_update,
+        )
+        from agents.cognition.offices import OfficeConceptLedger
+
+        if carried is not None and type(carried) is not InstitutionalMemoryLedger:
+            return None
+        return apply_institutional_memory_update(
+            owner_id=loop_input.agent_id,
+            observation=loop_input.observation,
+            identity=identity,
+            previous=carried,
+            office_concepts=(
+                office_concepts
+                if isinstance(office_concepts, OfficeConceptLedger)
+                else None
+            ),
+            institution_concepts=(
+                institution_concepts
+                if isinstance(institution_concepts, InstitutionConceptLedger)
+                else None
+            ),
+            artifact_interpretations=(
+                artifact_interpretations
+                if type(artifact_interpretations).__name__
+                == "ArtifactInterpretationLedger"
+                else None
+            ),
+            retrieved_memory_context=retrieved_memory_context,
+            teaching_enabled=(
+                self._teaching_mode is not None
+                and getattr(self._teaching_mode, "value", None) == "deterministic"
+            ),
+        )
 
     async def complete(
         self,
@@ -4627,6 +4706,41 @@ class CognitiveLoop:
                     final_command=command,
                     identity=identity,
                 )
+        from agents.cognition.configuration import (
+            CognitionInstitutionalMemoryMode,
+        )
+        from agents.cognition.institutional_memory import (
+            InstitutionalMemoryLedger,
+            InstitutionalMemorySelection,
+        )
+
+        institutional_memory = proposal.institutional_memory
+        selection = proposal.plan.institutional_memory_selection
+        if selection is not None:
+            if (
+                self._institutional_memory_mode
+                is not CognitionInstitutionalMemoryMode.DETERMINISTIC
+            ):
+                raise ValueError("institutional_memory_selection for disabled owner")
+            if type(selection) is not InstitutionalMemorySelection:
+                raise TypeError(
+                    "institutional_memory_selection must be "
+                    "InstitutionalMemorySelection"
+                )
+            if type(institutional_memory) is not InstitutionalMemoryLedger:
+                raise TypeError("institutional_memory ledger missing")
+            from agents.cognition.institutional_memory_actions import (
+                complete_institutional_memory_use,
+            )
+
+            institutional_memory = complete_institutional_memory_use(
+                institutional_memory,
+                selection,
+                owner_id=loop_input.agent_id,
+                invocation_id=invocation_id,
+                final_command=command,
+                tick=loop_input.observation.tick,
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -4667,6 +4781,7 @@ class CognitiveLoop:
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,
+            institutional_memory=institutional_memory,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,

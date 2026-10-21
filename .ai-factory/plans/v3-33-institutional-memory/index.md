@@ -165,8 +165,8 @@ No telepathy, omniscient archive, objective institution/office/proposal registry
 - [x] Task 6: Acquire records, procedural transmission and teaching ([details](phase-03-acquisition.md#task-6-acquire-records-procedural-transmission-and-teaching)) (depends on 2, 5).
 
 ### Phase 4
-- [ ] Task 7: Expose consultation and compile only selected existing actions ([details](phase-04-runtime.md#task-7-expose-consultation-and-compile-only-selected-existing-actions)) (depends on 5, 6).
-- [ ] Task 8: Integrate preparation, owner context and deferred commit ([details](phase-04-runtime.md#task-8-integrate-preparation-owner-context-and-deferred-commit)) (depends on 4–7).
+- [x] Task 7: Expose consultation and compile only selected existing actions ([details](phase-04-runtime.md#task-7-expose-consultation-and-compile-only-selected-existing-actions)) (depends on 5, 6).
+- [x] Task 8: Integrate preparation, owner context and deferred commit ([details](phase-04-runtime.md#task-8-integrate-preparation-owner-context-and-deferred-commit)) (depends on 4–7).
 
 ### Phase 5
 - [ ] Task 9: Preserve supported owner checkpoints and blank-slate admission ([details](phase-05-continuity.md#task-9-preserve-supported-owner-checkpoints-and-blank-slate-admission)) (depends on 8).

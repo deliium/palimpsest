@@ -173,6 +173,7 @@ class Perspective:
     office_concepts: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
+    institutional_memory: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -513,6 +514,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.scarcity_beliefs",
         )
+        from agents.cognition.institutional_memory import (
+            require_owner_institutional_memory,
+        )
+
+        require_owner_institutional_memory(
+            self.institutional_memory,
+            self.agent_id,
+            field_name="Perspective.institutional_memory",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -545,6 +555,7 @@ class Perspective:
             symbolic_language=self.symbolic_language,
             collective_decisions=self.collective_decisions,
             mediation=self.mediation,
+            institutional_memory=self.institutional_memory,
             cultural_narratives=self.cultural_narratives,
             developmental_knowledge=self.developmental_knowledge,
             mentorship=self.mentorship,

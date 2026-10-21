@@ -947,6 +947,9 @@ class CommandPlanner:
         mediation: object | None = None,
         mediation_authority: object | None = None,
         mediation_mode: object | None = None,
+        institutional_memory: object | None = None,
+        institutional_memory_mode: object | None = None,
+        institutional_teaching_enabled: bool = False,
     ) -> ActionPlan:
         owner = loop_input.agent_id
         tick = loop_input.observation.tick
@@ -956,6 +959,7 @@ class CommandPlanner:
         used_fallback = False
         communication_intent: object | None = None
         communication_intent_audit: object | None = None
+        institutional_selection: object | None = None
 
         if future is None or intention.direction is None:
             used_fallback = True
@@ -1270,9 +1274,7 @@ class CommandPlanner:
             identity=None if snapshot is None else snapshot.social_identity,
             ledger=prepared_mediation,
             authority=(
-                ()
-                if mediation_authority is None
-                else tuple(mediation_authority)  # type: ignore[arg-type]
+                () if mediation_authority is None else tuple(mediation_authority)  # type: ignore[arg-type]
             ),
             mode=mediation_mode,
         )
@@ -1299,6 +1301,56 @@ class CommandPlanner:
             preferred=preferred_inscribe,
             inbox=inbox,
         )
+        from agents.cognition.institutional_memory import (
+            InstitutionalMemoryLedger,
+            InstitutionalMemorySelection,
+            InstitutionalMemorySelectionKind,
+        )
+        from agents.cognition.institutional_memory_actions import (
+            fill_institutional_inscription,
+            institutional_memory_communicate_utterance,
+            select_institutional_memory_use,
+        )
+
+        if (
+            getattr(institutional_memory_mode, "value", None) == "deterministic"
+            and type(institutional_memory) is InstitutionalMemoryLedger
+        ):
+            selected = select_institutional_memory_use(
+                institutional_memory,
+                owner_id=owner,
+                command=command,
+                teaching_enabled=institutional_teaching_enabled,
+                tick=tick,
+            )
+            if selected is not None:
+                decorated = institutional_memory_communicate_utterance(
+                    command,
+                    ledger=institutional_memory,
+                    selection=selected,
+                    teaching_enabled=institutional_teaching_enabled,
+                    tick=tick,
+                )
+                if decorated is not command:
+                    command = decorated
+                    institutional_selection = selected
+                else:
+                    filled = fill_institutional_inscription(
+                        command,
+                        ledger=institutional_memory,
+                        selection=selected,
+                    )
+                    if filled is not command:
+                        command = filled
+                        institutional_selection = selected
+                    else:
+                        institutional_selection = InstitutionalMemorySelection(
+                            owner_id=owner,
+                            entry_id=selected.entry_id,
+                            channel_id=selected.channel_id,
+                            tick=tick,
+                            kind=InstitutionalMemorySelectionKind.CONSULT,
+                        )
         # Re-gate durable / repository commands after late Inscribe injection.
         durable_types = {CopyRecord, AnnotateRecord, DamageRecord}
         repository_types = {
@@ -1463,6 +1515,7 @@ class CommandPlanner:
             communication_intent=communication_intent,
             communication_intent_audit=communication_intent_audit,
             territorial_audits=territorial_audits,
+            institutional_memory_selection=institutional_selection,
         )
         band = (
             "high" if confidence >= 0.75 else "medium" if confidence >= 0.4 else "low"
