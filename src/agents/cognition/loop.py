@@ -323,6 +323,8 @@ class CognitiveLoop:
         "_identity_mode",
         "_institution_concept_mode",
         "_institution_concept_policy",
+        "_institutional_decay_mode",
+        "_institutional_decay_policy",
         "_institutional_memory_mode",
         "_institutional_memory_policy",
         "_intention",
@@ -347,6 +349,7 @@ class CognitiveLoop:
         "_perception",
         "_planner",
         "_possession_succession_active",
+        "_prepared_institutional_decay",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -475,6 +478,8 @@ class CognitiveLoop:
         mediation_policy: object | None = None,
         institutional_memory_mode: object | None = None,
         institutional_memory_policy: object | None = None,
+        institutional_decay_mode: object | None = None,
+        institutional_decay_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -944,6 +949,40 @@ class CognitiveLoop:
             )
         self._institutional_memory_mode = institutional
         self._institutional_memory_policy = institutional_memory_policy
+        from agents.cognition.configuration import (
+            CognitionInstitutionalDecayMode,
+            CognitionInstitutionConceptMode,
+        )
+        from agents.cognition.institutional_decay import InstitutionDecayPolicy
+
+        decay = (
+            CognitionInstitutionalDecayMode.DISABLED
+            if institutional_decay_mode is None
+            else institutional_decay_mode
+        )
+        if type(decay) is not CognitionInstitutionalDecayMode:
+            raise TypeError(
+                "institutional_decay_mode must be CognitionInstitutionalDecayMode"
+            )
+        if decay is CognitionInstitutionalDecayMode.DISABLED:
+            institutional_decay_policy = None
+        elif institutional_decay_policy is None:
+            from agents.cognition.institutional_decay import (
+                default_institutional_decay_policy,
+            )
+
+            institutional_decay_policy = default_institutional_decay_policy()
+        elif type(institutional_decay_policy) is not InstitutionDecayPolicy:
+            raise TypeError("institutional_decay_policy must be InstitutionDecayPolicy")
+        if (
+            decay is CognitionInstitutionalDecayMode.DETERMINISTIC
+            and self._institution_concept_mode
+            is not CognitionInstitutionConceptMode.DETERMINISTIC
+        ):
+            raise ValueError("institutional_decay_requires_local_concepts")
+        self._institutional_decay_mode = decay
+        self._institutional_decay_policy = institutional_decay_policy
+        self._prepared_institutional_decay: object | None = None
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 

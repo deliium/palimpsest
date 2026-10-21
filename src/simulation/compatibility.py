@@ -96,6 +96,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V48,
     RUNNER_SCHEMA_VERSION_V49,
     RUNNER_SCHEMA_VERSION_V53,
+    RUNNER_SCHEMA_VERSION_V54,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -481,6 +482,10 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V53} adds only a per-agent "
             "institutional_memory_mode and reuses the v52 family roots "
             "(no new root sibling; no new write-pair); "
+            f"{RUNNER_SCHEMA_VERSION_V54} adds only a per-agent "
+            "institutional_decay_mode on the exact v53 cognition keyset and "
+            "reuses the v53 family roots (requires that owner's institution "
+            "concepts; no new root sibling; no new write-pair); "
             f"(write-pair EVENT_SCHEMA_REPLAY_V16={EVENT_SCHEMA_REPLAY_V16}, "
             "codec v13 when the channel is active; no heir table); "
             "mode allowlists that top out at v34 widen to accept v35; "
@@ -780,6 +785,7 @@ _LOG.debug(
         "runner_v48": RUNNER_SCHEMA_VERSION_V48,
         "runner_v49": RUNNER_SCHEMA_VERSION_V49,
         "runner_v53": RUNNER_SCHEMA_VERSION_V53,
+        "runner_v54": RUNNER_SCHEMA_VERSION_V54,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

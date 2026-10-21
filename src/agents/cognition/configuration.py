@@ -54,6 +54,10 @@ from agents.cognition.institution_concepts import (
     InstitutionConceptPolicy,
     default_institution_concept_policy,
 )
+from agents.cognition.institutional_decay import (
+    InstitutionDecayPolicy,
+    default_institutional_decay_policy,
+)
 from agents.cognition.institutional_memory import (
     InstitutionalMemoryPolicy,
     default_institutional_memory_policy,
@@ -392,6 +396,17 @@ class CognitionMediationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionInstitutionalDecayMode(StrEnum):
+    """Owner-scoped institutional decay. Disabled allocates nothing.
+
+    Lockstep with ``simulation.InstitutionalDecayMode``. This is not a
+    capability flag and requires the same owner's institution concepts.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionInstitutionalMemoryMode(StrEnum):
     """Owner-scoped institutional information. Disabled allocates nothing.
 
@@ -550,6 +565,10 @@ class CognitionLoopConfig:
         CognitionInstitutionalMemoryMode.DISABLED
     )
     institutional_memory_policy: InstitutionalMemoryPolicy | None = None
+    institutional_decay_mode: CognitionInstitutionalDecayMode = (
+        CognitionInstitutionalDecayMode.DISABLED
+    )
+    institutional_decay_policy: InstitutionDecayPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -979,6 +998,39 @@ class CognitionLoopConfig:
             raise TypeError(
                 "institutional_memory_policy must be InstitutionalMemoryPolicy or None"
             )
+        if type(self.institutional_decay_mode) is not (CognitionInstitutionalDecayMode):
+            _LOG.error(
+                "invalid_enum path=institutional_decay_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "institutional_decay_mode must be CognitionInstitutionalDecayMode"
+            )
+        if self.institutional_decay_mode is (CognitionInstitutionalDecayMode.DISABLED):
+            object.__setattr__(self, "institutional_decay_policy", None)
+        elif self.institutional_decay_policy is None:
+            object.__setattr__(
+                self,
+                "institutional_decay_policy",
+                default_institutional_decay_policy(),
+            )
+        elif type(self.institutional_decay_policy) is not InstitutionDecayPolicy:
+            _LOG.error(
+                "invalid_enum path=institutional_decay_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "institutional_decay_policy must be InstitutionDecayPolicy or None"
+            )
+        if (
+            self.institutional_decay_mode
+            is CognitionInstitutionalDecayMode.DETERMINISTIC
+            and self.institution_concept_mode
+            is not CognitionInstitutionConceptMode.DETERMINISTIC
+        ):
+            _LOG.error(
+                "invalid_enum path=institutional_decay_mode "
+                "reason_code=institutional_decay_requires_local_concepts"
+            )
+            raise ValueError("institutional_decay_requires_local_concepts")
         if (
             self.translation_mode is CognitionTranslationMode.DETERMINISTIC
             and self.semantic_naming_mode
@@ -1285,6 +1337,16 @@ class CognitionLoopConfig:
                 if self.institutional_memory_policy is None
                 else self.institutional_memory_policy.version
             )
+        if (
+            self.institutional_decay_mode
+            is CognitionInstitutionalDecayMode.DETERMINISTIC
+        ):
+            material["institutional_decay_mode"] = self.institutional_decay_mode.value
+            material["institutional_decay_policy_version"] = (
+                None
+                if self.institutional_decay_policy is None
+                else self.institutional_decay_policy.version
+            )
         return material
 
 
@@ -1547,6 +1609,8 @@ def build_cognitive_loop(
         mediation_policy=resolved.mediation_policy,
         institutional_memory_mode=resolved.institutional_memory_mode,
         institutional_memory_policy=resolved.institutional_memory_policy,
+        institutional_decay_mode=resolved.institutional_decay_mode,
+        institutional_decay_policy=resolved.institutional_decay_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

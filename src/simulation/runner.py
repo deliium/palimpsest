@@ -1017,6 +1017,7 @@ def _cognition_config_for(
     )
     from agents.cognition.configuration import (
         CognitionCollectiveDecisionMode,
+        CognitionInstitutionalDecayMode,
         CognitionInstitutionalMemoryMode,
         CognitionInstitutionConceptMode,
         CognitionMediationMode,
@@ -1027,6 +1028,9 @@ def _cognition_config_for(
     )
     from agents.cognition.institution_concepts import (
         default_institution_concept_policy,
+    )
+    from agents.cognition.institutional_decay import (
+        default_institutional_decay_policy,
     )
     from agents.cognition.institutional_memory import (
         default_institutional_memory_policy,
@@ -1110,6 +1114,19 @@ def _cognition_config_for(
         "cognition_config_mediation_mode mode=%s policy_version=%s",
         mediation_mode.value,
         None if mediation_policy is None else mediation_policy.version,
+    )
+    institutional_decay_mode = CognitionInstitutionalDecayMode(
+        spec.institutional_decay_mode.value
+    )
+    institutional_decay_policy = None
+    if institutional_decay_mode is CognitionInstitutionalDecayMode.DETERMINISTIC:
+        institutional_decay_policy = default_institutional_decay_policy()
+    _LOG.debug(
+        "cognition_config_institutional_decay mode=%s policy_version=%s",
+        institutional_decay_mode.value,
+        None
+        if institutional_decay_policy is None
+        else institutional_decay_policy.version,
     )
     institutional_memory_mode = CognitionInstitutionalMemoryMode(
         spec.institutional_memory_mode.value
@@ -1226,6 +1243,8 @@ def _cognition_config_for(
         mediation_policy=mediation_policy,
         institutional_memory_mode=institutional_memory_mode,
         institutional_memory_policy=institutional_memory_policy,
+        institutional_decay_mode=institutional_decay_mode,
+        institutional_decay_policy=institutional_decay_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
