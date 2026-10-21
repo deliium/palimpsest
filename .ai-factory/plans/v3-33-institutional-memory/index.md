@@ -173,7 +173,7 @@ No telepathy, omniscient archive, objective institution/office/proposal registry
 - [x] Task 10: Prove external carrier survival, loss and later learning ([details](phase-05-continuity.md#task-10-prove-external-carrier-survival-loss-and-later-learning)) (depends on 6–9).
 
 ### Phase 6
-- [ ] Task 11: Add institutional memory continuity and provenance analysis ([details](phase-06-analysis.md#task-11-add-institutional-memory-continuity-and-provenance-analysis)) (depends on 9, 10).
+- [x] Task 11: Add institutional memory continuity and provenance analysis ([details](phase-06-analysis.md#task-11-add-institutional-memory-continuity-and-provenance-analysis)) (depends on 9, 10).
 
 ### Phase 7
 - [ ] Task 12: Add Experiment BJ institutional-memory opportunities ([details](phase-07-experiments.md#task-12-add-experiment-bj-institutional-memory-opportunities)) (depends on 3–11).

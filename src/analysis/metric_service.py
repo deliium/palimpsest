@@ -281,6 +281,9 @@ class MetricComputationInputs:
     reputation_neighborhoods: Mapping[str, str] | None = None
     reputation_target_id: str | None = None
     survival_cohort_map: Mapping[str, Sequence[str]] | None = None
+    institutional_memory_rows: Sequence[object] | None = None
+    institutional_memory_carrier_rows: Sequence[object] | None = None
+    institutional_memory_identity_rows: Sequence[object] | None = None
     regional_population: RegionalPopulationInput | None = None
     regional_destination_evidence: Sequence[RegionalDestinationEvidenceRow] | None = (
         None
@@ -1700,6 +1703,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             ),
         )
 
+    if inputs.institutional_memory_rows is not None:
+        from analysis.institutional_memory import (
+            compute_institutional_memory_continuity,
+            compute_institutional_memory_provenance,
+        )
+
+        _safe(
+            "institutional_memory_continuity",
+            lambda: compute_institutional_memory_continuity(
+                inputs.institutional_memory_rows,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+                carrier_rows=inputs.institutional_memory_carrier_rows,
+                identity_rows=inputs.institutional_memory_identity_rows,
+            ),
+        )
+        _safe(
+            "institutional_memory_provenance",
+            lambda: compute_institutional_memory_provenance(
+                inputs.institutional_memory_rows,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+                carrier_rows=inputs.institutional_memory_carrier_rows,
+                identity_rows=inputs.institutional_memory_identity_rows,
+            ),
+        )
+
     documents.sort(key=lambda doc: doc.metric_family)
     fingerprints = tuple(metric_document_fingerprint(doc) for doc in documents)
     # Touch encode path to ensure canonical bytes are stable.
@@ -1720,6 +1752,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             "duration_ms": duration_ms,
         },
     )
+
     return MetricBundle(
         run_id=run_id,
         input_revision=revision,

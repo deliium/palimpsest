@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 124
+METRIC_FAMILY_COUNT: Final[int] = 126
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -199,6 +199,8 @@ class MetricFamilyId(StrEnum):
     COLLECTIVE_DECISION_DISAGREEMENT = "collective_decision_disagreement"
     CONFLICT_MEDIATION = "conflict_mediation"
     MEDIATION_ROLE_EMERGENCE = "mediation_role_emergence"
+    INSTITUTIONAL_MEMORY_CONTINUITY = "institutional_memory_continuity"
+    INSTITUTIONAL_MEMORY_PROVENANCE = "institutional_memory_provenance"
 
 
 class DenominatorKind(StrEnum):
@@ -5546,6 +5548,108 @@ def _spec_narrative_historical_alignment() -> MetricSpecification:
     )
 
 
+def _spec_institutional_memory_continuity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTIONAL_MEMORY_CONTINUITY,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_owner_institutional_memory_rows",
+        denominator="enabled_owner_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="as_of exported institutional-memory ledgers",
+        deceased_policy="retained owner beliefs remain analytical evidence",
+        zero_holding_policy="no enabled owners -> availability=absent",
+        opportunity_vs_occurrence="acquisition is not survival or correctness",
+        self_edge_policy="not_applicable",
+        censoring_policy="pruned or partial histories mark partial coverage",
+        formulas={
+            "enabled_owner_count": "exported ledgers",
+            "bound_channel_count": "channels with local binding",
+            "entry_count": "retained entries",
+            "record_acquisition_count": "entries acquired through record reading",
+            "transmission_acquisition_count": "entries acquired through transmission",
+            "teaching_acquisition_count": "entries acquired through teaching",
+            "partial_entry_count": "entries with partial facts",
+            "ignored_entry_count": "entries locally ignored",
+            "consulted_entry_count": "completion receipts with consulted disposition",
+            "cross_occupant_opportunity_count": (
+                "uniquely aligned occupant changes with prior information"
+            ),
+            "cross_occupant_acquired_count": "successor acquisitions after a change",
+            "ambiguous_alignment_count": "ambiguous role alignments",
+            "excluded_alignment_count": "excluded role alignments",
+            "partial_coverage": "any partial owner export",
+            "as_of_tick": "detached export tick",
+        },
+        value_keys=(
+            "enabled_owner_count",
+            "bound_channel_count",
+            "entry_count",
+            "record_acquisition_count",
+            "transmission_acquisition_count",
+            "teaching_acquisition_count",
+            "partial_entry_count",
+            "ignored_entry_count",
+            "consulted_entry_count",
+            "cross_occupant_opportunity_count",
+            "cross_occupant_acquired_count",
+            "ambiguous_alignment_count",
+            "excluded_alignment_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+    )
+
+
+def _spec_institutional_memory_provenance() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTIONAL_MEMORY_PROVENANCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="detached_institutional_memory_provenance_rows",
+        denominator="entry_count",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="as_of exported institutional-memory ledgers",
+        deceased_policy="retained owner provenance remains analytical evidence",
+        zero_holding_policy="no entries -> availability=absent",
+        opportunity_vs_occurrence="declared roots are testimony, not observed paths",
+        self_edge_policy="not_applicable",
+        censoring_policy="pruned or unresolved evidence marks partial coverage",
+        formulas={
+            "entry_count": "retained entries",
+            "observed_carrier_edge_count": "entries with observed carrier evidence",
+            "declared_only_edge_count": "entries with only declared lineage",
+            "ambiguous_edge_count": "ambiguous source paths",
+            "unresolved_edge_count": "entries without observed or declared source",
+            "pruned_edge_count": "entries with pruned predecessor references",
+            "independent_root_count": "distinct observed source paths",
+            "conflicting_claim_count": "same-context conflicts with different objects",
+            "partial_coverage": "any partial owner export",
+            "as_of_tick": "detached export tick",
+        },
+        value_keys=(
+            "entry_count",
+            "observed_carrier_edge_count",
+            "declared_only_edge_count",
+            "ambiguous_edge_count",
+            "unresolved_edge_count",
+            "pruned_edge_count",
+            "independent_root_count",
+            "conflicting_claim_count",
+            "partial_coverage",
+            "as_of_tick",
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -5671,6 +5775,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_generational_narrative_continuity,
     _spec_narrative_source_loss,
     _spec_narrative_historical_alignment,
+    _spec_institutional_memory_continuity,
+    _spec_institutional_memory_provenance,
 )
 
 
