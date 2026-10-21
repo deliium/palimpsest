@@ -16,19 +16,38 @@ import hashlib
 import logging
 import math
 import re
+from collections.abc import Mapping as _Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import StrEnum
 from typing import Final, cast
 
+from agents.cognition.artifacts import (
+    ArtifactInterpretation,
+    ArtifactInterpretationLedger,
+)
+from agents.cognition.institution_concepts import (
+    InstitutionConcept,
+    InstitutionConceptLedger,
+    InstitutionPatternChannel,
+)
+from agents.cognition.models import OwnerSafeSocialIdentity
+from agents.cognition.offices import (
+    OfficeConcept,
+    OfficeConceptLedger,
+    OfficeConceptStatus,
+    OfficeOccupantStatus,
+)
 from agents.models import AgentId
+from world.artifacts import RecordIntegrity
 from world.communications import DeclaredTransmission
 from world.identifiers import (
     EntityId,
     require_bounded_text,
     require_exact_nonneg_int,
 )
+from world.observations import Observation
 
 __all__ = [
     "INSTITUTIONAL_MEMORY_POLICY_VERSION",
@@ -51,10 +70,15 @@ __all__ = [
     "append_institutional_memory_channel",
     "append_institutional_memory_entry",
     "append_institutional_memory_use",
+    "apply_institutional_memory_update",
     "default_institutional_memory_policy",
     "empty_institutional_memory_ledger",
+    "institutional_anchor_token",
     "institutional_channel_id",
+    "institutional_entity_token",
     "institutional_entry_id",
+    "institutional_kind_token",
+    "institutional_role_token",
     "record_institutional_acquisition_receipt",
     "require_owner_institutional_memory",
     "require_owner_institutional_memory_selection",
@@ -645,6 +669,9 @@ class InstitutionalMemoryEntry:
     ignored: bool
     provenance: tuple[InstitutionalProvenance, ...]
     superseded_entry: InstitutionalLocalReference | None = None
+    binding_kind: InstitutionalBindingKind | None = None
+    binding_function_token: str | None = None
+    binding_context_digest: str | None = None
 
     def __post_init__(self) -> None:
         _require_agent("entry.owner_id", self.owner_id)
@@ -711,6 +738,32 @@ class InstitutionalMemoryEntry:
             and self.superseded_entry.entry_id == self.entry_id
         ):
             raise _fail("entry.superseded_entry", "self_reference")
+        binding_values = (
+            self.binding_kind,
+            self.binding_function_token,
+            self.binding_context_digest,
+        )
+        if any(value is None for value in binding_values) and any(
+            value is not None for value in binding_values
+        ):
+            raise _fail("entry.binding_kind", "incomplete_binding")
+        if self.binding_kind is not None:
+            if type(self.binding_kind) is not InstitutionalBindingKind:
+                raise _fail("entry.binding_kind", "invalid_type")
+            object.__setattr__(
+                self,
+                "binding_function_token",
+                _require_token(
+                    "entry.binding_function_token", self.binding_function_token
+                ),
+            )
+            object.__setattr__(
+                self,
+                "binding_context_digest",
+                _require_digest(
+                    "entry.binding_context_digest", self.binding_context_digest
+                ),
+            )
         _LOG.debug(
             "institutional_entry_constructed owner_id=%s channel_bound=%s "
             "fact_count=%s declared_fact_count=%s provenance_count=%s "
@@ -1347,3 +1400,808 @@ def record_institutional_acquisition_receipt(
         len(receipts),
     )
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Owner-local grounding and locally produced information
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class _InstitutionalCandidate:
+    channel_id: str | None
+    fact: InstitutionalFact
+    tick: int
+    source_ref: str
+    confidence: float
+    binding_kind: InstitutionalBindingKind | None = None
+    binding_function_token: str | None = None
+    binding_context_digest: str | None = None
+
+
+def institutional_entity_token(value: str) -> str:
+    """Opaque local token for one observed actor or counterpart."""
+    if not isinstance(value, str) or not value:
+        raise _fail("entity_token", "invalid_type")
+    return "e_" + _sha256_hex(f"entity|{value}")[:24]
+
+
+def institutional_kind_token(kind: str) -> str:
+    """Artifact-safe occurrence token; irreversible normalization."""
+    if not isinstance(kind, str) or not kind:
+        raise _fail("kind_token", "invalid_type")
+    if _TOKEN_PATTERN.fullmatch(kind) is not None:
+        return kind
+    return "k_" + _sha256_hex(f"kind|{kind}")[:24]
+
+
+def institutional_role_token(function: str, context_key: str) -> str:
+    """Bounded public token for one locally recognized role."""
+    if not isinstance(function, str) or not function:
+        raise _fail("role.function", "invalid_type")
+    context = _require_digest("role.context_key", context_key)
+    token = f"{function.split('_')[0]}_{context[:8]}"
+    return _require_token("role.token", token)
+
+
+def institutional_anchor_token(anchor_digest: str) -> str:
+    anchor = _require_digest("anchor_digest", anchor_digest)
+    return "a_" + anchor
+
+
+def _office_occupant_status(
+    status: OfficeOccupantStatus,
+) -> InstitutionalOccupantStatus:
+    if (
+        status is OfficeOccupantStatus.DISPUTED
+        or status is OfficeOccupantStatus.OPPOSED
+    ):
+        return InstitutionalOccupantStatus.DISPUTED
+    if status is OfficeOccupantStatus.CANDIDATE:
+        return InstitutionalOccupantStatus.CLAIMED
+    return InstitutionalOccupantStatus.CLAIMED
+
+
+def _require_ledger_owner(value: object, owner_id: AgentId, expected: type) -> None:
+    if value is None:
+        return
+    if type(value) is not expected:
+        raise _fail("store", "invalid_type")
+    store_owner = getattr(value, "owner_id", None)
+    if store_owner is not None and store_owner != owner_id:
+        raise _fail("store", "owner_mismatch")
+
+
+def _role_channel(concept: OfficeConcept) -> InstitutionalChannel:
+    function = concept.function.value
+    role_token = institutional_role_token(function, concept.context_key)
+    occupants: list[InstitutionalOccupantClaim] = []
+    for claim in concept.occupants[:_MAX_OCCUPANTS]:
+        status = _office_occupant_status(claim.status)
+        occupant = claim.occupant_id
+        if occupant is None:
+            status = InstitutionalOccupantStatus.UNKNOWN
+        occupants.append(
+            InstitutionalOccupantClaim(
+                attributed_actor_id=None,
+                occupant_id=occupant,
+                status=status,
+                start_tick=claim.first_tick,
+                end_tick=None,
+                source_evidence_ref=(
+                    None if not claim.evidence_ids else claim.evidence_ids[0]
+                ),
+            )
+        )
+    return InstitutionalChannel(
+        owner_id=concept.owner_id,
+        channel_id=institutional_channel_id(
+            concept.owner_id,
+            InstitutionalBindingKind.ROLE,
+            concept.office_id,
+        ),
+        binding_kind=InstitutionalBindingKind.ROLE,
+        inception_reference=concept.office_id,
+        current_local_reference=concept.office_id,
+        public_function_token=role_token,
+        context_digest=concept.context_key,
+        first_tick=concept.first_tick,
+        last_tick=concept.last_tick,
+        revision_count=len(concept.revisions),
+        occupants=tuple(occupants),
+    )
+
+
+def _procedure_channel(
+    concept: InstitutionConcept,
+    previous_channels: Sequence[InstitutionalChannel],
+) -> InstitutionalChannel | None:
+    anchors = tuple(concept.anchor_digests)
+    if not anchors:
+        return None
+    overlapping = tuple(
+        channel
+        for channel in previous_channels
+        if channel.binding_kind is InstitutionalBindingKind.PROCEDURE
+        and channel.current_local_reference in anchors
+    )
+    if len(overlapping) > 1:
+        _LOG.debug(
+            "institutional_channel_ambiguous reason=%s anchor_count=%s",
+            "procedure_overlap",
+            len(anchors),
+        )
+        return None
+    if overlapping:
+        inception = overlapping[0].inception_reference
+    else:
+        inception = _sha256_hex(
+            f"{concept.owner_id.value}|procedure-inception|" + "|".join(sorted(anchors))
+        )
+    channel_id = institutional_channel_id(
+        concept.owner_id, InstitutionalBindingKind.PROCEDURE, inception
+    )
+    return InstitutionalChannel(
+        owner_id=concept.owner_id,
+        channel_id=channel_id,
+        binding_kind=InstitutionalBindingKind.PROCEDURE,
+        inception_reference=inception,
+        current_local_reference=anchors[0],
+        public_function_token="procedure",
+        context_digest=concept.group_key[:16],
+        first_tick=concept.first_tick,
+        last_tick=concept.last_tick,
+        revision_count=0,
+    )
+
+
+def _office_candidates(
+    concept: OfficeConcept,
+    channel: InstitutionalChannel,
+) -> tuple[list[_InstitutionalCandidate], set[str]]:
+    role_token = channel.public_function_token
+    evidence_tokens: set[str] = set()
+    for item in concept.evidence:
+        evidence_tokens.add(item.lineage_ref)
+        evidence_tokens.add(item.root_ref)
+        if item.actor_id is not None:
+            evidence_tokens.add(item.actor_id.value)
+    candidates: list[_InstitutionalCandidate] = []
+    for duty in concept.duties:
+        candidates.append(
+            _InstitutionalCandidate(
+                channel_id=channel.channel_id,
+                fact=InstitutionalFact(role_token, "duty", duty.kind.value),
+                tick=duty.last_tick,
+                source_ref=duty.duty_id,
+                confidence=0.7,
+            )
+        )
+    for claim in concept.occupants:
+        if claim.occupant_id is None:
+            continue
+        candidates.append(
+            _InstitutionalCandidate(
+                channel_id=channel.channel_id,
+                fact=InstitutionalFact(
+                    role_token,
+                    "occupant_claim",
+                    institutional_entity_token(claim.occupant_id.value),
+                ),
+                tick=claim.last_tick,
+                source_ref=claim.claim_id,
+                confidence=0.7,
+            )
+        )
+    for succession in concept.succession:
+        candidates.append(
+            _InstitutionalCandidate(
+                channel_id=channel.channel_id,
+                fact=InstitutionalFact(
+                    role_token, "succession_claim", succession.kind.value
+                ),
+                tick=succession.tick,
+                source_ref=succession.succession_id,
+                confidence=0.7,
+            )
+        )
+    return candidates, evidence_tokens
+
+
+def _procedure_candidates(
+    concept: InstitutionConcept, channel: InstitutionalChannel
+) -> tuple[list[_InstitutionalCandidate], set[str]]:
+    candidates: list[_InstitutionalCandidate] = []
+    evidence_tokens: set[str] = set()
+    for item in concept.evidence:
+        evidence_tokens.add(item.lineage_ref)
+        if item.actor_id is not None:
+            evidence_tokens.add(item.actor_id.value)
+        if item.pattern is not InstitutionPatternChannel.PROCEDURE_RECURRENCE:
+            continue
+        candidates.append(
+            _InstitutionalCandidate(
+                channel_id=channel.channel_id,
+                fact=InstitutionalFact(
+                    "procedure",
+                    "observed_pattern",
+                    institutional_anchor_token(item.anchor_digest),
+                ),
+                tick=item.tick,
+                source_ref=item.evidence_id,
+                confidence=0.7,
+            )
+        )
+    return candidates, evidence_tokens
+
+
+def _occurrence_candidates(
+    observation: Observation,
+    channel_evidence: _Mapping[str, set[str]],
+) -> list[_InstitutionalCandidate]:
+    candidates: list[_InstitutionalCandidate] = []
+    for occurrence in observation.occurrences:
+        actor = occurrence.actor_id
+        target = occurrence.other_entity_id or occurrence.destination_id
+        if actor is None or target is None:
+            _LOG.debug("institutional_occurrence_skipped reason=%s", "unresolved_actor")
+            continue
+        event_ref = (
+            None
+            if occurrence.provenance.source_event_id is None
+            else occurrence.provenance.source_event_id.value
+        )
+        matches = [
+            channel_id
+            for channel_id, tokens in channel_evidence.items()
+            if (event_ref is not None and event_ref in tokens) or actor.value in tokens
+        ]
+        if not matches:
+            _LOG.debug("institutional_occurrence_skipped reason=%s", "unbound")
+            continue
+        if len(matches) > 1:
+            _LOG.debug(
+                "institutional_occurrence_skipped reason=%s", "ambiguous_binding"
+            )
+            continue
+        kind = institutional_kind_token(occurrence.kind)
+        predicate = kind
+        if occurrence.success is not None:
+            suffix = "success" if occurrence.success else "failure"
+            combined = f"{kind}_{suffix}"
+            predicate = (
+                combined
+                if _TOKEN_PATTERN.fullmatch(combined) is not None
+                else "k_" + _sha256_hex(f"result|{kind}|{suffix}")[:24]
+            )
+        candidates.append(
+            _InstitutionalCandidate(
+                channel_id=matches[0],
+                fact=InstitutionalFact(
+                    institutional_entity_token(actor.value),
+                    predicate,
+                    institutional_entity_token(target.value),
+                ),
+                tick=occurrence.provenance.source_tick,
+                source_ref=event_ref
+                or f"occurrence|{occurrence.provenance.source_tick}|{actor.value}",
+                confidence=0.7,
+            )
+        )
+    return candidates
+
+
+def _reconsider_binding(
+    entry: InstitutionalMemoryEntry,
+    channels: Sequence[InstitutionalChannel],
+    existing_ids: set[str],
+) -> InstitutionalMemoryEntry:
+    if entry.channel_id is not None or entry.binding_kind is None:
+        return entry
+    matches = tuple(
+        channel
+        for channel in channels
+        if channel.binding_kind is entry.binding_kind
+        and channel.public_function_token == entry.binding_function_token
+        and channel.context_digest == entry.binding_context_digest
+    )
+    if len(matches) != 1:
+        _LOG.debug(
+            "institutional_rebinding_skipped reason=%s",
+            "ambiguous_binding" if matches else "unbound",
+        )
+        return entry
+    channel = matches[0]
+    new_id = institutional_entry_id(entry.owner_id, channel.channel_id, entry.ordinal)
+    if new_id in existing_ids:
+        return entry
+    return replace(entry, channel_id=channel.channel_id, entry_id=new_id)
+
+
+def apply_institutional_memory_update(
+    *,
+    owner_id: AgentId,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    previous: InstitutionalMemoryLedger | None = None,
+    office_concepts: OfficeConceptLedger | None = None,
+    institution_concepts: InstitutionConceptLedger | None = None,
+    artifact_interpretations: object | None = None,
+    retrieved_memory_context: object | None = None,
+    relationships: _Mapping[str, float] | None = None,
+    teaching_enabled: bool = False,
+    policy: InstitutionalMemoryPolicy | None = None,
+) -> InstitutionalMemoryLedger:
+    """Apply one tick of owner-local institutional information.
+
+    Only the owner's observation, owner-safe identity, prepared local ledgers,
+    and previous institutional ledger are inputs. No sender ledger is read.
+    """
+    _require_agent("owner_id", owner_id)
+    if type(observation) is not Observation:
+        raise _fail("observation", "invalid_type")
+    if type(identity) is not OwnerSafeSocialIdentity:
+        raise _fail("identity", "invalid_type")
+    if identity.owner_id != owner_id:
+        raise _fail("identity.owner_id", "owner_mismatch")
+    if observation.observer_id != identity.owner_entity_id:
+        raise _fail("observation.observer_id", "owner_mismatch")
+    if previous is not None and type(previous) is not InstitutionalMemoryLedger:
+        raise _fail("previous", "invalid_type")
+    if type(teaching_enabled) is not bool:
+        raise _fail("teaching_enabled", "invalid_type")
+    for store, expected in (
+        (office_concepts, OfficeConceptLedger),
+        (institution_concepts, InstitutionConceptLedger),
+    ):
+        _require_ledger_owner(store, owner_id, expected)
+    if artifact_interpretations is not None:
+        _require_ledger_owner(
+            artifact_interpretations, owner_id, ArtifactInterpretationLedger
+        )
+    if retrieved_memory_context is not None:
+        context_owner = getattr(retrieved_memory_context, "owner_id", None)
+        if context_owner != owner_id:
+            raise _fail("retrieved_memory_context", "owner_mismatch")
+    if relationships is not None and not isinstance(relationships, _Mapping):
+        raise _fail("relationships", "invalid_type")
+    resolved = _resolve_policy(policy)
+    ledger = previous or empty_institutional_memory_ledger(owner_id)
+    if ledger.owner_id != owner_id:
+        raise _fail("previous", "owner_mismatch")
+
+    channels: dict[str, InstitutionalChannel] = {
+        channel.channel_id: channel for channel in ledger.channels
+    }
+    channel_evidence: dict[str, set[str]] = {}
+    candidates: list[_InstitutionalCandidate] = []
+
+    if office_concepts is not None:
+        for concept in office_concepts.concepts:
+            if concept.status not in {
+                OfficeConceptStatus.RECOGNIZED,
+                OfficeConceptStatus.VACANT,
+                OfficeConceptStatus.DISPUTED,
+            }:
+                continue
+            role_channel = _role_channel(concept)
+            channels[role_channel.channel_id] = role_channel
+            produced, evidence = _office_candidates(concept, role_channel)
+            channel_evidence[role_channel.channel_id] = evidence
+            candidates.extend(produced)
+
+    if institution_concepts is not None:
+        previous_channels = tuple(channels.values())
+        for institution_concept in institution_concepts.concepts:
+            if institution_concept.procedure_recurrence <= 0.0:
+                continue
+            if not any(
+                item.pattern is InstitutionPatternChannel.PROCEDURE_RECURRENCE
+                for item in institution_concept.evidence
+            ):
+                continue
+            procedure_channel = _procedure_channel(
+                institution_concept, previous_channels
+            )
+            if procedure_channel is None:
+                continue
+            channels[procedure_channel.channel_id] = procedure_channel
+            produced, evidence = _procedure_candidates(
+                institution_concept, procedure_channel
+            )
+            channel_evidence[procedure_channel.channel_id] = evidence
+            candidates.extend(produced)
+
+    candidates.extend(_occurrence_candidates(observation, channel_evidence))
+    if not candidates and previous is None:
+        _LOG.debug(
+            "institutional_memory_update owner_id=%s channel_count=%s "
+            "entry_count=%s reason=%s",
+            owner_id.value,
+            0,
+            0,
+            "no_content",
+        )
+
+    candidates.sort(key=lambda item: (item.tick, item.source_ref, item.fact.subject))
+    existing_receipts = set(ledger.acquisition_receipt_keys)
+    existing_refs: set[tuple[str | None, str | None]] = {
+        (entry.channel_id, provenance.occurrence_ref)
+        for entry in ledger.entries
+        for provenance in entry.provenance
+        if provenance.occurrence_ref is not None
+    }
+    next_ordinal = (
+        0 if not ledger.entries else max(entry.ordinal for entry in ledger.entries) + 1
+    )
+    new_entries: list[InstitutionalMemoryEntry] = []
+    groups: list[list[_InstitutionalCandidate]] = []
+    current: list[_InstitutionalCandidate] = []
+    for candidate in candidates:
+        if current and (
+            candidate.channel_id,
+            candidate.tick,
+            candidate.source_ref,
+        ) != (
+            current[0].channel_id,
+            current[0].tick,
+            current[0].source_ref,
+        ):
+            groups.append(current)
+            current = []
+        current.append(candidate)
+    if current:
+        groups.append(current)
+    for group in groups:
+        for index in range(0, len(group), _MAX_FACTS):
+            chunk = group[index : index + _MAX_FACTS]
+            first = chunk[0]
+            key = f"{first.channel_id or 'unbound'}|{first.tick}|{first.source_ref}"
+            if key in existing_receipts:
+                continue
+            if (first.channel_id, first.source_ref) in existing_refs:
+                continue
+            entry = InstitutionalMemoryEntry(
+                owner_id=owner_id,
+                entry_id=institutional_entry_id(
+                    owner_id, first.channel_id, next_ordinal
+                ),
+                channel_id=first.channel_id,
+                ordinal=next_ordinal,
+                revision=0,
+                facts=tuple(item.fact for item in chunk),
+                declared_fact_count=len(chunk),
+                acquisition_tick=first.tick,
+                confidence=first.confidence,
+                distorted=False,
+                partial=False,
+                active=True,
+                ignored=False,
+                provenance=(
+                    InstitutionalProvenance(
+                        immediate_channel=InstitutionalMemoryChannel.OBSERVATION,
+                        occurrence_ref=first.source_ref,
+                    ),
+                ),
+                binding_kind=first.binding_kind,
+                binding_function_token=first.binding_function_token,
+                binding_context_digest=first.binding_context_digest,
+            )
+            next_ordinal += 1
+            new_entries.append(entry)
+            existing_receipts.add(key)
+
+    channel_list = tuple(sorted(channels.values(), key=lambda item: item.channel_id))
+    existing_ids = {entry.entry_id for entry in ledger.entries}
+    for entry in new_entries:
+        existing_refs.add(
+            (
+                entry.channel_id,
+                None if not entry.provenance else entry.provenance[0].occurrence_ref,
+            )
+        )
+    acquired = _record_acquisitions(
+        owner_id=owner_id,
+        observation=observation,
+        previous=ledger,
+        interpretations=(
+            artifact_interpretations
+            if type(artifact_interpretations) is ArtifactInterpretationLedger
+            else None
+        ),
+        channels=channel_list,
+    )
+    acquired.extend(
+        _speech_acquisitions(
+            observation=observation,
+            identity=identity,
+            channels=channel_list,
+            relationships=relationships,
+            teaching_enabled=teaching_enabled,
+        )
+    )
+    for item in acquired:
+        if item.receipt_key in existing_receipts:
+            continue
+        if any(
+            (item.channel_id, provenance.occurrence_ref) in existing_refs
+            for provenance in item.provenance
+        ):
+            continue
+        entry = InstitutionalMemoryEntry(
+            owner_id=owner_id,
+            entry_id=institutional_entry_id(owner_id, item.channel_id, next_ordinal),
+            channel_id=item.channel_id,
+            ordinal=next_ordinal,
+            revision=0,
+            facts=item.facts,
+            declared_fact_count=item.declared_fact_count,
+            acquisition_tick=item.tick,
+            confidence=item.confidence,
+            distorted=item.distorted,
+            partial=item.partial,
+            active=True,
+            ignored=False,
+            provenance=item.provenance,
+            binding_kind=item.binding_kind,
+            binding_function_token=item.binding_function_token,
+            binding_context_digest=item.binding_context_digest,
+        )
+        next_ordinal += 1
+        new_entries.append(entry)
+        existing_receipts.add(item.receipt_key)
+        for provenance in item.provenance:
+            existing_refs.add((item.channel_id, provenance.occurrence_ref))
+    rebound: list[InstitutionalMemoryEntry] = []
+    for entry in ledger.entries:
+        updated = _reconsider_binding(entry, channel_list, existing_ids)
+        if updated is not entry:
+            existing_ids.discard(entry.entry_id)
+            existing_ids.add(updated.entry_id)
+        rebound.append(updated)
+
+    entries = tuple(rebound) + tuple(new_entries)
+    while len(entries) > resolved.max_entries:
+        oldest = min(entries, key=lambda item: (item.acquisition_tick, item.entry_id))
+        entries = tuple(item for item in entries if item is not oldest)
+    first_tick = ledger.first_observed_tick
+    if first_tick is None:
+        first_tick = observation.tick
+    updated_ledger = replace(
+        ledger,
+        channels=channel_list,
+        entries=entries,
+        acquisition_receipt_keys=tuple(existing_receipts),
+        first_observed_tick=first_tick,
+        last_observed_tick=observation.tick,
+        observation_count=ledger.observation_count + 1,
+    )
+    _LOG.debug(
+        "institutional_memory_update owner_id=%s channel_count=%s entry_count=%s "
+        "candidate_count=%s",
+        owner_id.value,
+        len(channel_list),
+        len(entries),
+        len(candidates),
+    )
+    return updated_ledger
+
+
+@dataclass(frozen=True, slots=True)
+class _AcquiredEntry:
+    channel_id: str | None
+    facts: tuple[InstitutionalFact, ...]
+    declared_fact_count: int
+    tick: int
+    confidence: float
+    distorted: bool
+    partial: bool
+    provenance: tuple[InstitutionalProvenance, ...]
+    receipt_key: str
+    binding_kind: InstitutionalBindingKind | None = None
+    binding_function_token: str | None = None
+    binding_context_digest: str | None = None
+
+
+def _bind_frame(frame: object, channels: Sequence[InstitutionalChannel]) -> str | None:
+    from agents.cognition.institutional_memory_frames import (
+        InstitutionalMemoryFrame,
+    )
+
+    if type(frame) is not InstitutionalMemoryFrame:
+        return None
+    context_digest = frame.context_digest.removeprefix("c_")
+    if frame.binding_kind is InstitutionalBindingKind.ROLE:
+        matches = tuple(
+            channel
+            for channel in channels
+            if channel.binding_kind is InstitutionalBindingKind.ROLE
+            and channel.public_function_token == frame.function_token
+            and channel.context_digest == context_digest
+        )
+    else:
+        matches = tuple(
+            channel
+            for channel in channels
+            if channel.binding_kind is InstitutionalBindingKind.PROCEDURE
+            and channel.context_digest == context_digest
+        )
+    if len(matches) != 1:
+        _LOG.debug(
+            "institutional_frame_binding reason=%s",
+            "ambiguous_binding" if matches else "unbound",
+        )
+        return None
+    return matches[0].channel_id
+
+
+def _record_acquisitions(
+    *,
+    owner_id: AgentId,
+    observation: Observation,
+    previous: InstitutionalMemoryLedger,
+    interpretations: ArtifactInterpretationLedger | None,
+    channels: Sequence[InstitutionalChannel],
+) -> list[_AcquiredEntry]:
+    if interpretations is None:
+        return []
+    from agents.cognition.institutional_memory_frames import (
+        decode_institutional_marks,
+    )
+
+    by_artifact: dict[str, ArtifactInterpretation] = {
+        entry.artifact_id.value: entry for entry in interpretations.interpretations
+    }
+    acquired: list[_AcquiredEntry] = []
+    for artifact in observation.artifacts:
+        reading = by_artifact.get(artifact.entity_id.value)
+        if reading is None or reading.observed_revision != artifact.content_revision:
+            continue
+        frame = decode_institutional_marks(reading.reading_marks)
+        if frame is None:
+            _LOG.debug("institutional_record_skipped reason=%s", "invalid_frame")
+            continue
+        channel_id = _bind_frame(frame, channels)
+        damaged = artifact.integrity in {
+            RecordIntegrity.DAMAGED,
+            RecordIntegrity.PARTIALLY_LOST,
+        }
+        confidence = reading.confidence
+        if damaged:
+            confidence = max(0.0, confidence * 0.5)
+        root = artifact.source_artifact_id or artifact.entity_id
+        acquired.append(
+            _AcquiredEntry(
+                channel_id=channel_id,
+                facts=frame.facts,
+                declared_fact_count=frame.declared_fact_count or len(frame.facts),
+                tick=reading.source_tick,
+                confidence=confidence,
+                distorted=reading.distorted or damaged,
+                partial=frame.partial or damaged,
+                provenance=(
+                    InstitutionalProvenance(
+                        immediate_channel=InstitutionalMemoryChannel.RECORD,
+                        occurrence_ref=(
+                            None
+                            if reading.source_event_id is None
+                            else reading.source_event_id.value
+                        )
+                        or f"{artifact.entity_id.value}|{artifact.content_revision}",
+                        artifact_id=artifact.entity_id,
+                        artifact_revision=artifact.content_revision,
+                        artifact_parent_id=artifact.parent_artifact_id,
+                        artifact_root_id=root,
+                        declared_frame_root=frame.root,
+                        declared_frame_parent=frame.parent,
+                    ),
+                ),
+                receipt_key=(
+                    f"record|{artifact.entity_id.value}|"
+                    f"{artifact.content_revision}|{frame.root}"
+                ),
+                binding_kind=frame.binding_kind,
+                binding_function_token=frame.function_token,
+                binding_context_digest=frame.context_digest.removeprefix("c_"),
+            )
+        )
+    return acquired
+
+
+def _trust_factor(
+    relationships: _Mapping[str, float] | None, agent_id: AgentId
+) -> float:
+    if relationships is None:
+        return 0.75
+    value = relationships.get(agent_id.value)
+    if value is None or isinstance(value, bool) or type(value) not in {int, float}:
+        return 0.75
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0 or number > 1.0:
+        return 0.75
+    return 0.5 + 0.5 * number
+
+
+def _speech_acquisitions(
+    *,
+    observation: Observation,
+    identity: OwnerSafeSocialIdentity,
+    channels: Sequence[InstitutionalChannel],
+    relationships: _Mapping[str, float] | None,
+    teaching_enabled: bool,
+) -> list[_AcquiredEntry]:
+    from agents.cognition.institutional_memory_frames import (
+        INSTITUTIONAL_TEACH_PREDICATE,
+        InstitutionalMemoryFrame,
+        parse_institutional_frame_relation,
+    )
+
+    counterpart_by_entity = {
+        binding.entity_id.value: binding.agent_id for binding in identity.counterparts
+    }
+    acquired: list[_AcquiredEntry] = []
+    for communication in observation.communications:
+        if communication.listener_id != observation.observer_id:
+            continue
+        speaker = counterpart_by_entity.get(communication.speaker_id.value)
+        if speaker is None:
+            _LOG.debug("institutional_speech_skipped reason=%s", "unresolved_actor")
+            continue
+        recognized: list[tuple[int, InstitutionalMemoryFrame, bool]] = []
+        for index, relation in enumerate(communication.utterance.content.relations):
+            frame = parse_institutional_frame_relation(relation)
+            if frame is None:
+                continue
+            teaching = relation.predicate == INSTITUTIONAL_TEACH_PREDICATE
+            if teaching and not teaching_enabled:
+                _LOG.debug(
+                    "institutional_speech_skipped reason=%s", "teaching_disabled"
+                )
+                continue
+            recognized.append((index, frame, teaching))
+        if not recognized:
+            continue
+        if len(recognized) > 1:
+            _LOG.debug("institutional_speech_skipped reason=%s", "ambiguous_binding")
+            continue
+        index, frame, teaching = recognized[0]
+        event_ref = (
+            None
+            if communication.provenance.source_event_id is None
+            else communication.provenance.source_event_id.value
+        )
+        occurrence_ref = (
+            event_ref or communication.utterance.declared.communication_id.value
+        )
+        factor = _trust_factor(relationships, speaker)
+        acquired.append(
+            _AcquiredEntry(
+                channel_id=_bind_frame(frame, channels),
+                facts=frame.facts,
+                declared_fact_count=frame.declared_fact_count or len(frame.facts),
+                tick=communication.provenance.source_tick,
+                confidence=_quantize(0.5 * factor),
+                distorted=False,
+                partial=frame.partial,
+                provenance=(
+                    InstitutionalProvenance(
+                        immediate_channel=(
+                            InstitutionalMemoryChannel.TEACHING
+                            if teaching
+                            else InstitutionalMemoryChannel.TRANSMISSION
+                        ),
+                        observed_entity_id=communication.speaker_id,
+                        resolved_source_agent_id=speaker,
+                        occurrence_ref=occurrence_ref,
+                        declared_frame_root=frame.root,
+                        declared_frame_parent=frame.parent,
+                        declared_transmission=communication.utterance.declared,
+                    ),
+                ),
+                receipt_key=f"speech|{occurrence_ref}|{index}|{frame.root}",
+                binding_kind=frame.binding_kind,
+                binding_function_token=frame.function_token,
+                binding_context_digest=frame.context_digest.removeprefix("c_"),
+            )
+        )
+    return acquired

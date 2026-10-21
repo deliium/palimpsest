@@ -161,8 +161,8 @@ No telepathy, omniscient archive, objective institution/office/proposal registry
 - [x] Task 4: Add cognition-local configuration and composition ([details](phase-02-configuration.md#task-4-add-cognition-local-configuration-and-composition)) (depends on 3).
 
 ### Phase 3
-- [ ] Task 5: Ground channels and locally produced information ([details](phase-03-acquisition.md#task-5-ground-channels-and-locally-produced-information)) (depends on 1–4).
-- [ ] Task 6: Acquire records, procedural transmission and teaching ([details](phase-03-acquisition.md#task-6-acquire-records-procedural-transmission-and-teaching)) (depends on 2, 5).
+- [x] Task 5: Ground channels and locally produced information ([details](phase-03-acquisition.md#task-5-ground-channels-and-locally-produced-information)) (depends on 1–4).
+- [x] Task 6: Acquire records, procedural transmission and teaching ([details](phase-03-acquisition.md#task-6-acquire-records-procedural-transmission-and-teaching)) (depends on 2, 5).
 
 ### Phase 4
 - [ ] Task 7: Expose consultation and compile only selected existing actions ([details](phase-04-runtime.md#task-7-expose-consultation-and-compile-only-selected-existing-actions)) (depends on 5, 6).
