@@ -41,6 +41,11 @@ from analysis.contact_reputation_transfer import (
     compute_contact_reputation_transfer,
 )
 from analysis.institution_emergence import InstitutionLane, InstitutionLaneRow
+from analysis.institutional_decay import (
+    InstitutionContextEvidenceRow,
+    InstitutionTemporalRow,
+    institution_decay_rows_from_ledgers,
+)
 from analysis.models import (
     MEMORY_DYNAMICS_METRIC_VERSION,
     MemoryDynamicsAuditRow,
@@ -4010,3 +4015,112 @@ def institution_continuity_rows_from_channel_rows(
         len(out),
     )
     return tuple(out)
+
+
+def _institution_context_kind(event: object) -> str | None:
+    details = _event_details(event)
+    raw = getattr(event, "kind", None) or getattr(details, "kind", None)
+    kind = type(details).__name__.lower() if raw is None else str(raw).lower()
+    if "death" in kind or "died" in kind:
+        return "population_loss"
+    if "resource" in kind and (
+        "deplet" in kind or "fail" in kind or "collapse" in kind
+    ):
+        return "resource_failure"
+    if ("artifact" in kind or "record" in kind) and (
+        "damage" in kind or "destroy" in kind or "loss" in kind
+    ):
+        return "record_unavailability"
+    if "succession" in kind or "office" in kind:
+        return "succession_discontinuity"
+    if "abandon" in kind:
+        return "role_abandonment"
+    if (
+        "norm" in kind
+        or "convention" in kind
+        or "semantic" in kind
+        or "cultural" in kind
+    ):
+        return "cultural_change"
+    if "legitimacy" in kind:
+        return "legitimacy_decline"
+    if "competing" in kind:
+        return "competing_pattern"
+    return None
+
+
+def institution_decay_context_from_events(
+    events: Sequence[object],
+    rows: Sequence[object],
+    *,
+    as_of_tick: int | None = None,
+) -> tuple[InstitutionContextEvidenceRow, ...]:
+    """Project detached objective context to retained decay pattern scopes."""
+    from analysis.institutional_decay import InstitutionTemporalRow
+
+    if isinstance(events, (str, bytes, set, frozenset)) or not isinstance(
+        events, Sequence
+    ):
+        raise TypeError("institution_decay_context_from_events: invalid_events")
+    contexts: list[InstitutionContextEvidenceRow] = []
+    temporal = tuple(
+        row for row in rows if type(row) is InstitutionTemporalRow
+    )
+    for event in events:
+        details = _event_details(event)
+        tick = getattr(event, "tick", getattr(details, "tick", None))
+        if isinstance(tick, bool) or type(tick) is not int:
+            continue
+        if as_of_tick is not None and tick > as_of_tick:
+            continue
+        kind = _institution_context_kind(event)
+        if kind is None:
+            continue
+        location = _id_text_or_none(
+            getattr(details, "location_id", None)
+            or getattr(details, "origin_location_id", None)
+            or getattr(details, "destination_location_id", None)
+            or getattr(event, "location_id", None)
+        )
+        if location is None:
+            continue
+        native_ref = _id_text_or_none(
+            getattr(event, "event_id", None) or getattr(details, "event_id", None)
+        ) or f"context-{kind}-{tick}"
+        for row in temporal:
+            if row.context_key != location:
+                continue
+            contexts.append(
+                InstitutionContextEvidenceRow(
+                    owner_id=row.owner_id,
+                    local_pattern_id=row.local_pattern_id,
+                    kind=kind,
+                    start_tick=tick,
+                    end_tick=tick,
+                    native_ref=native_ref,
+                )
+            )
+    return tuple(
+        sorted(
+            contexts,
+            key=lambda item: (
+                item.owner_id,
+                item.local_pattern_id,
+                item.start_tick,
+                item.end_tick,
+                item.kind,
+                item.native_ref,
+            ),
+        )
+    )
+
+
+def institution_temporal_rows_from_ledgers(
+    ledgers: Sequence[object],
+) -> tuple[InstitutionTemporalRow, ...]:
+    """Validate exported decay ledgers and project detached temporal rows."""
+    if isinstance(ledgers, (str, bytes, set, frozenset)) or not isinstance(
+        ledgers, Sequence
+    ):
+        raise TypeError("institution_temporal_rows_from_ledgers: invalid_ledgers")
+    return institution_decay_rows_from_ledgers(tuple(ledgers))
