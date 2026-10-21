@@ -5422,6 +5422,20 @@ def experiment_bi_mediation_opportunities(
     return definition
 
 
+def experiment_bj_institutional_memory(
+    base: object,
+    *,
+    seed_matrix: object = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BJ: institutional-memory opportunities."""
+    from experiments.institutional_memory_scenario import (
+        experiment_bj_institutional_memory as build,
+    )
+
+    return build(base, seed_matrix=seed_matrix, max_ticks=max_ticks)
+
+
 def experiment_bh_collective_decisions(
     base: SimulationRunnerConfig,
     *,

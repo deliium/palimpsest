@@ -176,11 +176,11 @@ No telepathy, omniscient archive, objective institution/office/proposal registry
 - [x] Task 11: Add institutional memory continuity and provenance analysis ([details](phase-06-analysis.md#task-11-add-institutional-memory-continuity-and-provenance-analysis)) (depends on 9, 10).
 
 ### Phase 7
-- [ ] Task 12: Add Experiment BJ institutional-memory opportunities ([details](phase-07-experiments.md#task-12-add-experiment-bj-institutional-memory-opportunities)) (depends on 3–11).
-- [ ] Task 13: Prove nontelepathy, fallibility and invariants ([details](phase-07-experiments.md#task-13-prove-nontelepathy-fallibility-and-invariants)) (depends on 1–12).
+- [x] Task 12: Add Experiment BJ institutional-memory opportunities ([details](phase-07-experiments.md#task-12-add-experiment-bj-institutional-memory-opportunities)) (depends on 3–11).
+- [x] Task 13: Prove nontelepathy, fallibility and invariants ([details](phase-07-experiments.md#task-13-prove-nontelepathy-fallibility-and-invariants)) (depends on 1–12).
 
 ### Phase 8
-- [ ] Task 14: Complete docs checkpoint and run full gates ([details](phase-08-release.md#task-14-complete-docs-checkpoint-and-run-full-gates)) (depends on 1–13).
+- [x] Task 14: Complete docs checkpoint and run full gates ([details](phase-08-release.md#task-14-complete-docs-checkpoint-and-run-full-gates)) (depends on 1–13).
 
 ## Commit Plan
 

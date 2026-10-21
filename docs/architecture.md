@@ -412,3 +412,18 @@ execute another actor's action. Voluntary follow-through compiles only the
 acting owner's selected supported undertaking through `mediation_actions.py`.
 Detached analysis is read-only and never feeds cognition. See
 [Conflict mediation](mediation.md).
+
+
+## Institutional memory seam (V3-33)
+
+Institutional memory is owner-scoped cognition, not world authority. Role
+channels bind stable local office IDs; procedure channels bind locally evidenced
+anchors; occupant changes do not transfer entries. Records and speech carry
+bounded claims; declared roots are testimony, never lookup keys. Acquisition
+requires current observation plus interpretation or an actual addressed
+delivery. `institutional_memory_actions` only decorates already selected
+commands and produces completion receipts. Detached analysis adds
+`institutional_memory_continuity@1` and `institutional_memory_provenance@1`
+(families 124 → 126). No new command, event, observer semantic, write-pair,
+migration, or unowned capability is introduced; `institutional_economy` stays
+unowned.

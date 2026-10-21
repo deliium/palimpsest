@@ -413,3 +413,14 @@ No dispute, account, mediator occupation, acceptance, or settlement is seeded.
 The mode-off arm uses the highest legal prior schema for the same non-mediation
 modes. Detached metrics are `conflict_mediation@1` and
 `mediation_role_emergence@1`; successful mediation is not required.
+
+
+## Institutional memory opportunities (`institutional_memory@1`, BJ)
+
+Experiment BJ is off the V1 A–E gate. Its six arms contrast the v4 baseline, a
+v52 mediation/memory-off control, a v53 memory-on treatment, and record,
+teaching, and limited-opportunity arms. No arm preseed roles, records, learned
+entries, or successful handovers. Completed runs may export enabled-empty
+owner ledgers; detached continuity and provenance metrics report whatever
+occurred, including no acquisition. The changed material topology in extra
+opportunity arms is labeled as such and is not a mode-only causal contrast.

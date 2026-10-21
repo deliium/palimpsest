@@ -73,3 +73,19 @@ Subjective offices (V3-30) add an opt-in per-agent `office_succession_mode` (`ru
 Collective decisions (V3-31) add an opt-in per-agent `collective_decision_mode` (`runner-config-v51`) and an owner-scoped `CollectiveDecisionLedger` under locked policy `collective-decisions.v1`. Six acts (`propose`, `support`, `oppose`, `delegate`, `withdraw_support`, `coordinate`) travel as bounded relations inside existing `Talk`/`Ask`/`Tell` speech. Positions, one-hop delegations, retractions, claimed outcomes, descriptive compliance, and local influence attribution remain private beliefs; there is no objective proposal registry, electorate, quorum, majority, binding resolution, or authoritative leader. Detached analysis adds `collective_decision_process@1`, `collective_decision_outcomes@1`, and `collective_decision_disagreement@1` (families 119 → 122), and Experiment BH (`collective_decisions@1`) stays off-gate. No new command, event, observer semantic type, replay/codec marker, migration, or newborn profile; replay stays `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, commands 43, semantic types 73, Alembic `0017`, and default runner write `v4`.
 
 Conflict mediation (V3-32) adds an opt-in per-agent `mediation_mode` (`runner-config-v52`) and an owner-scoped `MediationLedger` under locked policy `mediation.v1`. Six acts (`hear_dispute`, `request_accounts`, `propose_compromise`, `vouch`, `mediate`, `recommend_restitution`) plus seven response kinds and three auxiliary role expressions travel as bounded relations inside existing `Talk`/`Ask`/`Tell` speech. Cases, accounts, recommendations, responses, authority appraisal, attempts, and outcomes remain private beliefs; there is no court, verdict, binding settlement, global dispute registry, or forced transfer. Voluntary follow-through compiles only an owner's independently selected, exact supported undertaking (initially `Give`); unsupported terms remain discussion. Detached analysis adds `conflict_mediation@1` and `mediation_role_emergence@1` (families 122 → 124), and Experiment BI (`mediation_opportunities@1`) stays off-gate. No new command, event, observer semantic type, replay/codec marker, API route, or migration; replay stays `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, commands 43, semantic types 73, Alembic `0017`, and default runner write `v4`.
+
+
+Institutional memory (V3-33) adds opt-in per-agent `institutional_memory_mode`
+on `runner-config-v53`, with an owner-local `InstitutionalMemoryLedger` under
+locked policy `institutional-memory.v1`. Role channels use stable local office
+IDs; procedure channels use locally evidenced anchors. Bounded `im_v1` frames
+travel in artifact marks or one existing speech relation. Acquisition requires
+current visible interpretation or actual addressed delivery; teaching requires
+receiver mode. Ignored, partial, damaged, and conflicting entries remain legal.
+Runtime checkpoints preserve one owner's ledger; admission transfers no content.
+The explicit `species_default_institutional_memory_v1` profile is v53-only and
+starts empty. Detached analysis adds `institutional_memory_continuity@1` and
+`institutional_memory_provenance@1` (families 124 → 126); Experiment BJ
+(`institutional_memory@1`) is off-gate. No new command, event, observer semantic,
+write-pair, migration, API route, or capability flag is added, and
+`institutional_economy` remains unowned.

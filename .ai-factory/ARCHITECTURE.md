@@ -179,9 +179,9 @@ are presentation only; neither client advances the simulation.
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v52` for per-agent `mediation_mode` |
+| Latest feature runner | `runner-config-v53` for per-agent `institutional_memory_mode` |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 124 (including the two V3-32 mediation families) |
+| Metric families | 126 (including the two V3-33 institutional-memory families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -329,3 +329,18 @@ subjective exports after the run, never while forming the owner's beliefs.
 - `docs/social-communication.md` — delivery, testimony, and owner derivation
 - `docs/mediation.md` — owner-scoped mediation and voluntary follow-through
 - `docs/development.md` — verification commands and client checks
+
+
+### V3-33 institutional memory seam
+
+`runner-config-v53` adds only per-agent `institutional_memory_mode` on the exact
+v52 cognition keyset. Each enabled owner requires its own office-succession or
+institution-concept mode. Information is owner-local, learned only from a
+current interpreted record or an actual addressed delivery, and carried in
+bounded marks/speech. Declared roots are testimony, never lookup keys; occupant
+succession never transfers entries. Runtime checkpoints preserve one owner's
+ledger but do not constitute durable subjective restart. Detached
+`institutional_memory_continuity@1` and `institutional_memory_provenance@1`
+raise the catalog to 126. No new command, event, observer semantic, write-pair,
+migration, or capability ownership exists; `institutional_economy` remains
+unowned.

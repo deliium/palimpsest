@@ -246,3 +246,19 @@ code and is not serialized as runner JSON.
 Mediation state is owner-scoped: each enabled owner carries one immutable
 `MediationLedger`. Runtime checkpoints and forks preserve it, but there is no
 durable SQL restart and a disabled owner rejects non-`None` mediation state.
+
+
+## Institutional memory (runner-config-v53)
+
+`institutional_memory_mode` is per-agent and defaults to `disabled`.
+`runner-config-v53` adds only that key to the exact v52 cognition keyset and is
+required when any owner enables `deterministic`. Each enabled owner must also
+enable its own `office_succession_mode` or `institution_concept_mode`. v53
+accepts mediation as an optional composition, while v52 still requires it.
+Historical schemas reject the key and a non-disabled mode.
+
+The explicit `species_default_institutional_memory_v1` initialization profile
+is accepted only on v53 and starts with empty institutional content. Older
+schemas reject it with `institutional_memory_profile_requires_v53`. Modes are
+abilities to interpret or transmit public input, not access grants or inherited
+knowledge. Default runner writes remain `runner-config-v4`.
