@@ -73,6 +73,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "symbolic_language",
         "translation",
         "institution_concepts",
+        "institutional_decay",
         "office_concepts",
         "mediation",
         "social_norms",

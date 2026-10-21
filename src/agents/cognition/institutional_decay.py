@@ -1181,3 +1181,662 @@ def append_institution_decay_receipt(
     )
 
 
+def _bindings_from_concepts(
+    concepts: InstitutionConceptLedger,
+    *,
+    inception_tick: int,
+) -> tuple[InstitutionDecayBinding, ...]:
+    bindings: list[InstitutionDecayBinding] = []
+    for concept in sorted(concepts.concepts, key=lambda item: item.group_key):
+        inception = max(concept.first_tick, inception_tick)
+        try:
+            bindings.append(
+                InstitutionDecayBinding(
+                    local_pattern_id=institution_decay_local_pattern_id(
+                        concepts.owner_id, concept.group_key, inception
+                    ),
+                    owner_id=concepts.owner_id,
+                    group_key=concept.group_key,
+                    concept_id=concept.concept_id,
+                    inception_tick=inception,
+                    anchor_digests=concept.anchor_digests,
+                )
+            )
+        except ValueError:
+            _LOG.warning(
+                "institution_decay_binding_skipped reason=%s", "invalid_binding"
+            )
+    return tuple(bindings[:_MAX_PATTERNS])
+
+
+def _component_digest(material: str) -> str:
+    return _sha256_hex(f"institution-decay-component|{material}")[:_DIGEST_LEN]
+
+
+def _structural_components(observation: object) -> tuple[str, ...]:
+    kinds = tuple(
+        getattr(item, "kind", None) for item in getattr(observation, "occurrences", ())
+    )
+    components = {
+        _component_digest(f"kind|{kind}") for kind in kinds if isinstance(kind, str)
+    }
+    for occurrence in getattr(observation, "occurrences", ()):
+        target = getattr(occurrence, "destination_id", None)
+        if target is not None:
+            components.add(_component_digest(f"target|{target.value}"))
+    return tuple(sorted(components))
+
+
+def _resolved_agent(identity: object, entity_id: object) -> AgentId | None:
+    owner_entity = getattr(identity, "owner_entity_id", None)
+    owner_id = getattr(identity, "owner_id", None)
+    if entity_id is not None and entity_id == owner_entity:
+        return owner_id if type(owner_id) is AgentId else None
+    for binding in getattr(identity, "counterparts", ()):
+        if binding.entity_id == entity_id:
+            agent_id = binding.agent_id
+            return agent_id if type(agent_id) is AgentId else None
+    return None
+
+
+def _evidence_from_observation(
+    observation: Observation, identity: object
+) -> InstitutionDimensionEvidence:
+    cohort: list[AgentId] = []
+    self_body = getattr(observation, "self_body", None)
+    if self_body is not None:
+        resolved_self = _resolved_agent(identity, self_body.entity_id)
+        if resolved_self is not None:
+            cohort.append(resolved_self)
+    for body in getattr(observation, "visible_bodies", ()):
+        resolved = _resolved_agent(identity, body.entity_id)
+        if resolved is not None:
+            cohort.append(resolved)
+    participant_actions: list[tuple[AgentId, str]] = []
+    procedure_keys: list[str] = []
+    source_ticks: list[int] = []
+    for occurrence in getattr(observation, "occurrences", ()):
+        provenance = occurrence.provenance
+        source_ticks.append(provenance.source_tick)
+        key = (
+            provenance.source_event_id.value
+            if provenance.source_event_id is not None
+            else f"occ-{occurrence.kind}-{provenance.source_tick}"
+        )
+        if getattr(occurrence, "success", None) is False:
+            continue
+        actor = _resolved_agent(identity, occurrence.actor_id)
+        if actor is not None:
+            participant_actions.append((actor, key))
+        procedure_keys.append(key)
+    first = min(source_ticks) if source_ticks else observation.tick
+    last = max(source_ticks) if source_ticks else observation.tick
+    participation = (
+        InstitutionDecayAvailability.OBSERVED
+        if participant_actions is not None and cohort
+        else InstitutionDecayAvailability.UNKNOWN
+    )
+    procedure = (
+        InstitutionDecayAvailability.OBSERVED
+        if procedure_keys
+        else InstitutionDecayAvailability.UNKNOWN
+    )
+    return InstitutionDimensionEvidence(
+        observed_cohort=tuple(cohort),
+        participant_actions=tuple(participant_actions),
+        performed_procedure_keys=tuple(procedure_keys),
+        participation_availability=participation,
+        procedure_availability=procedure,
+        support_availability=InstitutionDecayAvailability.UNKNOWN,
+        succession_availability=InstitutionDecayAvailability.NOT_APPLICABLE,
+        knowledge_availability=InstitutionDecayAvailability.NOT_APPLICABLE,
+        source_first_tick=first,
+        source_last_tick=last,
+    )
+
+
+
+def _owner_value(value: object) -> str | None:
+    raw = getattr(value, "owner_id", None)
+    return raw.value if isinstance(raw, AgentId) else None
+
+
+def _enrich_dimension_evidence(
+    evidence: InstitutionDimensionEvidence,
+    *,
+    owner_id: AgentId,
+    norms: object | None,
+    prior_offices: object | None,
+    prior_institutional_memory: object | None,
+) -> InstitutionDimensionEvidence:
+    """Add independently evidenced support, succession and retained knowledge."""
+    for ledger in (norms, prior_offices, prior_institutional_memory):
+        if ledger is not None and _owner_value(ledger) != owner_id.value:
+            raise ValueError(f"{type(ledger).__name__}: owner_id mismatch")
+
+    supporters: set[tuple[AgentId, str]] = set()
+    support_observed = False
+    if norms is not None:
+        support_observed = True
+        for belief in getattr(norms, "beliefs", ()):
+            status = getattr(getattr(belief, "status", None), "value", None)
+            if status not in {"active", "emerging", "candidate"}:
+                continue
+            belief_id = getattr(belief, "belief_id", None)
+            if not isinstance(belief_id, str):
+                continue
+            for supporter in getattr(belief, "supporters", ()):
+                if type(supporter) is AgentId:
+                    supporters.add((supporter, f"norm-{belief_id}"))
+
+    succession: set[str] = set()
+    completed: set[str] = set()
+    succession_observed = False
+    offices = (
+        getattr(prior_offices, "concepts", ()) if prior_offices is not None else ()
+    )
+    if prior_offices is not None:
+        succession_observed = True
+    for concept in offices:
+        for support in getattr(concept, "supporters", ()):
+            if not getattr(support, "independently_evidenced", False):
+                continue
+            if not getattr(support, "resolved", False):
+                continue
+            supporter = getattr(support, "supporter_id", None)
+            root = getattr(support, "root_ref", None)
+            if type(supporter) is AgentId and isinstance(root, str):
+                supporters.add((supporter, root))
+        for record in getattr(concept, "succession", ()):
+            kind = getattr(getattr(record, "kind", None), "value", None)
+            transition_id = getattr(record, "succession_id", None)
+            if not isinstance(transition_id, str):
+                continue
+            if kind in {
+                "occupant_lost",
+                "occupant_absent",
+                "occupant_relinquished",
+                "abandoned",
+            }:
+                succession.add(transition_id)
+            if kind == "occupant_returned" or getattr(
+                record, "proposed_occupant_id", None
+            ) is not None:
+                completed.add(transition_id)
+
+    assessments: list[InstitutionKnowledgeAssessment] = []
+    knowledge_observed = False
+    if prior_institutional_memory is not None:
+        knowledge_observed = True
+        retained = tuple(
+            sorted(
+                entry.entry_id
+                for entry in getattr(prior_institutional_memory, "entries", ())
+                if getattr(entry, "active", False)
+                and not getattr(entry, "ignored", False)
+            )
+        )
+        for transition_id in sorted(succession):
+            assessments.append(
+                InstitutionKnowledgeAssessment(
+                    transition_id=transition_id,
+                    before_entry_ids=retained,
+                    retained_entry_ids=retained,
+                )
+            )
+
+    return replace(
+        evidence,
+        supporters=tuple(sorted(supporters, key=lambda pair: (pair[0].value, pair[1]))),
+        succession_transitions=tuple(sorted(succession)),
+        completed_transitions=tuple(sorted(completed)),
+        knowledge_assessments=tuple(assessments),
+        support_availability=(
+            InstitutionDecayAvailability.OBSERVED
+            if support_observed
+            else InstitutionDecayAvailability.UNKNOWN
+        ),
+        succession_availability=(
+            InstitutionDecayAvailability.OBSERVED
+            if succession_observed
+            else InstitutionDecayAvailability.NOT_APPLICABLE
+        ),
+        knowledge_availability=(
+            InstitutionDecayAvailability.OBSERVED
+            if knowledge_observed
+            else InstitutionDecayAvailability.NOT_APPLICABLE
+        ),
+    )
+
+def _status_for(
+    strengths: Mapping[InstitutionPatternChannel, float],
+    *,
+    evidence_count: int,
+    concept_policy: InstitutionConceptPolicy,
+) -> InstitutionConceptStatus:
+    channel_count = sum(
+        1 for value in strengths.values() if value >= concept_policy.channel_floor
+    )
+    highest = max(strengths.values(), default=0.0)
+    if (
+        evidence_count >= concept_policy.promotion_count
+        and channel_count >= concept_policy.promotion_channels
+        and highest >= concept_policy.recognition_floor
+    ):
+        return InstitutionConceptStatus.RECOGNIZED
+    if highest < concept_policy.retire_strength:
+        return InstitutionConceptStatus.RETIRED
+    if highest < concept_policy.recognition_floor:
+        return InstitutionConceptStatus.CANDIDATE
+    return InstitutionConceptStatus.FADING
+
+
+def _adjusted_concepts(
+    previous: InstitutionConceptLedger,
+    updated: InstitutionConceptLedger,
+    *,
+    decay_policy: InstitutionDecayPolicy,
+    concept_policy: InstitutionConceptPolicy,
+    allow_fresh: bool,
+    allow_fresh_by_group: Mapping[str, bool] | None = None,
+) -> tuple[InstitutionConceptLedger, dict[str, set[InstitutionPatternChannel]]]:
+    before = {concept.group_key: concept for concept in previous.concepts}
+    refreshed: dict[str, set[InstitutionPatternChannel]] = {}
+    concepts: list[InstitutionConcept] = []
+    for concept in updated.concepts:
+        old = before.get(concept.group_key)
+        if old is None:
+            refreshed[concept.group_key] = {
+                channel
+                for channel in InstitutionPatternChannel
+                if concept.strength_for(channel) > 0.0
+            }
+            concepts.append(concept)
+            continue
+        strengths: dict[InstitutionPatternChannel, float] = {}
+        fresh: set[InstitutionPatternChannel] = set()
+        group_allow = (
+            allow_fresh
+            if allow_fresh_by_group is None
+            else allow_fresh_by_group.get(concept.group_key, allow_fresh)
+        )
+        for channel in InstitutionPatternChannel:
+            old_value = old.strength_for(channel)
+            new_value = concept.strength_for(channel)
+            if group_allow and new_value > old_value + 1e-9:
+                fresh.add(channel)
+                strengths[channel] = new_value
+            else:
+                strengths[channel] = _quantize(
+                    max(0.0, old_value - decay_policy.channel_loss)
+                )
+        refreshed[concept.group_key] = fresh
+        concepts.append(
+            replace(
+                concept,
+                role_recognition=strengths[InstitutionPatternChannel.ROLE_RECOGNITION],
+                procedure_recurrence=strengths[
+                    InstitutionPatternChannel.PROCEDURE_RECURRENCE
+                ],
+                social_expectation=strengths[
+                    InstitutionPatternChannel.SOCIAL_EXPECTATION
+                ],
+                legitimacy_belief=strengths[
+                    InstitutionPatternChannel.LEGITIMACY_BELIEF
+                ],
+                succession_observed=strengths[
+                    InstitutionPatternChannel.SUCCESSION_OBSERVED
+                ],
+                generational_continuity=strengths[
+                    InstitutionPatternChannel.GENERATIONAL_CONTINUITY
+                ],
+                status=_status_for(
+                    strengths,
+                    evidence_count=concept.evidence_count,
+                    concept_policy=concept_policy,
+                ),
+            )
+        )
+    return (
+        InstitutionConceptLedger(
+            owner_id=updated.owner_id,
+            concepts=tuple(concepts),
+            notices=updated.notices,
+        ),
+        refreshed,
+    )
+
+
+
+def _append_observation_receipts(
+    decay: InstitutionDecayLedger,
+    observation: Observation,
+    *,
+    tick: int,
+    policy: InstitutionDecayPolicy,
+) -> InstitutionDecayLedger:
+    for occurrence in observation.occurrences:
+        provenance = occurrence.provenance
+        key = (
+            provenance.source_event_id.value
+            if provenance.source_event_id is not None
+            else f"occ-{occurrence.kind}-{provenance.source_tick}"
+        )
+        for binding in decay.bindings:
+            receipt = InstitutionDecayReceipt(
+                owner_id=binding.owner_id,
+                local_pattern_id=binding.local_pattern_id,
+                channel=InstitutionPatternChannel.PROCEDURE_RECURRENCE,
+                evidence_key=key,
+                source_tick=provenance.source_tick,
+                observation_tick=tick,
+            )
+            try:
+                decay = append_institution_decay_receipt(
+                    decay, receipt, policy=policy
+                )
+            except ValueError:
+                _LOG.warning(
+                    "institution_decay_receipt_skipped reason=%s", "invalid"
+                )
+    return decay
+
+
+def apply_institution_decay_update(
+    *,
+    observation: object,
+    identity: object,
+    previous_concepts: object,
+    previous_decay: object,
+    norms: object | None = None,
+    conventions: object | None = None,
+    groups: object | None = None,
+    possession: object | None = None,
+    memories: Sequence[object] = (),
+    advice_delta: Sequence[object] = (),
+    mentorship: object | None = None,
+    prior_offices: object | None = None,
+    prior_institutional_memory: object | None = None,
+    policy: InstitutionDecayPolicy | None = None,
+) -> InstitutionDecayUpdate:
+    """Apply one enabled owner-local decay update.
+
+    The legacy concept kernel supplies raw evidence and ordinary strengths.
+    This enabled path then applies per-channel attrition, retains one raw
+    sufficient-statistics sidecar sample, and never writes objective state.
+    """
+    from agents.cognition.models import OwnerSafeSocialIdentity
+    from world.observations import Observation
+
+    _LOG.debug(
+        "apply_institution_decay_update owner_id=%s tick=%s",
+        getattr(getattr(identity, "owner_id", None), "value", None),
+        getattr(observation, "tick", None),
+    )
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    if type(identity) is not OwnerSafeSocialIdentity:
+        raise TypeError("identity must be OwnerSafeSocialIdentity")
+    owner_id = identity.owner_id
+    if previous_concepts is not None and (
+        type(previous_concepts) is not InstitutionConceptLedger
+    ):
+        raise TypeError("previous_concepts must be InstitutionConceptLedger or None")
+    if previous_concepts is not None and previous_concepts.owner_id != owner_id:
+        _LOG.warning("institution_decay_carry_rejected reason=%s", "owner_mismatch")
+        raise ValueError("previous_concepts owner_id mismatch")
+    require_owner_institution_decay(
+        previous_decay, owner_id, field_name="previous_decay"
+    )
+    active_policy = default_institutional_decay_policy() if policy is None else policy
+    if type(active_policy) is not InstitutionDecayPolicy:
+        raise TypeError("policy must be InstitutionDecayPolicy or None")
+    for value in (
+        norms,
+        conventions,
+        groups,
+        possession,
+        memories,
+        advice_delta,
+        mentorship,
+        prior_offices,
+        prior_institutional_memory,
+    ):
+        if type(value).__module__.startswith("analysis"):
+            raise TypeError(f"{type(value).__name__}: forbidden_input")
+
+    concepts = (
+        previous_concepts
+        if previous_concepts is not None
+        else InstitutionConceptLedger(owner_id=owner_id)
+    )
+    decay = (
+        previous_decay
+        if previous_decay is not None
+        else empty_institution_decay_ledger(owner_id)
+    )
+    if type(decay) is not InstitutionDecayLedger:
+        raise TypeError("previous_decay must be InstitutionDecayLedger or None")
+    tick = observation.tick
+    if decay.last_update_tick is not None and tick < decay.last_update_tick:
+        raise _fail("observation_tick", "tick_regression")
+
+    updated = apply_institution_concept_update(
+        observation,
+        identity,
+        previous=concepts,
+        norms=norms,
+        conventions=conventions,
+        groups=groups,
+        possession=possession,
+        memories=memories,
+        advice_delta=advice_delta,
+        mentorship=mentorship,
+        policy=default_institution_concept_policy(),
+    )
+    if updated is None:
+        updated = concepts
+    concept_policy = default_institution_concept_policy()
+    bindings = list(decay.bindings)
+    known = {binding.group_key: binding for binding in bindings}
+    allow_fresh = bool(observation.occurrences or observation.communications)
+    existing_receipts = {
+        (
+            receipt.local_pattern_id,
+            receipt.channel,
+            receipt.evidence_key,
+        )
+        for receipt in decay.receipts
+    }
+    occurrence_keys = []
+    for occurrence in observation.occurrences:
+        provenance = occurrence.provenance
+        occurrence_keys.append(
+            provenance.source_event_id.value
+            if provenance.source_event_id is not None
+            else f"occ-{occurrence.kind}-{provenance.source_tick}"
+        )
+    allow_fresh_by_group: dict[str, bool] = {}
+    for concept in concepts.concepts:
+        binding = known.get(concept.group_key)
+        if binding is None:
+            allow_fresh_by_group[concept.group_key] = allow_fresh
+            continue
+        fresh_occurrence = any(
+            (
+                binding.local_pattern_id,
+                InstitutionPatternChannel.PROCEDURE_RECURRENCE,
+                key,
+            )
+            not in existing_receipts
+            for key in occurrence_keys
+        )
+        allow_fresh_by_group[concept.group_key] = fresh_occurrence or bool(
+            observation.communications
+        )
+    adjusted, refreshed = _adjusted_concepts(
+        concepts,
+        updated,
+        decay_policy=active_policy,
+        concept_policy=concept_policy,
+        allow_fresh=allow_fresh,
+        allow_fresh_by_group=allow_fresh_by_group,
+    )
+
+    previous_last_tick = decay.last_update_tick
+    decay = replace(decay, last_update_tick=tick)
+    records = {record.local_pattern_id: record for record in decay.records}
+    evidence = _evidence_from_observation(observation, identity)
+    context_key = None
+    self_body = getattr(observation, "self_body", None)
+    location_id = getattr(self_body, "location_id", None)
+    if location_id is not None:
+        raw_location = getattr(location_id, "value", None)
+        if isinstance(raw_location, str) and raw_location:
+            context_key = raw_location
+    evidence = _enrich_dimension_evidence(
+        evidence,
+        owner_id=owner_id,
+        norms=norms,
+        prior_offices=prior_offices,
+        prior_institutional_memory=prior_institutional_memory,
+    )
+    if previous_last_tick is not None and tick == previous_last_tick:
+        existing = next(
+            (
+                sample
+                for sample in decay.samples
+                if sample.observation_tick == tick
+            ),
+            None,
+        )
+        if (
+            existing is None
+            or existing.evidence != evidence
+            or existing.context_key != context_key
+        ):
+            raise _fail("observation_tick", "conflicting_update")
+        decay = _append_observation_receipts(
+            decay, observation, tick=tick, policy=active_policy
+        )
+        return InstitutionDecayUpdate(concepts=concepts, decay=decay)
+    components = _structural_components(observation)
+    for concept in adjusted.concepts:
+        binding = known.get(concept.group_key)
+        if binding is None:
+            binding = _bindings_from_concepts(
+                InstitutionConceptLedger(owner_id=owner_id, concepts=(concept,)),
+                inception_tick=tick,
+            )[0]
+            binding = replace(
+                binding,
+                structural_components=components,
+                context_key=context_key,
+            )
+            known[concept.group_key] = binding
+            bindings.append(binding)
+            decay = replace(decay, bindings=tuple(bindings))
+        elif components and (
+            binding.structural_components != components
+            or (context_key is not None and binding.context_key != context_key)
+        ):
+            binding = replace(
+                binding,
+                structural_components=components,
+                context_key=context_key or binding.context_key,
+            )
+            known[concept.group_key] = binding
+            bindings = [
+                binding if item.group_key == binding.group_key else item
+                for item in bindings
+            ]
+            decay = replace(decay, bindings=tuple(bindings))
+        local_pattern_id = binding.local_pattern_id
+        prior_record = records.get(local_pattern_id)
+        fresh_practice = bool(evidence.performed_procedure_keys)
+        if prior_record is None:
+            inception = binding.inception_tick
+            prior_record = InstitutionDecayRecord(
+                owner_id=owner_id,
+                local_pattern_id=local_pattern_id,
+                group_key=concept.group_key,
+                concept_id=concept.concept_id,
+                anchor_digests=concept.anchor_digests,
+                structural_signature_key=_component_digest(
+                    "|".join(components) or concept.group_key
+                ),
+                inception_tick=inception,
+                last_activity_tick=tick,
+                current_span_start_tick=inception,
+            )
+        if fresh_practice:
+            if (
+                prior_record.covered_inactive_streak
+                >= active_policy.inactive_streak_cap
+            ):
+                record = replace(
+                    prior_record,
+                    previous_span_start_tick=prior_record.current_span_start_tick,
+                    current_span_start_tick=tick,
+                    last_activity_tick=tick,
+                    covered_inactive_streak=0,
+                )
+            else:
+                record = replace(
+                    prior_record,
+                    last_activity_tick=tick,
+                    covered_inactive_streak=0,
+                )
+        else:
+            record = replace(
+                prior_record,
+                covered_inactive_streak=min(
+                    active_policy.inactive_streak_cap,
+                    prior_record.covered_inactive_streak + 1,
+                ),
+            )
+        records[local_pattern_id] = record
+        sample = InstitutionDecaySample(
+            owner_id=owner_id,
+            local_pattern_id=local_pattern_id,
+            observation_tick=tick,
+            source_first_tick=evidence.source_first_tick or tick,
+            source_last_tick=evidence.source_last_tick or tick,
+            role_recognition=concept.role_recognition,
+            procedure_recurrence=concept.procedure_recurrence,
+            social_expectation=concept.social_expectation,
+            legitimacy_belief=concept.legitimacy_belief,
+            succession_observed=concept.succession_observed,
+            generational_continuity=concept.generational_continuity,
+            recognized=concept.recognized,
+            evidence=evidence,
+            anchor_digests=concept.anchor_digests,
+            structural_components=components,
+            context_key=context_key,
+            office_id=binding.office_id,
+            covered=True,
+        )
+        decay = retain_institution_decay_sample(decay, sample, policy=active_policy)
+    decay = replace(
+        decay,
+        bindings=tuple(bindings[:_MAX_PATTERNS]),
+        records=tuple(
+            records[binding.local_pattern_id]
+            for binding in bindings[:_MAX_PATTERNS]
+            if binding.local_pattern_id in records
+        ),
+        last_update_tick=tick,
+    )
+    decay = _append_observation_receipts(
+        decay, observation, tick=tick, policy=active_policy
+    )
+    _LOG.debug(
+        "institution_decay_updated owner_id=%s tick=%s pattern_count=%s "
+        "sample_count=%s fresh_pattern_count=%s",
+        owner_id.value,
+        tick,
+        len(decay.bindings),
+        len(decay.samples),
+        sum(1 for channels in refreshed.values() if channels),
+    )
+    return InstitutionDecayUpdate(concepts=adjusted, decay=decay)

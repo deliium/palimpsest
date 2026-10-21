@@ -441,6 +441,7 @@ class AgentRuntime:
         "_identity_cursor",
         "_inbox",
         "_institution_concepts",
+        "_institutional_decay",
         "_institutional_memory",
         "_internal_state",
         "_invocation_ids",
@@ -596,6 +597,7 @@ class AgentRuntime:
         self._symbolic_language: object | None = None
         self._translation: object | None = None
         self._institution_concepts: object | None = None
+        self._institutional_decay: object | None = None
         self._office_concepts: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
@@ -1147,6 +1149,76 @@ class AgentRuntime:
             "institution_concepts_carried owner_id=%s concept_count=%s tick=%s",
             owner.value,
             len(ledger.concepts),
+            tick,
+        )
+
+    def _preflight_institutional_decay_pair(self, result: object) -> None:
+        from agents.cognition.configuration import (
+            CognitionInstitutionalDecayMode,
+        )
+        from agents.cognition.institution_concepts import InstitutionConceptLedger
+        from agents.cognition.institutional_decay import (
+            InstitutionDecayLedger,
+            require_owner_institution_decay,
+        )
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_institutional_decay_mode",
+            CognitionInstitutionalDecayMode.DISABLED,
+        )
+        decay = getattr(result, "institutional_decay", None)
+        concepts = getattr(result, "institution_concepts", None)
+        if mode is not CognitionInstitutionalDecayMode.DETERMINISTIC:
+            if decay is not None:
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=owner.value,
+                )
+            return
+        if decay is None:
+            return
+        if type(decay) is not InstitutionDecayLedger:
+            raise TypeError("institutional_decay must be InstitutionDecayLedger")
+        require_owner_institution_decay(
+            decay, owner, field_name="CognitiveLoopResult.institutional_decay"
+        )
+        if type(concepts) is not InstitutionConceptLedger:
+            raise TypeError("institutional_decay requires institution_concepts")
+        groups = {concept.group_key for concept in concepts.concepts}
+        if any(binding.group_key not in groups for binding in decay.bindings):
+            raise ValueError("institutional_decay binding group mismatch")
+
+    def _commit_institutional_decay(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import (
+            CognitionInstitutionalDecayMode,
+        )
+        from agents.cognition.institutional_decay import (
+            InstitutionDecayLedger,
+            require_owner_institution_decay,
+        )
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_institutional_decay_mode",
+            CognitionInstitutionalDecayMode.DISABLED,
+        )
+        if mode is not CognitionInstitutionalDecayMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionInstitutionalDecayMode.DETERMINISTIC:
+                self._institutional_decay = None
+            return
+        if type(ledger) is not InstitutionDecayLedger:
+            raise TypeError("institutional_decay must be InstitutionDecayLedger")
+        require_owner_institution_decay(ledger, owner, field_name="institutional_decay")
+        self._institutional_decay = ledger
+        _LOG.debug(
+            "institutional_decay_carried owner_id=%s pattern_count=%s "
+            "sample_count=%s tick=%s",
+            owner.value,
+            len(ledger.bindings),
+            len(ledger.samples),
             tick,
         )
 
@@ -2061,6 +2133,7 @@ class AgentRuntime:
                 symbolic_language=self._symbolic_language,
                 translation=self._translation,
                 institution_concepts=self._institution_concepts,
+                institutional_decay=self._institutional_decay,
                 office_concepts=self._office_concepts,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
@@ -2530,8 +2603,12 @@ class AgentRuntime:
         self._commit_translation(
             getattr(pending.loop_result, "translation", None), pending.tick
         )
+        self._preflight_institutional_decay_pair(pending.loop_result)
         self._commit_institution_concepts(
             getattr(pending.loop_result, "institution_concepts", None), pending.tick
+        )
+        self._commit_institutional_decay(
+            getattr(pending.loop_result, "institutional_decay", None), pending.tick
         )
         self._commit_office_concepts(
             getattr(pending.loop_result, "office_concepts", None), pending.tick
@@ -2996,6 +3073,44 @@ class AgentRuntime:
             field_name="AgentRuntimeCheckpoint.institutional_memory",
         )
 
+    def _preflight_checkpoint_institutional_decay(self, checkpoint: object) -> None:
+        from agents.cognition.configuration import (
+            CognitionInstitutionalDecayMode,
+        )
+        from agents.cognition.institutional_decay import (
+            InstitutionDecayLedger,
+            require_owner_institution_decay,
+        )
+
+        value = getattr(checkpoint, "institutional_decay", None)
+        mode = getattr(
+            self._loop,
+            "_institutional_decay_mode",
+            CognitionInstitutionalDecayMode.DISABLED,
+        )
+        if value is None:
+            return
+        if mode is not CognitionInstitutionalDecayMode.DETERMINISTIC:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+        if type(value) is not InstitutionDecayLedger:
+            raise TypeError("institutional_decay must be InstitutionDecayLedger")
+        require_owner_institution_decay(
+            value,
+            self._agent.agent_id,
+            field_name="AgentRuntimeCheckpoint.institutional_decay",
+        )
+        concepts = getattr(checkpoint, "institution_concepts", None)
+        if concepts is not None:
+            groups = {
+                getattr(concept, "group_key", None)
+                for concept in getattr(concepts, "concepts", ())
+            }
+            if any(binding.group_key not in groups for binding in value.bindings):
+                raise ValueError("institutional_decay binding group mismatch")
+
     def restore_runtime_checkpoint(self, checkpoint: object) -> None:
         """Restore status/internal state/goals from a detached checkpoint."""
         from agents.models import Agent, Goal
@@ -3010,6 +3125,7 @@ class AgentRuntime:
             )
         self._preflight_checkpoint_mediation(checkpoint)
         self._preflight_checkpoint_institutional_memory(checkpoint)
+        self._preflight_checkpoint_institutional_decay(checkpoint)
         goals = tuple(checkpoint.goals)
         for goal in goals:
             if type(goal) is not Goal:
@@ -3066,6 +3182,7 @@ class AgentRuntime:
             )
         self._mediation = getattr(checkpoint, "mediation", None)
         self._institutional_memory = getattr(checkpoint, "institutional_memory", None)
+        self._institutional_decay = getattr(checkpoint, "institutional_decay", None)
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -3137,6 +3254,7 @@ class AgentRuntime:
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,
+            institutional_decay=self._institutional_decay,
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
             group_formation=self._group_formation,

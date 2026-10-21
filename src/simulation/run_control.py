@@ -608,6 +608,7 @@ class AgentRuntimeCheckpoint:
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
+    institutional_decay: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -774,6 +775,15 @@ class AgentRuntimeCheckpoint:
             self.institutional_memory,
             self.agent_id,
             field_name="AgentRuntimeCheckpoint.institutional_memory",
+        )
+        from agents.cognition.institutional_decay import (
+            require_owner_institution_decay,
+        )
+
+        require_owner_institution_decay(
+            self.institutional_decay,
+            self.agent_id,
+            field_name="AgentRuntimeCheckpoint.institutional_decay",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,

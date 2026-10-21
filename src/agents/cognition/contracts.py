@@ -174,6 +174,7 @@ class Perspective:
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
+    institutional_decay: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -523,6 +524,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.institutional_memory",
         )
+        from agents.cognition.institutional_decay import (
+            require_owner_institution_decay,
+        )
+
+        require_owner_institution_decay(
+            self.institutional_decay,
+            self.agent_id,
+            field_name="Perspective.institutional_decay",
+        )
 
     def to_snapshot(self) -> SubjectiveSnapshot:
         """Freeze this perspective into a ``SubjectiveSnapshot``."""
@@ -553,9 +563,11 @@ class Perspective:
             artifact_interpretations=self.artifact_interpretations,
             semantic_naming=self.semantic_naming,
             symbolic_language=self.symbolic_language,
+            institution_concepts=self.institution_concepts,
             collective_decisions=self.collective_decisions,
             mediation=self.mediation,
             institutional_memory=self.institutional_memory,
+            institutional_decay=self.institutional_decay,
             cultural_narratives=self.cultural_narratives,
             developmental_knowledge=self.developmental_knowledge,
             mentorship=self.mentorship,

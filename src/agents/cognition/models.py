@@ -742,6 +742,7 @@ class SubjectiveSnapshot:
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
+    institutional_decay: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -1037,6 +1038,15 @@ class SubjectiveSnapshot:
             self.institutional_memory,
             self.owner_id,
             field_name="SubjectiveSnapshot.institutional_memory",
+        )
+        from agents.cognition.institutional_decay import (
+            require_owner_institution_decay,
+        )
+
+        require_owner_institution_decay(
+            self.institutional_decay,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.institutional_decay",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,
@@ -3895,6 +3905,7 @@ class CognitiveLoopProposal:
     collective_decision_audit: tuple[object, ...] = ()
     mediation: object | None = None
     institutional_memory: object | None = None
+    institutional_decay: object | None = None
     mediation_authority: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
@@ -4072,6 +4083,15 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.institutional_memory",
         )
+        from agents.cognition.institutional_decay import (
+            require_owner_institution_decay,
+        )
+
+        require_owner_institution_decay(
+            self.institutional_decay,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.institutional_decay",
+        )
         from agents.cognition.developmental_learning import (
             require_owner_developmental_knowledge,
         )
@@ -4206,6 +4226,7 @@ class CognitiveLoopResult:
     mediation: object | None = None
     mediation_authority: object | None = None
     institutional_memory: object | None = None
+    institutional_decay: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -4358,6 +4379,15 @@ class CognitiveLoopResult:
             self.institutional_memory,
             self.agent_id,
             field_name="CognitiveLoopResult.institutional_memory",
+        )
+        from agents.cognition.institutional_decay import (
+            require_owner_institution_decay,
+        )
+
+        require_owner_institution_decay(
+            self.institutional_decay,
+            self.agent_id,
+            field_name="CognitiveLoopResult.institutional_decay",
         )
         from agents.cognition.developmental_learning import (
             require_owner_developmental_knowledge,

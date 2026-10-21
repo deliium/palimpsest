@@ -2083,7 +2083,10 @@ class CognitiveLoop:
         mentorship: object | None = None,
     ) -> object | None:
         """Refresh one owner's subjective institution concepts after ledgers."""
-        from agents.cognition.configuration import CognitionInstitutionConceptMode
+        from agents.cognition.configuration import (
+            CognitionInstitutionalDecayMode,
+            CognitionInstitutionConceptMode,
+        )
         from agents.cognition.institution_concepts import (
             InstitutionConceptLedger,
             apply_institution_concept_update,
@@ -2094,6 +2097,7 @@ class CognitiveLoop:
             self._institution_concept_mode
             is not CognitionInstitutionConceptMode.DETERMINISTIC
         ):
+            self._prepared_institutional_decay = None
             return None
         snapshot = loop_input.snapshot
         carried = None if snapshot is None else snapshot.institution_concepts
@@ -2104,20 +2108,52 @@ class CognitiveLoop:
                 "institution_concept_carry_rejected reason=%s",
                 "invalid_type" if snapshot is None else "owner_mismatch",
             )
+            self._prepared_institutional_decay = None
             return None
-        updated = apply_institution_concept_update(
-            loop_input.observation,
-            identity,
-            ledger,
-            norms=social_norms,
-            conventions=social_conventions,
-            groups=group_formation,
-            possession=possession_legitimacy,
-            memories=snapshot.memories,
-            advice_delta=advice_delta,
-            mentorship=mentorship,
-            policy=self._institution_concept_policy,
-        )
+        updated: object | None
+        if (
+            self._institutional_decay_mode
+            is CognitionInstitutionalDecayMode.DETERMINISTIC
+        ):
+            from agents.cognition.institutional_decay import (
+                apply_institution_decay_update,
+            )
+
+            paired = apply_institution_decay_update(
+                observation=loop_input.observation,
+                identity=identity,
+                previous_concepts=ledger,
+                previous_decay=getattr(snapshot, "institutional_decay", None),
+                norms=social_norms,
+                conventions=social_conventions,
+                groups=group_formation,
+                possession=possession_legitimacy,
+                memories=snapshot.memories,
+                advice_delta=advice_delta,
+                mentorship=mentorship,
+                prior_offices=getattr(snapshot, "office_concepts", None),
+                prior_institutional_memory=getattr(
+                    snapshot, "institutional_memory", None
+                ),
+                policy=self._institutional_decay_policy,
+            )
+            self._prepared_institutional_decay = paired.decay
+            updated = paired.concepts
+        else:
+            self._prepared_institutional_decay = None
+            updated = apply_institution_concept_update(
+                loop_input.observation,
+                identity,
+                ledger,
+                norms=social_norms,
+                conventions=social_conventions,
+                groups=group_formation,
+                possession=possession_legitimacy,
+                memories=snapshot.memories,
+                advice_delta=advice_delta,
+                mentorship=mentorship,
+                policy=self._institution_concept_policy,
+            )
         _LOG.debug(
             "institution_concepts_carried owner_id=%s concept_count=%s",
             owner_id,
@@ -4483,6 +4519,7 @@ class CognitiveLoop:
             mediation=mediation,
             mediation_authority=mediation_authority,
             institutional_memory=institutional_memory,
+            institutional_decay=self._prepared_institutional_decay,
             cultural_narratives=cultural_narratives,
             developmental_knowledge=developmental_knowledge,
             mentorship=mentorship,
@@ -4821,6 +4858,7 @@ class CognitiveLoop:
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,
             institutional_memory=institutional_memory,
+            institutional_decay=self._prepared_institutional_decay,
             cultural_narratives=proposal.cultural_narratives,
             developmental_knowledge=proposal.developmental_knowledge,
             mentorship=proposal.mentorship,

@@ -6046,6 +6046,7 @@ class SimulationRunnerResult:
     collective_decision_ledgers: tuple[object, ...] = ()
     mediation_ledgers: tuple[object, ...] = ()
     institutional_memory_ledgers: tuple[object, ...] = ()
+    institutional_decay_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
 
@@ -6311,6 +6312,19 @@ class SimulationRunnerResult:
             if type(ledger) is not InstitutionalMemoryLedger:
                 raise TypeError("institutional_memory_ledgers: invalid_item")
         object.__setattr__(self, "institutional_memory_ledgers", institutional_ledgers)
+        from agents.cognition.institutional_decay import InstitutionDecayLedger
+
+        if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
+            raise TypeError("institutional_decay_ledgers must be ordered")
+        if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(
+            self.institutional_decay_ledgers, Sequence
+        ):
+            raise TypeError("institutional_decay_ledgers must be ordered")
+        decay_ledgers = tuple(self.institutional_decay_ledgers)
+        for ledger in decay_ledgers:
+            if type(ledger) is not InstitutionDecayLedger:
+                raise TypeError("institutional_decay_ledgers: invalid_item")
+        object.__setattr__(self, "institutional_decay_ledgers", decay_ledgers)
         if isinstance(self.mediation_ledgers, (set, frozenset)):
             raise TypeError("mediation_ledgers must be ordered")
         from agents.cognition.mediation import MediationLedger

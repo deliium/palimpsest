@@ -174,6 +174,9 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "institutional_memory",
         "institutional_memory_entries",
         "institutional_memory_ledgers",
+        "institutional_decay",
+        "institutional_decay_ledger",
+        "institutional_decay_ledgers",
     }
 )
 
@@ -190,6 +193,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "symbolic_language",
     "translation",
     "institution_concepts",
+    "institutional_decay",
     "office_concepts",
     "mediation",
     "social_norms",
@@ -863,6 +867,7 @@ class BlankSlateStoreCounts:
     symbolic_language: int = 0
     translation: int = 0
     institution_concepts: int = 0
+    institutional_decay: int = 0
     office_concepts: int = 0
     mediation: int = 0
     social_norms: int = 0

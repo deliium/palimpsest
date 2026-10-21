@@ -2957,6 +2957,38 @@ class SimulationRunner:
             )
             if mode is not CognitionInstitutionalMemoryMode.DETERMINISTIC:
                 raise ValueError("institutional memory ledger for disabled owner")
+        from agents.cognition.configuration import (
+            CognitionInstitutionalDecayMode,
+        )
+        from agents.cognition.institutional_decay import InstitutionDecayLedger
+
+        for state in checkpoint.runtime_states:
+            ledger = getattr(state, "institutional_decay", None)
+            if ledger is None:
+                continue
+            if type(ledger) is not InstitutionDecayLedger:
+                raise TypeError("institutional_decay ledger invalid type")
+            if ledger.owner_id != state.agent_id:
+                raise ValueError("institutional decay ledger owner_id mismatch")
+            runtime = next(
+                (item for item in self._runtimes if item.agent_id == state.agent_id),
+                None,
+            )
+            mode = getattr(
+                getattr(runtime, "_loop", None),
+                "_institutional_decay_mode",
+                CognitionInstitutionalDecayMode.DISABLED,
+            )
+            if mode is not CognitionInstitutionalDecayMode.DETERMINISTIC:
+                raise ValueError("institutional decay ledger for disabled owner")
+            concepts = getattr(state, "institution_concepts", None)
+            if concepts is not None:
+                groups = {
+                    getattr(concept, "group_key", None)
+                    for concept in getattr(concepts, "concepts", ())
+                }
+                if any(binding.group_key not in groups for binding in ledger.bindings):
+                    raise ValueError("institutional decay binding group mismatch")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
         if len(by_agent) != len(checkpoint.runtime_states):
             raise ValueError("duplicate runtime state owner")
@@ -3062,6 +3094,7 @@ class SimulationRunner:
             collective_decision_ledgers=self.export_collective_decision_ledgers(),
             mediation_ledgers=self.export_mediation_ledgers(),
             institutional_memory_ledgers=self.export_institutional_memory_ledgers(),
+            institutional_decay_ledgers=self.export_institutional_decay_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
@@ -3420,6 +3453,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_office_concept_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_institutional_decay_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered institutional-decay ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "institutional_decay", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_institutional_decay_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
