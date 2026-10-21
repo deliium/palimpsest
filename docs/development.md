@@ -288,3 +288,14 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_institution_concepts_con
 Expected: 43 commands, 73 observer semantic types, 124 metric families,
 `runner-config-v49` only when a deterministic institution mode is present,
 replay `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, Alembic `0017`.
+
+
+## Institutional decay focused checks
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_institutional_decay_contracts.py tests/unit/test_runner_config_v54.py tests/unit/test_institutional_decay_updates.py tests/unit/test_institutional_decay_runtime.py tests/unit/test_institutional_decay_checkpoints.py tests/unit/test_institutional_decay_analysis.py tests/unit/test_institution_lineage.py tests/unit/test_institutional_decay_composition.py tests/unit/test_institutional_decay_metrics.py tests/unit/test_experiment_bk.py tests/unit/test_institutional_decay_invariants.py -q
+uv run --frozen --python 3.12.14 pytest tests/architecture/test_v3_institutional_decay_isolation.py -q
+```
+
+Pins remain commands 43, observer semantic types 73, replay/codec V22/v20,
+Alembic `0017`, `/v1`, `observer-protocol-v1`, and `prepare_parallel=False`.

@@ -427,3 +427,24 @@ commands and produces completion receipts. Detached analysis adds
 (families 124 → 126). No new command, event, observer semantic, write-pair,
 migration, or unowned capability is introduced; `institutional_economy` stays
 unowned.
+
+
+## V3-34 institutional decay seam
+
+`runner-config-v54` adds only per-agent `institutional_decay_mode` on the exact
+v53 cognition keyset. Each enabled owner requires its own institution concepts.
+Decay changes private concept strengths/status before ordinary office inference
+and planning; it never creates an objective institution or world command.
+Raw samples, receipts, absolute activity witnesses and the paired sidecar travel
+through the owner-safe perspective/snapshot boundary and supported runtime
+checkpoints. Admission copies nothing and old profiles stay unchanged.
+
+Detached analysis owns windows, lifecycle states and lineage. Episode identity
+uses absolute activity-span and structural-revision witnesses, not ordinals.
+Collapse requires prior stability plus two complete low/no-renewal windows;
+missing evidence is censored. Three families raise the catalog to 129:
+`institutional_decay@1`, `institution_lifecycle@1`, `institution_lineage@1`.
+Detailed graphs/trajectories are canonical JSON strings inside scalar metric
+values. Experiment BK is off the V1 gate. No new command, event, observer
+semantic, write-pair, migration, API route or capability ownership is added;
+`institutional_economy` remains unowned.

@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V3-32
+### Current baseline through V3-34
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v53` for per-agent `institutional_memory_mode` |
+| Latest feature runner | `runner-config-v54` for per-agent `institutional_decay_mode` |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 126 (including the two V3-33 institutional-memory families) |
+| Metric families | 129 (including the three V3-34 decay/lifecycle/lineage families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -344,3 +344,26 @@ ledger but do not constitute durable subjective restart. Detached
 raise the catalog to 126. No new command, event, observer semantic, write-pair,
 migration, or capability ownership exists; `institutional_economy` remains
 unowned.
+
+
+### V3-34 institutional decay seam
+
+`runner-config-v54` adds only per-agent `institutional_decay_mode` on the exact
+v53 cognition keyset. Each enabled owner requires its own institution concepts.
+Decay is private cognition: it adjusts concept strengths/status before ordinary
+office inference and planning and never creates an objective institution, command,
+or permission. The sidecar carries bounded raw samples, receipts, and absolute
+identity witnesses through the owner-safe perspective/snapshot path and supported
+runtime checkpoints. Admission copies nothing; the v53 memory profile stays
+decay-disabled.
+
+Detached analysis owns four-tick windows, lifecycle classification, and lineage.
+Collapse requires prior confirmed stability plus two complete low/no-renewal
+windows; missing evidence is censored. Episode IDs use absolute activity-span and
+structural-revision witnesses, never moving-history ordinals. Three families
+raise the catalog to 129: `institutional_decay@1`, `institution_lifecycle@1`,
+`institution_lineage@1`. Detailed graphs/trajectories are canonical JSON strings
+inside scalar metric values; the shared metric model/codec is unchanged.
+Experiment BK is off the V1 gate. No new command, event, observer semantic,
+write-pair, migration, API route, or capability ownership exists;
+`institutional_economy` remains unowned.

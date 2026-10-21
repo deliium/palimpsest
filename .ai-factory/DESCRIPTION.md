@@ -89,3 +89,18 @@ starts empty. Detached analysis adds `institutional_memory_continuity@1` and
 (`institutional_memory@1`) is off-gate. No new command, event, observer semantic,
 write-pair, migration, API route, or capability flag is added, and
 `institutional_economy` remains unowned.
+
+
+Institutional decay (V3-34) adds opt-in per-agent `institutional_decay_mode` on
+`runner-config-v54`, with an owner-local decay sidecar under locked policy
+`institutional-decay.v1`. Fresh evidence renews only the channels it supports;
+unrefreshed channels lose 0.04 per executed update. The paired adjusted concept
+ledger is committed through ordinary deferred finalization, traverses the
+owner-safe perspective/snapshot path, and is preserved by supported runtime
+checkpoints. Admission copies nothing and the v53 institutional-memory learner
+profile remains decay-disabled. Detached analysis adds
+`institutional_decay@1`, `institution_lifecycle@1`, and `institution_lineage@1`
+(families 126 → 129), with lifecycle hysteresis and absolute-witness lineage.
+Experiment BK (`institutional_decay@1`) is off-gate. No new command, event,
+observer semantic, write-pair, migration, API route, or capability flag is
+added, and `institutional_economy` remains unowned.

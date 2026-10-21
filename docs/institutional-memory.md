@@ -21,7 +21,7 @@ does not satisfy the dependency. `runner-config-v52` remains the mediation
 surface, and v53 may compose mediation without requiring it.
 
 The explicit `species_default_institutional_memory_v1` initialization profile
-is v53-only. It enables empty office, institutional-memory, artifact-reading,
+is accepted on v53 and v54. It enables empty office, institutional-memory, artifact-reading,
 and teaching modes for an admitted learner. It transfers no channel, entry,
 role identity, access privilege, or skill content. Existing newborn profiles
 remain institutional-memory-disabled.
@@ -93,3 +93,12 @@ lineage or metadata. A surviving record may still be ignored. Runtime
 checkpoint continuation preserves one owner's ledger, but it is not a durable
 restart guarantee for every subjective store; objective records persist and
 replay through the existing codecs.
+
+
+## Relation to institutional decay
+
+`institutional_decay_mode` (v54) changes only the owner's private concept
+strengths before ordinary office/memory preparation. Accepted v54 memory
+profiles remain decay-disabled. Missing or damaged records do not delete
+already acquired entries, and occupant succession never copies them. See
+[Institutional decay](institutional-decay.md).

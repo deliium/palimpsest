@@ -63,6 +63,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Read-only observer](docs/observer.md) | Observer protocol, frames, and the read-only HTTP and WebSocket routes |
 | [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, deep-link `?run_id=` / debugger params |
 | [Research causal debugger](docs/research-causal-debugger.md) | Read-only event→cognition chain, lineage GET APIs, Godot Explain panel |
+| [Institutional decay](docs/institutional-decay.md) | Opt-in owner-scoped weakening, lifecycle and lineage evidence (v54, BK, three detached families) |
 | [Institutional memory](docs/institutional-memory.md) | Opt-in owner-scoped role/procedure information learned through records, transmission, and teaching; v53 and detached continuity/provenance metrics |
 | [Conflict mediation](docs/mediation.md) | Opt-in owner-scoped disputes, accounts, compromises, vouching, voluntary restitution, and detached mediation metrics |
 | [Collective decisions](docs/collective-decisions.md) | Opt-in owner-scoped proposals, support/opposition, one-hop delegation, coordination, compliance, and detached metrics |

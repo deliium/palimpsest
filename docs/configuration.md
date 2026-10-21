@@ -258,7 +258,24 @@ accepts mediation as an optional composition, while v52 still requires it.
 Historical schemas reject the key and a non-disabled mode.
 
 The explicit `species_default_institutional_memory_v1` initialization profile
-is accepted only on v53 and starts with empty institutional content. Older
+is accepted on v53 and v54 and starts with empty institutional content. Older
 schemas reject it with `institutional_memory_profile_requires_v53`. Modes are
 abilities to interpret or transmit public input, not access grants or inherited
 knowledge. Default runner writes remain `runner-config-v4`.
+
+
+## Institutional decay (runner-config-v54)
+
+`institutional_decay_mode` is per-agent and defaults to `disabled`.
+`runner-config-v54` adds only that key to the exact v53 cognition keyset and is
+selected only when at least one owner enables it. Every enabled owner must also
+enable its own deterministic `institution_concept_mode`; office succession and
+institutional memory are optional. Older schemas reject the new key with
+`institutional_decay_requires_v54`; v54 with no enabled owner fails with
+`v54_requires_institutional_decay`; a decay owner without local concepts fails
+with `institutional_decay_requires_local_concepts`.
+
+Supported: decay + concepts; decay + concepts + offices; decay + concepts +
+memory; all three, with optional existing siblings. Default write remains
+`runner-config-v4`; memory mode accepts v53/v54; the institutional-memory
+learner profile remains accepted on both and stays decay-disabled.

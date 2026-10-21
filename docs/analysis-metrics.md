@@ -377,3 +377,24 @@ sufficiently aligned contemporaneous courses by detached topic/action/window
 evidence. Owner-local proposal references are not shared keys, and ambiguous or
 unmatched cases are excluded and counted. Missing or disabled input is absent,
 not zero.
+
+
+## Institutional decay, lifecycle and lineage (catalog 129)
+
+- `institutional_decay@1` — five separate dimension panels (support,
+  participation, procedure repetition, succession continuity, knowledge
+  continuity), comparable-cohort window deltas, legitimacy strength, descriptive
+  mechanism associations, coverage and pruning. Structured payloads are
+  canonical JSON strings `dimension_trajectories_json` and
+  `mechanism_evidence_json`.
+- `institution_lifecycle@1` — scoped emerging/stable/weakening/collapsed counts,
+  confirmation and last-active ticks, censoring and `episodes_json`.
+- `institution_lineage@1` — observed episodes, explicit pruned stubs,
+  transformed/split/reappeared/continued edges, ambiguity and
+  `lineage_graph_json`.
+
+All scalar summaries remain ordinary metric values. Detailed graphs and
+trajectories are schema-tagged JSON **strings**; the shared `MetricDocument`
+remains scalar-only and the common wire codec is unchanged. Missing evidence is
+`unknown`/`partial`/`absent`, never a fabricated zero. No family is a health
+score or causal effect estimate.

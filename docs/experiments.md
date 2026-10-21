@@ -424,3 +424,14 @@ entries, or successful handovers. Completed runs may export enabled-empty
 owner ledgers; detached continuity and provenance metrics report whatever
 occurred, including no acquisition. The changed material topology in extra
 opportunity arms is labeled as such and is not a mode-only causal contrast.
+
+
+## Institutional decay opportunities (`institutional_decay@1`, BK)
+
+Experiment BK is off the V1 A–E gate. Six arms: `bk-baseline`, `bk-decay-off`
+(v53 memory/office/concept composition), `bk-decay-on` (identical v54 plus
+per-owner decay), `bk-record-opportunities`, `bk-teaching-opportunities`, and
+`bk-limited-opportunities`. Off/on arms pair seed, world, agents and objective
+conditions; only declared existing opportunities differ. No collapse, death,
+resource shock, record destruction, abandonment or cultural-change tick is
+scheduled. Zero stable institutions and zero collapses are valid outcomes.
