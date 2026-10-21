@@ -323,6 +323,8 @@ class CognitiveLoop:
         "_identity_mode",
         "_institution_concept_mode",
         "_institution_concept_policy",
+        "_institutional_memory_mode",
+        "_institutional_memory_policy",
         "_intention",
         "_knowledge_genealogy_seed_material",
         "_knowledge_genealogy_spec",
@@ -471,6 +473,8 @@ class CognitiveLoop:
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
         mediation_policy: object | None = None,
+        institutional_memory_mode: object | None = None,
+        institutional_memory_policy: object | None = None,
         cultural_narrative_mode: object | None = None,
         cultural_narrative_policy: object | None = None,
         cognitive_budget_mode: object | None = None,
@@ -914,6 +918,32 @@ class CognitiveLoop:
             raise TypeError("mediation_policy must be MediationPolicy")
         self._mediation_mode = mediation
         self._mediation_policy = mediation_policy
+        from agents.cognition.configuration import CognitionInstitutionalMemoryMode
+        from agents.cognition.institutional_memory import InstitutionalMemoryPolicy
+
+        institutional = (
+            CognitionInstitutionalMemoryMode.DISABLED
+            if institutional_memory_mode is None
+            else institutional_memory_mode
+        )
+        if type(institutional) is not CognitionInstitutionalMemoryMode:
+            raise TypeError(
+                "institutional_memory_mode must be CognitionInstitutionalMemoryMode"
+            )
+        if institutional is CognitionInstitutionalMemoryMode.DISABLED:
+            institutional_memory_policy = None
+        elif institutional_memory_policy is None:
+            from agents.cognition.institutional_memory import (
+                default_institutional_memory_policy,
+            )
+
+            institutional_memory_policy = default_institutional_memory_policy()
+        elif type(institutional_memory_policy) is not InstitutionalMemoryPolicy:
+            raise TypeError(
+                "institutional_memory_policy must be InstitutionalMemoryPolicy"
+            )
+        self._institutional_memory_mode = institutional
+        self._institutional_memory_policy = institutional_memory_policy
         from agents.cognition.configuration import CognitionCulturalNarrativeMode
         from agents.cognition.cultural_narratives import CulturalNarrativePolicy
 
@@ -4588,9 +4618,7 @@ class CognitiveLoop:
             )
             if recommendation is not None and type(command) is Give:
                 snapshot = loop_input.snapshot
-                identity = (
-                    None if snapshot is None else snapshot.social_identity
-                )
+                identity = None if snapshot is None else snapshot.social_identity
                 mediation = record_mediation_attempt(
                     mediation,
                     recommendation,

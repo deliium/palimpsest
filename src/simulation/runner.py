@@ -1017,6 +1017,7 @@ def _cognition_config_for(
     )
     from agents.cognition.configuration import (
         CognitionCollectiveDecisionMode,
+        CognitionInstitutionalMemoryMode,
         CognitionInstitutionConceptMode,
         CognitionMediationMode,
         CognitionOfficeSuccessionMode,
@@ -1026,6 +1027,9 @@ def _cognition_config_for(
     )
     from agents.cognition.institution_concepts import (
         default_institution_concept_policy,
+    )
+    from agents.cognition.institutional_memory import (
+        default_institutional_memory_policy,
     )
     from agents.cognition.mediation import default_mediation_policy
     from agents.cognition.offices import default_office_concept_policy
@@ -1106,6 +1110,19 @@ def _cognition_config_for(
         "cognition_config_mediation_mode mode=%s policy_version=%s",
         mediation_mode.value,
         None if mediation_policy is None else mediation_policy.version,
+    )
+    institutional_memory_mode = CognitionInstitutionalMemoryMode(
+        spec.institutional_memory_mode.value
+    )
+    institutional_memory_policy = None
+    if institutional_memory_mode is CognitionInstitutionalMemoryMode.DETERMINISTIC:
+        institutional_memory_policy = default_institutional_memory_policy()
+    _LOG.debug(
+        "cognition_config_institutional_memory mode=%s policy_version=%s",
+        institutional_memory_mode.value,
+        None
+        if institutional_memory_policy is None
+        else institutional_memory_policy.version,
     )
     from agents.cognition.budget import policy_from_limits
     from agents.cognition.configuration import (
@@ -1207,6 +1224,8 @@ def _cognition_config_for(
         collective_decision_policy=collective_policy,
         mediation_mode=mediation_mode,
         mediation_policy=mediation_policy,
+        institutional_memory_mode=institutional_memory_mode,
+        institutional_memory_policy=institutional_memory_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(

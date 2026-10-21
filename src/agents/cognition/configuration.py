@@ -54,6 +54,10 @@ from agents.cognition.institution_concepts import (
     InstitutionConceptPolicy,
     default_institution_concept_policy,
 )
+from agents.cognition.institutional_memory import (
+    InstitutionalMemoryPolicy,
+    default_institutional_memory_policy,
+)
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.mediation import (
     MediationPolicy,
@@ -388,6 +392,17 @@ class CognitionMediationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionInstitutionalMemoryMode(StrEnum):
+    """Owner-scoped institutional information. Disabled allocates nothing.
+
+    Lockstep with ``simulation.InstitutionalMemoryMode``. This is not a
+    capability flag and requires an owner-local role or procedure mode.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCulturalNarrativeMode(StrEnum):
     """Owner-scoped narrative ledger. Disabled leaves the snapshot field unset.
 
@@ -531,6 +546,10 @@ class CognitionLoopConfig:
     collective_decision_policy: CollectiveDecisionPolicy | None = None
     mediation_mode: CognitionMediationMode = CognitionMediationMode.DISABLED
     mediation_policy: MediationPolicy | None = None
+    institutional_memory_mode: CognitionInstitutionalMemoryMode = (
+        CognitionInstitutionalMemoryMode.DISABLED
+    )
+    institutional_memory_policy: InstitutionalMemoryPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -938,6 +957,28 @@ class CognitionLoopConfig:
         elif type(self.mediation_policy) is not MediationPolicy:
             _LOG.error("invalid_enum path=mediation_policy reason_code=invalid_type")
             raise TypeError("mediation_policy must be MediationPolicy or None")
+        if type(self.institutional_memory_mode) is not CognitionInstitutionalMemoryMode:
+            _LOG.error(
+                "invalid_enum path=institutional_memory_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "institutional_memory_mode must be CognitionInstitutionalMemoryMode"
+            )
+        if self.institutional_memory_mode is CognitionInstitutionalMemoryMode.DISABLED:
+            object.__setattr__(self, "institutional_memory_policy", None)
+        elif self.institutional_memory_policy is None:
+            object.__setattr__(
+                self,
+                "institutional_memory_policy",
+                default_institutional_memory_policy(),
+            )
+        elif type(self.institutional_memory_policy) is not InstitutionalMemoryPolicy:
+            _LOG.error(
+                "invalid_enum path=institutional_memory_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "institutional_memory_policy must be InstitutionalMemoryPolicy or None"
+            )
         if (
             self.translation_mode is CognitionTranslationMode.DETERMINISTIC
             and self.semantic_naming_mode
@@ -1097,7 +1138,7 @@ class CognitionLoopConfig:
 
     def condition_fingerprint_material(self) -> dict[str, object]:
         """Stable, payload-free material for condition fingerprints."""
-        return {
+        material: dict[str, object] = {
             "consolidation_mode": self.consolidation_mode.value,
             "reflection_mode": self.reflection_mode.value,
             "drive_overrides": [
@@ -1234,6 +1275,17 @@ class CognitionLoopConfig:
                 self.mortality_appraisal_policy_version
             ),
         }
+        if (
+            self.institutional_memory_mode
+            is CognitionInstitutionalMemoryMode.DETERMINISTIC
+        ):
+            material["institutional_memory_mode"] = self.institutional_memory_mode.value
+            material["institutional_memory_policy_version"] = (
+                None
+                if self.institutional_memory_policy is None
+                else self.institutional_memory_policy.version
+            )
+        return material
 
 
 def production_cognition_config() -> CognitionLoopConfig:
@@ -1493,6 +1545,8 @@ def build_cognitive_loop(
         collective_decision_policy=resolved.collective_decision_policy,
         mediation_mode=resolved.mediation_mode,
         mediation_policy=resolved.mediation_policy,
+        institutional_memory_mode=resolved.institutional_memory_mode,
+        institutional_memory_policy=resolved.institutional_memory_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,
