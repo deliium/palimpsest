@@ -10,6 +10,7 @@ from agents.cognition.institutional_memory import (
     InstitutionalBindingKind,
     InstitutionalFact,
     InstitutionalMemoryChannel,
+    InstitutionalMemoryLedger,
     apply_institutional_memory_update,
     empty_institutional_memory_ledger,
     institutional_role_token,
@@ -132,7 +133,7 @@ def _office_concept() -> OfficeConcept:
     )
 
 
-def _role_setup() -> tuple[object, str]:
+def _role_setup() -> tuple[InstitutionalMemoryLedger, str]:
     concept = _office_concept()
     ledger = apply_institutional_memory_update(
         owner_id=_OWNER,
@@ -201,16 +202,16 @@ def _artifact(integrity: RecordIntegrity = RecordIntegrity.INTACT) -> ObservedAr
 
 def _acquire(
     *,
-    ledger: object,
+    ledger: InstitutionalMemoryLedger,
     observation: Observation,
     interpretations: ArtifactInterpretationLedger | None = None,
     teaching_enabled: bool = False,
-):
+) -> InstitutionalMemoryLedger:
     return apply_institutional_memory_update(
         owner_id=_OWNER,
         observation=observation,
         identity=_identity(),
-        previous=ledger,  # type: ignore[arg-type]
+        previous=ledger,
         artifact_interpretations=interpretations,
         teaching_enabled=teaching_enabled,
     )

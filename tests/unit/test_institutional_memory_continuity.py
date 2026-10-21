@@ -41,6 +41,7 @@ from world.observations import (
     Observation,
     ObservationProvenance,
     ObservationSourceKind,
+    ObservedArtifact,
     ObservedCommunication,
 )
 
@@ -67,7 +68,9 @@ def _identity(agent: AgentId, body: EntityId) -> OwnerSafeSocialIdentity:
     return OwnerSafeSocialIdentity(owner_id=agent, owner_entity_id=body)
 
 
-def _reading(artifact, *, confidence: float = 0.8):
+def _reading(
+    artifact: ObservedArtifact, *, confidence: float = 0.8
+) -> ArtifactInterpretationLedger:
     return ArtifactInterpretationLedger(
         owner_id=_AGENT_B,
         interpretations=(
@@ -256,3 +259,72 @@ def test_teaching_chain_passes_only_acquired_facts() -> None:
     )
     assert forwarded is not None
     assert forwarded.object
+
+
+def test_public_snapshot_restore_preserves_institutional_record_marks() -> None:
+    from dataclasses import replace
+
+    from simulation.clock import Tick
+    from simulation.journal import hash_snapshot
+    from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
+    from simulation.persistence import (
+        PROJECTOR_VERSION,
+        PayloadHash,
+        SnapshotId,
+        WorldSnapshot,
+    )
+    from world.events import EVENT_SCHEMA_REPLAY_V13
+
+    engine = WorldEngine(
+        config=physical_config(1),
+        bootstrap=two_location_fixture(item_on_ground=False).as_bootstrap(),
+        artifacts_enabled=True,
+        durable_records_spec=example_durable_records_spec(),
+    )
+    frame = _frame()
+    marks = encode_institutional_marks(frame)
+    batch = engine.observe()
+    engine.resolve_tick(
+        (
+            ActionSubmission(
+                batch.token,
+                _AGENT_A,
+                Inscribe(
+                    ArtifactKind.RECORD,
+                    ArtifactContent(marks=marks),
+                    record_genre=DurableRecordGenre.CHRONICLE,
+                ),
+            ),
+        )
+    )
+    state = engine._snapshot.world.state
+    draft = WorldSnapshot(
+        snapshot_id=SnapshotId("snap-im"),
+        run_id=RunId("run-im"),
+        world_id=WorldId("world-1"),
+        seed=1,
+        config=SimulationRunConfig(seed=1),
+        registrations=two_location_fixture(item_on_ground=False).registrations,
+        locations=tuple(state.locations.values()),
+        bodies=tuple(state.bodies.values()),
+        items=tuple(state.items.values()),
+        resources=tuple(state.resources.values()),
+        weather=tuple(state.weather.values()),
+        next_tick=Tick(1),
+        revision=state.revision,
+        event_schema_version=EVENT_SCHEMA_REPLAY_V13,
+        projector_version=PROJECTOR_VERSION,
+        persistence_codec_version="v10",
+        derivation_version=DERIVATION_VERSION,
+        integrity_hash=PayloadHash("a" * 64),
+        predecessor_commit_hash=None,
+        artifacts=tuple(state.artifacts.values()),
+    )
+    snapshot = replace(draft, integrity_hash=hash_snapshot(draft))
+    restored = WorldEngine.restore_from_snapshot(
+        snapshot,
+        artifacts_enabled=True,
+    )
+    observation = restored.observe().for_observer(_BODY_B)
+    assert observation.artifacts
+    assert decode_institutional_marks(observation.artifacts[0].content.marks) == frame

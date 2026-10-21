@@ -24,10 +24,11 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V53,
     InstitutionalMemoryMode,
     InstitutionConceptMode,
+    SimulationRunnerConfig,
 )
 
 
-def _config():
+def _config() -> SimulationRunnerConfig:
     definition = institutionalization_scenario(seed=23, max_ticks=2)
     base = next(
         condition.runner_config
@@ -66,7 +67,7 @@ async def test_checkpoint_round_trip_preserves_owner_ledgers() -> None:
         restored_ledgers = restored.export_institutional_memory_ledgers()
         assert restored_ledgers == exported
         assert all(
-            ledger.owner_id == runtime.agent_id
+            getattr(ledger, "owner_id", None) == runtime.agent_id
             for runtime, ledger in zip(
                 restored._runtimes, restored_ledgers, strict=True
             )
@@ -124,3 +125,11 @@ def test_checkpoint_field_rejects_foreign_owner() -> None:
 def test_disabled_direct_loop_rejects_injected_selection() -> None:
     loop = build_cognitive_loop(CognitionLoopConfig())
     assert loop._institutional_memory_mode is CognitionInstitutionalMemoryMode.DISABLED
+
+
+def test_newborn_copy_denials_include_institutional_memory_state() -> None:
+    from simulation.new_agent_initialization import SUBJECTIVE_COPY_DENY_LIST
+
+    assert "institutional_memory" in SUBJECTIVE_COPY_DENY_LIST
+    assert "institutional_memory_entries" in SUBJECTIVE_COPY_DENY_LIST
+    assert "institutional_memory_ledgers" in SUBJECTIVE_COPY_DENY_LIST

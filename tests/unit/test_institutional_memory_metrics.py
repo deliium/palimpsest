@@ -17,6 +17,8 @@ from agents.cognition.institutional_memory import (
 )
 from agents.models import AgentId
 from analysis.institutional_memory import (
+    InstitutionalCarrierRow,
+    InstitutionalIdentityRow,
     compute_institutional_memory_continuity,
     compute_institutional_memory_provenance,
     harvest_institutional_memory_rows,
@@ -145,13 +147,31 @@ def test_continuity_known_answer() -> None:
 def test_provenance_separates_observed_and_declared_edges() -> None:
     snapshots = harvest_institutional_memory_rows((_ledger(),))
     document = compute_institutional_memory_provenance(
-        snapshots, run_id="run", input_revision="rev", tick=3
+        snapshots,
+        run_id="run",
+        input_revision="rev",
+        tick=3,
+        carrier_rows=(
+            InstitutionalCarrierRow(
+                run_id="run",
+                event_id="event-1",
+                tick=1,
+                sequence=1,
+                kind="artifact_created",
+                actor_entity_id="record-author-body",
+                artifact_id="record-1",
+                content_revision=0,
+            ),
+        ),
+        identity_rows=(
+            InstitutionalIdentityRow("alice", "record-author-body", 0),
+        ),
     )
     assert document.values["entry_count"] == 2
     assert document.values["observed_carrier_edge_count"] == 1
     assert document.values["declared_only_edge_count"] == 1
     assert document.values["independent_root_count"] == 1
-    assert document.values["conflicting_claim_count"] == 0
+    assert document.values["conflicting_claim_count"] == 1
 
 
 def test_none_and_empty_inputs_are_absent() -> None:

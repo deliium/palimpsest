@@ -280,7 +280,7 @@ def test_bool_as_int_and_nan_are_rejected() -> None:
             revision=0,
             facts=(InstitutionalFact("trade", "owes", "grain"),),
             declared_fact_count=1,
-            acquisition_tick=True,  # type: ignore[arg-type]
+            acquisition_tick=True,
             confidence=0.5,
             distorted=False,
             partial=False,
@@ -472,7 +472,7 @@ def test_selection_validates_owner_and_kind() -> None:
             owner_id=alice,
             entry_id=entry_id,
             channel_id=None,
-            tick=True,  # type: ignore[arg-type]
+            tick=True,
             kind=InstitutionalMemorySelectionKind.CONSULT,
         )
 

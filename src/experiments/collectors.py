@@ -712,6 +712,34 @@ def assemble_arm_metric_bundle(
             institution_continuity_rows=continuity_rows,
             institution_known_person_ids=agent_ids,
         )
+    institutional_ledgers = getattr(
+        arm.runner_result, "institutional_memory_ledgers", None
+    )
+    if institutional_ledgers is not None:
+        from analysis.institutional_memory import (
+            harvest_institutional_memory_rows,
+            institutional_memory_carrier_rows_from_events,
+            institutional_memory_identity_rows_from_events,
+        )
+
+        initial_pairs = tuple(
+            (agent.agent_id.value, agent.entity_id.value)
+            for agent in arm.assignment.runner_config.agents
+        )
+        inputs = replace(
+            inputs,
+            institutional_memory_rows=harvest_institutional_memory_rows(
+                institutional_ledgers
+            ),
+            institutional_memory_carrier_rows=(
+                institutional_memory_carrier_rows_from_events(events or ())
+            ),
+            institutional_memory_identity_rows=(
+                institutional_memory_identity_rows_from_events(
+                    events or (), initial_pairs=initial_pairs
+                )
+            ),
+        )
     return assemble_metric_documents(inputs)
 
 

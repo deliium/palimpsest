@@ -12,6 +12,9 @@ from experiments.models import (
     ExperimentCondition,
     ExperimentDefinition,
 )
+from simulation.new_agent_initialization import (
+    SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+)
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V52,
     RUNNER_SCHEMA_VERSION_V53,
@@ -47,6 +50,19 @@ def _with_modes(config: Any, **modes: object) -> Any:
     )
 
 
+def _with_learner_profile(config: Any) -> Any:
+    initialization = config.new_agent_initialization
+    if initialization is None:
+        return config
+    return replace(
+        config,
+        new_agent_initialization=replace(
+            initialization,
+            species_defaults_id=SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+        ),
+    )
+
+
 def institutional_memory_scenario(
     *,
     seed: int = 23,
@@ -77,6 +93,8 @@ def institutional_memory_scenario(
                 agent,
                 cognition=replace(
                     agent.cognition,
+                    office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
+                    institution_concept_mode=InstitutionConceptMode.DETERMINISTIC,
                     institutional_memory_mode=InstitutionalMemoryMode.DISABLED,
                     mediation_mode=MediationMode.DETERMINISTIC,
                 ),
@@ -85,39 +103,39 @@ def institutional_memory_scenario(
         ),
     )
     memory_on = replace(
-        composed,
+        memory_off,
         schema_version=RUNNER_SCHEMA_VERSION_V53,
         agents=tuple(
             replace(
                 agent,
                 cognition=replace(
                     agent.cognition,
-                    office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
-                    institution_concept_mode=InstitutionConceptMode.DETERMINISTIC,
                     institutional_memory_mode=InstitutionalMemoryMode.DETERMINISTIC,
-                    mediation_mode=MediationMode.DISABLED,
                 ),
             )
-            for agent in composed.agents
+            for agent in memory_off.agents
         ),
     )
-    record_opportunities = _with_modes(
-        memory_on,
-        artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
-    )
-    teaching_opportunities = replace(
+    record_opportunities = _with_learner_profile(
         _with_modes(
             memory_on,
-            teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
-        ),
-        artifacts_enabled=False,
-        durable_records=None,
-        knowledge_repositories=None,
+            artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
+        )
     )
-    limited = replace(
-        teaching_opportunities,
-        collective_projects=None,
-        public_goods=None,
+    teaching_opportunities = _with_learner_profile(
+        replace(
+            _with_modes(
+                memory_on,
+                teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+            ),
+            artifacts_enabled=False,
+            durable_records=None,
+            knowledge_repositories=None,
+        )
+    )
+    limited = _with_modes(
+        replace(teaching_opportunities, mentorship=None),
+        teaching_interaction_mode=TeachingInteractionMode.DISABLED,
     )
     arms = (
         ("bj-baseline", "institutional_memory_opportunities_off", baseline),

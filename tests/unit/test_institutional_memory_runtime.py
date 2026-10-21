@@ -29,6 +29,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V53,
     InstitutionalMemoryMode,
     InstitutionConceptMode,
+    SimulationRunnerConfig,
 )
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.observations import Observation
@@ -65,7 +66,9 @@ def _input(*, institutional_memory: object | None = None) -> CognitiveLoopInput:
     )
 
 
-def _config(*, enabled: bool, mixed: bool = False):
+def _config(
+    *, enabled: bool, mixed: bool = False
+) -> SimulationRunnerConfig:
     definition = institutionalization_scenario(seed=23, max_ticks=2)
     base = next(
         condition.runner_config
@@ -144,9 +147,12 @@ async def test_enabled_run_carries_empty_owner_ledgers() -> None:
         config, run_id=RunId("run-institutional-memory")
     ) as runner:
         await runner.run()
-        ledgers = [runtime._institutional_memory for runtime in runner._runtimes]
+        ledgers: list[InstitutionalMemoryLedger] = []
+        for runtime in runner._runtimes:
+            ledger = runtime._institutional_memory
+            assert type(ledger) is InstitutionalMemoryLedger
+            ledgers.append(ledger)
     assert len(ledgers) == len(config.agents)
-    assert all(type(ledger) is InstitutionalMemoryLedger for ledger in ledgers)
     assert [ledger.owner_id.value for ledger in ledgers] == [
         runtime.agent_id.value for runtime in runner._runtimes
     ]
