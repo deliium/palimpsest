@@ -2965,6 +2965,37 @@ class AgentRuntime:
             field_name="checkpoint.mediation",
         )
 
+    def _preflight_checkpoint_institutional_memory(self, checkpoint: object) -> None:
+        """Validate institutional memory before any runtime state is assigned."""
+        from agents.cognition.configuration import (
+            CognitionInstitutionalMemoryMode,
+        )
+        from agents.cognition.institutional_memory import (
+            InstitutionalMemoryLedger,
+            require_owner_institutional_memory,
+        )
+
+        value = getattr(checkpoint, "institutional_memory", None)
+        mode = getattr(
+            self._loop,
+            "_institutional_memory_mode",
+            CognitionInstitutionalMemoryMode.DISABLED,
+        )
+        if value is None:
+            return
+        if mode is not CognitionInstitutionalMemoryMode.DETERMINISTIC:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+        if type(value) is not InstitutionalMemoryLedger:
+            raise TypeError("institutional_memory must be InstitutionalMemoryLedger")
+        require_owner_institutional_memory(
+            value,
+            self._agent.agent_id,
+            field_name="AgentRuntimeCheckpoint.institutional_memory",
+        )
+
     def restore_runtime_checkpoint(self, checkpoint: object) -> None:
         """Restore status/internal state/goals from a detached checkpoint."""
         from agents.models import Agent, Goal
@@ -2978,6 +3009,7 @@ class AgentRuntime:
                 agent_id=self._agent.agent_id.value,
             )
         self._preflight_checkpoint_mediation(checkpoint)
+        self._preflight_checkpoint_institutional_memory(checkpoint)
         goals = tuple(checkpoint.goals)
         for goal in goals:
             if type(goal) is not Goal:
@@ -3033,6 +3065,7 @@ class AgentRuntime:
                 agent_id=self._agent.agent_id.value,
             )
         self._mediation = getattr(checkpoint, "mediation", None)
+        self._institutional_memory = getattr(checkpoint, "institutional_memory", None)
         self._cultural_narratives = getattr(checkpoint, "cultural_narratives", None)
         self._developmental_knowledge = getattr(
             checkpoint, "developmental_knowledge", None
@@ -3103,6 +3136,7 @@ class AgentRuntime:
             office_concepts=self._office_concepts,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
+            institutional_memory=self._institutional_memory,
             reputation=self._reputation,
             territorial_claims=self._territorial_claims,
             group_formation=self._group_formation,

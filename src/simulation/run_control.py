@@ -607,6 +607,7 @@ class AgentRuntimeCheckpoint:
     office_concepts: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
+    institutional_memory: object | None = None
     cultural_narratives: object | None = None
     developmental_knowledge: object | None = None
     mentorship: object | None = None
@@ -764,6 +765,15 @@ class AgentRuntimeCheckpoint:
             self.mediation,
             self.agent_id,
             field_name="mediation",
+        )
+        from agents.cognition.institutional_memory import (
+            require_owner_institutional_memory,
+        )
+
+        require_owner_institutional_memory(
+            self.institutional_memory,
+            self.agent_id,
+            field_name="AgentRuntimeCheckpoint.institutional_memory",
         )
         from agents.cognition.cultural_narratives import (
             require_owner_cultural_narratives,

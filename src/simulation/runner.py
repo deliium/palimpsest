@@ -2914,6 +2914,30 @@ class SimulationRunner:
                     )
                 if mode is not CognitionMediationMode.DETERMINISTIC:
                     raise ValueError("mediation ledger for disabled owner")
+        from agents.cognition.configuration import (
+            CognitionInstitutionalMemoryMode,
+        )
+        from agents.cognition.institutional_memory import InstitutionalMemoryLedger
+
+        for state in checkpoint.runtime_states:
+            ledger = getattr(state, "institutional_memory", None)
+            if ledger is None:
+                continue
+            if type(ledger) is not InstitutionalMemoryLedger:
+                raise TypeError("institutional_memory ledger invalid type")
+            if ledger.owner_id != state.agent_id:
+                raise ValueError("institutional memory ledger owner_id mismatch")
+            runtime = next(
+                (item for item in self._runtimes if item.agent_id == state.agent_id),
+                None,
+            )
+            mode = getattr(
+                getattr(runtime, "_loop", None),
+                "_institutional_memory_mode",
+                CognitionInstitutionalMemoryMode.DISABLED,
+            )
+            if mode is not CognitionInstitutionalMemoryMode.DETERMINISTIC:
+                raise ValueError("institutional memory ledger for disabled owner")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
         if len(by_agent) != len(checkpoint.runtime_states):
             raise ValueError("duplicate runtime state owner")
@@ -3018,6 +3042,7 @@ class SimulationRunner:
             office_concept_ledgers=self.export_office_concept_ledgers(),
             collective_decision_ledgers=self.export_collective_decision_ledgers(),
             mediation_ledgers=self.export_mediation_ledgers(),
+            institutional_memory_ledgers=self.export_institutional_memory_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
         )
@@ -3376,6 +3401,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_office_concept_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_institutional_memory_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered institutional-memory ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "institutional_memory", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_institutional_memory_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)

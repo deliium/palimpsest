@@ -6026,10 +6026,12 @@ class SimulationRunnerResult:
     office_concept_ledgers: tuple[object, ...] = ()
     collective_decision_ledgers: tuple[object, ...] = ()
     mediation_ledgers: tuple[object, ...] = ()
+    institutional_memory_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
 
     def __post_init__(self) -> None:
+        from agents.cognition.institutional_memory import InstitutionalMemoryLedger
         from simulation.models import RunId
 
         if type(self.run_id) is not RunId:
@@ -6279,6 +6281,17 @@ class SimulationRunnerResult:
             if type(ledger) is not CollectiveDecisionLedger:
                 raise TypeError("collective_decision_ledgers: invalid_item")
         object.__setattr__(self, "collective_decision_ledgers", decision_ledgers)
+        if isinstance(self.institutional_memory_ledgers, (set, frozenset)):
+            raise TypeError("institutional_memory_ledgers must be ordered")
+        if isinstance(
+            self.institutional_memory_ledgers, (str, bytes)
+        ) or not isinstance(self.institutional_memory_ledgers, Sequence):
+            raise TypeError("institutional_memory_ledgers must be ordered")
+        institutional_ledgers = tuple(self.institutional_memory_ledgers)
+        for ledger in institutional_ledgers:
+            if type(ledger) is not InstitutionalMemoryLedger:
+                raise TypeError("institutional_memory_ledgers: invalid_item")
+        object.__setattr__(self, "institutional_memory_ledgers", institutional_ledgers)
         if isinstance(self.mediation_ledgers, (set, frozenset)):
             raise TypeError("mediation_ledgers must be ordered")
         from agents.cognition.mediation import MediationLedger
@@ -7189,9 +7202,26 @@ class SimulationRunnerConfig:
             )
         if self.new_agent_initialization is not None:
             from simulation.new_agent_initialization import (
+                SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
                 SPECIES_DEFAULT_OFFICES_V1,
             )
 
+            if (
+                self.new_agent_initialization.species_defaults_id
+                == SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1
+                and self.schema_version != RUNNER_SCHEMA_VERSION_V53
+            ):
+                _LOGGER.error(
+                    "invalid_fields path=new_agent_initialization "
+                    "reason_code=institutional_memory_profile_requires_v53 "
+                    "schema_version=%s",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "species_default_institutional_memory_v1 requires "
+                    "runner-config-v53 "
+                    "(code=institutional_memory_profile_requires_v53)"
+                )
             if (
                 self.new_agent_initialization.species_defaults_id
                 == SPECIES_DEFAULT_OFFICES_V1
@@ -9178,9 +9208,16 @@ class SimulationRunnerConfig:
                 == default_init.canonical_payload()
             )
             from simulation.new_agent_initialization import (
+                SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
                 SPECIES_DEFAULT_OFFICES_V1,
             )
 
+            institutional_memory_profile = (
+                type(self.new_agent_initialization) is NewAgentInitializationSpec
+                and self.new_agent_initialization.species_defaults_id
+                == SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1
+                and self.schema_version == RUNNER_SCHEMA_VERSION_V53
+            )
             offices_profile = (
                 type(self.new_agent_initialization) is NewAgentInitializationSpec
                 and self.new_agent_initialization.species_defaults_id
@@ -9194,8 +9231,10 @@ class SimulationRunnerConfig:
                 }
             )
             if (
-                self.schema_version != RUNNER_SCHEMA_VERSION_V24 or not is_default
-            ) and not offices_profile:
+                (self.schema_version != RUNNER_SCHEMA_VERSION_V24 or not is_default)
+                and not offices_profile
+                and not institutional_memory_profile
+            ):
                 _LOGGER.error(
                     "new_agent_initialization_requires_v25 schema_version=%s "
                     "reason_code=new_agent_initialization_requires_v25",

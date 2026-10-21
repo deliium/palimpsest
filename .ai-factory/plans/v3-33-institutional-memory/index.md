@@ -169,8 +169,8 @@ No telepathy, omniscient archive, objective institution/office/proposal registry
 - [x] Task 8: Integrate preparation, owner context and deferred commit ([details](phase-04-runtime.md#task-8-integrate-preparation-owner-context-and-deferred-commit)) (depends on 4–7).
 
 ### Phase 5
-- [ ] Task 9: Preserve supported owner checkpoints and blank-slate admission ([details](phase-05-continuity.md#task-9-preserve-supported-owner-checkpoints-and-blank-slate-admission)) (depends on 8).
-- [ ] Task 10: Prove external carrier survival, loss and later learning ([details](phase-05-continuity.md#task-10-prove-external-carrier-survival-loss-and-later-learning)) (depends on 6–9).
+- [x] Task 9: Preserve supported owner checkpoints and blank-slate admission ([details](phase-05-continuity.md#task-9-preserve-supported-owner-checkpoints-and-blank-slate-admission)) (depends on 8).
+- [x] Task 10: Prove external carrier survival, loss and later learning ([details](phase-05-continuity.md#task-10-prove-external-carrier-survival-loss-and-later-learning)) (depends on 6–9).
 
 ### Phase 6
 - [ ] Task 11: Add institutional memory continuity and provenance analysis ([details](phase-06-analysis.md#task-11-add-institutional-memory-continuity-and-provenance-analysis)) (depends on 9, 10).

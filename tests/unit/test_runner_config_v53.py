@@ -328,3 +328,61 @@ def test_cognitive_loop_constructor_forwards_mode_and_policy() -> None:
 def test_agent_cognition_spec_default_is_disabled() -> None:
     spec = AgentCognitionSpec(agent_id=AgentId("a"))
     assert spec.institutional_memory_mode is InstitutionalMemoryMode.DISABLED
+
+
+def test_institutional_memory_profile_round_trips_on_v53() -> None:
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+    )
+
+    config = _base()
+    assert config.new_agent_initialization is not None
+    initialization = replace(
+        config.new_agent_initialization,
+        species_defaults_id=SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+    )
+    updated = replace(config, new_agent_initialization=initialization)
+    decoded = decode_runner_config(encode_runner_config(updated))
+    assert (
+        decoded.new_agent_initialization is not None
+        and decoded.new_agent_initialization.species_defaults_id
+        == SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1
+    )
+
+
+def test_institutional_memory_profile_rejects_v52() -> None:
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+    )
+
+    config = _v52()
+    initialization = replace(
+        config.new_agent_initialization,
+        species_defaults_id=SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+    )
+    with pytest.raises(ValueError, match="institutional_memory_profile_requires_v53"):
+        replace(config, new_agent_initialization=initialization)
+
+
+def test_institutional_memory_profile_pack_is_empty_and_fresh() -> None:
+    from agents.models import AgentId
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+        species_defaults_for,
+    )
+
+    first = species_defaults_for(
+        SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1, agent_id=AgentId("new-a")
+    )
+    second = species_defaults_for(
+        SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1, agent_id=AgentId("new-b")
+    )
+    assert first.cognition.agent_id != second.cognition.agent_id
+    assert (
+        first.cognition.institutional_memory_mode
+        is InstitutionalMemoryMode.DETERMINISTIC
+    )
+    assert first.cognition.office_succession_mode is OfficeSuccessionMode.DETERMINISTIC
+    assert first.cognition.artifact_interpretation_mode.value == "deterministic"
+    assert first.cognition.teaching_interaction_mode.value == "deterministic"
+    assert first.cognition.institution_concept_mode is InstitutionConceptMode.DISABLED

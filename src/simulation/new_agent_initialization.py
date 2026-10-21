@@ -24,6 +24,8 @@ from simulation.runner_models import (
     ArtifactInterpretationMode,
     CulturalNarrativeMode,
     DriveOverrideSpec,
+    InstitutionalMemoryMode,
+    OfficeSuccessionMode,
     SemanticNamingMode,
     SkillLearningMode,
     SocialConventionMode,
@@ -38,6 +40,7 @@ __all__ = [
     "CREATION_REASON_CODES",
     "NEW_AGENT_INITIALIZATION_KEYS",
     "SPECIES_DEFAULT_DEVELOPMENTAL_V1",
+    "SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1",
     "SPECIES_DEFAULT_OFFICES_V1",
     "SPECIES_DEFAULT_V1",
     "SUBJECTIVE_COPY_DENY_LIST",
@@ -70,6 +73,9 @@ _LOG = logging.getLogger("simulation.new_agent_initialization")
 SPECIES_DEFAULT_V1: Final[str] = "species_default_v1"
 SPECIES_DEFAULT_DEVELOPMENTAL_V1: Final[str] = "species_default_developmental_v1"
 SPECIES_DEFAULT_OFFICES_V1: Final[str] = "species_default_offices_v1"
+SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1: Final[str] = (
+    "species_default_institutional_memory_v1"
+)
 
 _NEW_AGENT_INIT_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -165,6 +171,9 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "subjective_valuations",
         "scarcity_beliefs",
         "acceptance_memories",
+        "institutional_memory",
+        "institutional_memory_entries",
+        "institutional_memory_ledgers",
     }
 )
 
@@ -244,6 +253,7 @@ _KNOWN_SPECIES_DEFAULT_IDS: Final[frozenset[str]] = frozenset(
         SPECIES_DEFAULT_V1,
         SPECIES_DEFAULT_DEVELOPMENTAL_V1,
         SPECIES_DEFAULT_OFFICES_V1,
+        SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
     }
 )
 
@@ -961,8 +971,6 @@ def _species_default_developmental_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
 
 def _species_default_offices_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     """Office-capable pack with empty office content and default other modes."""
-    from simulation.runner_models import OfficeSuccessionMode
-
     cognition = AgentCognitionSpec(
         agent_id=agent_id,
         office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
@@ -975,10 +983,30 @@ def _species_default_offices_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     )
 
 
+def _species_default_institutional_memory_v1(
+    agent_id: AgentId,
+) -> SpeciesDefaultsPack:
+    """Empty institutional learner: office, interpretation, teaching, memory."""
+    cognition = AgentCognitionSpec(
+        agent_id=agent_id,
+        office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
+        institutional_memory_mode=InstitutionalMemoryMode.DETERMINISTIC,
+        artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
+        teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+    )
+    drive_profile = cognition.resolve_drive_profile()
+    return SpeciesDefaultsPack(
+        species_defaults_id=SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
+        cognition=cognition,
+        drive_profile=drive_profile,
+    )
+
+
 _SPECIES_DEFAULTS: Final[Mapping[str, Callable[[AgentId], SpeciesDefaultsPack]]] = {
     SPECIES_DEFAULT_V1: _species_default_v1,
     SPECIES_DEFAULT_DEVELOPMENTAL_V1: _species_default_developmental_v1,
     SPECIES_DEFAULT_OFFICES_V1: _species_default_offices_v1,
+    SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1: (_species_default_institutional_memory_v1),
 }
 
 
