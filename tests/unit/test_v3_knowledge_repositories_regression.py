@@ -51,7 +51,7 @@ def test_agent_command_count_is_35() -> None:
 
 
 def test_metric_family_count_is_62() -> None:
-    assert METRIC_FAMILY_COUNT == 126
+    assert METRIC_FAMILY_COUNT == 129
     assert MetricFamilyId.KNOWLEDGE_REPOSITORY_SURVIVAL.value == (
         "knowledge_repository_survival"
     )

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 126
+METRIC_FAMILY_COUNT: Final[int] = 129
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -201,6 +201,9 @@ class MetricFamilyId(StrEnum):
     MEDIATION_ROLE_EMERGENCE = "mediation_role_emergence"
     INSTITUTIONAL_MEMORY_CONTINUITY = "institutional_memory_continuity"
     INSTITUTIONAL_MEMORY_PROVENANCE = "institutional_memory_provenance"
+    INSTITUTIONAL_DECAY = "institutional_decay"
+    INSTITUTION_LIFECYCLE = "institution_lifecycle"
+    INSTITUTION_LINEAGE = "institution_lineage"
 
 
 class DenominatorKind(StrEnum):
@@ -5605,6 +5608,127 @@ def _spec_institutional_memory_continuity() -> MetricSpecification:
     )
 
 
+def _spec_institutional_decay() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTIONAL_DECAY,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="detached_owner_institutional_decay_rows",
+        denominator="stable_observed_cohort",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="four consecutive observation/update ticks",
+        deceased_policy="retained owner samples remain analytical evidence",
+        zero_holding_policy="enabled empty ledger -> observed zero patterns",
+        opportunity_vs_occurrence="observed support is not total social support",
+        self_edge_policy="not_applicable",
+        censoring_policy="hidden scope or pruned interval -> partial/unknown",
+        formulas={
+            "window_count": "complete trailing windows",
+            "support_ratio": "distinct independent supporters / observed cohort",
+            "participation_ratio": "distinct accepted actors / observed cohort",
+            "procedure_ratio": "updates with performed procedure / covered updates",
+            "succession_ratio": "completed transitions / eligible transitions",
+            "knowledge_ratio": "retained entries / before entries",
+            "dimension_trajectories_json": "canonical dimension window payload",
+            "mechanism_evidence_json": "nonexclusive association payload",
+        },
+        value_keys=(
+            "window_count",
+            "support_ratio",
+            "participation_ratio",
+            "procedure_ratio",
+            "succession_ratio",
+            "knowledge_ratio",
+            "as_of_tick",
+            "input_revision",
+            "dimension_trajectories_json",
+            "mechanism_evidence_json",
+        ),
+    )
+
+
+def _spec_institution_lifecycle() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTION_LIFECYCLE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_institution_episodes",
+        denominator="prior_stable_episodes",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        cohort_window="two adjacent nonoverlapping four-tick windows",
+        deceased_policy="owner death censors coverage, not the institution",
+        zero_holding_policy="no episodes -> availability=absent",
+        opportunity_vs_occurrence=(
+            "collapse requires prior stability and two low windows"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="incomplete history or scope -> right_censored",
+        formulas={
+            "episode_count": "retained episodes",
+            "emerging_count": "emerging episodes",
+            "stable_count": "stable episodes",
+            "weakening_count": "weakening episodes",
+            "collapsed_count": "confirmed collapsed episodes",
+            "right_censored_count": "insufficient or terminated coverage",
+            "episodes_json": "canonical lifecycle episode payload",
+        },
+        value_keys=(
+            "episode_count",
+            "emerging_count",
+            "stable_count",
+            "weakening_count",
+            "collapsed_count",
+            "right_censored_count",
+            "as_of_tick",
+            "input_revision",
+            "episodes_json",
+        ),
+    )
+
+
+def _spec_institution_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INSTITUTION_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_institution_lineage_episodes",
+        denominator="observed_episode_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="retained adjacent activity windows",
+        deceased_policy="retained episode witnesses remain analytical evidence",
+        zero_holding_policy="no episodes -> availability=absent",
+        opportunity_vs_occurrence=(
+            "declared labels and support do not establish lineage"
+        ),
+        self_edge_policy="reject_self_edges",
+        censoring_policy="pruned predecessors become explicit stubs",
+        formulas={
+            "episode_count": "observed episodes",
+            "stub_count": "pruned identity-only predecessors",
+            "transformed_count": "confirmed transform edges",
+            "split_count": "confirmed split edges",
+            "reappeared_count": "confirmed reappearance edges",
+            "continued_count": "continuation edges",
+            "ambiguous_count": "ambiguous excluded matches",
+            "lineage_graph_json": "canonical lineage graph payload",
+        },
+        value_keys=(
+            "episode_count",
+            "stub_count",
+            "transformed_count",
+            "split_count",
+            "reappeared_count",
+            "continued_count",
+            "ambiguous_count",
+            "as_of_tick",
+            "input_revision",
+            "lineage_graph_json",
+        ),
+    )
+
+
 def _spec_institutional_memory_provenance() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.INSTITUTIONAL_MEMORY_PROVENANCE,
@@ -5777,6 +5901,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_narrative_historical_alignment,
     _spec_institutional_memory_continuity,
     _spec_institutional_memory_provenance,
+    _spec_institutional_decay,
+    _spec_institution_lifecycle,
+    _spec_institution_lineage,
 )
 
 

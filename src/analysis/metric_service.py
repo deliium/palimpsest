@@ -281,6 +281,8 @@ class MetricComputationInputs:
     reputation_neighborhoods: Mapping[str, str] | None = None
     reputation_target_id: str | None = None
     survival_cohort_map: Mapping[str, Sequence[str]] | None = None
+    institutional_decay_rows: Sequence[object] | None = None
+    institutional_decay_context_rows: Sequence[object] | None = None
     institutional_memory_rows: Sequence[object] | None = None
     institutional_memory_carrier_rows: Sequence[object] | None = None
     institutional_memory_identity_rows: Sequence[object] | None = None
@@ -1700,6 +1702,43 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
                 as_of_tick=window_end,
                 expected_owner_count=(inputs.regional_destination_expected_owner_count),
+            ),
+        )
+
+    if inputs.institutional_decay_rows is not None:
+        from analysis.institutional_decay_metrics import (
+            compute_institution_lifecycle_metric,
+            compute_institution_lineage_metric,
+            compute_institutional_decay_metric,
+        )
+
+        _safe(
+            "institutional_decay",
+            lambda: compute_institutional_decay_metric(
+                inputs.institutional_decay_rows,
+                run_id=run_id,
+                input_revision=revision,
+                as_of_tick=window_end,
+                context_rows=inputs.institutional_decay_context_rows or (),  # type: ignore[arg-type]
+            ),
+        )
+        _safe(
+            "institution_lifecycle",
+            lambda: compute_institution_lifecycle_metric(
+                inputs.institutional_decay_rows,
+                run_id=run_id,
+                input_revision=revision,
+                as_of_tick=window_end,
+                context_rows=inputs.institutional_decay_context_rows or (),  # type: ignore[arg-type]
+            ),
+        )
+        _safe(
+            "institution_lineage",
+            lambda: compute_institution_lineage_metric(
+                inputs.institutional_decay_rows,
+                run_id=run_id,
+                input_revision=revision,
+                as_of_tick=window_end,
             ),
         )
 

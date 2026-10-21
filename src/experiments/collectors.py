@@ -712,6 +712,26 @@ def assemble_arm_metric_bundle(
             institution_continuity_rows=continuity_rows,
             institution_known_person_ids=agent_ids,
         )
+    decay_ledgers = getattr(arm.runner_result, "institutional_decay_ledgers", None)
+    if decay_ledgers is not None:
+        from experiments.composition import (
+            institution_decay_context_from_events,
+            institution_temporal_rows_from_ledgers,
+        )
+
+        decay_rows = institution_temporal_rows_from_ledgers(decay_ledgers)
+        context_rows = (
+            ()
+            if events is None
+            else institution_decay_context_from_events(
+                events, decay_rows, as_of_tick=ticks
+            )
+        )
+        inputs = replace(
+            inputs,
+            institutional_decay_rows=decay_rows,
+            institutional_decay_context_rows=context_rows,
+        )
     institutional_ledgers = getattr(
         arm.runner_result, "institutional_memory_ledgers", None
     )

@@ -2777,6 +2777,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "offices_succession@1",
         "collective_decisions@1",
         "mediation_opportunities@1",
+        "institutional_decay@1",
     }
 )
 
@@ -5431,6 +5432,20 @@ def experiment_bj_institutional_memory(
     """Off-gate Experiment BJ: institutional-memory opportunities."""
     from experiments.institutional_memory_scenario import (
         experiment_bj_institutional_memory as build,
+    )
+
+    return build(base, seed_matrix=seed_matrix, max_ticks=max_ticks)
+
+
+def experiment_bk_institutional_decay(
+    base: object,
+    *,
+    seed_matrix: object = None,
+    max_ticks: int = 32,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BK: institutional-decay opportunities."""
+    from experiments.institutional_decay_scenario import (
+        experiment_bk_institutional_decay as build,
     )
 
     return build(base, seed_matrix=seed_matrix, max_ticks=max_ticks)

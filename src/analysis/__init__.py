@@ -246,6 +246,12 @@ from analysis.institutional_decay import (
     compute_institutional_decay,
     institution_decay_rows_from_ledgers,
 )
+from analysis.institutional_decay_metrics import (
+    compute_institution_lifecycle_metric,
+    compute_institution_lineage_metric,
+    compute_institutional_decay_metric,
+)
+from analysis.institutional_memory import (
     InstitutionalCarrierRow,
     InstitutionalIdentityRow,
     InstitutionalMemoryEntryRow,
@@ -1080,8 +1086,11 @@ __all__ = [
     "compute_identity_dynamics",
     "compute_institution_candidates",
     "compute_institution_emergence",
+    "compute_institution_lifecycle_metric",
     "compute_institution_lineage",
+    "compute_institution_lineage_metric",
     "compute_institutional_decay",
+    "compute_institutional_decay_metric",
     "compute_institutional_memory_continuity",
     "compute_institutional_memory_provenance",
     "compute_institutional_persistence",
