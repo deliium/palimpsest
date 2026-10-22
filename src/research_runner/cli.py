@@ -210,7 +210,7 @@ def _cmd_generational(args: argparse.Namespace) -> int:
         create_tick_journal_repository,
     )
     from simulation.models import RunId
-    from simulation.runner import RunnerDependencyFactories
+    from simulation.runner import RecordingStoreSettings, RunnerDependencyFactories
     from simulation.runner_models import ExperimentAssignmentRef
     from simulation.runner_serialization import decode_runner_config
 
@@ -228,6 +228,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             "source_clean": bool(args.source_clean),
             "source_artifact_digest": args.source_artifact_digest,
         }
+        recording_values = (
+            args.recording_root,
+            args.recording_artifact_id,
+            args.recording_namespace,
+            args.recording_lookup_mode,
+        )
+        if any(recording_values) and not all(recording_values):
+            raise ValueError("recording flags require a complete set")
+        if config.provider.recording_policy.value == "deterministic_fake" and any(
+            recording_values
+        ):
+            raise ValueError("deterministic fake rejects recording flags")
         experiment = config.experiment or ExperimentAssignmentRef(
             experiment_id="generational_runner_ad_hoc@1",
             condition_id="standalone",
@@ -256,6 +268,15 @@ def _cmd_generational(args: argparse.Namespace) -> int:
     try:
         factories = RunnerDependencyFactories()
         reader = None
+        recording_store = None
+        if args.recording_root is not None:
+            from llm.recording import LookupMode
+
+            recording_store = RecordingStoreSettings(
+                root_dir=Path(args.recording_root),
+                cache_namespace=args.recording_namespace,
+                lookup_mode=LookupMode(args.recording_lookup_mode),
+            )
         if config.persistence.durable:
             settings = load_settings(env_file=False)
             resources = create_database_resources(settings)
@@ -269,11 +290,16 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 scientific_evidence=create_scientific_evidence_repository(
                     session_factory
                 ),
+                recording_store=recording_store,
             )
             reader = PostgresHistoricalBoundaryReader(
                 runs=create_run_repository(session_factory),
                 journal=create_tick_journal_repository(session_factory),
                 snapshots=create_snapshot_repository(session_factory),
+            )
+        if not config.persistence.durable:
+            factories = RunnerDependencyFactories(
+                recording_store=recording_store
             )
         context = GenerationalExecutionContext(
             artifact_root=Path(args.artifact_root),
@@ -389,6 +415,10 @@ def build_parser() -> argparse.ArgumentParser:
     source_group = gen_p.add_mutually_exclusive_group()
     source_group.add_argument("--source-clean", action="store_true")
     source_group.add_argument("--source-artifact-digest", default=None)
+    gen_p.add_argument("--recording-root", default=None)
+    gen_p.add_argument("--recording-artifact-id", default=None)
+    gen_p.add_argument("--recording-namespace", default=None)
+    gen_p.add_argument("--recording-lookup-mode", default=None)
     gen_p.set_defaults(func=_cmd_generational)
 
     return parser
