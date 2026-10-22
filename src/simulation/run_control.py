@@ -26,12 +26,15 @@ from memory.models import Belief, quantize_score
 from simulation.agent_runtime import AgentRuntimeStatus
 from simulation.clock import require_exact_nonneg_int
 from simulation.evidence import OpaqueCanonicalEnvelope, opaque_envelope_from_payload
+from simulation.generational_models import PopulationProgress, StopEvidence
 from simulation.lifecycle import ActionSubmission, require_action_submission
 from simulation.models import RunId
 from simulation.runner_models import (
     CognitionCounters,
     FinalizedTickReceipt,
     GoalTransitionReceipt,
+    RunnerAttemptReceipt,
+    SimulationRunnerResult,
 )
 from simulation.subjective_state import SubjectiveMutationBatch
 from world.identifiers import require_stable_id
@@ -45,6 +48,8 @@ __all__ = [
     "ConfigAvailability",
     "ExecutionLease",
     "FinalizationCommand",
+    "GenerationalBoundaryStage",
+    "GenerationalControlState",
     "LifecycleTransitionError",
     "ProcessRestartClass",
     "ResumeMode",
@@ -1018,6 +1023,67 @@ def decode_emotional_state(
     )
 
 
+class GenerationalBoundaryStage(StrEnum):
+    """In-process boundary pipeline stage for generational checkpoint carry."""
+
+    IDLE = "idle"
+    OWNER_FINALIZATION_PENDING = "owner_finalization_pending"
+    PUBLICATION_PENDING = "publication_pending"
+    PUBLISHED = "published"
+    TERMINAL = "terminal"
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationalControlState:
+    """Python-only generational control/latch carry (not a durable codec)."""
+
+    boundary_stage: GenerationalBoundaryStage
+    boundary_tick: int
+    terminal_receipt: RunnerAttemptReceipt | None = None
+    stop_evidence: StopEvidence | None = None
+    attempt_receipts: tuple[RunnerAttemptReceipt, ...] = ()
+    finished_result: SimulationRunnerResult | None = None
+    progress: PopulationProgress | None = None
+    published_boundaries: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.boundary_stage) is not GenerationalBoundaryStage:
+            raise TypeError("boundary_stage must be GenerationalBoundaryStage")
+        object.__setattr__(
+            self,
+            "boundary_tick",
+            require_exact_nonneg_int("boundary_tick", self.boundary_tick),
+        )
+        if self.terminal_receipt is not None and type(self.terminal_receipt) is not (
+            RunnerAttemptReceipt
+        ):
+            raise TypeError("terminal_receipt must be RunnerAttemptReceipt or None")
+        if self.stop_evidence is not None and type(
+            self.stop_evidence
+        ) is not StopEvidence:
+            raise TypeError("stop_evidence must be StopEvidence or None")
+        receipts = tuple(self.attempt_receipts)
+        for receipt in receipts:
+            if type(receipt) is not RunnerAttemptReceipt:
+                raise TypeError("attempt_receipts entries must be RunnerAttemptReceipt")
+        object.__setattr__(self, "attempt_receipts", receipts)
+        if self.finished_result is not None and type(self.finished_result) is not (
+            SimulationRunnerResult
+        ):
+            raise TypeError("finished_result must be SimulationRunnerResult or None")
+        if self.progress is not None and type(self.progress) is not PopulationProgress:
+            raise TypeError("progress must be PopulationProgress or None")
+        published = tuple(
+            sorted(
+                require_exact_nonneg_int("published_boundary", item)
+                for item in self.published_boundaries
+            )
+        )
+        if len(set(published)) != len(published):
+            raise ValueError("published_boundaries must be unique")
+        object.__setattr__(self, "published_boundaries", published)
+
+
 @dataclass(frozen=True, slots=True)
 class RunnerRuntimeCheckpoint:
     """Process-restart snapshot for SimulationRunner rehydration."""
@@ -1032,6 +1098,7 @@ class RunnerRuntimeCheckpoint:
     cognition_counters: CognitionCounters
     pending_tick: int | None = None
     pending_count: int = 0
+    generational_control_state: GenerationalControlState | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:
@@ -1060,6 +1127,12 @@ class RunnerRuntimeCheckpoint:
         object.__setattr__(self, "runtime_states", states)
         if type(self.cognition_counters) is not CognitionCounters:
             raise TypeError("cognition_counters must be CognitionCounters")
+        if self.generational_control_state is not None and type(
+            self.generational_control_state
+        ) is not GenerationalControlState:
+            raise TypeError(
+                "generational_control_state must be GenerationalControlState or None"
+            )
 
 
 @dataclass(frozen=True, slots=True)

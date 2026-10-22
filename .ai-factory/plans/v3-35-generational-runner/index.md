@@ -224,7 +224,7 @@ All eight findings were approved before editing; task IDs/settings/original requ
 ### Phase 3: Orchestration
 
 - [x] Task 7: Add trusted, versioned experiment criterion injection ([details](phase-03-boundary-orchestration.md#task-7-add-trusted-versioned-experiment-criterion-injection)) (depends on 1, 2, 3, 6).
-- [ ] Task 8: Centralize finalized-boundary publication and idempotent finishing ([details](phase-03-boundary-orchestration.md#task-8-centralize-finalized-boundary-publication-and-idempotent-finishing)) (depends on 6, 7).
+- [x] Task 8: Centralize finalized-boundary publication and idempotent finishing ([details](phase-03-boundary-orchestration.md#task-8-centralize-finalized-boundary-publication-and-idempotent-finishing)) (depends on 6, 7).
 - [x] Task 9: Update API and matrix stop/result consumers ([details](phase-03-boundary-orchestration.md#task-9-update-api-and-matrix-stopresult-consumers)) (depends on 3, 8).
 
 ### Phase 4: Reproducibility and history

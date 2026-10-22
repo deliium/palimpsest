@@ -7,6 +7,7 @@ It never imports environment settings, SQLAlchemy adapters, or API code.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
@@ -141,6 +142,8 @@ from simulation.persistence import (
 )
 from simulation.run_control import (
     FinalizationCommand,
+    GenerationalBoundaryStage,
+    GenerationalControlState,
     ResumeMode,
     RunnerCrashInjected,
     RunnerCrashPoint,
@@ -2452,6 +2455,11 @@ class SimulationRunner:
                 stage="closed",
             )
         self._ensure_started()
+        if self._finished_result is not None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="finished_run",
+            )
         if self._terminal_receipt is not None:
             return self._terminal_receipt
         if self._ticks_committed >= self._config.stop_policy.max_ticks:
@@ -2544,7 +2552,41 @@ class SimulationRunner:
                 tick_result=tick_result,
             )
             self._refresh_generational_progress(tick_result)
-            stop_reason = await self._evaluate_stop()
+            try:
+                stop_reason = await self._evaluate_stop()
+            except asyncio.CancelledError:
+                if not self._config.stop_policy.allow_cancellation:
+                    raise
+                if self._config.generational_run is not None:
+                    boundary = self._safe_boundary()
+                    if boundary is not None:
+                        self._stop_evidence = StopEvidence(
+                            boundary=boundary,
+                            matched_condition_codes=(
+                                RunnerStopReasonCode.CANCELLED.value,
+                            ),
+                            primary_condition_code=(
+                                RunnerStopReasonCode.CANCELLED.value
+                            ),
+                            criterion_evaluation_status=(
+                                ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
+                            ),
+                        )
+                cancelled = RunnerAttemptReceipt(
+                    tick=tick_value,
+                    status=RunnerAttemptStatus.FINALIZED,
+                    submission_count=len(submissions),
+                    finalized_count=finalized,
+                    stop_reason=RunnerStopReasonCode.CANCELLED,
+                )
+                self._attempt_receipts.append(cancelled)
+                self._terminal_receipt = cancelled
+                _LOG.info(
+                    "runner_cancelled_at_boundary run_id=%s tick=%s",
+                    self._run_id.value,
+                    tick_value,
+                )
+                return cancelled
             receipt = RunnerAttemptReceipt(
                 tick=tick_value,
                 status=RunnerAttemptStatus.FINALIZED,
@@ -2825,36 +2867,59 @@ class SimulationRunner:
                     stop_reason=RunnerStopReasonCode.AUTHORITY_FAILURE,
                 )
             revision = self._engine.revision
-            tick_result = TickResult(
-                tick=Tick(tick),
-                resulting_tick=resulting_tick,
-                base_revision=WorldRevision(max(0, revision.value - 1)),
-                resulting_revision=revision if revision.value > 0 else WorldRevision(0),
-                resolutions=(),
-                events=(),
-            )
-            # Fix revision pairing when engine revision did not advance.
-            if tick_result.resulting_revision.value < tick_result.base_revision.value:
-                tick_result = TickResult(
-                    tick=Tick(tick),
-                    resulting_tick=resulting_tick,
-                    base_revision=WorldRevision(0),
-                    resulting_revision=WorldRevision(0),
-                    resolutions=(),
-                    events=(),
-                )
-            elif (
-                tick_result.resulting_revision.value
-                > tick_result.base_revision.value + 1
+            exact_result = self._engine.last_tick_result
+            if (
+                exact_result is not None
+                and exact_result.tick.value == tick
+                and exact_result.resulting_tick.value == resulting_tick.value
             ):
+                tick_result = exact_result
+            elif self._config.generational_run is not None:
+                return RunnerAttemptReceipt(
+                    tick=tick,
+                    status=RunnerAttemptStatus.ABORTED,
+                    submission_count=len(commands),
+                    finalized_count=0,
+                    stop_reason=(
+                        RunnerStopReasonCode.FINALIZATION_RECOVERY_REQUIRED
+                    ),
+                )
+            else:
                 tick_result = TickResult(
                     tick=Tick(tick),
                     resulting_tick=resulting_tick,
-                    base_revision=WorldRevision(revision.value),
-                    resulting_revision=WorldRevision(revision.value),
+                    base_revision=WorldRevision(max(0, revision.value - 1)),
+                    resulting_revision=(
+                        revision if revision.value > 0 else WorldRevision(0)
+                    ),
                     resolutions=(),
                     events=(),
                 )
+                # Fix revision pairing when engine revision did not advance.
+                if (
+                    tick_result.resulting_revision.value
+                    < tick_result.base_revision.value
+                ):
+                    tick_result = TickResult(
+                        tick=Tick(tick),
+                        resulting_tick=resulting_tick,
+                        base_revision=WorldRevision(0),
+                        resulting_revision=WorldRevision(0),
+                        resolutions=(),
+                        events=(),
+                    )
+                elif (
+                    tick_result.resulting_revision.value
+                    > tick_result.base_revision.value + 1
+                ):
+                    tick_result = TickResult(
+                        tick=Tick(tick),
+                        resulting_tick=resulting_tick,
+                        base_revision=WorldRevision(revision.value),
+                        resulting_revision=WorldRevision(revision.value),
+                        resolutions=(),
+                        events=(),
+                    )
             finalized = await self._finalize_and_acknowledge(
                 pendings=tuple(pendings),
                 commands=commands,
@@ -2868,13 +2933,21 @@ class SimulationRunner:
                 tick,
                 finalized,
             )
-        return RunnerAttemptReceipt(
+        last_result = self._engine.last_tick_result
+        if self._config.generational_run is not None and last_result is not None:
+            self._refresh_generational_progress(last_result)
+        stop_reason = await self._evaluate_stop()
+        receipt = RunnerAttemptReceipt(
             tick=last_tick,
             status=RunnerAttemptStatus.FINALIZED,
             submission_count=total_finalized,
             finalized_count=total_finalized,
-            stop_reason=await self._evaluate_stop(),
+            stop_reason=stop_reason,
         )
+        self._attempt_receipts.append(receipt)
+        if stop_reason is not None:
+            self._terminal_receipt = receipt
+        return receipt
 
     def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
         """Export rehydratable runner state (no subjective payloads)."""
@@ -2883,6 +2956,24 @@ class SimulationRunner:
         states = tuple(
             runtime.export_runtime_checkpoint() for runtime in self._runtimes
         )
+        control_state: GenerationalControlState | None = None
+        if self._config.generational_run is not None:
+            if self._terminal_receipt is not None:
+                stage = GenerationalBoundaryStage.TERMINAL
+            elif self._published_boundaries:
+                stage = GenerationalBoundaryStage.PUBLISHED
+            else:
+                stage = GenerationalBoundaryStage.IDLE
+            control_state = GenerationalControlState(
+                boundary_stage=stage,
+                boundary_tick=self._ticks_committed,
+                terminal_receipt=self._terminal_receipt,
+                stop_evidence=self._stop_evidence,
+                attempt_receipts=tuple(self._attempt_receipts),
+                finished_result=self._finished_result,
+                progress=self._generational_progress,
+                published_boundaries=tuple(sorted(self._published_boundaries)),
+            )
         return RunnerRuntimeCheckpoint(
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
@@ -2894,6 +2985,7 @@ class SimulationRunner:
             cognition_counters=self._cognition_counters,
             pending_tick=pending_tick,
             pending_count=pending_count,
+            generational_control_state=control_state,
         )
 
     async def export_regional_destination_traces(
@@ -3049,8 +3141,38 @@ class SimulationRunner:
             runtime.restore_runtime_checkpoint(runtime_state)
         self._ticks_committed = checkpoint.ticks_committed
         self._finalized_tick_receipts = list(checkpoint.finalized_tick_receipts)
+        self._finalized_tick_ids = {
+            receipt.tick for receipt in self._finalized_tick_receipts
+        }
+        if len(self._finalized_tick_ids) != len(self._finalized_tick_receipts):
+            raise ValueError("duplicate finalized tick receipts")
         self._goal_transition_receipts = list(checkpoint.goal_transition_receipts)
         self._cognition_counters = checkpoint.cognition_counters
+        control = checkpoint.generational_control_state
+        if self._config.generational_run is not None:
+            if control is None:
+                raise ValueError("generational checkpoint requires control state")
+            if control.boundary_tick != checkpoint.ticks_committed:
+                raise ValueError("generational control boundary mismatch")
+            if (
+                control.finished_result is not None
+                and control.terminal_receipt is None
+            ):
+                raise ValueError(
+                    "finished generational control requires terminal receipt"
+                )
+            if control.progress is not None and (
+                control.progress.boundary_tick != checkpoint.ticks_committed
+            ):
+                raise ValueError("generational progress boundary mismatch")
+            self._terminal_receipt = control.terminal_receipt
+            self._stop_evidence = control.stop_evidence
+            self._attempt_receipts = list(control.attempt_receipts)
+            self._finished_result = control.finished_result
+            self._generational_progress = control.progress
+            self._published_boundaries = set(control.published_boundaries)
+        elif control is not None:
+            raise ValueError("legacy checkpoint forbids generational control state")
         self._started = True
         _LOG.info(
             "runner_rehydrated run_id=%s ticks_committed=%s runtime_count=%s",
