@@ -10,6 +10,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
+from experiments.coordinator import ExperimentAssignment
+from experiments.generational_execution import (
+    GenerationalExecutionContext,
+    execute_generational_assignment,
+)
 from experiments.matrix_aggregate import (
     build_matrix_aggregate,
     encode_matrix_aggregate,
@@ -25,6 +30,10 @@ from experiments.matrix_serialization import decode_matrix_spec
 from research_runner.composition import (
     build_batch_dependencies,
     build_manifest_store,
+)
+from research_runner.generational_composition import (
+    GenerationalExecutionRecipe,
+    PostgresHistoricalBoundaryReader,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("research_runner.cli")
@@ -162,6 +171,143 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_recipe(path: Path) -> GenerationalExecutionRecipe:
+    import json
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("execution recipe must be an object")
+    expected = {
+        "recipe_id",
+        "version",
+        "params",
+        "intervention_id",
+        "intervention_version",
+        "intervention_params",
+    }
+    if set(data) != expected:
+        raise ValueError("execution recipe exact key set mismatch")
+    return GenerationalExecutionRecipe(
+        recipe_id=data["recipe_id"],
+        version=data["version"],
+        params=data["params"],
+        intervention_id=data["intervention_id"],
+        intervention_version=data["intervention_version"],
+        intervention_params=data["intervention_params"],
+    )
+
+
+def _cmd_generational(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from infrastructure.database import create_database_resources, dispose_engine
+    from infrastructure.settings import load_settings
+    from persistence import (
+        create_pending_finalization_repository,
+        create_run_repository,
+        create_scientific_evidence_repository,
+        create_snapshot_repository,
+        create_tick_journal_repository,
+    )
+    from simulation.models import RunId
+    from simulation.runner import RunnerDependencyFactories
+    from simulation.runner_models import ExperimentAssignmentRef
+    from simulation.runner_serialization import decode_runner_config
+
+    try:
+        config = decode_runner_config(Path(args.config).read_bytes())
+        if config.generational_run is None:
+            raise ValueError("generational command requires runner-config-v55")
+        recipe = _load_recipe(Path(args.execution_recipe))
+        if args.source_clean and args.source_artifact_digest:
+            raise ValueError("choose --source-clean or --source-artifact-digest")
+        if not args.source_clean and not args.source_artifact_digest:
+            raise ValueError("source clean assertion or artifact digest required")
+        source_identity = {
+            "code_revision": args.code_revision,
+            "source_clean": bool(args.source_clean),
+            "source_artifact_digest": args.source_artifact_digest,
+        }
+        experiment = config.experiment or ExperimentAssignmentRef(
+            experiment_id="generational_runner_ad_hoc@1",
+            condition_id="standalone",
+            replicate_index=0,
+            seed_ordinal=0,
+        )
+        config = replace(config, experiment=experiment)
+        assignment = ExperimentAssignment(
+            experiment_id=experiment.experiment_id,
+            condition_id=experiment.condition_id,
+            condition_ordinal=0,
+            seed=config.seed,
+            seed_ordinal=experiment.seed_ordinal,
+            replicate_index=experiment.replicate_index,
+            run_id=RunId(args.run_id),
+            runner_config=config,
+        )
+    except Exception as exc:
+        _LOG.error(
+            "cli_generational_preflight_failed",
+            extra={"experiment": {"reason_code": type(exc).__name__}},
+        )
+        return 2
+
+    resources = None
+    try:
+        factories = RunnerDependencyFactories()
+        reader = None
+        if config.persistence.durable:
+            settings = load_settings(env_file=False)
+            resources = create_database_resources(settings)
+            session_factory = resources.session_factory
+            factories = RunnerDependencyFactories(
+                run_repository=create_run_repository(session_factory),
+                journal=create_tick_journal_repository(session_factory),
+                pending_finalizations=create_pending_finalization_repository(
+                    session_factory
+                ),
+                scientific_evidence=create_scientific_evidence_repository(
+                    session_factory
+                ),
+            )
+            reader = PostgresHistoricalBoundaryReader(
+                runs=create_run_repository(session_factory),
+                journal=create_tick_journal_repository(session_factory),
+                snapshots=create_snapshot_repository(session_factory),
+            )
+        context = GenerationalExecutionContext(
+            artifact_root=Path(args.artifact_root),
+            source_identity=source_identity,
+            recipe=recipe,
+            factories=factories,
+            reader=reader,
+            cadence_ticks=(
+                None
+                if config.generational_run is None
+                else config.generational_run.historical_checkpoint_cadence_ticks
+            ),
+            sample_on_generation_change=(
+                True
+                if config.generational_run is None
+                else config.generational_run.sample_on_generation_change
+            ),
+        )
+        arm = asyncio.run(execute_generational_assignment(assignment, context))
+        print(f"run_id={assignment.run_id.value}")
+        print(f"stop_reason={arm.runner_result.stop_reason.value}")
+        print(f"ticks_committed={arm.runner_result.ticks_committed}")
+        return 0
+    except Exception as exc:
+        _LOG.error(
+            "cli_generational_execution_failed",
+            extra={"experiment": {"reason_code": type(exc).__name__}},
+        )
+        return 1
+    finally:
+        if resources is not None:
+            asyncio.run(dispose_engine(resources.engine))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="palimpsest-matrix",
@@ -229,6 +375,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also write matrix-metric-summary-v1 from cell metric sidecars",
     )
     agg_p.set_defaults(func=_cmd_aggregate)
+    gen_p = sub.add_parser(
+        "generational",
+        help="Run one generational runner configuration with an archive",
+    )
+    gen_p.add_argument("--config", required=True, help="Runner config JSON")
+    gen_p.add_argument(
+        "--execution-recipe", required=True, help="Registered recipe JSON"
+    )
+    gen_p.add_argument("--artifact-root", required=True, help="Archive root")
+    gen_p.add_argument("--run-id", required=True, help="Scientific run ID")
+    gen_p.add_argument("--code-revision", required=True, help="Source revision")
+    source_group = gen_p.add_mutually_exclusive_group()
+    source_group.add_argument("--source-clean", action="store_true")
+    source_group.add_argument("--source-artifact-digest", default=None)
+    gen_p.set_defaults(func=_cmd_generational)
+
     return parser
 
 
