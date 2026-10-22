@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
@@ -121,12 +122,14 @@ class GenerationalHistoricalSampler:
         regional_input: RegionalPopulationInput | None,
         identities: tuple[SocietyIdentityRow, ...] = (),
         interaction_edges: tuple[SocietyEdgeRow, ...] = (),
+        transit_body_ids: tuple[str, ...] = (),
     ) -> GenerationalCommunitySample:
         if type(boundary) is not GenerationalBoundary:
             raise TypeError("boundary must be GenerationalBoundary")
         end = boundary.progress.boundary_tick
         start = max(0, end - self.window_ticks)
         warmup = end < self.window_ticks
+        transit = tuple(sorted(set(transit_body_ids)))
         if regional_input is None:
             empty = compute_candidate_communities((), (), None, (), end)
             return GenerationalCommunitySample(
@@ -135,7 +138,7 @@ class GenerationalHistoricalSampler:
                 coverage_complete=False,
                 warmup=warmup,
                 living_count=0,
-                transit_count=0,
+                transit_count=len(transit),
                 journey_departures=0,
                 journey_arrivals=0,
                 deaths=0,
@@ -232,7 +235,7 @@ class GenerationalHistoricalSampler:
             coverage_complete=complete,
             warmup=warmup,
             living_count=len(living),
-            transit_count=0,
+            transit_count=len(transit),
             journey_departures=departures,
             journey_arrivals=arrivals,
             deaths=deaths,
@@ -265,6 +268,7 @@ class CommunityCountCriterion:
     regional_input: RegionalPopulationInput | None
     identities: tuple[SocietyIdentityRow, ...] = ()
     interaction_edges: tuple[SocietyEdgeRow, ...] = ()
+    transit_body_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.criterion_id != "community_count_at_least":
@@ -283,6 +287,7 @@ class CommunityCountCriterion:
             regional_input=self.regional_input,
             identities=self.identities,
             interaction_edges=self.interaction_edges,
+            transit_body_ids=self.transit_body_ids,
         )
         matched = (
             sample.coverage_complete
@@ -305,7 +310,10 @@ def criterion_from_spec(
     regional_input: RegionalPopulationInput | None,
     identities: tuple[SocietyIdentityRow, ...] = (),
     interaction_edges: tuple[SocietyEdgeRow, ...] = (),
+    transit_body_ids: tuple[str, ...] = (),
 ) -> CommunityCountCriterion:
+    if regional_input is None:
+        raise GenerationalSamplingError("regional_input_required")
     if spec.criterion_id != "community_count_at_least":
         raise GenerationalSamplingError("unknown_criterion_id")
     if spec.version != CRITERION_VERSION:
@@ -334,7 +342,29 @@ def criterion_from_spec(
         regional_input=regional_input,
         identities=identities,
         interaction_edges=interaction_edges,
+        transit_body_ids=transit_body_ids,
     )
+
+
+def build_community_criterion_factory(
+    *,
+    regional_input: RegionalPopulationInput,
+    identities: tuple[SocietyIdentityRow, ...] = (),
+    interaction_edges: tuple[SocietyEdgeRow, ...] = (),
+    transit_body_ids: tuple[str, ...] = (),
+) -> Callable[[ExperimentCriterionSpec], CommunityCountCriterion]:
+    """Return a criterion factory for composition-root injection."""
+
+    def _factory(spec: ExperimentCriterionSpec) -> CommunityCountCriterion:
+        return criterion_from_spec(
+            spec,
+            regional_input=regional_input,
+            identities=identities,
+            interaction_edges=interaction_edges,
+            transit_body_ids=transit_body_ids,
+        )
+
+    return _factory
 
 
 __all__ = [
@@ -343,5 +373,6 @@ __all__ = [
     "GenerationalHistoricalSampler",
     "GenerationalSamplingError",
     "SocietyIdentityRow",
+    "build_community_criterion_factory",
     "criterion_from_spec",
 ]
