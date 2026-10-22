@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Final
 
 from experiments.collectors import collect_for_experiment
 from experiments.coordinator import ExperimentArmResult, ExperimentAssignment
+from experiments.generational_adoption import (
+    VerifiedGenerationalArchive,
+    verify_completed_archive,
+)
 from experiments.matrix_expand import expand_matrix
 from experiments.matrix_manifest import (
     MatrixCompletionRecord,
@@ -28,7 +34,10 @@ from experiments.matrix_models import (
 from experiments.models import EXPERIMENT_SCHEMA_VERSION, ExperimentDefinition
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
-from simulation.runner_models import SimulationRunnerResult
+from simulation.runner_models import (
+    RunnerStopReasonCode,
+    SimulationRunnerResult,
+)
 from simulation.runner_serialization import runner_config_fingerprint
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.matrix_runner")
@@ -43,6 +52,8 @@ class MatrixBatchDependencies:
 
     package_version: str
     code_revision: str = ""
+    archive_root: Path | None = None
+    durable_origin_exists: Callable[[str], bool] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +146,20 @@ def _assignment_for_cell(
         run_id=RunId(cell.cell_id),
         runner_config=config,
     )
+
+
+def _archive_stop_reason(
+    archive: VerifiedGenerationalArchive,
+) -> RunnerStopReasonCode:
+    result_document = archive.completion.get("result_document")
+    if isinstance(result_document, dict):
+        raw = result_document.get("stop_reason")
+        if isinstance(raw, str):
+            try:
+                return RunnerStopReasonCode(raw)
+            except ValueError:
+                pass
+    return RunnerStopReasonCode.MAX_TICKS
 
 
 def _stop_is_success(result: SimulationRunnerResult) -> bool:
@@ -265,6 +290,75 @@ class MatrixBatchRunner:
                         cell=cell,
                         condition_ordinal=condition_ordinals[cell.condition_id],
                     )
+                    archive = None
+                    if (
+                        self._deps.archive_root is not None
+                        and assignment.runner_config.generational_run is not None
+                    ):
+                        archive = verify_completed_archive(
+                            root=self._deps.archive_root,
+                            run_id=assignment.run_id,
+                            expected_config=assignment.runner_config,
+                            expected_code_revision=(
+                                self._deps.code_revision or None
+                            ),
+                        )
+                    if archive is not None:
+                        identity = RunVersionIdentity(
+                            package_version=self._deps.package_version,
+                            runner_schema_version=(
+                                assignment.runner_config.schema_version
+                            ),
+                            experiment_schema_version=EXPERIMENT_SCHEMA_VERSION,
+                            matrix_schema_version=EXPERIMENT_MATRIX_SCHEMA_VERSION,
+                            derivation_version=(
+                                assignment.runner_config.derivation_version
+                            ),
+                            matrix_fingerprint=matrix_fp,
+                            cell_fingerprint=cell.cell_fingerprint,
+                            config_fingerprint=cell.config_fingerprint,
+                            code_revision=self._deps.code_revision,
+                        )
+                        store.write_completion(
+                            MatrixCompletionRecord(
+                                cell_id=cell_id,
+                                run_id=assignment.run_id.value,
+                                stop_reason=_archive_stop_reason(archive),
+                                version_identity=identity,
+                            )
+                        )
+                        store.transition(
+                            cell_id, state=MatrixCellState.SKIPPED_VALID
+                        )
+                        skipped_valid += 1
+                        _LOG.info(
+                            "matrix_cell_archive_adopted",
+                            extra={
+                                "experiment": {
+                                    "cell_id": cell_id,
+                                    "attempt_id": archive.attempt_id,
+                                }
+                            },
+                        )
+                        return
+                    if (
+                        assignment.runner_config.persistence.durable
+                        and self._deps.durable_origin_exists is not None
+                        and self._deps.durable_origin_exists(
+                            assignment.run_id.value
+                        )
+                    ):
+                        store.transition(
+                            cell_id,
+                            state=MatrixCellState.FAILED,
+                            attempt_count=attempt,
+                            last_error_code="durable_origin_rerun_unsupported",
+                            run_id=assignment.run_id.value,
+                        )
+                        failed += 1
+                        if spec.execution.stop_on_first_error:
+                            stop_batch = True
+                        return
                     try:
                         arm = await run_one_assignment(assignment)
                     except Exception as exc:

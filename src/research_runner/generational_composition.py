@@ -15,6 +15,7 @@ from experiments.generational_artifacts import (
     GenerationalRunArtifactStore,
     GenerationalUsageStore,
     HistoricalBoundaryReader,
+    HistoricalBoundaryReference,
     source_identity_preflight,
     write_completion,
 )
@@ -29,6 +30,11 @@ from simulation.generational_seeds import (
     canonical_sha256,
 )
 from simulation.models import RunId
+from simulation.persistence import (
+    SimulationRunRepository,
+    SnapshotRepository,
+    TickJournalRepository,
+)
 from simulation.runner import RunnerDependencyFactories
 from simulation.runner_models import (
     SimulationRunnerConfig,
@@ -321,9 +327,66 @@ def open_generational_archive(
 __all__ = [
     "GenerationalArchiveSession",
     "GenerationalExecutionRecipe",
+    "PostgresHistoricalBoundaryReader",
     "build_assignment_identity",
     "build_environment_identity",
     "build_manifest_payload",
     "build_provider_identity",
     "open_generational_archive",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresHistoricalBoundaryReader:
+    """Read-only adapter over authoritative run/journal/snapshot repositories."""
+
+    runs: SimulationRunRepository
+    journal: TickJournalRepository
+    snapshots: SnapshotRepository
+
+    async def reference(
+        self, run_id: str, boundary_tick: int
+    ) -> HistoricalBoundaryReference:
+        from experiments.generational_artifacts import SnapshotReference
+        from simulation.clock import Tick
+
+        if isinstance(boundary_tick, bool) or not isinstance(boundary_tick, int):
+            raise TypeError("boundary_tick must be int")
+        if boundary_tick < 1:
+            raise ValueError("boundary_tick must be >= 1")
+        target = RunId(run_id)
+        get_run = getattr(self.runs, "get_run", None)
+        if callable(get_run):
+            manifest = await get_run(target)
+            if manifest is None:
+                raise ValueError("historical_run_missing")
+        commit = await self.journal.get_tick_commit(
+            target, Tick(boundary_tick - 1)
+        )
+        if commit is None:
+            raise ValueError("historical_commit_missing")
+        if commit.resulting_tick.value != boundary_tick:
+            raise ValueError("historical_commit_boundary_mismatch")
+        snapshot = await self.snapshots.get_latest_at_or_before(
+            target, Tick(boundary_tick)
+        )
+        if snapshot is None:
+            raise ValueError("historical_snapshot_missing")
+        if snapshot.next_tick.value > boundary_tick:
+            raise ValueError("historical_snapshot_after_boundary")
+        _LOG.debug(
+            "historical_boundary_reference run_id=%s boundary=%s "
+            "snapshot_next_tick=%s",
+            run_id,
+            boundary_tick,
+            snapshot.next_tick.value,
+        )
+        return HistoricalBoundaryReference(
+            revision=commit.resulting_revision.value,
+            objective_commit_hash=str(commit.commit_hash.value),
+            snapshot_ref=SnapshotReference(
+                snapshot_id=str(snapshot.snapshot_id.value),
+                integrity_hash=str(snapshot.integrity_hash.value),
+                next_tick=snapshot.next_tick.value,
+            ),
+        )
