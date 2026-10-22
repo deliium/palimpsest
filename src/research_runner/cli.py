@@ -56,6 +56,44 @@ def _cmd_run(args: argparse.Namespace) -> int:
     spec = _load_spec(Path(args.matrix))
     store = build_manifest_store(Path(args.manifest_root))
     deps = build_batch_dependencies(code_revision=args.code_revision)
+    if args.generational_artifact_root is not None:
+        from dataclasses import replace
+
+        from simulation.runner import RunnerDependencyFactories
+
+        if not args.source_clean and not args.source_artifact_digest:
+            _LOG.error(
+                "cli_generational_preflight_failed",
+                extra={"experiment": {"reason_code": "source_assertion_required"}},
+            )
+            return 2
+        try:
+            recipe = _load_recipe(Path(args.execution_recipe))
+        except Exception as exc:
+            _LOG.error(
+                "cli_generational_preflight_failed",
+                extra={"experiment": {"reason_code": type(exc).__name__}},
+            )
+            return 2
+        source_identity = {
+            "code_revision": args.code_revision or "",
+            "source_clean": bool(args.source_clean),
+            "source_artifact_digest": args.source_artifact_digest,
+        }
+        base_context = GenerationalExecutionContext(
+            artifact_root=Path(args.generational_artifact_root),
+            source_identity=source_identity,
+            recipe=recipe,
+            factories=RunnerDependencyFactories(),
+        )
+        deps = replace(
+            deps,
+            archive_root=Path(args.generational_artifact_root),
+            generational_contexts=lambda condition_id: replace(
+                base_context, attempt_id=condition_id
+            ),
+            require_generational_context=True,
+        )
     runner = MatrixBatchRunner(deps)
     _LOG.info(
         "cli_matrix_run",
@@ -334,6 +372,13 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             asyncio.run(dispose_engine(resources.engine))
 
 
+def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generational-artifact-root", default=None)
+    parser.add_argument("--execution-recipe", default=None)
+    parser.add_argument("--source-clean", action="store_true")
+    parser.add_argument("--source-artifact-digest", default=None)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="palimpsest-matrix",
@@ -364,6 +409,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Directory for manifest.json + cells/",
     )
+    _add_generational_matrix_args(run_p)
     run_p.set_defaults(func=_cmd_run)
 
     resume_p = sub.add_parser("resume", help="Resume an existing matrix batch")
@@ -373,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Directory for manifest.json + cells/",
     )
+    _add_generational_matrix_args(resume_p)
     resume_p.set_defaults(func=_cmd_resume)
 
     status_p = sub.add_parser("status", help="Show cell state counts")
