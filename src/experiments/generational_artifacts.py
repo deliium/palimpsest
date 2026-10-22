@@ -16,7 +16,7 @@ import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from simulation.generational_control import RecordingUsageEvidence
 
@@ -203,15 +203,22 @@ __all__ = [
     "GENERATIONAL_HISTORY_SCHEMA_VERSION",
     "GENERATIONAL_RECORDING_USAGE_SCHEMA_VERSION",
     "GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION",
+    "CompletionInputs",
     "GenerationalArtifactError",
+    "GenerationalHistoryObserver",
     "GenerationalRunArtifactStore",
     "GenerationalUsageStore",
+    "HistoricalBoundaryReader",
+    "HistoricalBoundaryReference",
+    "SnapshotReference",
     "canonical_bytes",
     "decode_generational_document",
     "decode_recording_usage_row",
     "encode_generational_document",
     "encode_recording_usage_row",
     "require_safe_segment",
+    "source_identity_preflight",
+    "write_completion",
 ]
 
 
@@ -673,3 +680,177 @@ class GenerationalRunArtifactStore:
                 }
             )
         return tuple(refs)
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotReference:
+    snapshot_id: str
+    integrity_hash: str
+    next_tick: int
+
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "integrity_hash": self.integrity_hash,
+            "next_tick": self.next_tick,
+            "snapshot_id": self.snapshot_id,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalBoundaryReference:
+    revision: int
+    objective_commit_hash: str
+    snapshot_ref: SnapshotReference
+    evidence_ref: dict[str, object] | None = None
+    community_ref: dict[str, str] | None = None
+
+
+class HistoricalBoundaryReader(Protocol):
+    async def reference(
+        self, run_id: str, boundary_tick: int
+    ) -> HistoricalBoundaryReference: ...
+
+
+class GenerationalHistoryObserver:
+    """Write detached generational history sidecars after finalization."""
+
+    def __init__(
+        self,
+        *,
+        store: GenerationalRunArtifactStore,
+        reader: HistoricalBoundaryReader,
+        cadence_ticks: int | None,
+        sample_on_generation_change: bool,
+    ) -> None:
+        if cadence_ticks is not None and (
+            isinstance(cadence_ticks, bool)
+            or not isinstance(cadence_ticks, int)
+            or cadence_ticks < 1
+        ):
+            raise GenerationalArtifactError("invalid_cadence", "history")
+        self._store = store
+        self._reader = reader
+        self._cadence = cadence_ticks
+        self._sample_on_generation_change = sample_on_generation_change
+        self._last_generation = 0
+
+    def _reasons(
+        self, boundary: object, stop_evidence: object
+    ) -> tuple[str, ...]:
+        from simulation.generational_models import GenerationalBoundary
+
+        if type(boundary) is not GenerationalBoundary:
+            raise TypeError("boundary must be GenerationalBoundary")
+        reasons: list[str] = []
+        tick = boundary.progress.boundary_tick
+        if self._cadence is not None and tick % self._cadence == 0:
+            reasons.append("cadence")
+        generation = boundary.progress.max_generation_index_seen
+        if self._sample_on_generation_change and generation > self._last_generation:
+            reasons.append("generation_change")
+            self._last_generation = generation
+        if stop_evidence is not None:
+            reasons.append("terminal")
+        return tuple(sorted(set(reasons)))
+
+    async def observe(self, boundary: object, stop_evidence: object) -> None:
+        from simulation.generational_models import GenerationalBoundary, StopEvidence
+
+        if type(boundary) is not GenerationalBoundary:
+            raise TypeError("boundary must be GenerationalBoundary")
+        if stop_evidence is not None and type(stop_evidence) is not StopEvidence:
+            raise TypeError("stop_evidence must be StopEvidence or None")
+        reasons = self._reasons(boundary, stop_evidence)
+        if not reasons:
+            return
+        tick = boundary.progress.boundary_tick
+        reference = await self._reader.reference(self._store.run_id, tick)
+        if reference.snapshot_ref.next_tick > tick:
+            raise GenerationalArtifactError("snapshot_after_boundary", "history")
+        if "cadence" in reasons and reference.snapshot_ref.next_tick != tick:
+            raise GenerationalArtifactError("cadence_snapshot_missing", "history")
+        from simulation.generational_serialization import (
+            encode_population_progress,
+            encode_stop_evidence,
+        )
+
+        payload: dict[str, object] = {
+            "boundary_tick": tick,
+            "community_ref": reference.community_ref,
+            "evidence_ref": reference.evidence_ref,
+            "last_completed_tick": (
+                None if tick == 0 else tick - 1
+            ),
+            "objective_commit_hash": reference.objective_commit_hash,
+            "payload_hash": "0" * 64,
+            "population_progress": encode_population_progress(boundary.progress),
+            "revision": reference.revision,
+            "run_id": self._store.run_id,
+            "sample_reasons": list(reasons),
+            "schema_version": GENERATIONAL_HISTORY_SCHEMA_VERSION,
+            "snapshot_ref": reference.snapshot_ref.canonical_payload(),
+            "stop_evidence": (
+                None if stop_evidence is None else encode_stop_evidence(stop_evidence)
+            ),
+        }
+        self._store.write_history(tick, payload)
+        _LOG.info(
+            "generational_history_written run_id=%s boundary=%s reasons=%s",
+            self._store.run_id,
+            tick,
+            list(reasons),
+        )
+
+
+def source_identity_preflight(
+    *,
+    code_revision: str,
+    source_clean: bool,
+    source_artifact_digest: str | None,
+) -> dict[str, object]:
+    """Validate the exact-archive source identity contract."""
+    if not code_revision:
+        raise GenerationalArtifactError("missing_source_revision", "source_identity")
+    if type(source_clean) is not bool:
+        raise GenerationalArtifactError("invalid_boolean", "source_clean")
+    if not source_clean and not source_artifact_digest:
+        raise GenerationalArtifactError(
+            "clean_source_assertion_required", "source_identity"
+        )
+    return {
+        "code_revision": code_revision,
+        "source_artifact_digest": source_artifact_digest,
+        "source_clean": source_clean,
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class CompletionInputs:
+    run_id: str
+    manifest_hash: str
+    result_document: dict[str, object]
+    seed_manifest_hash: str
+    source_identity: dict[str, object]
+    execution_recipe_hash: str
+    final_progress: dict[str, object]
+    recording_usage_ref: dict[str, object]
+    history_refs: tuple[dict[str, str], ...]
+
+
+def write_completion(
+    store: GenerationalRunArtifactStore, inputs: CompletionInputs
+) -> bytes:
+    payload: dict[str, object] = {
+        "completion_hash": "0" * 64,
+        "execution_recipe_hash": inputs.execution_recipe_hash,
+        "final_progress": inputs.final_progress,
+        "history_refs": list(inputs.history_refs),
+        "manifest_hash": inputs.manifest_hash,
+        "recording_usage_ref": inputs.recording_usage_ref,
+        "result_document": inputs.result_document,
+        "run_id": inputs.run_id,
+        "schema_version": GENERATIONAL_COMPLETION_SCHEMA_VERSION,
+        "seed_manifest_hash": inputs.seed_manifest_hash,
+        "source_identity": inputs.source_identity,
+    }
+    return store.write_completion(payload)

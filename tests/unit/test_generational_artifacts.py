@@ -290,3 +290,167 @@ def test_store_writes_failure_and_rejects_conflicting_history(
     conflicting["sample_reasons"] = ["terminal"]
     with pytest.raises(GenerationalArtifactError, match="artifact_conflict"):
         store.write_history(1, conflicting)
+
+
+def _boundary(tick: int = 4, generation: int = 1):
+    from simulation.generational_models import (
+        CohortPopulationRow,
+        GenerationalBoundary,
+        GenerationPopulationRow,
+        PopulationProgress,
+    )
+
+    progress = PopulationProgress(
+        boundary_tick=tick,
+        living_population=2,
+        total_admitted=3,
+        total_deaths=1,
+        max_generation_index_seen=generation,
+        cohorts=(
+            CohortPopulationRow(
+                generation_index=generation,
+                entry_tick=tick - 1,
+                cohort_id=f"cohort-{tick}",
+                admitted=1,
+                living=1,
+                dead=0,
+            ),
+            CohortPopulationRow(
+                generation_index=0,
+                entry_tick=0,
+                cohort_id="founders",
+                admitted=2,
+                living=1,
+                dead=1,
+            ),
+        ),
+        generations=(
+            GenerationPopulationRow(
+                generation_index=0, admitted=2, living=1, dead=1
+            ),
+            GenerationPopulationRow(
+                generation_index=generation, admitted=1, living=1, dead=0
+            ),
+        ),
+    )
+    return GenerationalBoundary(
+        progress=progress,
+        objective_revision=tick,
+        last_completed_tick=None if tick == 0 else tick - 1,
+    )
+
+
+class _Reader:
+    def __init__(self, next_tick: int) -> None:
+        self.next_tick = next_tick
+
+    async def reference(self, run_id: str, boundary_tick: int):
+        from experiments.generational_artifacts import (
+            HistoricalBoundaryReference,
+            SnapshotReference,
+        )
+
+        return HistoricalBoundaryReference(
+            revision=boundary_tick,
+            objective_commit_hash=f"{boundary_tick:064d}",
+            snapshot_ref=SnapshotReference(
+                snapshot_id=f"snap-{self.next_tick}",
+                integrity_hash=f"{self.next_tick:064d}",
+                next_tick=self.next_tick,
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_observer_writes_cadence_generation_and_terminal(tmp_path: Path) -> None:
+    from experiments.generational_artifacts import (
+        GenerationalHistoryObserver,
+        GenerationalRunArtifactStore,
+    )
+
+    store = GenerationalRunArtifactStore(root=tmp_path, run_id="run-1")
+    observer = GenerationalHistoryObserver(
+        store=store,
+        reader=_Reader(next_tick=4),
+        cadence_ticks=2,
+        sample_on_generation_change=True,
+    )
+    await observer.observe(_boundary(tick=4, generation=1), None)
+    refs = store.history_refs()
+    assert len(refs) == 1
+    document = __import__("json").loads(
+        (tmp_path / refs[0]["path"]).read_bytes()
+    )
+    assert document["sample_reasons"] == ["cadence", "generation_change"]
+
+
+@pytest.mark.asyncio
+async def test_observer_rejects_cadence_without_exact_snapshot(tmp_path: Path) -> None:
+    from experiments.generational_artifacts import (
+        GenerationalHistoryObserver,
+        GenerationalRunArtifactStore,
+    )
+
+    observer = GenerationalHistoryObserver(
+        store=GenerationalRunArtifactStore(root=tmp_path, run_id="run-1"),
+        reader=_Reader(next_tick=2),
+        cadence_ticks=4,
+        sample_on_generation_change=False,
+    )
+    with pytest.raises(
+        GenerationalArtifactError, match="cadence_snapshot_missing"
+    ):
+        await observer.observe(_boundary(tick=4, generation=1), None)
+
+
+def test_source_identity_preflight() -> None:
+    from experiments.generational_artifacts import source_identity_preflight
+
+    assert source_identity_preflight(
+        code_revision="abc", source_clean=True, source_artifact_digest=None
+    )["source_clean"] is True
+    with pytest.raises(
+        GenerationalArtifactError, match="clean_source_assertion_required"
+    ):
+        source_identity_preflight(
+            code_revision="abc", source_clean=False, source_artifact_digest=None
+        )
+
+
+def test_completion_written_after_history_and_usage(tmp_path: Path) -> None:
+    from experiments.generational_artifacts import (
+        CompletionInputs,
+        GenerationalRunArtifactStore,
+        GenerationalUsageStore,
+        write_completion,
+    )
+
+    store = GenerationalRunArtifactStore(root=tmp_path, run_id="run-1")
+    usage = GenerationalUsageStore(root=tmp_path, run_id="run-1")
+    usage.put_usage(_evidence())
+    store.write_manifest(_manifest_payload())
+    store.write_history(4, _history_payload())
+    encoded = write_completion(
+        store,
+        CompletionInputs(
+            run_id="run-1",
+            manifest_hash="a" * 64,
+            result_document={"schema_version": "runner-result-v3"},
+            seed_manifest_hash="b" * 64,
+            source_identity={
+                "code_revision": "abc",
+                "source_artifact_digest": None,
+                "source_clean": True,
+            },
+            execution_recipe_hash="c" * 64,
+            final_progress={"boundary_tick": 4},
+            recording_usage_ref={
+                "count": usage.count(),
+                "row_refs": [list(row) for row in usage.row_refs()],
+                "sha256": usage.usage_index_digest(),
+            },
+            history_refs=store.history_refs(),
+        ),
+    )
+    assert encoded
+    assert store.read_completion()["history_refs"]
