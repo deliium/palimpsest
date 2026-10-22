@@ -54,7 +54,9 @@ class MatrixBatchDependencies:
     code_revision: str = ""
     archive_root: Path | None = None
     durable_origin_exists: Callable[[str], bool] | None = None
-    generational_contexts: Callable[[str], object | None] | None = None
+    generational_contexts: (
+        Callable[[ExperimentAssignment, str], object | None] | None
+    ) = None
     require_generational_context: bool = False
 
 
@@ -237,10 +239,41 @@ class MatrixBatchRunner:
         pending_ids: list[str] = []
         for record in store.list_cells():
             cell = cell_by_id[record.cell_id]
-            if record.state in (
+            already_valid = record.state in (
                 MatrixCellState.COMPLETED,
                 MatrixCellState.SKIPPED_VALID,
-            ) or store.has_valid_completion(cell, matrix_fingerprint=matrix_fp):
+            ) or store.has_valid_completion(cell, matrix_fingerprint=matrix_fp)
+            if already_valid:
+                if self._deps.archive_root is not None:
+                    assignment = _assignment_for_cell(
+                        definition=definition,
+                        cell=cell,
+                        condition_ordinal=condition_ordinals[cell.condition_id],
+                    )
+                    if assignment.runner_config.generational_run is not None:
+                        archive = verify_completed_archive(
+                            root=self._deps.archive_root,
+                            run_id=assignment.run_id,
+                            expected_config=assignment.runner_config,
+                            expected_code_revision=(
+                                self._deps.code_revision or None
+                            ),
+                        )
+                        if archive is None:
+                            _LOG.warning(
+                                "matrix_cell_archive_rejected "
+                                "cell_id=%s run_id=%s",
+                                record.cell_id,
+                                assignment.run_id.value,
+                            )
+                            store.transition(
+                                record.cell_id,
+                                state=MatrixCellState.FAILED,
+                                last_error_code="archive_identity_mismatch",
+                                run_id=assignment.run_id.value,
+                            )
+                            failed += 1
+                            continue
                 if record.state is not MatrixCellState.SKIPPED_VALID:
                     store.transition(
                         record.cell_id, state=MatrixCellState.SKIPPED_VALID
@@ -365,13 +398,12 @@ class MatrixBatchRunner:
                         None
                         if self._deps.generational_contexts is None
                         else self._deps.generational_contexts(
-                            assignment.condition_id
+                            assignment, cell.cell_id
                         )
                     )
                     if (
                         assignment.runner_config.generational_run is not None
                         and context is None
-                        and self._deps.require_generational_context
                     ):
                         store.transition(
                             cell_id,

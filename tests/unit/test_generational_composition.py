@@ -207,3 +207,82 @@ async def test_postgres_boundary_reader_rejects_bad_evidence() -> None:
             journal=_Journal(_Commit()),
             snapshots=_Snaps(_LateSnap()),
         ).reference("run-1", 4)
+
+
+@pytest.mark.asyncio
+async def test_community_provider_builds_sample_and_criterion() -> None:
+    from experiments.persistence import (
+        PersistedAnalysisSnapshot,
+        PersistedRegionalContext,
+        PersistedRegionalInitialPlacement,
+        PersistedRegionalLocation,
+    )
+    from research_runner.generational_composition import (
+        PostgresCommunitySampleProvider,
+    )
+    from simulation.generational_models import (
+        ExperimentCriterionSpec,
+        GenerationalBoundary,
+        PopulationProgress,
+    )
+
+    snapshot = PersistedAnalysisSnapshot(
+        experiment_id="",
+        run_id="run-community-1",
+        owner_id="agent-1",
+        traces=(),
+        reconstructions=(),
+        derivation_edges=(),
+        events=(),
+        regional_context=PersistedRegionalContext(
+            region_ids=("region-1",),
+            known_location_ids=("loc-1",),
+            locations=(PersistedRegionalLocation("loc-1", "region-1"),),
+            initial_placements=(
+                PersistedRegionalInitialPlacement("body-1", "loc-1", True),
+            ),
+            owner_ids=("agent-1",),
+            residence_min_ticks=1,
+        ),
+        objective_complete_through_boundary=5,
+    )
+
+    class _Loader:
+        async def load(self, *, run_id: str, owner_id: str) -> object:
+            assert run_id == "run-community-1"
+            assert owner_id == "agent-1"
+            return snapshot
+
+    provider = PostgresCommunitySampleProvider(
+        loader=_Loader(),
+        run_id="run-community-1",
+        owner_id="agent-1",
+        window_ticks=5,
+    )
+    boundary = GenerationalBoundary(
+        progress=PopulationProgress(
+            boundary_tick=5,
+            living_population=1,
+            total_admitted=1,
+            total_deaths=0,
+            max_generation_index_seen=0,
+        ),
+        objective_revision=5,
+        last_completed_tick=4,
+    )
+    payload = await provider.sample(boundary)
+    assert payload is not None
+    assert payload["living_count"] == 1
+    assert payload["coverage_complete"] is True
+
+    factory = provider.criterion_factory()
+    criterion = factory(
+        ExperimentCriterionSpec(
+            criterion_id="community_count_at_least",
+            version="1",
+            params={"count": 1, "window_ticks": 5},
+        )
+    )
+    decision = await criterion.evaluate(boundary)
+    assert decision.measurements["coverage_complete"] is True
+    assert decision.measurements["candidate_community_count"] == 0

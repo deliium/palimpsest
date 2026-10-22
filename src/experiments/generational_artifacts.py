@@ -27,7 +27,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
 GENERATIONAL_RECORDING_USAGE_SCHEMA_VERSION: Final[str] = (
     "generational-recording-usage-v1"
 )
-_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$")
+_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$")
 _USAGE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "agent_id",
@@ -107,12 +107,7 @@ def encode_recording_usage_row(
 def decode_recording_usage_row(
     payload: bytes, *, run_id: str
 ) -> dict[str, object]:
-    try:
-        data = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise GenerationalArtifactError("invalid_json", "usage") from exc
-    if not isinstance(data, dict):
-        raise GenerationalArtifactError("invalid_object", "usage")
+    data = _load_json_object(payload, name="usage")
     if set(data) != _USAGE_KEYS:
         raise GenerationalArtifactError("invalid_keys", "usage")
     if data["schema_version"] != GENERATIONAL_RECORDING_USAGE_SCHEMA_VERSION:
@@ -122,6 +117,27 @@ def decode_recording_usage_row(
     expected = _sha256(canonical_bytes(_payload_without_hash(data)))
     if data["payload_hash"] != expected:
         raise GenerationalArtifactError("payload_hash_mismatch", "usage")
+    return data
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise GenerationalArtifactError("duplicate_json_key", key)
+        result[key] = value
+    return result
+
+
+def _load_json_object(payload: bytes, *, name: str) -> dict[str, object]:
+    try:
+        data = json.loads(
+            payload.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GenerationalArtifactError("invalid_json", name) from exc
+    if not isinstance(data, dict):
+        raise GenerationalArtifactError("invalid_object", name)
     return data
 
 
@@ -565,12 +581,7 @@ def decode_generational_document(
 ) -> dict[str, object]:
     if schema_version not in _schema_fields:
         raise GenerationalArtifactError("unsupported_version", schema_version)
-    try:
-        document = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise GenerationalArtifactError("invalid_json", schema_version) from exc
-    if not isinstance(document, dict):
-        raise GenerationalArtifactError("invalid_object", schema_version)
+    document = _load_json_object(payload, name=schema_version)
     if set(document) != _schema_fields[schema_version]:
         raise GenerationalArtifactError("invalid_keys", schema_version)
     hash_field = self_hash_fields[schema_version]
@@ -597,6 +608,16 @@ class GenerationalRunArtifactStore:
         require_safe_segment("attempt_id", self.attempt_id)
         object.__setattr__(self, "root", Path(self.root))
 
+    def _assert_safe_tree(self) -> None:
+        root = self.root.resolve()
+        for candidate in (self.root, self.root / self.run_id, self.attempt_dir):
+            if candidate.is_symlink():
+                raise GenerationalArtifactError(
+                    "unsafe_path", str(candidate.relative_to(self.root))
+                )
+        if not self.attempt_dir.resolve().is_relative_to(root):
+            raise GenerationalArtifactError("unsafe_path", "attempt_id")
+
     @property
     def attempt_dir(self) -> Path:
         return self.root / self.run_id / self.attempt_id
@@ -610,12 +631,14 @@ class GenerationalRunArtifactStore:
         return self.attempt_dir / "community-samples"
 
     def write_config(self, payload: bytes) -> tuple[str, str]:
+        self._assert_safe_tree()
         path = self.attempt_dir / "config.json"
         _atomic_write(path, payload)
         relative = str(path.relative_to(self.root))
         return relative, _sha256(payload)
 
     def write_manifest(self, payload: Mapping[str, object]) -> bytes:
+        self._assert_safe_tree()
         if (self.attempt_dir / "completion.json").exists() or (
             self.attempt_dir / "failure.json"
         ).exists():
@@ -629,6 +652,7 @@ class GenerationalRunArtifactStore:
     def write_history(
         self, boundary_tick: int, payload: Mapping[str, object]
     ) -> bytes:
+        self._assert_safe_tree()
         encoded = encode_generational_document(
             payload, schema_version=GENERATIONAL_HISTORY_SCHEMA_VERSION
         )
@@ -637,6 +661,7 @@ class GenerationalRunArtifactStore:
         return encoded
 
     def write_completion(self, payload: Mapping[str, object]) -> bytes:
+        self._assert_safe_tree()
         encoded = encode_generational_document(
             payload, schema_version=GENERATIONAL_COMPLETION_SCHEMA_VERSION
         )
@@ -644,6 +669,7 @@ class GenerationalRunArtifactStore:
         return encoded
 
     def write_failure(self, payload: Mapping[str, object]) -> bytes:
+        self._assert_safe_tree()
         encoded = encode_generational_document(
             payload, schema_version=GENERATIONAL_FAILURE_SCHEMA_VERSION
         )
@@ -671,6 +697,7 @@ class GenerationalRunArtifactStore:
     def write_community_sample(
         self, boundary_tick: int, sample: Mapping[str, object]
     ) -> dict[str, str]:
+        self._assert_safe_tree()
         """Persist one detached analytical sample and return its safe ref."""
         if isinstance(boundary_tick, bool) or not isinstance(boundary_tick, int):
             raise TypeError("boundary_tick must be int")
@@ -692,17 +719,13 @@ class GenerationalRunArtifactStore:
     def read_community_sample(self, boundary_tick: int) -> dict[str, object]:
         path = self.community_samples_dir / f"{boundary_tick:012d}.json"
         try:
-            payload = json.loads(path.read_bytes().decode("utf-8"))
+            payload = _load_json_object(
+                path.read_bytes(), name="community_sample"
+            )
         except FileNotFoundError:
             raise GenerationalArtifactError(
                 "community_sample_missing", str(boundary_tick)
             ) from None
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise GenerationalArtifactError(
-                "invalid_json", "community_sample"
-            ) from exc
-        if not isinstance(payload, dict):
-            raise GenerationalArtifactError("invalid_object", "community_sample")
         expected = payload.get("payload_hash")
         without = {
             key: value
@@ -772,6 +795,7 @@ class GenerationalHistoryObserver:
         reader: HistoricalBoundaryReader,
         cadence_ticks: int | None,
         sample_on_generation_change: bool,
+        community_sampler: Callable[[object], object] | None = None,
     ) -> None:
         if cadence_ticks is not None and (
             isinstance(cadence_ticks, bool)
@@ -783,6 +807,7 @@ class GenerationalHistoryObserver:
         self._reader = reader
         self._cadence = cadence_ticks
         self._sample_on_generation_change = sample_on_generation_change
+        self._community_sampler = community_sampler
         self._last_generation = 0
 
     def _reasons(
@@ -816,6 +841,10 @@ class GenerationalHistoryObserver:
             return
         tick = boundary.progress.boundary_tick
         reference = await self._reader.reference(self._store.run_id, tick)
+        if reference.revision != boundary.objective_revision:
+            raise GenerationalArtifactError(
+                "historical_revision_mismatch", "history"
+            )
         if reference.snapshot_ref.next_tick > tick:
             raise GenerationalArtifactError("snapshot_after_boundary", "history")
         if "cadence" in reasons and reference.snapshot_ref.next_tick != tick:
@@ -825,9 +854,25 @@ class GenerationalHistoryObserver:
             encode_stop_evidence,
         )
 
+        community_ref = reference.community_ref
+        if self._community_sampler is not None:
+            import inspect
+            from collections.abc import Mapping
+
+            sampled = self._community_sampler(boundary)
+            if inspect.isawaitable(sampled):
+                sampled = await sampled
+            if sampled is not None:
+                if not isinstance(sampled, Mapping):
+                    raise GenerationalArtifactError(
+                        "invalid_community_sample", "community_ref"
+                    )
+                community_ref = self._store.write_community_sample(
+                    tick, dict(sampled)
+                )
         payload: dict[str, object] = {
             "boundary_tick": tick,
-            "community_ref": reference.community_ref,
+            "community_ref": community_ref,
             "evidence_ref": reference.evidence_ref,
             "last_completed_tick": (
                 None if tick == 0 else tick - 1

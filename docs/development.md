@@ -45,6 +45,7 @@ uv run --frozen --python 3.12.14 pytest
 | `PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m integration tests/integration/test_episodic_memory_pgvector.py tests/integration/test_memory_concurrency.py tests/integration/test_migrations.py tests/integration/test_subjective_state_persistence.py tests/integration/test_experiment_repository.py -q` | Opt-in Postgres episodic + subjective + experiment records + migration head `0010` |
 | `uv run --frozen --python 3.12.14 pytest -m integration` | Disposable Postgres via `PALIMPSEST_TEST_DATABASE_URL` |
 | `PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m "integration and scale" tests/benchmarks/ -q` | Long-run scale harness (deterministic fake cognition; default 1k/10k ticks; `PALIMPSEST_SCALE_BENCH_EXTENDED=1` adds 50k; optional `PALIMPSEST_SCALE_BENCH_TICKS`). Also covers observer catch-up / seek / multi-observer isolation scenarios in `tests/benchmarks/test_observer_scale_scenarios.py`. |
+| `PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m "integration and scale" tests/integration/test_generational_scale.py -q` | Opt-in 100000-tick generational durability gate: cohorts, gaps, snapshot/history cadence, exact hashes, historical seek parity, deterministic twin, indexed receipt membership. A skipped database gate is not a passing durability check. |
 | `uv run --frozen --python 3.12.14 pytest -m compose` | Compose file checks and optional stack smoke |
 | `uv run --frozen --python 3.12.14 ruff check src tests` | Lint |
 | `uv run --frozen --python 3.12.14 mypy src tests` | Strict typing |
@@ -132,6 +133,40 @@ docker compose config --quiet
 uv run --frozen --python 3.12.14 pytest -m compose
 ./scripts/down.sh
 ```
+
+## Generational runner verification
+
+Routine feature gates (no PostgreSQL):
+
+```bash
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_runner_config_v55.py \
+  tests/unit/test_generational_models.py \
+  tests/unit/test_generational_population_runner.py \
+  tests/unit/test_generational_stopping.py \
+  tests/unit/test_generational_criteria.py \
+  tests/unit/test_generational_artifacts.py \
+  tests/unit/test_generational_sampling.py \
+  tests/unit/test_experiment_bl.py \
+  tests/unit/test_generational_execution.py \
+  tests/unit/test_generational_cli.py -q
+uv run --frozen --python 3.12.14 palimpsest-matrix generational --help
+```
+
+Durability and history require a validated disposable `palimpsest_test`
+database:
+
+```bash
+PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest \
+  -m integration tests/integration/test_generational_history.py -q
+PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest \
+  -m 'integration and scale' tests/integration/test_generational_scale.py -q
+```
+
+Historical replay is objective inspection, not subjective restart. Exact
+external-LLM reproduction needs deterministic fakes or validated recordings;
+source revision plus a clean assertion/digest and the registered execution
+recipe are archive inputs. See [Generational runner](generational-runner.md).
 
 ## Regional migration verification
 
@@ -297,5 +332,9 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_institutional_decay_cont
 uv run --frozen --python 3.12.14 pytest tests/architecture/test_v3_institutional_decay_isolation.py -q
 ```
 
-Pins remain commands 43, observer semantic types 73, replay/codec V22/v20,
-Alembic `0017`, `/v1`, `observer-protocol-v1`, and `prepare_parallel=False`.
+Pins remain commands 43, observer semantic types 73, metric families 129,
+replay/codec V22/v20, Alembic `0017`, `/v1`, `observer-protocol-v1`,
+`prepare_parallel=False`, default runner write `runner-config-v4`, and the
+legacy result default `runner-result-v2`. New `runner-config-v55` /
+`runner-result-v3` are feature-selected only. Older sections of this document
+retain earlier metric counts as historical context.

@@ -45,6 +45,7 @@ __all__ = [
     "FINALIZATION_COMMAND_CODEC_VERSION",
     "STREAM_RECORD_SCHEMA_VERSION",
     "AgentRuntimeCheckpoint",
+    "CachedCriterionDecision",
     "ConfigAvailability",
     "ExecutionLease",
     "FinalizationCommand",
@@ -1034,6 +1035,49 @@ class GenerationalBoundaryStage(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class CachedCriterionDecision:
+    """Frozen decision carried across supported in-process checkpoint carry."""
+
+    boundary_tick: int
+    criterion_id: str
+    version: str
+    matched: bool
+    measurements: tuple[tuple[str, bool | int | float], ...] = ()
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_exact_nonneg_int, require_stable_id
+
+        object.__setattr__(
+            self,
+            "boundary_tick",
+            require_exact_nonneg_int(
+                "CachedCriterionDecision.boundary_tick", self.boundary_tick
+            ),
+        )
+        object.__setattr__(
+            self,
+            "criterion_id",
+            require_stable_id(
+                "CachedCriterionDecision.criterion_id", self.criterion_id
+            ),
+        )
+        object.__setattr__(
+            self,
+            "version",
+            require_stable_id("CachedCriterionDecision.version", self.version),
+        )
+        if type(self.matched) is not bool:
+            raise TypeError("matched must be bool")
+        measurements = tuple(self.measurements)
+        for key, value in measurements:
+            if type(key) is not str:
+                raise TypeError("measurement keys must be str")
+            if type(value) not in {bool, int, float}:
+                raise TypeError("measurement values must be scalars")
+        object.__setattr__(self, "measurements", measurements)
+
+
+@dataclass(frozen=True, slots=True)
 class GenerationalControlState:
     """Python-only generational control/latch carry (not a durable codec)."""
 
@@ -1045,6 +1089,7 @@ class GenerationalControlState:
     finished_result: SimulationRunnerResult | None = None
     progress: PopulationProgress | None = None
     published_boundaries: tuple[int, ...] = ()
+    criterion_decisions: tuple[CachedCriterionDecision, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.boundary_stage) is not GenerationalBoundaryStage:
@@ -1082,6 +1127,19 @@ class GenerationalControlState:
         if len(set(published)) != len(published):
             raise ValueError("published_boundaries must be unique")
         object.__setattr__(self, "published_boundaries", published)
+        decisions = tuple(self.criterion_decisions)
+        for decision in decisions:
+            if type(decision) is not CachedCriterionDecision:
+                raise TypeError(
+                    "criterion_decisions entries must be CachedCriterionDecision"
+                )
+        identities = {
+            (item.boundary_tick, item.criterion_id, item.version)
+            for item in decisions
+        }
+        if len(identities) != len(decisions):
+            raise ValueError("criterion_decisions identities must be unique")
+        object.__setattr__(self, "criterion_decisions", decisions)
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
 from analysis.regional_population import RegionalPopulationInput
 from analysis.society_emergence import (
@@ -297,6 +297,18 @@ class CommunityCountCriterion:
     identities: tuple[SocietyIdentityRow, ...] = ()
     interaction_edges: tuple[SocietyEdgeRow, ...] = ()
     transit_body_ids: tuple[str, ...] = ()
+    regional_input_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None
+    identities_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None
+    interaction_edges_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None
+    transit_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None
 
     def __post_init__(self) -> None:
         if self.criterion_id != "community_count_at_least":
@@ -309,13 +321,48 @@ class CommunityCountCriterion:
             raise GenerationalSamplingError("invalid_window_ticks")
 
     async def evaluate(self, boundary: GenerationalBoundary) -> CriterionDecision:
+        import inspect
+
+        async def _resolve(value: object) -> object:
+            return await value if inspect.isawaitable(value) else value
+
         sampler = GenerationalHistoricalSampler(window_ticks=self.window_ticks)
+        regional_input = self.regional_input
+        if self.regional_input_provider is not None:
+            regional_input = cast(
+                RegionalPopulationInput | None,
+                await _resolve(self.regional_input_provider(boundary)),
+            )
+        identities = (
+            self.identities
+            if self.identities_provider is None
+            else cast(
+                tuple[SocietyIdentityRow, ...],
+                await _resolve(self.identities_provider(boundary)),
+            )
+        )
+        interaction_edges = (
+            self.interaction_edges
+            if self.interaction_edges_provider is None
+            else cast(
+                tuple[SocietyEdgeRow, ...],
+                await _resolve(self.interaction_edges_provider(boundary)),
+            )
+        )
+        transit_body_ids = (
+            self.transit_body_ids
+            if self.transit_provider is None
+            else cast(
+                tuple[str, ...],
+                await _resolve(self.transit_provider(boundary)),
+            )
+        )
         sample = sampler.sample(
             boundary=boundary,
-            regional_input=self.regional_input,
-            identities=self.identities,
-            interaction_edges=self.interaction_edges,
-            transit_body_ids=self.transit_body_ids,
+            regional_input=regional_input,
+            identities=identities,
+            interaction_edges=interaction_edges,
+            transit_body_ids=transit_body_ids,
         )
         matched = (
             sample.coverage_complete
@@ -339,8 +386,20 @@ def criterion_from_spec(
     identities: tuple[SocietyIdentityRow, ...] = (),
     interaction_edges: tuple[SocietyEdgeRow, ...] = (),
     transit_body_ids: tuple[str, ...] = (),
+    regional_input_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    identities_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    interaction_edges_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    transit_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
 ) -> CommunityCountCriterion:
-    if regional_input is None:
+    if regional_input is None and regional_input_provider is None:
         raise GenerationalSamplingError("regional_input_required")
     if spec.criterion_id != "community_count_at_least":
         raise GenerationalSamplingError("unknown_criterion_id")
@@ -371,6 +430,10 @@ def criterion_from_spec(
         identities=identities,
         interaction_edges=interaction_edges,
         transit_body_ids=transit_body_ids,
+        regional_input_provider=regional_input_provider,
+        identities_provider=identities_provider,
+        interaction_edges_provider=interaction_edges_provider,
+        transit_provider=transit_provider,
     )
 
 
@@ -395,6 +458,94 @@ def build_community_criterion_factory(
     return _factory
 
 
+def build_live_community_criterion_factory(
+    *,
+    regional_input_provider: Callable[[GenerationalBoundary], object],
+    identities_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    interaction_edges_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    transit_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+) -> Callable[[ExperimentCriterionSpec], CommunityCountCriterion]:
+    """Factory for production composition with boundary-scoped evidence."""
+
+    def _factory(spec: ExperimentCriterionSpec) -> CommunityCountCriterion:
+        return criterion_from_spec(
+            spec,
+            regional_input=None,
+            regional_input_provider=regional_input_provider,
+            identities_provider=identities_provider,
+            interaction_edges_provider=interaction_edges_provider,
+            transit_provider=transit_provider,
+        )
+
+    return _factory
+
+
+def build_community_sample_provider(
+    *,
+    sampler: GenerationalHistoricalSampler,
+    regional_input_provider: Callable[[GenerationalBoundary], object],
+    identities_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    interaction_edges_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+    transit_provider: (
+        Callable[[GenerationalBoundary], object] | None
+    ) = None,
+) -> Callable[[GenerationalBoundary], object]:
+    """Build a history-observer community sampler from boundary evidence."""
+
+    async def _provider(boundary: GenerationalBoundary) -> dict[str, object] | None:
+        import inspect
+
+        async def _resolve(value: object) -> object:
+            return await value if inspect.isawaitable(value) else value
+
+        regional_input = regional_input_provider(boundary)
+        if inspect.isawaitable(regional_input):
+            regional_input = await regional_input
+        if regional_input is None:
+            return None
+        sample = sampler.sample(
+            boundary=boundary,
+            regional_input=cast(RegionalPopulationInput, regional_input),
+            identities=(
+                ()
+                if identities_provider is None
+                else cast(
+                    tuple[SocietyIdentityRow, ...],
+                    await _resolve(identities_provider(boundary)),
+                )
+            ),
+            interaction_edges=(
+                ()
+                if interaction_edges_provider is None
+                else cast(
+                    tuple[SocietyEdgeRow, ...],
+                    await _resolve(interaction_edges_provider(boundary)),
+                )
+            ),
+            transit_body_ids=(
+                ()
+                if transit_provider is None
+                else cast(
+                    tuple[str, ...],
+                    await _resolve(transit_provider(boundary)),
+                )
+            ),
+        )
+        return sample.canonical_payload()
+
+    return _provider
+
+
 __all__ = [
     "CommunityCountCriterion",
     "GenerationalCommunitySample",
@@ -402,5 +553,7 @@ __all__ = [
     "GenerationalSamplingError",
     "SocietyIdentityRow",
     "build_community_criterion_factory",
+    "build_community_sample_provider",
+    "build_live_community_criterion_factory",
     "criterion_from_spec",
 ]

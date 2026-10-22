@@ -314,18 +314,17 @@ def build_generational_seed_manifest(
     channels.append(
         SeedChannelLineage(
             name="environment",
-            algorithm_version="sha256-environment-v1",
-            namespace="environment",
+            algorithm_version="derivation-v3-stream-v1",
+            namespace="system-effect",
             identity_selector="stochastic_identity",
             scope_fields=(
                 "derivation_version",
                 "physical_rules_fingerprint",
                 "stochastic_identity",
                 "seed",
-                "tick",
-                "location",
+                "names",
             ),
-            draw_usage="deterministic_hash",
+            draw_usage="sampled",
         )
     )
     channels.append(
@@ -333,7 +332,11 @@ def build_generational_seed_manifest(
             name="llm",
             algorithm_version="provider-recording-v1",
             namespace="llm_recording",
-            identity_selector="recording_artifact",
+            identity_selector=(
+                "recording_artifact"
+                if config.provider.recording_policy is RecordingPolicy.REPLAY
+                else "request_correlation"
+            ),
             scope_fields=(
                 "namespace",
                 "request_id",
@@ -342,7 +345,12 @@ def build_generational_seed_manifest(
             ),
             draw_usage=(
                 "sampled"
-                if config.provider.recording_policy is RecordingPolicy.LIVE
+                if config.provider.recording_policy
+                in {
+                    RecordingPolicy.LIVE,
+                    RecordingPolicy.RECORD,
+                    RecordingPolicy.CACHE,
+                }
                 else "deterministic_hash"
             ),
         )

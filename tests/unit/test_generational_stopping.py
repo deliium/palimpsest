@@ -219,3 +219,41 @@ async def test_run_returns_v3_evidence_after_max_tick_horizon() -> None:
         assert result.generational_progress.boundary_tick == 2
     finally:
         await runner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_empty_population_gap_revives_on_scheduled_entry() -> None:
+    config = _config(
+        generational_run=GenerationalRunSpec(
+            max_generation_index=None,
+            stop_on_extinction=False,
+        ),
+        max_ticks=8,
+        lifespan_ticks=1,
+    )
+    lifecycle = config.population_lifecycle
+    assert lifecycle is not None
+    params = dict(lifecycle.demographic_policy_params)
+    params["interval_ticks"] = 4
+    params["generation_length_ticks"] = 4
+    config = replace(
+        config,
+        population_lifecycle=replace(
+            lifecycle, demographic_policy_params=params
+        ),
+    )
+    runner = await SimulationRunner.from_config(config)
+    try:
+        for _ in range(4):
+            receipt = await runner.run_tick()
+            assert receipt.stop_reason is None
+        assert runner._generational_progress is not None
+        assert runner._generational_progress.boundary_tick == 4
+        assert runner._generational_progress.living_population == 0
+        revived = await runner.run_tick()
+        assert revived.stop_reason is None
+        assert runner._generational_progress is not None
+        assert runner._generational_progress.boundary_tick == 5
+        assert runner._generational_progress.living_population == 1
+    finally:
+        await runner.aclose()

@@ -56,77 +56,236 @@ def _cmd_run(args: argparse.Namespace) -> int:
     spec = _load_spec(Path(args.matrix))
     store = build_manifest_store(Path(args.manifest_root))
     deps = build_batch_dependencies(code_revision=args.code_revision)
-    if args.generational_artifact_root is not None:
-        from dataclasses import replace
+    resources = None
+    try:
+        if args.generational_artifact_root is not None:
+            from dataclasses import replace
 
-        from simulation.runner import RunnerDependencyFactories
+            from experiments.matrix_models import MatrixEmbeddedBase
+            from simulation.runner import (
+                RunnerDependencyFactories,
+                recording_store_settings,
+            )
 
-        if not args.source_clean and not args.source_artifact_digest:
-            _LOG.error(
-                "cli_generational_preflight_failed",
-                extra={"experiment": {"reason_code": "source_assertion_required"}},
+            if not args.source_clean and not args.source_artifact_digest:
+                _LOG.error(
+                    "cli_generational_preflight_failed",
+                    extra={
+                        "experiment": {"reason_code": "source_assertion_required"}
+                    },
+                )
+                return 2
+            if args.execution_recipe is None:
+                _LOG.error(
+                    "cli_generational_preflight_failed",
+                    extra={
+                        "experiment": {"reason_code": "execution_recipe_required"}
+                    },
+                )
+                return 2
+            try:
+                recipe = _load_recipe(Path(args.execution_recipe))
+            except Exception as exc:
+                _LOG.error(
+                    "cli_generational_preflight_failed",
+                    extra={"experiment": {"reason_code": type(exc).__name__}},
+                )
+                return 2
+            recording_values = (
+                args.recording_root,
+                args.recording_artifact_id,
+                args.recording_namespace,
+                args.recording_lookup_mode,
             )
-            return 2
-        try:
-            recipe = _load_recipe(Path(args.execution_recipe))
-        except Exception as exc:
-            _LOG.error(
-                "cli_generational_preflight_failed",
-                extra={"experiment": {"reason_code": type(exc).__name__}},
+            if any(recording_values) and not all(recording_values):
+                _LOG.error(
+                    "cli_generational_preflight_failed",
+                    extra={
+                        "experiment": {
+                            "reason_code": "recording_flags_incomplete"
+                        }
+                    },
+                )
+                return 2
+            recording_identity = (
+                {
+                    "recording_artifact_id": args.recording_artifact_id,
+                    "recording_namespace": args.recording_namespace,
+                    "lookup_mode": args.recording_lookup_mode,
+                }
+                if all(recording_values)
+                else None
             )
-            return 2
-        source_identity = {
-            "code_revision": args.code_revision or "",
-            "source_clean": bool(args.source_clean),
-            "source_artifact_digest": args.source_artifact_digest,
-        }
-        base_context = GenerationalExecutionContext(
-            artifact_root=Path(args.generational_artifact_root),
-            source_identity=source_identity,
-            recipe=recipe,
-            factories=RunnerDependencyFactories(),
-        )
-        deps = replace(
-            deps,
-            archive_root=Path(args.generational_artifact_root),
-            generational_contexts=lambda condition_id: replace(
-                base_context, attempt_id=condition_id
-            ),
-            require_generational_context=True,
-        )
-    runner = MatrixBatchRunner(deps)
-    _LOG.info(
-        "cli_matrix_run",
-        extra={
-            "experiment": {
-                "command": "run",
-                "matrix_id": spec.matrix_id,
-                "manifest_root": str(args.manifest_root),
+            recording_store = (
+                recording_store_settings(
+                    root_dir=Path(args.recording_root),
+                    cache_namespace=args.recording_namespace,
+                    lookup_mode=args.recording_lookup_mode,
+                )
+                if args.recording_root is not None
+                else None
+            )
+            durable = (
+                isinstance(spec.base, MatrixEmbeddedBase)
+                and spec.base.runner_config.persistence.durable
+            )
+            factories = RunnerDependencyFactories(recording_store=recording_store)
+            reader = None
+            if durable:
+                from infrastructure.database import (
+                    create_database_resources,
+                    dispose_engine,
+                )
+                from infrastructure.settings import load_settings
+                from persistence import (
+                    create_analysis_evidence_loader,
+                    create_pending_finalization_repository,
+                    create_run_repository,
+                    create_scientific_evidence_repository,
+                    create_snapshot_repository,
+                    create_tick_journal_repository,
+                )
+
+                settings = load_settings(env_file=False)
+                resources = create_database_resources(settings)
+                session_factory = resources.session_factory
+                factories = RunnerDependencyFactories(
+                    recording_store=recording_store,
+                    run_repository=create_run_repository(session_factory),
+                    journal=create_tick_journal_repository(session_factory),
+                    pending_finalizations=(
+                        create_pending_finalization_repository(session_factory)
+                    ),
+                    scientific_evidence=(
+                        create_scientific_evidence_repository(session_factory)
+                    ),
+                )
+                from research_runner.generational_composition import (
+                    PostgresHistoricalBoundaryReader,
+                )
+
+                reader = PostgresHistoricalBoundaryReader(
+                    runs=create_run_repository(session_factory),
+                    journal=create_tick_journal_repository(session_factory),
+                    snapshots=create_snapshot_repository(session_factory),
+                    evidence=create_scientific_evidence_repository(
+                        session_factory
+                    ),
+                )
+                from research_runner.generational_composition import (
+                    PostgresCommunitySampleProvider,
+                )
+
+                analysis_loader = create_analysis_evidence_loader(session_factory)
+            source_identity = {
+                "code_revision": args.code_revision or "",
+                "source_clean": bool(args.source_clean),
+                "source_artifact_digest": args.source_artifact_digest,
             }
-        },
-    )
-    result = asyncio.run(runner.run(spec, store))
-    aggregate = build_matrix_aggregate(
-        matrix_id=spec.matrix_id,
-        matrix_fingerprint=result.matrix_fingerprint,
-        cells=result.cells,
-        arm_results=result.arm_results,
-    )
-    out = Path(args.manifest_root) / "aggregate.json"
-    out.write_bytes(encode_matrix_aggregate(aggregate))
-    _LOG.info(
-        "cli_matrix_run_complete",
-        extra={
-            "experiment": {
-                "completed": result.completed,
-                "failed": result.failed,
-                "skipped_valid": result.skipped_valid,
-            }
-        },
-    )
-    if args.print_fingerprint:
-        print(result.matrix_fingerprint)
-    return 0 if result.failed == 0 else 1
+            base_context = GenerationalExecutionContext(
+                artifact_root=Path(args.generational_artifact_root),
+                source_identity=source_identity,
+                recipe=recipe,
+                factories=factories,
+                reader=reader,
+                recording_identity=recording_identity,
+            )
+
+
+            def _context_for(
+                assignment: ExperimentAssignment, cell_id: str
+            ) -> object:
+                generational = assignment.runner_config.generational_run
+                cadence = (
+                    None
+                    if generational is None
+                    else generational.historical_checkpoint_cadence_ticks
+                )
+                attempt_id = (
+                    f"{assignment.condition_id}-"
+                    f"{assignment.condition_ordinal}-"
+                    f"{assignment.replicate_index}-"
+                    f"{assignment.seed_ordinal}"
+                )
+                community_provider = (
+                    None
+                    if reader is None
+                    else PostgresCommunitySampleProvider(
+                        loader=analysis_loader,
+                        run_id=assignment.run_id.value,
+                        owner_id=assignment.runner_config.agents[0].agent_id.value,
+                        window_ticks=cadence or 100,
+                    )
+                )
+                return replace(
+                    base_context,
+                    attempt_id=attempt_id,
+                    matrix_id=spec.matrix_id,
+                    cell_id=cell_id,
+                    condition_ordinal=assignment.condition_ordinal,
+                    community_sampler=(
+                        None
+                        if community_provider is None
+                        else community_provider.sample
+                    ),
+                    criterion_factory=(
+                        None
+                        if community_provider is None
+                        else community_provider.criterion_factory()
+                    ),
+                    cadence_ticks=cadence,
+                    sample_on_generation_change=(
+                        True
+                        if generational is None
+                        else generational.sample_on_generation_change
+                    ),
+                    reader=reader if cadence is not None else None,
+                )
+
+            deps = replace(
+                deps,
+                archive_root=Path(args.generational_artifact_root),
+                generational_contexts=_context_for,
+                require_generational_context=True,
+            )
+        runner = MatrixBatchRunner(deps)
+        _LOG.info(
+            "cli_matrix_run",
+            extra={
+                "experiment": {
+                    "command": "run",
+                    "matrix_id": spec.matrix_id,
+                    "manifest_root": str(args.manifest_root),
+                }
+            },
+        )
+        result = asyncio.run(runner.run(spec, store))
+        aggregate = build_matrix_aggregate(
+            matrix_id=spec.matrix_id,
+            matrix_fingerprint=result.matrix_fingerprint,
+            cells=result.cells,
+            arm_results=result.arm_results,
+        )
+        out = Path(args.manifest_root) / "aggregate.json"
+        out.write_bytes(encode_matrix_aggregate(aggregate))
+        _LOG.info(
+            "cli_matrix_run_complete",
+            extra={
+                "experiment": {
+                    "completed": result.completed,
+                    "failed": result.failed,
+                    "skipped_valid": result.skipped_valid,
+                }
+            },
+        )
+        if args.print_fingerprint:
+            print(result.matrix_fingerprint)
+        return 0 if result.failed == 0 else 1
+    finally:
+        if resources is not None:
+            from infrastructure.database import dispose_engine
+
+            asyncio.run(dispose_engine(resources.engine))
 
 
 def _cmd_resume(args: argparse.Namespace) -> int:
@@ -241,14 +400,21 @@ def _cmd_generational(args: argparse.Namespace) -> int:
     from infrastructure.database import create_database_resources, dispose_engine
     from infrastructure.settings import load_settings
     from persistence import (
+        create_analysis_evidence_loader,
         create_pending_finalization_repository,
         create_run_repository,
         create_scientific_evidence_repository,
         create_snapshot_repository,
         create_tick_journal_repository,
     )
+    from research_runner.generational_composition import (
+        PostgresCommunitySampleProvider,
+    )
     from simulation.models import RunId
-    from simulation.runner import RecordingStoreSettings, RunnerDependencyFactories
+    from simulation.runner import (
+        RunnerDependencyFactories,
+        recording_store_settings,
+    )
     from simulation.runner_models import ExperimentAssignmentRef
     from simulation.runner_serialization import decode_runner_config
 
@@ -307,14 +473,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
         factories = RunnerDependencyFactories()
         reader = None
         recording_store = None
+        recording_identity = None
         if args.recording_root is not None:
-            from llm.recording import LookupMode
-
-            recording_store = RecordingStoreSettings(
+            recording_store = recording_store_settings(
                 root_dir=Path(args.recording_root),
                 cache_namespace=args.recording_namespace,
-                lookup_mode=LookupMode(args.recording_lookup_mode),
+                lookup_mode=args.recording_lookup_mode,
             )
+            recording_identity = {
+                "recording_artifact_id": args.recording_artifact_id,
+                "recording_namespace": args.recording_namespace,
+                "lookup_mode": args.recording_lookup_mode,
+            }
         if config.persistence.durable:
             settings = load_settings(env_file=False)
             resources = create_database_resources(settings)
@@ -334,7 +504,21 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 runs=create_run_repository(session_factory),
                 journal=create_tick_journal_repository(session_factory),
                 snapshots=create_snapshot_repository(session_factory),
+                evidence=create_scientific_evidence_repository(session_factory),
             )
+            community_provider = PostgresCommunitySampleProvider(
+                loader=create_analysis_evidence_loader(session_factory),
+                run_id=assignment.run_id.value,
+                owner_id=config.agents[0].agent_id.value,
+                window_ticks=(
+                    config.generational_run.historical_checkpoint_cadence_ticks
+                    or 100
+                    if config.generational_run is not None
+                    else 100
+                ),
+            )
+        else:
+            community_provider = None
         if not config.persistence.durable:
             factories = RunnerDependencyFactories(
                 recording_store=recording_store
@@ -345,6 +529,15 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             recipe=recipe,
             factories=factories,
             reader=reader,
+            recording_identity=recording_identity,
+            community_sampler=(
+                None if community_provider is None else community_provider.sample
+            ),
+            criterion_factory=(
+                None
+                if community_provider is None
+                else community_provider.criterion_factory()
+            ),
             cadence_ticks=(
                 None
                 if config.generational_run is None
@@ -377,6 +570,10 @@ def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--execution-recipe", default=None)
     parser.add_argument("--source-clean", action="store_true")
     parser.add_argument("--source-artifact-digest", default=None)
+    parser.add_argument("--recording-root", default=None)
+    parser.add_argument("--recording-artifact-id", default=None)
+    parser.add_argument("--recording-namespace", default=None)
+    parser.add_argument("--recording-lookup-mode", default=None)
 
 
 def build_parser() -> argparse.ArgumentParser:

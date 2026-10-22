@@ -14,9 +14,18 @@ from experiments.generational_artifacts import (
     GenerationalRunArtifactStore,
     GenerationalUsageStore,
 )
+from simulation.generational_seeds import canonical_sha256
 from simulation.models import RunId
-from simulation.runner_models import SimulationRunnerConfig
-from simulation.runner_serialization import runner_config_fingerprint
+from simulation.runner_models import (
+    RunnerStopReasonCode,
+    SimulationRunnerConfig,
+    runner_stop_is_failure,
+)
+from simulation.runner_serialization import (
+    cognition_fingerprint,
+    runner_config_fingerprint,
+)
+from world.models import physical_rules_fingerprint
 
 _LOG: Final[logging.Logger] = logging.getLogger(
     "experiments.generational_adoption"
@@ -118,9 +127,54 @@ def _verify(
         raise GenerationalArtifactError(
             "archive_config_fingerprint_drift", "config_fingerprint"
         )
+    result_document = completion["result_document"]
+    if not isinstance(result_document, dict):
+        raise GenerationalArtifactError("archive_result_drift", "result_document")
+    raw_stop = result_document.get("stop_reason")
+    if not isinstance(raw_stop, str):
+        raise GenerationalArtifactError("archive_result_drift", "stop_reason")
+    try:
+        stop_reason = RunnerStopReasonCode(raw_stop)
+    except ValueError as exc:
+        raise GenerationalArtifactError(
+            "archive_result_drift", "stop_reason"
+        ) from exc
+    if runner_stop_is_failure(stop_reason):
+        raise GenerationalArtifactError(
+            "archive_incomplete_failure", "result_document.stop_reason"
+        )
     seed = manifest["seed_manifest"]
     if not isinstance(seed, dict) or seed.get("run_id") != run_id.value:
         raise GenerationalArtifactError("archive_seed_drift", "seed_manifest")
+    if completion.get("seed_manifest_hash") != canonical_sha256(seed):
+        raise GenerationalArtifactError(
+            "archive_seed_drift", "seed_manifest_hash"
+        )
+    recipe = manifest["execution_recipe"]
+    if not isinstance(recipe, dict):
+        raise GenerationalArtifactError("archive_recipe_drift", "execution_recipe")
+    if completion.get("execution_recipe_hash") != canonical_sha256(recipe):
+        raise GenerationalArtifactError(
+            "archive_recipe_drift", "execution_recipe_hash"
+        )
+    expected_scenario = canonical_sha256(
+        {
+            "physical_rules": physical_rules_fingerprint(
+                expected_config.scenario.physical_rules
+            ),
+            "world_id": expected_config.scenario.world_id.value,
+        }
+    )
+    if manifest.get("scenario_fingerprint") != expected_scenario:
+        raise GenerationalArtifactError(
+            "archive_scenario_drift", "scenario_fingerprint"
+        )
+    if manifest.get("cognition_fingerprint") != cognition_fingerprint(
+        expected_config
+    ):
+        raise GenerationalArtifactError(
+            "archive_cognition_drift", "cognition_fingerprint"
+        )
     assignment = manifest["assignment"]
     experiment = expected_config.experiment
     if not isinstance(assignment, dict):

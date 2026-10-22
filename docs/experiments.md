@@ -1,6 +1,6 @@
 # Experiments Framework
 
-[← Previous Page](simulation-runner.md) · [Back to README](../README.md) · [Next Page →](v2-benchmark-suite.md)
+[← Generational runner](generational-runner.md) · [Back to README](../README.md) · [V2 benchmark suite →](v2-benchmark-suite.md)
 
 ## Trust boundary
 
@@ -435,3 +435,23 @@ per-owner decay), `bk-record-opportunities`, `bk-teaching-opportunities`, and
 conditions; only declared existing opportunities differ. No collapse, death,
 resource shock, record destruction, abandonment or cultural-change tick is
 scheduled. Zero stable institutions and zero collapses are valid outcomes.
+
+
+## Experiment BL — generational runner (`generational_runner@1`)
+
+Off the V1 A–E gate. BL composes the real AY regional world, routes, and
+migration physics with an explicit demographic calendar rather than a synthetic
+counter. Conditions are `bl-single-cohort` (demography disabled),
+`bl-generational-unassisted` (advancing entries at several locations without a
+migration order), and `bl-generational-contact` (the same entry schedule with
+the declared AY diagnostic treatment). The unassisted arm has no forced
+migration and no guaranteed isolation; isolated-community evidence comes from
+the separate AZ sampler fixture.
+
+The experiment replaces lifecycle, initialization, and generational settings on
+the final config instead of assuming a base config preserves them. Modes stay
+explicit and content-empty, and no founder state, parents, or knowledge is
+copied to entrants. The catalog exposes `generational_runner@1`; run archives
+and per-assignment recipes are owned by the generational execution layer, not a
+new metric family. See [Generational runner](generational-runner.md) for the
+archive schemas and CLI.

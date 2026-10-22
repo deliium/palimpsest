@@ -2778,6 +2778,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "collective_decisions@1",
         "mediation_opportunities@1",
         "institutional_decay@1",
+        "generational_runner@1",
     }
 )
 
@@ -5511,6 +5512,26 @@ def experiment_az_multiple_societies(
     )
     _LOG.info(
         "experiment_registered experiment_id=multiple_societies@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bl_generational_runner(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 16,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BL: multi-generation generational runner."""
+    del seed_matrix
+    from experiments.generational_runner_scenario import (
+        generational_runner_scenario,
+    )
+
+    definition = generational_runner_scenario(base=base, max_ticks=max_ticks)
+    _LOG.info(
+        "experiment_registered experiment_id=generational_runner@1 arms=%s",
         len(definition.conditions),
     )
     return definition

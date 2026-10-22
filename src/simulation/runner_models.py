@@ -9192,6 +9192,22 @@ class SimulationRunnerConfig:
                     "cultural_feature_provenance "
                     "(code=generational_narratives_requires_cultural_provenance)"
                 )
+            if not any(
+                agent.cognition.cultural_narrative_mode
+                is CulturalNarrativeMode.DETERMINISTIC
+                for agent in self.agents
+            ):
+                _LOGGER.error(
+                    "generational_narratives_requires_narrative_mode "
+                    "schema_version=%s "
+                    "reason_code=generational_narratives_requires_narrative_mode",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "generational_narratives requires at least one deterministic "
+                    "cultural_narrative_mode "
+                    "(code=generational_narratives_requires_narrative_mode)"
+                )
         if self.generational_run is not None:
             if type(self.generational_run) is not GenerationalRunSpec:
                 raise TypeError("generational_run must be GenerationalRunSpec or None")
@@ -9290,33 +9306,6 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "runner-config-v55 requires generational_run "
                 "(code=v55_requires_generational_run)"
-            )
-            if not any(
-                agent.cognition.cultural_narrative_mode
-                is CulturalNarrativeMode.DETERMINISTIC
-                for agent in self.agents
-            ):
-                _LOGGER.error(
-                    "generational_narratives_requires_narrative_mode "
-                    "schema_version=%s "
-                    "reason_code=generational_narratives_requires_narrative_mode",
-                    self.schema_version,
-                )
-                raise ValueError(
-                    "generational_narratives requires at least one deterministic "
-                    "cultural_narrative_mode "
-                    "(code=generational_narratives_requires_narrative_mode)"
-                )
-            _LOGGER.info(
-                "generational_narratives_schema_select schema_version=%s "
-                "mode=%s max_witnesses=%s max_records=%s max_transitions=%s "
-                "max_declared_chain=%s",
-                self.schema_version,
-                self.generational_narratives.generational_narratives_mode,
-                self.generational_narratives.max_witnesses,
-                self.generational_narratives.max_records,
-                self.generational_narratives.max_transitions,
-                self.generational_narratives.max_declared_chain,
             )
         if (
             self.schema_version == RUNNER_SCHEMA_VERSION_V48

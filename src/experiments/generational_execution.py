@@ -10,15 +10,16 @@ from typing import Final
 
 from experiments.collectors import collect_for_experiment
 from experiments.coordinator import ExperimentArmResult, ExperimentAssignment
+from experiments.generational_archive import (
+    GenerationalExecutionRecipe,
+    open_generational_archive,
+)
 from experiments.generational_artifacts import (
     HistoricalBoundaryReader,
     HistoricalBoundaryReference,
 )
 from experiments.generational_runner_scenario import generational_runner_arbiter
-from research_runner.generational_composition import (
-    GenerationalExecutionRecipe,
-    open_generational_archive,
-)
+from simulation.generational_models import ExperimentCriterionSpec
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import SimulationRunnerConfig
 from simulation.runner_serialization import runner_config_fingerprint
@@ -78,6 +79,12 @@ class GenerationalExecutionContext:
     recipe: GenerationalExecutionRecipe
     factories: RunnerDependencyFactories
     reader: HistoricalBoundaryReader | None = None
+    recording_identity: dict[str, object] | None = None
+    community_sampler: Callable[[object], object] | None = None
+    criterion_factory: Callable[[ExperimentCriterionSpec], object] | None = None
+    matrix_id: str | None = None
+    cell_id: str | None = None
+    condition_ordinal: int | None = None
     attempt_id: str = "single"
     cadence_ticks: int | None = None
     sample_on_generation_change: bool = True
@@ -129,6 +136,12 @@ async def execute_generational_assignment(
             "source_artifact_digest"
         ),
         recipe=context.recipe,
+        recording_identity=context.recording_identity,
+        assignment_overrides={
+            "matrix_id": context.matrix_id,
+            "cell_id": context.cell_id,
+            "condition_ordinal": context.condition_ordinal,
+        },
     )
     reader = context.reader if context.reader is not None else _BoundaryReader()
     factories = session.dependencies(
@@ -136,7 +149,10 @@ async def execute_generational_assignment(
         cadence_ticks=context.cadence_ticks,
         sample_on_generation_change=context.sample_on_generation_change,
         base=context.factories,
+        community_sampler=context.community_sampler,
     )
+    if context.criterion_factory is not None:
+        factories = factories.with_criterion_factory(context.criterion_factory)
     try:
         async with await SimulationRunner.from_config(
             config, run_id=assignment.run_id, factories=factories
@@ -161,7 +177,56 @@ async def execute_generational_assignment(
             if traces is None
             else regional_destination_evidence_rows_from_traces(traces)
         )
-        session.write_completion(result)
+        from simulation.generational_serialization import encode_stop_evidence
+        from simulation.runner_models import (
+            RunnerStopReasonCode,
+            runner_stop_is_failure,
+        )
+
+        if runner_stop_is_failure(result.stop_reason):
+            _LOG.error(
+                "generational_assignment_failed run_id=%s reason_code=%s "
+                "ticks_committed=%s",
+                assignment.run_id.value,
+                result.stop_reason.value,
+                result.ticks_committed,
+            )
+            progress = result.generational_progress
+            boundary_tick = (
+                progress.boundary_tick
+                if progress is not None
+                else result.ticks_committed
+            )
+            finalized_failures = {
+                RunnerStopReasonCode.EXPERIMENT_CRITERION_FAILURE,
+                RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE,
+            }
+            session.store.write_failure(
+                {
+                    "boundary_tick": boundary_tick,
+                    "failure_hash": "0" * 64,
+                    "manifest_hash": session.manifest_hash,
+                    "objective_committed": result.ticks_committed > 0,
+                    "owners_finalized": (
+                        result.stop_reason in finalized_failures
+                    ),
+                    "reason_code": result.stop_reason.value,
+                    "run_id": assignment.run_id.value,
+                    "schema_version": "generational-failure-v1",
+                    "stage": (
+                        "finalized_boundary"
+                        if result.stop_reason in finalized_failures
+                        else "execution"
+                    ),
+                    "stop_evidence": (
+                        None
+                        if result.stop_evidence is None
+                        else encode_stop_evidence(result.stop_evidence)
+                    ),
+                }
+            )
+        else:
+            session.write_completion(result)
     except Exception as exc:
         store = session.store
         try:

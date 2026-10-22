@@ -465,3 +465,29 @@ def test_community_sample_artifact_roundtrip(tmp_path: Path) -> None:
     payload = store.read_community_sample(4)
     assert payload["living_count"] == 2
     assert payload["schema_version"] == "generational-community-sample-v1"
+
+
+def test_duplicate_json_keys_are_rejected() -> None:
+    from experiments.generational_artifacts import decode_generational_document
+
+    raw = (
+        b'{"schema_version":"generational-history-v1",'
+        b'"schema_version":"generational-history-v1"}'
+    )
+    with pytest.raises(GenerationalArtifactError, match="duplicate_json_key"):
+        decode_generational_document(
+            raw, schema_version="generational-history-v1"
+        )
+
+
+def test_symlinked_attempt_directory_is_rejected(tmp_path: Path) -> None:
+    from experiments.generational_artifacts import GenerationalRunArtifactStore
+
+    root = tmp_path / "root"
+    root.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (root / "run-1").symlink_to(elsewhere, target_is_directory=True)
+    store = GenerationalRunArtifactStore(root=root, run_id="run-1")
+    with pytest.raises(GenerationalArtifactError, match="unsafe_path"):
+        store.write_config(b"{}")

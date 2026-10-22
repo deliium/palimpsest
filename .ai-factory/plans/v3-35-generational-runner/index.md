@@ -242,8 +242,8 @@ All eight findings were approved before editing; task IDs/settings/original requ
 ### Phase 6: Experiment and release
 
 - [x] Task 16: Add a real multi-generation experiment and per-assignment execution context ([details](phase-06-experiment-and-release.md#task-16-add-a-real-multi-generation-experiment-and-per-assignment-execution-context)) (depends on 4–15).
-- [ ] Task 17: Expose generational CLI composition and reproducibility preflight ([details](phase-06-experiment-and-release.md#task-17-expose-generational-cli-composition-and-reproducibility-preflight)) (depends on 9, 10, 11, 12, 16).
-- [ ] Task 18: Prove long-horizon gates and document exact guarantees ([details](phase-06-experiment-and-release.md#task-18-prove-long-horizon-gates-and-document-exact-guarantees)) (depends on 1–17).
+- [x] Task 17: Expose generational CLI composition and reproducibility preflight ([details](phase-06-experiment-and-release.md#task-17-expose-generational-cli-composition-and-reproducibility-preflight)) (depends on 9, 10, 11, 12, 16).
+- [x] Task 18: Prove long-horizon gates and document exact guarantees ([details](phase-06-experiment-and-release.md#task-18-prove-long-horizon-gates-and-document-exact-guarantees)) (depends on 1–17).
 
 ## Commit Plan
 

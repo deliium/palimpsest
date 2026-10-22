@@ -279,3 +279,27 @@ Supported: decay + concepts; decay + concepts + offices; decay + concepts +
 memory; all three, with optional existing siblings. Default write remains
 `runner-config-v4`; memory mode accepts v53/v54; the institutional-memory
 learner profile remains accepted on both and stays decay-disabled.
+
+
+## Generational runs (`runner-config-v55`)
+
+`runner-config-v55` is selected only by an exact `generational_run` sibling on
+an otherwise valid lower-family root. It requires an exact
+`population_lifecycle`, the owned `V3CapabilityFlags.generational_population`
+flag, explicit `new_agent_initialization`, a finite `stop_policy.max_ticks`, and
+`stop_policy.stop_on_all_agents_terminal=false`. The v54 cognition keyset is
+preserved, and every institutional mode may remain `disabled`; v55 does not
+require institutional decay.
+
+`generational_run` carries only the optional generation horizon, extinction
+policy, inclusive population threshold, ordered trusted criteria and cadence,
+optional historical checkpoint cadence, and generation-change sampling flag.
+The demographic policy remains the existing `generational_interval_entry` (or
+`fixed_interval_entry`/`disabled`) schedule inside `population_lifecycle`.
+There is no biology, mating, parent assignment, or community installation.
+
+Generational results use `runner-result-v3`; the legacy default remains v2.
+Older runner schemas reject v55-only keys, and v55 rejects missing required
+siblings. Default write remains `runner-config-v4`, and the existing
+replay/codec write pairs remain channel-selected. See
+[Generational runner](generational-runner.md).

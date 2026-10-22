@@ -1,6 +1,6 @@
 # Simulation Runner
 
-[← Architecture](architecture.md) · [Back to README](../README.md)
+[← Architecture](architecture.md) · [Back to README](../README.md) · [Generational runner →](generational-runner.md)
 
 ## Role
 
@@ -97,6 +97,14 @@ contact-off regional runs stay on `(replay-v21, codec v19)`. Absent contact or
 symbolic modes keep the prior highest-active schema, so the default write
 remains `runner-config-v4`.
 
+Generational runs select `runner-config-v55` only when an exact
+`generational_run` sibling is present; they require population lifecycle, the
+owned `generational_population` flag, explicit initialization, a finite tick
+horizon, and disabled runtime-terminal stopping. The cognition keyset remains
+v54 and every institutional mode may be disabled. Generational results use
+`runner-result-v3`; legacy result defaults stay v2. See
+[Generational runner](generational-runner.md).
+
 Top-level `CognitionTraceSpec` (default disabled) rides in `runner-config-v4` only.
 Prior versions decode to a disabled spec. Tracing is **not** a capability flag;
 when enabled it may change `config_fingerprint` but must not change
@@ -134,7 +142,14 @@ Scheduling is sequential in bootstrap registration order. Concurrent cognition i
 
 ## Stop and results
 
-Stop policies cover max ticks and closed failure modes. Results are versioned machine-readable documents with stop reason, tick counts, config fingerprint prefixes, and exact vs replica-normalized trajectory hashes. Seeds, credentials, prompts, and raw provider output stay out of logs and result documents.
+Stop policies cover max ticks and closed failure modes. Generational runs add
+generation-horizon, extinction, inclusive population-threshold, and trusted
+experiment-criterion selectors after the completed boundary; see
+[Generational runner](generational-runner.md) for precedence and latching.
+Results are versioned machine-readable documents with stop reason, tick counts,
+config fingerprint prefixes, and exact vs replica-normalized trajectory hashes.
+Seeds, credentials, prompts, and raw provider output stay out of logs and result
+documents.
 
 ## Recovery and inspection
 

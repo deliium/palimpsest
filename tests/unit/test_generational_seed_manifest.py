@@ -41,7 +41,7 @@ def test_demographic_reserved_draw_is_not_reported_as_zero() -> None:
     by_name = {channel.name: channel for channel in manifest.channels}
     assert by_name["demography"].draw_usage == "reserved_ignored"
     assert by_name["innovation"].draw_usage == "deterministic_hash"
-    assert by_name["environment"].draw_usage == "deterministic_hash"
+    assert by_name["environment"].draw_usage == "sampled"
 
 
 def test_schedule_and_rules_identity_are_covered() -> None:

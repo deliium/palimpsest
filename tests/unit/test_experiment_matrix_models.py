@@ -113,6 +113,10 @@ def test_default_success_stop_set() -> None:
         RunnerStopReasonCode.MAX_TICKS,
         RunnerStopReasonCode.ALL_AGENTS_TERMINAL,
         RunnerStopReasonCode.INJECTED_STOP,
+        RunnerStopReasonCode.GENERATION_HORIZON,
+        RunnerStopReasonCode.POPULATION_EXTINCTION,
+        RunnerStopReasonCode.POPULATION_THRESHOLD,
+        RunnerStopReasonCode.EXPERIMENT_CRITERION,
     )
 
 

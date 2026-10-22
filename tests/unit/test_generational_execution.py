@@ -248,9 +248,66 @@ async def test_expanded_matrix_routes_bl_cells_through_context(tmp_path: Path) -
             package_version="0.0.0-test",
             code_revision="abc123",
             archive_root=tmp_path / "archives",
-            generational_contexts=lambda condition_id: context,
+            generational_contexts=lambda _assignment, _cell_id: context,
             require_generational_context=True,
         )
     ).run(spec, FilesystemMatrixManifestStore(tmp_path / "matrix"))
     assert result.completed == 2
     assert result.failed == 0
+
+
+@pytest.mark.asyncio
+async def test_matrix_requires_generational_context_by_default(
+    tmp_path: Path,
+) -> None:
+    from experiments.generational_runner_scenario import (
+        generational_runner_scenario,
+    )
+    from experiments.matrix_manifest import FilesystemMatrixManifestStore
+    from experiments.matrix_models import (
+        EXPERIMENT_MATRIX_SCHEMA_VERSION,
+        ExperimentMatrixSpec,
+        ExperimentSeedMatrix,
+        GroupRole,
+        MatrixEmbeddedBase,
+        MatrixFactor,
+        MatrixFactorId,
+        MatrixFactorLevel,
+    )
+    from experiments.matrix_runner import MatrixBatchDependencies, MatrixBatchRunner
+
+    source = generational_runner_scenario(seed=23, max_ticks=6)
+    base = next(
+        item.runner_config
+        for item in source.conditions
+        if item.condition_id == "bl-generational-unassisted"
+    )
+    spec = ExperimentMatrixSpec(
+        matrix_id="bl-matrix-missing-context",
+        schema_version=EXPERIMENT_MATRIX_SCHEMA_VERSION,
+        base=MatrixEmbeddedBase(runner_config=base),
+        factors=(
+            MatrixFactor(
+                factor_id=MatrixFactorId.TOM,
+                levels=(
+                    MatrixFactorLevel("off", "tom_off", GroupRole.CONTROL),
+                    MatrixFactorLevel("on", "tom_on", GroupRole.TREATMENT),
+                ),
+            ),
+        ),
+        seed_matrix=ExperimentSeedMatrix(seeds=(23,)),
+    )
+    store = FilesystemMatrixManifestStore(tmp_path / "matrix")
+    result = await MatrixBatchRunner(
+        MatrixBatchDependencies(
+            package_version="0.0.0-test",
+            code_revision="abc123",
+            archive_root=tmp_path / "archives",
+        )
+    ).run(spec, store)
+    assert result.completed == 0
+    assert result.failed == 2
+    assert all(
+        record.last_error_code == "generational_context_required"
+        for record in store.list_cells()
+    )
