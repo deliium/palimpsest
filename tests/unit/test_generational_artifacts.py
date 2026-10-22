@@ -80,3 +80,213 @@ def test_tampered_payload_hash_is_rejected(tmp_path: Path) -> None:
     path.write_bytes(payload)
     with pytest.raises(GenerationalArtifactError, match="payload_hash_mismatch"):
         store.row_refs()
+
+
+def _manifest_payload() -> dict[str, object]:
+    return {
+        "attempt_id": "single",
+        "assignment": {
+            "cell_id": None,
+            "condition_id": "bl-on",
+            "condition_ordinal": 0,
+            "experiment_id": "generational@1",
+            "matrix_id": None,
+            "replicate_index": 0,
+            "seed_ordinal": 0,
+        },
+        "cognition_fingerprint": "a" * 64,
+        "config_fingerprint": "b" * 64,
+        "config_ref": {"path": "run-1/single/config.json", "sha256": "c" * 64},
+        "environment_identity": {
+            "dependency_versions": {"pytest": "9.1.1"},
+            "package_version": "0.1.0",
+            "platform": "linux",
+            "python_implementation": "CPython",
+            "python_version": "3.12.14",
+        },
+        "execution_recipe": {
+            "intervention_id": None,
+            "intervention_params": {},
+            "intervention_version": None,
+            "params": {"mode": "standalone"},
+            "recipe_id": "generational-standalone",
+            "version": "v1",
+        },
+        "history_policy": {
+            "criterion_cadence_ticks": 1,
+            "historical_checkpoint_cadence_ticks": None,
+            "sample_on_generation_change": True,
+        },
+        "manifest_hash": "0" * 64,
+        "provider_identity": {
+            "adapter_kind": "deterministic_fake",
+            "exact_reproducibility": "false",
+            "lookup_mode": None,
+            "model": None,
+            "recording_artifact_id": None,
+            "recording_namespace": None,
+            "recording_policy": "deterministic_fake",
+        },
+        "run_id": "run-1",
+        "scenario_fingerprint": "d" * 64,
+        "schema_version": "generational-run-manifest-v1",
+        "seed_manifest": {
+            "channels": [
+                {
+                    "algorithm_version": "derivation-v3-stream-v1",
+                    "draw_usage": "sampled",
+                    "identity_selector": "stochastic_identity",
+                    "name": "world",
+                    "namespace": "objective",
+                    "scope_fields": ["seed"],
+                }
+            ],
+            "derivation_version": "derivation-v3",
+            "initialization_identity": {
+                "lifespan_distribution_hash": "e" * 64,
+                "parameter_distributions_hash": "f" * 64,
+                "profile_id": "species_default_v1",
+            },
+            "physical_rules_fingerprint": "1" * 64,
+            "run_id": "run-1",
+            "schedule_fingerprint": "2" * 64,
+            "seed": 23,
+            "stochastic_identity": "generational",
+        },
+        "source_identity": {
+            "code_revision": "abc123",
+            "source_artifact_digest": None,
+            "source_clean": True,
+        },
+    }
+
+
+def _history_payload() -> dict[str, object]:
+    return {
+        "boundary_tick": 4,
+        "community_ref": None,
+        "evidence_ref": None,
+        "last_completed_tick": 3,
+        "objective_commit_hash": "3" * 64,
+        "payload_hash": "0" * 64,
+        "population_progress": {"boundary_tick": 4},
+        "revision": 4,
+        "run_id": "run-1",
+        "sample_reasons": ["cadence"],
+        "schema_version": "generational-history-v1",
+        "snapshot_ref": {
+            "integrity_hash": "4" * 64,
+            "next_tick": 4,
+            "snapshot_id": "snap-4",
+        },
+        "stop_evidence": None,
+    }
+
+
+def _completion_payload() -> dict[str, object]:
+    return {
+        "completion_hash": "0" * 64,
+        "execution_recipe_hash": "5" * 64,
+        "final_progress": {"boundary_tick": 4},
+        "history_refs": [],
+        "manifest_hash": "6" * 64,
+        "recording_usage_ref": {"count": 0, "row_refs": [], "sha256": "7" * 64},
+        "result_document": {"schema_version": "runner-result-v3"},
+        "run_id": "run-1",
+        "schema_version": "generational-completion-v1",
+        "seed_manifest_hash": "8" * 64,
+        "source_identity": {
+            "code_revision": "abc123",
+            "source_artifact_digest": None,
+            "source_clean": True,
+        },
+    }
+
+
+def _failure_payload() -> dict[str, object]:
+    return {
+        "boundary_tick": 3,
+        "failure_hash": "0" * 64,
+        "manifest_hash": "a" * 64,
+        "objective_committed": True,
+        "owners_finalized": False,
+        "reason_code": "observer_failure",
+        "run_id": "run-1",
+        "schema_version": "generational-failure-v1",
+        "stage": "boundary_observer",
+        "stop_evidence": None,
+    }
+
+
+def test_exact_document_self_hash_roundtrip_and_tamper() -> None:
+    from experiments.generational_artifacts import (
+        decode_generational_document,
+        encode_generational_document,
+    )
+
+    encoded = encode_generational_document(
+        _manifest_payload(), schema_version="generational-run-manifest-v1"
+    )
+    decoded = decode_generational_document(
+        encoded, schema_version="generational-run-manifest-v1"
+    )
+    assert decoded["manifest_hash"] != "0" * 64
+    tampered = encoded.replace(b'"attempt_id":"single"', b'"attempt_id":"other"')
+    with pytest.raises(GenerationalArtifactError, match="payload_hash_mismatch"):
+        decode_generational_document(
+            tampered, schema_version="generational-run-manifest-v1"
+        )
+
+
+def test_manifest_rejects_unknown_and_incomplete_identity() -> None:
+    from experiments.generational_artifacts import encode_generational_document
+
+    payload = _manifest_payload()
+    payload["unknown"] = 1
+    with pytest.raises(GenerationalArtifactError, match="invalid_keys"):
+        encode_generational_document(
+            payload, schema_version="generational-run-manifest-v1"
+        )
+    payload = _manifest_payload()
+    source = dict(payload["source_identity"])  # type: ignore[arg-type]
+    source["source_clean"] = False
+    payload["source_identity"] = source
+    with pytest.raises(
+        GenerationalArtifactError, match="source_identity_incomplete"
+    ):
+        encode_generational_document(
+            payload, schema_version="generational-run-manifest-v1"
+        )
+
+
+def test_store_writes_history_and_completion_and_freezes_attempt(
+    tmp_path: Path,
+) -> None:
+    from experiments.generational_artifacts import GenerationalRunArtifactStore
+
+    store = GenerationalRunArtifactStore(root=tmp_path, run_id="run-1")
+    store.write_config(b'{"schema_version":"runner-config-v55"}')
+    store.write_manifest(_manifest_payload())
+    store.write_history(4, _history_payload())
+    assert store.history_refs()
+    payload = _completion_payload()
+    payload["history_refs"] = list(store.history_refs())
+    store.write_completion(payload)
+    assert store.read_completion()["run_id"] == "run-1"
+    with pytest.raises(GenerationalArtifactError, match="completed_attempt_immutable"):
+        store.write_manifest(_manifest_payload())
+
+
+def test_store_writes_failure_and_rejects_conflicting_history(
+    tmp_path: Path,
+) -> None:
+    from experiments.generational_artifacts import GenerationalRunArtifactStore
+
+    store = GenerationalRunArtifactStore(root=tmp_path, run_id="run-1")
+    store.write_failure(_failure_payload())
+    assert store.read_failure()["reason_code"] == "observer_failure"
+    store.write_history(1, _history_payload())
+    conflicting = _history_payload()
+    conflicting["sample_reasons"] = ["terminal"]
+    with pytest.raises(GenerationalArtifactError, match="artifact_conflict"):
+        store.write_history(1, conflicting)

@@ -13,7 +13,7 @@ import logging
 import os
 import re
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -198,11 +198,478 @@ class GenerationalUsageStore:
 
 
 __all__ = [
+    "GENERATIONAL_COMPLETION_SCHEMA_VERSION",
+    "GENERATIONAL_FAILURE_SCHEMA_VERSION",
+    "GENERATIONAL_HISTORY_SCHEMA_VERSION",
     "GENERATIONAL_RECORDING_USAGE_SCHEMA_VERSION",
+    "GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION",
     "GenerationalArtifactError",
+    "GenerationalRunArtifactStore",
     "GenerationalUsageStore",
     "canonical_bytes",
+    "decode_generational_document",
     "decode_recording_usage_row",
+    "encode_generational_document",
     "encode_recording_usage_row",
     "require_safe_segment",
 ]
+
+
+GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION: Final[str] = (
+    "generational-run-manifest-v1"
+)
+GENERATIONAL_HISTORY_SCHEMA_VERSION: Final[str] = "generational-history-v1"
+GENERATIONAL_COMPLETION_SCHEMA_VERSION: Final[str] = (
+    "generational-completion-v1"
+)
+GENERATIONAL_FAILURE_SCHEMA_VERSION: Final[str] = "generational-failure-v1"
+
+_MANIFEST_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "assignment",
+        "cognition_fingerprint",
+        "config_fingerprint",
+        "config_ref",
+        "environment_identity",
+        "execution_recipe",
+        "history_policy",
+        "manifest_hash",
+        "provider_identity",
+        "run_id",
+        "scenario_fingerprint",
+        "schema_version",
+        "seed_manifest",
+        "source_identity",
+        "attempt_id",
+    }
+)
+_HISTORY_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "boundary_tick",
+        "community_ref",
+        "evidence_ref",
+        "last_completed_tick",
+        "objective_commit_hash",
+        "payload_hash",
+        "population_progress",
+        "revision",
+        "run_id",
+        "sample_reasons",
+        "schema_version",
+        "snapshot_ref",
+        "stop_evidence",
+    }
+)
+_COMPLETION_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "completion_hash",
+        "execution_recipe_hash",
+        "final_progress",
+        "history_refs",
+        "manifest_hash",
+        "recording_usage_ref",
+        "result_document",
+        "run_id",
+        "schema_version",
+        "seed_manifest_hash",
+        "source_identity",
+    }
+)
+_FAILURE_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "boundary_tick",
+        "failure_hash",
+        "manifest_hash",
+        "objective_committed",
+        "owners_finalized",
+        "reason_code",
+        "run_id",
+        "schema_version",
+        "stage",
+        "stop_evidence",
+    }
+)
+_ASSIGNMENT_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "cell_id",
+        "condition_id",
+        "condition_ordinal",
+        "experiment_id",
+        "matrix_id",
+        "replicate_index",
+        "seed_ordinal",
+    }
+)
+_RECIPE_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "intervention_id",
+        "intervention_params",
+        "intervention_version",
+        "params",
+        "recipe_id",
+        "version",
+    }
+)
+_SOURCE_FIELDS: Final[frozenset[str]] = frozenset(
+    {"code_revision", "source_artifact_digest", "source_clean"}
+)
+_ENVIRONMENT_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "dependency_versions",
+        "package_version",
+        "platform",
+        "python_implementation",
+        "python_version",
+    }
+)
+_PROVIDER_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "adapter_kind",
+        "exact_reproducibility",
+        "lookup_mode",
+        "model",
+        "recording_artifact_id",
+        "recording_namespace",
+        "recording_policy",
+    }
+)
+_SEED_MANIFEST_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "channels",
+        "derivation_version",
+        "initialization_identity",
+        "physical_rules_fingerprint",
+        "run_id",
+        "schedule_fingerprint",
+        "seed",
+        "stochastic_identity",
+    }
+)
+_SEED_CHANNEL_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "algorithm_version",
+        "draw_usage",
+        "identity_selector",
+        "name",
+        "namespace",
+        "scope_fields",
+    }
+)
+_INIT_IDENTITY_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "lifespan_distribution_hash",
+        "parameter_distributions_hash",
+        "profile_id",
+    }
+)
+_REF_FIELDS: Final[frozenset[str]] = frozenset({"path", "sha256"})
+_SNAPSHOT_FIELDS: Final[frozenset[str]] = frozenset(
+    {"integrity_hash", "next_tick", "snapshot_id"}
+)
+_USAGE_REF_FIELDS: Final[frozenset[str]] = frozenset(
+    {"count", "row_refs", "sha256"}
+)
+_HISTORY_POLICY_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "criterion_cadence_ticks",
+        "historical_checkpoint_cadence_ticks",
+        "sample_on_generation_change",
+    }
+)
+
+
+def _exact_mapping(
+    value: object, fields: frozenset[str], *, name: str
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise GenerationalArtifactError("invalid_object", name)
+    if set(value) != fields:
+        raise GenerationalArtifactError("invalid_keys", name)
+    return value
+
+
+def _require_str(value: object, *, name: str) -> str:
+    if type(value) is not str or not value:
+        raise GenerationalArtifactError("invalid_string", name)
+    return value
+
+
+def _validate_seed_manifest(value: object) -> None:
+    seed = _exact_mapping(value, _SEED_MANIFEST_FIELDS, name="seed_manifest")
+    for key in (
+        "derivation_version",
+        "physical_rules_fingerprint",
+        "run_id",
+        "schedule_fingerprint",
+        "stochastic_identity",
+    ):
+        _require_str(seed[key], name=f"seed_manifest.{key}")
+    if isinstance(seed["seed"], bool) or not isinstance(seed["seed"], int):
+        raise GenerationalArtifactError("invalid_int", "seed_manifest.seed")
+    _exact_mapping(
+        seed["initialization_identity"],
+        _INIT_IDENTITY_FIELDS,
+        name="seed_manifest.initialization_identity",
+    )
+    channels = seed["channels"]
+    if not isinstance(channels, list):
+        raise GenerationalArtifactError("invalid_array", "seed_manifest.channels")
+    names: set[str] = set()
+    for channel in channels:
+        row = _exact_mapping(
+            channel, _SEED_CHANNEL_FIELDS, name="seed_manifest.channel"
+        )
+        name = _require_str(row["name"], name="seed_manifest.channel.name")
+        if name in names:
+            raise GenerationalArtifactError(
+                "duplicate_channel", "seed_manifest.channels"
+            )
+        names.add(name)
+        if row["draw_usage"] not in {
+            "absent",
+            "reserved_ignored",
+            "deterministic_hash",
+            "sampled",
+        }:
+            raise GenerationalArtifactError(
+                "invalid_draw_usage", "seed_manifest.channel"
+            )
+
+
+def _validate_manifest_nested(payload: dict[str, object]) -> None:
+    _exact_mapping(payload["assignment"], _ASSIGNMENT_FIELDS, name="assignment")
+    recipe = _exact_mapping(
+        payload["execution_recipe"], _RECIPE_FIELDS, name="execution_recipe"
+    )
+    if (recipe["intervention_id"] is None) != (
+        recipe["intervention_version"] is None
+    ):
+        raise GenerationalArtifactError(
+            "intervention_pair_mismatch", "execution_recipe"
+        )
+    _exact_mapping(
+        payload["source_identity"], _SOURCE_FIELDS, name="source_identity"
+    )
+    source = payload["source_identity"]
+    assert isinstance(source, dict)
+    _require_str(source["code_revision"], name="source_identity.code_revision")
+    if type(source["source_clean"]) is not bool:
+        raise GenerationalArtifactError(
+            "invalid_boolean", "source_identity.source_clean"
+        )
+    if source["source_clean"] is False and source["source_artifact_digest"] is None:
+        raise GenerationalArtifactError(
+            "source_identity_incomplete", "source_identity"
+        )
+    _exact_mapping(
+        payload["environment_identity"],
+        _ENVIRONMENT_FIELDS,
+        name="environment_identity",
+    )
+    _exact_mapping(
+        payload["provider_identity"], _PROVIDER_FIELDS, name="provider_identity"
+    )
+    provider = payload["provider_identity"]
+    assert isinstance(provider, dict)
+    if provider["recording_policy"] == "replay":
+        for key in ("recording_artifact_id", "recording_namespace", "lookup_mode"):
+            if provider[key] is None:
+                raise GenerationalArtifactError(
+                    "replay_provider_incomplete", f"provider_identity.{key}"
+                )
+    _exact_mapping(payload["config_ref"], _REF_FIELDS, name="config_ref")
+    _exact_mapping(
+        payload["history_policy"], _HISTORY_POLICY_FIELDS, name="history_policy"
+    )
+    _validate_seed_manifest(payload["seed_manifest"])
+
+
+def _validate_history_nested(payload: dict[str, object]) -> None:
+    reasons = payload["sample_reasons"]
+    if not isinstance(reasons, list) or any(type(item) is not str for item in reasons):
+        raise GenerationalArtifactError("invalid_array", "sample_reasons")
+    if reasons != sorted(set(reasons)):
+        raise GenerationalArtifactError("unsorted_sample_reasons", "sample_reasons")
+    _exact_mapping(payload["snapshot_ref"], _SNAPSHOT_FIELDS, name="snapshot_ref")
+    if payload["community_ref"] is not None:
+        _exact_mapping(payload["community_ref"], _REF_FIELDS, name="community_ref")
+    if not isinstance(payload["population_progress"], dict):
+        raise GenerationalArtifactError("invalid_object", "population_progress")
+
+
+def _validate_completion_nested(payload: dict[str, object]) -> None:
+    _exact_mapping(
+        payload["recording_usage_ref"], _USAGE_REF_FIELDS, name="recording_usage_ref"
+    )
+    refs = payload["history_refs"]
+    if not isinstance(refs, list):
+        raise GenerationalArtifactError("invalid_array", "history_refs")
+    for ref in refs:
+        _exact_mapping(ref, _REF_FIELDS, name="history_ref")
+    _exact_mapping(
+        payload["source_identity"], _SOURCE_FIELDS, name="source_identity"
+    )
+
+
+self_hash_fields: Final[Mapping[str, str]] = {
+    GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION: "manifest_hash",
+    GENERATIONAL_HISTORY_SCHEMA_VERSION: "payload_hash",
+    GENERATIONAL_COMPLETION_SCHEMA_VERSION: "completion_hash",
+    GENERATIONAL_FAILURE_SCHEMA_VERSION: "failure_hash",
+}
+_schema_fields: Final[Mapping[str, frozenset[str]]] = {
+    GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION: _MANIFEST_FIELDS,
+    GENERATIONAL_HISTORY_SCHEMA_VERSION: _HISTORY_FIELDS,
+    GENERATIONAL_COMPLETION_SCHEMA_VERSION: _COMPLETION_FIELDS,
+    GENERATIONAL_FAILURE_SCHEMA_VERSION: _FAILURE_FIELDS,
+}
+def _validate_failure_nested(payload: dict[str, object]) -> None:
+    del payload
+
+
+_nested_validators: Mapping[str, Callable[[dict[str, object]], None]] = {
+    GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION: _validate_manifest_nested,
+    GENERATIONAL_HISTORY_SCHEMA_VERSION: _validate_history_nested,
+    GENERATIONAL_COMPLETION_SCHEMA_VERSION: _validate_completion_nested,
+    GENERATIONAL_FAILURE_SCHEMA_VERSION: _validate_failure_nested,
+}
+
+
+def encode_generational_document(
+    payload: Mapping[str, object], *, schema_version: str
+) -> bytes:
+    if schema_version not in _schema_fields:
+        raise GenerationalArtifactError("unsupported_version", schema_version)
+    expected = _schema_fields[schema_version]
+    document = dict(payload)
+    hash_field = self_hash_fields[schema_version]
+    if set(document) != expected:
+        raise GenerationalArtifactError("invalid_keys", schema_version)
+    if document.get("schema_version") != schema_version:
+        raise GenerationalArtifactError("schema_version_mismatch", schema_version)
+    document.pop(hash_field, None)
+    document[hash_field] = _sha256(canonical_bytes(document))
+    _nested_validators[schema_version](document)
+    return canonical_bytes(document)
+
+
+def decode_generational_document(
+    payload: bytes, *, schema_version: str
+) -> dict[str, object]:
+    if schema_version not in _schema_fields:
+        raise GenerationalArtifactError("unsupported_version", schema_version)
+    try:
+        document = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GenerationalArtifactError("invalid_json", schema_version) from exc
+    if not isinstance(document, dict):
+        raise GenerationalArtifactError("invalid_object", schema_version)
+    if set(document) != _schema_fields[schema_version]:
+        raise GenerationalArtifactError("invalid_keys", schema_version)
+    hash_field = self_hash_fields[schema_version]
+    expected_hash = document[hash_field]
+    without_hash = {key: value for key, value in document.items() if key != hash_field}
+    if expected_hash != _sha256(canonical_bytes(without_hash)):
+        raise GenerationalArtifactError("payload_hash_mismatch", schema_version)
+    if document.get("schema_version") != schema_version:
+        raise GenerationalArtifactError("schema_version_mismatch", schema_version)
+    _nested_validators[schema_version](document)
+    return document
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationalRunArtifactStore:
+    """Append-only archive tree for one run attempt."""
+
+    root: Path
+    run_id: str
+    attempt_id: str = "single"
+
+    def __post_init__(self) -> None:
+        require_safe_segment("run_id", self.run_id)
+        require_safe_segment("attempt_id", self.attempt_id)
+        object.__setattr__(self, "root", Path(self.root))
+
+    @property
+    def attempt_dir(self) -> Path:
+        return self.root / self.run_id / self.attempt_id
+
+    @property
+    def history_dir(self) -> Path:
+        return self.attempt_dir / "history"
+
+    def write_config(self, payload: bytes) -> tuple[str, str]:
+        path = self.attempt_dir / "config.json"
+        _atomic_write(path, payload)
+        relative = str(path.relative_to(self.root))
+        return relative, _sha256(payload)
+
+    def write_manifest(self, payload: Mapping[str, object]) -> bytes:
+        if (self.attempt_dir / "completion.json").exists() or (
+            self.attempt_dir / "failure.json"
+        ).exists():
+            raise GenerationalArtifactError("completed_attempt_immutable", "manifest")
+        encoded = encode_generational_document(
+            payload, schema_version=GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION
+        )
+        _atomic_write(self.attempt_dir / "manifest.json", encoded)
+        return encoded
+
+    def write_history(
+        self, boundary_tick: int, payload: Mapping[str, object]
+    ) -> bytes:
+        encoded = encode_generational_document(
+            payload, schema_version=GENERATIONAL_HISTORY_SCHEMA_VERSION
+        )
+        path = self.history_dir / f"{boundary_tick:012d}.json"
+        _atomic_write(path, encoded)
+        return encoded
+
+    def write_completion(self, payload: Mapping[str, object]) -> bytes:
+        encoded = encode_generational_document(
+            payload, schema_version=GENERATIONAL_COMPLETION_SCHEMA_VERSION
+        )
+        _atomic_write(self.attempt_dir / "completion.json", encoded)
+        return encoded
+
+    def write_failure(self, payload: Mapping[str, object]) -> bytes:
+        encoded = encode_generational_document(
+            payload, schema_version=GENERATIONAL_FAILURE_SCHEMA_VERSION
+        )
+        _atomic_write(self.attempt_dir / "failure.json", encoded)
+        return encoded
+
+    def read_manifest(self) -> dict[str, object]:
+        return decode_generational_document(
+            (self.attempt_dir / "manifest.json").read_bytes(),
+            schema_version=GENERATIONAL_RUN_MANIFEST_SCHEMA_VERSION,
+        )
+
+    def read_completion(self) -> dict[str, object]:
+        return decode_generational_document(
+            (self.attempt_dir / "completion.json").read_bytes(),
+            schema_version=GENERATIONAL_COMPLETION_SCHEMA_VERSION,
+        )
+
+    def read_failure(self) -> dict[str, object]:
+        return decode_generational_document(
+            (self.attempt_dir / "failure.json").read_bytes(),
+            schema_version=GENERATIONAL_FAILURE_SCHEMA_VERSION,
+        )
+
+    def history_refs(self) -> tuple[dict[str, str], ...]:
+        if not self.history_dir.exists():
+            return ()
+        refs: list[dict[str, str]] = []
+        for path in sorted(self.history_dir.glob("*.json"), key=lambda item: item.name):
+            payload = path.read_bytes()
+            decode_generational_document(
+                payload, schema_version=GENERATIONAL_HISTORY_SCHEMA_VERSION
+            )
+            refs.append(
+                {
+                    "path": str(path.relative_to(self.root)),
+                    "sha256": _sha256(payload),
+                }
+            )
+        return tuple(refs)
