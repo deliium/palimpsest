@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Final, cast
 
 from agents.models import AgentId
+from simulation._history import HistorySequence
 from simulation.actions import (
     PHYSICAL_PURPOSE_ATTACK_DAMAGE,
     PHYSICAL_PURPOSE_ATTACK_HIT,
@@ -211,8 +212,8 @@ class _EngineSnapshot:
     phase: EnginePhase
     token: TickToken | None
     observation_batch: ObservationBatch | None
-    resolution_history: tuple[ActionResolution, ...]
-    event_history: tuple[WorldEvent, ...]
+    resolution_history: HistorySequence[ActionResolution]
+    event_history: HistorySequence[WorldEvent]
     prior_event_window: tuple[WorldEvent, ...]
 
 
@@ -559,8 +560,8 @@ class WorldEngine:
             phase=EnginePhase.AWAITING_OBSERVATION,
             token=None,
             observation_batch=None,
-            resolution_history=(),
-            event_history=(),
+            resolution_history=HistorySequence(),
+            event_history=HistorySequence(),
             prior_event_window=(),
         )
         self._bind_skill_state(
@@ -1017,8 +1018,8 @@ class WorldEngine:
             phase=EnginePhase.AWAITING_OBSERVATION,
             token=None,
             observation_batch=None,
-            resolution_history=(),
-            event_history=normalized_events,
+            resolution_history=HistorySequence(),
+            event_history=HistorySequence.from_iterable(normalized_events),
             prior_event_window=_prior_event_window_for_tick(
                 normalized_events, observation_tick=restored_tick.value
             ),
@@ -1668,7 +1669,7 @@ class WorldEngine:
                 token=snap.token,
                 observation_batch=snap.observation_batch,
                 resolution_history=snap.resolution_history,
-                event_history=(*snap.event_history, event),
+                event_history=snap.event_history.append((event,)),
                 prior_event_window=(*snap.prior_event_window, event),
             )
         return details
@@ -1931,7 +1932,7 @@ class WorldEngine:
             token=None,
             observation_batch=None,
             resolution_history=snap.resolution_history,
-            event_history=(*snap.event_history, *events),
+            event_history=snap.event_history.append(events),
             prior_event_window=(*snap.prior_event_window, *events),
         )
         _LOGGER.info(
@@ -2816,7 +2817,7 @@ class WorldEngine:
         restored_tick = (
             Tick(tick_before.value + 1) if includes_last_event else tick_before
         )
-        folded = self._snapshot.event_history + tuple(events)
+        folded = self._snapshot.event_history.append(events)
         world = _materialize_projected_world(world_id=self.world_id, state=projected)
         self._snapshot = _EngineSnapshot(
             world=world,
@@ -3352,8 +3353,8 @@ class WorldEngine:
             phase=EnginePhase.AWAITING_OBSERVATION,
             token=None,
             observation_batch=None,
-            resolution_history=(*snap.resolution_history, *resolutions),
-            event_history=(*snap.event_history, *events),
+            resolution_history=snap.resolution_history.append(resolutions),
+            event_history=snap.event_history.append(events),
             prior_event_window=events,
         )
         return _PreparedTickCandidate(
@@ -3432,7 +3433,11 @@ class WorldEngine:
         return result
 
     def export_events(self) -> SimulationExport:
-        return make_export(self._config, self._run_id, self._snapshot.event_history)
+        return make_export(
+            self._config,
+            self._run_id,
+            self._snapshot.event_history.to_tuple(),
+        )
 
     def skill_untargeted_request_ids(self) -> frozenset[str]:
         """Request ids whose search command had no target.
