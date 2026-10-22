@@ -454,3 +454,14 @@ def test_completion_written_after_history_and_usage(tmp_path: Path) -> None:
     )
     assert encoded
     assert store.read_completion()["history_refs"]
+
+
+def test_community_sample_artifact_roundtrip(tmp_path: Path) -> None:
+    from experiments.generational_artifacts import GenerationalRunArtifactStore
+
+    store = GenerationalRunArtifactStore(root=tmp_path, run_id="run-1")
+    ref = store.write_community_sample(4, {"living_count": 2})
+    assert ref["path"].endswith("community-samples/000000000004.json")
+    payload = store.read_community_sample(4)
+    assert payload["living_count"] == 2
+    assert payload["schema_version"] == "generational-community-sample-v1"

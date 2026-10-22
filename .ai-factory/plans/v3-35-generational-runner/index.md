@@ -237,7 +237,7 @@ All eight findings were approved before editing; task IDs/settings/original requ
 
 - [x] Task 13: Replace cumulative history tuple copying with immutable chunks ([details](phase-05-long-horizon-and-communities.md#task-13-replace-cumulative-history-tuple-copying-with-immutable-chunks)) (depends on 5, 12).
 - [x] Task 14: Stream canonical hashes without dropping retained evidence ([details](phase-05-long-horizon-and-communities.md#task-14-stream-canonical-hashes-without-dropping-retained-evidence)) (depends on 3, 13).
-- [ ] Task 15: Sample cohorts, migration, and candidate communities outside simulation ([details](phase-05-long-horizon-and-communities.md#task-15-sample-cohorts-migration-and-candidate-communities-outside-simulation)) (depends on 7, 11, 12).
+- [x] Task 15: Sample cohorts, migration, and candidate communities outside simulation ([details](phase-05-long-horizon-and-communities.md#task-15-sample-cohorts-migration-and-candidate-communities-outside-simulation)) (depends on 7, 11, 12).
 
 ### Phase 6: Experiment and release
 

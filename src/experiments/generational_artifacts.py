@@ -605,6 +605,10 @@ class GenerationalRunArtifactStore:
     def history_dir(self) -> Path:
         return self.attempt_dir / "history"
 
+    @property
+    def community_samples_dir(self) -> Path:
+        return self.attempt_dir / "community-samples"
+
     def write_config(self, payload: bytes) -> tuple[str, str]:
         path = self.attempt_dir / "config.json"
         _atomic_write(path, payload)
@@ -663,6 +667,53 @@ class GenerationalRunArtifactStore:
             (self.attempt_dir / "failure.json").read_bytes(),
             schema_version=GENERATIONAL_FAILURE_SCHEMA_VERSION,
         )
+
+    def write_community_sample(
+        self, boundary_tick: int, sample: Mapping[str, object]
+    ) -> dict[str, str]:
+        """Persist one detached analytical sample and return its safe ref."""
+        if isinstance(boundary_tick, bool) or not isinstance(boundary_tick, int):
+            raise TypeError("boundary_tick must be int")
+        if boundary_tick < 0:
+            raise ValueError("boundary_tick must be non-negative")
+        payload = dict(sample)
+        payload["schema_version"] = "generational-community-sample-v1"
+        payload["run_id"] = self.run_id
+        payload["boundary_tick"] = boundary_tick
+        payload["payload_hash"] = _sha256(canonical_bytes(payload))
+        encoded = canonical_bytes(payload)
+        path = self.community_samples_dir / f"{boundary_tick:012d}.json"
+        _atomic_write(path, encoded)
+        return {
+            "path": str(path.relative_to(self.root)),
+            "sha256": _sha256(encoded),
+        }
+
+    def read_community_sample(self, boundary_tick: int) -> dict[str, object]:
+        path = self.community_samples_dir / f"{boundary_tick:012d}.json"
+        try:
+            payload = json.loads(path.read_bytes().decode("utf-8"))
+        except FileNotFoundError:
+            raise GenerationalArtifactError(
+                "community_sample_missing", str(boundary_tick)
+            ) from None
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise GenerationalArtifactError(
+                "invalid_json", "community_sample"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise GenerationalArtifactError("invalid_object", "community_sample")
+        expected = payload.get("payload_hash")
+        without = {
+            key: value
+            for key, value in payload.items()
+            if key != "payload_hash"
+        }
+        if expected != _sha256(canonical_bytes(without)):
+            raise GenerationalArtifactError(
+                "payload_hash_mismatch", "community_sample"
+            )
+        return payload
 
     def history_refs(self) -> tuple[dict[str, str], ...]:
         if not self.history_dir.exists():

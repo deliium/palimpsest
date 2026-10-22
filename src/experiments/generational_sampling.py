@@ -64,6 +64,34 @@ class GenerationalCommunitySample:
     emission: SocietyEmissionResult
     sampler_version: str = SAMPLER_VERSION
 
+    def canonical_payload(self) -> dict[str, object]:
+        return {
+            "cohort_counts": [list(item) for item in self.cohort_counts],
+            "communities": [
+                {
+                    "community_id": item.community_id,
+                    "lane_coverage": sorted(item.lane_coverage),
+                    "person_ids": list(item.person_ids),
+                    "residence_region_ids": list(item.residence_region_ids),
+                    "tick_end": item.tick_end,
+                    "tick_start": item.tick_start,
+                }
+                for item in self.emission.communities
+            ],
+            "coverage_complete": self.coverage_complete,
+            "deaths": self.deaths,
+            "generation_counts": [list(item) for item in self.generation_counts],
+            "journey_arrivals": self.journey_arrivals,
+            "journey_departures": self.journey_departures,
+            "living_count": self.living_count,
+            "sampler_version": self.sampler_version,
+            "singleton_person_ids": list(self.emission.singleton_person_ids),
+            "transit_count": self.transit_count,
+            "warmup": self.warmup,
+            "window_end": self.window_end,
+            "window_start": self.window_start,
+        }
+
 
 def _region_by_location(
     regional_input: RegionalPopulationInput,

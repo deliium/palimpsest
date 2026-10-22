@@ -181,3 +181,56 @@ def test_criterion_spec_validation_and_params() -> None:
             ),
             regional_input=_input(),
         )
+
+
+@pytest.mark.asyncio
+async def test_real_az_topology_ids_yield_two_candidate_communities() -> None:
+    regional = RegionalPopulationInput(
+        run_id="az-isolated-run",
+        input_revision="rev-az",
+        region_ids=("north", "south"),
+        known_location_ids=(
+            "loc-north",
+            "loc-north-hill",
+            "loc-south",
+            "loc-south-grove",
+        ),
+        location_rows=(
+            RegionalLocationRow("loc-north", "north"),
+            RegionalLocationRow("loc-north-hill", "north"),
+            RegionalLocationRow("loc-south", "south"),
+            RegionalLocationRow("loc-south-grove", "south"),
+        ),
+        initial_placements=(
+            RegionalInitialPlacementRow("body-a", "loc-north"),
+            RegionalInitialPlacementRow("body-b", "loc-north"),
+            RegionalInitialPlacementRow("body-e", "loc-north"),
+            RegionalInitialPlacementRow("body-c", "loc-south"),
+            RegionalInitialPlacementRow("body-d", "loc-south"),
+        ),
+        events=(
+            RegionalEventRow(
+                2, 0, "relocation", "body-a", "loc-north", "loc-south"
+            ),
+        ),
+        residence_min_ticks=1,
+        window_end=3,
+        complete_through_boundary=3,
+    )
+    sample = GenerationalHistoricalSampler(window_ticks=3).sample(
+        boundary=_boundary(tick=3),
+        regional_input=regional,
+        interaction_edges=(
+            SocietyEdgeRow("body-b", "body-e", 1),
+            SocietyEdgeRow("body-c", "body-d", 2),
+        ),
+    )
+    assert sample.coverage_complete is True
+    assert len(sample.emission.communities) == 2
+    assert {row.person_id for row in sample.residence_rows} == {
+        "body-a",
+        "body-b",
+        "body-c",
+        "body-d",
+        "body-e",
+    }
