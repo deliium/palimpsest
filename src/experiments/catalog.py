@@ -2779,6 +2779,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "mediation_opportunities@1",
         "institutional_decay@1",
         "generational_runner@1",
+        "generational_comparison@1",
     }
 )
 
@@ -5532,6 +5533,27 @@ def experiment_bl_generational_runner(
     definition = generational_runner_scenario(base=base, max_ticks=max_ticks)
     _LOG.info(
         "experiment_registered experiment_id=generational_runner@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_bm_generational_comparison(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 12,
+) -> ExperimentDefinition:
+    """Off-gate Experiment BM: paired population-level comparisons."""
+    from experiments.generational_comparison_scenario import (
+        generational_comparison_scenario,
+    )
+
+    definition = generational_comparison_scenario(
+        base=base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=generational_comparison@1 arms=%s",
         len(definition.conditions),
     )
     return definition

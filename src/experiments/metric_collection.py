@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
+    from simulation.generational_models import PopulationProgress
     from simulation.runner_models import TechniqueLifecycleSpec
 
 from analysis.metric_service import (
@@ -256,6 +257,7 @@ def inputs_with_opt_in_metric_rows(
     technique_lifecycle_spec: TechniqueLifecycleSpec | None = None,
     technique_node_rows: Sequence[object] | None = None,
     technique_item_rows: Sequence[object] | None = None,
+    generational_progress: PopulationProgress | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -402,6 +404,9 @@ def inputs_with_opt_in_metric_rows(
             technique_node_rows=technique_node_rows,
             technique_item_rows=technique_item_rows,
         )
+    if generational_progress is not None:
+        attached["generational_progress"] = 1
+        updated = replace(updated, generational_progress=generational_progress)
 
     _LOG.debug(
         "opt_in_metric_rows_attached",

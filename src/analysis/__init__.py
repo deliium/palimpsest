@@ -186,6 +186,10 @@ from analysis.external_artifact_metrics import (
     EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION,
     compute_external_artifact_memory,
 )
+from analysis.generational_cohort import (
+    GENERATIONAL_COHORT_COMPARISON_METRIC_VERSION,
+    compute_generational_cohort_comparison,
+)
 from analysis.generational_narratives import (
     GenerationalNarrativeInputs,
     NarrativeGenerationRow,
@@ -746,6 +750,7 @@ __all__ = [
     "EVENT_FACT_PROJECTOR_VERSION",
     "EVIDENCE_STAGE_SCHEMA_VERSION",
     "EXTERNAL_ARTIFACT_MEMORY_METRIC_VERSION",
+    "GENERATIONAL_COHORT_COMPARISON_METRIC_VERSION",
     "GRAPH_NODE_ORDER_POLICY",
     "HISTORICAL_MEMORY_LAYERS_METRIC_VERSION",
     "HISTORICAL_MEMORY_QUERIES_METRIC_VERSION",
@@ -1076,6 +1081,7 @@ __all__ = [
     "compute_emergent_social_norms",
     "compute_external_artifact_memory",
     "compute_false_belief_persistence",
+    "compute_generational_cohort_comparison",
     "compute_generational_narrative_continuity",
     "compute_goal_completion",
     "compute_group_community_structure",

@@ -448,3 +448,18 @@ Detailed graphs/trajectories are canonical JSON strings inside scalar metric
 values. Experiment BK is off the V1 gate. No new command, event, observer
 semantic, write-pair, migration, API route or capability ownership is added;
 `institutional_economy` remains unowned.
+
+## V3-36 generational experiments (current baseline)
+
+Experiment BM and the comparison matrix factors compose existing
+`runner-config-v55` fields; there is no v56, new command, event, observer
+semantic, write-pair, API route, migration, or capability flag. Comparisons are
+closed experiment presets, not simulation authority. All paired arms share
+seed, stochastic identity, world, roster, horizon, schedule, and initialization;
+only the declared axis differs. Cohort measurement is detached and analysis-only.
+
+The current metric catalog is **130** families after adding
+`generational_cohort_comparison@1`. The V3-34 section's 129 is its historical
+count. Default runner write `runner-config-v4`, default result
+`runner-result-v2`, commands **43**, observer semantic types **73**, replay
+`EVENT_SCHEMA_REPLAY_V22` / codec `v20`, and Alembic `0017` remain unchanged.

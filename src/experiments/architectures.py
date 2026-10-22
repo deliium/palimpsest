@@ -32,6 +32,7 @@ from simulation.runner_models import (
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.architectures")
 
 __all__ = [
+    "apply_architecture_modes",
     "expand_architecture",
     "mode_snapshot_from_runner_config",
     "registered_architecture_ids",
@@ -156,6 +157,60 @@ def expand_architecture(
         digest,
     )
     return expanded
+
+
+def apply_architecture_modes(
+    base: SimulationRunnerConfig,
+    architecture_id: str,
+) -> SimulationRunnerConfig:
+    """Apply an architecture's mode-only preset without changing the schema.
+
+    This is the v55-preserving sibling of ``expand_architecture``. It never sets
+    ``schema_version`` and never rebuilds a limited config, so newer siblings and
+    V3 fields survive the comparison.
+    """
+    if type(base) is not SimulationRunnerConfig:
+        raise TypeError("base must be SimulationRunnerConfig")
+
+    definition = get_architecture(architecture_id)
+    modes = definition.capabilities.required_modes
+    memory_mode = MemoryMode(modes["memory_mode"])
+    imagination_mode = ImaginationMode(modes["imagination_mode"])
+    reflection_mode = ReflectionMode(modes["reflection_mode"])
+    prospective_mode = ProspectiveImaginationMode(modes["prospective_mode"])
+    mortality_mode = MortalityMode(modes["mortality_appraisal"])
+    capability_flags = _flags_for_definition(definition)
+
+    agents = tuple(
+        replace(
+            agent,
+            cognition=replace(
+                agent.cognition,
+                memory_mode=memory_mode,
+                imagination_mode=imagination_mode,
+                reflection_mode=reflection_mode,
+                prospective_mode=prospective_mode,
+            ),
+        )
+        for agent in base.agents
+    )
+    applied = replace(
+        base,
+        agents=agents,
+        capability_flags=capability_flags,
+        mortality_mode=mortality_mode,
+    )
+
+    snapshot = mode_snapshot_from_runner_config(applied)
+    validate_architecture_compatibility(definition, snapshot)
+    _LOG.info(
+        "architecture_modes_applied architecture_id=%s schema_version=%s "
+        "mode_count=4 enabled_flags=%s",
+        definition.architecture_id,
+        applied.schema_version,
+        ",".join(capability_flags.enabled_names()) or "-",
+    )
+    return applied
 
 
 def expand_all_architectures(

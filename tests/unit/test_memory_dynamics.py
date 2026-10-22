@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from agents.models import AgentId
@@ -24,6 +26,7 @@ from memory.dynamics import (
 )
 from memory.models import (
     ConceptMention,
+    EntityMention,
     MemoryDistortionCode,
     MemoryDynamicsPolicy,
     MemoryId,
@@ -60,10 +63,8 @@ def _source(
         )
         for index, label in enumerate(concepts)
     )
-    entities = ()
+    entities: tuple[EntityMention, ...] = ()
     if entity_id is not None:
-        from memory.models import EntityMention
-
         entities = (
             EntityMention(
                 mention_id=MentionId(f"{memory_id}-e-0"),
@@ -271,6 +272,36 @@ def test_reconstruct_v2_deterministic_and_emits_audit() -> None:
     assert set(first.audit.source_memory_ids).issubset(
         {MemoryId("m-1"), MemoryId("m-2"), MemoryId("m-3")}
     )
+
+
+def test_reconstruct_v2_generation_ignores_unselected_competitors() -> None:
+    selected = (
+        _source(memory_id="m-1", concepts=("gate",), tags=("camp",), rank=1),
+        _source(memory_id="m-2", concepts=("wall",), tags=("camp",), rank=2),
+        _source(memory_id="m-3", concepts=("tower",), tags=("camp",), rank=3),
+    )
+    weak_competitor = replace(
+        _source(
+            memory_id="m-4",
+            concepts=("river",),
+            tags=("river",),
+            rank=4,
+            confidence=0.05,
+            salience=0.0,
+            age=80,
+        ),
+        generation=9,
+    )
+    evidence = _evidence(
+        (*selected, weak_competitor),
+        tags=("camp",),
+    )
+    policy = MemoryDynamicsPolicy(source_confusion_mass=0.0)
+    result = reconstruct_v2(evidence, policy=policy)
+    assert tuple(
+        item.value for item in result.reconstructed.source_memory_ids
+    ) == ("m-1", "m-2", "m-3")
+    assert result.reconstructed.generation == 1
 
 
 def test_cue_overlap_empty_cue_is_neutral() -> None:

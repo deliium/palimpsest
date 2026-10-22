@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V3-34
+### Current baseline through V3-36
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v54` for per-agent `institutional_decay_mode` |
+| Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 129 (including the three V3-34 decay/lifecycle/lineage families) |
+| Metric families | 130 (including the V3-36 comparison family) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -367,3 +367,20 @@ inside scalar metric values; the shared metric model/codec is unchanged.
 Experiment BK is off the V1 gate. No new command, event, observer semantic,
 write-pair, migration, API route, or capability ownership exists;
 `institutional_economy` remains unowned.
+
+### V3-36 generational experiments seam
+
+Experiment BM (`generational_comparison@1`) and the generational matrix factors
+compose existing `runner-config-v55` fields into closed paired comparisons. They
+add no v56, command, event, observer semantic, write-pair, API route, migration,
+or capability flag, and they do not acquire simulation authority. A pair must
+share seed, stochastic identity, world layout, founder roster, stop horizon,
+generation schedule, and initialization; only the declared axis differs.
+Contradictory matrix combinations fail with `incompatible_factor_combination`,
+and generational factors on a non-v55 base fail with `generational_base_required`.
+
+Detached `analysis.generational_cohort` folds finalized `PopulationProgress` into
+`generational_cohort_comparison@1`, raising the metric catalog to 130. The
+family is scalar-only, analysis-only, and absent for non-generational runs. Cross-
+arm comparison remains `matrix-metric-summary-v1`; no paired statistical layer
+exists.

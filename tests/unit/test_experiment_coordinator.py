@@ -25,6 +25,7 @@ from simulation.runner_models import (
     CognitiveBudgetLimits,
     CognitiveBudgetMode,
     ExperimentAssignmentRef,
+    SimulationRunnerConfig,
     V2CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -34,7 +35,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -70,6 +71,28 @@ def test_materialize_assignments_order() -> None:
         (a.condition_ordinal, a.seed_ordinal, a.replicate_index) for a in assignments
     ]
     assert keys == sorted(keys)
+
+
+def test_materialize_assignments_shortens_overlong_run_ids() -> None:
+    definition = experiment_a_memory(
+        _base(),
+        seed_matrix=ExperimentSeedMatrix(seeds=(1,)),
+    )
+    legacy = materialize_assignments(definition)
+    assert legacy[0].run_id.value == (
+        f"{definition.experiment_id}-{legacy[0].condition_id}-s0-r0"
+    )
+
+    long_definition = replace(
+        definition,
+        experiment_id=f"{definition.experiment_id}-{'x' * 60}",
+    )
+    first = materialize_assignments(long_definition)
+    second = materialize_assignments(long_definition)
+    assert [item.run_id for item in first] == [item.run_id for item in second]
+    for assignment in first:
+        assert len(assignment.run_id.value) <= 64
+        assert assignment.run_id.value.startswith("run-")
 
 
 @pytest.mark.asyncio

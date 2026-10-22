@@ -14,6 +14,11 @@ from typing import Final
 
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
+from experiments.generational_axes import apply_generational_level
+from experiments.generational_comparison_models import (
+    GenerationalComparisonAxis,
+    GenerationalComparisonError,
+)
 from experiments.matrix_models import (
     LOCKED_FACTOR_LEVEL_IDS,
     MatrixFactorId,
@@ -30,10 +35,14 @@ from simulation.runner_models import (
     CognitiveBudgetLimits,
     CognitiveBudgetMode,
     ImaginationMode,
+    InstitutionalDecayMode,
+    InstitutionalMemoryMode,
     MemoryMode,
     MortalityMode,
     ReflectionMode,
     SimulationRunnerConfig,
+    SkillLearningMode,
+    TeachingInteractionMode,
     WorldScenarioSpec,
 )
 from world.environment import scarcity_scenario_dynamics
@@ -286,6 +295,54 @@ def _apply_cognitive_budget(
     )
 
 
+_GENERATIONAL_FACTOR_AXES: Final[
+    dict[MatrixFactorId, GenerationalComparisonAxis]
+] = {
+    MatrixFactorId.LIFESPAN: GenerationalComparisonAxis.LIFESPAN,
+    MatrixFactorId.LEARNING_MODEL: GenerationalComparisonAxis.LEARNING_MODEL,
+    MatrixFactorId.TEACHING_FREQUENCY: (
+        GenerationalComparisonAxis.TEACHING_FREQUENCY
+    ),
+    MatrixFactorId.RECORD_AVAILABILITY: (
+        GenerationalComparisonAxis.RECORD_AVAILABILITY
+    ),
+    MatrixFactorId.INNOVATION_RATE: GenerationalComparisonAxis.INNOVATION_RATE,
+    MatrixFactorId.MIGRATION: GenerationalComparisonAxis.MIGRATION,
+    MatrixFactorId.POPULATION_SIZE: GenerationalComparisonAxis.POPULATION_SIZE,
+    MatrixFactorId.INSTITUTION_SUPPORT: (
+        GenerationalComparisonAxis.INSTITUTION_SUPPORT
+    ),
+    MatrixFactorId.COGNITIVE_ARCHITECTURE: (
+        GenerationalComparisonAxis.COGNITIVE_ARCHITECTURE
+    ),
+    MatrixFactorId.GENERATIONAL_RESOURCE_SCARCITY: (
+        GenerationalComparisonAxis.RESOURCE_SCARCITY
+    ),
+}
+
+
+def _apply_generational_axis(
+    config: SimulationRunnerConfig,
+    axis: GenerationalComparisonAxis,
+    level_id: str,
+) -> SimulationRunnerConfig:
+    try:
+        applied = apply_generational_level(config, axis, level_id)
+    except GenerationalComparisonError as exc:
+        raise MatrixValidationError(exc.code, str(exc)) from exc
+    _LOG.debug(
+        "matrix_factor_applied",
+        extra={
+            "experiment": {
+                "factor_id": axis.value,
+                "level_id": level_id,
+                "generational": True,
+            }
+        },
+    )
+    return applied
+
+
 def _level_table(
     factor: MatrixFactorId,
     apply: Callable[[SimulationRunnerConfig, str], SimulationRunnerConfig],
@@ -317,6 +374,66 @@ _APPLICATORS: Final[dict[MatrixFactorId, dict[str, FactorApplicator]]] = {
     ),
     MatrixFactorId.COGNITIVE_BUDGET: _level_table(
         MatrixFactorId.COGNITIVE_BUDGET, _apply_cognitive_budget
+    ),
+    MatrixFactorId.LIFESPAN: _level_table(
+        MatrixFactorId.LIFESPAN,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.LIFESPAN, level_id
+        ),
+    ),
+    MatrixFactorId.LEARNING_MODEL: _level_table(
+        MatrixFactorId.LEARNING_MODEL,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.LEARNING_MODEL, level_id
+        ),
+    ),
+    MatrixFactorId.TEACHING_FREQUENCY: _level_table(
+        MatrixFactorId.TEACHING_FREQUENCY,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.TEACHING_FREQUENCY, level_id
+        ),
+    ),
+    MatrixFactorId.RECORD_AVAILABILITY: _level_table(
+        MatrixFactorId.RECORD_AVAILABILITY,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.RECORD_AVAILABILITY, level_id
+        ),
+    ),
+    MatrixFactorId.INNOVATION_RATE: _level_table(
+        MatrixFactorId.INNOVATION_RATE,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.INNOVATION_RATE, level_id
+        ),
+    ),
+    MatrixFactorId.MIGRATION: _level_table(
+        MatrixFactorId.MIGRATION,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.MIGRATION, level_id
+        ),
+    ),
+    MatrixFactorId.POPULATION_SIZE: _level_table(
+        MatrixFactorId.POPULATION_SIZE,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.POPULATION_SIZE, level_id
+        ),
+    ),
+    MatrixFactorId.INSTITUTION_SUPPORT: _level_table(
+        MatrixFactorId.INSTITUTION_SUPPORT,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.INSTITUTION_SUPPORT, level_id
+        ),
+    ),
+    MatrixFactorId.COGNITIVE_ARCHITECTURE: _level_table(
+        MatrixFactorId.COGNITIVE_ARCHITECTURE,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.COGNITIVE_ARCHITECTURE, level_id
+        ),
+    ),
+    MatrixFactorId.GENERATIONAL_RESOURCE_SCARCITY: _level_table(
+        MatrixFactorId.GENERATIONAL_RESOURCE_SCARCITY,
+        lambda config, level_id: _apply_generational_axis(
+            config, GenerationalComparisonAxis.RESOURCE_SCARCITY, level_id
+        ),
     ),
 }
 
@@ -415,9 +532,88 @@ def matrix_reference_fixture_base(*, max_ticks: int = 2) -> SimulationRunnerConf
     return config
 
 
+def validate_generational_factor_combination(
+    config: SimulationRunnerConfig,
+    levels: tuple[tuple[str, str], ...],
+) -> None:
+    """Reject contradictory effective generational factor combinations."""
+    config = _require_config(config)
+    if config.generational_run is None:
+        return
+    selected = dict(levels)
+    cognition = tuple(agent.cognition for agent in config.agents)
+
+    if "teaching_frequency" in selected and any(
+        item.teaching_interaction_mode is not TeachingInteractionMode.DETERMINISTIC
+        or item.skill_learning_mode is not SkillLearningMode.DETERMINISTIC
+        for item in cognition
+    ):
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "teaching_frequency requires deterministic teaching and skill learning",
+        )
+    if "innovation_rate" in selected and any(
+        item.skill_learning_mode is not SkillLearningMode.DETERMINISTIC
+        for item in cognition
+    ):
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "innovation_rate requires deterministic skill learning",
+        )
+    if selected.get("record_availability") == "present" and (
+        not config.v3_capability_flags.cultural_historical_memory
+        or config.cultural_feature_provenance is None
+    ):
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "record_availability=present requires cultural provenance and flag",
+        )
+    if (
+        selected.get("record_availability") == "absent"
+        and config.knowledge_repositories is not None
+    ):
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "record_availability=absent conflicts with knowledge repositories",
+        )
+    if selected.get("migration") == "connected" and config.regions_migration is None:
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "migration=connected requires regions_migration",
+        )
+    if selected.get("migration") == "isolated" and config.cultural_contact is not None:
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "migration=isolated conflicts with cultural contact",
+        )
+    if selected.get("learning_model") == "practice_only" and (
+        "teaching_frequency" in selected
+        or "innovation_rate" in selected
+        or config.mentorship is not None
+    ):
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "practice_only conflicts with teaching, innovation, or mentorship",
+        )
+    if selected.get("institution_support") == "off" and any(
+        item.institutional_memory_mode is InstitutionalMemoryMode.DETERMINISTIC
+        or item.institutional_decay_mode is InstitutionalDecayMode.DETERMINISTIC
+        for item in cognition
+    ):
+        raise MatrixValidationError(
+            "incompatible_factor_combination",
+            "institution_support=off conflicts with institutional memory or decay",
+        )
+    _LOG.debug(
+        "generational_factor_combination_validated factor_count=%s",
+        len(levels),
+    )
+
+
 __all__ = [
     "apply_factor_level",
     "apply_factor_levels",
     "clone_runner_config",
     "matrix_reference_fixture_base",
+    "validate_generational_factor_combination",
 ]

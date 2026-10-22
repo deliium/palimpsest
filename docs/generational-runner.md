@@ -53,6 +53,23 @@ affection, rights, or offices, and never fabricates institutional outcomes.
 Entrants start from the explicit species initialization profile with empty
 content.
 
+## Experiment comparisons
+
+Experiment BM (`generational_comparison@1`) pairs controls and treatments over
+the closed comparison axes documented in [Experiments](experiments.md). All
+pairs share the same seed, stochastic identity, world layout, founder roster,
+stop horizon, generation schedule, and initialization; only the declared axis
+changes. A pair is rejected by the comparability gate when any of those differs.
+
+`generational_cohort_comparison@1` folds the finalized `PopulationProgress` into
+`generation:<n>:*` and `cohort:<id>:*` scalar counts plus survival shares.
+Cohorts are admission cohorts, not observed activity communities. Generation
+means the admitted generation label, not age, kinship depth, or community
+membership. The family is detached and analysis-only. Cross-arm comparison uses
+`matrix-metric-summary-v1`; no paired confidence intervals or effect sizes are
+produced.
+
+
 ## Admission, death, and capacity order
 
 For tick `t` the engine runs normal command effects, then lifecycle/deaths, then

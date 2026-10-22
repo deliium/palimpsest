@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from agents.models import AgentId
@@ -243,6 +245,25 @@ def test_reconstructed_memory_safe_repr_and_semantic_validation() -> None:
             _reconstructed(sources=("m-missing",)),
             evidence=evidence,
         )
+
+
+def test_reconstructed_generation_uses_only_selected_sources() -> None:
+    unrelated = replace(_source(memory_id="m-2", rank=2), generation=9)
+    evidence = RecallEvidence(
+        owner_id=AgentId("agent-1"),
+        current_tick=5,
+        reconstruction_id=ReconstructionId("recon-1"),
+        policy=_policy(),
+        sources=(_source(), unrelated),
+        beliefs=(),
+        recall_context=MemoryRecallContext(),
+    )
+    reconstructed = _reconstructed(sources=("m-1",))
+    assert reconstructed.generation == 1
+    assert (
+        validate_reconstructed_memory(reconstructed, evidence=evidence)
+        is reconstructed
+    )
 
 
 def test_reconstruction_record_aligns_with_reconstructed_episode() -> None:

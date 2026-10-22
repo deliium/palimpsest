@@ -2,7 +2,7 @@
 
 [← Experiments](experiments.md) · [Memory reconstruction](memory-reconstruction.md) · [Back to README](../README.md)
 
-Executable formula, population, and edge-case policy for all nineteen metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
+Executable formula, population, and edge-case policy for all metric families lives in `analysis.specifications`. Implementations must consume these specs; they do not redefine denominators ad hoc.
 
 ## Catalog
 
@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all nineteen metric fam
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **109** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **130** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -379,7 +379,7 @@ unmatched cases are excluded and counted. Missing or disabled input is absent,
 not zero.
 
 
-## Institutional decay, lifecycle and lineage (catalog 129)
+## Institutional decay, lifecycle and lineage (historical catalog 129)
 
 - `institutional_decay@1` — five separate dimension panels (support,
   participation, procedure repetition, succession continuity, knowledge
@@ -398,3 +398,33 @@ trajectories are schema-tagged JSON **strings**; the shared `MetricDocument`
 remains scalar-only and the common wire codec is unchanged. Missing evidence is
 `unknown`/`partial`/`absent`, never a fabricated zero. No family is a health
 score or causal effect estimate.
+
+
+## Generational cohort comparison (catalog 130)
+
+`generational_cohort_comparison@1` is analysis-only and assembles when
+`MetricComputationInputs.generational_progress` is present. Non-generational
+runs omit it; missing progress is not a fabricated zero.
+
+- Population: `finalized_generational_population_progress`.
+- Denominator: admitted agents and the final completed generation boundary.
+- Formula ids: totals (`admitted_total`, `living_total`, `dead_total`,
+  `generation_count`, `cohort_count`, `boundary_tick`,
+  `max_generation_index`), `generation_span_ticks`,
+  `post_founder_admitted_share`, `founder_living_share`, and
+  `cohort_generation_alignment_violations`.
+- Dynamic scalar keys: `generation:<n>:{admitted,living,dead,survival_rate}` and
+  `cohort:<id>:{generation_index,entry_tick,admitted,living,dead,survival_rate}`.
+  They follow the `regional_population@1` scalar-key pattern; no nested maps are
+  stored.
+- Zero/extinction policy: zero living population is a present zero with survival
+  rate `0.0`, not absent evidence. A missing `PopulationProgress` omits the
+  family at assembly.
+- Generation means the admitted generation label, not age, kinship depth, or
+  community membership. Cohort ids are admission cohorts, not observed activity
+  clusters.
+- Provenance: `source_kind=population_progress`, `source_ids=(run_id,)`,
+  `notes_code=ok`.
+
+Cross-arm summaries remain descriptive (`matrix-metric-summary-v1`). The family
+never feeds cognition and does not provide paired significance or effect sizes.

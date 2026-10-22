@@ -17,8 +17,9 @@ Derivation version **v3** requires an explicit stochastic identity and fails clo
 ## Configuration
 
 `SimulationRunnerConfig` is frozen and versioned (`runner-config-v4` write default
-when every V2/V3 flag and V3 root is inactive; `runner-config-v1`…`v46` remain
-decodable). Strict canonical JSON codecs reject unknown fields, duplicate keys,
+when every V2/V3 flag and V3 root is inactive; `runner-config-v1`…`v55` remain
+decodable; generational runs use `runner-result-v3`, while legacy result v1/v2
+stay accepted). Strict canonical JSON codecs reject unknown fields, duplicate keys,
 non-finite numbers, credentials, and unsupported versions. Separate fingerprints
 cover:
 

@@ -43,6 +43,16 @@ LOCKED_FACTOR_LEVEL_IDS: Final[Mapping[str, frozenset[str]]] = {
     "resource_scarcity": frozenset({"scarce", "abundant"}),
     "seasonality": frozenset({"off", "on"}),
     "cognitive_budget": frozenset({"disabled", "low_cost", "high_cost"}),
+    "lifespan": frozenset({"short", "long"}),
+    "learning_model": frozenset({"practice_only", "teaching_supported"}),
+    "teaching_frequency": frozenset({"low", "high"}),
+    "record_availability": frozenset({"absent", "present"}),
+    "innovation_rate": frozenset({"low", "high"}),
+    "migration": frozenset({"isolated", "connected"}),
+    "population_size": frozenset({"small", "large"}),
+    "institution_support": frozenset({"off", "on"}),
+    "cognitive_architecture": frozenset({"v1_memory", "full_v2"}),
+    "generational_resource_scarcity": frozenset({"scarce", "abundant"}),
 }
 
 
@@ -57,6 +67,16 @@ class MatrixFactorId(StrEnum):
     RESOURCE_SCARCITY = "resource_scarcity"
     SEASONALITY = "seasonality"
     COGNITIVE_BUDGET = "cognitive_budget"
+    LIFESPAN = "lifespan"
+    LEARNING_MODEL = "learning_model"
+    TEACHING_FREQUENCY = "teaching_frequency"
+    RECORD_AVAILABILITY = "record_availability"
+    INNOVATION_RATE = "innovation_rate"
+    MIGRATION = "migration"
+    POPULATION_SIZE = "population_size"
+    INSTITUTION_SUPPORT = "institution_support"
+    COGNITIVE_ARCHITECTURE = "cognitive_architecture"
+    GENERATIONAL_RESOURCE_SCARCITY = "generational_resource_scarcity"
 
 
 class GroupRole(StrEnum):

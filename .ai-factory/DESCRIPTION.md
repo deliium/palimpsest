@@ -104,3 +104,26 @@ profile remains decay-disabled. Detached analysis adds
 Experiment BK (`institutional_decay@1`) is off-gate. No new command, event,
 observer semantic, write-pair, migration, API route, or capability flag is
 added, and `institutional_economy` remains unowned.
+
+Generational runner (V3-35) adds `runner-config-v55` and `runner-result-v3` for
+multi-generation experiments over the owned `generational_population` seam.
+`generational_interval_entry` labels admitted cohorts by absolute tick; v55
+requires explicit lifecycle, initialization, finite tick horizon, disabled
+runtime-terminal stopping, and the owned population flag. Stop selectors,
+historical inspection (not subjective restart), seed lineage, validated LLM
+replay identity, and immutable generational manifests are owned by that plan.
+No new command, event, observer semantic, SQL migration, or capability flag is
+added; default writes remain v4/v2.
+
+Generational experiments (V3-36) add closed experiment presets over the existing
+`runner-config-v55` seam: lifespan, learning model, teaching frequency, record
+availability, memory architecture, innovation rate, migration, resource
+scarcity, population size, institution support, and cognitive architecture.
+Experiment BM (`generational_comparison@1`) builds five paired control/treatment
+comparisons that share seed, stochastic identity, world layout, founder roster,
+stop horizon, generation schedule, and initialization. Matrix factors reuse the
+same applicators, preserve v55, and reject contradictory combinations. Detached
+`generational_cohort_comparison@1` folds finalized `PopulationProgress` and
+raises the metric catalog from 129 to 130. V3-36 adds no capability flag,
+runner schema (no v56), command, event, observer semantic, write-pair, API route,
+or migration, and does not own `institutional_economy`.

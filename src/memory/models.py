@@ -2836,8 +2836,14 @@ def validate_reconstructed_memory(
     for source_id in reconstructed.source_memory_ids:
         if source_id not in allowed_sources:
             raise ValueError("ReconstructedMemory.source_memory_ids: unknown_source")
+    source_ids = set(reconstructed.source_memory_ids)
     expected_generation = 1 + max(
-        (item.generation for item in evidence.sources), default=-1
+        (
+            item.generation
+            for item in evidence.sources
+            if item.memory_id in source_ids
+        ),
+        default=-1,
     )
     if evidence.sources and reconstructed.generation != expected_generation:
         raise ValueError("ReconstructedMemory.generation: not_dense")

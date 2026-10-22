@@ -345,6 +345,9 @@ def assemble_arm_metric_bundle(
         practical_knowledge_audits=pk_audits,
         events=events,
     )
+    generational_progress = getattr(
+        arm.runner_result, "generational_progress", None
+    )
 
     inputs = inputs_with_opt_in_metric_rows(
         inputs,
@@ -418,6 +421,7 @@ def assemble_arm_metric_bundle(
             if genealogy_harvest is None
             else dict(cast(Mapping[str, int], genealogy_harvest["death_ticks"]))
         ),
+        generational_progress=generational_progress,
     )
     lifecycle_spec = getattr(arm.assignment.runner_config, "technique_lifecycle", None)
     if lifecycle_spec is not None:

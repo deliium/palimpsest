@@ -624,7 +624,12 @@ def reconstruct_v2(
             seen_codes.add(code)
             ordered_codes.append(code)
 
-    generation = 1 + max(item.generation for item in evidence.sources)
+    source_generations = {
+        item.memory_id: item.generation for item in evidence.sources
+    }
+    generation = 1 + max(
+        source_generations[source_id] for source_id in agent_ids
+    )
     reconstructed = ReconstructedMemory(
         reconstruction_id=evidence.reconstruction_id,
         owner_id=evidence.owner_id,

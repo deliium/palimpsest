@@ -198,7 +198,15 @@ def plan_reconsolidation(
         if parent.memory_id == evidence.derived_memory_id:
             raise ValueError("plan_reconsolidation: not_fresh")
 
-    expected_generation = 1 + max(item.generation for item in evidence.sources)
+    source_ids = set(reconstructed.source_memory_ids)
+    expected_generation = 1 + max(
+        (
+            item.generation
+            for item in evidence.sources
+            if item.memory_id in source_ids
+        ),
+        default=-1,
+    )
     if reconstructed.generation != expected_generation:
         raise ValueError("plan_reconsolidation: generation_not_dense")
 

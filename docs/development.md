@@ -332,9 +332,21 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_institutional_decay_cont
 uv run --frozen --python 3.12.14 pytest tests/architecture/test_v3_institutional_decay_isolation.py -q
 ```
 
-Pins remain commands 43, observer semantic types 73, metric families 129,
+Pins remain commands 43, observer semantic types 73, metric families 130,
 replay/codec V22/v20, Alembic `0017`, `/v1`, `observer-protocol-v1`,
 `prepare_parallel=False`, default runner write `runner-config-v4`, and the
 legacy result default `runner-result-v2`. New `runner-config-v55` /
 `runner-result-v3` are feature-selected only. Older sections of this document
 retain earlier metric counts as historical context.
+
+## Generational experiment focused checks
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_experiment_bm.py tests/unit/test_experiment_bm_execution.py tests/unit/test_generational_matrix_factors.py tests/unit/test_generational_cohort_metrics.py tests/unit/test_generational_cohort_collectors.py -q
+uv run --frozen --python 3.12.14 pytest tests/unit/test_generational_matrix_execution.py tests/unit/test_v1_regression_gate.py tests/unit/test_v2_scientific_invariants.py -q
+```
+
+Expected: 130 metric families, BM's ten paired arms and matrix factors execute
+on `runner-config-v55`, the comparison metric is present for generational arms
+and absent for legacy arms, and default write/result, command, observer, replay,
+and migration pins are unchanged.

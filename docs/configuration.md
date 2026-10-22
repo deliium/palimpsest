@@ -303,3 +303,12 @@ Older runner schemas reject v55-only keys, and v55 rejects missing required
 siblings. Default write remains `runner-config-v4`, and the existing
 replay/codec write pairs remain channel-selected. See
 [Generational runner](generational-runner.md).
+
+Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
+do not add a runner schema. There is no `runner-config-v56`. The closed axes
+(`lifespan`, `learning_model`, `teaching_frequency`, `record_availability`,
+`memory_architecture`, `innovation_rate`, `migration`, `resource_scarcity`,
+`population_size`, `institution_support`, `cognitive_architecture`) are
+experiment presets over existing fields. Comparability requires a passthrough
+lifespan distribution and deterministic `none` initialization; capacity and
+entry rate may differ only for the `population_size` axis.

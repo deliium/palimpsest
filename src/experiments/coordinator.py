@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -18,6 +19,22 @@ from simulation.runner_models import (
 from simulation.runner_serialization import runner_config_fingerprint
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.coordinator")
+
+_RUN_ID_MAX = 64
+
+
+def _assignment_run_id(raw: str) -> str:
+    """Keep legacy ids; hash only ids that exceed the safe segment bound."""
+    if len(raw) <= _RUN_ID_MAX:
+        return raw
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+    shortened = f"run-{digest}"
+    _LOG.debug(
+        "assignment_run_id_shortened raw_length=%s run_id_prefix=%s",
+        len(raw),
+        shortened,
+    )
+    return shortened
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,8 +76,10 @@ def materialize_assignments(
             for replicate_index in range(definition.seed_matrix.replicates_per_seed):
                 config = replace(condition.runner_config, seed=seed)
                 run_id = RunId(
-                    f"{definition.experiment_id}-{condition.condition_id}"
-                    f"-s{seed_ordinal}-r{replicate_index}"
+                    _assignment_run_id(
+                        f"{definition.experiment_id}-{condition.condition_id}"
+                        f"-s{seed_ordinal}-r{replicate_index}"
+                    )
                 )
                 assignments.append(
                     ExperimentAssignment(

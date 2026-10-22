@@ -74,6 +74,7 @@ from experiments.catalog import (
     experiment_bj_institutional_memory,
     experiment_bk_institutional_decay,
     experiment_bl_generational_runner,
+    experiment_bm_generational_comparison,
     experiment_c_mortality,
     experiment_d_drives,
     experiment_e_false_story,
@@ -162,6 +163,23 @@ from experiments.environmental_scenario import (
     seasonal_scarcity_scenario,
 )
 from experiments.external_artifacts_scenario import external_artifacts_scenario
+from experiments.generational_comparison import build_generational_comparison
+from experiments.generational_comparison_base import (
+    assert_comparable_generational_conditions,
+    assert_comparable_generational_pair,
+    generational_comparison_base,
+)
+from experiments.generational_comparison_models import (
+    AXIS_LEVEL_IDS,
+    GenerationalAxisLevel,
+    GenerationalComparison,
+    GenerationalComparisonAxis,
+    GenerationalComparisonError,
+    GenerationalComparisonSpec,
+)
+from experiments.generational_comparison_scenario import (
+    generational_comparison_scenario,
+)
 from experiments.interventions import (
     DEFAULT_OVERRIDE_BUDGET,
     MILESTONE_ARBITER_POLICY_VERSION,
@@ -191,6 +209,7 @@ from experiments.matrix_factors import (
     apply_factor_levels,
     clone_runner_config,
     matrix_reference_fixture_base,
+    validate_generational_factor_combination,
 )
 from experiments.matrix_manifest import (
     MATRIX_MANIFEST_SCHEMA_VERSION,
@@ -296,6 +315,7 @@ from experiments.reference_scenario import (
 from experiments.reputation_scenario import distributed_reputation_scenario
 
 __all__ = [
+    "AXIS_LEVEL_IDS",
     "BENCHMARK_SCENARIO_COUNT",
     "BENCHMARK_SCENARIO_IDS",
     "BENCHMARK_SUITE_ID",
@@ -343,6 +363,11 @@ __all__ = [
     "ExperimentResultRecord",
     "ExperimentSeedMatrix",
     "FilesystemMatrixManifestStore",
+    "GenerationalAxisLevel",
+    "GenerationalComparison",
+    "GenerationalComparisonAxis",
+    "GenerationalComparisonError",
+    "GenerationalComparisonSpec",
     "GroupRole",
     "InMemoryExperimentRecordRepository",
     "MatrixAggregateDocument",
@@ -399,8 +424,11 @@ __all__ = [
     "artifact_interpretation_rows_from_ledgers",
     "artifact_memory_rows_from_traces",
     "artifact_objective_rows_from_artifacts",
+    "assert_comparable_generational_conditions",
+    "assert_comparable_generational_pair",
     "benchmark_suite_registry",
     "bounded_experimentation_profile",
+    "build_generational_comparison",
     "build_matrix_aggregate",
     "build_observer_graphical_scenario",
     "build_reference_scenario",
@@ -480,6 +508,7 @@ __all__ = [
     "experiment_bj_institutional_memory",
     "experiment_bk_institutional_decay",
     "experiment_bl_generational_runner",
+    "experiment_bm_generational_comparison",
     "experiment_c_mortality",
     "experiment_d_drives",
     "experiment_e_false_story",
@@ -506,6 +535,8 @@ __all__ = [
     "experiment_z_external_artifacts",
     "external_artifacts_scenario",
     "finalize_matrix_cell_config",
+    "generational_comparison_base",
+    "generational_comparison_scenario",
     "generational_population_profile",
     "get_benchmark_scenario",
     "historical_memory_layers_profile",
@@ -548,4 +579,5 @@ __all__ = [
     "v1_regression_profile",
     "v2_regression_profile",
     "v3_scaffolding_profile",
+    "validate_generational_factor_combination",
 ]

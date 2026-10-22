@@ -7,7 +7,13 @@ import itertools
 import logging
 from typing import Final
 
-from experiments.matrix_factors import apply_factor_levels
+from experiments.generational_comparison_base import (
+    assert_comparable_generational_conditions,
+)
+from experiments.matrix_factors import (
+    apply_factor_levels,
+    validate_generational_factor_combination,
+)
 from experiments.matrix_models import (
     EXPERIMENT_MATRIX_SCHEMA_VERSION,
     ExperimentMatrixSpec,
@@ -129,6 +135,7 @@ def expand_matrix(
         roles = tuple(role for _fid, _lid, role in combo)
         group_role = _compose_group_role(spec, levels, roles)
         applied = apply_factor_levels(base, levels)
+        validate_generational_factor_combination(applied, levels)
         finalized = finalize_matrix_cell_config(applied)
         condition_id = _condition_id_for(levels)
         conditions_data.append((condition_id, group_role, levels, finalized))
@@ -173,6 +180,14 @@ def expand_matrix(
         ),
         paired_world_group=f"{spec.matrix_id}-world",
     )
+    generational_configs = tuple(
+        config for _cid, _role, _levels, config in conditions_data
+        if config.generational_run is not None
+    )
+    if generational_configs:
+        assert_comparable_generational_conditions(
+            generational_configs, allow_population_size=True
+        )
 
     matrix_fp = matrix_spec_fingerprint(spec)
     cells: list[MatrixCell] = []

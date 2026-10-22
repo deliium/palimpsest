@@ -53,6 +53,9 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
+from analysis.generational_cohort import (
+    compute_generational_cohort_comparison,
+)
 from analysis.generational_narratives import (
     compute_generational_narrative_continuity,
     compute_narrative_historical_alignment,
@@ -185,6 +188,7 @@ from analysis.transmission_metrics import (
     compute_rumor_distortion,
 )
 from analysis.truth import ClaimTruthSpec
+from simulation.generational_models import PopulationProgress
 from simulation.runner_models import TechniqueLifecycleSpec
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
@@ -287,6 +291,7 @@ class MetricComputationInputs:
     institutional_memory_carrier_rows: Sequence[object] | None = None
     institutional_memory_identity_rows: Sequence[object] | None = None
     regional_population: RegionalPopulationInput | None = None
+    generational_progress: PopulationProgress | None = None
     regional_destination_evidence: Sequence[RegionalDestinationEvidenceRow] | None = (
         None
     )
@@ -1214,6 +1219,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         "society_isolation": inputs.society_isolation is not None,
         "contact_analysis": inputs.contact_analysis is not None,
         "translation_analysis": inputs.translation_analysis is not None,
+        "generational_cohort_comparison": inputs.generational_progress is not None,
         "institution_analysis": any(
             block is not None
             for block in (
@@ -1702,6 +1708,18 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
                 as_of_tick=window_end,
                 expected_owner_count=(inputs.regional_destination_expected_owner_count),
+            ),
+        )
+
+    progress = inputs.generational_progress
+    if progress is not None:
+        _safe(
+            "generational_cohort_comparison",
+            lambda: compute_generational_cohort_comparison(
+                progress,
+                run_id=run_id,
+                input_revision=revision,
+                window_end=window_end,
             ),
         )
 

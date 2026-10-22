@@ -35,7 +35,7 @@ Builders share scenario, seed, and stochastic identity across paired arms; only 
 
 **Experiment A** has three arms (`a-reference`, `a-reconstructive`, `a-reconstructive-v2`). The V1 regression gate uses `experiment_a_memory_v1_arms()` / `EXPERIMENT_A_V1_CONDITION_IDS` so only the two V1 arms run — a broken V2 path cannot fail V1 `exact_trajectory_hash` baselines. V2 audits are harvested in-run, composed via `map_recall_audits_to_dynamics_report`, and never agent-visible.
 
-Catalog builders emit current write schema (`runner-config-v4`) with all `V2CapabilityFlags` / `V3CapabilityFlags` default-off and `CognitionTraceSpec` disabled. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent profile (raises `v1_regression_flags_enabled` if any V2 flag is on, or `v1_regression_trace_enabled` if tracing is enabled). Use `v3_scaffolding_profile` for all V3 flags off, and `v2_regression_profile` (V3-off + V1 regression rules; does not require every V2 cognition mode `DISABLED`). Capability flags and tracing are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`). Matrix finalize highest-wins accepts `runner-config-v23` when any V3 flag is on; default finalize stays `v4` when all V3 flags are off.
+Catalog builders emit current write schema (`runner-config-v4`) with all `V2CapabilityFlags` / `V3CapabilityFlags` default-off and `CognitionTraceSpec` disabled. Use `experiments.catalog.v1_regression_profile(config)` to assert the V1-equivalent profile (raises `v1_regression_flags_enabled` if any V2 flag is on, or `v1_regression_trace_enabled` if tracing is enabled). Use `v3_scaffolding_profile` for all V3 flags off, and `v2_regression_profile` (V3-off + V1 regression rules; does not require every V2 cognition mode `DISABLED`). Capability flags and tracing are configuration identifiers only; they do not change experiment-definition schema (`experiment-definition-v1`). Matrix finalize selects `runner-config-v55` first when `generational_run` is present, then the highest active feature family; default finalize stays `v4` when all flags are off.
 
 Network-free regression gate: `tests/unit/test_v1_regression_gate.py` (short ticks, catalog A–E + reference scenario). Experiments F, G, H, I, J, K, N, O, P, Q, and R are additive and are not part of that gate. The default config write stays `runner-config-v4`. `runner-config-v5` is emitted only when some agent's consolidation mode is not `DISABLED`. `runner-config-v6` is emitted only when some agent's reflection mode is not `DISABLED`, and that document may also carry consolidation. `runner-config-v8` is emitted only when some agent's counterfactual mode is not `DISABLED`, and that document may also carry consolidation, reflection, and prospective imagination. `runner-config-v9` is emitted only when some agent's communication strategy mode is `DETERMINISTIC` and every reputation mode is `DISABLED`. That document carries the v8 cognition keys plus `communication_strategy_mode`. A non-disabled strategy is also accepted on `runner-config-v10`. `runner-config-v10` is emitted only when some agent's reputation mode is `DETERMINISTIC`, and that document carries every v9 cognition key plus `reputation_mode`. Reputation and the earlier cognition modes are also accepted on `runner-config-v11`. `runner-config-v11` is emitted only when some agent's skill-learning mode is `DETERMINISTIC`. That document carries every v10 cognition key plus `skill_learning_mode` and the locked rate keys. No capability flag was added for skill learning. `v1_regression_profile` is unchanged. Experiment G checks a shared objective hash through the reflection tick and an audit on the deterministic arm only. It does not preload the decision-divergence memories, and it does not require a later command to change.
 
@@ -85,6 +85,18 @@ Additive research batch orchestration over catalog applicators. Matrix documents
 | `resource_scarcity` | `scarce`, `abundant` | scenario resource quantities (layout preserved) |
 | `seasonality` | `off`, `on` | clear / set `EnvironmentalDynamicsSpec` |
 | `cognitive_budget` | `disabled`, `low_cost`, `high_cost` | `CognitiveBudgetMode` + AD presets |
+| `lifespan` | `short`, `long` | lifecycle lifespan/stage presets (8/24 ticks) |
+| `learning_model` | `practice_only`, `teaching_supported` | skill-learning and teaching modes |
+| `teaching_frequency` | `low`, `high` | teaching offer/rate presets |
+| `record_availability` | `absent`, `present` | durable-record sibling + cultural provenance |
+| `innovation_rate` | `low`, `high` | acquisition-rate preset |
+| `migration` | `isolated`, `connected` | regional template + owned migration flag |
+| `population_size` | `small`, `large` | lifecycle capacity/entry rate only |
+| `institution_support` | `off`, `on` | institution-concept and office-succession modes |
+| `cognitive_architecture` | `v1_memory`, `full_v2` | registered mode preset, schema preserved |
+| `generational_resource_scarcity` | `scarce`, `abundant` | proportional resource scaling on v55 |
+
+The generational factors are valid only on an embedded `runner-config-v55` with explicit lifecycle, initialization, and `generational_run`. They never change `schema_version`, seed, scenario identity, roster, or generation schedule. Legacy `resource_scarcity` keeps its fixed territorial-layout contract; use `generational_resource_scarcity` for the proportional v55 treatment.
 
 Constraints accept only `exclude_combos`. Expansion requires ≥2 conditions after filtering.
 
@@ -92,7 +104,7 @@ Constraints accept only `exclude_combos`. Expansion requires ≥2 conditions aft
 
 ### Schema finalize (highest-wins)
 
-Factor applicators never set `schema_version`. After levels apply, `finalize_matrix_cell_config` picks the first match: budget → `v22`, cultural narratives → `v21`, semantic naming → `v20`, artifact interpretation → `v19`, environmental dynamics → `v14`, reflection → `v6`, else `v4`.
+Factor applicators never set `schema_version`. After levels apply, the final compatibility gate rejects contradictory effective modes with `incompatible_factor_combination`. `finalize_matrix_cell_config` then selects `runner-config-v55` first when `generational_run` is present; otherwise it picks the first matching feature family (budget → `v22`, cultural narratives → `v21`, semantic naming → `v20`, artifact interpretation → `v19`, environmental dynamics → `v14`, reflection → `v6`, else `v4`). A generational factor on a non-v55 base fails with `generational_base_required`.
 
 ### `group_role` composition
 
@@ -455,3 +467,64 @@ copied to entrants. The catalog exposes `generational_runner@1`; run archives
 and per-assignment recipes are owned by the generational execution layer, not a
 new metric family. See [Generational runner](generational-runner.md) for the
 archive schemas and CLI.
+
+
+## Experiment BM — generational comparison (`generational_comparison@1`)
+
+Off the V1 A–E gate. BM builds five independent paired comparisons over one
+canonical AY-derived `runner-config-v55` base (`seed=23`, `max_ticks=12`,
+minimum 8). Every pair shares seed, stochastic identity, world layout, founder
+roster, stop horizon, generation schedule, and initialization; only the declared
+axis differs.
+
+| Pair | Control → treatment | Axis |
+| --- | --- | --- |
+| `bm-oral-vs-records` | `absent` → `present` | `record_availability` |
+| `bm-short-vs-long-lifespan` | `short` → `long` | `lifespan` |
+| `bm-isolated-vs-connected` | `isolated` → `connected` | `migration` |
+| `bm-low-vs-high-teaching` | `low` → `high` | `teaching_frequency` |
+| `bm-reference-vs-reconstructive-memory` | `reference` → `reconstructive` | `memory_architecture` |
+
+Ten condition ids are produced in pair order:
+`bm-oral-vs-records-{control,treatment}`,
+`bm-short-vs-long-lifespan-{control,treatment}`,
+`bm-isolated-vs-connected-{control,treatment}`,
+`bm-low-vs-high-teaching-{control,treatment}`, and
+`bm-reference-vs-reconstructive-memory-{control,treatment}`.
+Build it with `experiments.generational_comparison_scenario` or the catalog
+builder `experiment_bm_generational_comparison`.
+
+### Closed comparison axes
+
+| Axis | Level ids |
+| --- | --- |
+| `lifespan` | `short`, `long` |
+| `learning_model` | `practice_only`, `teaching_supported` |
+| `teaching_frequency` | `low`, `high` |
+| `record_availability` | `absent`, `present` |
+| `memory_architecture` | `reference`, `reconstructive` |
+| `innovation_rate` | `low`, `high` |
+| `migration` | `isolated`, `connected` |
+| `resource_scarcity` | `scarce`, `abundant` |
+| `population_size` | `small`, `large` |
+| `institution_support` | `off`, `on` |
+| `cognitive_architecture` | `v1_memory`, `full_v2` |
+
+`build_generational_comparison(spec)` accepts independent pairs only; it is not
+a Cartesian product. A pair that changes lifespan, capacity, or entry rate must
+still preserve the declared schedule and pass the comparability gate. The gate
+rejects mismatched seed, stochastic identity, scenario, resource identity,
+roster, stop policy, schedule, lifecycle fixed fields, generational contract, or
+initialization with stable `comparison_*` codes. Comparability requires a
+passthrough lifespan distribution and a deterministic `none` initialization
+distribution; run-ID-scoped channels are documented, not silently unified.
+
+BM guarantees configuration, admitted generations, cohort rows, and
+measurement. It does not guarantee that a durable record is created, a teaching
+act occurs, migration happens, or an institution emerges; those depend on
+cognition and horizon.
+
+Detached analysis adds `generational_cohort_comparison@1`, which folds the
+finalized `PopulationProgress` into generation/cohort counts and survival
+shares. Cross-arm comparison remains `matrix-metric-summary-v1`; there is no
+paired confidence-interval, effect-size, or significance layer.

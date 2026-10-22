@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 129
+METRIC_FAMILY_COUNT: Final[int] = 130
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -204,6 +204,7 @@ class MetricFamilyId(StrEnum):
     INSTITUTIONAL_DECAY = "institutional_decay"
     INSTITUTION_LIFECYCLE = "institution_lifecycle"
     INSTITUTION_LINEAGE = "institution_lineage"
+    GENERATIONAL_COHORT_COMPARISON = "generational_cohort_comparison"
 
 
 class DenominatorKind(StrEnum):
@@ -5774,6 +5775,64 @@ def _spec_institutional_memory_provenance() -> MetricSpecification:
     )
 
 
+def _spec_generational_cohort_comparison() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.GENERATIONAL_COHORT_COMPARISON,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="finalized_generational_population_progress",
+        denominator="admitted_agents_and_completed_generation_boundary",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="final completed boundary of a generational run",
+        deceased_policy=(
+            "dead remain in admitted/dead totals; living counts exclude them"
+        ),
+        zero_holding_policy=(
+            "zero population is a present zero, not absent evidence"
+        ),
+        opportunity_vs_occurrence=(
+            "admitted cohorts are occurrences; counts are censuses at finalization"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="no mid-run extrapolation; uses finalized progress only",
+        formulas={
+            "admitted_total": "sum of admitted agents across finalized generations",
+            "living_total": "living population at the final boundary",
+            "dead_total": "objective deaths at the final boundary",
+            "generation_count": "number of generation rows",
+            "cohort_count": "number of admission cohort rows",
+            "generation_span_ticks": "max cohort entry tick - min cohort entry tick",
+            "post_founder_admitted_share": "generation>0 admitted / admitted_total",
+            "founder_living_share": "generation 0 living / living_total",
+            "generation_survival_rate": "generation living / generation admitted",
+            "cohort_survival_rate": "cohort living / cohort admitted",
+            "cohort_generation_alignment_violations": (
+                "cohort rows not attributable to their generation totals"
+            ),
+        },
+        value_keys=(
+            "admitted_total",
+            "boundary_tick",
+            "cohort_count",
+            "cohort_generation_alignment_violations",
+            "dead_total",
+            "founder_living_share",
+            "generation_count",
+            "generation_span_ticks",
+            "layer",
+            "living_total",
+            "max_generation_index",
+            "post_founder_admitted_share",
+        ),
+        empty_case=(
+            "present zero totals when progress exists; family omitted when absent"
+        ),
+        unknown_case=(
+            "missing progress -> availability=unknown; family omitted; "
+            "never fabricate counts"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -5904,6 +5963,7 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_institutional_decay,
     _spec_institution_lifecycle,
     _spec_institution_lineage,
+    _spec_generational_cohort_comparison,
 )
 
 
