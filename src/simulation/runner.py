@@ -101,6 +101,18 @@ from simulation.engine import (
     objective_skill_policy,
     teaching_interaction_policy,
 )
+from simulation.generational_models import (
+    BoundaryEventFact,
+    ExperimentCriterionEvaluationStatus,
+    ExperimentCriterionIdentity,
+    GenerationalBoundary,
+    PopulationProgress,
+    StopEvidence,
+)
+from simulation.generational_progress import (
+    build_population_progress,
+    evaluate_generational_stops,
+)
 from simulation.identifiers import derive_run_id
 from simulation.journal import hash_snapshot
 from simulation.lifecycle import (
@@ -138,17 +150,6 @@ from simulation.run_control import (
 )
 from simulation.runner_models import (
     _V2_CAPABILITY_FLAG_NAMES,
-    RUNNER_SCHEMA_VERSION_V25,
-    RUNNER_SCHEMA_VERSION_V26,
-    RUNNER_SCHEMA_VERSION_V27,
-    RUNNER_SCHEMA_VERSION_V28,
-    RUNNER_SCHEMA_VERSION_V29,
-    RUNNER_SCHEMA_VERSION_V30,
-    RUNNER_SCHEMA_VERSION_V31,
-    RUNNER_SCHEMA_VERSION_V32,
-    RUNNER_SCHEMA_VERSION_V33,
-    RUNNER_SCHEMA_VERSION_V34,
-    RUNNER_SCHEMA_VERSION_V35,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionCounters,
@@ -179,6 +180,7 @@ from simulation.runner_models import (
     describe_runner_config,
     detach_action_resolution_evidence,
     evaluate_goals_after_finalization,
+    schema_supports_explicit_new_agent_initialization,
 )
 from simulation.runner_serialization import (
     build_runner_diagnostics,
@@ -373,9 +375,11 @@ class RunnerDependencyFactories:
 
     __slots__ = (
         "_belief_factory",
+        "_boundary_observer",
         "_bundle_factory",
         "_cognition_trace_repository",
         "_credential_resolver",
+        "_criterion_factory",
         "_journal",
         "_llm_max_concurrency",
         "_memory_factory",
@@ -412,6 +416,8 @@ class RunnerDependencyFactories:
         pending_finalizations: PendingFinalizationRepository | None = None,
         cognition_trace_repository: CognitionTraceRepository | None = None,
         scientific_evidence: ScientificEvidenceRepository | None = None,
+        criterion_factory: object | None = None,
+        boundary_observer: object | None = None,
         llm_max_concurrency: int = 1,
     ) -> None:
         if (
@@ -434,6 +440,8 @@ class RunnerDependencyFactories:
         self._pending_finalizations = pending_finalizations
         self._cognition_trace_repository = cognition_trace_repository
         self._scientific_evidence = scientific_evidence
+        self._criterion_factory = criterion_factory
+        self._boundary_observer = boundary_observer
         self._llm_max_concurrency = llm_max_concurrency
 
     @property
@@ -455,6 +463,14 @@ class RunnerDependencyFactories:
     @property
     def scientific_evidence(self) -> ScientificEvidenceRepository | None:
         return self._scientific_evidence
+
+    @property
+    def criterion_factory(self) -> object | None:
+        return self._criterion_factory
+
+    @property
+    def boundary_observer(self) -> object | None:
+        return self._boundary_observer
 
     def resolve_credentials(
         self, settings: RunnerProviderSettings
@@ -1506,26 +1522,36 @@ class SimulationRunner:
 
     __slots__ = (
         "_agents",
+        "_attempt_receipts",
         "_bootstrap",
+        "_boundary_observer",
         "_closed",
         "_cognition_counters",
         "_config",
         "_crash_hook",
+        "_criteria",
+        "_criterion_status",
         "_diagnostics",
         "_durable",
         "_engine",
         "_factories",
+        "_finalized_tick_ids",
         "_finalized_tick_receipts",
+        "_finished_result",
+        "_generational_progress",
         "_goal_transition_receipts",
         "_injected_stop",
         "_intervention_arbiter",
         "_observation_sink",
         "_pending_finalizations",
         "_provider",
+        "_published_boundaries",
         "_run_config",
         "_run_id",
         "_runtimes",
         "_started",
+        "_stop_evidence",
+        "_terminal_receipt",
         "_ticks_committed",
     )
 
@@ -1546,6 +1572,8 @@ class SimulationRunner:
         observation_sink: ExperimentalObservationSink | None = None,
         crash_hook: Callable[[RunnerCrashPoint, int | None], None] | None = None,
         factories: RunnerDependencyFactories | None = None,
+        criteria: Sequence[object] = (),
+        boundary_observer: object | None = None,
     ) -> None:
         self._config = config
         self._run_id = run_id
@@ -1575,6 +1603,18 @@ class SimulationRunner:
         self._finalized_tick_receipts: list[FinalizedTickReceipt] = []
         self._goal_transition_receipts: list[GoalTransitionReceipt] = []
         self._cognition_counters = CognitionCounters()
+        self._generational_progress: PopulationProgress | None = None
+        self._stop_evidence: StopEvidence | None = None
+        self._terminal_receipt: RunnerAttemptReceipt | None = None
+        self._criteria = tuple(criteria)
+        self._criterion_status = (
+            ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
+        )
+        self._boundary_observer = boundary_observer
+        self._published_boundaries: set[int] = set()
+        self._attempt_receipts: list[RunnerAttemptReceipt] = []
+        self._finished_result: SimulationRunnerResult | None = None
+        self._finalized_tick_ids: set[int] = set()
 
     @property
     def config(self) -> SimulationRunnerConfig:
@@ -1628,6 +1668,36 @@ class SimulationRunner:
                 RunnerConstructionErrorCode.DURABLE_UNSUPPORTED,
                 stage="persistence",
             )
+
+        resolved_criteria: tuple[object, ...] = ()
+        if config.generational_run is not None:
+            requested = tuple(
+                sorted(
+                    config.generational_run.experiment_criteria,
+                    key=lambda item: item.identity,
+                )
+            )
+            factory = deps.criterion_factory
+            resolved: list[object] = []
+            for criterion_spec in requested:
+                if factory is None:
+                    raise RunnerConstructionError(
+                        RunnerConstructionErrorCode.INVALID_CONFIG,
+                        stage="criterion",
+                    )
+                criterion = factory(criterion_spec)  # type: ignore[operator]
+                if (
+                    getattr(criterion, "criterion_id", None)
+                    != criterion_spec.criterion_id
+                    or getattr(criterion, "version", None)
+                    != criterion_spec.version
+                ):
+                    raise RunnerConstructionError(
+                        RunnerConstructionErrorCode.INVALID_CONFIG,
+                        stage="criterion",
+                    )
+                resolved.append(criterion)
+            resolved_criteria = tuple(resolved)
 
         created_closables: list[AsyncCloseable] = []
         created_agents: list[_AgentBundle] = []
@@ -1840,20 +1910,9 @@ class SimulationRunner:
                     config.new_agent_initialization
                     if (
                         lifecycle_channel
-                        and config.schema_version
-                        in {
-                            RUNNER_SCHEMA_VERSION_V25,
-                            RUNNER_SCHEMA_VERSION_V26,
-                            RUNNER_SCHEMA_VERSION_V27,
-                            RUNNER_SCHEMA_VERSION_V28,
-                            RUNNER_SCHEMA_VERSION_V29,
-                            RUNNER_SCHEMA_VERSION_V30,
-                            RUNNER_SCHEMA_VERSION_V31,
-                            RUNNER_SCHEMA_VERSION_V32,
-                            RUNNER_SCHEMA_VERSION_V33,
-                            RUNNER_SCHEMA_VERSION_V34,
-                            RUNNER_SCHEMA_VERSION_V35,
-                        }
+                        and schema_supports_explicit_new_agent_initialization(
+                            config.schema_version
+                        )
                         and config.new_agent_initialization is not None
                     )
                     else None
@@ -2273,6 +2332,8 @@ class SimulationRunner:
                 durable=durable_service,
                 pending_finalizations=deps.pending_finalizations,
                 factories=deps,
+                criteria=resolved_criteria,
+                boundary_observer=deps.boundary_observer,
             )
         except RunnerConstructionError:
             await _cleanup_created(created_closables, stage=stage)
@@ -2391,6 +2452,8 @@ class SimulationRunner:
                 stage="closed",
             )
         self._ensure_started()
+        if self._terminal_receipt is not None:
+            return self._terminal_receipt
         if self._ticks_committed >= self._config.stop_policy.max_ticks:
             return RunnerAttemptReceipt(
                 tick=self._ticks_committed,
@@ -2449,22 +2512,6 @@ class SimulationRunner:
                 commands.append(command)
                 submissions.append(pending.submission)
 
-            if not submissions and all(
-                runtime.status is AgentRuntimeStatus.TERMINAL
-                for runtime in self._runtimes
-            ):
-                tick_result = await self._commit_tick(())
-                await self._sync_mid_run_population_entries()
-                await self._record_finalized_tick(tick_result, pendings=())
-                self._ticks_committed += 1
-                return RunnerAttemptReceipt(
-                    tick=tick_value,
-                    status=RunnerAttemptStatus.FINALIZED,
-                    submission_count=0,
-                    finalized_count=0,
-                    stop_reason=RunnerStopReasonCode.ALL_AGENTS_TERMINAL,
-                )
-
             if self._pending_finalizations is not None:
                 for command in commands:
                     await self._pending_finalizations.append_pending(
@@ -2496,7 +2543,18 @@ class SimulationRunner:
                 commands=tuple(commands),
                 tick_result=tick_result,
             )
-            stop_reason = self._evaluate_stop()
+            self._refresh_generational_progress(tick_result)
+            stop_reason = await self._evaluate_stop()
+            receipt = RunnerAttemptReceipt(
+                tick=tick_value,
+                status=RunnerAttemptStatus.FINALIZED,
+                submission_count=len(submissions),
+                finalized_count=finalized,
+                stop_reason=stop_reason,
+            )
+            self._attempt_receipts.append(receipt)
+            if stop_reason is not None:
+                self._terminal_receipt = receipt
             _LOG.info(
                 "runner_tick_finalized run_id=%s tick=%s submission_count=%s "
                 "finalized_count=%s stop_reason=%s",
@@ -2506,13 +2564,7 @@ class SimulationRunner:
                 finalized,
                 "-" if stop_reason is None else stop_reason.value,
             )
-            return RunnerAttemptReceipt(
-                tick=tick_value,
-                status=RunnerAttemptStatus.FINALIZED,
-                submission_count=len(submissions),
-                finalized_count=finalized,
-                stop_reason=stop_reason,
-            )
+            return receipt
         except RunnerCrashInjected as crash:
             _LOG.warning(
                 "runner_crash_injected run_id=%s tick=%s point=%s",
@@ -2656,10 +2708,7 @@ class SimulationRunner:
                 ordinal,
             )
         if record_receipt and tick_result is not None:
-            already = any(
-                receipt.tick == tick_result.tick.value
-                for receipt in self._finalized_tick_receipts
-            )
+            already = tick_result.tick.value in self._finalized_tick_ids
             if not already:
                 await self._record_finalized_tick(tick_result, pendings=pendings)
             if self._ticks_committed <= tick_result.tick.value:
@@ -2824,7 +2873,7 @@ class SimulationRunner:
             status=RunnerAttemptStatus.FINALIZED,
             submission_count=total_finalized,
             finalized_count=total_finalized,
-            stop_reason=self._evaluate_stop(),
+            stop_reason=await self._evaluate_stop(),
         )
 
     def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
@@ -3025,11 +3074,9 @@ class SimulationRunner:
     async def run(self) -> SimulationRunnerResult:
         """Run until a closed stop reason is reached at a finalized boundary."""
         self._ensure_started()
-        receipts: list[RunnerAttemptReceipt] = []
         stop_reason: RunnerStopReasonCode | None = None
         while stop_reason is None:
             receipt = await self.run_tick()
-            receipts.append(receipt)
             if receipt.status is RunnerAttemptStatus.ABORTED:
                 stop_reason = (
                     receipt.stop_reason
@@ -3044,6 +3091,29 @@ class SimulationRunner:
             ):
                 stop_reason = RunnerStopReasonCode.MAX_TICKS
         assert stop_reason is not None
+        return await self.finish_run(stop_reason)
+
+    async def finish_run(
+        self, stop_reason: RunnerStopReasonCode
+    ) -> SimulationRunnerResult:
+        """Finish one terminal run exactly once and cache the result."""
+        if type(stop_reason) is not RunnerStopReasonCode:
+            raise TypeError("stop_reason must be RunnerStopReasonCode")
+        if self._finished_result is not None:
+            if self._finished_result.stop_reason is not stop_reason:
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.INVALID_CONFIG,
+                    stage="finish_run_conflict",
+                )
+            return self._finished_result
+        if (
+            self._terminal_receipt is not None
+            and self._terminal_receipt.stop_reason is not stop_reason
+        ):
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="finish_run_conflict",
+            )
         projection = self.final_objective_projection()
         objective_hash = objective_projection_hash(projection)
         goal_receipts = self._evaluate_goals_at_boundary(
@@ -3053,6 +3123,56 @@ class SimulationRunner:
         )
         self._goal_transition_receipts.extend(goal_receipts)
         await self._apply_objective_goal_receipts(goal_receipts)
+        generational_progress: PopulationProgress | None = None
+        stop_evidence: StopEvidence | None = None
+        if self._config.generational_run is not None:
+            generational_progress = self._generational_progress
+            if generational_progress is None:
+                generational_progress = build_population_progress(
+                    lifecycle_records=self._engine.lifecycle_records,
+                    detached_bodies=self._engine.detached_bodies(),
+                    boundary_tick=self._ticks_committed,
+                )
+                self._generational_progress = generational_progress
+            stop_evidence = self._stop_evidence
+            if stop_evidence is None:
+                last_result = self._engine.last_tick_result
+                boundary = (
+                    self._build_boundary_evidence(last_result)
+                    if last_result is not None
+                    and last_result.resulting_tick.value
+                    == generational_progress.boundary_tick
+                    else GenerationalBoundary(
+                        progress=generational_progress,
+                        objective_revision=self._engine.revision.value,
+                        last_completed_tick=(
+                            None
+                            if generational_progress.boundary_tick == 0
+                            else generational_progress.boundary_tick - 1
+                        ),
+                    )
+                )
+                is_failure = stop_reason in {
+                    RunnerStopReasonCode.AUTHORITY_FAILURE,
+                    RunnerStopReasonCode.COGNITION_FAILURE,
+                    RunnerStopReasonCode.FINALIZATION_RECOVERY_REQUIRED,
+                    RunnerStopReasonCode.EXPERIMENT_CRITERION_FAILURE,
+                    RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE,
+                }
+                stop_evidence = StopEvidence(
+                    boundary=boundary,
+                    primary_condition_code=stop_reason.value,
+                    criterion_evaluation_status=(
+                        ExperimentCriterionEvaluationStatus.FAILED
+                        if is_failure
+                        else ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
+                    ),
+                    failed_stage="runner" if is_failure else None,
+                    failure_reason_code=(
+                        stop_reason.value if is_failure else None
+                    ),
+                )
+                self._stop_evidence = stop_evidence
         audits = self.export_memory_dynamics_audits()
         consolidation_audits = self.export_offline_consolidation_audits()
         reflection_audits = self.export_reflection_audits()
@@ -3060,7 +3180,7 @@ class SimulationRunner:
             run_id=self._run_id,
             ticks_committed=self._ticks_committed,
             stop_reason=stop_reason,
-            attempt_receipts=tuple(receipts),
+            attempt_receipts=tuple(self._attempt_receipts),
             finalized_tick_receipts=tuple(self._finalized_tick_receipts),
             goal_transition_receipts=tuple(self._goal_transition_receipts),
             cognition_counters=self._cognition_counters,
@@ -3097,6 +3217,8 @@ class SimulationRunner:
             institutional_decay_ledgers=self.export_institutional_decay_ledgers(),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
+            generational_progress=generational_progress,
+            stop_evidence=stop_evidence,
         )
         mentorship_audit_count = len(result.mentorship_audits)
         cultural_audit_count = len(result.cultural_feature_audits)
@@ -3109,7 +3231,7 @@ class SimulationRunner:
             self._run_id.value,
             self._ticks_committed,
             stop_reason.value,
-            len(receipts),
+            len(self._attempt_receipts),
             len(self._finalized_tick_receipts),
             len(self._goal_transition_receipts),
             objective_hash[:12],
@@ -3135,6 +3257,7 @@ class SimulationRunner:
                 self._run_id.value,
                 cultural_audit_count,
             )
+        self._finished_result = result
         return result
 
     def export_memory_dynamics_audits(self) -> tuple[object, ...]:
@@ -3781,6 +3904,12 @@ class SimulationRunner:
             objective_state_hash=state_hash,
             event_count=len(tick_result.events),
         )
+        if receipt.tick in self._finalized_tick_ids:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="duplicate_finalized_tick",
+            )
+        self._finalized_tick_ids.add(receipt.tick)
         self._finalized_tick_receipts.append(receipt)
         cognition_invocations = self._cognition_counters.cognition_invocations
         imagination_evaluations = self._cognition_counters.imagination_evaluations
@@ -3865,15 +3994,312 @@ class SimulationRunner:
         )
         return evaluate_goals_after_finalization(tuple(goals), evidence)
 
-    def _evaluate_stop(self) -> RunnerStopReasonCode | None:
-        if self._injected_stop and self._config.stop_policy.allow_injected_stop:
+    def _refresh_generational_progress(self, tick_result: TickResult) -> None:
+        if self._config.generational_run is None:
+            return
+        progress = build_population_progress(
+            lifecycle_records=self._engine.lifecycle_records,
+            detached_bodies=self._engine.detached_bodies(),
+            boundary_tick=self._ticks_committed,
+        )
+        self._generational_progress = progress
+        _LOG.debug(
+            "runner_generational_progress run_id=%s boundary_tick=%s "
+            "living=%s admitted=%s deaths=%s max_generation=%s",
+            self._run_id.value,
+            progress.boundary_tick,
+            progress.living_population,
+            progress.total_admitted,
+            progress.total_deaths,
+            progress.max_generation_index_seen,
+        )
+        del tick_result
+
+    def _build_boundary_evidence(self, tick_result: TickResult) -> GenerationalBoundary:
+        progress = self._generational_progress
+        if progress is None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="missing_generational_progress",
+            )
+        facts = tuple(
+            BoundaryEventFact(
+                event_id=record.event.event_id.value,
+                kind=str(record.event.details.kind),
+                tick=record.event.tick,
+                actor_id=(
+                    None
+                    if record.event.actor_id is None
+                    else record.event.actor_id.value
+                ),
+                target_id=(
+                    None
+                    if record.event.target_id is None
+                    else record.event.target_id.value
+                ),
+            )
+            for record in tick_result.events
+        )
+        return GenerationalBoundary(
+            progress=progress,
+            objective_revision=self._engine.revision.value,
+            last_completed_tick=(
+                None if progress.boundary_tick == 0 else progress.boundary_tick - 1
+            ),
+            event_facts=facts,
+        )
+
+    def _safe_boundary(self) -> GenerationalBoundary | None:
+        progress = self._generational_progress
+        last_result = self._engine.last_tick_result
+        if progress is None or last_result is None:
+            return None
+        return self._build_boundary_evidence(last_result)
+
+    async def _publish_boundary(
+        self,
+        boundary: GenerationalBoundary | None,
+        evidence: StopEvidence | None,
+    ) -> StopEvidence | None:
+        if self._boundary_observer is None or boundary is None:
+            return evidence
+        tick = boundary.progress.boundary_tick
+        if tick in self._published_boundaries:
+            _LOG.debug(
+                "runner_boundary_publication_cached run_id=%s boundary=%s",
+                self._run_id.value,
+                tick,
+            )
+            return evidence
+        try:
+            await self._boundary_observer.observe(boundary, evidence)  # type: ignore[attr-defined]
+        except Exception as exc:
+            _LOG.error(
+                "runner_boundary_publication_failed run_id=%s boundary=%s "
+                "error_type=%s reason_code=historical_artifact_failure",
+                self._run_id.value,
+                tick,
+                type(exc).__name__,
+            )
+            codes = (
+                ()
+                if evidence is None
+                else tuple(evidence.matched_condition_codes)
+            )
+            codes = (*codes, RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE.value)
+            from simulation.runner_models import (
+                RunnerStopReasonCode as _StopCode,
+            )
+            from simulation.runner_models import (
+                order_matched_stop_reasons,
+            )
+
+            ordered = order_matched_stop_reasons(
+                tuple(_StopCode(code) for code in codes)
+            )
+            return StopEvidence(
+                boundary=boundary,
+                matched_condition_codes=codes,
+                primary_condition_code=ordered[0].value,
+                matched_criteria=(
+                    () if evidence is None else evidence.matched_criteria
+                ),
+                criterion_evaluation_status=(
+                    ExperimentCriterionEvaluationStatus.FAILED
+                ),
+                failed_stage="boundary_observer",
+                failure_reason_code=(
+                    RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE.value
+                ),
+                measurements=(
+                    {} if evidence is None else dict(evidence.measurements)
+                ),
+            )
+        self._published_boundaries.add(tick)
+        _LOG.debug(
+            "runner_boundary_published run_id=%s boundary=%s stop=%s",
+            self._run_id.value,
+            tick,
+            evidence is not None,
+        )
+        return evidence
+
+    async def _evaluate_stop(self) -> RunnerStopReasonCode | None:
+        injected = self._injected_stop and self._config.stop_policy.allow_injected_stop
+        if injected and self._config.generational_run is None:
             return RunnerStopReasonCode.INJECTED_STOP
-        if self._ticks_committed >= self._config.stop_policy.max_ticks:
-            return RunnerStopReasonCode.MAX_TICKS
-        if self._config.stop_policy.stop_on_all_agents_terminal and all(
-            runtime.status is AgentRuntimeStatus.TERMINAL for runtime in self._runtimes
-        ):
-            return RunnerStopReasonCode.ALL_AGENTS_TERMINAL
+        generational = self._config.generational_run
+        if generational is None:
+            if self._ticks_committed >= self._config.stop_policy.max_ticks:
+                return RunnerStopReasonCode.MAX_TICKS
+            if self._config.stop_policy.stop_on_all_agents_terminal and all(
+                runtime.status is AgentRuntimeStatus.TERMINAL
+                for runtime in self._runtimes
+            ):
+                return RunnerStopReasonCode.ALL_AGENTS_TERMINAL
+            return None
+        progress = self._generational_progress
+        if progress is None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="missing_generational_progress",
+            )
+        boundary = self._safe_boundary()
+        matched = evaluate_generational_stops(
+            generational,
+            progress,
+            ticks_committed=self._ticks_committed,
+            max_ticks=self._config.stop_policy.max_ticks,
+        )
+        if injected:
+            matched = (RunnerStopReasonCode.INJECTED_STOP, *matched)
+        measurements = {
+            "living_population": progress.living_population,
+            "total_admitted": progress.total_admitted,
+            "total_deaths": progress.total_deaths,
+            "max_generation_index_seen": progress.max_generation_index_seen,
+        }
+        if matched:
+            status = (
+                ExperimentCriterionEvaluationStatus.SKIPPED_BUILTIN_STOP
+                if self._criteria
+                else ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
+            )
+            self._criterion_status = status
+            assert boundary is not None
+            evidence = StopEvidence(
+                boundary=boundary,
+                matched_condition_codes=tuple(code.value for code in matched),
+                primary_condition_code=matched[0].value,
+                criterion_evaluation_status=status,
+                measurements=measurements,
+            )
+            published = await self._publish_boundary(boundary, evidence)
+            self._stop_evidence = published
+            primary = matched[0]
+            if published is not None and published.primary_condition_code == (
+                RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE.value
+            ):
+                primary = RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE
+            _LOG.info(
+                "runner_generational_stop run_id=%s boundary_tick=%s "
+                "primary=%s matched=%s living=%s max_generation=%s",
+                self._run_id.value,
+                progress.boundary_tick,
+                primary.value,
+                [code.value for code in matched],
+                progress.living_population,
+                progress.max_generation_index_seen,
+            )
+            return primary
+        cadence = generational.criterion_cadence_ticks
+        due = self._ticks_committed % cadence == 0
+        if not self._criteria:
+            self._criterion_status = (
+                ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
+            )
+            published = await self._publish_boundary(boundary, None)
+            if published is not None:
+                self._stop_evidence = published
+                return RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE
+            return None
+        if not due:
+            self._criterion_status = ExperimentCriterionEvaluationStatus.NOT_DUE
+            published = await self._publish_boundary(boundary, None)
+            if published is not None:
+                self._stop_evidence = published
+                return RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE
+            return None
+        matched_criteria: list[ExperimentCriterionIdentity] = []
+        failed: Exception | None = None
+        assert boundary is not None
+        for criterion in self._criteria:
+            try:
+                decision = await criterion.evaluate(boundary)  # type: ignore[attr-defined]
+            except Exception as exc:
+                failed = exc
+                _LOG.error(
+                    "runner_criterion_failed run_id=%s boundary=%s "
+                    "criterion_id=%s version=%s error_type=%s",
+                    self._run_id.value,
+                    progress.boundary_tick,
+                    getattr(criterion, "criterion_id", "-"),
+                    getattr(criterion, "version", "-"),
+                    type(exc).__name__,
+                )
+                break
+            _LOG.debug(
+                "runner_criterion_evaluated run_id=%s boundary=%s "
+                "criterion_id=%s version=%s matched=%s",
+                self._run_id.value,
+                progress.boundary_tick,
+                getattr(criterion, "criterion_id", "-"),
+                getattr(criterion, "version", "-"),
+                getattr(decision, "matched", None),
+            )
+            if getattr(decision, "matched", False) is True:
+                matched_criteria.append(
+                    ExperimentCriterionIdentity(
+                        criterion_id=str(criterion.criterion_id),  # type: ignore[attr-defined]
+                        version=str(criterion.version),  # type: ignore[attr-defined]
+                    )
+                )
+        if failed is not None:
+            self._criterion_status = ExperimentCriterionEvaluationStatus.FAILED
+            codes = (RunnerStopReasonCode.EXPERIMENT_CRITERION_FAILURE.value,)
+            evidence = StopEvidence(
+                boundary=boundary,
+                matched_condition_codes=codes,
+                primary_condition_code=(
+                    RunnerStopReasonCode.EXPERIMENT_CRITERION_FAILURE.value
+                ),
+                matched_criteria=tuple(matched_criteria),
+                criterion_evaluation_status=(
+                    ExperimentCriterionEvaluationStatus.FAILED
+                ),
+                failed_stage="criterion",
+                failure_reason_code=(
+                    RunnerStopReasonCode.EXPERIMENT_CRITERION_FAILURE.value
+                ),
+                measurements=measurements,
+            )
+            published = await self._publish_boundary(boundary, evidence)
+            self._stop_evidence = published
+            return RunnerStopReasonCode.EXPERIMENT_CRITERION_FAILURE
+        self._criterion_status = ExperimentCriterionEvaluationStatus.EVALUATED
+        if matched_criteria:
+            evidence = StopEvidence(
+                boundary=boundary,
+                matched_condition_codes=(
+                    RunnerStopReasonCode.EXPERIMENT_CRITERION.value,
+                ),
+                primary_condition_code=(
+                    RunnerStopReasonCode.EXPERIMENT_CRITERION.value
+                ),
+                matched_criteria=tuple(matched_criteria),
+                criterion_evaluation_status=(
+                    ExperimentCriterionEvaluationStatus.EVALUATED
+                ),
+                measurements=measurements,
+            )
+            published = await self._publish_boundary(boundary, evidence)
+            self._stop_evidence = published
+            if published is not None and published.primary_condition_code == (
+                RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE.value
+            ):
+                return RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE
+            _LOG.info(
+                "runner_generational_stop run_id=%s boundary_tick=%s "
+                "primary=experiment_criterion criteria=%s",
+                self._run_id.value,
+                progress.boundary_tick,
+                [item.identity for item in matched_criteria],
+            )
+            return RunnerStopReasonCode.EXPERIMENT_CRITERION
+        published = await self._publish_boundary(boundary, None)
+        if published is not None:
+            self._stop_evidence = published
+            return RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE
         return None
 
     def _runtimes_by_agent(self, agent_id: AgentId) -> AgentRuntime:

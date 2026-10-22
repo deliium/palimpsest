@@ -25,6 +25,7 @@ __all__ = [
     "DemographicPopulationSnapshot",
     "DisabledDemographicPolicy",
     "FixedIntervalEntryPolicy",
+    "GenerationalIntervalEntryPolicy",
     "demographic_policy_for",
 ]
 
@@ -238,9 +239,111 @@ class FixedIntervalEntryPolicy:
         return ordered
 
 
+@dataclass(frozen=True, slots=True)
+class GenerationalIntervalEntryPolicy:
+    """Admit cohorts on an absolute-tick generation calendar.
+
+    The schedule is an experimental entry calendar, not biological
+    reproduction. Generation labels come from the absolute tick, so missing
+    or capacity-denied cohorts never shift later labels.
+    """
+
+    policy_id: str = "generational_interval_entry"
+
+    def propose_entries(
+        self,
+        *,
+        snapshot: DemographicPopulationSnapshot,
+        params: Mapping[str, object],
+        rng_draw: int,
+    ) -> tuple[DemographicEntryCandidate, ...]:
+        del rng_draw
+        interval = int(cast(int, params["interval_ticks"]))
+        per_interval = int(cast(int, params["entries_per_interval"]))
+        generation_length = int(cast(int, params["generation_length_ticks"]))
+        name_prefix = str(params["name_prefix"])
+        cohort_prefix = str(params["cohort_id_prefix"])
+        spawn_values = cast(tuple[str, ...], params["spawn_location_ids"])
+        if (
+            snapshot.tick < 1
+            or interval < 1
+            or snapshot.tick % interval != 0
+            or per_interval == 0
+        ):
+            _LOG.debug(
+                "demographic_policy_consult "
+                "policy_id=generational_interval_entry candidate_count=0 "
+                "reason_code=interval_skip tick=%s",
+                snapshot.tick,
+            )
+            return ()
+        capacity = snapshot.max_population - snapshot.living_population
+        if capacity <= 0:
+            _LOG.debug(
+                "demographic_policy_consult "
+                "policy_id=generational_interval_entry candidate_count=0 "
+                "reason_code=population_cap tick=%s",
+                snapshot.tick,
+            )
+            return ()
+        generation_index = 1 + (snapshot.tick - 1) // generation_length
+        spawn_count = len(spawn_values)
+        interval_ordinal = snapshot.tick // interval - 1
+        count = min(per_interval, capacity)
+        candidates: list[DemographicEntryCandidate] = []
+        for ordinal in range(count):
+            spawn_index = (interval_ordinal * per_interval + ordinal) % spawn_count
+            spawn_location_id = EntityId(spawn_values[spawn_index])
+            suffix = f"{snapshot.tick:04d}-{ordinal:02d}"
+            agent_value = f"{name_prefix}-{suffix}"
+            body_value = f"body-{name_prefix}-{suffix}"
+            if (
+                agent_value in snapshot.known_agent_ids
+                or body_value in snapshot.known_body_ids
+            ):
+                _LOG.debug(
+                    "demographic_policy_consult "
+                    "policy_id=generational_interval_entry "
+                    "reason_code=id_collision skip_ordinal=%s",
+                    ordinal,
+                )
+                continue
+            candidates.append(
+                DemographicEntryCandidate(
+                    agent_id=AgentId(agent_value),
+                    body_id=EntityId(body_value),
+                    spawn_location_id=spawn_location_id,
+                    generation_index=generation_index,
+                    cohort_id=(
+                        f"{cohort_prefix}-{snapshot.tick:04d}-{spawn_index:04d}"
+                    ),
+                    provenance=OriginProvenance.DEMOGRAPHIC_POLICY,
+                    name_prefix=name_prefix,
+                    sort_key=(agent_value, body_value),
+                    creation_reason="demographic_policy",
+                    origin_refs=(),
+                )
+            )
+        ordered = tuple(sorted(candidates, key=lambda item: item.sort_key))
+        _LOG.debug(
+            "demographic_policy_consult policy_id=generational_interval_entry "
+            "candidate_count=%s scheduled_count=%s generation_index=%s "
+            "tick=%s living=%s capacity=%s spawn_count=%s",
+            len(ordered),
+            count,
+            generation_index,
+            snapshot.tick,
+            snapshot.living_population,
+            capacity,
+            spawn_count,
+        )
+        return ordered
+
+
 _POLICIES: Mapping[str, DemographicPolicy] = {
     "disabled": DisabledDemographicPolicy(),
     "fixed_interval_entry": FixedIntervalEntryPolicy(),
+    "generational_interval_entry": GenerationalIntervalEntryPolicy(),
 }
 
 

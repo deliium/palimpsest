@@ -58,6 +58,7 @@ class TickExecutionResult:
     ticks_committed: int
     stop_reason: str | None = None
     completed: bool = False
+    failed: bool = False
 
 
 class MetricSetPortal(Protocol):
@@ -607,6 +608,17 @@ class SimulationManager:
         receipt = await run_tick()
         stop = getattr(receipt, "stop_reason", None)
         stop_text = None if stop is None else str(getattr(stop, "value", stop))
+        from simulation.runner_models import (
+            RunnerStopReasonCode,
+            runner_stop_is_failure,
+        )
+
+        failed = False
+        if stop_text is not None:
+            try:
+                failed = runner_stop_is_failure(RunnerStopReasonCode(stop_text))
+            except ValueError:
+                failed = False
         committed = getattr(runner, "ticks_committed", None)
         ticks = (
             committed
@@ -617,6 +629,7 @@ class SimulationManager:
             ticks_committed=ticks,
             stop_reason=stop_text,
             completed=stop is not None,
+            failed=failed,
         )
 
     async def _run_until_stop(self, run_id: str) -> None:
@@ -649,10 +662,53 @@ class SimulationManager:
                     await self._heartbeat(handle, record)
                     result = await self._execute_one_tick(run_id)
                     if result.completed:
+                        interrupted = result.stop_reason in {
+                            "cancelled",
+                            "finalization_recovery_required",
+                        }
+                        if not interrupted and handle.runner is not None:
+                            finish_run = getattr(handle.runner, "finish_run", None)
+                            if callable(finish_run) and result.stop_reason is not None:
+                                from simulation.runner_models import (
+                                    RunnerStopReasonCode,
+                                )
+
+                                try:
+                                    await finish_run(
+                                        RunnerStopReasonCode(result.stop_reason)
+                                    )
+                                except Exception:
+                                    result = TickExecutionResult(
+                                        ticks_committed=result.ticks_committed,
+                                        stop_reason=(
+                                            "finalization_recovery_required"
+                                        ),
+                                        completed=True,
+                                        failed=False,
+                                    )
+                                    interrupted = True
+                        if interrupted:
+                            final = await self._run_control.transition(
+                                run_id=record.run_id,
+                                expected_version=record.lifecycle_version,
+                                to_state=RunLifecycleState.PAUSED,
+                                reason_code=result.stop_reason or "interrupted",
+                                operation_id=generate_operation_id(),
+                                ticks_committed=result.ticks_committed,
+                                progress_cursor=result.ticks_committed,
+                                terminal_reason_code=result.stop_reason,
+                            )
+                            await self._release_lease(handle, final)
+                            return
+                        state = (
+                            RunLifecycleState.FAILED
+                            if result.failed
+                            else RunLifecycleState.COMPLETED
+                        )
                         final = await self._run_control.transition(
                             run_id=record.run_id,
                             expected_version=record.lifecycle_version,
-                            to_state=RunLifecycleState.COMPLETED,
+                            to_state=state,
                             reason_code=result.stop_reason or "completed",
                             operation_id=generate_operation_id(),
                             ticks_committed=result.ticks_committed,
@@ -661,12 +717,18 @@ class SimulationManager:
                         )
                         await self._release_lease(handle, final)
                         if self._metric_hook is not None:
-                            await self._metric_hook(run_id, "complete")
+                            await self._metric_hook(
+                                run_id,
+                                "fail" if result.failed else "complete",
+                            )
                         _LOGGER.info(
-                            "simulation_completed",
+                            "simulation_completed"
+                            if not result.failed
+                            else "simulation_failed",
                             run_id=run_id,
                             lifecycle_code=final.lifecycle_state.value,
                             ticks_committed=final.ticks_committed,
+                            stop_reason=result.stop_reason,
                         )
                         return
                     # Progress is always written through a ready-state edge

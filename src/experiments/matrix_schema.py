@@ -48,6 +48,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V50,
     RUNNER_SCHEMA_VERSION_V51,
     RUNNER_SCHEMA_VERSION_V52,
+    RUNNER_SCHEMA_VERSION_V55,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CollectiveDecisionMode,
@@ -148,7 +149,12 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if mediation_on:
+    if config.generational_run is not None:
+        schema_version, rule = (
+            RUNNER_SCHEMA_VERSION_V55,
+            "generational_run_on",
+        )
+    elif mediation_on:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V52,
             "mediation_on",

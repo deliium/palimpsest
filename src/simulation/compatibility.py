@@ -50,6 +50,7 @@ from simulation.runner_models import (
     RESULT_SCHEMA_VERSION,
     RESULT_SCHEMA_VERSION_V1,
     RESULT_SCHEMA_VERSION_V2,
+    RESULT_SCHEMA_VERSION_V3,
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V3,
     RUNNER_SCHEMA_VERSION_V4,
@@ -97,6 +98,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V49,
     RUNNER_SCHEMA_VERSION_V53,
     RUNNER_SCHEMA_VERSION_V54,
+    RUNNER_SCHEMA_VERSION_V55,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -486,6 +488,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "institutional_decay_mode on the exact v53 cognition keyset and "
             "reuses the v53 family roots (requires that owner's institution "
             "concepts; no new root sibling; no new write-pair); "
+            f"{RUNNER_SCHEMA_VERSION_V55} adds the required run-level "
+            "generational_run sibling over the exact selected v54-compatible "
+            "lower family (requires explicit population_lifecycle, "
+            "new_agent_initialization, generational_population, and finite "
+            "max_ticks; every institutional mode may be disabled; no new "
+            "root beyond generational_run; no new write-pair); "
             f"(write-pair EVENT_SCHEMA_REPLAY_V16={EVENT_SCHEMA_REPLAY_V16}, "
             "codec v13 when the channel is active; no heir table); "
             "mode allowlists that top out at v34 widen to accept v35; "
@@ -521,12 +529,15 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         write_version=RESULT_SCHEMA_VERSION,
         accepted_restore=_versions(*sorted(SUPPORTED_RESULT_SCHEMA_VERSIONS)),
         bump_trigger=(
-            "Prefer leaving runner-result-v2; bump only if flag digests must "
-            "appear in results (prefer diagnostics/fingerprints instead)"
+            "Prefer leaving runner-result-v2 for legacy runs; "
+            f"{RESULT_SCHEMA_VERSION_V3} is emitted only for generational "
+            "configs that add generational_progress and stop_evidence"
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
-            f"{RESULT_SCHEMA_VERSION_V1}/{RESULT_SCHEMA_VERSION_V2} remain accepted"
+            f"{RESULT_SCHEMA_VERSION_V1}/{RESULT_SCHEMA_VERSION_V2} remain "
+            f"accepted; {RESULT_SCHEMA_VERSION_V3} is accepted for generational "
+            "runs"
         ),
     ),
     "cognition_trace": CompatibilityEntry(
@@ -786,6 +797,7 @@ _LOG.debug(
         "runner_v49": RUNNER_SCHEMA_VERSION_V49,
         "runner_v53": RUNNER_SCHEMA_VERSION_V53,
         "runner_v54": RUNNER_SCHEMA_VERSION_V54,
+        "runner_v55": RUNNER_SCHEMA_VERSION_V55,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

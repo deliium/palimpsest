@@ -27,6 +27,10 @@ DEFAULT_SUCCESS_STOP_REASONS: Final[tuple[RunnerStopReasonCode, ...]] = (
     RunnerStopReasonCode.MAX_TICKS,
     RunnerStopReasonCode.ALL_AGENTS_TERMINAL,
     RunnerStopReasonCode.INJECTED_STOP,
+    RunnerStopReasonCode.GENERATION_HORIZON,
+    RunnerStopReasonCode.POPULATION_EXTINCTION,
+    RunnerStopReasonCode.POPULATION_THRESHOLD,
+    RunnerStopReasonCode.EXPERIMENT_CRITERION,
 )
 
 # Locked level-id tables for the v1 factor registry (Task 2 applies them).
