@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Final
 
 from llm.models import ProviderDefaults, StructuredOutputMode
+from llm.recording.models import ReplayConsumption
 from llm.recording.provider import RecordingLLMProvider, RecordingMode
 from llm.recording.store import (
     FilesystemRecordingStore,
@@ -44,6 +45,7 @@ def wrap_recording_provider(
     model_name: str,
     monotonic: MonotonicClock,
     defaults: ProviderDefaults | None = None,
+    on_replay_consumed: Callable[[ReplayConsumption], None] | None = None,
 ) -> RecordingLLMProvider:
     """Wrap ``inner`` with a recording decorator using explicit composition args."""
     namespace_prefix = ""
@@ -70,4 +72,5 @@ def wrap_recording_provider(
         model_name=model_name,
         monotonic=monotonic,
         defaults=defaults,
+        on_replay_consumed=on_replay_consumed,
     )

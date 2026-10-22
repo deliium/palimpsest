@@ -80,6 +80,79 @@ class ExperimentStopCriterion(Protocol):
 CriterionFactory = Callable[[ExperimentCriterionSpec], ExperimentStopCriterion]
 
 
+@dataclass(frozen=True, slots=True)
+class RecordingUsageEvidence:
+    """Neutral, payload-free consumed replay metadata crossing into simulation."""
+
+    agent_id: str
+    tick: int
+    component: str
+    request_id: str
+    lookup_mode: str
+    namespace: str
+    cache_key: str
+    record_integrity_hash: str
+    prompt_identity: Mapping[str, str] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    response_schema_identity: Mapping[str, str] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+    def __post_init__(self) -> None:
+        for name in (
+            "agent_id",
+            "component",
+            "request_id",
+            "lookup_mode",
+            "namespace",
+            "cache_key",
+            "record_integrity_hash",
+        ):
+            require_stable_id(f"RecordingUsageEvidence.{name}", getattr(self, name))
+        if isinstance(self.tick, bool) or type(self.tick) is not int or self.tick < 0:
+            raise ValueError("RecordingUsageEvidence.tick must be non-negative int")
+        for name in ("prompt_identity", "response_schema_identity"):
+            value = getattr(self, name)
+            if not isinstance(value, Mapping):
+                raise TypeError(f"RecordingUsageEvidence.{name} must be a mapping")
+            frozen = {
+                require_stable_id(f"{name} key", key): require_stable_id(
+                    f"{name} value", item
+                )
+                for key, item in value.items()
+            }
+            object.__setattr__(
+                self, name, MappingProxyType(dict(sorted(frozen.items())))
+            )
+
+    @property
+    def usage_key(self) -> str:
+        import hashlib
+        import json
+
+        encoded = json.dumps(
+            {
+                "agent_id": self.agent_id,
+                "component": self.component,
+                "lookup_mode": self.lookup_mode,
+                "request_id": self.request_id,
+                "tick": self.tick,
+            },
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+
+class RecordingUsageSink(Protocol):
+    """Persistence port for validated replay-consumption metadata."""
+
+    def put_usage(self, evidence: RecordingUsageEvidence) -> None: ...
+
+
 class FinalizedBoundaryObserver(Protocol):
     """Post-finalization observer for detached historical artifacts."""
 
@@ -110,5 +183,7 @@ __all__ = [
     "ExperimentStopCriterion",
     "FinalizedBoundaryObserver",
     "GenerationalControlError",
+    "RecordingUsageEvidence",
+    "RecordingUsageSink",
     "unsupported_criterion_factory",
 ]

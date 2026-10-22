@@ -390,6 +390,7 @@ class RunnerDependencyFactories:
         "_pending_finalizations",
         "_provider_factory",
         "_recording_store",
+        "_recording_usage_sink",
         "_relationship_factory",
         "_run_repository",
         "_scientific_evidence",
@@ -421,6 +422,7 @@ class RunnerDependencyFactories:
         scientific_evidence: ScientificEvidenceRepository | None = None,
         criterion_factory: object | None = None,
         boundary_observer: object | None = None,
+        recording_usage_sink: object | None = None,
         llm_max_concurrency: int = 1,
     ) -> None:
         if (
@@ -445,6 +447,7 @@ class RunnerDependencyFactories:
         self._scientific_evidence = scientific_evidence
         self._criterion_factory = criterion_factory
         self._boundary_observer = boundary_observer
+        self._recording_usage_sink = recording_usage_sink
         self._llm_max_concurrency = llm_max_concurrency
 
     @property
@@ -475,6 +478,54 @@ class RunnerDependencyFactories:
     def boundary_observer(self) -> object | None:
         return self._boundary_observer
 
+    @property
+    def recording_usage_sink(self) -> object | None:
+        return self._recording_usage_sink
+
+    def _recording_usage_callback(
+        self,
+    ) -> Callable[[object], None] | None:
+        sink = self._recording_usage_sink
+        if sink is None:
+            return None
+        from llm.recording import ReplayConsumption
+        from simulation.generational_control import RecordingUsageEvidence
+
+        put_usage = getattr(sink, "put_usage", None)
+        if not callable(put_usage):
+            raise TypeError("recording_usage_sink must implement put_usage")
+
+        def _on_replay(consumption: object) -> None:
+            if not isinstance(consumption, ReplayConsumption):
+                raise TypeError("replay consumption must be ReplayConsumption")
+            put_usage(
+                RecordingUsageEvidence(
+                    agent_id=consumption.agent_id,
+                    tick=consumption.tick,
+                    component=consumption.component,
+                    request_id=consumption.request_id,
+                    lookup_mode=consumption.lookup_mode,
+                    namespace=consumption.namespace,
+                    cache_key=consumption.cache_key,
+                    record_integrity_hash=consumption.record_integrity_hash,
+                    prompt_identity={
+                        key: value
+                        for key, value in {
+                            "name": consumption.prompt_name,
+                            "version": consumption.prompt_version,
+                            "digest": consumption.prompt_digest,
+                        }.items()
+                        if value is not None
+                    },
+                    response_schema_identity={
+                        "qualname": consumption.schema_qualname,
+                        "digest": consumption.schema_digest,
+                    },
+                )
+            )
+
+        return _on_replay
+
     def resolve_credentials(
         self, settings: RunnerProviderSettings
     ) -> ProviderCredentials:
@@ -496,6 +547,7 @@ class RunnerDependencyFactories:
                 sleep=self._sleep,
                 monotonic=self._monotonic,
                 recording_store=self._recording_store,
+                on_replay_consumed=self._recording_usage_callback(),
             )
         from llm.factory import wrap_llm_concurrency
 
@@ -1292,6 +1344,7 @@ def _default_provider(
     sleep: AsyncSleep | None,
     monotonic: MonotonicClock | None,
     recording_store: RecordingStoreSettings | None = None,
+    on_replay_consumed: object | None = None,
 ) -> AsyncCloseable:
     if settings.recording_policy is RecordingPolicy.DETERMINISTIC_FAKE:
         _LOG.info(
@@ -1356,6 +1409,7 @@ def _default_provider(
             ),
             model_name=settings.model or "unspecified",
             monotonic=monotonic,
+            on_replay_consumed=on_replay_consumed,  # type: ignore[arg-type]
         )
 
     if settings.adapter_kind is ProviderAdapterKind.DISABLED:

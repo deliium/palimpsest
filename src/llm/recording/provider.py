@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Callable
 from enum import StrEnum
@@ -27,6 +28,7 @@ from llm.recording.cache_key import (
     digest_request_messages,
     schema_identity_for,
 )
+from llm.recording.codec import encode_exchange_record_bytes
 from llm.recording.models import (
     ExchangeCorrelation,
     ExchangeEffectiveOptions,
@@ -35,6 +37,7 @@ from llm.recording.models import (
     ExchangeValidation,
     ExchangeValidationStatus,
     LLMExchangeRecord,
+    ReplayConsumption,
     SchemaIdentity,
 )
 from llm.recording.store import (
@@ -74,6 +77,7 @@ class RecordingLLMProvider:
         "_mode",
         "_model_name",
         "_monotonic",
+        "_on_replay_consumed",
         "_provider_name",
         "_store",
         "_structured_output_mode",
@@ -92,6 +96,9 @@ class RecordingLLMProvider:
         model_name: str,
         monotonic: MonotonicClock,
         defaults: ProviderDefaults | None = None,
+        on_replay_consumed: (
+            Callable[[ReplayConsumption], None] | None
+        ) = None,
     ) -> None:
         if not isinstance(mode, RecordingMode):
             raise TypeError("mode must be RecordingMode")
@@ -107,6 +114,8 @@ class RecordingLLMProvider:
             raise ValueError("model_name must be a non-blank string")
         if defaults is not None and type(defaults) is not ProviderDefaults:
             raise TypeError("defaults must be ProviderDefaults")
+        if on_replay_consumed is not None and not callable(on_replay_consumed):
+            raise TypeError("on_replay_consumed must be callable or None")
 
         if mode is not RecordingMode.LIVE:
             if store is None:
@@ -134,6 +143,7 @@ class RecordingLLMProvider:
         self._model_name = model_name.strip()
         self._defaults = defaults if defaults is not None else ProviderDefaults()
         self._monotonic = monotonic
+        self._on_replay_consumed = on_replay_consumed
         _LOG.debug(
             "recording_provider_init mode=%s lookup_mode=%s "
             "store_configured=%s namespace_chars=%s",
@@ -192,7 +202,7 @@ class RecordingLLMProvider:
             prompt=request.prompt,
             request_digest=request_digest,
             effective_options=effective,
-            agent_id=request.context.agent_id,
+            agent_id=str(request.context.agent_id),
             component=request.context.component or "",
         )
         _LOG.debug(
@@ -316,10 +326,10 @@ class RecordingLLMProvider:
                 record = self._store.get_by_correlation(
                     CorrelationKey(
                         cache_namespace=self._cache_namespace,
-                        agent_id=request.context.agent_id,
+                        agent_id=str(request.context.agent_id),
                         tick=request.context.tick,
                         component=request.context.component or "",
-                        llm_request_id=request.context.llm_request_id,
+                        llm_request_id=str(request.context.llm_request_id),
                     )
                 )
             else:
@@ -356,7 +366,38 @@ class RecordingLLMProvider:
             )
             return None
 
-        return self._result_from_record(request, record)
+        result = self._result_from_record(request, record)
+        if self._on_replay_consumed is not None:
+            prompt = record.prompt
+            try:
+                self._on_replay_consumed(
+                    ReplayConsumption(
+                        namespace=self._cache_namespace,
+                        agent_id=str(request.context.agent_id),
+                        tick=request.context.tick,
+                        component=request.context.component or "",
+                        request_id=str(request.context.llm_request_id),
+                        lookup_mode=self._lookup_mode.value,
+                        cache_key=cache_key,
+                        record_integrity_hash=hashlib.sha256(
+                            encode_exchange_record_bytes(record)
+                        ).hexdigest(),
+                        prompt_name=None if prompt is None else prompt.name,
+                        prompt_version=None if prompt is None else prompt.version,
+                        prompt_digest=None if prompt is None else prompt.digest,
+                        schema_qualname=schema_identity.qualname,
+                        schema_digest=schema_identity.digest,
+                    )
+                )
+            except Exception:
+                _LOG.error(
+                    "recording_usage_callback_failed reason=callback_error mode=%s",
+                    self._mode.value,
+                )
+                raise LLMError(
+                    LLMErrorCode.CONFIGURATION, retryable=False
+                ) from None
+        return result
 
     def _digests_compatible[T: StructuredOutput](
         self,
@@ -468,9 +509,9 @@ class RecordingLLMProvider:
             latency_ms=latency_ms,
             correlation=ExchangeCorrelation(
                 run_id=request.context.run_id,
-                agent_id=request.context.agent_id,
+                agent_id=str(request.context.agent_id),
                 tick=request.context.tick,
-                llm_request_id=request.context.llm_request_id,
+                llm_request_id=str(request.context.llm_request_id),
                 upstream_request_id=result.metadata.upstream_request_id,
             ),
             component=request.context.component or "",

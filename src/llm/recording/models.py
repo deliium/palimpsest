@@ -443,3 +443,58 @@ class LLMExchangeRecord:
             f"has_monotonic_offset="
             f"{self.recorded_at_monotonic_offset is not None})"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayConsumption:
+    """Payload-free successful replay-consumption metadata.
+
+    Emitted only after digest compatibility and stored-response validation.
+    """
+
+    namespace: str
+    agent_id: str
+    tick: int
+    component: str
+    request_id: str
+    lookup_mode: str
+    cache_key: str
+    record_integrity_hash: str
+    prompt_name: str | None
+    prompt_version: str | None
+    prompt_digest: str | None
+    schema_qualname: str
+    schema_digest: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "namespace",
+            "agent_id",
+            "component",
+            "request_id",
+            "lookup_mode",
+            "cache_key",
+            "schema_qualname",
+        ):
+            _require_non_blank(name, getattr(self, name), max_chars=_MAX_ID_CHARS)
+        object.__setattr__(
+            self, "tick", _require_non_negative_int("tick", self.tick)
+        )
+        object.__setattr__(
+            self,
+            "record_integrity_hash",
+            _require_digest("record_integrity_hash", self.record_integrity_hash),
+        )
+        object.__setattr__(
+            self, "schema_digest", _require_digest("schema_digest", self.schema_digest)
+        )
+        if self.prompt_digest is not None:
+            object.__setattr__(
+                self,
+                "prompt_digest",
+                _require_digest("prompt_digest", self.prompt_digest),
+            )
+        for name in ("prompt_name", "prompt_version"):
+            value = getattr(self, name)
+            if value is not None:
+                _require_non_blank(name, value, max_chars=_MAX_ID_CHARS)

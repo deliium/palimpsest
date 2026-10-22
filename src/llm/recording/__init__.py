@@ -27,6 +27,7 @@ from llm.recording.models import (
     ExchangeValidation,
     ExchangeValidationStatus,
     LLMExchangeRecord,
+    ReplayConsumption,
     SchemaIdentity,
 )
 from llm.recording.provider import RecordingLLMProvider, RecordingMode
@@ -54,6 +55,7 @@ __all__ = [
     "RecordingMode",
     "RecordingStore",
     "RecordingStoreError",
+    "ReplayConsumption",
     "SchemaIdentity",
     "create_filesystem_recording_store",
     "decode_exchange_record",
