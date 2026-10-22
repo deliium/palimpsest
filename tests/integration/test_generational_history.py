@@ -22,7 +22,8 @@ from research_runner.generational_composition import (
     open_generational_archive,
 )
 from simulation.clock import Tick
-from simulation.replay import ReplayService, scene_at_tick
+from simulation.persistence import ReplayRequest, ReplayStatus
+from simulation.replay import ReplayService
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
     RunnerCheckpointPolicy,
@@ -89,8 +90,16 @@ async def test_durable_history_refs_match_replay_at_boundaries(
             payload, schema_version="generational-history-v1"
         )
         boundary = int(history["boundary_tick"])
-        scene = await scene_at_tick(replay, run_id, target_tick=Tick(boundary))
-        assert scene.scene.tick == boundary
+        outcome = await replay.replay(
+            ReplayRequest(
+                run_id=run_id,
+                target_tick=Tick(boundary),
+                population_lifecycle=config.population_lifecycle,
+            )
+        )
+        assert outcome.result.status is ReplayStatus.OK
+        assert outcome.engine is not None
+        assert outcome.engine.tick.value == boundary
         reference = await reader.reference(run_id.value, boundary)
         assert reference.objective_commit_hash == history["objective_commit_hash"]
         assert (
@@ -101,3 +110,13 @@ async def test_durable_history_refs_match_replay_at_boundaries(
     # Non-cadence lookup may use the nearest checkpoint while folding to B.
     nearest = await reader.reference(run_id.value, 3)
     assert nearest.snapshot_ref.next_tick <= 3
+    folded = await replay.replay(
+        ReplayRequest(
+            run_id=run_id,
+            target_tick=Tick(3),
+            population_lifecycle=config.population_lifecycle,
+        )
+    )
+    assert folded.result.status is ReplayStatus.OK
+    assert folded.engine is not None
+    assert folded.engine.tick.value == 3
