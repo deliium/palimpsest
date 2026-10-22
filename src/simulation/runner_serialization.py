@@ -8940,7 +8940,18 @@ def _encode_runner_document(config: SimulationRunnerConfig) -> dict[str, Any]:
             )
         elif (
             config.schema_version
-            in {RUNNER_SCHEMA_VERSION_V46, RUNNER_SCHEMA_VERSION_V47}
+            in {
+                RUNNER_SCHEMA_VERSION_V46,
+                RUNNER_SCHEMA_VERSION_V47,
+                RUNNER_SCHEMA_VERSION_V48,
+                RUNNER_SCHEMA_VERSION_V49,
+                RUNNER_SCHEMA_VERSION_V50,
+                RUNNER_SCHEMA_VERSION_V51,
+                RUNNER_SCHEMA_VERSION_V52,
+                RUNNER_SCHEMA_VERSION_V53,
+                RUNNER_SCHEMA_VERSION_V54,
+                RUNNER_SCHEMA_VERSION_V55,
+            }
             and config.regions_migration is not None
         ):
             document["regions_migration"] = _encode_regions_migration(
