@@ -230,7 +230,7 @@ All eight findings were approved before editing; task IDs/settings/original requ
 ### Phase 4: Reproducibility and history
 
 - [x] Task 10: Record actual seed lineage and external LLM replay identity ([details](phase-04-reproducibility-and-history.md#task-10-record-actual-seed-lineage-and-external-llm-replay-identity)) (depends on 1, 2, 7, 8).
-- [ ] Task 11: Persist immutable experiment manifests and historical boundary index ([details](phase-04-reproducibility-and-history.md#task-11-persist-immutable-experiment-manifests-and-historical-boundary-index)) (depends on 3, 8, 10).
+- [x] Task 11: Persist immutable experiment manifests and historical boundary index ([details](phase-04-reproducibility-and-history.md#task-11-persist-immutable-experiment-manifests-and-historical-boundary-index)) (depends on 3, 8, 10).
 - [ ] Task 12: Compose durable snapshot references and verify historical replay ([details](phase-04-reproducibility-and-history.md#task-12-compose-durable-snapshot-references-and-verify-historical-replay)) (depends on 5, 8, 11).
 
 ### Phase 5: Long horizons and communities
