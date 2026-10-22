@@ -54,6 +54,8 @@ class MatrixBatchDependencies:
     code_revision: str = ""
     archive_root: Path | None = None
     durable_origin_exists: Callable[[str], bool] | None = None
+    generational_contexts: Callable[[str], object | None] | None = None
+    require_generational_context: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,8 +361,43 @@ class MatrixBatchRunner:
                         if spec.execution.stop_on_first_error:
                             stop_batch = True
                         return
+                    context = (
+                        None
+                        if self._deps.generational_contexts is None
+                        else self._deps.generational_contexts(
+                            assignment.condition_id
+                        )
+                    )
+                    if (
+                        assignment.runner_config.generational_run is not None
+                        and context is None
+                        and self._deps.require_generational_context
+                    ):
+                        store.transition(
+                            cell_id,
+                            state=MatrixCellState.FAILED,
+                            attempt_count=attempt,
+                            last_error_code="generational_context_required",
+                            run_id=assignment.run_id.value,
+                        )
+                        failed += 1
+                        if spec.execution.stop_on_first_error:
+                            stop_batch = True
+                        return
                     try:
-                        arm = await run_one_assignment(assignment)
+                        if (
+                            assignment.runner_config.generational_run is not None
+                            and context is not None
+                        ):
+                            from experiments.generational_execution import (
+                                execute_generational_assignment,
+                            )
+
+                            arm = await execute_generational_assignment(
+                                assignment, context  # type: ignore[arg-type]
+                            )
+                        else:
+                            arm = await run_one_assignment(assignment)
                     except Exception as exc:
                         reason = type(exc).__name__
                         retryable = (

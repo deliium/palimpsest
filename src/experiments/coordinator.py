@@ -93,18 +93,24 @@ def _generation_index_by_owner(
 class ExperimentCoordinator:
     """Sequential V1 coordinator: one fresh runner per assignment."""
 
-    __slots__ = ("_definition", "_intervention")
+    __slots__ = (
+        "_definition",
+        "_generational_contexts",
+        "_intervention",
+    )
 
     def __init__(
         self,
         definition: ExperimentDefinition,
         *,
         intervention_arbiter: StoryInterventionArbiter | None = None,
+        generational_contexts: Mapping[str, object] | None = None,
     ) -> None:
         if type(definition) is not ExperimentDefinition:
             raise TypeError("definition must be ExperimentDefinition")
         self._definition = definition
         self._intervention = intervention_arbiter
+        self._generational_contexts = dict(generational_contexts or {})
 
     async def run_all(self) -> tuple[ExperimentArmResult, ...]:
         results: list[ExperimentArmResult] = []
@@ -122,6 +128,22 @@ class ExperimentCoordinator:
                     }
                 },
             )
+            if assignment.runner_config.generational_run is not None:
+                context = self._generational_contexts.get(
+                    assignment.condition_id
+                ) or self._generational_contexts.get("*")
+                if context is None:
+                    raise ValueError(
+                        "generational assignment requires execution context"
+                    )
+                from experiments.generational_execution import (
+                    execute_generational_assignment,
+                )
+
+                results.append(
+                    await execute_generational_assignment(assignment, context)  # type: ignore[arg-type]
+                )
+                continue
             async with await SimulationRunner.from_config(
                 assignment.runner_config,
                 run_id=assignment.run_id,

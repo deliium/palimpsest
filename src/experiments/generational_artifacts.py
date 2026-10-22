@@ -27,7 +27,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
 GENERATIONAL_RECORDING_USAGE_SCHEMA_VERSION: Final[str] = (
     "generational-recording-usage-v1"
 )
-_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$")
 _USAGE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "agent_id",

@@ -78,9 +78,32 @@ def test_only_contact_installs_the_versioned_intervention() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bl_runs_produce_multiple_generations_and_movement() -> None:
+async def test_bl_runs_produce_multiple_generations_and_movement(
+    tmp_path,
+) -> None:
+    from experiments.generational_execution import (
+        PLAIN_RECIPE_ID,
+        GenerationalExecutionContext,
+    )
+    from research_runner.generational_composition import GenerationalExecutionRecipe
+    from simulation.runner import RunnerDependencyFactories
+
     definition = generational_runner_scenario(seed=23, max_ticks=8)
-    results = await ExperimentCoordinator(definition).run_all()
+    context = GenerationalExecutionContext(
+        artifact_root=tmp_path,
+        source_identity={
+            "code_revision": "abc123",
+            "source_artifact_digest": None,
+            "source_clean": True,
+        },
+        recipe=GenerationalExecutionRecipe(
+            recipe_id=PLAIN_RECIPE_ID, version="1"
+        ),
+        factories=RunnerDependencyFactories(),
+    )
+    results = await ExperimentCoordinator(
+        definition, generational_contexts={"*": context}
+    ).run_all()
     assert {item.assignment.experiment_id for item in results} == {EXPERIMENT_ID}
     generations = set()
     for arm in results:
