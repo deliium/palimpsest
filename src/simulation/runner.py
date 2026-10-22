@@ -526,6 +526,34 @@ class RunnerDependencyFactories:
 
         return _on_replay
 
+    def with_generational_control(
+        self,
+        *,
+        boundary_observer: object | None,
+        recording_usage_sink: object | None,
+    ) -> RunnerDependencyFactories:
+        """Clone factories with optional generational orchestration ports."""
+        return RunnerDependencyFactories(
+            credential_resolver=self._credential_resolver,
+            provider_factory=self._provider_factory,
+            recording_store=self._recording_store,
+            memory_factory=self._memory_factory,
+            belief_factory=self._belief_factory,
+            relationship_factory=self._relationship_factory,
+            bundle_factory=self._bundle_factory,
+            sleep=self._sleep,
+            monotonic=self._monotonic,
+            run_repository=self._run_repository,
+            journal=self._journal,
+            pending_finalizations=self._pending_finalizations,
+            cognition_trace_repository=self._cognition_trace_repository,
+            scientific_evidence=self._scientific_evidence,
+            criterion_factory=self._criterion_factory,
+            boundary_observer=boundary_observer,
+            recording_usage_sink=recording_usage_sink,
+            llm_max_concurrency=self._llm_max_concurrency,
+        )
+
     def resolve_credentials(
         self, settings: RunnerProviderSettings
     ) -> ProviderCredentials:
