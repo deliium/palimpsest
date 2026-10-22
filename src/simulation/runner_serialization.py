@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
@@ -11742,21 +11742,53 @@ def _encode_tick_receipt_for_hash(
     }
 
 
+def _iter_trajectory_hash_bytes(
+    *,
+    mode: str,
+    run_id: str | None,
+    tick_receipts: tuple[FinalizedTickReceipt, ...],
+    include_run_scoped_ids: bool,
+) -> Iterator[bytes]:
+    """Yield byte-equivalent canonical trajectory JSON without a full list."""
+    header: dict[str, object] = {"mode": mode}
+    if run_id is not None:
+        header["run_id"] = run_id
+    encoded_header = _canonical_dumps(header)
+    yield encoded_header[:-1] + b',"ticks":['
+    first = True
+    for receipt in tick_receipts:
+        if not first:
+            yield b","
+        first = False
+        yield _canonical_dumps(
+            _encode_tick_receipt_for_hash(
+                receipt, include_run_scoped_ids=include_run_scoped_ids
+            )
+        )
+    yield b"]}"
+
+
+def _sha256_stream(chunks: Iterable[bytes]) -> str:
+    hasher = hashlib.sha256()
+    for chunk in chunks:
+        hasher.update(chunk)
+    return hasher.hexdigest()
+
+
 def exact_trajectory_hash(
     *,
     run_id: str,
     tick_receipts: tuple[FinalizedTickReceipt, ...],
 ) -> str:
     """Hash trajectory identity including run-scoped identifiers."""
-    document = {
-        "mode": "exact",
-        "run_id": run_id,
-        "ticks": [
-            _encode_tick_receipt_for_hash(item, include_run_scoped_ids=True)
-            for item in tick_receipts
-        ],
-    }
-    return _sha256_hex(_canonical_dumps(document))
+    return _sha256_stream(
+        _iter_trajectory_hash_bytes(
+            mode="exact",
+            run_id=run_id,
+            tick_receipts=tick_receipts,
+            include_run_scoped_ids=True,
+        )
+    )
 
 
 def replica_normalized_trajectory_hash(
@@ -11769,14 +11801,14 @@ def replica_normalized_trajectory_hash(
     agent identities, command kinds, statuses, and revisions remain so distinct
     trajectories cannot collapse.
     """
-    document = {
-        "mode": "replica",
-        "ticks": [
-            _encode_tick_receipt_for_hash(item, include_run_scoped_ids=False)
-            for item in tick_receipts
-        ],
-    }
-    return _sha256_hex(_canonical_dumps(document))
+    return _sha256_stream(
+        _iter_trajectory_hash_bytes(
+            mode="replica",
+            run_id=None,
+            tick_receipts=tick_receipts,
+            include_run_scoped_ids=False,
+        )
+    )
 
 
 def objective_projection_hash(projection: object) -> str:
