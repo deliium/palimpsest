@@ -218,8 +218,8 @@ CLI rollout is opt-in `palimpsest-matrix path-dependence ...`. BN discovery uses
 
 ### Phase 5: Artifacts, resume and CLI
 
-- [ ] Task 13: Seal explicit intervention lineage and outcome artifacts ([details](phase-05-artifacts-resume-and-cli.md#task-13-seal-explicit-intervention-lineage-and-outcome-artifacts)) (depends on 1, 5, 9, 10, 11, 12)
-- [ ] Task 14: Resume by verified adoption or deterministic reconstruction ([details](phase-05-artifacts-resume-and-cli.md#task-14-resume-by-verified-adoption-or-deterministic-reconstruction)) (depends on 6, 9, 13)
+- [x] Task 13: Seal explicit intervention lineage and outcome artifacts ([details](phase-05-artifacts-resume-and-cli.md#task-13-seal-explicit-intervention-lineage-and-outcome-artifacts)) (depends on 1, 5, 9, 10, 11, 12)
+- [x] Task 14: Resume by verified adoption or deterministic reconstruction ([details](phase-05-artifacts-resume-and-cli.md#task-14-resume-by-verified-adoption-or-deterministic-reconstruction)) (depends on 6, 9, 13)
 - [ ] Task 15: Add researcher CLI composition and comparison commands ([details](phase-05-artifacts-resume-and-cli.md#task-15-add-researcher-cli-composition-and-comparison-commands)) (depends on 9, 12, 13, 14)
 
 ### Phase 6: Gates and documentation
