@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -14,12 +15,12 @@ from simulation.fork_checkpoint import ForkCheckpointError
 from simulation.models import RunId
 from simulation.persistence import SnapshotId
 from simulation.runner import SimulationRunner
-from simulation.runner_models import RecordingPolicy
+from simulation.runner_models import RecordingPolicy, SimulationRunnerConfig
 
 pytestmark = pytest.mark.unit
 
 
-def _config(*, max_ticks: int = 8, **overrides: object):
+def _config(*, max_ticks: int = 8, **overrides: Any) -> SimulationRunnerConfig:
     config = generational_comparison_base(seed=23, max_ticks=max_ticks)
     return replace(config, **overrides)
 
@@ -122,6 +123,33 @@ async def test_fork_checkpoint_restores_complete_state_into_child_engine() -> No
             await child.aclose()
     finally:
         await parent.aclose()
+
+
+@pytest.mark.asyncio
+async def test_v20_bootstrap_and_fork_checkpoint_preserve_regions_state() -> None:
+    """Codec v20 must not regress construction or drop regional state."""
+
+    from experiments.cultural_contact_scenario import cultural_contact_scenario
+
+    definition = cultural_contact_scenario(seed=29, max_ticks=8)
+    config = next(
+        item.runner_config
+        for item in definition.conditions
+        if item.condition_id == "ba-contact-trade"
+    )
+    parent = await SimulationRunner.from_config(
+        config, run_id=RunId("v20-parent-run")
+    )
+    try:
+        await parent.initialize_finalized_boundary()
+        await parent.run_tick()
+        checkpoint = await parent.capture_fork_checkpoint()
+    finally:
+        await parent.aclose()
+    assert checkpoint.snapshot.persistence_codec_version == "v20"
+    assert checkpoint.snapshot.regions_migration is not None
+    assert checkpoint.snapshot.regions_migration == config.regions_migration
+    assert checkpoint.snapshot.journeys is not None
 
 
 @pytest.mark.asyncio

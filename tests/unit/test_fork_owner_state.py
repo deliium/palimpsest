@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any, cast
 
 import pytest
 
@@ -87,7 +88,7 @@ def _trace(
     *,
     owner: AgentId = OWNER,
     tick: int = 1,
-    lineage: object | None = None,
+    lineage: MemoryLineage | None = None,
 ) -> MemoryTrace:
     return MemoryTrace(
         memory_id=MemoryId(memory_id),
@@ -107,7 +108,7 @@ def _trace(
         source_tick=tick,
         last_access_tick=tick,
         access_count=0,
-        lineage=MemoryLineage() if lineage is None else lineage,  # type: ignore[arg-type]
+        lineage=MemoryLineage() if lineage is None else lineage,
     )
 
 
@@ -204,9 +205,9 @@ async def _populated_bundle(
     relationship = InMemoryRelationshipService(scope.owner_id)
     bundle = InMemorySubjectiveOwnerBundle(
         scope,
-        memory_service=memory,  # type: ignore[arg-type]
-        belief_service=belief,  # type: ignore[arg-type]
-        relationship_service=relationship,  # type: ignore[arg-type]
+        memory_service=memory,
+        belief_service=belief,
+        relationship_service=relationship,
     )
     await memory.apply(
         MemoryMutationBatch(
@@ -270,9 +271,9 @@ async def test_owner_fork_state_round_trip_preserves_history_and_rebases_run() -
     child_relationship = InMemoryRelationshipService(OWNER)
     child = InMemorySubjectiveOwnerBundle(
         CHILD_SCOPE,
-        memory_service=child_memory,  # type: ignore[arg-type]
-        belief_service=child_belief,  # type: ignore[arg-type]
-        relationship_service=child_relationship,  # type: ignore[arg-type]
+        memory_service=child_memory,
+        belief_service=child_belief,
+        relationship_service=child_relationship,
     )
     await child.restore_fork_state(state, parent_scope=PARENT_SCOPE)
 
@@ -336,9 +337,9 @@ async def test_owner_fork_state_rejects_owner_mismatch_and_second_import() -> No
     other_scope = MemoryScope(run_id=CHILD_RUN, owner_id=OTHER)
     other = InMemorySubjectiveOwnerBundle(
         other_scope,
-        memory_service=InMemoryMemoryService(other_scope),  # type: ignore[arg-type]
-        belief_service=InMemorySemanticBeliefService(other_scope),  # type: ignore[arg-type]
-        relationship_service=InMemoryRelationshipService(OTHER),  # type: ignore[arg-type]
+        memory_service=InMemoryMemoryService(other_scope),
+        belief_service=InMemorySemanticBeliefService(other_scope),
+        relationship_service=InMemoryRelationshipService(OTHER),
     )
     with pytest.raises(SubjectiveStateError) as exc:
         await other.restore_fork_state(state, parent_scope=PARENT_SCOPE)
@@ -346,9 +347,9 @@ async def test_owner_fork_state_rejects_owner_mismatch_and_second_import() -> No
 
     child = InMemorySubjectiveOwnerBundle(
         CHILD_SCOPE,
-        memory_service=InMemoryMemoryService(CHILD_SCOPE),  # type: ignore[arg-type]
-        belief_service=InMemorySemanticBeliefService(CHILD_SCOPE),  # type: ignore[arg-type]
-        relationship_service=InMemoryRelationshipService(OWNER),  # type: ignore[arg-type]
+        memory_service=InMemoryMemoryService(CHILD_SCOPE),
+        belief_service=InMemorySemanticBeliefService(CHILD_SCOPE),
+        relationship_service=InMemoryRelationshipService(OWNER),
     )
     await child.restore_fork_state(state, parent_scope=PARENT_SCOPE)
     with pytest.raises(SubjectiveStateError) as exc:
@@ -367,9 +368,9 @@ async def test_owner_fork_state_rolls_back_on_partial_install(
     child_relationship = InMemoryRelationshipService(OWNER)
     child = InMemorySubjectiveOwnerBundle(
         CHILD_SCOPE,
-        memory_service=child_memory,  # type: ignore[arg-type]
-        belief_service=child_belief,  # type: ignore[arg-type]
-        relationship_service=child_relationship,  # type: ignore[arg-type]
+        memory_service=child_memory,
+        belief_service=child_belief,
+        relationship_service=child_relationship,
     )
 
     def _fail(_self: object, _state: object) -> None:
@@ -395,9 +396,9 @@ async def test_non_fork_capable_service_fails_preflight() -> None:
 
     child = InMemorySubjectiveOwnerBundle(
         CHILD_SCOPE,
-        memory_service=_BareService(),  # type: ignore[arg-type]
-        belief_service=_BareService(),  # type: ignore[arg-type]
-        relationship_service=_BareService(),  # type: ignore[arg-type]
+        memory_service=cast(Any, _BareService()),
+        belief_service=cast(Any, _BareService()),
+        relationship_service=cast(Any, _BareService()),
     )
     with pytest.raises(SubjectiveStateError) as exc:
         await child.export_fork_state()

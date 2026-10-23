@@ -2443,11 +2443,11 @@ class SimulationRunner:
             diagnostics = build_runner_diagnostics(config)
             fields = describe_runner_config(diagnostics)
             durable_service: PersistentSimulationService | None = None
+            bootstrap_snapshot = _bootstrap_snapshot(engine)
             if config.persistence.durable:
                 stage = "durable_create_run"
                 assert deps.run_repository is not None
                 assert deps.journal is not None
-                bootstrap_snapshot = _bootstrap_snapshot(engine)
                 await deps.run_repository.create_run(
                     RunCreateRequest(
                         run_id=resolved_run_id,
@@ -2470,7 +2470,6 @@ class SimulationRunner:
                     "runner_durable_service_ready run_id=%s",
                     resolved_run_id.value,
                 )
-            bootstrap_snapshot = _bootstrap_snapshot(engine)
             _LOG.info(
                 "runner_constructed run_id=%s world_id=%s agent_count=%s "
                 "config_fingerprint_prefix=%s scenario_fingerprint_prefix=%s "
@@ -6002,19 +6001,39 @@ def _engine_snapshot(
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
         )
-    if codec_version in {"v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19"}:
+    if codec_version in {
+        "v11",
+        "v12",
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+    }:
         production_rows["repositories"] = tuple(state.repositories.values())
-    if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}:
+    if codec_version in {
+        "v13",
+        "v14",
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+    }:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17", "v18", "v19"}:
+    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version in {"v17", "v18", "v19"}:
+    if codec_version in {"v17", "v18", "v19", "v20"}:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
         )
-    if codec_version == "v19":
+    if codec_version in {"v19", "v20"}:
         production_rows["regions_migration"] = state.regions_migration
         production_rows["journeys"] = (
             None if state.journeys is None else tuple(state.journeys.values())

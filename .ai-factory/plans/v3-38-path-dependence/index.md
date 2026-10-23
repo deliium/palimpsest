@@ -6,7 +6,7 @@ Canonical plan identifier: `v3-38-path-dependence`
 Branch: `main` (existing; no branch/worktree created)
 Created: 2026-10-23
 Refined: 2026-10-23 (seven approved code-backed improvements; task IDs preserved)
-Status: planned; implementation not started
+Status: implemented; verification remediation applied (2026-10-24)
 
 ## Original Request
 

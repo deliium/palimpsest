@@ -18,7 +18,10 @@ from analysis.path_dependence_models import (
     compute_path_dependence_outcomes,
 )
 from analysis.relationship_metrics import compute_relationship_stability
-from analysis.social_norm_metrics import compute_emergent_social_norms
+from analysis.social_norm_metrics import (
+    compute_emergent_social_norms,
+    compute_norm_persistence,
+)
 from experiments.path_dependence_models import (
     OutcomeDomain,
     OutcomeSelector,
@@ -32,6 +35,7 @@ pytestmark = pytest.mark.unit
 WINDOW = OutcomeWindow("win", Tick(4), Tick(4), Tick(36))
 SELECTORS = (
     OutcomeSelector("norms.active_beliefs", OutcomeDomain.NORMS, "win"),
+    OutcomeSelector("norms.belief_persistence", OutcomeDomain.NORMS, "win"),
     OutcomeSelector("relationships.mean_abs_delta", OutcomeDomain.RELATIONSHIPS, "win"),
     OutcomeSelector(
         "institutions.persistent_candidates", OutcomeDomain.INSTITUTIONS, "win"
@@ -66,12 +70,13 @@ def test_all_seven_domains_emit_explicit_rows() -> None:
     rows = compute_path_dependence_outcomes(
         PathDependenceEvidence(()), SELECTORS, (WINDOW,)
     )
-    assert len(rows) == 8
+    assert len(rows) == 9
     assert {row.domain for row in rows} == set(OutcomeDomain)
     assert all(row.availability is OutcomeAvailability.UNKNOWN for row in rows)
     assert all(row.reason_code for row in rows)
     assert {row.reason_code for row in rows} >= {
         "missing_norm_evidence",
+        "insufficient_norm_readings",
         "no_relationship_delta",
         "incomplete_candidate_search",
         "missing_cultural_evidence",
@@ -197,6 +202,45 @@ def test_norm_active_beliefs_matches_direct_calculator_and_known_empty() -> None
     )
     assert zero.value == 0.0
     assert zero.availability is OutcomeAvailability.KNOWN_ZERO
+
+
+def test_norm_belief_persistence_matches_direct_calculator() -> None:
+    active = {
+        "status": "active",
+        "confidence": 0.9,
+        "owner_id": "agent-a",
+        "pattern": "share_food",
+    }
+    history = (
+        {"rates": {}, "beliefs": (active,)},
+        {"rates": {}, "beliefs": (active,)},
+    )
+    evidence = PathDependenceEvidence(norm_history=history)
+    (row,) = compute_path_dependence_outcomes(
+        evidence,
+        (_selector("norms.belief_persistence", OutcomeDomain.NORMS),),
+        (WINDOW,),
+    )
+    oracle = compute_norm_persistence(
+        history,
+        run_id=evidence.run_id,
+        input_revision=evidence.input_revision,
+        tick=WINDOW.end_tick.value,
+    )
+    assert row.value == oracle.values["belief_persistence"]
+    assert row.availability is OutcomeAvailability.PRESENT
+    assert row.evidence_refs == (
+        f"algorithm:{oracle.algorithm_version}",
+        "readings:2",
+    )
+
+    (unknown,) = compute_path_dependence_outcomes(
+        PathDependenceEvidence(norm_history=(history[0],)),
+        (_selector("norms.belief_persistence", OutcomeDomain.NORMS),),
+        (WINDOW,),
+    )
+    assert unknown.availability is OutcomeAvailability.UNKNOWN
+    assert unknown.reason_code == "insufficient_norm_readings"
 
 
 def test_relationship_predecessor_and_window_boundaries_match_direct_call() -> None:

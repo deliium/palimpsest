@@ -49,6 +49,36 @@ from experiments.path_dependence_scenario import historical_contingency_scenario
 spec = historical_contingency_scenario(seed=23, profile="smoke")
 ```
 
+Write the sealed spec consumed by the CLI with the strict codec (do not hand-edit
+the JSON):
+
+```python
+import json
+from pathlib import Path
+
+from experiments.path_dependence_serialization import (
+    encode_path_dependence_spec_document,
+)
+
+Path("path-dependence.json").write_text(
+    json.dumps(
+        encode_path_dependence_spec_document(spec),
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ),
+    encoding="utf-8",
+)
+```
+
+The spec document has exactly these top-level keys:
+`assignment_seed`, `arms`, `base`, `capture_policy`, `common_setup`,
+`contrasts`, `experiment_id`, `fork_ticks`, `horizon_tick`,
+`max_interventions_per_arm`, `replicates_per_seed`, `schema_version`,
+`seeds`, `selectors`, `windows`. Values are canonical JSON with finite
+numbers only; unknown or missing keys, duplicate keys, and path escapes are
+rejected before execution.
+
 ## Artifact tree
 
 ```text

@@ -72,6 +72,7 @@ def test_smoke_ensemble_seals_complete_lineage_and_honest_unknown_outcomes(
         assert {row["availability"] for row in rows} == {"unknown"}
         assert {row["selector_id"] for row in rows} == {
             "norms.active_beliefs",
+            "norms.belief_persistence",
             "relationships.mean_abs_delta",
             "institutions.persistent_candidates",
             "technology.living_retention",

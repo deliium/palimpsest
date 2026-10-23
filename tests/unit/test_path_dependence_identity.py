@@ -25,7 +25,10 @@ from experiments.path_dependence_models import (
     WaitInterventionAction,
 )
 from simulation.clock import Tick
-from simulation.generational_seeds import build_generational_seed_manifest
+from simulation.generational_seeds import (
+    GenerationalSeedManifest,
+    build_generational_seed_manifest,
+)
 from simulation.models import RunId
 from tests.unit.test_path_dependence_models import _spec
 
@@ -184,7 +187,9 @@ def test_channel_alignment_uses_every_pair_and_conservative_summary() -> None:
 
     # Make only the second pair run-ID scoped; it must not be hidden by the
     # first pair's shared summary.
-    def _run_scoped(manifest):
+    def _run_scoped(
+        manifest: GenerationalSeedManifest,
+    ) -> GenerationalSeedManifest:
         return replace(
             manifest,
             channels=tuple(

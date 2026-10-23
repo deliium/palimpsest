@@ -59,7 +59,6 @@ from simulation.models import (
     StochasticIdentity,
 )
 from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V14,
     EVENT_SCHEMA_VERSION,
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
@@ -76,7 +75,12 @@ from simulation.runner_serialization import exact_trajectory_hash
 from tests.simulation_helpers import make_location, make_weather
 from tests.unit.test_runner_serialization import _config
 from world.dependency_care import DependencyNeedRegister
-from world.events import Waited, WorldEvent, make_replayable_event
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V14,
+    Waited,
+    WorldEvent,
+    make_replayable_event,
+)
 from world.identifiers import (
     EntityId,
     EventId,

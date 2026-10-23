@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -40,12 +41,13 @@ from simulation.runner_models import (
     ExactReproducibilityMode,
     RecordingPolicy,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
 )
 from world.actions import Search, Wait
 from world.identifiers import EntityId
 
 
-def _base(*, schema_version: str = RUNNER_SCHEMA_VERSION_V55):
+def _base(*, schema_version: str = RUNNER_SCHEMA_VERSION_V55) -> SimulationRunnerConfig:
     config = next(
         condition.runner_config
         for condition in institutionalization_scenario(
@@ -166,6 +168,36 @@ def test_codec_round_trip_and_fingerprint_are_canonical() -> None:
     assert action_schedule_digest(()) == action_schedule_digest(())
 
 
+def test_documented_scenario_spec_round_trips_with_exact_top_level_keys() -> None:
+    from experiments.path_dependence_scenario import historical_contingency_scenario
+
+    spec = historical_contingency_scenario(seed=23, profile="smoke")
+    document = encode_path_dependence_spec_document(spec)
+    assert set(document) == {
+        "schema_version",
+        "experiment_id",
+        "base",
+        "seeds",
+        "replicates_per_seed",
+        "fork_ticks",
+        "horizon_tick",
+        "arms",
+        "contrasts",
+        "windows",
+        "selectors",
+        "assignment_seed",
+        "max_interventions_per_arm",
+        "common_setup",
+        "capture_policy",
+    }
+    payload = json.dumps(
+        document, allow_nan=False, separators=(",", ":"), sort_keys=True
+    ).encode()
+    assert path_dependence_spec_fingerprint(
+        decode_path_dependence_spec(payload)
+    ) == path_dependence_spec_fingerprint(spec)
+
+
 def test_codec_rejects_unknown_and_missing_keys() -> None:
     document = encode_path_dependence_spec_document(_spec())
     document["retry_policy"] = {"max_attempts": 2}
@@ -184,7 +216,8 @@ def test_codec_rejects_unknown_and_missing_keys() -> None:
 
 def test_codec_rejects_nested_unknown_keys_and_duplicate_keys() -> None:
     document = encode_path_dependence_spec_document(_spec())
-    document["arms"][0]["retry_on_failure"] = True
+    arms = cast(list[dict[str, object]], document["arms"])
+    arms[0]["retry_on_failure"] = True
     with pytest.raises(PathDependenceSerializationError, match="invalid_fields"):
         decode_path_dependence_spec(
             json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
@@ -396,7 +429,8 @@ def test_unsupported_base_configuration_fails_closed() -> None:
             )
         )
     document = encode_path_dependence_spec_document(_spec())
-    document["base"]["schema_version"] = "runner-config-v54"
+    base = cast(dict[str, object], document["base"])
+    base["schema_version"] = "runner-config-v54"
     with pytest.raises(PathDependenceSerializationError, match="unsupported_base"):
         decode_path_dependence_spec(
             json.dumps(document, sort_keys=True, separators=(",", ":")).encode()

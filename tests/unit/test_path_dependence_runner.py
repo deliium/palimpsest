@@ -15,13 +15,17 @@ from experiments.path_dependence_scenario import (
 from simulation.branch_service import rematerialize_snapshot
 from simulation.clock import Tick
 from simulation.engine import WorldEngine
+from simulation.fork_checkpoint import RunnerForkCheckpoint
+from simulation.models import RunId
 from simulation.persistence import SnapshotId
 from simulation.runner import RunnerDependencyFactories
 
 pytestmark = pytest.mark.unit
 
 
-async def _materialize(checkpoint, child_run):
+async def _materialize(
+    checkpoint: RunnerForkCheckpoint, child_run: RunId
+) -> WorldEngine:
     snapshot = rematerialize_snapshot(
         checkpoint.snapshot,
         child_run_id=child_run,

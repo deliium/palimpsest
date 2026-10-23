@@ -82,6 +82,7 @@ _SPAWN_LOCATIONS: Final[tuple[str, ...]] = (
 )
 _SELECTOR_DOMAINS: Final[tuple[tuple[str, OutcomeDomain], ...]] = (
     ("norms.active_beliefs", OutcomeDomain.NORMS),
+    ("norms.belief_persistence", OutcomeDomain.NORMS),
     ("relationships.mean_abs_delta", OutcomeDomain.RELATIONSHIPS),
     ("institutions.persistent_candidates", OutcomeDomain.INSTITUTIONS),
     ("technology.living_retention", OutcomeDomain.TECHNOLOGY),

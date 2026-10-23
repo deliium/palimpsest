@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import pytest
 
 from experiments.interventions import MilestoneInterventionArbiter, MilestoneOverride
@@ -31,6 +33,7 @@ from simulation.runner_models import (
     SocialConventionMode,
     SocialNormMode,
 )
+from world.actions import AgentCommand
 from world.identifiers import EntityId
 from world.models import LifeStatus
 from world.values import ItemKind, ResourceKind
@@ -130,6 +133,10 @@ def test_founder_modes_and_cultural_coverage_are_explicit() -> None:
     assert spec.base.v3_capability_flags.institutional_economy is False
 
 
+def _identity_command(command: AgentCommand) -> AgentCommand:
+    return command
+
+
 @pytest.mark.asyncio
 async def test_food_opportunity_is_eligible_at_finalized_fork() -> None:
     spec = historical_contingency_scenario(profile="smoke")
@@ -142,7 +149,7 @@ async def test_food_opportunity_is_eligible_at_finalized_fork() -> None:
                 f"setup-{index}",
                 command.tick.value,
                 command.actor_id,
-                build_command=lambda value=command.command: value,
+                build_command=partial(_identity_command, command.command),
             )
             for index, command in enumerate(spec.common_setup)
         ],
@@ -183,7 +190,7 @@ def test_selector_domains_cover_all_requested_outcomes() -> None:
         OutcomeDomain.INEQUALITY,
         OutcomeDomain.COOPERATION,
     }
-    assert len(spec.selectors) == 8
+    assert len(spec.selectors) == 9
     assert spec.arms[0].actions_for(Tick(4))[0].action.kind == "give"
     assert any(
         type(action.action) is WaitInterventionAction

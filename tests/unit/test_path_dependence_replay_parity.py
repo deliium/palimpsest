@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 
 import pytest
@@ -11,19 +12,25 @@ from experiments.generational_comparison_base import generational_comparison_bas
 from simulation.branch_service import rematerialize_event, rematerialize_snapshot
 from simulation.clock import Tick
 from simulation.engine import WorldEngine
-from simulation.fork_checkpoint import fork_state_digest
+from simulation.fork_checkpoint import RunnerForkCheckpoint, fork_state_digest
 from simulation.models import RunId
 from simulation.persistence import SnapshotId
 from simulation.runner import SimulationRunner
+from simulation.runner_models import SimulationRunnerConfig
+from world.events import WorldEvent
 
 pytestmark = pytest.mark.unit
 
 
-def _config():
+def _config() -> SimulationRunnerConfig:
     return generational_comparison_base(seed=23, max_ticks=8)
 
 
-def _restored_engine(checkpoint, prefix_events, run_id: RunId):
+def _restored_engine(
+    checkpoint: RunnerForkCheckpoint,
+    prefix_events: Sequence[WorldEvent],
+    run_id: RunId,
+) -> WorldEngine:
     config = checkpoint.config
     catalog = config.agents[0].cognition.production_catalog
     bootstrap = rematerialize_snapshot(
@@ -58,7 +65,7 @@ async def test_same_identity_restore_matches_uninterrupted_continuation() -> Non
         checkpoint = await uninterrupted.capture_fork_checkpoint()
         prefix_events = tuple(
             event
-            for event in uninterrupted._engine.export_events().events  # type: ignore[attr-defined]
+            for event in uninterrupted._engine.export_events().events
             if event.tick < checkpoint.boundary_tick.value
         )
         restored_engine = _restored_engine(checkpoint, prefix_events, run_id)
@@ -82,12 +89,12 @@ async def test_same_identity_restore_matches_uninterrupted_continuation() -> Non
                 assert left.runtime_state(owner_id) == right.runtime_state(owner_id)
             left_events = tuple(
                 event
-                for event in uninterrupted._engine.export_events().events  # type: ignore[attr-defined]
+                for event in uninterrupted._engine.export_events().events
                 if event.tick >= checkpoint.boundary_tick.value
             )
             right_events = tuple(
                 event
-                for event in restored._engine.export_events().events  # type: ignore[attr-defined]
+                for event in restored._engine.export_events().events
                 if event.tick >= checkpoint.boundary_tick.value
             )
             assert left_events == right_events
@@ -108,7 +115,7 @@ async def test_distinct_child_starts_from_exact_pre_treatment_state() -> None:
         checkpoint = await parent.capture_fork_checkpoint()
         prefix_events = tuple(
             event
-            for event in parent._engine.export_events().events  # type: ignore[attr-defined]
+            for event in parent._engine.export_events().events
             if event.tick < checkpoint.boundary_tick.value
         )
         child_run = RunId("child-run")
@@ -160,7 +167,7 @@ async def test_fork_restore_publishes_exactly_one_baseline_then_next_tick() -> N
         checkpoint = await parent.capture_fork_checkpoint()
         prefix_events = tuple(
             event
-            for event in parent._engine.export_events().events  # type: ignore[attr-defined]
+            for event in parent._engine.export_events().events
             if event.tick < checkpoint.boundary_tick.value
         )
         recorder = CulturalEvidenceRecorder()
