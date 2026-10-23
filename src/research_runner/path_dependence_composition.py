@@ -9,12 +9,15 @@ from typing import Final
 from infrastructure.database import DatabaseResources, create_database_resources
 from infrastructure.settings import Settings
 from persistence import (
+    create_pending_finalization_repository,
     create_run_repository,
+    create_scientific_evidence_repository,
     create_snapshot_repository,
     create_tick_journal_repository,
 )
 from simulation.clock import Tick
 from simulation.models import RunId
+from simulation.runner import RunnerDependencyFactories
 
 _LOG: Final[logging.Logger] = logging.getLogger(
     "research_runner.path_dependence_composition"
@@ -66,6 +69,7 @@ class PostgresObjectivePresence:
 class PathDependencePostgresComposition:
     resources: DatabaseResources
     presence: PostgresObjectivePresence
+    factories: RunnerDependencyFactories
 
     async def close(self) -> None:
         await self.resources.engine.dispose()
@@ -83,11 +87,19 @@ def build_path_dependence_postgres_composition(
     runs = create_run_repository(resources.session_factory)
     journal = create_tick_journal_repository(resources.session_factory)
     snapshots = create_snapshot_repository(resources.session_factory)
+    pending = create_pending_finalization_repository(resources.session_factory)
+    evidence = create_scientific_evidence_repository(resources.session_factory)
     _LOG.info("path_dependence_postgres_composition_built")
     return PathDependencePostgresComposition(
         resources=resources,
         presence=PostgresObjectivePresence(
             runs=runs, journal=journal, snapshots=snapshots
+        ),
+        factories=RunnerDependencyFactories(
+            run_repository=runs,
+            journal=journal,
+            pending_finalizations=pending,
+            scientific_evidence=evidence,
         ),
     )
 

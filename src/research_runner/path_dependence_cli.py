@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import logging
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from analysis.path_dependence_comparison import (
     ComparisonContrast,
@@ -14,6 +14,8 @@ from analysis.path_dependence_comparison import (
     PathDependenceOutcomeCell,
     build_path_dependence_comparison,
 )
+from analysis.path_dependence_models import compute_path_dependence_outcomes
+from experiments.cultural_evidence import CulturalEvidenceRecorder
 from experiments.path_dependence_artifacts import (
     PathDependenceArtifactStore,
     build_branch_document,
@@ -22,6 +24,7 @@ from experiments.path_dependence_artifacts import (
     build_outcomes_document,
     build_prefix_document,
 )
+from experiments.path_dependence_evidence import PathDependenceEvidenceRecorder
 from experiments.path_dependence_models import PathDependenceSpec
 from experiments.path_dependence_resume import (
     ResumeDecision,
@@ -42,6 +45,7 @@ from research_runner.path_dependence_composition import (
 from simulation.branch_service import rematerialize_snapshot
 from simulation.clock import Tick
 from simulation.engine import WorldEngine
+from simulation.fork_checkpoint import RunnerForkCheckpoint
 from simulation.models import RunId
 from simulation.persistence import SnapshotId
 from simulation.runner import RunnerDependencyFactories
@@ -354,15 +358,17 @@ def cmd_resume(args: argparse.Namespace) -> int:
     return asyncio.run(_resume(args))
 
 
-async def _materialize(checkpoint: object, child_run: RunId) -> object:
+async def _materialize(
+    checkpoint: RunnerForkCheckpoint, child_run: RunId
+) -> WorldEngine:
     snapshot = rematerialize_snapshot(
-        checkpoint.snapshot,  # type: ignore[attr-defined]
+        checkpoint.snapshot,
         child_run_id=child_run,
         snapshot_id=SnapshotId(f"child-{child_run.value}"),
         predecessor_commit_hash=None,
-        next_tick=Tick(checkpoint.boundary_tick.value),  # type: ignore[attr-defined]
+        next_tick=Tick(checkpoint.boundary_tick.value),
     )
-    config = checkpoint.config  # type: ignore[attr-defined]
+    config = checkpoint.config
     return WorldEngine.restore_from_snapshot(
         snapshot,
         population_lifecycle=config.population_lifecycle,
@@ -379,6 +385,7 @@ async def _execute(
     root: Path,
     code_revision: str,
     source_artifact_digest: str,
+    factories: RunnerDependencyFactories | None = None,
 ) -> tuple[dict[str, object], PathDependenceExecutionSummary]:
     store = _store(root)
     payload = await asyncio.to_thread(spec_path.read_bytes)
@@ -389,11 +396,43 @@ async def _execute(
         source_artifact_digest=source_artifact_digest,
     )
     store.write_ensemble(ensemble)
+    fork_by_child = {
+        str(slot["child_run_id"]): _int_value(slot["fork_tick"])
+        for slot in cast(list[dict[str, object]], ensemble["slots"])
+    }
+    cultural_recorders: dict[str, CulturalEvidenceRecorder] = {}
+    captured: dict[str, tuple[object, tuple[object, ...]]] = {}
+
+    def _sink_factory(run_id: RunId) -> object | None:
+        fork_tick = fork_by_child.get(run_id.value)
+        if fork_tick is None:
+            return None
+        recorder = CulturalEvidenceRecorder()
+        recorder.start_at_boundary(fork_tick)
+        cultural_recorders[run_id.value] = recorder
+        return recorder
+
+    async def _observe_child(child: object, slot: object) -> None:
+        try:
+            boundary = await child.export_finalized_research_boundary()  # type: ignore[attr-defined]
+        except Exception:
+            _LOG.warning(
+                "path_dependence_outcome_capture_failed child_id=%s "
+                "reason_code=outcome_endpoint_missing",
+                slot.child_run_id,  # type: ignore[attr-defined]
+            )
+            return
+        recorder = cultural_recorders.get(slot.child_run_id)  # type: ignore[attr-defined]
+        frames = () if recorder is None else recorder.result().frames
+        captured[slot.child_run_id] = (boundary, frames)  # type: ignore[attr-defined]
+
     summary = await PathDependenceBatchRunner().run(
         spec,
         PathDependenceExecutionContext(
-            factories=RunnerDependencyFactories(),
-            materialize_engine=_materialize,  # type: ignore[arg-type]
+            factories=factories or RunnerDependencyFactories(),
+            materialize_engine=_materialize,
+            cultural_sink_factory=_sink_factory,
+            child_observer=_observe_child,
             source_identity=code_revision,
         ),
     )
@@ -462,18 +501,51 @@ async def _execute(
                     },
                 ),
             )
-            outcome_rows = [
-                {
-                    "selector_id": selector.selector_id,
-                    "domain": selector.domain.value,
-                    "window_id": selector.window_id,
-                    "value": None,
-                    "availability": "unknown",
-                    "coverage": "missing",
-                    "reason_code": "outcome_not_collected",
-                }
-                for selector in spec.selectors
-            ]
+            outcome_rows: list[dict[str, object]] = []
+            observed = captured.get(child.child_run_id)
+            if observed is not None:
+                boundary, frames = observed
+                for window in spec.windows:
+                    window_selectors = tuple(
+                        selector
+                        for selector in spec.selectors
+                        if selector.window_id == window.window_id
+                    )
+                    if not window_selectors:
+                        continue
+                    evidence_recorder = PathDependenceEvidenceRecorder()
+                    evidence_recorder.capture(boundary)  # type: ignore[arg-type]
+                    evidence = evidence_recorder.analysis_evidence(
+                        window, cultural_frames=frames
+                    )
+                    for row in compute_path_dependence_outcomes(
+                        evidence, window_selectors, (window,)
+                    ):
+                        outcome_rows.append(
+                            {
+                                "selector_id": row.selector_id,
+                                "domain": row.domain.value,
+                                "window_id": row.window_id,
+                                "value": row.value,
+                                "availability": row.availability.value,
+                                "coverage": row.coverage,
+                                "reason_code": row.reason_code,
+                                "evidence_refs": list(row.evidence_refs),
+                            }
+                        )
+            if not outcome_rows:
+                outcome_rows = [
+                    {
+                        "selector_id": selector.selector_id,
+                        "domain": selector.domain.value,
+                        "window_id": selector.window_id,
+                        "value": None,
+                        "availability": "unknown",
+                        "coverage": "missing",
+                        "reason_code": "outcome_not_collected",
+                    }
+                    for selector in spec.selectors
+                ]
             outcomes = build_outcomes_document(
                 ensemble_id=ensemble_id,
                 child_scientific_id=child.child_run_id,
@@ -481,7 +553,18 @@ async def _execute(
                 slot_ordinal=child.slot_ordinal,
                 fork_tick=prefix.fork_tick,
                 rows=outcome_rows,
-                coverage={"complete": False, "reason_code": "outcome_capture_partial"},
+                coverage={
+                    "complete": all(
+                        row["availability"] in {"present", "known_zero"}
+                        for row in outcome_rows
+                    ),
+                    "reason_code": "outcome_capture_complete"
+                    if all(
+                        row["availability"] in {"present", "known_zero"}
+                        for row in outcome_rows
+                    )
+                    else "outcome_capture_partial",
+                },
                 evidence_refs=(),
             )
             store.write_outcomes(
@@ -561,17 +644,47 @@ async def _execute(
     return ensemble, summary
 
 
+async def _execute_with_database(
+    *,
+    spec_path: Path,
+    root: Path,
+    code_revision: str,
+    source_artifact_digest: str,
+) -> tuple[dict[str, object], PathDependenceExecutionSummary]:
+    from infrastructure.settings import Settings
+
+    composition = build_path_dependence_postgres_composition(Settings())
+    try:
+        return await _execute(
+            spec_path=spec_path,
+            root=root,
+            code_revision=code_revision,
+            source_artifact_digest=source_artifact_digest,
+            factories=composition.factories,
+        )
+    finally:
+        await composition.close()
+
+
 def cmd_run(args: argparse.Namespace) -> int:
-    """Execute a fake-only ensemble and seal its lineage artifacts."""
+    """Execute an ensemble and seal its lineage artifacts."""
     root = Path(args.artifact_root)
-    ensemble, summary = asyncio.run(
-        _execute(
+    coroutine = (
+        _execute_with_database(
+            spec_path=Path(args.spec),
+            root=root,
+            code_revision=args.code_revision,
+            source_artifact_digest=args.source_artifact_digest,
+        )
+        if getattr(args, "database", False)
+        else _execute(
             spec_path=Path(args.spec),
             root=root,
             code_revision=args.code_revision,
             source_artifact_digest=args.source_artifact_digest,
         )
     )
+    ensemble, summary = asyncio.run(coroutine)
     slots = ensemble["slots"]
     if not isinstance(slots, list):
         raise PathDependenceCliError("artifact_identity_mismatch")
@@ -596,6 +709,11 @@ def add_path_dependence_parser(
     run_p.add_argument("--artifact-root", required=True)
     run_p.add_argument("--code-revision", required=True)
     run_p.add_argument("--source-artifact-digest", required=True)
+    run_p.add_argument(
+        "--database",
+        action="store_true",
+        help="Persist objective runs and journals in the configured database",
+    )
     run_p.set_defaults(func=cmd_run)
 
     resume_p = nested.add_parser("resume", help="Classify every planned slot")

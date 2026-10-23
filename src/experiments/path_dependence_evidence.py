@@ -164,7 +164,12 @@ class PathDependenceEvidenceRecorder:
             truncated=self._truncated,
         )
 
-    def analysis_evidence(self, window: OutcomeWindow) -> PathDependenceEvidence:
+    def analysis_evidence(
+        self,
+        window: OutcomeWindow,
+        *,
+        cultural_frames: Sequence[object] = (),
+    ) -> PathDependenceEvidence:
         """Project captured boundaries into detached selector inputs."""
         capture = self.result()
         endpoint = window.end_tick.value

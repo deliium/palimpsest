@@ -14,6 +14,7 @@ from experiments.path_dependence_interventions import (
     TreatmentLedgerEntry,
 )
 from experiments.path_dependence_models import (
+    BranchSlot,
     CommonSetupCommand,
     PathDependenceSpec,
     ScheduledCommandIntervention,
@@ -44,6 +45,9 @@ class PathDependenceExecutionContext:
     materialize_engine: Callable[[RunnerForkCheckpoint, RunId], Awaitable[WorldEngine]]
     eligibility: Callable[[RunnerForkCheckpoint], PrefixEligibility] | None = None
     cultural_sink_factory: Callable[[RunId], object | None] | None = None
+    child_observer: Callable[[SimulationRunner, BranchSlot], Awaitable[None]] | None = (
+        None
+    )
     source_identity: str = "unspecified"
 
 
@@ -161,14 +165,11 @@ class PathDependenceBatchRunner:
             prefixes: list[PrefixExecutionResult] = []
             for fork_tick in spec.fork_ticks:
                 while (
-                    parent.export_runtime_checkpoint().ticks_committed
-                    < fork_tick.value
+                    parent.export_runtime_checkpoint().ticks_committed < fork_tick.value
                 ):
                     receipt = await parent.run_tick()
                     if receipt.status.value != "finalized":
-                        raise PathDependenceExecutionError(
-                            "prefix_execution_aborted"
-                        )
+                        raise PathDependenceExecutionError("prefix_execution_aborted")
                 checkpoint = await parent.capture_fork_checkpoint()
                 from simulation.fork_checkpoint import fork_state_digest
 
@@ -221,16 +222,14 @@ class PathDependenceBatchRunner:
                             try:
                                 arbiter = PathDependenceArbiter(
                                     _arm_actions(spec, arm_id, fork_tick.value),
-                                    override_budget=(
-                                        spec.max_interventions_per_arm
-                                    ),
+                                    override_budget=(spec.max_interventions_per_arm),
                                 )
                                 child.set_intervention_arbiter(arbiter)
                                 result = await child.run()
                                 arbiter.finalize_unreached()
-                                failed = runner_stop_is_failure(
-                                    result.stop_reason
-                                )
+                                if context.child_observer is not None:
+                                    await context.child_observer(child, slot)
+                                failed = runner_stop_is_failure(result.stop_reason)
                                 child_digest = None
                                 child_head = None
                                 child_rev = None
@@ -255,19 +254,13 @@ class PathDependenceBatchRunner:
                                         slot_ordinal=slot.slot_ordinal,
                                         child_run_id=slot.child_run_id,
                                         arm_id=arm_id,
-                                        status=(
-                                            "failed" if failed else "completed"
-                                        ),
+                                        status=("failed" if failed else "completed"),
                                         ticks_committed=result.ticks_committed,
                                         stop_reason=result.stop_reason.value,
                                         error_code=(
-                                            result.stop_reason.value
-                                            if failed
-                                            else None
+                                            result.stop_reason.value if failed else None
                                         ),
-                                        treatment_ledger=(
-                                            arbiter.treatment_ledger
-                                        ),
+                                        treatment_ledger=(arbiter.treatment_ledger),
                                         complete_state_digest=child_digest,
                                         objective_head_hash=child_head,
                                         terminal_revision=child_rev,
@@ -305,9 +298,7 @@ class PathDependenceBatchRunner:
                             checkpoint.bootstrap_snapshot.integrity_hash.value
                         ),
                         snapshot_hash=checkpoint.snapshot.integrity_hash.value,
-                        objective_head_hash=(
-                            checkpoint.snapshot.integrity_hash.value
-                        ),
+                        objective_head_hash=(checkpoint.snapshot.integrity_hash.value),
                         eligibility_witness=(
                             ()
                             if eligibility.witness is None
