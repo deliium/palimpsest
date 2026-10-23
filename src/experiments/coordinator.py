@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Final
 
+from experiments.cultural_metric_artifacts import CulturalCaptureOptions
 from experiments.interventions import StoryInterventionArbiter
 from experiments.models import ExperimentDefinition
 from simulation.models import RunId
@@ -62,6 +63,10 @@ class ExperimentArmResult:
     committed_events: tuple[object, ...] | None = None
     regional_destination_evidence: tuple[object, ...] | None = None
     generation_index_by_owner: Mapping[str, int] | None = None
+    cultural_evolution_evidence: object | None = None
+    cultural_evolution_evidence_digest: str | None = None
+    cultural_evolution_documents: tuple[object, ...] = ()
+    cultural_evolution_capture_status: object | None = None
 
 
 def materialize_assignments(
@@ -113,9 +118,11 @@ class ExperimentCoordinator:
     """Sequential V1 coordinator: one fresh runner per assignment."""
 
     __slots__ = (
+        "_cultural_capture",
         "_definition",
         "_generational_contexts",
         "_intervention",
+        "_source_revision",
     )
 
     def __init__(
@@ -124,12 +131,16 @@ class ExperimentCoordinator:
         *,
         intervention_arbiter: StoryInterventionArbiter | None = None,
         generational_contexts: Mapping[str, object] | None = None,
+        cultural_capture: CulturalCaptureOptions | None = None,
+        source_revision: str = "unknown",
     ) -> None:
         if type(definition) is not ExperimentDefinition:
             raise TypeError("definition must be ExperimentDefinition")
         self._definition = definition
         self._intervention = intervention_arbiter
         self._generational_contexts = dict(generational_contexts or {})
+        self._cultural_capture = cultural_capture
+        self._source_revision = source_revision
 
     async def run_all(self) -> tuple[ExperimentArmResult, ...]:
         results: list[ExperimentArmResult] = []
@@ -156,17 +167,34 @@ class ExperimentCoordinator:
                         "generational assignment requires execution context"
                     )
                 from experiments.generational_execution import (
+                    GenerationalExecutionContext,
                     execute_generational_assignment,
                 )
 
+                if (
+                    self._cultural_capture is not None
+                    and type(context) is GenerationalExecutionContext
+                ):
+                    context = replace(context, cultural_capture=self._cultural_capture)
                 results.append(
                     await execute_generational_assignment(assignment, context)  # type: ignore[arg-type]
                 )
                 continue
+            recorder = None
+            kinship_edges: tuple[tuple[str, str], ...] = ()
             async with await SimulationRunner.from_config(
                 assignment.runner_config,
                 run_id=assignment.run_id,
             ) as runner:
+                from experiments.cultural_evidence import (
+                    install_cultural_recorder,
+                    kinship_parent_child_edges,
+                )
+
+                recorder = install_cultural_recorder(
+                    runner,
+                    self._cultural_capture,
+                )
                 if assignment.experiment_id == "regional_migration@1":
                     from experiments.regional_migration_scenario import (
                         regional_migration_arbiter,
@@ -242,7 +270,12 @@ class ExperimentCoordinator:
                 ):
                     runner.set_intervention_arbiter(self._intervention)
                 runner_result = await runner.run()
+                if recorder is not None:
+                    recorder.merge_capture_status(
+                        runner.export_cultural_capture_status()
+                    )
                 committed_events = tuple(runner.engine.export_events().events)
+                kinship_edges = kinship_parent_child_edges(runner.engine.kinship_graph)
                 regional_destination_traces = (
                     await runner.export_regional_destination_traces()
                 )
@@ -259,6 +292,18 @@ class ExperimentCoordinator:
                         )
                     )
             fingerprint = runner_config_fingerprint(assignment.runner_config)
+            cultural_fields: dict[str, object] = {}
+            if recorder is not None and self._cultural_capture is not None:
+                from experiments.cultural_evidence import build_cultural_arm_fields
+
+                cultural_fields = build_cultural_arm_fields(
+                    recorder,
+                    run_id=assignment.run_id.value,
+                    config_fingerprint=fingerprint,
+                    options=self._cultural_capture,
+                    source_revision=self._source_revision,
+                    parent_child_edges=kinship_edges,
+                )
             arm = ExperimentArmResult(
                 assignment=assignment,
                 runner_result=runner_result,
@@ -266,19 +311,11 @@ class ExperimentCoordinator:
                 committed_events=committed_events,
                 regional_destination_evidence=regional_destination_evidence,
                 generation_index_by_owner=_generation_index_by_owner(runner_result),
+                **cultural_fields,  # type: ignore[arg-type]
             )
             from experiments.collectors import collect_for_experiment
 
-            metrics = collect_for_experiment(arm)
-            arm = ExperimentArmResult(
-                assignment=assignment,
-                runner_result=runner_result,
-                config_fingerprint=fingerprint,
-                metrics=metrics,
-                committed_events=committed_events,
-                regional_destination_evidence=regional_destination_evidence,
-                generation_index_by_owner=_generation_index_by_owner(runner_result),
-            )
+            arm = replace(arm, metrics=collect_for_experiment(arm))
             results.append(arm)
             _LOG.info(
                 "experiment_arm_complete",
@@ -295,7 +332,7 @@ class ExperimentCoordinator:
                         ),
                         "config_fingerprint_prefix": fingerprint[:12],
                         "metric_families": tuple(
-                            getattr(item, "family", "unknown") for item in metrics
+                            getattr(item, "family", "unknown") for item in arm.metrics
                         ),
                     }
                 },

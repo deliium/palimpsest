@@ -211,6 +211,17 @@ def test_fixed_pair_denominator_excludes_pair_empty_at_either_endpoint() -> None
     convergence = _row(rows, "within_group_convergence", baseline=0, end=1)
     assert convergence.numerator == 2.0
     assert convergence.denominator == 2.0
+    assert (
+        _row(rows, "within_group_excluded_pair_count", baseline=0, end=1).value == 1.0
+    )
+    assert (
+        _row(rows, "within_group_endpoint_empty_pair_count", baseline=0, end=1).value
+        == 1.0
+    )
+    assert (
+        _row(rows, "within_group_baseline_empty_pair_count", baseline=0, end=1).value
+        == 0.0
+    )
 
 
 def test_all_pairs_excluded_yields_null_convergence() -> None:
@@ -227,6 +238,17 @@ def test_all_pairs_excluded_yields_null_convergence() -> None:
     convergence = _row(rows, "within_group_convergence", baseline=0, end=1)
     assert convergence.value is None
     assert convergence.reason_code == "no_eligible_pairs"
+    assert (
+        _row(rows, "within_group_excluded_pair_count", baseline=0, end=1).value == 1.0
+    )
+    assert (
+        _row(rows, "within_group_baseline_empty_pair_count", baseline=0, end=1).value
+        == 1.0
+    )
+    assert (
+        _row(rows, "within_group_endpoint_empty_pair_count", baseline=0, end=1).value
+        == 1.0
+    )
 
 
 def test_membership_churn_does_not_create_convergence() -> None:

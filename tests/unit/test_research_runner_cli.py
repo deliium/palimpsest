@@ -62,7 +62,7 @@ def test_resolve_package_version_without_api() -> None:
     assert isinstance(version, str) and version
 
 
-def test_cli_run_and_status(tmp_path) -> None:
+def test_cli_run_and_status(tmp_path: Path) -> None:
     matrix_path = tmp_path / "matrix.json"
     manifest_root = tmp_path / "manifest"
     _write_matrix(matrix_path)
@@ -92,3 +92,213 @@ def test_research_runner_sources_never_import_api() -> None:
                     assert not alias.name.startswith("api")
             elif isinstance(node, ast.ImportFrom) and node.module is not None:
                 assert not node.module.startswith("api")
+
+
+def test_cli_cultural_capture_and_summary(tmp_path: Path) -> None:
+    matrix_path = tmp_path / "matrix.json"
+    manifest_root = tmp_path / "manifest"
+    _write_matrix(matrix_path)
+    run_code = main(
+        [
+            "run",
+            "--matrix",
+            str(matrix_path),
+            "--manifest-root",
+            str(manifest_root),
+            "--cultural-metrics",
+            "--cultural-max-frames",
+            "100",
+            "--cultural-baseline-boundary",
+            "0",
+        ]
+    )
+    assert run_code == 0
+    aggregate_code = main(
+        [
+            "aggregate",
+            "--matrix",
+            str(matrix_path),
+            "--manifest-root",
+            str(manifest_root),
+            "--cultural-summary",
+        ]
+    )
+    assert aggregate_code == 0
+    comparison = manifest_root / "cultural-metric-comparison.json"
+    assert comparison.exists()
+    payload = comparison.read_bytes()
+    assert b'"schema_version":"cultural-metric-comparison-v1"' in payload
+
+
+def test_cli_cultural_options_require_capture(tmp_path: Path) -> None:
+    matrix_path = tmp_path / "matrix.json"
+    manifest_root = tmp_path / "manifest"
+    _write_matrix(matrix_path)
+    code = main(
+        [
+            "run",
+            "--matrix",
+            str(matrix_path),
+            "--manifest-root",
+            str(manifest_root),
+            "--cultural-max-frames",
+            "100",
+        ]
+    )
+    assert code == 2
+    assert not (manifest_root / "manifest.json").exists()
+
+
+def test_cli_cultural_summary_validation(tmp_path: Path) -> None:
+    matrix_path = tmp_path / "matrix.json"
+    manifest_root = tmp_path / "manifest"
+    _write_matrix(matrix_path)
+    assert (
+        main(
+            [
+                "run",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "aggregate",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+                "--confidence",
+                "0.9",
+            ]
+        )
+        == 2
+    )
+    assert (
+        main(
+            [
+                "aggregate",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+                "--cultural-summary",
+                "--confidence",
+                "1.5",
+            ]
+        )
+        == 2
+    )
+    assert (
+        main(
+            [
+                "aggregate",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+                "--cultural-summary",
+                "--cultural-contrast",
+                "unknown:other",
+            ]
+        )
+        == 2
+    )
+
+
+def test_cli_cultural_summary_without_artifacts_is_explicit(tmp_path: Path) -> None:
+    matrix_path = tmp_path / "matrix.json"
+    manifest_root = tmp_path / "manifest"
+    _write_matrix(matrix_path)
+    assert (
+        main(
+            [
+                "run",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+            ]
+        )
+        == 0
+    )
+    code = main(
+        [
+            "aggregate",
+            "--matrix",
+            str(matrix_path),
+            "--manifest-root",
+            str(manifest_root),
+            "--cultural-summary",
+        ]
+    )
+    assert code == 0
+    payload = (manifest_root / "cultural-metric-comparison.json").read_bytes()
+    assert b'"reasons":["cultural_capture_missing"]' in payload
+    assert b'"conditions":[]' in payload
+
+
+def test_cli_cultural_caps_and_windows_are_validated(tmp_path: Path) -> None:
+    matrix_path = tmp_path / "matrix.json"
+    manifest_root = tmp_path / "manifest"
+    _write_matrix(matrix_path)
+    for extra in (
+        ["--cultural-max-frames", "0"],
+        ["--cultural-max-rows", "0"],
+        ["--cultural-baseline-boundary", "-1"],
+        ["--cultural-baseline-boundary", "2"],
+        ["--cultural-end-boundary", "0"],
+        ["--cultural-end-boundary", "2"],
+    ):
+        code = main(
+            [
+                "run",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+                "--cultural-metrics",
+                *extra,
+            ]
+        )
+        assert code == 2
+
+
+def test_cli_corrupt_cultural_artifact_fails_without_replacing_summary(
+    tmp_path: Path,
+) -> None:
+    matrix_path = tmp_path / "matrix.json"
+    manifest_root = tmp_path / "manifest"
+    _write_matrix(matrix_path)
+    assert (
+        main(
+            [
+                "run",
+                "--matrix",
+                str(matrix_path),
+                "--manifest-root",
+                str(manifest_root),
+                "--cultural-metrics",
+            ]
+        )
+        == 0
+    )
+    cells = list((manifest_root / "cells").glob("*.cultural-evidence.json"))
+    cells[0].write_bytes(b"{}")
+    code = main(
+        [
+            "aggregate",
+            "--matrix",
+            str(matrix_path),
+            "--manifest-root",
+            str(manifest_root),
+            "--cultural-summary",
+        ]
+    )
+    assert code == 1
+    assert not (manifest_root / "cultural-metric-comparison.json").exists()

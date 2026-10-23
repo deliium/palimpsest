@@ -31,6 +31,91 @@ CULTURAL_EVOLUTION_EVIDENCE_SCHEMA_VERSION: Final[str] = (
 )
 MAX_EVIDENCE_BYTES: Final[int] = 64 * 1024 * 1024
 MAX_EVIDENCE_ROWS: Final[int] = 1_000_000
+MAX_EVIDENCE_DEPTH: Final[int] = 32
+
+_BOUNDARY_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "boundary_tick",
+        "living_owner_ids",
+        "generation_by_owner",
+        "owner_dimension_coverage",
+    }
+)
+_TRAIT_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "boundary_tick",
+        "owner_id",
+        "local_entry_id",
+        "dimension",
+        "content_digest",
+        "lineage_key",
+        "acquisition_tick",
+        "parent_refs",
+        "source_refs",
+        "status",
+    }
+)
+_EDGE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "edge_id",
+        "source_owner_id",
+        "receiver_owner_id",
+        "source_local_id",
+        "receiver_local_id",
+        "acquisition_boundary",
+        "modality",
+        "attribution_status",
+        "generation_class",
+        "kin_vertical",
+        "source_digest",
+        "target_digest",
+        "mutated",
+        "recombined",
+        "evidence_ids",
+    }
+)
+_GROUP_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "boundary_tick",
+        "owner_id",
+        "group_id",
+        "basis_id",
+        "basis_version",
+        "evidence_ids",
+    }
+)
+_ARCHIVE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "boundary_tick",
+        "subject_id",
+        "content_digest",
+        "record_present",
+        "holder_owner_ids",
+        "provenance_source_ids",
+        "evidence_ids",
+    }
+)
+_POINTER_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "run_id",
+        "owner_id",
+        "boundary_tick",
+        "source_kind",
+        "local_id",
+        "source_revision_digest",
+        "original_refs",
+    }
+)
+_STATUS_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "active",
+        "failed",
+        "failure_boundary",
+        "failure_code",
+        "missing_prefix_through",
+    }
+)
+_WINDOW_KEYS: Final[frozenset[str]] = frozenset({"baseline_boundary", "end_boundary"})
 
 _ENVELOPE_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -124,6 +209,43 @@ def _require_mapping(value: object, code: str) -> Mapping[str, object]:
         if not isinstance(key, str):
             raise _codec_fail(code)
     return value
+
+
+def _require_exact_keys(
+    value: Mapping[str, object],
+    keys: frozenset[str],
+    code: str,
+) -> Mapping[str, object]:
+    if set(value) != keys:
+        raise _codec_fail(code)
+    return value
+
+
+def _depth_ok(data: bytes) -> bool:
+    depth = 0
+    quoted = False
+    escaped = False
+    for byte in data:
+        char = chr(byte)
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            continue
+        if char == '"':
+            quoted = True
+        elif char in "{[":
+            depth += 1
+            if depth > MAX_EVIDENCE_DEPTH:
+                return False
+        elif char in "}]":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
 
 
 def _require_str(value: object, code: str) -> str:
@@ -329,6 +451,7 @@ def _duplicate_aware_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]
 
 
 def _decode_trait(row: Mapping[str, object]) -> tuple[int, TraitPresence]:
+    _require_exact_keys(row, _TRAIT_KEYS, "invalid_trait_row")
     boundary_tick = _require_int(row.get("boundary_tick"), "invalid_trait_row")
     presence = TraitPresence(
         owner_id=_require_str(row.get("owner_id"), "invalid_trait_row"),
@@ -352,9 +475,15 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
     """Decode and verify a canonical evidence envelope."""
     if not isinstance(data, bytes) or len(data) > MAX_EVIDENCE_BYTES:
         raise _codec_fail("too_large")
+    if not _depth_ok(data):
+        raise _codec_fail("excessive_depth")
     try:
         payload = json.loads(
-            data.decode("utf-8"), object_pairs_hook=_duplicate_aware_pairs
+            data.decode("utf-8"),
+            object_pairs_hook=_duplicate_aware_pairs,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                CulturalEvidenceSerializationError("nonfinite_number")
+            ),
         )
     except CulturalEvidenceSerializationError:
         raise
@@ -368,7 +497,11 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
     if document.get("digest") != _digest_payload(document):
         raise _codec_fail("digest_mismatch")
 
-    window_doc = _require_mapping(document.get("analysis_window"), "invalid_window")
+    window_doc = _require_exact_keys(
+        _require_mapping(document.get("analysis_window"), "invalid_window"),
+        _WINDOW_KEYS,
+        "invalid_window",
+    )
     window = CulturalAnalysisWindow(
         baseline_boundary=_require_int(
             window_doc.get("baseline_boundary"), "invalid_window"
@@ -391,7 +524,11 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
         traits_by_boundary.setdefault(boundary_tick, []).append(presence)
     boundaries: list[InventoryBoundary] = []
     for raw in raw_boundaries:
-        row = _require_mapping(raw, "invalid_boundary")
+        row = _require_exact_keys(
+            _require_mapping(raw, "invalid_boundary"),
+            _BOUNDARY_KEYS,
+            "invalid_boundary",
+        )
         boundary_tick = _require_int(row.get("boundary_tick"), "invalid_boundary")
         generations = _require_mapping(
             row.get("generation_by_owner"), "invalid_boundary"
@@ -430,7 +567,9 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
 
     edges: list[TransmissionEdge] = []
     for raw in _require_sequence(document.get("transmission_edges"), "invalid_edges"):
-        row = _require_mapping(raw, "invalid_edge")
+        row = _require_exact_keys(
+            _require_mapping(raw, "invalid_edge"), _EDGE_KEYS, "invalid_edge"
+        )
         edges.append(
             TransmissionEdge(
                 edge_id=_require_str(row.get("edge_id"), "invalid_edge"),
@@ -473,7 +612,9 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
 
     groups: list[GroupMembership] = []
     for raw in _require_sequence(document.get("group_memberships"), "invalid_groups"):
-        row = _require_mapping(raw, "invalid_group")
+        row = _require_exact_keys(
+            _require_mapping(raw, "invalid_group"), _GROUP_KEYS, "invalid_group"
+        )
         groups.append(
             GroupMembership(
                 boundary_tick=_require_int(row.get("boundary_tick"), "invalid_group"),
@@ -489,7 +630,9 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
 
     archives: list[ArchiveKnowledgeState] = []
     for raw in _require_sequence(document.get("archive_states"), "invalid_archives"):
-        row = _require_mapping(raw, "invalid_archive")
+        row = _require_exact_keys(
+            _require_mapping(raw, "invalid_archive"), _ARCHIVE_KEYS, "invalid_archive"
+        )
         archives.append(
             ArchiveKnowledgeState(
                 boundary_tick=_require_int(row.get("boundary_tick"), "invalid_archive"),
@@ -512,7 +655,9 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
 
     pointers: list[EvidencePointer] = []
     for raw in _require_sequence(document.get("evidence_pointers"), "invalid_pointers"):
-        row = _require_mapping(raw, "invalid_pointer")
+        row = _require_exact_keys(
+            _require_mapping(raw, "invalid_pointer"), _POINTER_KEYS, "invalid_pointer"
+        )
         pointers.append(
             EvidencePointer(
                 run_id=_require_str(row.get("run_id"), "invalid_pointer"),
@@ -529,8 +674,10 @@ def decode_cultural_evolution_evidence(data: bytes) -> CulturalEvolutionEvidence
             )
         )
 
-    status_doc = _require_mapping(
-        document.get("capture_status"), "invalid_capture_status"
+    status_doc = _require_exact_keys(
+        _require_mapping(document.get("capture_status"), "invalid_capture_status"),
+        _STATUS_KEYS,
+        "invalid_capture_status",
     )
     capture_status = CulturalCaptureStatus(
         active=bool(status_doc.get("active")),

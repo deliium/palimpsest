@@ -264,3 +264,39 @@ def test_js_is_bounded_by_ln_two() -> None:
     assert js.value is not None
     assert 0.0 <= js.value <= math.log(2) + 1e-6
     assert js.availability is MetricAvailability.PRESENT
+
+
+def test_candidate_and_retired_bindings_are_counted_not_inventoried() -> None:
+    entries = (
+        _label("a", _A),
+        TraitPresence(
+            owner_id="a",
+            local_entry_id="binding:a:candidate",
+            dimension="vocabulary",
+            content_digest=_B,
+            status="candidate",
+        ),
+        TraitPresence(
+            owner_id="b",
+            local_entry_id="binding:b:retired",
+            dimension="vocabulary",
+            content_digest=_C,
+            status="retired",
+        ),
+    )
+    boundary = InventoryBoundary(
+        boundary_tick=0,
+        living_owner_ids=("a", "b"),
+        generation_by_owner={"a": 0, "b": 0},
+        owner_dimension_coverage=_coverage(("a", "b")),
+        entries=entries,
+    )
+    rows = compute_cultural_vocabulary_differentiation(
+        _inputs(
+            (boundary,),
+            _memberships(0, {"a": "g1", "b": "g1"}),
+        )
+    )
+    assert _row(rows, "vocabulary_candidate_label_count", baseline=0).value == 1.0
+    assert _row(rows, "vocabulary_retired_label_count", baseline=0).value == 1.0
+    assert _row(rows, "group_vocabulary_richness", baseline=0).value == 1.0

@@ -13,10 +13,15 @@ from analysis.cultural_evolution_evidence import (
     GroupMembership,
     normalize_cultural_frames,
 )
+from experiments.cultural_metric_artifacts import (
+    CulturalCaptureOptions,
+    cultural_capture_policy,
+)
 from simulation.cultural_evidence import (
     CulturalBoundaryExport,
     CulturalCaptureStatus,
 )
+from simulation.runner import SimulationRunner
 
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.cultural_evidence")
 
@@ -28,8 +33,22 @@ __all__ = [
     "DEFAULT_MAX_CULTURAL_ROWS",
     "CulturalEvidenceCapture",
     "CulturalEvidenceRecorder",
+    "build_cultural_arm_fields",
     "cultural_evolution_inputs_from_capture",
+    "install_cultural_recorder",
+    "kinship_parent_child_edges",
 ]
+
+
+def kinship_parent_child_edges(graph: object) -> tuple[tuple[str, str], ...]:
+    """Copy detached objective parent→child identities from a kinship graph."""
+    rows: set[tuple[str, str]] = set()
+    for edge in getattr(graph, "edges", ()):
+        parent = getattr(getattr(edge, "parent_agent_id", None), "value", None)
+        child = getattr(getattr(edge, "child_agent_id", None), "value", None)
+        if isinstance(parent, str) and isinstance(child, str):
+            rows.add((parent, child))
+    return tuple(sorted(rows))
 
 
 def _ledger_entry_count(frame: CulturalBoundaryExport) -> int:
@@ -95,6 +114,68 @@ def cultural_evolution_inputs_from_capture(
         archive_states=archive_states,
         gaps=gaps,
     )
+
+
+def install_cultural_recorder(
+    runner: SimulationRunner,
+    options: CulturalCaptureOptions | None,
+) -> CulturalEvidenceRecorder | None:
+    """Install one fresh recorder for this run when capture is enabled."""
+    if options is None or not options.enabled:
+        return None
+    recorder = CulturalEvidenceRecorder(
+        max_frames=options.max_frames,
+        max_rows=options.max_rows,
+    )
+    runner.set_cultural_boundary_sink(recorder)
+    _LOG.debug(
+        "cultural_capture_installed run_id=%s max_frames=%s max_rows=%s",
+        getattr(runner, "run_id", "unknown"),
+        options.max_frames,
+        options.max_rows,
+    )
+    return recorder
+
+
+def build_cultural_arm_fields(
+    recorder: CulturalEvidenceRecorder,
+    *,
+    run_id: str,
+    config_fingerprint: str,
+    options: CulturalCaptureOptions,
+    source_revision: str,
+    parent_child_edges: tuple[tuple[str, str], ...] = (),
+) -> dict[str, object]:
+    """Normalize captured frames and bind six documents to the evidence digest."""
+    from analysis.cultural_evolution_metrics import (
+        assemble_cultural_evolution_documents,
+    )
+    from experiments.cultural_evidence_serialization import evidence_digest
+
+    capture = recorder.result()
+    inputs = cultural_evolution_inputs_from_capture(
+        capture,
+        run_id=run_id,
+        source_revision=source_revision,
+        window=options.analysis_window,
+        parent_child_edges=parent_child_edges,
+    )
+    digest = evidence_digest(
+        inputs,
+        config_fingerprint=config_fingerprint,
+        capture_options=cultural_capture_policy(options),
+        capture_status=capture.capture_status,
+    )
+    documents = assemble_cultural_evolution_documents(
+        inputs,
+        evidence_manifest_digest=digest,
+    )
+    return {
+        "cultural_evolution_evidence": inputs,
+        "cultural_evolution_evidence_digest": digest,
+        "cultural_evolution_documents": documents,
+        "cultural_evolution_capture_status": capture.capture_status,
+    }
 
 
 class CulturalEvidenceRecorder:

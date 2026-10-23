@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V3-36
+### Current baseline through V3-37
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 130 (including the V3-36 comparison family) |
+| Metric families | 136 (including the V3-36 comparison and six V3-37 cultural families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -384,3 +384,33 @@ Detached `analysis.generational_cohort` folds finalized `PopulationProgress` int
 family is scalar-only, analysis-only, and absent for non-generational runs. Cross-
 arm comparison remains `matrix-metric-summary-v1`; no paired statistical layer
 exists.
+
+
+### V3-37 cultural evolution metrics seam
+
+Opt-in capture installs a bounded, immutable boundary recorder in the trusted
+experiment layer. It stores normalized owner-local evidence after complete
+finalization and never feeds commands, perception, world state, stop criteria,
+memory, prompts, or observer semantics. Six additive analysis families cover
+trait dynamics, transmission, population structure, narrative survival,
+vocabulary differentiation, and technology continuity; each dimension keeps its
+own estimand and denominator, and no composite culture score exists.
+
+`cultural-capture` is composition-only and default off. Completed cells may
+carry `cultural-evolution-evidence-v1` and `cultural-cell-metrics-v1` siblings;
+`aggregate --cultural-summary` may add `cultural-metric-comparison-v1`. These
+are sibling artifacts, not runner/archive schema changes. A capture-required
+cell without a verified matching pair fails preflight without rerunning
+objective history; sealed archives are never reopened to recover capture.
+Repeated-seed inference uses a Student-t interval over distinct numeric-seed
+blocks, with duplicate seeds/replicas averaged inside a block. Paired contrasts
+require exactly one declared matrix factor and are re-materialized through the
+registered applicators; actual channel selectors determine shared/mixed/unknown
+stream alignment. Legacy metric-summary `p05`/`p95` values remain percentile
+ranges.
+
+V3-37 adds no capability flag, runner schema (no v56), command, event, observer
+semantic type, write-pair, API route, or migration; default runner writes remain
+v4/result v2, commands stay 43, observer semantic types stay 73, replay stays
+`EVENT_SCHEMA_REPLAY_V22`/`v20` for feature-selected runs, and Alembic head stays
+`0017`.

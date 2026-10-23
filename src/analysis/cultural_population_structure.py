@@ -69,6 +69,7 @@ def _measurement(
     coverage_expected: int | None,
     units: str,
     evidence_ids: tuple[str, ...] = (),
+    population_basis: str = "fixed_eligible_pairs",
 ) -> CulturalMeasurement:
     return CulturalMeasurement(
         family=CULTURAL_POPULATION_STRUCTURE_FAMILY,
@@ -80,8 +81,8 @@ def _measurement(
         scope=scope,
         partition_id=partition_id,
         group_ids=group_ids,
-        population_basis="fixed_eligible_pairs",
-        denominator_code="fixed_eligible_pairs",
+        population_basis=population_basis,
+        denominator_code=population_basis,
         baseline_tick=baseline_tick,
         end_tick=end_tick,
         trait_id=None,
@@ -121,7 +122,11 @@ def _inventory(boundary: InventoryBoundary, dimension: str) -> dict[str, set[str
     inventories: dict[str, set[str]] = defaultdict(set)
     living = set(boundary.living_owner_ids)
     for entry in boundary.entries:
-        if entry.dimension == dimension and entry.owner_id in living:
+        if (
+            entry.dimension == dimension
+            and entry.owner_id in living
+            and entry.status in (None, "active")
+        ):
             inventories[entry.owner_id].add(entry.content_digest)
     return dict(inventories)
 
@@ -371,17 +376,19 @@ def _convergence_rows(
                 endpoint_inventory = _inventory(endpoint, dimension)
                 baseline_complete = _complete_owners(baseline, dimension)
                 endpoint_complete = _complete_owners(endpoint, dimension)
+                baseline_group = {
+                    owner
+                    for owner in baseline.living_owner_ids
+                    if baseline_assignment.get(owner) == group
+                }
+                endpoint_group = {
+                    owner
+                    for owner in endpoint.living_owner_ids
+                    if endpoint_assignment.get(owner) == group
+                }
                 cohort = (
-                    {
-                        owner
-                        for owner in baseline.living_owner_ids
-                        if baseline_assignment.get(owner) == group
-                    }
-                    & {
-                        owner
-                        for owner in endpoint.living_owner_ids
-                        if endpoint_assignment.get(owner) == group
-                    }
+                    baseline_group
+                    & endpoint_group
                     & baseline_complete
                     & endpoint_complete
                 )
@@ -389,6 +396,8 @@ def _convergence_rows(
                 kept: list[tuple[str, str]] = []
                 baseline_distances: list[float] = []
                 endpoint_distances: list[float] = []
+                baseline_empty_pairs = 0
+                endpoint_empty_pairs = 0
                 for left, right in pairs:
                     baseline_union = baseline_inventory.get(
                         left, set()
@@ -396,6 +405,10 @@ def _convergence_rows(
                     endpoint_union = endpoint_inventory.get(
                         left, set()
                     ) | endpoint_inventory.get(right, set())
+                    if not baseline_union:
+                        baseline_empty_pairs += 1
+                    if not endpoint_union:
+                        endpoint_empty_pairs += 1
                     if not baseline_union or not endpoint_union:
                         continue
                     baseline_distance = _pair_distance(
@@ -411,6 +424,66 @@ def _convergence_rows(
                     kept.append((left, right))
                     baseline_distances.append(baseline_distance)
                     endpoint_distances.append(endpoint_distance)
+                union_owners = baseline_group | endpoint_group
+                for measurement_id, count, basis, denominator in (
+                    (
+                        "within_group_cohort_size",
+                        len(cohort),
+                        "eligible_living_owners",
+                        len(union_owners),
+                    ),
+                    (
+                        "within_group_excluded_pair_count",
+                        len(pairs) - len(kept),
+                        "fixed_eligible_pairs",
+                        len(pairs),
+                    ),
+                    (
+                        "within_group_baseline_empty_pair_count",
+                        baseline_empty_pairs,
+                        "fixed_eligible_pairs",
+                        len(pairs),
+                    ),
+                    (
+                        "within_group_endpoint_empty_pair_count",
+                        endpoint_empty_pairs,
+                        "fixed_eligible_pairs",
+                        len(pairs),
+                    ),
+                    (
+                        "within_group_entrant_count",
+                        len(endpoint_group - baseline_group),
+                        "eligible_living_owners",
+                        len(union_owners),
+                    ),
+                    (
+                        "within_group_exit_count",
+                        len(baseline_group - endpoint_group),
+                        "eligible_living_owners",
+                        len(union_owners),
+                    ),
+                ):
+                    rows.append(
+                        _measurement(
+                            measurement_id=measurement_id,
+                            dimension=dimension,
+                            scope="group",
+                            group_ids=(group,),
+                            partition_id=basis,
+                            value=float(count),
+                            numerator=float(count),
+                            denominator=float(denominator),
+                            availability=MetricAvailability.PRESENT,
+                            reason_code=None,
+                            baseline_tick=baseline_tick,
+                            end_tick=resolved_end,
+                            coverage_observed=len(cohort),
+                            coverage_expected=len(union_owners),
+                            units="count",
+                            evidence_ids=evidence,
+                            population_basis=basis,
+                        )
+                    )
                 if not kept:
                     rows.append(
                         _measurement(

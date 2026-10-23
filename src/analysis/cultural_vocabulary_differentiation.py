@@ -21,7 +21,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
 )
 
 CULTURAL_VOCABULARY_DIFFERENTIATION_FAMILY: Final[str] = (
-    "cultural_vocabulary_differentiation@1"
+    "cultural_vocabulary_differentiation"
 )
 CULTURAL_VOCABULARY_DIFFERENTIATION_ALGORITHM_VERSION: Final[str] = (
     "cultural-vocabulary-differentiation@1"
@@ -52,6 +52,7 @@ def _measurement(
     coverage_expected: int | None,
     units: str,
     evidence_ids: tuple[str, ...] = (),
+    population_basis: str = "fixed_eligible_pairs",
 ) -> CulturalMeasurement:
     return CulturalMeasurement(
         family=CULTURAL_VOCABULARY_DIFFERENTIATION_FAMILY,
@@ -63,8 +64,8 @@ def _measurement(
         scope=scope,
         partition_id=partition_id,
         group_ids=group_ids,
-        population_basis="fixed_eligible_pairs",
-        denominator_code="fixed_eligible_pairs",
+        population_basis=population_basis,
+        denominator_code=population_basis,
         baseline_tick=baseline_tick,
         end_tick=end_tick,
         trait_id=None,
@@ -104,7 +105,11 @@ def _inventory(boundary: InventoryBoundary) -> dict[str, set[str]]:
     living = set(boundary.living_owner_ids)
     inventory: dict[str, set[str]] = defaultdict(set)
     for entry in boundary.entries:
-        if entry.dimension == _DIMENSION and entry.owner_id in living:
+        if (
+            entry.dimension == _DIMENSION
+            and entry.owner_id in living
+            and entry.status in (None, "active")
+        ):
             inventory[entry.owner_id].add(entry.content_digest)
     return dict(inventory)
 
@@ -176,6 +181,40 @@ def _point_rows(
         for group in sorted(groups):
             labels = labels_by_group[group]
             evidence = _group_evidence(inputs, basis, group)
+            complete_owners = groups[group] & complete
+            for measurement_id, status in (
+                ("vocabulary_candidate_label_count", "candidate"),
+                ("vocabulary_retired_label_count", "retired"),
+            ):
+                count = len(
+                    {
+                        entry.local_entry_id
+                        for entry in boundary.entries
+                        if entry.dimension == _DIMENSION
+                        and entry.owner_id in complete_owners
+                        and entry.status == status
+                    }
+                )
+                rows.append(
+                    _measurement(
+                        measurement_id=measurement_id,
+                        scope="group",
+                        group_ids=(group,),
+                        partition_id=basis,
+                        value=float(count),
+                        numerator=float(count),
+                        denominator=float(len(complete_owners)),
+                        availability=MetricAvailability.PRESENT,
+                        reason_code=None,
+                        baseline_tick=boundary.boundary_tick,
+                        end_tick=boundary.boundary_tick,
+                        coverage_observed=len(complete_owners),
+                        coverage_expected=len(groups[group]),
+                        units="count",
+                        evidence_ids=evidence,
+                        population_basis="eligible_living_owners",
+                    )
+                )
             rows.append(
                 _measurement(
                     measurement_id="group_vocabulary_richness",

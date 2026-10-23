@@ -5,12 +5,28 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
+from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
+from analysis.cultural_metric_comparison import (
+    CULTURAL_METRIC_COMPARISON_SCHEMA_VERSION,
+    CulturalComparisonRequest,
+    CulturalMetricComparison,
+)
 from experiments.coordinator import ExperimentAssignment
+from experiments.cultural_metric_artifacts import (
+    CulturalArtifactError,
+    CulturalCaptureOptions,
+)
+from experiments.cultural_metric_comparison import (
+    encode_cultural_metric_comparison,
+    load_cultural_metric_comparison,
+)
 from experiments.generational_execution import (
     GenerationalExecutionContext,
     execute_generational_assignment,
@@ -52,10 +68,113 @@ def _load_spec(path: Path) -> ExperimentMatrixSpec:
     return decode_matrix_spec(payload)
 
 
+def _matrix_max_ticks(spec: ExperimentMatrixSpec) -> int:
+    config = getattr(getattr(spec, "base", None), "runner_config", None)
+    if config is None:
+        definition, _cells = expand_matrix(spec)
+        config = definition.conditions[0].runner_config
+    max_ticks = getattr(config.stop_policy, "max_ticks", 0)
+    return 0 if max_ticks is None else int(max_ticks)
+
+
+def _build_capture_options(
+    args: argparse.Namespace,
+    spec: ExperimentMatrixSpec,
+) -> CulturalCaptureOptions | None:
+    capture = bool(getattr(args, "cultural_metrics", False))
+    supplied = {
+        "max_frames": getattr(args, "cultural_max_frames", None),
+        "max_rows": getattr(args, "cultural_max_rows", None),
+        "baseline": getattr(args, "cultural_baseline_boundary", None),
+        "end": getattr(args, "cultural_end_boundary", None),
+    }
+    if not capture:
+        if any(value is not None for value in supplied.values()):
+            raise ValueError("cultural_options_require_capture")
+        return None
+    max_frames = (
+        10_000 if supplied["max_frames"] is None else int(supplied["max_frames"])
+    )
+    max_rows = 1_000_000 if supplied["max_rows"] is None else int(supplied["max_rows"])
+    baseline = 0 if supplied["baseline"] is None else int(supplied["baseline"])
+    end = None if supplied["end"] is None else int(supplied["end"])
+    if max_frames < 1 or max_rows < 1:
+        raise ValueError("cultural_capture_cap_invalid")
+    if baseline < 0:
+        raise ValueError("cultural_baseline_invalid")
+    horizon = _matrix_max_ticks(spec)
+    if baseline > horizon:
+        raise ValueError("cultural_baseline_exceeds_horizon")
+    if end is not None and (end <= baseline or end > horizon):
+        raise ValueError("cultural_end_boundary_invalid")
+    return CulturalCaptureOptions(
+        enabled=True,
+        max_frames=max_frames,
+        max_rows=max_rows,
+        analysis_window=CulturalAnalysisWindow(
+            baseline_boundary=baseline,
+            end_boundary=end,
+        ),
+    )
+
+
+def _parse_contrasts(
+    raw_values: Sequence[str],
+    known_conditions: frozenset[str],
+) -> tuple[CulturalComparisonRequest, ...]:
+    requests: list[CulturalComparisonRequest] = []
+    seen: set[tuple[str, str]] = set()
+    for index, raw in enumerate(raw_values, start=1):
+        if raw.count(":") != 1:
+            raise ValueError("cultural_contrast_invalid")
+        control, treatment = raw.split(":")
+        if not control or not treatment or control == treatment:
+            raise ValueError("cultural_contrast_invalid")
+        if control not in known_conditions or treatment not in known_conditions:
+            raise ValueError("cultural_contrast_unknown_condition")
+        if (control, treatment) in seen:
+            raise ValueError("cultural_contrast_duplicate")
+        seen.add((control, treatment))
+        requests.append(
+            CulturalComparisonRequest(
+                contrast_id=f"contrast-{index}",
+                control_condition_id=control,
+                treatment_condition_id=treatment,
+            )
+        )
+    return tuple(requests)
+
+
+def _write_atomic(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     spec = _load_spec(Path(args.matrix))
+    try:
+        capture_options = _build_capture_options(args, spec)
+    except (TypeError, ValueError) as exc:
+        _LOG.error(
+            "cli_cultural_options_invalid",
+            extra={"experiment": {"reason_code": str(exc)}},
+        )
+        return 2
     store = build_manifest_store(Path(args.manifest_root))
     deps = build_batch_dependencies(code_revision=args.code_revision)
+    if capture_options is not None:
+        from dataclasses import replace
+
+        deps = replace(deps, cultural_capture=capture_options)
     resources = None
     try:
         if args.generational_artifact_root is not None:
@@ -70,17 +189,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if not args.source_clean and not args.source_artifact_digest:
                 _LOG.error(
                     "cli_generational_preflight_failed",
-                    extra={
-                        "experiment": {"reason_code": "source_assertion_required"}
-                    },
+                    extra={"experiment": {"reason_code": "source_assertion_required"}},
                 )
                 return 2
             if args.execution_recipe is None:
                 _LOG.error(
                     "cli_generational_preflight_failed",
-                    extra={
-                        "experiment": {"reason_code": "execution_recipe_required"}
-                    },
+                    extra={"experiment": {"reason_code": "execution_recipe_required"}},
                 )
                 return 2
             try:
@@ -100,11 +215,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if any(recording_values) and not all(recording_values):
                 _LOG.error(
                     "cli_generational_preflight_failed",
-                    extra={
-                        "experiment": {
-                            "reason_code": "recording_flags_incomplete"
-                        }
-                    },
+                    extra={"experiment": {"reason_code": "recording_flags_incomplete"}},
                 )
                 return 2
             recording_identity = (
@@ -168,9 +279,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     runs=create_run_repository(session_factory),
                     journal=create_tick_journal_repository(session_factory),
                     snapshots=create_snapshot_repository(session_factory),
-                    evidence=create_scientific_evidence_repository(
-                        session_factory
-                    ),
+                    evidence=create_scientific_evidence_repository(session_factory),
                 )
                 from research_runner.generational_composition import (
                     PostgresCommunitySampleProvider,
@@ -191,10 +300,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 recording_identity=recording_identity,
             )
 
-
-            def _context_for(
-                assignment: ExperimentAssignment, cell_id: str
-            ) -> object:
+            def _context_for(assignment: ExperimentAssignment, cell_id: str) -> object:
                 generational = assignment.runner_config.generational_run
                 cadence = (
                     None
@@ -331,6 +437,33 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
             extra={"experiment": {"reason_code": "fingerprint_mismatch"}},
         )
         return 2
+    summary_requested = bool(getattr(args, "cultural_summary", False))
+    contrast_values = tuple(getattr(args, "cultural_contrast", ()) or ())
+    confidence_arg = getattr(args, "confidence", None)
+    if (contrast_values or confidence_arg is not None) and not summary_requested:
+        _LOG.error(
+            "cli_cultural_summary_options_invalid",
+            extra={"experiment": {"reason_code": "cultural_summary_required"}},
+        )
+        return 2
+    confidence = 0.95 if confidence_arg is None else float(confidence_arg)
+    if not 0.0 < confidence < 1.0:
+        _LOG.error(
+            "cli_cultural_summary_options_invalid",
+            extra={"experiment": {"reason_code": "invalid_confidence"}},
+        )
+        return 2
+    try:
+        comparisons = _parse_contrasts(
+            contrast_values,
+            frozenset(cell.condition_id for cell in cells),
+        )
+    except ValueError as exc:
+        _LOG.error(
+            "cli_cultural_summary_options_invalid",
+            extra={"experiment": {"reason_code": str(exc)}},
+        )
+        return 2
     # Aggregate from completion sidecars only when arm results unavailable —
     # status-only aggregate emits empty arm_results refs from completed cells.
     aggregate = build_matrix_aggregate(
@@ -352,6 +485,59 @@ def _cmd_aggregate(args: argparse.Namespace) -> int:
                     "command": "aggregate",
                     "output_path": str(summary_out),
                     "key_summary_count": len(summary.key_summaries),
+                }
+            },
+        )
+    if summary_requested:
+        comparison_out = Path(args.manifest_root) / "cultural-metric-comparison.json"
+        try:
+            comparison = load_cultural_metric_comparison(
+                spec=spec,
+                cells=cells,
+                store=store,
+                comparisons=comparisons,
+                confidence=confidence,
+                source_revision=args.code_revision or None,
+            )
+        except CulturalArtifactError as exc:
+            if exc.code != "cultural_capture_missing":
+                _LOG.error(
+                    "cli_cultural_summary_failed",
+                    extra={"experiment": {"reason_code": exc.code}},
+                )
+                return 1
+            _LOG.warning(
+                "cli_cultural_summary_insufficient",
+                extra={"experiment": {"reason_code": "cultural_capture_missing"}},
+            )
+            comparison = CulturalMetricComparison(
+                schema_version=CULTURAL_METRIC_COMPARISON_SCHEMA_VERSION,
+                matrix_fingerprint=fingerprint,
+                confidence=confidence,
+                method="student_t_seed_block_mean",
+                conditions=(),
+                contrasts=(),
+                excluded_cells=tuple(sorted(cell.cell_id for cell in cells)),
+                reasons=("cultural_capture_missing",),
+            )
+        except Exception as exc:
+            _LOG.error(
+                "cli_cultural_summary_failed",
+                extra={"experiment": {"reason_code": type(exc).__name__}},
+            )
+            return 1
+        _write_atomic(
+            comparison_out,
+            encode_cultural_metric_comparison(comparison),
+        )
+        _LOG.info(
+            "cli_cultural_metric_comparison",
+            extra={
+                "experiment": {
+                    "command": "aggregate",
+                    "output_path": str(comparison_out),
+                    "condition_count": len(comparison.conditions),
+                    "contrast_count": len(comparison.contrasts),
                 }
             },
         )
@@ -511,8 +697,7 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 run_id=assignment.run_id.value,
                 owner_id=config.agents[0].agent_id.value,
                 window_ticks=(
-                    config.generational_run.historical_checkpoint_cadence_ticks
-                    or 100
+                    config.generational_run.historical_checkpoint_cadence_ticks or 100
                     if config.generational_run is not None
                     else 100
                 ),
@@ -520,9 +705,7 @@ def _cmd_generational(args: argparse.Namespace) -> int:
         else:
             community_provider = None
         if not config.persistence.durable:
-            factories = RunnerDependencyFactories(
-                recording_store=recording_store
-            )
+            factories = RunnerDependencyFactories(recording_store=recording_store)
         context = GenerationalExecutionContext(
             artifact_root=Path(args.artifact_root),
             source_identity=source_identity,
@@ -574,6 +757,15 @@ def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--recording-artifact-id", default=None)
     parser.add_argument("--recording-namespace", default=None)
     parser.add_argument("--recording-lookup-mode", default=None)
+    parser.add_argument(
+        "--cultural-metrics",
+        action="store_true",
+        help="Opt in to detached cultural evidence capture",
+    )
+    parser.add_argument("--cultural-max-frames", type=int, default=None)
+    parser.add_argument("--cultural-max-rows", type=int, default=None)
+    parser.add_argument("--cultural-baseline-boundary", type=int, default=None)
+    parser.add_argument("--cultural-end-boundary", type=int, default=None)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -643,6 +835,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--metric-summary",
         action="store_true",
         help="Also write matrix-metric-summary-v1 from cell metric sidecars",
+    )
+    agg_p.add_argument(
+        "--cultural-summary",
+        action="store_true",
+        help="Also write cultural-metric-comparison-v1 from verified cell artifacts",
+    )
+    agg_p.add_argument(
+        "--cultural-contrast",
+        action="append",
+        default=[],
+        metavar="CONTROL:TREATMENT",
+        help="Explicit paired condition contrast (requires --cultural-summary)",
+    )
+    agg_p.add_argument(
+        "--confidence",
+        type=float,
+        default=None,
+        help="Student-t confidence level (default 0.95; requires --cultural-summary)",
     )
     agg_p.set_defaults(func=_cmd_aggregate)
     gen_p = sub.add_parser(

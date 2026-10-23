@@ -345,9 +345,9 @@ def assemble_arm_metric_bundle(
         practical_knowledge_audits=pk_audits,
         events=events,
     )
-    generational_progress = getattr(
-        arm.runner_result, "generational_progress", None
-    )
+    generational_progress = getattr(arm.runner_result, "generational_progress", None)
+    cultural_evolution = getattr(arm, "cultural_evolution_evidence", None)
+    cultural_evolution_digest = getattr(arm, "cultural_evolution_evidence_digest", None)
 
     inputs = inputs_with_opt_in_metric_rows(
         inputs,
@@ -422,6 +422,8 @@ def assemble_arm_metric_bundle(
             else dict(cast(Mapping[str, int], genealogy_harvest["death_ticks"]))
         ),
         generational_progress=generational_progress,
+        cultural_evolution=cultural_evolution,
+        cultural_evolution_evidence_digest=cultural_evolution_digest,
     )
     lifecycle_spec = getattr(arm.assignment.runner_config, "technique_lifecycle", None)
     if lifecycle_spec is not None:

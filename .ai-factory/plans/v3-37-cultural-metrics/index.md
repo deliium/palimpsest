@@ -5,7 +5,7 @@ Mode: ultra
 Branch: main (stay on current branch; automatic branch creation disabled)  
 Created: 2026-10-23  
 Plan identifier: `v3-37-cultural-metrics`  
-Status: planned; implementation not started
+Status: implemented; verification complete (see handoff)
 
 ## Original Request
 
@@ -179,14 +179,14 @@ Cross-run rows pool only population-summary measurements sharing scientific sele
 ### Phase 4: Integration and statistics
 
 - [x] Task 10: Register six versioned metric families ([details](phase-04-integration-statistics.md#task-10-register-six-versioned-metric-families)) (depends on 3, 4, 5, 6, 7, 8, 9).
-- [ ] Task 11: Persist and propagate agent-level evidence artifacts ([details](phase-04-integration-statistics.md#task-11-persist-and-propagate-agent-level-evidence-artifacts)) (depends on 2, 3, 10).
-- [ ] Task 12: Implement repeated-seed means, confidence intervals and paired contrasts ([details](phase-04-integration-statistics.md#task-12-implement-repeated-seed-means-confidence-intervals-and-paired-contrasts)) (depends on 10, 11).
+- [x] Task 11: Persist and propagate agent-level evidence artifacts ([details](phase-04-integration-statistics.md#task-11-persist-and-propagate-agent-level-evidence-artifacts)) (depends on 2, 3, 10).
+- [x] Task 12: Implement repeated-seed means, confidence intervals and paired contrasts ([details](phase-04-integration-statistics.md#task-12-implement-repeated-seed-means-confidence-intervals-and-paired-contrasts)) (depends on 10, 11).
 
 ### Phase 5: Delivery
 
-- [ ] Task 13: Expose opt-in capture and comparisons through the matrix CLI ([details](phase-05-delivery.md#task-13-expose-opt-in-capture-and-comparisons-through-the-matrix-cli)) (depends on 11, 12).
-- [ ] Task 14: Add hand-calculated and real-scenario end-to-end gates ([details](phase-05-delivery.md#task-14-add-hand-calculated-and-real-scenario-end-to-end-gates)) (depends on 1–13).
-- [ ] Task 15: Complete mandatory documentation and implementation handoff ([details](phase-05-delivery.md#task-15-complete-mandatory-documentation-and-implementation-handoff)) (depends on 14).
+- [x] Task 13: Expose opt-in capture and comparisons through the matrix CLI ([details](phase-05-delivery.md#task-13-expose-opt-in-capture-and-comparisons-through-the-matrix-cli)) (depends on 11, 12).
+- [x] Task 14: Add hand-calculated and real-scenario end-to-end gates ([details](phase-05-delivery.md#task-14-add-hand-calculated-and-real-scenario-end-to-end-gates)) (depends on 1–13).
+- [x] Task 15: Complete mandatory documentation and implementation handoff ([details](phase-05-delivery.md#task-15-complete-mandatory-documentation-and-implementation-handoff)) (depends on 14).
 
 ## Commit Plan
 

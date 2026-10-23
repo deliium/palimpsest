@@ -11,6 +11,7 @@ from analysis.cultural_evolution_evidence import (
     CulturalMeasurement,
     InventoryBoundary,
     TraitPresence,
+    dimension_population,
 )
 from analysis.models import MetricAvailability
 
@@ -251,11 +252,75 @@ def compute_cultural_narrative_survival(
             )
         rows.sort(key=lambda row: row.measurement_id)
         return tuple(rows)
+    (
+        baseline_living,
+        baseline_eligible,
+        baseline_observed,
+        baseline_complete,
+    ) = dimension_population(baseline, _DIMENSION)
+    if baseline_living == 0 or baseline_eligible == 0 or not baseline_complete:
+        reason = (
+            "population_empty"
+            if baseline_living == 0
+            else "channel_disabled"
+            if baseline_eligible == 0
+            else "partial_baseline"
+        )
+        for measurement_id, units in (
+            ("baseline_variant_count", "count"),
+            ("surviving_baseline_count", "count"),
+            ("unresolved_baseline_count", "count"),
+            ("endpoint_persistence", "proportion"),
+            ("continuous_persistence", "proportion"),
+            ("witnessed_generation_span", "generations"),
+            ("observed_duration", "ticks"),
+        ):
+            rows.append(
+                _measurement(
+                    measurement_id=measurement_id,
+                    units=units,
+                    value=None,
+                    numerator=None,
+                    denominator=None,
+                    availability=MetricAvailability.UNKNOWN,
+                    reason_code=reason,
+                    baseline_tick=baseline_tick,
+                    end_tick=end_tick,
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
+                    left_censored=True,
+                )
+            )
+        _LOG.debug(
+            "[FIX] cultural_narrative_coverage_censored stage=baseline "
+            "reason_code=%s observed=%s expected=%s",
+            reason,
+            baseline_observed,
+            baseline_eligible,
+        )
+        rows.sort(key=lambda row: row.measurement_id)
+        return tuple(rows)
     graph = _build_graph(tuple(inputs.boundaries))
     baseline_entries = _narrative_entries(baseline)
     baseline_keys = {_variant_key(entry) for entry in baseline_entries}
     evidence = _entry_evidence(inputs, baseline_entries)
     baseline_count = len(baseline_keys)
+    known_keys = set(graph)
+    unresolved_keys = {
+        _variant_key(entry)
+        for entry in baseline_entries
+        if any(
+            (entry.owner_id, parent_id) not in known_keys
+            for parent_id in entry.parent_refs
+        )
+    }
+    unresolved_count = len(unresolved_keys)
+    if unresolved_count:
+        _LOG.debug(
+            "[FIX] cultural_narrative_ancestry_unresolved count=%s baseline=%s",
+            unresolved_count,
+            baseline_count,
+        )
     if baseline_count == 0:
         rows.extend(
             (
@@ -269,8 +334,8 @@ def compute_cultural_narrative_survival(
                     reason_code=None,
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=evidence,
                 ),
                 _measurement(
@@ -283,8 +348,8 @@ def compute_cultural_narrative_survival(
                     reason_code="empty_baseline",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=evidence,
                 ),
                 _measurement(
@@ -297,8 +362,8 @@ def compute_cultural_narrative_survival(
                     reason_code=None,
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=evidence,
                 ),
                 _measurement(
@@ -311,8 +376,8 @@ def compute_cultural_narrative_survival(
                     reason_code="empty_baseline",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=evidence,
                 ),
                 _measurement(
@@ -325,8 +390,8 @@ def compute_cultural_narrative_survival(
                     reason_code="empty_baseline",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=evidence,
                 ),
                 _measurement(
@@ -380,8 +445,8 @@ def compute_cultural_narrative_survival(
                     reason_code="missing_endpoint",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=evidence,
                     right_censored=True,
                 )
@@ -397,8 +462,8 @@ def compute_cultural_narrative_survival(
                 reason_code=None,
                 baseline_tick=baseline_tick,
                 end_tick=end_tick,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=evidence,
             )
         )
@@ -421,6 +486,100 @@ def compute_cultural_narrative_survival(
         rows.sort(key=lambda row: row.measurement_id)
         return tuple(rows)
     assert resolved_end is not None
+    (
+        endpoint_living,
+        endpoint_eligible,
+        endpoint_observed,
+        endpoint_complete,
+    ) = dimension_population(endpoint, _DIMENSION)
+    if endpoint_living == 0 or endpoint_eligible == 0 or not endpoint_complete:
+        reason = (
+            "population_empty"
+            if endpoint_living == 0
+            else "channel_disabled"
+            if endpoint_eligible == 0
+            else "partial_endpoint"
+        )
+        for measurement_id, units in (
+            ("surviving_baseline_count", "count"),
+            ("endpoint_persistence", "proportion"),
+            ("continuous_persistence", "proportion"),
+            ("witnessed_generation_span", "generations"),
+        ):
+            rows.append(
+                _measurement(
+                    measurement_id=measurement_id,
+                    units=units,
+                    value=None,
+                    numerator=None,
+                    denominator=float(baseline_count),
+                    availability=MetricAvailability.UNKNOWN,
+                    reason_code=reason,
+                    baseline_tick=baseline_tick,
+                    end_tick=resolved_end,
+                    coverage_observed=endpoint_observed,
+                    coverage_expected=endpoint_eligible,
+                    evidence_ids=evidence,
+                    right_censored=True,
+                )
+            )
+        rows.append(
+            _measurement(
+                measurement_id="baseline_variant_count",
+                units="count",
+                value=float(baseline_count),
+                numerator=float(baseline_count),
+                denominator=float(baseline_count),
+                availability=MetricAvailability.PRESENT,
+                reason_code=None,
+                baseline_tick=baseline_tick,
+                end_tick=resolved_end,
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
+                evidence_ids=evidence,
+            )
+        )
+        rows.append(
+            _measurement(
+                measurement_id="unresolved_baseline_count",
+                units="count",
+                value=float(unresolved_count),
+                numerator=float(unresolved_count),
+                denominator=float(baseline_count),
+                availability=MetricAvailability.PRESENT,
+                reason_code=None,
+                baseline_tick=baseline_tick,
+                end_tick=resolved_end,
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
+                evidence_ids=evidence,
+            )
+        )
+        rows.append(
+            _measurement(
+                measurement_id="observed_duration",
+                units="ticks",
+                value=float(max(0, resolved_end - baseline_tick)),
+                numerator=None,
+                denominator=None,
+                availability=MetricAvailability.PRESENT,
+                reason_code=None,
+                baseline_tick=baseline_tick,
+                end_tick=resolved_end,
+                coverage_observed=1,
+                coverage_expected=1,
+                evidence_ids=evidence,
+            )
+        )
+        _LOG.debug(
+            "[FIX] cultural_narrative_coverage_censored stage=endpoint "
+            "reason_code=%s observed=%s expected=%s",
+            reason,
+            endpoint_observed,
+            endpoint_eligible,
+        )
+        rows.sort(key=lambda row: row.measurement_id)
+        return tuple(rows)
     surviving = _persistence(baseline_keys, endpoint, graph)
     surviving_count = len(surviving)
     intermediate = [
@@ -428,15 +587,24 @@ def compute_cultural_narrative_survival(
         for boundary in inputs.boundaries
         if baseline_tick <= boundary.boundary_tick <= resolved_end
     ]
-    censored = bool(inputs.gaps) or (resolved_end - baseline_tick) + 1 != len(
-        intermediate
+    continuous_complete = True
+    for boundary in intermediate:
+        living, eligible, _observed, complete = dimension_population(
+            boundary, _DIMENSION
+        )
+        if living == 0 or eligible == 0 or not complete:
+            continuous_complete = False
+            break
+    censored = (
+        bool(inputs.gaps)
+        or (resolved_end - baseline_tick) + 1 != len(intermediate)
+        or not continuous_complete
     )
     continuous_surviving = set(baseline_keys)
     for boundary in intermediate:
         continuous_surviving &= _persistence(baseline_keys, boundary, graph)
         if not continuous_surviving:
             break
-    unresolved_count = 0
     generation_values = {
         boundary.generation_by_owner.get(entry.owner_id)
         for entry in _narrative_entries(endpoint)
@@ -457,8 +625,8 @@ def compute_cultural_narrative_survival(
                 reason_code=None,
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=evidence,
             ),
             _measurement(
@@ -471,8 +639,8 @@ def compute_cultural_narrative_survival(
                 reason_code=None,
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=evidence,
             ),
             _measurement(
@@ -485,8 +653,8 @@ def compute_cultural_narrative_survival(
                 reason_code=None,
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=evidence,
             ),
             _measurement(
@@ -503,8 +671,8 @@ def compute_cultural_narrative_survival(
                 reason_code=("unresolved_ancestry" if unresolved_count else None),
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=evidence,
             ),
             _measurement(
@@ -537,8 +705,8 @@ def compute_cultural_narrative_survival(
                 ),
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=evidence,
                 left_censored=bool(inputs.gaps),
                 right_censored=censored,

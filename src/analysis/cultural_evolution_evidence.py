@@ -1265,6 +1265,37 @@ def _coverage_is_observed(channel: CulturalChannelExport) -> bool:
     }
 
 
+def dimension_population(
+    boundary: InventoryBoundary, dimension: str
+) -> tuple[int, int, int, bool]:
+    """Return living owners, eligible owners, complete owners, and completeness.
+
+    Disabled owners are excluded from the channel population. Missing or
+    unobserved coverage stays in the eligible denominator but not in the
+    complete count, so callers can distinguish an empty inventory from missing
+    evidence.
+    """
+    if type(boundary) is not InventoryBoundary:
+        raise TypeError("boundary must be InventoryBoundary")
+    if dimension not in CULTURAL_DIMENSION_SET:
+        raise ValueError("dimension: unsupported")
+    coverage = {
+        (owner, code_dimension): code
+        for owner, code_dimension, code in boundary.owner_dimension_coverage
+    }
+    living = boundary.living_owner_ids
+    eligible = 0
+    observed = 0
+    for owner in living:
+        code = coverage.get((owner, dimension))
+        if code == "disabled":
+            continue
+        eligible += 1
+        if code == "complete":
+            observed += 1
+    return len(living), eligible, observed, eligible > 0 and observed == eligible
+
+
 def _boundary_pointers(
     frame: CulturalBoundaryExport, entries: tuple[TraitPresence, ...]
 ) -> tuple[EvidencePointer, ...]:
@@ -1341,10 +1372,13 @@ def _terminology_presences(
     ledger = channel.ledger
     rows: list[TraitPresence] = []
     for binding in getattr(ledger, "bindings", ()):
-        if getattr(getattr(binding, "status", None), "value", None) != "active":
-            continue
-        if getattr(binding, "merged_into", None) is not None:
-            continue
+        status = getattr(getattr(binding, "status", None), "value", None)
+        if status == "candidate":
+            presence_status = "candidate"
+        elif status == "active" and getattr(binding, "merged_into", None) is None:
+            presence_status = "active"
+        else:
+            presence_status = "retired"
         digest = canonical_source_digest(
             "cultural-vocabulary-label-v1",
             {"label_token": binding.label_token},
@@ -1356,7 +1390,7 @@ def _terminology_presences(
                 dimension="vocabulary",
                 content_digest=digest,
                 acquisition_tick=getattr(binding, "first_tick", None),
-                status="active",
+                status=presence_status,
             )
         )
     return rows
@@ -1491,9 +1525,9 @@ def _practical_source_rows(
                     if not bool(getattr(entry, "active", False)):
                         continue
                     digest = _technology_digest(entry)
-                    rows.setdefault((owner.owner_id.value, digest), []).append(
-                        (frame.boundary_tick, entry.entry_id, entry.acquired_tick)
-                    )
+                    rows.setdefault(
+                        (owner.owner_id.value, entry.content_key), []
+                    ).append((frame.boundary_tick, entry.entry_id, digest))
     return rows
 
 
@@ -1530,19 +1564,26 @@ def _normalize_transmission_edges(
                     target_digest = _technology_digest(entry)
                     candidates = [
                         row
-                        for row in source_rows.get((source_token, target_digest), ())
+                        for row in source_rows.get(
+                            (source_token, entry.content_key), ()
+                        )
                         if row[0] <= entry.acquired_tick
                     ]
                     candidate_ids = sorted({row[1] for row in candidates})
                     if len(candidate_ids) == 1:
                         status = "resolved"
                         source_local_id: str | None = candidate_ids[0]
+                        source_digest: str | None = next(
+                            row[2] for row in candidates if row[1] == source_local_id
+                        )
                     elif len(candidate_ids) > 1:
                         status = "ambiguous_source"
                         source_local_id = None
+                        source_digest = None
                     else:
                         status = "unknown_source"
                         source_local_id = None
+                        source_digest = None
                     if status == "resolved":
                         source_generation = generations.get(source_token)
                         receiver_generation = generations.get(owner.owner_id.value)
@@ -1586,9 +1627,7 @@ def _normalize_transmission_edges(
                                 in parent_child_edges
                                 and generation_class == "intergenerational"
                             ),
-                            source_digest=(
-                                target_digest if status == "resolved" else None
-                            ),
+                            source_digest=source_digest,
                             target_digest=(
                                 target_digest if status == "resolved" else None
                             ),
@@ -1600,6 +1639,14 @@ def _normalize_transmission_edges(
                             evidence_ids=(),
                         )
                     )
+    _LOG.debug(
+        "[FIX] cultural_transmission_edges_normalized edge_count=%s "
+        "resolved_count=%s ambiguous_count=%s unknown_count=%s",
+        len(edges),
+        sum(1 for edge in edges if edge.attribution_status == "resolved"),
+        sum(1 for edge in edges if edge.attribution_status == "ambiguous_source"),
+        sum(1 for edge in edges if edge.attribution_status == "unknown_source"),
+    )
     return tuple(edges)
 
 

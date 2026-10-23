@@ -136,6 +136,16 @@ class MatrixManifestStore(Protocol):
 
     def read_metric_documents(self, cell_id: str) -> tuple[object, ...] | None: ...
 
+    def write_cultural_artifacts(
+        self,
+        cell_id: str,
+        *,
+        evidence_bytes: bytes,
+        cell_metrics_bytes: bytes,
+    ) -> None: ...
+
+    def read_cultural_artifacts(self, cell_id: str) -> tuple[bytes, bytes] | None: ...
+
     def has_valid_completion(
         self,
         cell: MatrixCell,
@@ -536,6 +546,27 @@ class FilesystemMatrixManifestStore:
         for item in raw:
             documents.append(decode_metric_document(_canonical_dumps(item)))
         return tuple(documents)
+
+    def write_cultural_artifacts(
+        self,
+        cell_id: str,
+        *,
+        evidence_bytes: bytes,
+        cell_metrics_bytes: bytes,
+    ) -> None:
+        from experiments.cultural_metric_artifacts import write_cultural_pair
+
+        write_cultural_pair(
+            self._root,
+            str(cell_id),
+            evidence_bytes=evidence_bytes,
+            cell_metrics_bytes=cell_metrics_bytes,
+        )
+
+    def read_cultural_artifacts(self, cell_id: str) -> tuple[bytes, bytes] | None:
+        from experiments.cultural_metric_artifacts import read_cultural_pair
+
+        return read_cultural_pair(self._root, str(cell_id))
 
     def has_valid_completion(
         self,

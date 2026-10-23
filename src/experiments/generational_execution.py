@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
 from experiments.collectors import collect_for_experiment
 from experiments.coordinator import ExperimentArmResult, ExperimentAssignment
+from experiments.cultural_metric_artifacts import CulturalCaptureOptions
 from experiments.generational_archive import (
     GenerationalExecutionRecipe,
     open_generational_archive,
@@ -24,9 +25,7 @@ from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import SimulationRunnerConfig
 from simulation.runner_serialization import runner_config_fingerprint
 
-_LOG: Final[logging.Logger] = logging.getLogger(
-    "experiments.generational_execution"
-)
+_LOG: Final[logging.Logger] = logging.getLogger("experiments.generational_execution")
 
 PLAIN_RECIPE_ID: Final[str] = "plain-generational"
 BL_RECIPE_ID: Final[str] = "bl-diagnostic"
@@ -65,9 +64,7 @@ def _validate_recipe(
         if lifecycle.demographic_policy_id != "disabled":
             raise GenerationalExecutionError("single_cohort_requires_disabled")
     elif lifecycle.demographic_policy_id != "generational_interval_entry":
-        raise GenerationalExecutionError(
-            "generational_treatment_requires_schedule"
-        )
+        raise GenerationalExecutionError("generational_treatment_requires_schedule")
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +86,7 @@ class GenerationalExecutionContext:
     cadence_ticks: int | None = None
     sample_on_generation_change: bool = True
     configurator: Callable[[SimulationRunner], object] | None = None
+    cultural_capture: CulturalCaptureOptions | None = None
 
     def preflight(self, config: SimulationRunnerConfig) -> None:
         _validate_recipe(self.recipe, config)
@@ -154,19 +152,28 @@ async def execute_generational_assignment(
     if context.criterion_factory is not None:
         factories = factories.with_criterion_factory(context.criterion_factory)
     try:
+        recorder = None
+        kinship_edges: tuple[tuple[str, str], ...] = ()
         async with await SimulationRunner.from_config(
             config, run_id=assignment.run_id, factories=factories
         ) as runner:
+            from experiments.cultural_evidence import (
+                install_cultural_recorder,
+                kinship_parent_child_edges,
+            )
+
+            recorder = install_cultural_recorder(runner, context.cultural_capture)
             if context.configurator is not None:
                 context.configurator(runner)
             elif config.experiment is not None:
-                arbiter = generational_runner_arbiter(
-                    assignment.condition_id, config
-                )
+                arbiter = generational_runner_arbiter(assignment.condition_id, config)
                 if arbiter is not None:
                     runner.set_intervention_arbiter(arbiter)
             result = await runner.run()
+            if recorder is not None:
+                recorder.merge_capture_status(runner.export_cultural_capture_status())
             committed_events = tuple(runner.engine.export_events().events)
+            kinship_edges = kinship_parent_child_edges(runner.engine.kinship_graph)
             traces = await runner.export_regional_destination_traces()
         from experiments.composition import (
             regional_destination_evidence_rows_from_traces,
@@ -207,9 +214,7 @@ async def execute_generational_assignment(
                     "failure_hash": "0" * 64,
                     "manifest_hash": session.manifest_hash,
                     "objective_committed": result.ticks_committed > 0,
-                    "owners_finalized": (
-                        result.stop_reason in finalized_failures
-                    ),
+                    "owners_finalized": (result.stop_reason in finalized_failures),
                     "reason_code": result.stop_reason.value,
                     "run_id": assignment.run_id.value,
                     "schema_version": "generational-failure-v1",
@@ -248,22 +253,29 @@ async def execute_generational_assignment(
             pass
         raise
     fingerprint = runner_config_fingerprint(config)
+    cultural_fields: dict[str, object] = {}
+    if recorder is not None and context.cultural_capture is not None:
+        from experiments.cultural_evidence import build_cultural_arm_fields
+
+        cultural_fields = build_cultural_arm_fields(
+            recorder,
+            run_id=assignment.run_id.value,
+            config_fingerprint=fingerprint,
+            options=context.cultural_capture,
+            source_revision=str(
+                context.source_identity.get("code_revision", "unknown")
+            ),
+            parent_child_edges=kinship_edges,
+        )
     arm = ExperimentArmResult(
         assignment=assignment,
         runner_result=result,
         config_fingerprint=fingerprint,
         committed_events=committed_events,
         regional_destination_evidence=evidence,
+        **cultural_fields,  # type: ignore[arg-type]
     )
-    metrics = collect_for_experiment(arm)
-    return ExperimentArmResult(
-        assignment=assignment,
-        runner_result=result,
-        config_fingerprint=fingerprint,
-        metrics=metrics,
-        committed_events=committed_events,
-        regional_destination_evidence=evidence,
-    )
+    return replace(arm, metrics=collect_for_experiment(arm))
 
 
 __all__ = [

@@ -439,3 +439,72 @@ def test_measurement_schema_is_independent_from_evidence_codec() -> None:
     assert measurement.row_id
     assert len(CULTURAL_FEATURE_DIMENSIONS) == 6
     assert _coverage_for(("learner",))[0][1] in CULTURAL_FEATURE_DIMENSIONS
+
+
+def test_attributed_mutation_resolves_donor_and_measures_changed_content() -> None:
+    teacher = _TEACHER
+    learner = _LEARNER
+    teacher_ledgers = _empty_ledgers(teacher)
+    teacher_ledgers[CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE] = _practical_ledger(
+        teacher,
+        (
+            _practical_entry(
+                owner=teacher,
+                entry_id="pk-teacher",
+                content_key="tech:fire",
+                fingerprint=("fp-fire",),
+                acquired_tick=0,
+            ),
+        ),
+    )
+    learner_ledgers = _empty_ledgers(learner)
+    learner_ledgers[CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE] = _practical_ledger(
+        learner,
+        (
+            _practical_entry(
+                owner=learner,
+                entry_id="pk-learner",
+                content_key="tech:fire",
+                fingerprint=("fp-fire-mutated",),
+                acquired_tick=0,
+                source=teacher,
+            ),
+        ),
+    )
+    frames = (
+        CulturalBoundaryExport(
+            run_id="run-normalize",
+            boundary_tick=0,
+            owners=(
+                _owner(teacher, 0, teacher_ledgers),
+                _owner(learner, 1, _empty_ledgers(learner)),
+            ),
+        ),
+        CulturalBoundaryExport(
+            run_id="run-normalize",
+            boundary_tick=1,
+            owners=(
+                _owner(teacher, 0, teacher_ledgers),
+                _owner(learner, 1, learner_ledgers),
+            ),
+        ),
+    )
+    inputs = cultural_evolution_inputs_from_capture(
+        frames,
+        run_id="run-normalize",
+        source_revision="rev-normalize",
+        window=CulturalAnalysisWindow(end_boundary=1),
+        parent_child_edges=(("teacher", "learner"),),
+    )
+    assert len(inputs.transmission_edges) == 1
+    edge = inputs.transmission_edges[0]
+    assert edge.attribution_status == "resolved"
+    assert edge.source_digest != edge.target_digest
+    from analysis.cultural_evolution_transmission import (
+        compute_cultural_evolution_transmission,
+    )
+
+    rows = compute_cultural_evolution_transmission(inputs)
+    by_id = {row.measurement_id: row for row in rows}
+    assert by_id["exact_fidelity"].value == 0.0
+    assert by_id["mutation_rate"].value == 1.0

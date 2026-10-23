@@ -58,26 +58,20 @@ _MEASUREMENT_REGISTRY: Final[
         "exact_fidelity": frozenset({("proportion", "comparable_single_source_edges")}),
         "mutation_rate": frozenset({("proportion", "comparable_single_source_edges")}),
         "declared_mutation_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
+            {("proportion", "attributable_acquisitions")}
         ),
-        "recombination_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
-        ),
-        "horizontal_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
-        ),
+        "recombination_share": frozenset({("proportion", "attributable_acquisitions")}),
+        "horizontal_share": frozenset({("proportion", "attributable_acquisitions")}),
         "forward_intergenerational_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
+            {("proportion", "attributable_acquisitions")}
         ),
         "reverse_intergenerational_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
+            {("proportion", "attributable_acquisitions")}
         ),
         "unknown_generation_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
+            {("proportion", "attributable_acquisitions")}
         ),
-        "vertical_kin_share": frozenset(
-            {("proportion", "comparable_single_source_edges")}
-        ),
+        "vertical_kin_share": frozenset({("proportion", "attributable_acquisitions")}),
         "acquisition_candidate_count": frozenset(
             {("count", "attributable_acquisitions")}
         ),
@@ -103,6 +97,18 @@ _MEASUREMENT_REGISTRY: Final[
         "within_group_convergence": frozenset(
             {("jaccard_distance", "fixed_eligible_pairs")}
         ),
+        "within_group_cohort_size": frozenset({("count", "eligible_living_owners")}),
+        "within_group_excluded_pair_count": frozenset(
+            {("count", "fixed_eligible_pairs")}
+        ),
+        "within_group_baseline_empty_pair_count": frozenset(
+            {("count", "fixed_eligible_pairs")}
+        ),
+        "within_group_endpoint_empty_pair_count": frozenset(
+            {("count", "fixed_eligible_pairs")}
+        ),
+        "within_group_entrant_count": frozenset({("count", "eligible_living_owners")}),
+        "within_group_exit_count": frozenset({("count", "eligible_living_owners")}),
     },
     MetricFamilyId.CULTURAL_NARRATIVE_SURVIVAL: {
         "baseline_variant_count": frozenset({("count", "fixed_baseline_traits")}),
@@ -129,6 +135,12 @@ _MEASUREMENT_REGISTRY: Final[
         ),
         "within_group_vocabulary_convergence": frozenset(
             {("jaccard_distance", "fixed_eligible_pairs")}
+        ),
+        "vocabulary_candidate_label_count": frozenset(
+            {("count", "eligible_living_owners")}
+        ),
+        "vocabulary_retired_label_count": frozenset(
+            {("count", "eligible_living_owners")}
         ),
     },
     MetricFamilyId.CULTURAL_TECHNOLOGY_CONTINUITY: {

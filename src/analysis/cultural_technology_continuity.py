@@ -13,6 +13,7 @@ from analysis.cultural_evolution_evidence import (
     CulturalMeasurement,
     InventoryBoundary,
     TraitPresence,
+    dimension_population,
 )
 from analysis.models import MetricAvailability
 
@@ -49,6 +50,8 @@ def _measurement(
     evidence_ids: tuple[str, ...] = (),
     population_basis: str = "fixed_baseline_traits",
     lineage_id: str | None = None,
+    left_censored: bool = False,
+    right_censored: bool = False,
 ) -> CulturalMeasurement:
     return CulturalMeasurement(
         family=CULTURAL_TECHNOLOGY_CONTINUITY_FAMILY,
@@ -75,8 +78,8 @@ def _measurement(
         reason_code=reason_code,
         coverage_observed=coverage_observed,
         coverage_expected=coverage_expected,
-        left_censored=False,
-        right_censored=False,
+        left_censored=left_censored,
+        right_censored=right_censored,
         evidence_ids=evidence_ids,
     )
 
@@ -195,6 +198,58 @@ def compute_cultural_technology_continuity(
             )
         rows.sort(key=lambda row: row.measurement_id)
         return tuple(rows)
+    (
+        baseline_living,
+        baseline_eligible,
+        baseline_observed,
+        baseline_complete,
+    ) = dimension_population(baseline, _DIMENSION)
+    if baseline_living == 0 or baseline_eligible == 0 or not baseline_complete:
+        reason = (
+            "population_empty"
+            if baseline_living == 0
+            else "channel_disabled"
+            if baseline_eligible == 0
+            else "partial_baseline"
+        )
+        for measurement_id, units in (
+            ("baseline_content_key_count", "count"),
+            ("living_retention", "proportion"),
+            ("exact_variant_retention", "proportion"),
+            ("living_loss_count", "count"),
+            ("living_loss_share", "proportion"),
+            ("technology_preserved_count", "count"),
+            ("technology_absent_count", "count"),
+            ("technology_unknown_count", "count"),
+            ("global_loss_count", "count"),
+            ("global_loss_share", "proportion"),
+            ("not_performable_count", "count"),
+        ):
+            rows.append(
+                _measurement(
+                    measurement_id=measurement_id,
+                    units=units,
+                    value=None,
+                    numerator=None,
+                    denominator=None,
+                    availability=MetricAvailability.UNKNOWN,
+                    reason_code=reason,
+                    baseline_tick=baseline_tick,
+                    end_tick=end_tick,
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
+                    left_censored=True,
+                )
+            )
+        _LOG.debug(
+            "[FIX] cultural_technology_coverage_censored stage=baseline "
+            "reason_code=%s observed=%s expected=%s",
+            reason,
+            baseline_observed,
+            baseline_eligible,
+        )
+        rows.sort(key=lambda row: row.measurement_id)
+        return tuple(rows)
     baseline_keys = _baseline_keys(baseline)
     baseline_variants = {
         (key, digest) for key, digests in baseline_keys.items() for digest in digests
@@ -219,8 +274,8 @@ def compute_cultural_technology_continuity(
                     reason_code="empty_baseline",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=baseline_evidence,
                 )
             )
@@ -244,8 +299,8 @@ def compute_cultural_technology_continuity(
                     reason_code="empty_baseline",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=baseline_evidence,
                 )
             )
@@ -275,8 +330,8 @@ def compute_cultural_technology_continuity(
                     reason_code="missing_endpoint",
                     baseline_tick=baseline_tick,
                     end_tick=end_tick,
-                    coverage_observed=len(baseline.living_owner_ids),
-                    coverage_expected=len(baseline.living_owner_ids),
+                    coverage_observed=baseline_observed,
+                    coverage_expected=baseline_eligible,
                     evidence_ids=baseline_evidence,
                 )
             )
@@ -291,14 +346,82 @@ def compute_cultural_technology_continuity(
                 reason_code=None,
                 baseline_tick=baseline_tick,
                 end_tick=end_tick,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=baseline_evidence,
             )
         )
         rows.sort(key=lambda row: row.measurement_id)
         return tuple(rows)
     assert resolved_end is not None
+    (
+        endpoint_living,
+        endpoint_eligible,
+        endpoint_observed,
+        endpoint_complete,
+    ) = dimension_population(endpoint, _DIMENSION)
+    if endpoint_living == 0 or endpoint_eligible == 0 or not endpoint_complete:
+        reason = (
+            "population_empty"
+            if endpoint_living == 0
+            else "channel_disabled"
+            if endpoint_eligible == 0
+            else "partial_endpoint"
+        )
+        for measurement_id, units in (
+            ("living_retention", "proportion"),
+            ("exact_variant_retention", "proportion"),
+            ("living_loss_count", "count"),
+            ("living_loss_share", "proportion"),
+            ("technology_preserved_count", "count"),
+            ("technology_absent_count", "count"),
+            ("technology_unknown_count", "count"),
+            ("global_loss_count", "count"),
+            ("global_loss_share", "proportion"),
+            ("not_performable_count", "count"),
+        ):
+            rows.append(
+                _measurement(
+                    measurement_id=measurement_id,
+                    units=units,
+                    value=None,
+                    numerator=None,
+                    denominator=float(baseline_count),
+                    availability=MetricAvailability.UNKNOWN,
+                    reason_code=reason,
+                    baseline_tick=baseline_tick,
+                    end_tick=resolved_end,
+                    coverage_observed=endpoint_observed,
+                    coverage_expected=endpoint_eligible,
+                    evidence_ids=baseline_evidence,
+                    right_censored=True,
+                )
+            )
+        rows.append(
+            _measurement(
+                measurement_id="baseline_content_key_count",
+                units="count",
+                value=float(baseline_count),
+                numerator=float(baseline_count),
+                denominator=float(baseline_count),
+                availability=MetricAvailability.PRESENT,
+                reason_code=None,
+                baseline_tick=baseline_tick,
+                end_tick=resolved_end,
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
+                evidence_ids=baseline_evidence,
+            )
+        )
+        _LOG.debug(
+            "[FIX] cultural_technology_coverage_censored stage=endpoint "
+            "reason_code=%s observed=%s expected=%s",
+            reason,
+            endpoint_observed,
+            endpoint_eligible,
+        )
+        rows.sort(key=lambda row: row.measurement_id)
+        return tuple(rows)
     endpoint_keys = _baseline_keys(endpoint)
     endpoint_variants = {
         (key, digest) for key, digests in endpoint_keys.items() for digest in digests
@@ -341,8 +464,8 @@ def compute_cultural_technology_continuity(
                 reason_code=None,
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                coverage_observed=len(baseline.living_owner_ids),
-                coverage_expected=len(baseline.living_owner_ids),
+                coverage_observed=baseline_observed,
+                coverage_expected=baseline_eligible,
                 evidence_ids=baseline_evidence,
             ),
             _measurement(

@@ -129,6 +129,12 @@ uv run palimpsest-matrix resume --matrix matrix.json --manifest-root ./matrix-ou
 uv run palimpsest-matrix status --manifest-root ./matrix-out
 uv run palimpsest-matrix aggregate --matrix matrix.json --manifest-root ./matrix-out
 uv run palimpsest-matrix aggregate --matrix matrix.json --manifest-root ./matrix-out --metric-summary
+# opt-in cultural evidence and repeated-seed comparison
+uv run palimpsest-matrix --code-revision "$PALIMPSEST_CODE_REVISION" run \
+  --matrix matrix.json --manifest-root ./matrix-out --cultural-metrics
+uv run palimpsest-matrix --code-revision "$PALIMPSEST_CODE_REVISION" aggregate \
+  --matrix matrix.json --manifest-root ./matrix-out --cultural-summary \
+  --cultural-contrast control-condition:treatment-condition --confidence 0.95
 # or: python -m research_runner …
 ```
 
@@ -136,7 +142,24 @@ Optional `--print-fingerprint` prints the matrix fingerprint only. Never dump fu
 
 Completed cells may write optional `cells/<cell_id>.metrics.json` sidecars (encoded `MetricDocument` payloads, sorted by family) when present/partial documents exist. `--metric-summary` reads those sidecars and writes sibling `metric-summary.json` (`matrix-metric-summary-v1`) beside the aggregate — never replacing it. Missing sidecars contribute no numeric rows (not zeros). Phenomenon indicator panels and metric summaries are analysis-only and stay off the V1 regression gate.
 
-`RunVersionIdentity.code_revision` is optional metadata: pass `--code-revision` or set `PALIMPSEST_CODE_REVISION`. Empty is allowed; the CLI never invents a wall-clock surrogate.
+`RunVersionIdentity.code_revision` is optional metadata: pass `--code-revision` or set `PALIMPSEST_CODE_REVISION`. Empty is allowed for ordinary runs; generational archives require a nonempty revision. The CLI never invents a wall-clock surrogate.
+
+Cultural capture adds `cells/<cell_id>.cultural-evidence.json`
+(`cultural-evolution-evidence-v1`) and `cells/<cell_id>.cultural-metrics.json`
+(`cultural-cell-metrics-v1`). `--cultural-summary` writes sibling
+`cultural-metric-comparison.json` (`cultural-metric-comparison-v1`) from
+verified completed artifacts. `--cultural-contrast CONTROL:TREATMENT` is
+repeatable and must name known, distinct condition IDs; `--confidence` defaults
+to `0.95`. Both require `--cultural-summary`. Legacy `aggregate.json`,
+`metric-summary.json`, and `.metrics.json` schemas are unchanged. Capture is not
+backfilled for completed cells: a missing/mismatched pair fails preflight, and a
+sealed archive with lost capture is not rerun. Evidence and cell artifacts are
+bounded to 64 MiB, embedded `rows_json` to 16 MiB, and JSON depth to 32;
+duplicate keys, non-finite numbers, unknown fields, and symlinked or escaping
+paths fail closed. Identical artifacts are idempotent; divergent content is a
+conflict. The legacy `p05`/`p95` metric-summary fields remain empirical
+percentile ranges, not confidence intervals. See
+[Cultural evolution metrics](cultural-evolution-metrics.md).
 
 ## V2 benchmark suite
 
@@ -526,5 +549,9 @@ cognition and horizon.
 
 Detached analysis adds `generational_cohort_comparison@1`, which folds the
 finalized `PopulationProgress` into generation/cohort counts and survival
-shares. Cross-arm comparison remains `matrix-metric-summary-v1`; there is no
-paired confidence-interval, effect-size, or significance layer.
+shares. Legacy cross-arm comparison remains `matrix-metric-summary-v1` with
+empirical `p05`/`p95` ranges. An opt-in sibling
+`cultural-metric-comparison-v1` adds repeated-seed Student-t intervals and
+explicit one-factor paired contrasts over verified cultural sidecars, without
+turning the legacy percentile range into a confidence interval and without
+claiming significance.

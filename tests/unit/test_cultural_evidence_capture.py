@@ -274,3 +274,28 @@ def test_capture_status_defaults_and_repr_are_safe() -> None:
     assert "failure_code=None" in repr(status)
     with pytest.raises(ValueError, match="failed_requires"):
         CulturalCaptureStatus(active=False, failed=True)
+
+
+def test_kinship_parent_child_edges_copies_and_sorts_objective_edges() -> None:
+    from types import SimpleNamespace
+
+    from agents.models import AgentId
+    from experiments.cultural_evidence import kinship_parent_child_edges
+
+    graph = SimpleNamespace(
+        edges=(
+            SimpleNamespace(
+                parent_agent_id=AgentId("parent-b"),
+                child_agent_id=AgentId("child-b"),
+            ),
+            SimpleNamespace(
+                parent_agent_id=AgentId("parent-a"),
+                child_agent_id=AgentId("child-a"),
+            ),
+        )
+    )
+    assert kinship_parent_child_edges(graph) == (
+        ("parent-a", "child-a"),
+        ("parent-b", "child-b"),
+    )
+    assert kinship_parent_child_edges(SimpleNamespace(edges=())) == ()

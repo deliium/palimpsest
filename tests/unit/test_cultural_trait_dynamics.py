@@ -319,7 +319,7 @@ def test_no_living_population_is_not_extinction() -> None:
     assert not [row for row in rows if row.measurement_id == "extinction_transition"]
     diversity = _row(rows, "richness", baseline=0)
     assert diversity.availability is MetricAvailability.UNKNOWN
-    assert diversity.reason_code == "population_unavailable"
+    assert diversity.reason_code == "population_empty"
 
 
 def test_birth_and_death_change_frequency_denominator() -> None:

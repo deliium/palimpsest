@@ -280,3 +280,67 @@ def test_performability_without_evidence_is_unknown_not_loss() -> None:
     assert (
         _row(rows, "not_performable_count").reason_code == "no_performability_evidence"
     )
+
+
+def _coverage_code(
+    owners: tuple[str, ...], code: str
+) -> tuple[tuple[str, str, str], ...]:
+    return tuple(
+        (owner, dimension, code if dimension == "technology" else "complete")
+        for owner in owners
+        for dimension in CULTURAL_DIMENSIONS
+    )
+
+
+def test_missing_endpoint_coverage_is_unknown_not_loss() -> None:
+    boundaries = (
+        _boundary(0, (_tech("a", _A),)),
+        InventoryBoundary(
+            boundary_tick=2,
+            living_owner_ids=("a",),
+            generation_by_owner={"a": 0},
+            owner_dimension_coverage=_coverage_code(("a",), "missing"),
+            entries=(),
+        ),
+    )
+    rows = compute_cultural_technology_continuity(_inputs(boundaries, end=2))
+    row = _row(rows, "living_retention")
+    assert row.value is None
+    assert row.availability is MetricAvailability.UNKNOWN
+    assert row.reason_code == "partial_endpoint"
+    assert _row(rows, "living_loss_count").value is None
+
+
+def test_disabled_baseline_channel_is_unknown_not_empty() -> None:
+    boundaries = (
+        InventoryBoundary(
+            boundary_tick=0,
+            living_owner_ids=("a",),
+            generation_by_owner={"a": 0},
+            owner_dimension_coverage=_coverage_code(("a",), "disabled"),
+            entries=(),
+        ),
+        _boundary(2, (), owners=("a",)),
+    )
+    rows = compute_cultural_technology_continuity(_inputs(boundaries, end=2))
+    row = _row(rows, "baseline_content_key_count")
+    assert row.value is None
+    assert row.reason_code == "channel_disabled"
+
+
+def test_empty_population_is_not_inferred_loss() -> None:
+    boundaries = (
+        _boundary(0, (_tech("a", _A),)),
+        InventoryBoundary(
+            boundary_tick=2,
+            living_owner_ids=(),
+            generation_by_owner={},
+            owner_dimension_coverage=(),
+            entries=(),
+        ),
+    )
+    rows = compute_cultural_technology_continuity(_inputs(boundaries, end=2))
+    row = _row(rows, "living_retention")
+    assert row.value is None
+    assert row.reason_code == "population_empty"
+    assert _row(rows, "global_loss_count").availability is MetricAvailability.UNKNOWN

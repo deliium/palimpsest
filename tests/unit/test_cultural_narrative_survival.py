@@ -239,3 +239,74 @@ def test_gap_censors_continuous_but_not_endpoint_retention() -> None:
     assert _row(rows, "endpoint_persistence").value == 1.0
     assert _row(rows, "continuous_persistence").value is None
     assert _row(rows, "continuous_persistence").reason_code == "censored_intermediate"
+
+
+def _boundary_with_coverage(
+    tick: int,
+    entries: tuple[TraitPresence, ...],
+    *,
+    living: tuple[str, ...],
+    code: str,
+) -> InventoryBoundary:
+    return InventoryBoundary(
+        boundary_tick=tick,
+        living_owner_ids=living,
+        generation_by_owner={owner: 0 for owner in living},
+        owner_dimension_coverage=tuple(
+            (owner, dimension, code if dimension == "narrative" else "complete")
+            for owner in living
+            for dimension in CULTURAL_DIMENSIONS
+        ),
+        entries=entries,
+    )
+
+
+def test_missing_endpoint_coverage_is_unknown_not_loss() -> None:
+    boundaries = (
+        _boundary(0, (_narrative("a", "vA", _A),)),
+        _boundary_with_coverage(2, (), living=("a",), code="missing"),
+    )
+    rows = compute_cultural_narrative_survival(_inputs(boundaries, end=2))
+    row = _row(rows, "endpoint_persistence")
+    assert row.value is None
+    assert row.availability is MetricAvailability.UNKNOWN
+    assert row.reason_code == "partial_endpoint"
+
+
+def test_missing_baseline_coverage_is_unknown_not_empty() -> None:
+    boundaries = (
+        _boundary_with_coverage(0, (), living=("a",), code="disabled"),
+        _boundary_with_coverage(2, (), living=("a",), code="complete"),
+    )
+    rows = compute_cultural_narrative_survival(_inputs(boundaries, end=2))
+    row = _row(rows, "baseline_variant_count")
+    assert row.value is None
+    assert row.reason_code == "channel_disabled"
+
+
+def test_unresolved_baseline_ancestry_censors_exact_rate() -> None:
+    boundaries = (
+        _boundary(0, (_narrative("a", "vA", _A, parents=("missing",)),)),
+        _boundary(2, (_narrative("a", "vA", _A, parents=("missing",)),)),
+    )
+    rows = compute_cultural_narrative_survival(_inputs(boundaries, end=2))
+    assert _row(rows, "unresolved_baseline_count").value == 1.0
+    assert _row(rows, "endpoint_persistence").value is None
+    assert _row(rows, "endpoint_persistence").reason_code == "unresolved_ancestry"
+
+
+def test_empty_population_is_not_inferred_loss() -> None:
+    boundaries = (
+        _boundary(0, (_narrative("a", "vA", _A),)),
+        InventoryBoundary(
+            boundary_tick=2,
+            living_owner_ids=(),
+            generation_by_owner={},
+            owner_dimension_coverage=(),
+            entries=(),
+        ),
+    )
+    rows = compute_cultural_narrative_survival(_inputs(boundaries, end=2))
+    row = _row(rows, "endpoint_persistence")
+    assert row.value is None
+    assert row.reason_code == "population_empty"

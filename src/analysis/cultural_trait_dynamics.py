@@ -146,6 +146,14 @@ def _dimension_population(
     return tuple(eligible), observed, len(eligible), missing == 0
 
 
+def _unavailable_reason(boundary: InventoryBoundary, expected: int) -> str:
+    if not boundary.living_owner_ids:
+        return "population_empty"
+    if expected == 0:
+        return "channel_disabled"
+    return "population_unavailable"
+
+
 def _carriers(boundary: InventoryBoundary, dimension: str) -> dict[str, set[str]]:
     carriers: dict[str, set[str]] = defaultdict(set)
     living = set(boundary.living_owner_ids)
@@ -153,6 +161,8 @@ def _carriers(boundary: InventoryBoundary, dimension: str) -> dict[str, set[str]
         if entry.dimension != dimension:
             continue
         if entry.owner_id not in living:
+            continue
+        if entry.status not in (None, "active"):
             continue
         carriers[entry.content_digest].add(entry.owner_id)
     return dict(carriers)
@@ -222,7 +232,7 @@ def _frequency_rows(
                 if expected == 0:
                     availability = MetricAvailability.UNKNOWN
                     value = None
-                    reason = "population_unavailable"
+                    reason = _unavailable_reason(boundary, expected)
                 elif complete:
                     availability = MetricAvailability.PRESENT
                     value = carrier_count / expected
@@ -264,7 +274,7 @@ def _diversity_rows(
             evidence: tuple[str, ...] = ()
             if expected == 0:
                 availability = MetricAvailability.UNKNOWN
-                reason = "population_unavailable"
+                reason = _unavailable_reason(boundary, expected)
             elif not complete:
                 availability = MetricAvailability.PARTIAL
                 reason = "partial_owner_coverage"
@@ -393,7 +403,7 @@ def _persistence_rows(
         )
         baseline_traits = _baseline_cohort(baseline, dimension)
         if expected == 0:
-            reason = "population_unavailable"
+            reason = _unavailable_reason(baseline, expected)
             availability = MetricAvailability.UNKNOWN
             baseline_value: float | None = None
         elif not baseline_complete:

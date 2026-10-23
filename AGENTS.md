@@ -78,6 +78,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | README | `README.md` | Project landing page and complete documentation index |
 | Architecture | `docs/architecture.md` | Authority boundaries and regional migration contract |
 | Experiments | `docs/experiments.md` | AY treatments, reproduction, and demographic interpretation |
+| Cultural metrics | `docs/cultural-evolution-metrics.md` | Opt-in capture, six families, seed-block intervals, provenance limits |
 | Observer | `docs/observer.md` | Read-only region and journey presentation |
 | Physical simulation | `docs/physical-simulation.md` | Discrete journeys, fatigue, capacity, and death |
 | Configuration | `docs/configuration.md` | Exact regional specification and optional capability gates |
