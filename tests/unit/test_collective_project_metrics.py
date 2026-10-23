@@ -23,7 +23,7 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 
 
 def test_family_count_is_94() -> None:
-    assert METRIC_FAMILY_COUNT == 130
+    assert METRIC_FAMILY_COUNT == 136
     assert MetricFamilyId.COLLECTIVE_PROJECT_OUTCOME.value == (
         "collective_project_outcome"
     )

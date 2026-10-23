@@ -17,7 +17,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
     "analysis.cultural_evolution_transmission"
 )
 
-CULTURAL_EVOLUTION_TRANSMISSION_FAMILY: Final[str] = "cultural_evolution_transmission@1"
+CULTURAL_EVOLUTION_TRANSMISSION_FAMILY: Final[str] = "cultural_evolution_transmission"
 CULTURAL_EVOLUTION_TRANSMISSION_ALGORITHM_VERSION: Final[str] = (
     "cultural-evolution-transmission@1"
 )

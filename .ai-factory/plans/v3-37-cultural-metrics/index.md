@@ -178,7 +178,7 @@ Cross-run rows pool only population-summary measurements sharing scientific sele
 
 ### Phase 4: Integration and statistics
 
-- [ ] Task 10: Register six versioned metric families ([details](phase-04-integration-statistics.md#task-10-register-six-versioned-metric-families)) (depends on 3, 4, 5, 6, 7, 8, 9).
+- [x] Task 10: Register six versioned metric families ([details](phase-04-integration-statistics.md#task-10-register-six-versioned-metric-families)) (depends on 3, 4, 5, 6, 7, 8, 9).
 - [ ] Task 11: Persist and propagate agent-level evidence artifacts ([details](phase-04-integration-statistics.md#task-11-persist-and-propagate-agent-level-evidence-artifacts)) (depends on 2, 3, 10).
 - [ ] Task 12: Implement repeated-seed means, confidence intervals and paired contrasts ([details](phase-04-integration-statistics.md#task-12-implement-repeated-seed-means-confidence-intervals-and-paired-contrasts)) (depends on 10, 11).
 

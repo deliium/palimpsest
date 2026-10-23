@@ -258,6 +258,8 @@ def inputs_with_opt_in_metric_rows(
     technique_node_rows: Sequence[object] | None = None,
     technique_item_rows: Sequence[object] | None = None,
     generational_progress: PopulationProgress | None = None,
+    cultural_evolution: object | None = None,
+    cultural_evolution_evidence_digest: str | None = None,
 ) -> MetricComputationInputs:
     """Attach opt-in family inputs from harvested evidence when present.
 
@@ -265,6 +267,12 @@ def inputs_with_opt_in_metric_rows(
     zeros). Spatial rows still follow ``inputs_with_spatial_rows``.
     """
     updated = inputs_with_spatial_rows(inputs, events, claim_ledgers=claim_ledgers)
+    if cultural_evolution is not None:
+        updated = replace(
+            updated,
+            cultural_evolution=cultural_evolution,
+            cultural_evolution_evidence_digest=(cultural_evolution_evidence_digest),
+        )
     if contact_analysis is not None:
         updated = replace(updated, contact_analysis=contact_analysis)
     from experiments.composition import (

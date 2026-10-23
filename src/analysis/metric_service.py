@@ -316,6 +316,8 @@ class MetricComputationInputs:
     mediation_rows: Sequence[object] | None = None
     mediation_effects: Sequence[object] | None = None
     collective_decision_effects: Sequence[object] | None = None
+    cultural_evolution: object | None = None
+    cultural_evolution_evidence_digest: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1787,6 +1789,25 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 carrier_rows=inputs.institutional_memory_carrier_rows,
                 identity_rows=inputs.institutional_memory_identity_rows,
             ),
+        )
+
+    if inputs.cultural_evolution is not None:
+        from analysis.cultural_evolution_evidence import (
+            CulturalEvolutionInputs,
+        )
+        from analysis.cultural_evolution_metrics import (
+            assemble_cultural_evolution_documents,
+        )
+
+        if type(inputs.cultural_evolution) is not CulturalEvolutionInputs:
+            raise TypeError("cultural_evolution: invalid_type")
+        if inputs.cultural_evolution_evidence_digest is None:
+            raise ValueError("cultural_evolution_evidence_digest_required")
+        documents.extend(
+            assemble_cultural_evolution_documents(
+                inputs.cultural_evolution,
+                evidence_manifest_digest=(inputs.cultural_evolution_evidence_digest),
+            )
         )
 
     documents.sort(key=lambda doc: doc.metric_family)

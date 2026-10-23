@@ -186,7 +186,7 @@ def test_none_and_empty_inputs_are_absent() -> None:
 
 
 def test_specifications_are_registered_exactly() -> None:
-    assert METRIC_FAMILY_COUNT == 130
+    assert METRIC_FAMILY_COUNT == 136
     continuity = metric_specification(MetricFamilyId.INSTITUTIONAL_MEMORY_CONTINUITY)
     provenance = metric_specification(MetricFamilyId.INSTITUTIONAL_MEMORY_PROVENANCE)
     assert len(continuity.value_keys) == 15

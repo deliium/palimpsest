@@ -21,7 +21,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
     "analysis.cultural_population_structure"
 )
 
-CULTURAL_POPULATION_STRUCTURE_FAMILY: Final[str] = "cultural_population_structure@1"
+CULTURAL_POPULATION_STRUCTURE_FAMILY: Final[str] = "cultural_population_structure"
 CULTURAL_POPULATION_STRUCTURE_ALGORITHM_VERSION: Final[str] = (
     "cultural-population-structure@1"
 )

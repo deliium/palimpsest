@@ -20,7 +20,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
     "analysis.cultural_technology_continuity"
 )
 
-CULTURAL_TECHNOLOGY_CONTINUITY_FAMILY: Final[str] = "cultural_technology_continuity@1"
+CULTURAL_TECHNOLOGY_CONTINUITY_FAMILY: Final[str] = "cultural_technology_continuity"
 CULTURAL_TECHNOLOGY_CONTINUITY_ALGORITHM_VERSION: Final[str] = (
     "cultural-technology-continuity@1"
 )

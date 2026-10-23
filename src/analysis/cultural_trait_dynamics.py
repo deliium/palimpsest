@@ -19,7 +19,7 @@ from analysis.models import MetricAvailability
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.cultural_trait_dynamics")
 
-CULTURAL_TRAIT_DYNAMICS_FAMILY: Final[str] = "cultural_trait_dynamics@1"
+CULTURAL_TRAIT_DYNAMICS_FAMILY: Final[str] = "cultural_trait_dynamics"
 CULTURAL_TRAIT_DYNAMICS_ALGORITHM_VERSION: Final[str] = "cultural-trait-dynamics@1"
 
 _REPRESENTATION: Final[dict[str, str]] = {

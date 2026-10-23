@@ -16,7 +16,7 @@ from analysis.models import MetricAvailability
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.cultural_narrative_survival")
 
-CULTURAL_NARRATIVE_SURVIVAL_FAMILY: Final[str] = "cultural_narrative_survival@1"
+CULTURAL_NARRATIVE_SURVIVAL_FAMILY: Final[str] = "cultural_narrative_survival"
 CULTURAL_NARRATIVE_SURVIVAL_ALGORITHM_VERSION: Final[str] = (
     "cultural-narrative-survival@1"
 )

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 130
+METRIC_FAMILY_COUNT: Final[int] = 136
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -205,6 +205,12 @@ class MetricFamilyId(StrEnum):
     INSTITUTION_LIFECYCLE = "institution_lifecycle"
     INSTITUTION_LINEAGE = "institution_lineage"
     GENERATIONAL_COHORT_COMPARISON = "generational_cohort_comparison"
+    CULTURAL_TRAIT_DYNAMICS = "cultural_trait_dynamics"
+    CULTURAL_EVOLUTION_TRANSMISSION = "cultural_evolution_transmission"
+    CULTURAL_POPULATION_STRUCTURE = "cultural_population_structure"
+    CULTURAL_NARRATIVE_SURVIVAL = "cultural_narrative_survival"
+    CULTURAL_VOCABULARY_DIFFERENTIATION = "cultural_vocabulary_differentiation"
+    CULTURAL_TECHNOLOGY_CONTINUITY = "cultural_technology_continuity"
 
 
 class DenominatorKind(StrEnum):
@@ -5786,9 +5792,7 @@ def _spec_generational_cohort_comparison() -> MetricSpecification:
         deceased_policy=(
             "dead remain in admitted/dead totals; living counts exclude them"
         ),
-        zero_holding_policy=(
-            "zero population is a present zero, not absent evidence"
-        ),
+        zero_holding_policy=("zero population is a present zero, not absent evidence"),
         opportunity_vs_occurrence=(
             "admitted cohorts are occurrences; counts are censuses at finalization"
         ),
@@ -5830,6 +5834,169 @@ def _spec_generational_cohort_comparison() -> MetricSpecification:
             "missing progress -> availability=unknown; family omitted; "
             "never fabricate counts"
         ),
+    )
+
+
+def _spec_cultural_evolution_family(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    formulas: Mapping[str, str],
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population=population,
+        denominator=denominator,
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window=(
+            "exact requested baseline boundary and exact requested/resolved "
+            "endpoint boundary; no nearest or first-complete substitution"
+        ),
+        deceased_policy=(
+            "living prevalence/retention excludes deceased owners; dead owners "
+            "remain provenance sources"
+        ),
+        zero_holding_policy=(
+            "complete empty inventory is a known zero carriage/richness state; "
+            "disabled or missing inventory is not zero"
+        ),
+        opportunity_vs_occurrence=(
+            "carrier prevalence and acquisition opportunities are separate "
+            "denominators; occurrences never become exposure"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "missing frames, gaps, truncation and unresolved ancestry are "
+            "explicitly left/right censored; no forward filling"
+        ),
+        formulas=formulas,
+        value_keys=(
+            "evidence_manifest_digest",
+            "measurement_count",
+            "policy_version",
+            "rows_json",
+            "window_end",
+            "window_start",
+        ),
+        empty_case=(
+            "complete empty inventories yield known zero counts; empty baseline "
+            "yields null cohort retention; family omitted without capture"
+        ),
+        unknown_case=(
+            "missing capture, partial coverage or unresolved lineage -> "
+            "availability=unknown or partial; never coerce to zero"
+        ),
+    )
+
+
+def _spec_cultural_trait_dynamics() -> MetricSpecification:
+    return _spec_cultural_evolution_family(
+        family_id=MetricFamilyId.CULTURAL_TRAIT_DYNAMICS,
+        population="living_owners_with_enabled_inventory_by_dimension",
+        denominator="eligible_living_owners_or_carrier_incidences_or_fixed_baseline_traits",
+        formulas={
+            "trait_frequency": "carriers of exact trait digest / eligible living owners",  # noqa: E501
+            "endpoint_persistence": "baseline cohort traits present at exact endpoint / baseline cohort",  # noqa: E501
+            "continuous_persistence": "baseline cohort traits present at every complete boundary / baseline cohort",  # noqa: E501
+            "extinction_transition": "positive prevalence at b and zero at next complete b+1",  # noqa: E501
+            "richness": "distinct carrier traits at boundary",
+            "shannon_entropy": "-sum(p_i ln p_i) over carrier incidences",
+            "effective_diversity": "exp(shannon_entropy)",
+            "simpson_diversity": "1 - sum(p_i^2) over carrier incidences",
+        },
+    )
+
+
+def _spec_cultural_evolution_transmission() -> MetricSpecification:
+    return _spec_cultural_evolution_family(
+        family_id=MetricFamilyId.CULTURAL_EVOLUTION_TRANSMISSION,
+        population="explicit_attributable_acquisition_edges",
+        denominator="comparable_single_source_edges_or_known_generation_edges_or_candidates",
+        formulas={
+            "exact_fidelity": "equal digest comparable edges / comparable single-source edges",  # noqa: E501
+            "mutation_rate": "changed digest comparable edges / comparable single-source edges",  # noqa: E501
+            "declared_mutation_share": "declared mutation flagged candidates / candidates",  # noqa: E501
+            "recombination_share": "recombined candidates / candidates",
+            "horizontal_share": "horizontal known-generation edges / known-generation edges",  # noqa: E501
+            "forward_intergenerational_share": "forward intergenerational known edges / known-generation edges",  # noqa: E501
+            "reverse_intergenerational_share": "reverse intergenerational known edges / known-generation edges",  # noqa: E501
+            "unknown_generation_share": "unknown generation candidates / candidates",
+            "vertical_kin_share": "explicit parent-child known edges / known-generation edges",  # noqa: E501
+        },
+    )
+
+
+def _spec_cultural_population_structure() -> MetricSpecification:
+    return _spec_cultural_evolution_family(
+        family_id=MetricFamilyId.CULTURAL_POPULATION_STRUCTURE,
+        population="fixed_same_group_owner_pairs_and_explicit_group_memberships",
+        denominator="fixed_eligible_pairs_or_group_carrier_incidences",
+        formulas={
+            "between_group_js_divergence": "Jensen-Shannon divergence in nats over carrier-incidence distributions",  # noqa: E501
+            "within_group_pairwise_distance": "mean Jaccard distance over nonempty owner pairs",  # noqa: E501
+            "within_group_convergence": "baseline mean distance - endpoint mean distance over identical fixed pairs",  # noqa: E501
+        },
+    )
+
+
+def _spec_cultural_narrative_survival() -> MetricSpecification:
+    return _spec_cultural_evolution_family(
+        family_id=MetricFamilyId.CULTURAL_NARRATIVE_SURVIVAL,
+        population="active_baseline_narrative_variants_with_explicit_owner_local_ancestry",
+        denominator="fixed_baseline_narrative_variants",
+        formulas={
+            "baseline_variant_count": "distinct active baseline variants at exact baseline boundary",  # noqa: E501
+            "surviving_baseline_count": "baseline variants surviving directly or via resolved descendant",  # noqa: E501
+            "unresolved_baseline_count": "baseline variants with unresolved ancestry",
+            "endpoint_persistence": "surviving baseline variants / baseline variants",
+            "continuous_persistence": "baseline variants surviving through every complete intermediate boundary / baseline variants",  # noqa: E501
+            "witnessed_generation_span": "max witnessed generation - min witnessed generation",  # noqa: E501
+            "observed_duration": "resolved endpoint - baseline (observed lower bound)",
+        },
+    )
+
+
+def _spec_cultural_vocabulary_differentiation() -> MetricSpecification:
+    return _spec_cultural_evolution_family(
+        family_id=MetricFamilyId.CULTURAL_VOCABULARY_DIFFERENTIATION,
+        population="active_unmerged_label_bindings_by_explicit_group",
+        denominator="group_label_sets_and_carrier_incidences",
+        formulas={
+            "group_vocabulary_richness": "distinct labels in group inventory",
+            "between_group_vocabulary_js": "Jensen-Shannon divergence over label carrier incidences",  # noqa: E501
+            "between_group_vocabulary_jaccard": "1 - shared labels / label union",
+            "between_group_shared_label_count": "distinct labels present in both groups",  # noqa: E501
+            "between_group_label_union_size": "distinct labels present in either group",
+            "within_group_vocabulary_convergence": "baseline mean distance - endpoint mean distance over identical fixed pairs",  # noqa: E501
+        },
+    )
+
+
+def _spec_cultural_technology_continuity() -> MetricSpecification:
+    return _spec_cultural_evolution_family(
+        family_id=MetricFamilyId.CULTURAL_TECHNOLOGY_CONTINUITY,
+        population="active_baseline_practical_content_keys_with_optional_linked_archives",
+        denominator="fixed_baseline_content_keys_and_variants",
+        formulas={
+            "baseline_content_key_count": "distinct baseline practical content keys",
+            "living_retention": "baseline keys with an active living holder / baseline keys",  # noqa: E501
+            "exact_variant_retention": "baseline exact variant digests present / baseline variants",  # noqa: E501
+            "living_loss_count": "baseline keys with no active living holder",
+            "living_loss_share": "living loss count / baseline keys",
+            "technology_preserved_count": "baseline keys with an intact linked record or living holder",  # noqa: E501
+            "technology_absent_count": "baseline keys with no living holder and no intact linked record",  # noqa: E501
+            "technology_unknown_count": "baseline keys with unknown archive state",
+            "global_loss_count": "keys absent from living holders and intact linked records when archive coverage is complete",  # noqa: E501
+            "global_loss_share": "global loss count / baseline keys",
+            "not_performable_count": "keys with existing lifecycle evidence of non-performability only",  # noqa: E501
+        },
     )
 
 
@@ -5964,6 +6131,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_institution_lifecycle,
     _spec_institution_lineage,
     _spec_generational_cohort_comparison,
+    _spec_cultural_trait_dynamics,
+    _spec_cultural_evolution_transmission,
+    _spec_cultural_population_structure,
+    _spec_cultural_narrative_survival,
+    _spec_cultural_vocabulary_differentiation,
+    _spec_cultural_technology_continuity,
 )
 
 
