@@ -304,6 +304,14 @@ class MatrixBatchRunner:
     ) -> MatrixBatchResult:
         if type(spec) is not ExperimentMatrixSpec:
             raise TypeError("spec must be ExperimentMatrixSpec")
+        from experiments.path_dependence_catalog import (
+            grouped_experiment_id_from_matrix_base,
+            require_independent_execution,
+        )
+
+        grouped_id = grouped_experiment_id_from_matrix_base(spec.base)
+        if grouped_id is not None:
+            require_independent_execution(grouped_id)
         definition, cells = expand_matrix(spec)
         matrix_fp = matrix_spec_fingerprint(spec)
         header = MatrixManifestHeader(

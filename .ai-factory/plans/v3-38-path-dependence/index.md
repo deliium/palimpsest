@@ -206,7 +206,7 @@ CLI rollout is opt-in `palimpsest-matrix path-dependence ...`. BN discovery uses
 
 ### Phase 3: Intervention ensembles
 
-- [ ] Task 7: Apply bounded interventions through ordinary admission ([details](phase-03-intervention-ensembles.md#task-7-apply-bounded-interventions-through-ordinary-admission)) (depends on 1, 6)
+- [x] Task 7: Apply bounded interventions through ordinary admission ([details](phase-03-intervention-ensembles.md#task-7-apply-bounded-interventions-through-ordinary-admission)) (depends on 1, 6)
 - [ ] Task 8: Define Experiment BN and pre-treatment eligibility ([details](phase-03-intervention-ensembles.md#task-8-define-experiment-bn-and-pre-treatment-eligibility)) (depends on 1, 7)
 - [ ] Task 9: Execute shared prefixes and isolated child continuations ([details](phase-03-intervention-ensembles.md#task-9-execute-shared-prefixes-and-isolated-child-continuations)) (depends on 4, 5, 6, 7, 8)
 

@@ -143,6 +143,9 @@ class ExperimentCoordinator:
         self._source_revision = source_revision
 
     async def run_all(self) -> tuple[ExperimentArmResult, ...]:
+        from experiments.path_dependence_catalog import require_independent_execution
+
+        require_independent_execution(self._definition.experiment_id)
         results: list[ExperimentArmResult] = []
         for assignment in materialize_assignments(self._definition):
             _LOG.info(
