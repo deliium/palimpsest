@@ -172,9 +172,9 @@ Cross-run rows pool only population-summary measurements sharing scientific sele
 
 ### Phase 3: Specialized metrics
 
-- [ ] Task 7: Implement baseline-cohort narrative persistence ([details](phase-03-specialized-metrics.md#task-7-implement-baseline-cohort-narrative-persistence)) (depends on 3, 4).
-- [ ] Task 8: Implement vocabulary inventory divergence ([details](phase-03-specialized-metrics.md#task-8-implement-vocabulary-inventory-divergence)) (depends on 3, 6).
-- [ ] Task 9: Implement technology retention and loss ([details](phase-03-specialized-metrics.md#task-9-implement-technology-retention-and-loss)) (depends on 3, 4).
+- [x] Task 7: Implement baseline-cohort narrative persistence ([details](phase-03-specialized-metrics.md#task-7-implement-baseline-cohort-narrative-persistence)) (depends on 3, 4).
+- [x] Task 8: Implement vocabulary inventory divergence ([details](phase-03-specialized-metrics.md#task-8-implement-vocabulary-inventory-divergence)) (depends on 3, 6).
+- [x] Task 9: Implement technology retention and loss ([details](phase-03-specialized-metrics.md#task-9-implement-technology-retention-and-loss)) (depends on 3, 4).
 
 ### Phase 4: Integration and statistics
 

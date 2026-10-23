@@ -1419,7 +1419,7 @@ def _technology_presences(
                 local_entry_id=entry.entry_id,
                 dimension="technology",
                 content_digest=_technology_digest(entry),
-                lineage_key=entry.lineage_root_id,
+                lineage_key=entry.content_key,
                 acquisition_tick=entry.acquired_tick,
                 parent_refs=entry.parent_entry_ids,
                 source_refs=entry.evidence_refs,
