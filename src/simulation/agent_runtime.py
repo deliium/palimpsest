@@ -83,6 +83,10 @@ if TYPE_CHECKING:
         DecisionOutcomeCode,
         SubjectiveDecisionRecord,
     )
+    from simulation.cultural_evidence import (
+        CulturalChannelExport,
+        CulturalOwnerExport,
+    )
     from simulation.persistence import ScientificEvidenceRepository
 
 __all__ = [
@@ -430,7 +434,9 @@ class AgentRuntime:
         "_counterfactual_state",
         "_cultural_feature_audits",
         "_cultural_features",
+        "_cultural_fresh_channels",
         "_cultural_narratives",
+        "_cultural_restored",
         "_decision_journal",
         "_developmental_audits",
         "_developmental_knowledge",
@@ -607,6 +613,8 @@ class AgentRuntime:
         self._mentorship: object | None = None
         self._cultural_features: object | None = None
         self._practical_knowledge: object | None = None
+        self._cultural_restored = False
+        self._cultural_fresh_channels = self._enabled_cultural_channels()
         self._competence: object | None = None
         self._recipe_beliefs: object | None = None
         self._advice: object | None = None
@@ -1352,6 +1360,8 @@ class AgentRuntime:
             "_semantic_naming_mode",
             CognitionSemanticNamingMode.DISABLED,
         )
+        if mode is CognitionSemanticNamingMode.DETERMINISTIC:
+            self._cultural_fresh_channels.discard("terminology")
         if mode is not CognitionSemanticNamingMode.DETERMINISTIC or ledger is None:
             if mode is not CognitionSemanticNamingMode.DETERMINISTIC:
                 self._semantic_naming = None
@@ -1381,6 +1391,8 @@ class AgentRuntime:
             "_cultural_narrative_mode",
             CognitionCulturalNarrativeMode.DISABLED,
         )
+        if mode is CognitionCulturalNarrativeMode.DETERMINISTIC:
+            self._cultural_fresh_channels.discard("narratives")
         if mode is not CognitionCulturalNarrativeMode.DETERMINISTIC or ledger is None:
             if mode is not CognitionCulturalNarrativeMode.DETERMINISTIC:
                 self._cultural_narratives = None
@@ -1495,6 +1507,8 @@ class AgentRuntime:
 
         owner = self._agent.agent_id
         channel = getattr(self._loop, "_cultural_features_spec", None)
+        if channel is not None:
+            self._cultural_fresh_channels.discard("cultural_features")
         if channel is None or ledger is None:
             if channel is None:
                 self._cultural_features = None
@@ -1530,6 +1544,8 @@ class AgentRuntime:
 
         owner = self._agent.agent_id
         channel = getattr(self._loop, "_knowledge_genealogy_spec", None)
+        if channel is not None:
+            self._cultural_fresh_channels.discard("practical_knowledge")
         if channel is None or ledger is None:
             if channel is None:
                 self._practical_knowledge = None
@@ -3190,6 +3206,8 @@ class AgentRuntime:
         self._mentorship = getattr(checkpoint, "mentorship", None)
         self._cultural_features = getattr(checkpoint, "cultural_features", None)
         self._practical_knowledge = getattr(checkpoint, "practical_knowledge", None)
+        self._cultural_restored = True
+        self._cultural_fresh_channels = set()
         self._competence = checkpoint.competence_model
         self._recipe_beliefs = getattr(checkpoint, "recipe_beliefs", None)
         self._advice = checkpoint.declarative_advice
@@ -3861,6 +3879,131 @@ class AgentRuntime:
 
     def export_offline_consolidation_audits(self) -> tuple[object, ...]:
         return tuple(self._offline_consolidation_audits)
+
+    def _enabled_cultural_channels(self) -> set[str]:
+        from simulation.cultural_evidence import CULTURAL_EVIDENCE_CHANNELS
+
+        return {
+            channel
+            for channel in CULTURAL_EVIDENCE_CHANNELS
+            if self._cultural_channel_enabled(channel)
+        }
+
+    def _cultural_channel_enabled(self, channel: str) -> bool:
+        from agents.cognition.configuration import (
+            CognitionCulturalNarrativeMode,
+            CognitionSemanticNamingMode,
+        )
+        from simulation.cultural_evidence import (
+            CULTURAL_EVIDENCE_CHANNEL_CULTURAL_FEATURES,
+            CULTURAL_EVIDENCE_CHANNEL_NARRATIVES,
+            CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE,
+            CULTURAL_EVIDENCE_CHANNEL_TERMINOLOGY,
+        )
+
+        if channel == CULTURAL_EVIDENCE_CHANNEL_CULTURAL_FEATURES:
+            return getattr(self._loop, "_cultural_features_spec", None) is not None
+        if channel == CULTURAL_EVIDENCE_CHANNEL_TERMINOLOGY:
+            mode = getattr(
+                self._loop,
+                "_semantic_naming_mode",
+                CognitionSemanticNamingMode.DISABLED,
+            )
+            return mode is CognitionSemanticNamingMode.DETERMINISTIC
+        if channel == CULTURAL_EVIDENCE_CHANNEL_NARRATIVES:
+            mode = getattr(
+                self._loop,
+                "_cultural_narrative_mode",
+                CognitionCulturalNarrativeMode.DISABLED,
+            )
+            return mode is CognitionCulturalNarrativeMode.DETERMINISTIC
+        if channel == CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE:
+            return getattr(self._loop, "_knowledge_genealogy_spec", None) is not None
+        raise ValueError("channel: unknown_channel")
+
+    def _cultural_ledger_for(self, channel: str) -> object | None:
+        from simulation.cultural_evidence import (
+            CULTURAL_EVIDENCE_CHANNEL_CULTURAL_FEATURES,
+            CULTURAL_EVIDENCE_CHANNEL_NARRATIVES,
+            CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE,
+            CULTURAL_EVIDENCE_CHANNEL_TERMINOLOGY,
+        )
+
+        if channel == CULTURAL_EVIDENCE_CHANNEL_CULTURAL_FEATURES:
+            return self._cultural_features
+        if channel == CULTURAL_EVIDENCE_CHANNEL_TERMINOLOGY:
+            return self._semantic_naming
+        if channel == CULTURAL_EVIDENCE_CHANNEL_NARRATIVES:
+            return self._cultural_narratives
+        if channel == CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE:
+            return self._practical_knowledge
+        raise ValueError("channel: unknown_channel")
+
+    def _cultural_channel_export(self, channel: str) -> CulturalChannelExport:
+        from simulation.cultural_evidence import (
+            CULTURAL_EVIDENCE_BASIS_CARRIED_LEDGER,
+            CULTURAL_EVIDENCE_BASIS_CHANNEL_OFF,
+            CULTURAL_EVIDENCE_BASIS_FRESH_EMPTY,
+            CULTURAL_EVIDENCE_BASIS_RESTORED_LEDGER,
+            CULTURAL_EVIDENCE_BASIS_UNAVAILABLE,
+            CULTURAL_EVIDENCE_COVERAGE_COMPLETE,
+            CULTURAL_EVIDENCE_COVERAGE_DISABLED,
+            CULTURAL_EVIDENCE_COVERAGE_MISSING,
+            CulturalChannelExport,
+        )
+
+        if not self._cultural_channel_enabled(channel):
+            return CulturalChannelExport(
+                channel=channel,
+                enabled=False,
+                coverage=CULTURAL_EVIDENCE_COVERAGE_DISABLED,
+                basis=CULTURAL_EVIDENCE_BASIS_CHANNEL_OFF,
+            )
+        ledger = self._cultural_ledger_for(channel)
+        if ledger is not None:
+            return CulturalChannelExport(
+                channel=channel,
+                enabled=True,
+                coverage=CULTURAL_EVIDENCE_COVERAGE_COMPLETE,
+                basis=(
+                    CULTURAL_EVIDENCE_BASIS_RESTORED_LEDGER
+                    if self._cultural_restored
+                    else CULTURAL_EVIDENCE_BASIS_CARRIED_LEDGER
+                ),
+                ledger=ledger,
+            )
+        if channel in self._cultural_fresh_channels:
+            return CulturalChannelExport(
+                channel=channel,
+                enabled=True,
+                coverage=CULTURAL_EVIDENCE_COVERAGE_COMPLETE,
+                basis=CULTURAL_EVIDENCE_BASIS_FRESH_EMPTY,
+            )
+        return CulturalChannelExport(
+            channel=channel,
+            enabled=True,
+            coverage=CULTURAL_EVIDENCE_COVERAGE_MISSING,
+            basis=CULTURAL_EVIDENCE_BASIS_UNAVAILABLE,
+        )
+
+    def export_cultural_owner_state(
+        self, *, generation_index: int, living: bool
+    ) -> CulturalOwnerExport:
+        """Return all four owner channel exports at a finalized boundary."""
+        from simulation.cultural_evidence import (
+            CULTURAL_EVIDENCE_CHANNELS,
+            CulturalOwnerExport,
+        )
+
+        return CulturalOwnerExport(
+            owner_id=self._agent.agent_id,
+            generation_index=generation_index,
+            living=living,
+            channels=tuple(
+                self._cultural_channel_export(channel)
+                for channel in CULTURAL_EVIDENCE_CHANNELS
+            ),
+        )
 
     def export_cultural_narratives(self) -> object | None:
         """Return this owner's carried narrative ledger, or None when off."""

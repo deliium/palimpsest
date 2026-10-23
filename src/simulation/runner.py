@@ -97,6 +97,11 @@ from simulation.cognition_trace import (
     CognitionTraceRepository,
     select_cognition_trace_repository,
 )
+from simulation.cultural_evidence import (
+    CulturalBoundaryExport,
+    CulturalBoundarySink,
+    CulturalCaptureStatus,
+)
 from simulation.engine import (
     WorldEngine,
     objective_skill_policy,
@@ -1666,6 +1671,12 @@ class SimulationRunner:
         "_criteria",
         "_criterion_decisions",
         "_criterion_status",
+        "_cultural_boundary_sink",
+        "_cultural_capture_failed",
+        "_cultural_capture_failure_boundary",
+        "_cultural_capture_failure_code",
+        "_cultural_capture_last_boundary",
+        "_cultural_missing_prefix_through",
         "_diagnostics",
         "_durable",
         "_engine",
@@ -1743,12 +1754,16 @@ class SimulationRunner:
         self._stop_evidence: StopEvidence | None = None
         self._terminal_receipt: RunnerAttemptReceipt | None = None
         self._criteria = tuple(criteria)
-        self._criterion_status = (
-            ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
-        )
+        self._criterion_status = ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
         self._criterion_decisions: dict[tuple[int, str, str], object] = {}
         self._generational_boundary_stage = GenerationalBoundaryStage.IDLE
         self._boundary_observer = boundary_observer
+        self._cultural_boundary_sink: CulturalBoundarySink | None = None
+        self._cultural_capture_failed = False
+        self._cultural_capture_failure_boundary: int | None = None
+        self._cultural_capture_failure_code: str | None = None
+        self._cultural_capture_last_boundary: int | None = None
+        self._cultural_missing_prefix_through: int | None = None
         self._published_boundaries: set[int] = set()
         self._attempt_receipts: list[RunnerAttemptReceipt] = []
         self._finished_result: SimulationRunnerResult | None = None
@@ -1827,8 +1842,7 @@ class SimulationRunner:
                 if (
                     getattr(criterion, "criterion_id", None)
                     != criterion_spec.criterion_id
-                    or getattr(criterion, "version", None)
-                    != criterion_spec.version
+                    or getattr(criterion, "version", None) != criterion_spec.version
                 ):
                     raise RunnerConstructionError(
                         RunnerConstructionErrorCode.INVALID_CONFIG,
@@ -2590,6 +2604,7 @@ class SimulationRunner:
                 stage="closed",
             )
         self._ensure_started()
+        await self._publish_initial_cultural_boundary()
         if self._finished_result is not None:
             raise RunnerConstructionError(
                 RunnerConstructionErrorCode.INVALID_CONFIG,
@@ -2610,9 +2625,7 @@ class SimulationRunner:
                 status=RunnerAttemptStatus.ABORTED,
                 submission_count=0,
                 finalized_count=0,
-                stop_reason=(
-                    RunnerStopReasonCode.FINALIZATION_RECOVERY_REQUIRED
-                ),
+                stop_reason=(RunnerStopReasonCode.FINALIZATION_RECOVERY_REQUIRED),
             )
         if self._ticks_committed >= self._config.stop_policy.max_ticks:
             return RunnerAttemptReceipt(
@@ -2712,6 +2725,7 @@ class SimulationRunner:
                     GenerationalBoundaryStage.PUBLICATION_PENDING
                 )
             self._refresh_generational_progress(tick_result)
+            self._publish_cultural_boundary_if_complete(tick_value + 1)
             try:
                 stop_reason = await self._evaluate_stop()
             except asyncio.CancelledError:
@@ -3051,9 +3065,7 @@ class SimulationRunner:
                     status=RunnerAttemptStatus.ABORTED,
                     submission_count=len(commands),
                     finalized_count=0,
-                    stop_reason=(
-                        RunnerStopReasonCode.FINALIZATION_RECOVERY_REQUIRED
-                    ),
+                    stop_reason=(RunnerStopReasonCode.FINALIZATION_RECOVERY_REQUIRED),
                 )
             else:
                 tick_result = TickResult(
@@ -3097,6 +3109,7 @@ class SimulationRunner:
                 tick_result=tick_result,
             )
             await self._sync_mid_run_population_entries()
+            self._publish_cultural_boundary_if_complete(tick + 1)
             total_finalized += finalized
             last_tick = tick
             _LOG.info(
@@ -3127,6 +3140,136 @@ class SimulationRunner:
             )
         return receipt
 
+    def set_cultural_boundary_sink(self, sink: CulturalBoundarySink | None) -> None:
+        """Install the observational sink once before execution or restore."""
+        if self._started or self._ticks_committed > 0:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="cultural_sink_after_start",
+            )
+        if self._cultural_boundary_sink is not None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="cultural_sink_replacement",
+            )
+        if sink is not None and not isinstance(sink, CulturalBoundarySink):
+            raise TypeError("sink must implement CulturalBoundarySink")
+        self._cultural_boundary_sink = sink
+        _LOG.debug(
+            "cultural_capture_sink_installed run_id=%s active=%s",
+            self._run_id.value,
+            sink is not None,
+        )
+
+    def export_cultural_capture_status(self) -> CulturalCaptureStatus:
+        """Return runner-owned capture health even after exporter failure."""
+        return CulturalCaptureStatus(
+            active=(
+                self._cultural_boundary_sink is not None
+                and not self._cultural_capture_failed
+            ),
+            failed=self._cultural_capture_failed,
+            failure_boundary=self._cultural_capture_failure_boundary,
+            failure_code=self._cultural_capture_failure_code,
+            missing_prefix_through=self._cultural_missing_prefix_through,
+        )
+
+    def _mark_cultural_capture_failure(self, boundary_tick: int, code: str) -> None:
+        if self._cultural_capture_failed:
+            return
+        self._cultural_capture_failed = True
+        self._cultural_capture_failure_boundary = boundary_tick
+        self._cultural_capture_failure_code = code
+        _LOG.warning(
+            "cultural_capture_failed run_id=%s boundary_tick=%s reason_code=%s",
+            self._run_id.value,
+            boundary_tick,
+            code,
+        )
+
+    def _build_cultural_boundary(self, boundary_tick: int) -> CulturalBoundaryExport:
+        generation_by_owner: dict[str, int] = {}
+        for record in self._engine.lifecycle_records:
+            owner = getattr(record, "agent_id", None)
+            generation = getattr(record, "generation_index", None)
+            if not isinstance(owner, str) or not owner:
+                continue
+            if isinstance(generation, bool) or not isinstance(generation, int):
+                continue
+            if generation < 0:
+                continue
+            generation_by_owner[owner] = generation
+        owners = []
+        for runtime in self._runtimes:
+            living = runtime.status is not AgentRuntimeStatus.TERMINAL
+            generation_index = generation_by_owner.get(runtime.agent_id.value, 0)
+            owners.append(
+                runtime.export_cultural_owner_state(
+                    generation_index=generation_index,
+                    living=living,
+                )
+            )
+        return CulturalBoundaryExport(
+            run_id=self._run_id.value,
+            boundary_tick=boundary_tick,
+            owners=tuple(owners),
+        )
+
+    def _publish_cultural_boundary_if_complete(self, boundary_tick: int) -> None:
+        sink = self._cultural_boundary_sink
+        if sink is None or self._cultural_capture_failed:
+            return
+        if (
+            self._cultural_capture_last_boundary is not None
+            and boundary_tick <= self._cultural_capture_last_boundary
+        ):
+            return
+        try:
+            frame = self._build_cultural_boundary(boundary_tick)
+        except Exception:
+            self._mark_cultural_capture_failure(boundary_tick, "capture_build_failed")
+            return
+        try:
+            sink.capture(frame)
+        except Exception:
+            self._mark_cultural_capture_failure(boundary_tick, "capture_failed")
+            return
+        self._cultural_capture_last_boundary = boundary_tick
+        _LOG.debug(
+            "cultural_boundary_published run_id=%s boundary_tick=%s owner_count=%s",
+            self._run_id.value,
+            boundary_tick,
+            len(frame.owners),
+        )
+
+    async def _publish_initial_cultural_boundary(self) -> None:
+        if self._cultural_boundary_sink is None:
+            return
+        if self._cultural_capture_last_boundary is not None:
+            return
+        if self._ticks_committed != 0:
+            self._cultural_missing_prefix_through = self._ticks_committed
+            return
+        if self._pending_finalizations is not None:
+            try:
+                records = await self._pending_finalizations.list_pending_for_run(
+                    run_id=self._run_id
+                )
+            except Exception:
+                self._mark_cultural_capture_failure(0, "capture_pending_check_failed")
+                return
+            if records:
+                self._cultural_missing_prefix_through = 0
+                _LOG.warning(
+                    "cultural_capture_initial_pending run_id=%s boundary_tick=%s "
+                    "reason_code=%s",
+                    self._run_id.value,
+                    0,
+                    "capture_missing_prefix",
+                )
+                return
+        self._publish_cultural_boundary_if_complete(0)
+
     def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
         """Export rehydratable runner state (no subjective payloads)."""
         pending_tick = None
@@ -3152,9 +3295,7 @@ class SimulationRunner:
                         criterion_id=criterion_id,
                         version=version,
                         matched=bool(getattr(decision, "matched", False)),
-                        measurements=tuple(
-                            getattr(decision, "measurements", ())
-                        ),
+                        measurements=tuple(getattr(decision, "measurements", ())),
                     )
                     for (
                         boundary_tick,
@@ -3330,6 +3471,9 @@ class SimulationRunner:
                 continue
             runtime.restore_runtime_checkpoint(runtime_state)
         self._ticks_committed = checkpoint.ticks_committed
+        if self._cultural_boundary_sink is not None:
+            self._cultural_missing_prefix_through = checkpoint.ticks_committed
+            self._cultural_capture_last_boundary = checkpoint.ticks_committed
         self._finalized_tick_receipts = list(checkpoint.finalized_tick_receipts)
         self._finalized_tick_ids = {
             receipt.tick for receipt in self._finalized_tick_receipts
@@ -3344,10 +3488,7 @@ class SimulationRunner:
                 raise ValueError("generational checkpoint requires control state")
             if control.boundary_tick != checkpoint.ticks_committed:
                 raise ValueError("generational control boundary mismatch")
-            if (
-                control.finished_result is not None
-                and control.terminal_receipt is None
-            ):
+            if control.finished_result is not None and control.terminal_receipt is None:
                 raise ValueError(
                     "finished generational control requires terminal receipt"
                 )
@@ -3503,9 +3644,7 @@ class SimulationRunner:
                         else ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
                     ),
                     failed_stage="runner" if is_failure else None,
-                    failure_reason_code=(
-                        stop_reason.value if is_failure else None
-                    ),
+                    failure_reason_code=(stop_reason.value if is_failure else None),
                 )
                 self._stop_evidence = stop_evidence
         audits = self.export_memory_dynamics_audits()
@@ -4416,11 +4555,7 @@ class SimulationRunner:
                 tick,
                 type(exc).__name__,
             )
-            codes = (
-                ()
-                if evidence is None
-                else tuple(evidence.matched_condition_codes)
-            )
+            codes = () if evidence is None else tuple(evidence.matched_condition_codes)
             codes = (*codes, RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE.value)
             from simulation.runner_models import (
                 RunnerStopReasonCode as _StopCode,
@@ -4446,9 +4581,7 @@ class SimulationRunner:
                 failure_reason_code=(
                     RunnerStopReasonCode.HISTORICAL_ARTIFACT_FAILURE.value
                 ),
-                measurements=(
-                    {} if evidence is None else dict(evidence.measurements)
-                ),
+                measurements=({} if evidence is None else dict(evidence.measurements)),
             )
         self._published_boundaries.add(tick)
         _LOG.debug(
@@ -4530,9 +4663,7 @@ class SimulationRunner:
         cadence = generational.criterion_cadence_ticks
         due = self._ticks_committed % cadence == 0
         if not self._criteria:
-            self._criterion_status = (
-                ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
-            )
+            self._criterion_status = ExperimentCriterionEvaluationStatus.NOT_CONFIGURED
             published = await self._publish_boundary(boundary, None)
             if published is not None:
                 self._stop_evidence = published
