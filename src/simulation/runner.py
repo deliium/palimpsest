@@ -3641,6 +3641,148 @@ class SimulationRunner:
         )
         return checkpoint
 
+    async def export_finalized_research_boundary(self) -> object:
+        """Export the public scientific projection of this finalized boundary.
+
+        This is a detached inspection artifact. Calling it never advances a
+        tick, mutates a ledger, or feeds data back into cognition.
+        """
+        from simulation.fork_checkpoint import (
+            FinalizedResearchBoundary,
+            FinalizedResearchOwnerSnapshot,
+            ResearchResourceHolding,
+        )
+
+        checkpoint = await self.capture_fork_checkpoint()
+        generations: dict[str, int] = {}
+        for record in self._engine.lifecycle_records:
+            owner = getattr(record, "agent_id", None)
+            generation = getattr(record, "generation_index", None)
+            if not isinstance(owner, str) or not owner:
+                continue
+            if isinstance(generation, bool) or not isinstance(generation, int):
+                continue
+            if generation < 0:
+                continue
+            generations[owner] = generation
+        living_by_owner = {
+            runtime.agent_id.value: runtime.status is not AgentRuntimeStatus.TERMINAL
+            for runtime in self._runtimes
+        }
+        runtime_by_agent = {
+            state.checkpoint.agent_id: state for state in checkpoint.runtime_states
+        }
+        live_runtime_by_agent = {
+            runtime.agent_id: runtime for runtime in self._runtimes
+        }
+        entity_by_agent = {
+            registration.agent_id: registration.entity_id
+            for registration in checkpoint.registrations
+        }
+        owners: list[FinalizedResearchOwnerSnapshot] = []
+        for registration in checkpoint.registrations:
+            owner_state = checkpoint.owner_state(registration.agent_id)
+            runtime_state = runtime_by_agent[registration.agent_id]
+            runtime_checkpoint = runtime_state.checkpoint
+            owners.append(
+                FinalizedResearchOwnerSnapshot(
+                    owner_id=registration.agent_id,
+                    entity_id=registration.entity_id,
+                    generation_index=generations.get(
+                        registration.agent_id.value, 0
+                    ),
+                    living=living_by_owner.get(
+                        registration.agent_id.value, False
+                    ),
+                    memories=tuple(owner_state.memory.traces),
+                    memory_reconstructions=tuple(
+                        owner_state.memory.reconstructions
+                    ),
+                    memory_access_operations=tuple(
+                        owner_state.memory.access_operations
+                    ),
+                    beliefs=tuple(owner_state.belief.beliefs),
+                    belief_histories=tuple(owner_state.belief.histories),
+                    relationship_profiles=tuple(
+                        owner_state.relationship.profiles
+                    ),
+                    relationship_histories=tuple(
+                        owner_state.relationship.histories
+                    ),
+                    norm_ledger=runtime_checkpoint.social_norms,
+                    institution_concept_ledger=(
+                        runtime_checkpoint.institution_concepts
+                    ),
+                    practical_knowledge_ledger=(
+                        runtime_checkpoint.practical_knowledge
+                    ),
+                    narrative_ledger=runtime_checkpoint.cultural_narratives,
+                    cultural_owner=live_runtime_by_agent[
+                        registration.agent_id
+                    ].export_cultural_owner_state(
+                        generation_index=generations.get(
+                            registration.agent_id.value, 0
+                        ),
+                        living=living_by_owner.get(
+                            registration.agent_id.value, False
+                        ),
+                    ),
+                )
+            )
+        events = tuple(
+            event
+            for event in self._engine.export_events().events
+            if event.tick < checkpoint.boundary_tick.value
+        )
+        item_counts: dict[str, int] = {
+            agent_id.value: 0 for agent_id in entity_by_agent
+        }
+        entity_to_agent = {
+            entity.value: agent.value
+            for agent, entity in entity_by_agent.items()
+        }
+        for item in checkpoint.snapshot.items:
+            holder = getattr(item, "holder_id", None)
+            if holder is None:
+                continue
+            agent_id = entity_to_agent.get(holder.value)
+            if agent_id is None:
+                continue
+            item_counts[agent_id] += 1
+        holdings = tuple(
+            ResearchResourceHolding(
+                agent_id=agent_id,
+                item_count=float(count),
+            )
+            for agent_id, count in sorted(item_counts.items())
+        )
+        population = self._generational_progress
+        if population is None and self._config.generational_run is not None:
+            population = build_population_progress(
+                lifecycle_records=self._engine.lifecycle_records,
+                detached_bodies=self._engine.detached_bodies(),
+                boundary_tick=self._ticks_committed,
+            )
+        boundary = FinalizedResearchBoundary(
+            run_id=self._run_id,
+            boundary_tick=checkpoint.boundary_tick,
+            boundary_revision=checkpoint.boundary_revision,
+            config_fingerprint=checkpoint.config_fingerprint,
+            owners=tuple(owners),
+            events=events,
+            resource_holdings=holdings,
+            population_progress=population,
+        )
+        _LOG.info(
+            "runner_finalized_research_boundary_exported run_id=%s "
+            "boundary_tick=%s owner_count=%s event_count=%s",
+            self._run_id.value,
+            checkpoint.boundary_tick.value,
+            len(owners),
+            len(events),
+        )
+        return boundary
+
     def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
         """Export rehydratable runner state (no subjective payloads)."""
         pending_tick = None

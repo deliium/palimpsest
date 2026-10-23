@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from analysis.cultural_evolution_evidence import CulturalEvolutionInputs
+from analysis.institution_emergence import InstitutionLaneRow
+from analysis.models import AppliedActionRow, RelationshipEdgeRow, ResourceHoldingRow
 from experiments.path_dependence_models import (
     OutcomeDomain,
     OutcomeSelector,
@@ -89,7 +92,29 @@ class OutcomeMeasurement:
 
 @dataclass(frozen=True, slots=True)
 class PathDependenceEvidence:
+    """Detached inputs for the closed outcome selectors.
+
+    ``measurements`` carries caller-supplied oracle values. Every other field is
+    raw detached evidence used only when the matching measurement is absent.
+    """
+
     measurements: tuple[OutcomeMeasurement, ...] = ()
+    run_id: str = "path-dependence-evidence"
+    input_revision: str = "revision-0"
+    norm_rows: Mapping[str, object] | None = None
+    norm_history: tuple[object, ...] = ()
+    norm_coverage_complete: bool = False
+    relationship_rows: tuple[RelationshipEdgeRow, ...] = ()
+    relationship_death_ticks: tuple[tuple[str, int], ...] = ()
+    institution_lane_rows: tuple[InstitutionLaneRow, ...] = ()
+    institution_known_person_ids: tuple[str, ...] = ()
+    institution_complete_search: bool = False
+    cultural_inputs: CulturalEvolutionInputs | None = None
+    resource_holdings: tuple[ResourceHoldingRow, ...] = ()
+    living_agent_ids: tuple[str, ...] = ()
+    action_rows: tuple[AppliedActionRow, ...] = ()
+    action_agent_ids: tuple[str, ...] = ()
+    action_death_ticks: tuple[tuple[str, int], ...] = ()
 
     def __post_init__(self) -> None:
         if isinstance(self.measurements, (set, frozenset, Mapping)) or not isinstance(
@@ -105,6 +130,66 @@ class PathDependenceEvidence:
                     "outcome_basis_mismatch", "invalid measurement"
                 )
         object.__setattr__(self, "measurements", measurements)
+        for name in ("run_id", "input_revision"):
+            value = getattr(self, name)
+            if type(value) is not str or not value:
+                raise PathDependenceValidationError(
+                    "outcome_basis_mismatch", f"invalid {name}"
+                )
+        if type(self.norm_coverage_complete) is not bool:
+            raise PathDependenceValidationError(
+                "outcome_basis_mismatch", "invalid norm coverage"
+            )
+        if type(self.institution_complete_search) is not bool:
+            raise PathDependenceValidationError(
+                "outcome_basis_mismatch", "invalid institution search flag"
+            )
+        for name, model in (
+            ("relationship_rows", RelationshipEdgeRow),
+            ("institution_lane_rows", InstitutionLaneRow),
+            ("resource_holdings", ResourceHoldingRow),
+            ("action_rows", AppliedActionRow),
+        ):
+            values = tuple(getattr(self, name))
+            for value in values:
+                if type(value) is not model:
+                    raise PathDependenceValidationError(
+                        "outcome_basis_mismatch", f"invalid {name}"
+                    )
+            object.__setattr__(self, name, values)
+        for name in (
+            "norm_history",
+            "institution_known_person_ids",
+            "living_agent_ids",
+            "action_agent_ids",
+        ):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+        for name in ("relationship_death_ticks", "action_death_ticks"):
+            rows: list[tuple[str, int]] = []
+            for entry in getattr(self, name):
+                if not isinstance(entry, tuple) or len(entry) != 2:
+                    raise PathDependenceValidationError(
+                        "outcome_basis_mismatch", f"invalid {name}"
+                    )
+                agent_id, tick = entry
+                if (
+                    type(agent_id) is not str
+                    or not agent_id
+                    or isinstance(tick, bool)
+                    or type(tick) is not int
+                    or tick < 0
+                ):
+                    raise PathDependenceValidationError(
+                        "outcome_basis_mismatch", f"invalid {name}"
+                    )
+                rows.append((agent_id, tick))
+            object.__setattr__(self, name, tuple(rows))
+        if self.cultural_inputs is not None and (
+            type(self.cultural_inputs) is not CulturalEvolutionInputs
+        ):
+            raise PathDependenceValidationError(
+                "outcome_basis_mismatch", "invalid cultural inputs"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,80 +230,17 @@ def compute_path_dependence_outcomes(
     selectors: tuple[OutcomeSelector, ...],
     windows: tuple[OutcomeWindow, ...],
 ) -> tuple[PathDependenceOutcomeRow, ...]:
-    """Project every requested selector to a scalar row or explicit unknown."""
-    if type(evidence) is not PathDependenceEvidence:
-        raise TypeError("evidence must be PathDependenceEvidence")
-    window_ids = {window.window_id for window in windows}
-    measurements: dict[tuple[str, str], OutcomeMeasurement] = {}
-    for measurement in evidence.measurements:
-        selector_id = measurement.selector_id
-        if selector_id not in SELECTOR_REGISTRY:
-            raise PathDependenceValidationError(
-                "unknown_outcome_selector", f"unknown selector {selector_id}"
-            )
-        if measurement.window_id not in window_ids:
-            raise PathDependenceValidationError(
-                "invalid_window", "measurement references unknown window"
-            )
-        key = (selector_id, measurement.window_id)
-        if key in measurements:
-            raise PathDependenceValidationError(
-                "outcome_duplicate_measurement", "duplicate measurement"
-            )
-        measurements[key] = measurement
-    rows: list[PathDependenceOutcomeRow] = []
-    seen: set[tuple[str, str]] = set()
-    for selector in selectors:
-        expected_domain = SELECTOR_REGISTRY.get(selector.selector_id)
-        if expected_domain is None:
-            raise PathDependenceValidationError(
-                "unknown_outcome_selector",
-                f"unknown selector {selector.selector_id}",
-            )
-        if expected_domain is not selector.domain:
-            raise PathDependenceValidationError(
-                "outcome_basis_mismatch", "selector domain mismatch"
-            )
-        if selector.window_id not in window_ids:
-            raise PathDependenceValidationError(
-                "invalid_window", "selector references unknown window"
-            )
-        key = (selector.selector_id, selector.window_id)
-        if key in seen:
-            raise PathDependenceValidationError(
-                "outcome_duplicate_measurement", "duplicate selector row"
-            )
-        seen.add(key)
-        selected_measurement = measurements.get(key)
-        if selected_measurement is None:
-            rows.append(
-                PathDependenceOutcomeRow(
-                    selector_id=selector.selector_id,
-                    domain=selector.domain,
-                    window_id=selector.window_id,
-                    value=None,
-                    availability=OutcomeAvailability.UNKNOWN,
-                    coverage="missing",
-                    censoring=None,
-                    reason_code="missing_measurement",
-                    evidence_refs=(),
-                )
-            )
-            continue
-        rows.append(
-            PathDependenceOutcomeRow(
-                selector_id=selector.selector_id,
-                domain=selector.domain,
-                window_id=selector.window_id,
-                value=selected_measurement.value,
-                availability=selected_measurement.availability,
-                coverage=selected_measurement.coverage,
-                censoring=selected_measurement.censoring,
-                reason_code=selected_measurement.reason_code,
-                evidence_refs=selected_measurement.evidence_refs,
-            )
-        )
-    return tuple(rows)
+    """Project every requested selector to a scalar row or explicit unknown.
+
+    Implementation lives in ``analysis.path_dependence_outcomes`` to keep this
+    module limited to detached row contracts. Imported lazily to avoid a module
+    cycle with the calculator registry.
+    """
+    from analysis.path_dependence_outcomes import (
+        compute_path_dependence_outcomes as _compute,
+    )
+
+    return _compute(evidence, selectors, windows)
 
 
 __all__ = [

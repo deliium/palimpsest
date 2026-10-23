@@ -212,9 +212,9 @@ CLI rollout is opt-in `palimpsest-matrix path-dependence ...`. BN discovery uses
 
 ### Phase 4: Outcomes and inference
 
-- [ ] Task 10: Collect bounded finalized evidence with exact coverage ([details](phase-04-outcomes-and-inference.md#task-10-collect-bounded-finalized-evidence-with-exact-coverage)) (depends on 4, 9)
-- [ ] Task 11: Register exact scalar outcomes for all requested domains ([details](phase-04-outcomes-and-inference.md#task-11-register-exact-scalar-outcomes-for-all-requested-domains)) (depends on 10)
-- [ ] Task 12: Compare paired protocols across independent seed blocks ([details](phase-04-outcomes-and-inference.md#task-12-compare-paired-protocols-across-independent-seed-blocks)) (depends on 5, 10, 11)
+- [x] Task 10: Collect bounded finalized evidence with exact coverage ([details](phase-04-outcomes-and-inference.md#task-10-collect-bounded-finalized-evidence-with-exact-coverage)) (depends on 4, 9)
+- [x] Task 11: Register exact scalar outcomes for all requested domains ([details](phase-04-outcomes-and-inference.md#task-11-register-exact-scalar-outcomes-for-all-requested-domains)) (depends on 10)
+- [x] Task 12: Compare paired protocols across independent seed blocks ([details](phase-04-outcomes-and-inference.md#task-12-compare-paired-protocols-across-independent-seed-blocks)) (depends on 5, 10, 11)
 
 ### Phase 5: Artifacts, resume and CLI
 

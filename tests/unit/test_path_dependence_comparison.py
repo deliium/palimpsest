@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 import pytest
 
@@ -27,6 +28,11 @@ def _cell(
     value: float | None,
     alignment: str = "shared",
     outcome: str = "norms.active_beliefs",
+    root_id: str | None = None,
+    config_digest: str = "",
+    provider_basis: str = "deterministic_fake",
+    planned_child_run_id: str | None = None,
+    child_run_id: str | None = None,
 ) -> PathDependenceOutcomeCell:
     return PathDependenceOutcomeCell(
         cell_id=cell_id,
@@ -42,10 +48,17 @@ def _cell(
         source_digest=f"digest-{seed}",
         channel_alignment=alignment,
         value=value,
+        root_id=root_id,
+        config_digest=config_digest,
+        provider_basis=provider_basis,
+        planned_child_run_id=planned_child_run_id,
+        child_run_id=child_run_id,
     )
 
 
-def _request(cells) -> PathDependenceComparisonRequest:
+def _request(
+    cells: Sequence[PathDependenceOutcomeCell],
+) -> PathDependenceComparisonRequest:
     return PathDependenceComparisonRequest(
         cells=tuple(cells),
         contrasts=(ComparisonContrast("share-vs-withhold", "withhold", "share"),),
@@ -186,3 +199,190 @@ def test_reordered_inputs_are_byte_identical() -> None:
     first = build_path_dependence_comparison(_request(cells))
     second = build_path_dependence_comparison(_request(tuple(reversed(cells))))
     assert first == second
+
+
+def test_shared_ancestry_root_coalesces_seed_labels() -> None:
+    cells = [
+        _cell(
+            cell_id="c1",
+            arm="withhold",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=1.0,
+            root_id="root-shared",
+        ),
+        _cell(
+            cell_id="t1",
+            arm="share",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=2.0,
+            root_id="root-shared",
+        ),
+        _cell(
+            cell_id="c2",
+            arm="withhold",
+            seed=2,
+            seed_ordinal=1,
+            replicate=0,
+            value=3.0,
+            root_id="root-shared",
+        ),
+        _cell(
+            cell_id="t2",
+            arm="share",
+            seed=2,
+            seed_ordinal=1,
+            replicate=0,
+            value=7.0,
+            root_id="root-shared",
+        ),
+    ]
+    (result,) = build_path_dependence_comparison(_request(cells))
+    assert result.block_count == 1
+    assert result.paired_slot_count == 2
+    assert result.blocks[0].paired_count == 2
+    assert result.blocks[0].mean == 2.5
+    assert result.status == "insufficient_independent_seeds"
+
+
+def test_missing_arm_retains_denominator_and_arm_counts() -> None:
+    cells = [
+        _cell(
+            cell_id="c1",
+            arm="withhold",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=1.0,
+        ),
+    ]
+    (result,) = build_path_dependence_comparison(_request(cells))
+    assert result.block_count == 0
+    assert result.mean is None
+    assert result.missing_slot_count == 1
+    assert result.excluded_slot_count == 1
+    assert result.arm_counts == (("withhold", 1),)
+
+
+def test_basis_and_child_identity_mismatches_fail_closed() -> None:
+    config_mismatch = [
+        _cell(
+            cell_id="c1",
+            arm="withhold",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=1.0,
+            config_digest="config-a",
+        ),
+        _cell(
+            cell_id="t1",
+            arm="share",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=2.0,
+            config_digest="config-b",
+        ),
+    ]
+    with pytest.raises(
+        PathDependenceComparisonError, match="comparison_basis_mismatch"
+    ):
+        build_path_dependence_comparison(_request(config_mismatch))
+
+    provider_mismatch = [
+        _cell(
+            cell_id="c1",
+            arm="withhold",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=1.0,
+            provider_basis="deterministic_fake",
+        ),
+        _cell(
+            cell_id="t1",
+            arm="share",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=2.0,
+            provider_basis="recorded",
+        ),
+    ]
+    with pytest.raises(
+        PathDependenceComparisonError, match="comparison_basis_mismatch"
+    ):
+        build_path_dependence_comparison(_request(provider_mismatch))
+
+    substituted = [
+        _cell(
+            cell_id="c1",
+            arm="withhold",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=1.0,
+            planned_child_run_id="planned-child",
+            child_run_id="planned-child",
+        ),
+        _cell(
+            cell_id="t1",
+            arm="share",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=2.0,
+            planned_child_run_id="planned-child",
+            child_run_id="replacement-child",
+        ),
+    ]
+    with pytest.raises(
+        PathDependenceComparisonError, match="comparison_lineage_mismatch"
+    ):
+        build_path_dependence_comparison(_request(substituted))
+
+
+def test_constant_blocks_report_degenerate_interval() -> None:
+    cells = [
+        _cell(
+            cell_id="c1",
+            arm="withhold",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=1.0,
+        ),
+        _cell(
+            cell_id="t1",
+            arm="share",
+            seed=1,
+            seed_ordinal=0,
+            replicate=0,
+            value=3.0,
+        ),
+        _cell(
+            cell_id="c2",
+            arm="withhold",
+            seed=2,
+            seed_ordinal=1,
+            replicate=0,
+            value=2.0,
+        ),
+        _cell(
+            cell_id="t2",
+            arm="share",
+            seed=2,
+            seed_ordinal=1,
+            replicate=0,
+            value=4.0,
+        ),
+    ]
+    (result,) = build_path_dependence_comparison(_request(cells))
+    assert result.block_count == 2
+    assert result.sample_sd == 0.0
+    assert result.ci_low == result.ci_high == 2.0
+    assert result.causal_claim is False

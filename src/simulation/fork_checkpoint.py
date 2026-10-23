@@ -16,15 +16,24 @@ from typing import Final
 from agents.cognition.counterfactual import CounterfactualState
 from agents.cognition.fork_state import CognitiveLoopForkState
 from agents.models import AgentId
+from memory import BeliefId, BeliefRevision, SemanticBelief
 from memory.models import Belief, MemoryTrace
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.clock import Tick, require_exact_nonneg_int
+from simulation.cultural_evidence import CulturalOwnerExport
+from simulation.generational_models import PopulationProgress
 from simulation.models import RunId
 from simulation.persistence import WorldSnapshot
 from simulation.run_control import AgentRuntimeCheckpoint, RunnerRuntimeCheckpoint
 from simulation.runner_models import SimulationRunnerConfig
 from simulation.subjective_state import SubjectiveOwnerForkState
-from world.identifiers import WorldRevision
+from social import (
+    DirectedRelationshipProfile,
+    RelationshipId,
+    RelationshipRevision,
+)
+from world.events import WorldEvent
+from world.identifiers import EntityId, WorldRevision
 
 RUNNER_FORK_CHECKPOINT_VERSION: Final[str] = "runner-fork-checkpoint-v1"
 AGENT_RUNTIME_FORK_STATE_VERSION: Final[str] = "agent-runtime-fork-state-v1"
@@ -310,6 +319,262 @@ class RunnerForkCheckpoint:
         raise ForkCheckpointError("fork_roster_mismatch", "unknown runtime")
 
 
+@dataclass(frozen=True, slots=True)
+class ResearchResourceHolding:
+    """One living owner's portable-item count at a research boundary."""
+
+    agent_id: str
+    item_count: float
+
+    def __post_init__(self) -> None:
+        from world.identifiers import require_stable_id
+
+        object.__setattr__(
+            self, "agent_id", require_stable_id("agent_id", self.agent_id)
+        )
+        if isinstance(self.item_count, bool) or type(self.item_count) not in (
+            int,
+            float,
+        ):
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid item count"
+            )
+        value = float(self.item_count)
+        if value < 0.0 or value != value or value in (
+            float("inf"),
+            float("-inf"),
+        ):
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid item count"
+            )
+        object.__setattr__(self, "item_count", value)
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizedResearchOwnerSnapshot:
+    """Detached public projection of one owner's scientific state.
+
+    This is not a cognition perspective and contains no engine token or mutable
+    services. It exposes only the rows registered outcome selectors need.
+    """
+
+    owner_id: AgentId
+    entity_id: EntityId
+    generation_index: int
+    living: bool
+    memories: tuple[MemoryTrace, ...]
+    memory_reconstructions: tuple[object, ...]
+    memory_access_operations: tuple[tuple[str, str], ...]
+    beliefs: tuple[SemanticBelief, ...]
+    belief_histories: tuple[tuple[BeliefId, tuple[BeliefRevision, ...]], ...]
+    relationship_profiles: tuple[DirectedRelationshipProfile, ...]
+    relationship_histories: tuple[
+        tuple[RelationshipId, tuple[RelationshipRevision, ...]], ...
+    ]
+    norm_ledger: object | None = None
+    institution_concept_ledger: object | None = None
+    practical_knowledge_ledger: object | None = None
+    narrative_ledger: object | None = None
+    cultural_owner: CulturalOwnerExport | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid owner identity"
+            )
+        if type(self.entity_id) is not EntityId:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid owner entity"
+            )
+        object.__setattr__(
+            self,
+            "generation_index",
+            require_exact_nonneg_int("generation_index", self.generation_index),
+        )
+        if type(self.living) is not bool:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid living flag"
+            )
+        object.__setattr__(
+            self,
+            "memories",
+            _ordered("memories", self.memories, MemoryTrace),
+        )
+        object.__setattr__(
+            self,
+            "beliefs",
+            _ordered("beliefs", self.beliefs, SemanticBelief),
+        )
+        object.__setattr__(
+            self,
+            "relationship_profiles",
+            _ordered(
+                "relationship_profiles",
+                self.relationship_profiles,
+                DirectedRelationshipProfile,
+            ),
+        )
+        if isinstance(self.memory_reconstructions, (set, frozenset, Mapping)):
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid reconstructions"
+            )
+        object.__setattr__(
+            self,
+            "memory_reconstructions",
+            tuple(self.memory_reconstructions),
+        )
+        operations: list[tuple[str, str]] = []
+        for entry in self.memory_access_operations:
+            if (
+                not isinstance(entry, tuple)
+                or len(entry) != 2
+                or type(entry[0]) is not str
+                or type(entry[1]) is not str
+            ):
+                raise ForkCheckpointError(
+                    "research_snapshot_invalid", "invalid memory access operation"
+                )
+            operations.append(entry)
+        object.__setattr__(
+            self, "memory_access_operations", tuple(operations)
+        )
+        object.__setattr__(
+            self,
+            "belief_histories",
+            _typed_histories(
+                "belief_histories",
+                self.belief_histories,
+                BeliefId,
+                BeliefRevision,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "relationship_histories",
+            _typed_histories(
+                "relationship_histories",
+                self.relationship_histories,
+                RelationshipId,
+                RelationshipRevision,
+            ),
+        )
+        if self.cultural_owner is not None:
+            if type(self.cultural_owner) is not CulturalOwnerExport:
+                raise ForkCheckpointError(
+                    "research_snapshot_invalid", "invalid cultural owner"
+                )
+            if self.cultural_owner.owner_id != self.owner_id:
+                raise ForkCheckpointError(
+                    "research_snapshot_invalid", "cultural owner mismatch"
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizedResearchBoundary:
+    """Complete detached research evidence at one finalized runner boundary."""
+
+    run_id: RunId
+    boundary_tick: Tick
+    boundary_revision: WorldRevision
+    config_fingerprint: str
+    owners: tuple[FinalizedResearchOwnerSnapshot, ...]
+    events: tuple[WorldEvent, ...]
+    resource_holdings: tuple[ResearchResourceHolding, ...]
+    population_progress: PopulationProgress | None = None
+    schema_version: str = "finalized-research-boundary-v1"
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "finalized-research-boundary-v1":
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "unsupported research boundary"
+            )
+        if type(self.run_id) is not RunId:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid run_id"
+            )
+        if type(self.boundary_tick) is not Tick:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid boundary tick"
+            )
+        if type(self.boundary_revision) is not WorldRevision:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid boundary revision"
+            )
+        if type(self.config_fingerprint) is not str or not self.config_fingerprint:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid config fingerprint"
+            )
+        owners = _ordered(
+            "owners", self.owners, FinalizedResearchOwnerSnapshot
+        )
+        if len({owner.owner_id for owner in owners}) != len(owners):
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "duplicate research owner"
+            )
+        object.__setattr__(self, "owners", owners)
+        events = _ordered("events", self.events, WorldEvent)
+        object.__setattr__(self, "events", events)
+        holdings = _ordered(
+            "resource_holdings", self.resource_holdings, ResearchResourceHolding
+        )
+        if len({row.agent_id for row in holdings}) != len(holdings):
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "duplicate resource holding"
+            )
+        object.__setattr__(self, "resource_holdings", holdings)
+        if self.population_progress is not None and (
+            type(self.population_progress) is not PopulationProgress
+        ):
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", "invalid population progress"
+            )
+
+    def owner(self, agent_id: AgentId) -> FinalizedResearchOwnerSnapshot:
+        for owner in self.owners:
+            if owner.owner_id == agent_id:
+                return owner
+        raise ForkCheckpointError(
+            "research_snapshot_invalid", "unknown research owner"
+        )
+
+
+def _typed_histories(
+    name: str,
+    values: object,
+    key_type: type[object],
+    revision_type: type[object],
+) -> tuple[tuple[object, tuple[object, ...]], ...]:
+    if isinstance(values, (set, frozenset, Mapping)) or not isinstance(
+        values, Sequence
+    ):
+        raise ForkCheckpointError("research_snapshot_invalid", f"{name} invalid")
+    out: list[tuple[object, tuple[object, ...]]] = []
+    for entry in values:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", f"{name} invalid entry"
+            )
+        key, revisions = entry
+        if type(key) is not key_type:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", f"{name} invalid key"
+            )
+        if isinstance(revisions, (str, bytes)) or not isinstance(
+            revisions, Sequence
+        ) or not revisions:
+            raise ForkCheckpointError(
+                "research_snapshot_invalid", f"{name} invalid revisions"
+            )
+        copied = tuple(revisions)
+        for revision in copied:
+            if type(revision) is not revision_type:
+                raise ForkCheckpointError(
+                    "research_snapshot_invalid", f"{name} invalid revision"
+                )
+        out.append((key, copied))
+    return tuple(out)
+
+
 def _audit_payload(state: AgentRuntimeForkState) -> list[object]:
     return [
         {
@@ -470,7 +735,10 @@ __all__ = [
     "AUDIT_FIELD_NAMES",
     "RUNNER_FORK_CHECKPOINT_VERSION",
     "AgentRuntimeForkState",
+    "FinalizedResearchBoundary",
+    "FinalizedResearchOwnerSnapshot",
     "ForkCheckpointError",
+    "ResearchResourceHolding",
     "RunnerForkCheckpoint",
     "fork_state_digest",
 ]

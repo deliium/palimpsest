@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from analysis.numerical import quantize_float
 from analysis.seed_block_statistics import student_t_interval
 
 _LOG: Final[logging.Logger] = logging.getLogger(
@@ -41,6 +42,12 @@ class PathDependenceOutcomeCell:
     channel_alignment: str = "unknown"
     value: float | None = None
     availability: str = "present"
+    config_digest: str = ""
+    provider_basis: str = "deterministic_fake"
+    channel_manifest: tuple[str, ...] = ()
+    root_id: str | None = None
+    planned_child_run_id: str | None = None
+    child_run_id: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -69,6 +76,26 @@ class PathDependenceOutcomeCell:
             raise PathDependenceComparisonError("comparison_basis_mismatch")
         if self.value is not None:
             object.__setattr__(self, "value", float(self.value))
+        for name in (
+            "config_digest",
+            "provider_basis",
+            "root_id",
+            "planned_child_run_id",
+            "child_run_id",
+        ):
+            value = getattr(self, name)
+            if name == "config_digest" and value == "":
+                continue
+            if value is not None and (type(value) is not str or not value):
+                raise PathDependenceComparisonError("comparison_basis_mismatch")
+        if isinstance(self.channel_manifest, (str, bytes)) or not isinstance(
+            self.channel_manifest, Sequence
+        ):
+            raise PathDependenceComparisonError("comparison_basis_mismatch")
+        manifest = tuple(self.channel_manifest)
+        if any(type(item) is not str or not item for item in manifest):
+            raise PathDependenceComparisonError("comparison_basis_mismatch")
+        object.__setattr__(self, "channel_manifest", manifest)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +136,7 @@ class SeedBlockSummary:
     paired_count: int
     mean: float
     membership: tuple[str, ...]
+    root_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +146,7 @@ class PairedContrastComparison:
     window_id: str
     fork_tick: int
     block_count: int
+    branch_count: int
     paired_slot_count: int
     missing_slot_count: int
     mean: float | None
@@ -129,6 +158,11 @@ class PairedContrastComparison:
     status: str
     blocks: tuple[SeedBlockSummary, ...]
     channel_alignment: str
+    arm_counts: tuple[tuple[str, int], ...] = ()
+    excluded_slot_count: int = 0
+    provider_basis: str = "deterministic_fake"
+    interval_method: str = "pointwise_two_sided_student_t_0.95"
+    arm_assignment_policy: str = "treatment_blind_slots"
     causal_claim: bool = False
     single_run_is_illustrative: bool = True
     multiplicity_policy: str = MULTIPLICITY_POLICY
@@ -175,6 +209,9 @@ def build_path_dependence_comparison(
             raise PathDependenceComparisonError("comparison_basis_mismatch")
         by_key[_pair_key(cell)].append(cell)
     results: list[PairedContrastComparison] = []
+    arm_counts_by_group: dict[tuple[str, str, str, int], dict[str, int]] = (
+        defaultdict(lambda: defaultdict(int))
+    )
     grouped: dict[tuple[str, str, str, int], list[tuple[object, ...]]] = (
         defaultdict(list)
     )
@@ -186,16 +223,23 @@ def build_path_dependence_comparison(
         if not isinstance(fork_tick_value, int):
             raise PathDependenceComparisonError("comparison_basis_mismatch")
         fork_tick = fork_tick_value
-        grouped[(contrast_id, outcome_key, window_id, fork_tick)].append(key)
+        group_key = (contrast_id, outcome_key, window_id, fork_tick)
+        grouped[group_key].append(key)
+        for cell in by_key[key]:
+            arm_counts_by_group[group_key][cell.arm_id] += 1
     for (contrast_id, outcome_key, window_id, fork_tick), keys in sorted(
         grouped.items()
     ):
         contrast = contrast_map[contrast_id]
-        block_values: dict[int, list[float]] = defaultdict(list)
-        block_members: dict[int, list[str]] = defaultdict(list)
+        block_values: dict[str, list[float]] = defaultdict(list)
+        block_members: dict[str, list[str]] = defaultdict(list)
+        block_seed: dict[str, int] = {}
+        block_root: dict[str, str | None] = {}
         channel_values: list[str] = []
+        provider_values: set[str] = set()
         paired = 0
         missing = 0
+        excluded = 0
         for key in sorted(keys, key=repr):
             entries = by_key[key]
             by_arm: dict[str, list[PathDependenceOutcomeCell]] = defaultdict(list)
@@ -207,6 +251,7 @@ def build_path_dependence_comparison(
             treatment = by_arm.get(contrast.treatment_arm_id, [])
             if not control or not treatment:
                 missing += 1
+                excluded += 1
                 continue
             control_cell = control[0]
             treatment_cell = treatment[0]
@@ -214,13 +259,57 @@ def build_path_dependence_comparison(
                 raise PathDependenceComparisonError(
                     "comparison_lineage_mismatch"
                 )
+            if (
+                control_cell.config_digest
+                and treatment_cell.config_digest
+                and control_cell.config_digest != treatment_cell.config_digest
+            ):
+                raise PathDependenceComparisonError(
+                    "comparison_basis_mismatch"
+                )
+            if control_cell.provider_basis != treatment_cell.provider_basis:
+                raise PathDependenceComparisonError(
+                    "comparison_basis_mismatch"
+                )
+            if (
+                control_cell.channel_manifest
+                and treatment_cell.channel_manifest
+                and control_cell.channel_manifest
+                != treatment_cell.channel_manifest
+            ):
+                raise PathDependenceComparisonError(
+                    "comparison_basis_mismatch"
+                )
+            if (
+                control_cell.root_id is not None
+                and treatment_cell.root_id is not None
+                and control_cell.root_id != treatment_cell.root_id
+            ):
+                raise PathDependenceComparisonError(
+                    "comparison_lineage_mismatch"
+                )
+            for cell in (control_cell, treatment_cell):
+                if (
+                    cell.planned_child_run_id is not None
+                    and cell.child_run_id is not None
+                    and cell.planned_child_run_id != cell.child_run_id
+                ):
+                    raise PathDependenceComparisonError(
+                        "comparison_lineage_mismatch"
+                    )
             if control_cell.value is None or treatment_cell.value is None:
                 missing += 1
+                excluded += 1
                 continue
             delta = treatment_cell.value - control_cell.value
-            numeric_seed = control_cell.numeric_seed
-            block_values[numeric_seed].append(delta)
-            block_members[numeric_seed].extend(
+            root_id = control_cell.root_id or treatment_cell.root_id
+            block_key = root_id if root_id is not None else (
+                f"seed:{control_cell.numeric_seed}"
+            )
+            block_values[block_key].append(delta)
+            block_seed.setdefault(block_key, control_cell.numeric_seed)
+            block_root.setdefault(block_key, root_id)
+            block_members[block_key].extend(
                 (control_cell.cell_id, treatment_cell.cell_id)
             )
             channel_values.extend(
@@ -229,22 +318,24 @@ def build_path_dependence_comparison(
                     treatment_cell.channel_alignment,
                 )
             )
+            provider_values.add(control_cell.provider_basis)
             paired += 1
+        block_keys = sorted(block_values)
         block_means = [
-            statistics.fmean(values)
-            for _seed, values in sorted(block_values.items())
+            statistics.fmean(block_values[key]) for key in block_keys
         ]
         interval = student_t_interval(
             block_means, confidence=request.confidence
         )
         blocks = tuple(
             SeedBlockSummary(
-                numeric_seed=numeric_seed,
-                paired_count=len(values),
-                mean=statistics.fmean(values),
-                membership=tuple(sorted(block_members[numeric_seed])),
+                numeric_seed=block_seed[key],
+                paired_count=len(block_values[key]),
+                mean=quantize_float(statistics.fmean(block_values[key])),
+                membership=tuple(sorted(block_members[key])),
+                root_id=block_root[key],
             )
-            for numeric_seed, values in sorted(block_values.items())
+            for key in block_keys
         )
         results.append(
             PairedContrastComparison(
@@ -253,17 +344,49 @@ def build_path_dependence_comparison(
                 window_id=window_id,
                 fork_tick=fork_tick,
                 block_count=len(block_means),
+                branch_count=len(request.cells),
                 paired_slot_count=paired,
                 missing_slot_count=missing,
-                mean=interval.mean,
-                sample_sd=interval.sample_sd,
-                standard_error=interval.standard_error,
+                excluded_slot_count=excluded,
+                mean=(
+                    None
+                    if interval.mean is None
+                    else quantize_float(interval.mean)
+                ),
+                sample_sd=(
+                    None
+                    if interval.sample_sd is None
+                    else quantize_float(interval.sample_sd)
+                ),
+                standard_error=(
+                    None
+                    if interval.standard_error is None
+                    else quantize_float(interval.standard_error)
+                ),
                 df=interval.df,
-                ci_low=interval.low,
-                ci_high=interval.high,
+                ci_low=(
+                    None if interval.low is None else quantize_float(interval.low)
+                ),
+                ci_high=(
+                    None
+                    if interval.high is None
+                    else quantize_float(interval.high)
+                ),
                 status=interval.status,
                 blocks=blocks,
                 channel_alignment=_channel_summary(channel_values),
+                arm_counts=tuple(
+                    sorted(arm_counts_by_group[group_key].items())
+                ),
+                provider_basis=(
+                    next(iter(provider_values))
+                    if len(provider_values) == 1
+                    else "mixed"
+                ),
+                interval_method=(
+                    "pointwise_two_sided_student_t_"
+                    f"{request.confidence:.2f}"
+                ),
             )
         )
     _LOG.info(
