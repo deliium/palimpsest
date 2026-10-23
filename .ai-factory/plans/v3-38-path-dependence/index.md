@@ -200,9 +200,9 @@ CLI rollout is opt-in `palimpsest-matrix path-dependence ...`. BN discovery uses
 
 ### Phase 2: Finalized-boundary replay continuation
 
-- [ ] Task 4: Capture and restore coherent runner fork checkpoints ([details](phase-02-fork-continuation.md#task-4-capture-and-restore-coherent-runner-fork-checkpoints)) (depends on 2, 3)
-- [ ] Task 5: Rebase typed scope and record truthful branch identities ([details](phase-02-fork-continuation.md#task-5-rebase-typed-scope-and-record-truthful-branch-identities)) (depends on 1, 4)
-- [ ] Task 6: Prove replay and no-treatment continuation equivalence ([details](phase-02-fork-continuation.md#task-6-prove-replay-and-no-treatment-continuation-equivalence)) (depends on 2, 3, 4, 5)
+- [x] Task 4: Capture and restore coherent runner fork checkpoints ([details](phase-02-fork-continuation.md#task-4-capture-and-restore-coherent-runner-fork-checkpoints)) (depends on 2, 3)
+- [x] Task 5: Rebase typed scope and record truthful branch identities ([details](phase-02-fork-continuation.md#task-5-rebase-typed-scope-and-record-truthful-branch-identities)) (depends on 1, 4)
+- [x] Task 6: Prove replay and no-treatment continuation equivalence ([details](phase-02-fork-continuation.md#task-6-prove-replay-and-no-treatment-continuation-equivalence)) (depends on 2, 3, 4, 5)
 
 ### Phase 3: Intervention ensembles
 

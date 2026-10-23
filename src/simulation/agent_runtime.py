@@ -87,6 +87,7 @@ if TYPE_CHECKING:
         CulturalChannelExport,
         CulturalOwnerExport,
     )
+    from simulation.fork_checkpoint import AgentRuntimeForkState
     from simulation.persistence import ScientificEvidenceRepository
 
 __all__ = [
@@ -3300,6 +3301,153 @@ class AgentRuntime:
             subjective_valuations=self._subjective_valuations,
             scarcity_beliefs=self._scarcity_beliefs,
             acceptance_memories=self._acceptance_memories,
+        )
+
+    def export_fork_state(self) -> AgentRuntimeForkState:
+        """Export every process-local runtime field needed for continuation."""
+        from simulation.fork_checkpoint import (
+            AUDIT_FIELD_NAMES,
+            AgentRuntimeForkState,
+            ForkCheckpointError,
+        )
+
+        if self._pending is not None or self._reflection_capture is not None:
+            raise ForkCheckpointError(
+                "fork_boundary_not_finalized", "runtime has a pending finalization"
+            )
+        if self._counterfactual_capture is not None:
+            raise ForkCheckpointError(
+                "fork_boundary_not_finalized", "runtime has an open capture"
+            )
+        if type(self._invocation_ids) is not SequentialInvocationIds:
+            raise ForkCheckpointError(
+                "fork_state_unsupported", "custom invocation id source"
+            )
+        if type(self._inbox) is not EmptyInbox:
+            raise ForkCheckpointError("fork_state_unsupported", "custom inbox source")
+        loop_export = getattr(self._loop, "export_fork_state", None)
+        if not callable(loop_export):
+            raise ForkCheckpointError(
+                "fork_state_unsupported", "custom cognitive loop"
+            )
+        memory_export = getattr(self._memory_writer, "export_fork_state", None)
+        belief_export = getattr(self._belief_writer, "export_fork_state", None)
+        if not callable(memory_export) or not callable(belief_export):
+            raise ForkCheckpointError(
+                "fork_state_unsupported", "legacy stores are not fork capable"
+            )
+        audits = tuple(
+            (name, tuple(getattr(self, f"_{name}"))) for name in AUDIT_FIELD_NAMES
+        )
+        state = AgentRuntimeForkState(
+            checkpoint=self.export_runtime_checkpoint(),  # type: ignore[arg-type]
+            processed_invocations=frozenset(self._processed_invocations),
+            finalized_hashes=frozenset(self._finalized_hashes),
+            invocation_counts=tuple(
+                (agent_id, tick, count)
+                for (agent_id, tick), count in sorted(
+                    self._invocation_ids._counts.items()
+                )
+            ),
+            goal_revision_counters=tuple(
+                sorted(self._goal_revision_counters.items())
+            ),
+            applied_identity_operation_ids=frozenset(
+                self._applied_identity_operation_ids
+            ),
+            applied_reflection_operation_ids=frozenset(
+                self._applied_reflection_operation_ids
+            ),
+            legacy_memories=tuple(memory_export()),
+            legacy_beliefs=tuple(belief_export()),
+            cultural_restored=self._cultural_restored,
+            cultural_fresh_channels=frozenset(self._cultural_fresh_channels),
+            counterfactual_state=self._counterfactual_state,
+            loop_state=loop_export(),
+            audits=audits,
+        )
+        _LOG.debug(
+            "runtime_fork_state_exported",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "processed_invocation_count": len(self._processed_invocations),
+                    "finalized_hash_count": len(self._finalized_hashes),
+                    "audit_family_count": len(audits),
+                }
+            },
+        )
+        return state
+
+    def restore_fork_state(self, state: AgentRuntimeForkState) -> None:
+        """Install a complete runtime continuation state into a fresh runtime."""
+        from simulation.fork_checkpoint import (
+            AUDIT_FIELD_NAMES,
+            AgentRuntimeForkState,
+            ForkCheckpointError,
+        )
+
+        if type(state) is not AgentRuntimeForkState:
+            raise ForkCheckpointError("fork_state_unsupported", "invalid state")
+        if state.checkpoint.agent_id != self._agent.agent_id:
+            raise ForkCheckpointError("fork_roster_mismatch", "runtime owner mismatch")
+        if self._pending is not None:
+            raise ForkCheckpointError(
+                "fork_destination_not_empty", "runtime already has pending state"
+            )
+        if type(self._invocation_ids) is not SequentialInvocationIds:
+            raise ForkCheckpointError(
+                "fork_state_unsupported", "custom invocation id source"
+            )
+        if type(self._inbox) is not EmptyInbox:
+            raise ForkCheckpointError("fork_state_unsupported", "custom inbox source")
+        self.restore_runtime_checkpoint(state.checkpoint)
+        self._processed_invocations = set(state.processed_invocations)
+        self._finalized_hashes = set(state.finalized_hashes)
+        self._goal_revision_counters = dict(state.goal_revision_counters)
+        self._applied_identity_operation_ids = set(
+            state.applied_identity_operation_ids
+        )
+        self._applied_reflection_operation_ids = set(
+            state.applied_reflection_operation_ids
+        )
+        self._cultural_restored = state.cultural_restored
+        self._cultural_fresh_channels = set(state.cultural_fresh_channels)
+        self._counterfactual_state = state.counterfactual_state
+        loop_restore = getattr(self._loop, "restore_fork_state", None)
+        if not callable(loop_restore):
+            raise ForkCheckpointError(
+                "fork_state_unsupported", "custom cognitive loop"
+            )
+        loop_restore(state.loop_state)
+        self._invocation_ids._counts = {
+            (agent_id, tick): count
+            for agent_id, tick, count in state.invocation_counts
+        }
+        for name, values in state.audits:
+            if name not in AUDIT_FIELD_NAMES:
+                raise ForkCheckpointError(
+                    "fork_state_unsupported", "unknown audit family"
+                )
+            setattr(self, f"_{name}", list(values))
+        memory_restore = getattr(self._memory_writer, "restore_fork_state", None)
+        belief_restore = getattr(self._belief_writer, "restore_fork_state", None)
+        if not callable(memory_restore) or not callable(belief_restore):
+            raise ForkCheckpointError(
+                "fork_state_unsupported", "legacy stores are not fork capable"
+            )
+        memory_restore(state.legacy_memories)
+        belief_restore(state.legacy_beliefs)
+        _LOG.debug(
+            "runtime_fork_state_restored",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "processed_invocation_count": len(self._processed_invocations),
+                    "finalized_hash_count": len(self._finalized_hashes),
+                    "audit_family_count": len(state.audits),
+                }
+            },
         )
 
     async def process_observation(

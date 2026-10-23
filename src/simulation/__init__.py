@@ -222,6 +222,14 @@ from simulation.evidence import (
     manifest_idempotency_material,
     opaque_envelope_from_payload,
 )
+from simulation.fork_checkpoint import (
+    AGENT_RUNTIME_FORK_STATE_VERSION,
+    RUNNER_FORK_CHECKPOINT_VERSION,
+    AgentRuntimeForkState,
+    ForkCheckpointError,
+    RunnerForkCheckpoint,
+    fork_state_digest,
+)
 from simulation.generational_control import (
     DEFAULT_CRITERION_FACTORY,
     CriterionDecision,
@@ -593,6 +601,7 @@ from simulation.subjective_state import (
 __all__ = [
     "ACCEPTED_COGNITION_TRACE_SCHEMA_VERSIONS",
     "ACTION_RESOLUTION_SCHEMA_VERSION",
+    "AGENT_RUNTIME_FORK_STATE_VERSION",
     "ALEMBIC_HEAD_REVISION",
     "ALLOWED_LIFECYCLE_TRANSITIONS",
     "ALLOWED_OBJECTIVE_INHERITANCE_KEYS",
@@ -645,6 +654,7 @@ __all__ = [
     "RESEARCH_INTERVENTION_REASON_CODES",
     "RESEARCH_UI_MOUNT",
     "RESULT_SCHEMA_VERSION",
+    "RUNNER_FORK_CHECKPOINT_VERSION",
     "RUNNER_SCHEMA_VERSION",
     "RUNNER_SCHEMA_VERSION_V1",
     "RUNNER_SCHEMA_VERSION_V2",
@@ -700,6 +710,7 @@ __all__ = [
     "AgentRuntimeCheckpoint",
     "AgentRuntimeError",
     "AgentRuntimeErrorCode",
+    "AgentRuntimeForkState",
     "AgentRuntimeStatus",
     "AgentStepResult",
     "AgentVisibleProjection",
@@ -798,6 +809,7 @@ __all__ = [
     "FinalizedBoundaryObserver",
     "FinalizedTickReceipt",
     "ForkCapableSubjectiveOwnerBundle",
+    "ForkCheckpointError",
     "GenerationPopulationRow",
     "GenerationalBoundary",
     "GenerationalBoundaryStage",
@@ -908,6 +920,7 @@ __all__ = [
     "RunnerCrashInjected",
     "RunnerCrashPoint",
     "RunnerDependencyFactories",
+    "RunnerForkCheckpoint",
     "RunnerPersistenceSpec",
     "RunnerProviderSettings",
     "RunnerResumePlan",
@@ -1043,6 +1056,7 @@ __all__ = [
     "example_population_lifecycle_spec",
     "export_metadata",
     "fingerprint_physical_rules",
+    "fork_state_digest",
     "freeze_json_value",
     "future_effect_scope",
     "hash_canonical_payload",

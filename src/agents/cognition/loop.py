@@ -10,10 +10,15 @@ import hashlib
 import logging
 import re
 from asyncio import CancelledError
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, Final, Never, Protocol, TypeVar, cast
+
+from agents.cognition.fork_state import (
+    CognitiveLoopForkState,
+    CognitiveLoopForkStateError,
+)
 
 if TYPE_CHECKING:
     from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
@@ -1331,6 +1336,67 @@ class CognitiveLoop:
         self._last_mentorship_audits: tuple[object, ...] = ()
         self._last_cultural_feature_audits: tuple[object, ...] = ()
         self._last_practical_knowledge_audits: tuple[object, ...] = ()
+
+    def export_fork_state(self) -> CognitiveLoopForkState:
+        """Export mutable loop state that is not static configuration."""
+        return CognitiveLoopForkState(
+            counterfactual_state=self._counterfactual_state,
+            last_counterfactual_scenarios=self._last_counterfactual_scenarios,
+            deferred_dissonance=self._deferred_dissonance,
+            last_developmental_audits=self._last_developmental_audits,
+            last_mentorship_audits=self._last_mentorship_audits,
+            last_cultural_feature_audits=self._last_cultural_feature_audits,
+            last_practical_knowledge_audits=self._last_practical_knowledge_audits,
+            last_cognitive_budget_audit=self._last_cognitive_budget_audit,
+            tick_budget_ledger=self._tick_budget_ledger,
+            prepared_institutional_decay=self._prepared_institutional_decay,
+            symbolic_translation_applications=tuple(
+                dict(item) for item in self._symbolic_translation_applications
+            ),
+            developmental_entity_learning_rates=tuple(
+                sorted(self._developmental_entity_learning_rates.items())
+            ),
+            developmental_stage_learning_rates=tuple(
+                sorted(self._developmental_stage_learning_rates.items())
+            ),
+            experiment_ledger=self._experiment_ledger,
+        )
+
+    def restore_fork_state(self, state: CognitiveLoopForkState) -> None:
+        """Install captured mutable loop state into a fresh loop."""
+        if type(state) is not CognitiveLoopForkState:
+            raise CognitiveLoopForkStateError(
+                "fork_state_unsupported", "invalid loop fork state"
+            )
+        self._counterfactual_state = state.counterfactual_state
+        self._last_counterfactual_scenarios = tuple(
+            state.last_counterfactual_scenarios
+        )
+        self._deferred_dissonance = tuple(state.deferred_dissonance)
+        self._last_developmental_audits = tuple(state.last_developmental_audits)
+        self._last_mentorship_audits = tuple(state.last_mentorship_audits)
+        self._last_cultural_feature_audits = tuple(
+            state.last_cultural_feature_audits
+        )
+        self._last_practical_knowledge_audits = tuple(
+            state.last_practical_knowledge_audits
+        )
+        self._last_cognitive_budget_audit = state.last_cognitive_budget_audit
+        self._tick_budget_ledger = state.tick_budget_ledger
+        self._prepared_institutional_decay = state.prepared_institutional_decay
+        self._symbolic_translation_applications = [
+            dict(cast("Mapping[str, object]", item))
+            for item in state.symbolic_translation_applications
+        ]
+        self._developmental_entity_learning_rates = dict(
+            state.developmental_entity_learning_rates
+        )
+        self._developmental_stage_learning_rates = dict(
+            state.developmental_stage_learning_rates
+        )
+        self._experiment_ledger = cast(
+            "ExperimentLedger | None", state.experiment_ledger
+        )
 
     def _prepare_reputation(self, loop_input: CognitiveLoopInput) -> object | None:
         from agents.cognition.configuration import CognitionReputationMode

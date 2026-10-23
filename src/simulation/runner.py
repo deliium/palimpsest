@@ -107,6 +107,10 @@ from simulation.engine import (
     objective_skill_policy,
     teaching_interaction_policy,
 )
+from simulation.fork_checkpoint import (
+    ForkCheckpointError,
+    RunnerForkCheckpoint,
+)
 from simulation.generational_models import (
     BoundaryEventFact,
     ExperimentCriterionEvaluationStatus,
@@ -132,6 +136,7 @@ from simulation.persistence import (
     LEGACY_PENDING_FINALIZATION_CODEC_VERSION,
     PENDING_FINALIZATION_CODEC_VERSION,
     PROJECTOR_VERSION,
+    CommitHash,
     PayloadHash,
     PendingFinalizationRecord,
     PendingFinalizationRepository,
@@ -196,9 +201,11 @@ from simulation.runner_serialization import (
     decode_finalization_command,
     finalization_command_to_mapping,
     objective_projection_hash,
+    runner_config_fingerprint,
 )
 from simulation.service import PersistentSimulationService
 from simulation.subjective_state import (
+    ForkCapableSubjectiveOwnerBundle,
     InMemorySubjectiveOwnerBundle,
     SubjectiveOwnerBundle,
     SubjectiveStateService,
@@ -1663,6 +1670,7 @@ class SimulationRunner:
         "_agents",
         "_attempt_receipts",
         "_bootstrap",
+        "_bootstrap_checkpoint",
         "_boundary_observer",
         "_closed",
         "_cognition_counters",
@@ -1721,11 +1729,17 @@ class SimulationRunner:
         factories: RunnerDependencyFactories | None = None,
         criteria: Sequence[object] = (),
         boundary_observer: object | None = None,
+        bootstrap_snapshot: WorldSnapshot | None = None,
     ) -> None:
         self._config = config
         self._run_id = run_id
         self._run_config = run_config
         self._bootstrap = bootstrap
+        self._bootstrap_checkpoint = (
+            bootstrap_snapshot
+            if bootstrap_snapshot is not None
+            else _bootstrap_snapshot(engine)
+        )
         self._engine = engine
         self._runtimes = tuple(runtimes)
         self._agents = tuple(agents)
@@ -2456,6 +2470,7 @@ class SimulationRunner:
                     "runner_durable_service_ready run_id=%s",
                     resolved_run_id.value,
                 )
+            bootstrap_snapshot = _bootstrap_snapshot(engine)
             _LOG.info(
                 "runner_constructed run_id=%s world_id=%s agent_count=%s "
                 "config_fingerprint_prefix=%s scenario_fingerprint_prefix=%s "
@@ -2486,6 +2501,7 @@ class SimulationRunner:
                 factories=deps,
                 criteria=resolved_criteria,
                 boundary_observer=deps.boundary_observer,
+                bootstrap_snapshot=bootstrap_snapshot,
             )
         except RunnerConstructionError:
             await _cleanup_created(created_closables, stage=stage)
@@ -2502,6 +2518,241 @@ class SimulationRunner:
                 RunnerConstructionErrorCode.FACTORY_FAILED,
                 stage=stage,
             ) from exc
+
+    @classmethod
+    async def from_fork_checkpoint(
+        cls,
+        config: SimulationRunnerConfig,
+        *,
+        run_id: RunId,
+        checkpoint: RunnerForkCheckpoint,
+        restored_engine: WorldEngine,
+        factories: RunnerDependencyFactories | None = None,
+        cultural_sink: object | None = None,
+    ) -> SimulationRunner:
+        """Build a child runner from complete fork state and a restored engine."""
+        if type(config) is not SimulationRunnerConfig:
+            raise TypeError("from_fork_checkpoint requires SimulationRunnerConfig")
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(checkpoint) is not RunnerForkCheckpoint:
+            raise TypeError("checkpoint must be RunnerForkCheckpoint")
+        if config.provider.recording_policy is not RecordingPolicy.DETERMINISTIC_FAKE:
+            raise ForkCheckpointError(
+                "fork_provider_unsupported",
+                "only deterministic fake forks are supported",
+            )
+        if runner_config_fingerprint(config) != checkpoint.config_fingerprint:
+            raise ForkCheckpointError(
+                "fork_engine_mismatch", "config fingerprint mismatch"
+            )
+        if restored_engine.run_id != run_id:
+            raise ForkCheckpointError("fork_engine_mismatch", "engine run mismatch")
+        if restored_engine.tick != checkpoint.boundary_tick:
+            raise ForkCheckpointError("fork_engine_mismatch", "engine tick mismatch")
+        if restored_engine.revision != checkpoint.boundary_revision:
+            raise ForkCheckpointError(
+                "fork_engine_mismatch", "engine revision mismatch"
+            )
+        if tuple(restored_engine.ordered_registrations) != checkpoint.registrations:
+            raise ForkCheckpointError("fork_roster_mismatch", "engine roster mismatch")
+
+        deps = factories if factories is not None else RunnerDependencyFactories()
+        if config.persistence.durable and deps.journal is None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.DURABLE_UNSUPPORTED, stage="persistence"
+            )
+        provider = deps.create_provider(
+            config.provider, deps.resolve_credentials(config.provider)
+        )
+        resolved_criteria: tuple[object, ...] = ()
+        if config.generational_run is not None:
+            requested = tuple(
+                sorted(
+                    config.generational_run.experiment_criteria,
+                    key=lambda item: item.identity,
+                )
+            )
+            resolved: list[object] = []
+            for criterion_spec in requested:
+                if deps.criterion_factory is None:
+                    await provider.close()
+                    raise RunnerConstructionError(
+                        RunnerConstructionErrorCode.INVALID_CONFIG,
+                        stage="criterion",
+                    )
+                criterion = deps.criterion_factory(criterion_spec)  # type: ignore[operator]
+                if (
+                    getattr(criterion, "criterion_id", None)
+                    != criterion_spec.criterion_id
+                    or getattr(criterion, "version", None) != criterion_spec.version
+                ):
+                    await provider.close()
+                    raise RunnerConstructionError(
+                        RunnerConstructionErrorCode.INVALID_CONFIG,
+                        stage="criterion",
+                    )
+                resolved.append(criterion)
+            resolved_criteria = tuple(resolved)
+
+        translators = restored_engine.registration_translator
+        memory_run_id = MemoryRunId(run_id.value)
+        scoring_policy = _default_scoring_policy()
+        allow_provider = _llm_assisted_provider_bound(config.provider)
+        reconstruction_policy = _default_reconstruction_policy(
+            allow_provider=allow_provider
+        )
+        reconstructor = _reconstructor_for(config.provider, provider)
+        counterpart = _counterpart_resolver(translators)
+        cognition_trace_repository: CognitionTraceRepository = (
+            select_cognition_trace_repository(
+                enabled=config.cognition_trace.enabled,
+                durable=deps.cognition_trace_repository,
+            )
+        )
+        from simulation.new_agent_initialization import (
+            default_new_agent_initialization_spec,
+            species_defaults_for,
+        )
+
+        init_spec = config.new_agent_initialization
+        if init_spec is None:
+            init_spec = default_new_agent_initialization_spec()
+        founder_specs = {spec.agent_id: spec for spec in config.agents}
+        bundles: list[_AgentBundle] = []
+        try:
+            for registration in checkpoint.registrations:
+                owner = registration.agent_id
+                founder = founder_specs.get(owner)
+                if founder is not None:
+                    agent_spec = founder
+                    drives = founder.cognition.resolve_drive_profile()
+                    name = founder.name if founder.name is not None else owner.value
+                    initial_goals = founder.initial_goals
+                    mid_run = False
+                else:
+                    pack = species_defaults_for(
+                        init_spec.species_defaults_id, agent_id=owner
+                    )
+                    agent_spec = AgentRunnerSpec(
+                        agent_id=owner,
+                        entity_id=registration.entity_id,
+                        cognition=pack.cognition,
+                        name=owner.value,
+                        initial_goals=(),
+                    )
+                    drives = pack.drive_profile
+                    name = owner.value
+                    initial_goals = ()
+                    mid_run = True
+                bundles.append(
+                    _construct_agent_bundle(
+                        config=config,
+                        agent_spec=agent_spec,
+                        translator=translators,
+                        provider=provider,
+                        deps=deps,
+                        memory_run_id=memory_run_id,
+                        run_id=run_id,
+                        cognition_trace_repository=cognition_trace_repository,
+                        scoring_policy=scoring_policy,
+                        reconstruction_policy=reconstruction_policy,
+                        reconstructor=reconstructor,
+                        counterpart=counterpart,
+                        name=name,
+                        drives=drives,
+                        initial_goals=initial_goals,
+                        mark_mid_run_admit=mid_run,
+                    )
+                )
+            run_config = SimulationRunConfig(
+                seed=config.seed,
+                physical_rules=config.resolve_physical_rules(),
+                derivation_version=config.derivation_version,
+                stochastic_identity=config.stochastic_identity,
+            )
+            durable_service = (
+                PersistentSimulationService(restored_engine, deps.journal)
+                if config.persistence.durable and deps.journal is not None
+                else None
+            )
+            runner = cls(
+                config=config,
+                run_id=run_id,
+                run_config=run_config,
+                bootstrap=checkpoint.bootstrap,
+                engine=restored_engine,
+                runtimes=[bundle.runtime for bundle in bundles],
+                agents=bundles,
+                provider=provider,
+                diagnostics=build_runner_diagnostics(config),
+                durable=durable_service,
+                pending_finalizations=deps.pending_finalizations,
+                factories=deps,
+                criteria=resolved_criteria,
+                boundary_observer=deps.boundary_observer,
+                bootstrap_snapshot=checkpoint.bootstrap_snapshot,
+            )
+            if cultural_sink is not None:
+                runner.set_cultural_boundary_sink(cultural_sink)  # type: ignore[arg-type]
+            for bundle in bundles:
+                owner = bundle.runtime.agent_id
+                owner_state = checkpoint.owner_state(owner)
+                if not isinstance(
+                    bundle.bundle, ForkCapableSubjectiveOwnerBundle
+                ):
+                    raise ForkCheckpointError(
+                        "fork_state_unsupported", "owner bundle is not fork capable"
+                    )
+                await bundle.bundle.restore_fork_state(
+                    owner_state, parent_scope=owner_state.scope
+                )
+                bundle.runtime.restore_fork_state(
+                    checkpoint.runtime_state(owner)
+                )
+            control = checkpoint.runner_control
+            runner._ticks_committed = checkpoint.boundary_tick.value
+            runner._finalized_tick_receipts = list(control.finalized_tick_receipts)
+            runner._goal_transition_receipts = list(control.goal_transition_receipts)
+            runner._cognition_counters = control.cognition_counters
+            if control.generational_control_state is not None:
+                gcs = control.generational_control_state
+                runner._generational_progress = gcs.progress
+                runner._stop_evidence = gcs.stop_evidence
+                runner._terminal_receipt = gcs.terminal_receipt
+                runner._attempt_receipts = list(gcs.attempt_receipts)
+                runner._finished_result = gcs.finished_result
+                runner._published_boundaries = set(gcs.published_boundaries)
+                runner._generational_boundary_stage = gcs.boundary_stage
+                runner._criterion_decisions = {
+                    (item.boundary_tick, item.criterion_id, item.version): item
+                    for item in gcs.criterion_decisions
+                }
+            runner._started = True
+            runner._cultural_capture_last_boundary = None
+            if cultural_sink is not None:
+                runner._publish_cultural_boundary_if_complete(
+                    checkpoint.boundary_tick.value
+                )
+                if (
+                    runner._cultural_capture_last_boundary
+                    != checkpoint.boundary_tick.value
+                ):
+                    raise ForkCheckpointError(
+                        "fork_boundary_not_finalized",
+                        "baseline publication failed",
+                    )
+            _LOG.info(
+                "runner_fork_constructed run_id=%s boundary_tick=%s "
+                "owner_count=%s",
+                run_id.value,
+                checkpoint.boundary_tick.value,
+                len(bundles),
+            )
+            return runner
+        except Exception:
+            await provider.close()
+            raise
 
     def request_stop(self) -> None:
         """Request stop at the next fully finalized committed boundary."""
@@ -3269,6 +3520,126 @@ class SimulationRunner:
                 )
                 return
         self._publish_cultural_boundary_if_complete(0)
+
+    async def initialize_finalized_boundary(self) -> None:
+        """Start runtimes and publish boundary zero without advancing a tick."""
+        if self._closed:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG, stage="closed"
+            )
+        if self._terminal_receipt is not None or self._finished_result is not None:
+            raise ForkCheckpointError(
+                "fork_terminal_boundary", "runner is already terminal"
+            )
+        if self._ticks_committed != 0 or self._engine.tick.value != 0:
+            raise ForkCheckpointError(
+                "fork_boundary_not_finalized", "initialization requires boundary zero"
+            )
+        if not self._started:
+            for runtime in self._runtimes:
+                if runtime.status is AgentRuntimeStatus.CREATED:
+                    runtime.start()
+                elif runtime.status is not AgentRuntimeStatus.ACTIVE:
+                    raise ForkCheckpointError(
+                        "fork_boundary_not_finalized", "runtime is not active"
+                    )
+            self._started = True
+        await self._publish_initial_cultural_boundary()
+        _LOG.info(
+            "runner_finalized_boundary_initialized run_id=%s owner_count=%s",
+            self._run_id.value,
+            len(self._runtimes),
+        )
+
+    async def capture_fork_checkpoint(self) -> RunnerForkCheckpoint:
+        """Capture complete process-local state at a finalized boundary."""
+        if not self._started:
+            raise ForkCheckpointError(
+                "fork_boundary_not_finalized", "runner is not initialized"
+            )
+        if self._terminal_receipt is not None or self._finished_result is not None:
+            raise ForkCheckpointError(
+                "fork_terminal_boundary", "runner is already terminal"
+            )
+        if self._ticks_committed != self._engine.tick.value:
+            raise ForkCheckpointError(
+                "fork_boundary_not_finalized", "runner and engine ticks disagree"
+            )
+        if (
+            self._config.generational_run is not None
+            and self._generational_boundary_stage is GenerationalBoundaryStage.TERMINAL
+        ):
+            raise ForkCheckpointError(
+                "fork_terminal_boundary", "generational stage is terminal"
+            )
+        if self._pending_finalizations is not None:
+            records = await self._pending_finalizations.list_pending_for_run(
+                run_id=self._run_id
+            )
+            if records:
+                raise ForkCheckpointError(
+                    "fork_boundary_not_finalized", "pending finalizations exist"
+                )
+        if (
+            self._cultural_boundary_sink is not None
+            and not self._cultural_capture_failed
+            and self._cultural_capture_last_boundary != self._ticks_committed
+        ):
+            raise ForkCheckpointError(
+                "fork_boundary_not_finalized", "cultural baseline is not published"
+            )
+        runtime_states = tuple(
+            runtime.export_fork_state() for runtime in self._runtimes
+        )
+        owner_states = []
+        for bundle in self._agents:
+            if not isinstance(bundle.bundle, ForkCapableSubjectiveOwnerBundle):
+                raise ForkCheckpointError(
+                    "fork_state_unsupported", "owner bundle is not fork capable"
+                )
+            owner_states.append(await bundle.bundle.export_fork_state())
+        registrations = self._engine.ordered_registrations
+        runtime_ids = {state.checkpoint.agent_id for state in runtime_states}
+        owner_ids = {state.scope.owner_id for state in owner_states}
+        registration_ids = {item.agent_id for item in registrations}
+        if (
+            runtime_ids != registration_ids
+            or owner_ids != registration_ids
+            or len(runtime_ids) != len(registrations)
+        ):
+            raise ForkCheckpointError(
+                "fork_roster_mismatch", "captured roster is incomplete"
+            )
+        boundary_tick = Tick(self._ticks_committed)
+        snapshot = _engine_snapshot(
+            self._engine,
+            snapshot_id=SnapshotId(
+                f"fork-{self._run_id.value}-t{self._ticks_committed}"
+            ),
+            next_tick=boundary_tick,
+        )
+        checkpoint = RunnerForkCheckpoint(
+            run_id=self._run_id,
+            config=self._config,
+            config_fingerprint=runner_config_fingerprint(self._config),
+            boundary_tick=boundary_tick,
+            boundary_revision=self._engine.revision,
+            snapshot=snapshot,
+            bootstrap=self._bootstrap,
+            bootstrap_snapshot=self._bootstrap_checkpoint,
+            registrations=tuple(registrations),
+            runtime_states=runtime_states,
+            owner_states=tuple(owner_states),
+            runner_control=self.export_runtime_checkpoint(),
+        )
+        _LOG.info(
+            "runner_fork_checkpoint_captured run_id=%s boundary_tick=%s "
+            "owner_count=%s",
+            self._run_id.value,
+            self._ticks_committed,
+            len(registrations),
+        )
+        return checkpoint
 
     def export_runtime_checkpoint(self) -> RunnerRuntimeCheckpoint:
         """Export rehydratable runner state (no subjective payloads)."""
@@ -5198,8 +5569,156 @@ async def _cleanup_created(
             )
 
 
+def _construct_agent_bundle(
+    *,
+    config: SimulationRunnerConfig,
+    agent_spec: AgentRunnerSpec,
+    translator: RegistrationTranslator,
+    provider: AsyncCloseable,
+    deps: RunnerDependencyFactories,
+    memory_run_id: MemoryRunId,
+    run_id: RunId,
+    cognition_trace_repository: CognitionTraceRepository,
+    scoring_policy: MemoryScoringPolicy,
+    reconstruction_policy: MemoryReconstructionPolicy,
+    reconstructor: MemoryReconstructor,
+    counterpart: object,
+    name: str,
+    drives: object,
+    initial_goals: tuple[Goal, ...],
+    mark_mid_run_admit: bool = False,
+) -> _AgentBundle:
+    """Build one owner bundle from immutable configuration and factories."""
+    owner = agent_spec.agent_id
+    scope = MemoryScope(run_id=memory_run_id, owner_id=owner)
+    memory_service = deps.create_memory_service(scope, reconstructor=reconstructor)
+    belief_service = deps.create_belief_service(scope)
+    relationship_service = deps.create_relationship_service(owner)
+    owner_bundle = deps.create_subjective_bundle(
+        scope,
+        memory_service=memory_service,
+        belief_service=belief_service,
+        relationship_service=relationship_service,
+    )
+    legacy_beliefs = BeliefStore(owner)
+    loop_config = _cognition_config_for(
+        agent_spec.cognition,
+        mortality_mode=config.mortality_mode,
+        capability_flags=config.capability_flags,
+        generational_narratives=config.generational_narratives,
+    )
+    memory_retriever = _memory_retriever_for(
+        agent_spec.cognition.memory_mode,
+        memory_service=memory_service,
+        scoring_policy=scoring_policy,
+        reconstruction_policy=reconstruction_policy,
+        belief_reader=None,
+        emotion_bias=(
+            loop_config.emotional_state_mode
+            is CognitionEmotionalStateMode.ENABLED
+        ),
+        destination_memory_limit=(
+            config.regions_migration.destination_memory_limit
+            if config.regions_migration is not None
+            and config.regions_migration.cognition_mode.value == "deterministic"
+            else 0
+        ),
+        destination_hop_limit=(
+            1
+            if config.regions_migration is None
+            else config.regions_migration.destination_hop_limit
+        ),
+    )
+    cognitive_loop = build_cognitive_loop(
+        loop_config,
+        memory=memory_retriever,
+        regional_migration_cognition_mode=(
+            "disabled"
+            if config.regions_migration is None
+            else config.regions_migration.cognition_mode.value
+        ),
+        regional_migration_hop_limit=(
+            1
+            if config.regions_migration is None
+            else config.regions_migration.destination_hop_limit
+        ),
+        resolve_counterpart=counterpart,
+        identity_history=owner_bundle.semantic_belief_reader.history,
+        consolidation_selector=_consolidation_selector_for(
+            config.provider,
+            provider,
+            loop_config.consolidation_mode,
+        ),
+        reflection_selector=_reflection_selector_for(
+            config.provider,
+            provider,
+            loop_config.reflection_mode,
+        ),
+        **_channel_loop_kwargs(config),
+    )
+    agent = Agent(
+        agent_id=owner,
+        name=name,
+        goals=initial_goals,
+        drives=drives,  # type: ignore[arg-type]
+    )
+    runtime = AgentRuntime(
+        agent=agent,
+        translator=translator,
+        cognitive_loop=cognitive_loop,
+        memory_reader=owner_bundle.memory_reader,
+        memory_writer=MemoryStore(owner),
+        belief_reader=legacy_beliefs,
+        belief_writer=legacy_beliefs,
+        memory_service=memory_service,
+        semantic_belief_reader=owner_bundle.semantic_belief_reader,
+        relationship_reader=owner_bundle.relationship_reader,
+        subjective_state=owner_bundle.commit_service,
+        run_id=run_id,
+        cognition_trace_repository=cognition_trace_repository,
+        cognition_trace_spec=config.cognition_trace,
+        scientific_evidence=deps.scientific_evidence,
+    )
+    if mark_mid_run_admit:
+        mark_admit = getattr(
+            cognitive_loop, "mark_developmental_mid_run_admit", None
+        )
+        if callable(mark_admit):
+            mark_admit()
+    return _AgentBundle(
+        runtime=runtime,
+        bundle=owner_bundle,
+        memory_service=memory_service,
+        belief_service=belief_service,
+        relationship_service=relationship_service,
+        subjective_state=owner_bundle.commit_service,
+        memory_retriever=memory_retriever,
+    )
+
+
 def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
     """Build the tick-0 durable bootstrap checkpoint from a live engine."""
+    return _engine_snapshot(
+        engine,
+        snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
+        next_tick=Tick(0),
+    )
+
+
+def _engine_snapshot(
+    engine: WorldEngine,
+    *,
+    snapshot_id: SnapshotId,
+    next_tick: Tick,
+    predecessor_commit_hash: CommitHash | None = None,
+) -> WorldSnapshot:
+    """Build a complete objective checkpoint from a live engine at any boundary."""
+    if type(engine) is not WorldEngine:
+        raise TypeError("_engine_snapshot requires WorldEngine")
+    if type(snapshot_id) is not SnapshotId:
+        raise TypeError("snapshot_id must be SnapshotId")
+    if type(next_tick) is not Tick:
+        raise TypeError("next_tick must be Tick")
     state = engine._snapshot.world.state
     schema_version, codec_version = checkpoint_schema_for_production(
         production_active=engine._production_catalog is not None,
@@ -5359,7 +5878,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
             None if state.journeys is None else tuple(state.journeys.values())
         )
     draft = WorldSnapshot(
-        snapshot_id=SnapshotId(f"bootstrap-{engine.run_id.value}"),
+        snapshot_id=snapshot_id,
         run_id=engine.run_id,
         world_id=engine.world_id,
         seed=engine._config.seed,
@@ -5370,14 +5889,14 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         items=tuple(engine._snapshot.world.state.items.values()),
         resources=tuple(engine._snapshot.world.state.resources.values()),
         weather=tuple(engine._snapshot.world.state.weather.values()),
-        next_tick=Tick(0),
+        next_tick=next_tick,
         revision=engine.revision,
         event_schema_version=schema_version,
         projector_version=PROJECTOR_VERSION,
         persistence_codec_version=codec_version,
         derivation_version=engine._config.derivation_version or DERIVATION_VERSION_V3,
         integrity_hash=PayloadHash("a" * 64),
-        predecessor_commit_hash=None,
+        predecessor_commit_hash=predecessor_commit_hash,
         **production_rows,
     )
     return WorldSnapshot(
@@ -5399,7 +5918,7 @@ def _bootstrap_snapshot(engine: WorldEngine) -> WorldSnapshot:
         persistence_codec_version=draft.persistence_codec_version,
         derivation_version=draft.derivation_version,
         integrity_hash=hash_snapshot(draft),
-        predecessor_commit_hash=None,
+        predecessor_commit_hash=draft.predecessor_commit_hash,
         structures=draft.structures,
         production_jobs=draft.production_jobs,
         tool_marks=draft.tool_marks,
