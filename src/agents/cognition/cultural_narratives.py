@@ -3893,7 +3893,7 @@ def narrative_semantic_evidence(
         requests.append(
             BeliefRevisionRequest(
                 owner_id=owner_id,
-                operation_id=f"narrative-belief-{digest}",
+                operation_id=f"narrative-belief-{digest}-t{tick}",
                 logical_tick=tick,
                 claim=claim,
                 evidence=evidence,
