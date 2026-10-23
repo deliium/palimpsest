@@ -555,3 +555,7 @@ empirical `p05`/`p95` ranges. An opt-in sibling
 explicit one-factor paired contrasts over verified cultural sidecars, without
 turning the legacy percentile range into a confidence interval and without
 claiming significance.
+
+## Historical contingency (BN)
+
+Experiment BN and the `historical_contingency@1` grouped protocol are documented in [Historical contingency](historical-contingency.md). BN is a separate typed grouped recipe and is not an independent matrix cell or part of the V1 A–E gate.

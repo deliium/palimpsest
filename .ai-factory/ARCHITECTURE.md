@@ -414,3 +414,8 @@ semantic type, write-pair, API route, or migration; default runner writes remain
 v4/result v2, commands stay 43, observer semantic types stay 73, replay stays
 `EVENT_SCHEMA_REPLAY_V22`/`v20` for feature-selected runs, and Alembic head stays
 `0017`.
+
+
+### V3-38 historical contingency seam
+
+`historical_contingency@1` is an opt-in grouped experiment protocol, not a runner capability. `experiments` owns predeclared designs, treatment-blind slots, eligibility, ordinary-admission arbiters, bounded finalized evidence collection, detached outcome projection, and strict sibling artifacts. `analysis` owns selector calculators and paired seed-block comparison over detached rows and never imports experiments or live services. `research_runner` composes the CLI and read-only objective presence; it never starts HTTP. Common prefix state is process-local only: completed children may be adopted, but durable subjective restart is not claimed and an unused planned child requires exact deterministic prefix reconstruction. No runner v56, capability flag, command/event, observer semantic, write-pair, API route, migration, or metric family is added.

@@ -292,3 +292,7 @@ surrogates, or evidence payloads.
 - [Analysis metrics](analysis-metrics.md) — metric documents and numerical policy
 - [Generational runner](generational-runner.md) — archives and historical inspection
 - [Architecture](architecture.md) — authority boundaries and extension rules
+
+## Path-dependence outcomes
+
+Historical-contingency experiments reuse the repeated-seed numerical policy and several existing analysis calculators; see [Historical contingency](historical-contingency.md). They add comparison projections, not new metric families.

@@ -56,6 +56,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2/V3 seams + downstream plan contracts |
 | [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, V2/V3 capability flags, fingerprint vs trajectory identity |
 | [Generational runner](docs/generational-runner.md) | `runner-config-v55`/`runner-result-v3`, cohorts, stop selectors, archives, historical inspection, CLI |
+| [Historical contingency](docs/historical-contingency.md) | Experiment BN forked replay, intervention lineage, seven outcome domains, seed-block statistics |
 | [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile` / `v2_regression_profile` / `v3_scaffolding_profile`, coordinator, generational comparison (BM) axes and matrix factors, persistence (`0010`) |
 | [V2 benchmark suite](docs/v2-benchmark-suite.md) | Sixteen composition scenarios, observer graphical fixture, zero-install + scientific gates (off V1 gate) |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |

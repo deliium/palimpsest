@@ -312,3 +312,7 @@ do not add a runner schema. There is no `runner-config-v56`. The closed axes
 experiment presets over existing fields. Comparability requires a passthrough
 lifespan distribution and deterministic `none` initialization; capacity and
 entry rate may differ only for the `population_size` axis.
+
+## Path-dependence research artifacts
+
+`historical_contingency@1` is composition-only research surface. It adds sibling artifact schemas and no runner-config field, capability flag, or migration. See [Historical contingency](historical-contingency.md).

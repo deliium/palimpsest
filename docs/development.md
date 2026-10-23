@@ -350,3 +350,7 @@ Expected: 130 metric families, BM's ten paired arms and matrix factors execute
 on `runner-config-v55`, the comparison metric is present for generational arms
 and absent for legacy arms, and default write/result, command, observer, replay,
 and migration pins are unchanged.
+
+## Historical contingency checks
+
+`uv run pytest tests/unit/test_path_dependence_end_to_end.py -q` runs the fake-only smoke workflow. PostgreSQL path-dependence integration and the tick-100 scale profile are opt-in and reported as separate verification gaps when infrastructure is unavailable. See [Historical contingency](historical-contingency.md).

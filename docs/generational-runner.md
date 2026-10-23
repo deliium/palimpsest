@@ -266,3 +266,7 @@ not a passing durability check.
 - [Experiments](experiments.md) — Experiment BL and matrix composition
 - [Persistence](persistence.md) — durable runs, snapshots, and replay
 - [LLM providers](llm-providers.md) — recording and replay
+
+## Forked histories
+
+Historical-contingency experiments fork a finalized generational prefix into replay children; see [Historical contingency](historical-contingency.md). This is different from historical objective inspection: it never implies durable subjective restart.
