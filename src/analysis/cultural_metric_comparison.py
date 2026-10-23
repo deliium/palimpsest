@@ -15,8 +15,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from scipy import stats
-
 from analysis.cultural_evolution_evidence import CulturalMeasurement
 from analysis.cultural_evolution_transmission import (
     CULTURAL_EVOLUTION_TRANSMISSION_ALGORITHM_VERSION,
@@ -396,18 +394,16 @@ def _t_interval(
     values: Sequence[float],
     confidence: float,
 ) -> tuple[float | None, float | None, float | None, float | None, str]:
-    n = len(values)
-    if n == 0:
-        return None, None, None, None, "insufficient_independent_seeds"
-    mean = statistics.fmean(values)
-    if n == 1:
-        return mean, None, None, None, "insufficient_independent_seeds"
-    sd = statistics.stdev(values)
-    df = n - 1
-    if sd == 0.0:
-        return mean, sd, mean, mean, "present"
-    margin = float(stats.t.ppf((1.0 + confidence) / 2.0, df)) * sd / math.sqrt(n)
-    return mean, sd, mean - margin, mean + margin, "present"
+    from analysis.seed_block_statistics import student_t_interval
+
+    result = student_t_interval(values, confidence=confidence)
+    return (
+        result.mean,
+        result.sample_sd,
+        result.low,
+        result.high,
+        result.status,
+    )
 
 
 def _seed_block_values(
