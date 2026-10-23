@@ -529,8 +529,6 @@ def build_comparison_document(
 ) -> dict[str, object]:
     _safe("comparison_id", comparison_id)
     _safe("ensemble_id", ensemble_id)
-    if not input_digests:
-        raise PathDependenceArtifactError("artifact_identity_mismatch")
     for digest in input_digests:
         _digest(digest)
     payload: dict[str, object] = {

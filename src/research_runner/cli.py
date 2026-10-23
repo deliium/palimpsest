@@ -51,6 +51,7 @@ from research_runner.generational_composition import (
     GenerationalExecutionRecipe,
     PostgresHistoricalBoundaryReader,
 )
+from research_runner.path_dependence_cli import add_path_dependence_parser
 
 _LOG: Final[logging.Logger] = logging.getLogger("research_runner.cli")
 
@@ -874,6 +875,7 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--recording-namespace", default=None)
     gen_p.add_argument("--recording-lookup-mode", default=None)
     gen_p.set_defaults(func=_cmd_generational)
+    add_path_dependence_parser(sub)
 
     return parser
 
