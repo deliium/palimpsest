@@ -14,7 +14,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final, Protocol, cast
+from typing import Final, Protocol, cast, runtime_checkable
 
 from agents.models import AgentId
 from memory.beliefs import BeliefRevisionRequest, SemanticBelief
@@ -23,6 +23,11 @@ from memory.contracts import (
     MemoryService,
     SemanticBeliefReader,
     SemanticBeliefService,
+)
+from memory.fork_state import (
+    BeliefForkState,
+    MemoryForkState,
+    MemoryForkStateError,
 )
 from memory.models import (
     MemoryAccessReceipt,
@@ -33,6 +38,10 @@ from memory.models import (
     ReconstructionRecord,
 )
 from social.contracts import RelationshipReader, RelationshipService
+from social.fork_state import (
+    RelationshipForkState,
+    RelationshipForkStateError,
+)
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipRevisionRequest,
@@ -44,11 +53,15 @@ from world.identifiers import (
 )
 
 __all__ = [
+    "ForkCapableSubjectiveOwnerBundle",
     "InMemorySubjectiveOwnerBundle",
     "InMemorySubjectiveStateService",
     "SubjectiveApplyReceipt",
+    "SubjectiveCommitForkState",
     "SubjectiveMutationBatch",
+    "SubjectiveOperationReceipt",
     "SubjectiveOwnerBundle",
+    "SubjectiveOwnerForkState",
     "SubjectiveOwnerSnapshot",
     "SubjectiveStateError",
     "SubjectiveStateErrorCode",
@@ -69,6 +82,10 @@ class SubjectiveStateErrorCode(StrEnum):
     IDEMPOTENCY_CONFLICT = "idempotency_conflict"
     ADAPTER_FAILED = "adapter_failed"
     ROLLBACK = "rollback"
+    FORK_STATE_UNSUPPORTED = "fork_state_unsupported"
+    FORK_OWNER_MISMATCH = "fork_owner_mismatch"
+    FORK_STATE_INVALID = "fork_state_invalid"
+    FORK_DESTINATION_NOT_EMPTY = "fork_destination_not_empty"
 
 
 class SubjectiveStateError(Exception):
@@ -225,6 +242,101 @@ class SubjectiveApplyReceipt:
         )
 
 
+SUBJECTIVE_OWNER_FORK_STATE_VERSION: Final[str] = "subjective-owner-fork-state-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveOperationReceipt:
+    """One retained subjective idempotency receipt."""
+
+    operation_id: str
+    fingerprint: str
+    receipt: SubjectiveApplyReceipt
+
+    def __post_init__(self) -> None:
+        require_stable_id("SubjectiveOperationReceipt.operation_id", self.operation_id)
+        if type(self.fingerprint) is not str or not self.fingerprint:
+            raise ValueError("SubjectiveOperationReceipt.fingerprint: invalid")
+        if type(self.receipt) is not SubjectiveApplyReceipt:
+            raise TypeError("SubjectiveOperationReceipt.receipt: invalid_type")
+        if self.receipt.operation_id != self.operation_id:
+            raise ValueError("SubjectiveOperationReceipt: operation_mismatch")
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveCommitForkState:
+    """Revision and idempotency receipts for one subjective commit service."""
+
+    scope: MemoryScope
+    revision: int
+    operations: tuple[SubjectiveOperationReceipt, ...] = ()
+    state_format_version: str = SUBJECTIVE_OWNER_FORK_STATE_VERSION
+
+    def __post_init__(self) -> None:
+        if self.state_format_version != SUBJECTIVE_OWNER_FORK_STATE_VERSION:
+            raise ValueError("unsupported subjective commit fork-state version")
+        if type(self.scope) is not MemoryScope:
+            raise TypeError("SubjectiveCommitForkState.scope: invalid_type")
+        object.__setattr__(
+            self,
+            "revision",
+            require_exact_nonneg_int(
+                "SubjectiveCommitForkState.revision", self.revision
+            ),
+        )
+        if isinstance(self.operations, (set, frozenset)):
+            raise TypeError("SubjectiveCommitForkState.operations: not_ordered")
+        if isinstance(self.operations, (str, bytes)) or not isinstance(
+            self.operations, Sequence
+        ):
+            raise TypeError("SubjectiveCommitForkState.operations: not_ordered")
+        operations = tuple(self.operations)
+        seen: set[str] = set()
+        for operation in operations:
+            if type(operation) is not SubjectiveOperationReceipt:
+                raise TypeError(
+                    "SubjectiveCommitForkState.operations: invalid_type"
+                )
+            if operation.operation_id in seen:
+                raise ValueError("SubjectiveCommitForkState.operations: duplicate")
+            seen.add(operation.operation_id)
+        object.__setattr__(self, "operations", operations)
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveOwnerForkState:
+    """Complete process-local continuation state for one owner bundle."""
+
+    scope: MemoryScope
+    memory: MemoryForkState
+    belief: BeliefForkState
+    relationship: RelationshipForkState
+    commit: SubjectiveCommitForkState
+    state_format_version: str = SUBJECTIVE_OWNER_FORK_STATE_VERSION
+
+    def __post_init__(self) -> None:
+        if self.state_format_version != SUBJECTIVE_OWNER_FORK_STATE_VERSION:
+            raise ValueError("unsupported subjective owner fork-state version")
+        if type(self.scope) is not MemoryScope:
+            raise TypeError("SubjectiveOwnerForkState.scope: invalid_type")
+        for name, value, model in (
+            ("memory", self.memory, MemoryForkState),
+            ("belief", self.belief, BeliefForkState),
+            ("relationship", self.relationship, RelationshipForkState),
+            ("commit", self.commit, SubjectiveCommitForkState),
+        ):
+            if type(value) is not model:
+                raise TypeError(f"SubjectiveOwnerForkState.{name}: invalid_type")
+        if (
+            self.memory.scope != self.scope
+            or self.belief.scope != self.scope
+            or self.commit.scope != self.scope
+        ):
+            raise ValueError("SubjectiveOwnerForkState: scope_mismatch")
+        if self.relationship.owner_id != self.scope.owner_id:
+            raise ValueError("SubjectiveOwnerForkState: owner_mismatch")
+
+
 class _MemoryAdapter(Protocol):
     @property
     def scope(self) -> MemoryScope: ...
@@ -338,6 +450,60 @@ class InMemorySubjectiveStateService:
     @property
     def revision(self) -> int:
         return self._revision
+
+    def _export_commit_fork_state_locked(self) -> SubjectiveCommitForkState:
+        return SubjectiveCommitForkState(
+            scope=self._scope,
+            revision=self._revision,
+            operations=tuple(
+                SubjectiveOperationReceipt(
+                    operation_id=operation_id,
+                    fingerprint=fingerprint,
+                    receipt=receipt,
+                )
+                for operation_id, (fingerprint, receipt) in self._ops.items()
+            ),
+        )
+
+    def _restore_commit_fork_state_locked(
+        self, state: SubjectiveCommitForkState
+    ) -> None:
+        if type(state) is not SubjectiveCommitForkState:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_STATE_INVALID,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        if state.scope.owner_id != self._scope.owner_id:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_OWNER_MISMATCH,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        if self._revision != 0 or self._ops:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_DESTINATION_NOT_EMPTY,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        self._revision = state.revision
+        self._ops = {
+            operation.operation_id: (
+                operation.fingerprint,
+                operation.receipt,
+            )
+            for operation in state.operations
+        }
+
+    async def export_fork_state(self) -> SubjectiveCommitForkState:
+        """Return the commit revision and idempotency receipts under the lock."""
+        async with self._lock:
+            return self._export_commit_fork_state_locked()
+
+    async def restore_fork_state(self, state: SubjectiveCommitForkState) -> None:
+        """Install commit revision and receipts into an empty service."""
+        async with self._lock:
+            self._restore_commit_fork_state_locked(state)
 
     async def commit(self, batch: SubjectiveMutationBatch) -> SubjectiveApplyReceipt:
         if type(batch) is not SubjectiveMutationBatch:
@@ -739,6 +905,23 @@ class SubjectiveOwnerBundle(Protocol):
     ) -> SubjectiveApplyReceipt: ...
 
 
+@runtime_checkable
+class ForkCapableSubjectiveOwnerBundle(Protocol):
+    """Optional protocol for process-local owner continuation checkpoints."""
+
+    @property
+    def scope(self) -> MemoryScope: ...
+
+    async def export_fork_state(self) -> SubjectiveOwnerForkState: ...
+
+    async def restore_fork_state(
+        self,
+        state: SubjectiveOwnerForkState,
+        *,
+        parent_scope: MemoryScope,
+    ) -> None: ...
+
+
 class InMemorySubjectiveOwnerBundle:
     """In-process owner-scoped subjective bundle with shared commit boundary."""
 
@@ -859,6 +1042,140 @@ class InMemorySubjectiveOwnerBundle:
             },
         )
         return snap
+
+    def _require_fork_services(self) -> None:
+        if type(self._subjective) is not InMemorySubjectiveStateService:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_STATE_UNSUPPORTED,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        for service in (self._memory, self._belief, self._relationship):
+            exporter = getattr(service, "export_fork_state", None)
+            restorer = getattr(service, "restore_fork_state", None)
+            if not callable(exporter) or not callable(restorer):
+                raise SubjectiveStateError(
+                    SubjectiveStateErrorCode.FORK_STATE_UNSUPPORTED,
+                    run_id=self._scope.run_id.value,
+                    owner_id=self._scope.owner_id.value,
+                )
+
+    async def export_fork_state(self) -> SubjectiveOwnerForkState:
+        """Capture complete owner state under the commit lock."""
+        self._require_fork_services()
+        subject = cast(InMemorySubjectiveStateService, self._subjective)
+        async with subject._lock:
+            memory_state = cast(
+                MemoryForkState, self._memory.export_fork_state()  # type: ignore[attr-defined]
+            )
+            belief_state = cast(
+                BeliefForkState, self._belief.export_fork_state()  # type: ignore[attr-defined]
+            )
+            relationship_state = cast(
+                RelationshipForkState,
+                self._relationship.export_fork_state(),  # type: ignore[attr-defined]
+            )
+            commit_state = subject._export_commit_fork_state_locked()
+            state = SubjectiveOwnerForkState(
+                scope=self._scope,
+                memory=memory_state,
+                belief=belief_state,
+                relationship=relationship_state,
+                commit=commit_state,
+            )
+        _LOG.info(
+            "subjective_bundle_fork_export",
+            extra={
+                "operation": "fork_export",
+                "run_id": self._scope.run_id.value,
+                "owner_id": self._scope.owner_id.value,
+                "memory_count": len(memory_state.traces),
+                "belief_count": len(belief_state.beliefs),
+                "relationship_count": len(relationship_state.profiles),
+                "revision": commit_state.revision,
+            },
+        )
+        return state
+
+    async def restore_fork_state(
+        self,
+        state: SubjectiveOwnerForkState,
+        *,
+        parent_scope: MemoryScope,
+    ) -> None:
+        """Atomically install complete owner state into a fresh bundle."""
+        self._require_fork_services()
+        if type(state) is not SubjectiveOwnerForkState:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_STATE_UNSUPPORTED,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        if type(parent_scope) is not MemoryScope or parent_scope != state.scope:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_OWNER_MISMATCH,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        if state.scope.owner_id != self._scope.owner_id:
+            raise SubjectiveStateError(
+                SubjectiveStateErrorCode.FORK_OWNER_MISMATCH,
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+            )
+        subject = cast(InMemorySubjectiveStateService, self._subjective)
+        async with subject._lock:
+            if subject._revision != 0 or subject._ops:
+                raise SubjectiveStateError(
+                    SubjectiveStateErrorCode.FORK_DESTINATION_NOT_EMPTY,
+                    run_id=self._scope.run_id.value,
+                    owner_id=self._scope.owner_id.value,
+                )
+            memory_tx = self._memory.capture_transaction_state()  # type: ignore[attr-defined]
+            belief_tx = self._belief.capture_transaction_state()  # type: ignore[attr-defined]
+            relationship_tx = self._relationship.capture_transaction_state()  # type: ignore[attr-defined]
+            prior_revision = subject._revision
+            prior_ops = dict(subject._ops)
+            try:
+                self._memory.restore_fork_state(  # type: ignore[attr-defined]
+                    state.memory.rebased(self._scope)
+                )
+                self._belief.restore_fork_state(  # type: ignore[attr-defined]
+                    state.belief.rebased(self._scope)
+                )
+                self._relationship.restore_fork_state(  # type: ignore[attr-defined]
+                    state.relationship
+                )
+                subject._restore_commit_fork_state_locked(state.commit)
+            except (
+                MemoryForkStateError,
+                RelationshipForkStateError,
+                SubjectiveStateError,
+            ) as exc:
+                self._memory.restore_transaction_state(memory_tx)  # type: ignore[attr-defined]
+                self._belief.restore_transaction_state(belief_tx)  # type: ignore[attr-defined]
+                self._relationship.restore_transaction_state(relationship_tx)  # type: ignore[attr-defined]
+                subject._revision = prior_revision
+                subject._ops = prior_ops
+                if isinstance(exc, SubjectiveStateError):
+                    raise
+                raise SubjectiveStateError(
+                    SubjectiveStateErrorCode.FORK_STATE_INVALID,
+                    run_id=self._scope.run_id.value,
+                    owner_id=self._scope.owner_id.value,
+                ) from None
+        _LOG.info(
+            "subjective_bundle_fork_restore",
+            extra={
+                "operation": "fork_restore",
+                "run_id": self._scope.run_id.value,
+                "owner_id": self._scope.owner_id.value,
+                "memory_count": len(state.memory.traces),
+                "belief_count": len(state.belief.beliefs),
+                "relationship_count": len(state.relationship.profiles),
+                "revision": state.commit.revision,
+            },
+        )
 
     async def commit(self, batch: SubjectiveMutationBatch) -> SubjectiveApplyReceipt:
         receipt = await self._subjective.commit(batch)

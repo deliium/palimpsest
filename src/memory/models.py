@@ -822,6 +822,21 @@ class MemoryStore:
         # Frozen traces are already detached; store by identity key only.
         self._records[record.memory_id] = record
 
+    def export_fork_state(self) -> tuple[MemoryTrace, ...]:
+        """Return detached legacy trace rows for a continuation checkpoint."""
+        return tuple(self._records.values())
+
+    def restore_fork_state(self, values: Sequence[MemoryTrace]) -> None:
+        """Install validated legacy trace rows into an empty store."""
+        from memory.fork_state import MemoryForkStateError, validate_legacy_traces
+
+        if self._records:
+            raise MemoryForkStateError(
+                "fork_destination_not_empty", "legacy memory store is not empty"
+            )
+        traces = validate_legacy_traces(self._owner_id, values)
+        self._records = {trace.memory_id: trace for trace in traces}
+
 
 class BeliefStore:
     """Mutable belief aggregate bound to a single owner."""
@@ -854,6 +869,21 @@ class BeliefStore:
             confidence=belief.confidence,
             evidence_memory_ids=belief.evidence_memory_ids,
         )
+
+    def export_fork_state(self) -> tuple[Belief, ...]:
+        """Return detached legacy belief rows for a continuation checkpoint."""
+        return tuple(self._beliefs.values())
+
+    def restore_fork_state(self, values: Sequence[Belief]) -> None:
+        """Install validated legacy belief rows into an empty store."""
+        from memory.fork_state import LegacyBeliefForkState, MemoryForkStateError
+
+        if self._beliefs:
+            raise MemoryForkStateError(
+                "fork_destination_not_empty", "legacy belief store is not empty"
+            )
+        state = LegacyBeliefForkState(owner_id=self._owner_id, beliefs=tuple(values))
+        self._beliefs = {belief.belief_id: belief for belief in state.beliefs}
 
 
 # ---------------------------------------------------------------------------

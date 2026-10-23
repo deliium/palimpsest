@@ -409,73 +409,24 @@ def rematerialize_snapshot(
         len(snapshot.lifecycle_records),
         snapshot.persistence_codec_version,
     )
-    draft = WorldSnapshot(
+    # Preserve every snapshot field, including fields added by later features.
+    # Only identity/hash/envelope values listed here may differ from the parent.
+    draft = replace(
+        snapshot,
         snapshot_id=snapshot_id,
         run_id=child_run_id,
-        world_id=snapshot.world_id,
         seed=resolved_config.seed,
         config=resolved_config,
-        registrations=snapshot.registrations,
-        locations=snapshot.locations,
-        bodies=snapshot.bodies,
-        items=snapshot.items,
-        resources=snapshot.resources,
-        weather=snapshot.weather,
         next_tick=resolved_next,
-        revision=snapshot.revision,
-        event_schema_version=snapshot.event_schema_version,
-        projector_version=snapshot.projector_version,
-        persistence_codec_version=snapshot.persistence_codec_version,
-        derivation_version=resolved_config.derivation_version
-        if resolved_config.derivation_version is not None
-        else snapshot.derivation_version,
+        derivation_version=(
+            resolved_config.derivation_version
+            if resolved_config.derivation_version is not None
+            else snapshot.derivation_version
+        ),
         integrity_hash=PayloadHash("a" * 64),
         predecessor_commit_hash=predecessor_commit_hash,
-        structures=snapshot.structures,
-        production_jobs=snapshot.production_jobs,
-        tool_marks=snapshot.tool_marks,
-        active_hazards=snapshot.active_hazards,
-        artifacts=snapshot.artifacts,
-        lifecycle_records=snapshot.lifecycle_records,
-        corpse_custody_item_ids=snapshot.corpse_custody_item_ids,
-        exchange_offers=snapshot.exchange_offers,
-        collective_projects=snapshot.collective_projects,
-        regions_migration=snapshot.regions_migration,
-        journeys=snapshot.journeys,
     )
-    return WorldSnapshot(
-        snapshot_id=draft.snapshot_id,
-        run_id=draft.run_id,
-        world_id=draft.world_id,
-        seed=draft.seed,
-        config=draft.config,
-        registrations=draft.registrations,
-        locations=draft.locations,
-        bodies=draft.bodies,
-        items=draft.items,
-        resources=draft.resources,
-        weather=draft.weather,
-        next_tick=draft.next_tick,
-        revision=draft.revision,
-        event_schema_version=draft.event_schema_version,
-        projector_version=draft.projector_version,
-        persistence_codec_version=draft.persistence_codec_version,
-        derivation_version=draft.derivation_version,
-        integrity_hash=hash_snapshot(draft),
-        predecessor_commit_hash=draft.predecessor_commit_hash,
-        structures=draft.structures,
-        production_jobs=draft.production_jobs,
-        tool_marks=draft.tool_marks,
-        active_hazards=draft.active_hazards,
-        artifacts=draft.artifacts,
-        lifecycle_records=draft.lifecycle_records,
-        corpse_custody_item_ids=draft.corpse_custody_item_ids,
-        exchange_offers=draft.exchange_offers,
-        collective_projects=draft.collective_projects,
-        regions_migration=draft.regions_migration,
-        journeys=draft.journeys,
-    )
-
+    return replace(draft, integrity_hash=hash_snapshot(draft))
 
 def rematerialize_tick_append(
     *,

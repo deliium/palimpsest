@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import logging
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,11 @@ from memory.beliefs import (
     SemanticClaim,
 )
 from simulation.bootstrap import AgentRegistration
-from simulation.branch_service import BranchService, InMemorySubjectiveClonePort
+from simulation.branch_service import (
+    BranchService,
+    InMemorySubjectiveClonePort,
+    rematerialize_snapshot,
+)
 from simulation.branching import (
     BranchCreateRequest,
     BranchLineage,
@@ -54,6 +59,7 @@ from simulation.models import (
     StochasticIdentity,
 )
 from simulation.persistence import (
+    EVENT_SCHEMA_REPLAY_V14,
     EVENT_SCHEMA_VERSION,
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
@@ -69,6 +75,7 @@ from simulation.runner_models import FinalizedTickReceipt, MemoryMode
 from simulation.runner_serialization import exact_trajectory_hash
 from tests.simulation_helpers import make_location, make_weather
 from tests.unit.test_runner_serialization import _config
+from world.dependency_care import DependencyNeedRegister
 from world.events import Waited, WorldEvent, make_replayable_event
 from world.identifiers import (
     EntityId,
@@ -77,7 +84,9 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
+from world.kinship import KinshipEdge, stable_kinship_edge_id
 from world.models import AgentBody, LifeStatus, default_physical_rules
+from world.repositories import KnowledgeRepository, RepositoryAccessMode
 from world.values import (
     CarryCapacity,
     Fatigue,
@@ -462,6 +471,72 @@ def test_simulation_branch_modules_do_not_import_experiments() -> None:
             elif isinstance(node, ast.ImportFrom) and node.module:
                 root = node.module.split(".", 1)[0]
                 assert root not in forbidden, f"{path.name} imports {node.module}"
+
+
+def test_rematerialize_snapshot_preserves_every_modern_objective_field() -> None:
+    edge = KinshipEdge(
+        parent_agent_id=AgentId("agent-1"),
+        child_agent_id=AgentId("agent-2"),
+        established_tick=0,
+        edge_id=stable_kinship_edge_id(
+            parent_agent_id=AgentId("agent-1"),
+            child_agent_id=AgentId("agent-2"),
+            established_tick=0,
+        ),
+    )
+    register = DependencyNeedRegister(
+        agent_id=AgentId("agent-2"), deficits={"learning": 0.25}
+    )
+    repository = KnowledgeRepository(
+        repository_id=EntityId("repo-1"),
+        location_id=EntityId("loc-1"),
+        founder_ids=(EntityId("body-1"),),
+        established_tick=0,
+        access_mode=RepositoryAccessMode.OPEN,
+    )
+    parent = replace(
+        _snapshot(next_tick=2, revision=2),
+        event_schema_version=EVENT_SCHEMA_REPLAY_V14,
+        persistence_codec_version="v11",
+        kinship_edges=(edge,),
+        dependency_need_registers=(register,),
+        repositories=(repository,),
+    )
+    parent = replace(parent, integrity_hash=hash_snapshot(parent))
+    original_parent = parent
+
+    for next_tick in (0, 2):
+        child = rematerialize_snapshot(
+            parent,
+            child_run_id=RunId("child-run"),
+            snapshot_id=SnapshotId(f"child-snap-{next_tick}"),
+            predecessor_commit_hash=None,
+            next_tick=Tick(next_tick),
+        )
+        assert child.snapshot_id == SnapshotId(f"child-snap-{next_tick}")
+        assert child.run_id == RunId("child-run")
+        assert child.next_tick == Tick(next_tick)
+        assert child.integrity_hash == hash_snapshot(child)
+        assert child.kinship_edges == parent.kinship_edges
+        assert child.dependency_need_registers == parent.dependency_need_registers
+        assert child.repositories == parent.repositories
+        changed = {
+            "snapshot_id",
+            "run_id",
+            "seed",
+            "config",
+            "next_tick",
+            "derivation_version",
+            "integrity_hash",
+            "predecessor_commit_hash",
+        }
+        for field_info in fields(WorldSnapshot):
+            if field_info.name in changed:
+                continue
+            assert getattr(child, field_info.name) == getattr(
+                parent, field_info.name
+            ), field_info.name
+        assert parent == original_parent
 
 
 @pytest.mark.asyncio

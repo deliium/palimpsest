@@ -32,6 +32,11 @@ from memory.beliefs import (
     canonical_subject_predicate_key,
 )
 from memory.errors import BeliefServiceError, BeliefServiceErrorCode
+from memory.fork_state import (
+    BeliefForkState,
+    BeliefOperation,
+    MemoryForkStateError,
+)
 from memory.models import BeliefId, MemoryScope, MemoryTrace
 
 __all__ = [
@@ -173,6 +178,50 @@ class InMemorySemanticBeliefService:
         self._store._beliefs = dict(beliefs)
         self._store._histories = dict(histories)
         self._ops = dict(ops)
+
+    def export_fork_state(self) -> BeliefForkState:
+        """Return a detached complete owner continuation checkpoint."""
+        return BeliefForkState(
+            scope=self._scope,
+            policy=self._policy,
+            beliefs=tuple(self._store._beliefs.values()),
+            histories=tuple(self._store._histories.items()),
+            operations=tuple(
+                BeliefOperation(
+                    operation_id=operation_id,
+                    fingerprint=fingerprint,
+                    result=result,
+                )
+                for operation_id, (fingerprint, result) in self._ops.items()
+            ),
+        )
+
+    def restore_fork_state(self, state: BeliefForkState) -> None:
+        """Atomically install a validated, owner-checked fork state."""
+        if type(state) is not BeliefForkState:
+            raise MemoryForkStateError(
+                "fork_state_unsupported", "unsupported belief fork state"
+            )
+        if state.scope.owner_id != self._scope.owner_id:
+            raise MemoryForkStateError(
+                "fork_owner_mismatch", "fork state owner mismatch"
+            )
+        if self._store._beliefs or self._store._histories or self._ops:
+            raise MemoryForkStateError(
+                "fork_destination_not_empty", "belief destination is not empty"
+            )
+        beliefs = {belief.belief_id: belief for belief in state.beliefs}
+        histories = {
+            belief_id: tuple(revisions) for belief_id, revisions in state.histories
+        }
+        ops = {
+            operation.operation_id: (operation.fingerprint, operation.result)
+            for operation in state.operations
+        }
+        self._policy = state.policy
+        self._store._beliefs = beliefs
+        self._store._histories = histories
+        self._ops = ops
 
     async def revise(self, request: BeliefRevisionRequest) -> BeliefRevisionResult:
         if type(request) is not BeliefRevisionRequest:

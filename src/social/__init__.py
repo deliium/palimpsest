@@ -6,6 +6,12 @@ from social.contracts import (
     RelationshipService,
     RelationshipWriter,
 )
+from social.fork_state import (
+    RELATIONSHIP_FORK_STATE_VERSION,
+    RelationshipForkState,
+    RelationshipForkStateError,
+    RelationshipOperation,
+)
 from social.models import (
     CommunicationEnvelope,
     EnvelopeId,
@@ -45,6 +51,7 @@ from social.service import (
 
 __all__ = [
     "DEFAULT_RELATIONSHIP_POLICY",
+    "RELATIONSHIP_FORK_STATE_VERSION",
     "CommunicationEnvelope",
     "DirectedRelationshipProfile",
     "EnvelopeId",
@@ -56,10 +63,13 @@ __all__ = [
     "RelationshipDimension",
     "RelationshipDimensionState",
     "RelationshipEvidenceItem",
+    "RelationshipForkState",
+    "RelationshipForkStateError",
     "RelationshipFormationPolicy",
     "RelationshipHistory",
     "RelationshipId",
     "RelationshipInteractionSignal",
+    "RelationshipOperation",
     "RelationshipPolicyRef",
     "RelationshipProfileStore",
     "RelationshipReader",

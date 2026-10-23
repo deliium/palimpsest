@@ -11,6 +11,11 @@ from dataclasses import replace
 from typing import Final
 
 from memory.errors import MemoryServiceError, MemoryServiceErrorCode
+from memory.fork_state import (
+    DerivationEdge,
+    MemoryForkState,
+    MemoryForkStateError,
+)
 from memory.models import (
     MemoryAccessReceipt,
     MemoryApplyResult,
@@ -122,6 +127,57 @@ class InMemoryMemoryService:
         self._reconstructions = dict(reconstructions)
         self._derivation_edges = dict(edges)
         self._access_ops = set(access_ops)
+
+    def export_fork_state(self) -> MemoryForkState:
+        """Return a detached complete owner continuation checkpoint."""
+        return MemoryForkState(
+            scope=self._scope,
+            traces=tuple(self._records.values()),
+            reconstructions=tuple(self._reconstructions.values()),
+            derivation_edges=tuple(
+                DerivationEdge(
+                    memory_id=memory_id,
+                    source_memory_ids=tuple(sources),
+                    reconstruction_id=reconstruction_id,
+                )
+                for memory_id, (sources, reconstruction_id) in (
+                    self._derivation_edges.items()
+                )
+            ),
+            access_operations=tuple(self._access_ops),
+        )
+
+    def restore_fork_state(self, state: MemoryForkState) -> None:
+        """Atomically install a validated, owner-checked fork state."""
+        if type(state) is not MemoryForkState:
+            raise MemoryForkStateError(
+                "fork_state_unsupported", "unsupported memory fork state"
+            )
+        if state.scope.owner_id != self._scope.owner_id:
+            raise MemoryForkStateError(
+                "fork_owner_mismatch", "fork state owner mismatch"
+            )
+        if self._records or self._reconstructions or self._derivation_edges:
+            raise MemoryForkStateError(
+                "fork_destination_not_empty", "memory destination is not empty"
+            )
+        rebased = state.rebased(self._scope)
+        records = {trace.memory_id: trace for trace in rebased.traces}
+        reconstructions = {
+            record.reconstruction_id: record for record in rebased.reconstructions
+        }
+        edges = {
+            edge.memory_id: (
+                edge.source_memory_ids,
+                edge.reconstruction_id,
+            )
+            for edge in rebased.derivation_edges
+        }
+        access_ops = set(rebased.access_operations)
+        self._records = records
+        self._reconstructions = reconstructions
+        self._derivation_edges = edges
+        self._access_ops = access_ops
 
     async def retrieve(self, request: MemoryRetrieveRequest) -> MemoryRetrieveResult:
         if type(request) is not MemoryRetrieveRequest:

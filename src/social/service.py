@@ -12,6 +12,11 @@ from enum import StrEnum
 from typing import Final
 
 from agents.models import AgentId
+from social.fork_state import (
+    RelationshipForkState,
+    RelationshipForkStateError,
+    RelationshipOperation,
+)
 from social.models import RelationshipId
 from social.relationships import (
     DEFAULT_RELATIONSHIP_POLICY,
@@ -130,6 +135,53 @@ class InMemoryRelationshipService:
         self._store._profiles = dict(profiles)
         self._store._histories = dict(histories)
         self._ops = dict(ops)
+
+    def export_fork_state(self) -> RelationshipForkState:
+        """Return a detached complete owner continuation checkpoint."""
+        return RelationshipForkState(
+            owner_id=self._source_id,
+            policy=self._policy,
+            profiles=tuple(self._store._profiles.values()),
+            histories=tuple(self._store._histories.items()),
+            operations=tuple(
+                RelationshipOperation(
+                    operation_id=operation_id,
+                    fingerprint=fingerprint,
+                    result=result,
+                )
+                for operation_id, (fingerprint, result) in self._ops.items()
+            ),
+        )
+
+    def restore_fork_state(self, state: RelationshipForkState) -> None:
+        """Atomically install a validated, owner-checked fork state."""
+        if type(state) is not RelationshipForkState:
+            raise RelationshipForkStateError(
+                "fork_state_unsupported", "unsupported relationship fork state"
+            )
+        if state.owner_id != self._source_id:
+            raise RelationshipForkStateError(
+                "fork_owner_mismatch", "fork state owner mismatch"
+            )
+        if self._store._profiles or self._store._histories or self._ops:
+            raise RelationshipForkStateError(
+                "fork_destination_not_empty", "relationship destination is not empty"
+            )
+        profiles = {
+            profile.relationship_id: profile for profile in state.profiles
+        }
+        histories = {
+            relationship_id: tuple(revisions)
+            for relationship_id, revisions in state.histories
+        }
+        ops = {
+            operation.operation_id: (operation.fingerprint, operation.result)
+            for operation in state.operations
+        }
+        self._policy = state.policy
+        self._store._profiles = profiles
+        self._store._histories = histories
+        self._ops = ops
 
     async def revise(
         self, request: RelationshipRevisionRequest
