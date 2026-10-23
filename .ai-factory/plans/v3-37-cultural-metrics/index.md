@@ -166,9 +166,9 @@ Cross-run rows pool only population-summary measurements sharing scientific sele
 
 ### Phase 2: Population metrics
 
-- [ ] Task 4: Implement frequency, persistence, extinction and diversity ([details](phase-02-population-metrics.md#task-4-implement-frequency-persistence-extinction-and-diversity)) (depends on 3).
-- [ ] Task 5: Implement mutation, fidelity and transmission classifications ([details](phase-02-population-metrics.md#task-5-implement-mutation-fidelity-and-transmission-classifications)) (depends on 3).
-- [ ] Task 6: Implement between-group divergence and within-group convergence ([details](phase-02-population-metrics.md#task-6-implement-between-group-divergence-and-within-group-convergence)) (depends on 3).
+- [x] Task 4: Implement frequency, persistence, extinction and diversity ([details](phase-02-population-metrics.md#task-4-implement-frequency-persistence-extinction-and-diversity)) (depends on 3).
+- [x] Task 5: Implement mutation, fidelity and transmission classifications ([details](phase-02-population-metrics.md#task-5-implement-mutation-fidelity-and-transmission-classifications)) (depends on 3).
+- [x] Task 6: Implement between-group divergence and within-group convergence ([details](phase-02-population-metrics.md#task-6-implement-between-group-divergence-and-within-group-convergence)) (depends on 3).
 
 ### Phase 3: Specialized metrics
 
