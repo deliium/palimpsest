@@ -19,10 +19,10 @@ from simulation.persistence import (
     SnapshotId,
     TickAppendRequest,
     TickCommit,
+    WorldEvent,
+    WorldRevision,
     WorldSnapshot,
 )
-from world.events import WorldEvent
-from world.identifiers import WorldRevision
 
 
 class IsolatedReconstructionError(RuntimeError):

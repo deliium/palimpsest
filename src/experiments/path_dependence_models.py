@@ -15,6 +15,12 @@ from enum import StrEnum
 from typing import Final, Literal
 
 from agents.models import AgentId
+from analysis.path_dependence_contracts import (
+    OutcomeDomain,
+    OutcomeSelector,
+    OutcomeWindow,
+    PathDependenceValidationError,
+)
 from simulation.clock import Tick
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V55,
@@ -57,37 +63,12 @@ MAX_BOUNDARY_OWNERS: Final[int] = 2048
 MAX_BOUNDARY_ROWS: Final[int] = 50000
 
 
-class PathDependenceValidationError(ValueError):
-    """Fail-closed path-dependence validation with a stable reason code."""
-
-    def __init__(self, code: str, message: str = "") -> None:
-        self.code = code
-        detail = message or code
-        super().__init__(f"{code}: {detail}")
-        _LOG.warning(
-            "path_dependence_invalid",
-            extra={"experiment": {"reason_code": code}},
-        )
-
-
 class ArmRole(StrEnum):
     """Researcher-facing arm role. Never a world role or moral label."""
 
     CONTROL = "control"
     TREATMENT = "treatment"
     NEUTRAL = "neutral"
-
-
-class OutcomeDomain(StrEnum):
-    """The seven independently reported historical-contingency domains."""
-
-    NORMS = "norms"
-    RELATIONSHIPS = "relationships"
-    INSTITUTIONS = "institutions"
-    TECHNOLOGY = "technology"
-    CULTURAL_NARRATIVES = "cultural_narratives"
-    INEQUALITY = "inequality"
-    COOPERATION = "cooperation"
 
 
 def _require_str(name: str, value: object) -> str:
@@ -113,9 +94,7 @@ def _require_int(name: str, value: object, *, minimum: int = 0) -> int:
 
 def _require_tick(name: str, value: object) -> Tick:
     if type(value) is not Tick:
-        raise PathDependenceValidationError(
-            "invalid_tick", f"{name} must be Tick"
-        )
+        raise PathDependenceValidationError("invalid_tick", f"{name} must be Tick")
     return value
 
 
@@ -228,9 +207,7 @@ class ForkTickSchedule:
         object.__setattr__(
             self,
             "actions",
-            _require_ordered(
-                "actions", self.actions, ScheduledCommandIntervention
-            ),
+            _require_ordered("actions", self.actions, ScheduledCommandIntervention),
         )
         seen_interventions: set[str] = set()
         seen_slots: set[tuple[int, str]] = set()
@@ -265,9 +242,7 @@ class PathDependenceArm:
             self, "label_code", _require_str("label_code", self.label_code)
         )
         if type(self.role) is not ArmRole:
-            raise PathDependenceValidationError(
-                "invalid_type", "role must be ArmRole"
-            )
+            raise PathDependenceValidationError("invalid_type", "role must be ArmRole")
         object.__setattr__(
             self,
             "schedule_by_fork_tick",
@@ -319,74 +294,6 @@ class ProtocolContrast:
             raise PathDependenceValidationError(
                 "unknown_arm", "control and treatment arms must differ"
             )
-
-
-@dataclass(frozen=True, slots=True)
-class OutcomeWindow:
-    """Half-open analytical window bound to an absolute fork boundary."""
-
-    window_id: str
-    fork_tick: Tick
-    start_tick: Tick
-    end_tick: Tick
-    generation_start: int | None = None
-    generation_end: int | None = None
-    absolute_tick_cap: Tick | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "window_id", _require_str("window_id", self.window_id)
-        )
-        _require_tick("fork_tick", self.fork_tick)
-        _require_tick("start_tick", self.start_tick)
-        _require_tick("end_tick", self.end_tick)
-        if self.start_tick.value >= self.end_tick.value:
-            raise PathDependenceValidationError(
-                "invalid_window", "start_tick must be < end_tick"
-            )
-        generation_fields = (
-            self.generation_start,
-            self.generation_end,
-            self.absolute_tick_cap,
-        )
-        if any(value is not None for value in generation_fields):
-            if any(value is None for value in generation_fields):
-                raise PathDependenceValidationError(
-                    "invalid_window",
-                    "generation windows require start, end and absolute_tick_cap",
-                )
-            start = _require_int("generation_start", self.generation_start)
-            end = _require_int("generation_end", self.generation_end)
-            if start >= end:
-                raise PathDependenceValidationError(
-                    "invalid_window", "generation_start must be < generation_end"
-                )
-            cap = _require_tick("absolute_tick_cap", self.absolute_tick_cap)
-            if cap.value < self.end_tick.value:
-                raise PathDependenceValidationError(
-                    "invalid_window", "absolute_tick_cap must be >= end_tick"
-                )
-
-
-@dataclass(frozen=True, slots=True)
-class OutcomeSelector:
-    """One predeclared scalar outcome selector for a declared window."""
-
-    selector_id: str
-    domain: OutcomeDomain
-    window_id: str
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "selector_id", _require_str("selector_id", self.selector_id)
-        )
-        if type(self.domain) is not OutcomeDomain:
-            raise PathDependenceValidationError(
-                "invalid_type", "domain must be OutcomeDomain"
-            )
-        object.__setattr__(
-            self, "window_id", _require_str("window_id", self.window_id)
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -550,17 +457,13 @@ class PathDependenceSpec:
                 "unsupported_base", "unsupported capture_policy"
             )
 
-        object.__setattr__(
-            self, "seeds", _require_int_sequence("seeds", self.seeds)
-        )
+        object.__setattr__(self, "seeds", _require_int_sequence("seeds", self.seeds))
         if not self.seeds:
             raise PathDependenceValidationError(
                 "invalid_seed", "seeds must be non-empty"
             )
         if len(self.seeds) > MAX_SEED_ENTRIES:
-            raise PathDependenceValidationError(
-                "invalid_seed", "too many seed entries"
-            )
+            raise PathDependenceValidationError("invalid_seed", "too many seed entries")
         object.__setattr__(
             self,
             "replicates_per_seed",
@@ -740,9 +643,7 @@ class PathDependenceSpec:
             _require_int("assignment_seed", self.assignment_seed),
         )
 
-        setup = _require_ordered(
-            "common_setup", self.common_setup, CommonSetupCommand
-        )
+        setup = _require_ordered("common_setup", self.common_setup, CommonSetupCommand)
         if len(setup) > MAX_COMMON_SETUP_COMMANDS:
             raise PathDependenceValidationError(
                 "intervention_budget_exceeded", "common setup exceeds command cap"
@@ -765,10 +666,7 @@ class PathDependenceSpec:
         object.__setattr__(self, "common_setup", setup)
 
         planned_children = (
-            len(self.seeds)
-            * self.replicates_per_seed
-            * len(forks)
-            * len(arms)
+            len(self.seeds) * self.replicates_per_seed * len(forks) * len(arms)
         )
         if planned_children > MAX_PLANNED_CHILDREN:
             raise PathDependenceValidationError(

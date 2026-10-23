@@ -38,6 +38,11 @@ from analysis.objective_metrics import (
     compute_cooperation,
     compute_resource_inequality,
 )
+from analysis.path_dependence_contracts import (
+    OutcomeSelector,
+    OutcomeWindow,
+    PathDependenceValidationError,
+)
 from analysis.path_dependence_models import (
     SELECTOR_REGISTRY,
     OutcomeAvailability,
@@ -51,11 +56,6 @@ from analysis.social_norm_metrics import (
     compute_norm_persistence,
 )
 from analysis.specifications import ResourceMeasureId
-from experiments.path_dependence_models import (
-    OutcomeSelector,
-    OutcomeWindow,
-    PathDependenceValidationError,
-)
 
 _LOG: Final[logging.Logger] = logging.getLogger(
     "analysis.path_dependence_outcomes"

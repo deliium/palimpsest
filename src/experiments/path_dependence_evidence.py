@@ -36,12 +36,8 @@ from simulation.fork_checkpoint import (
     FinalizedResearchBoundary,
 )
 from simulation.runner import SimulationRunner
-from social import RelationshipDimensionState, RelationshipRevision
-from social.relationships import RelationshipDimension
 
-_LOG: Final[logging.Logger] = logging.getLogger(
-    "experiments.path_dependence_evidence"
-)
+_LOG: Final[logging.Logger] = logging.getLogger("experiments.path_dependence_evidence")
 
 CAPTURE_LIMIT_CODE: Final[str] = "outcome_capture_limit"
 CAPTURE_PARTIAL_CODE: Final[str] = "outcome_capture_partial"
@@ -82,9 +78,7 @@ class PathDependenceEvidenceRecorder:
         max_rows: int = MAX_BOUNDARY_ROWS,
     ) -> None:
         if cadence is not None and (
-            isinstance(cadence, bool)
-            or type(cadence) is not int
-            or cadence < 1
+            isinstance(cadence, bool) or type(cadence) is not int or cadence < 1
         ):
             raise ValueError("cadence: must_be_positive_integer")
         for name, value in (
@@ -142,8 +136,7 @@ class PathDependenceEvidenceRecorder:
             self._truncated = True
             self._gaps.append(CAPTURE_LIMIT_CODE)
             _LOG.warning(
-                "path_dependence_capture_truncated boundary_tick=%s "
-                "reason_code=%s",
+                "path_dependence_capture_truncated boundary_tick=%s reason_code=%s",
                 tick,
                 CAPTURE_LIMIT_CODE,
             )
@@ -171,9 +164,7 @@ class PathDependenceEvidenceRecorder:
             truncated=self._truncated,
         )
 
-    def analysis_evidence(
-        self, window: OutcomeWindow
-    ) -> PathDependenceEvidence:
+    def analysis_evidence(self, window: OutcomeWindow) -> PathDependenceEvidence:
         """Project captured boundaries into detached selector inputs."""
         capture = self.result()
         endpoint = window.end_tick.value
@@ -212,17 +203,13 @@ class PathDependenceEvidenceRecorder:
             owner.owner_id.value for owner in boundary.owners if owner.living
         )
         entity_to_agent = {
-            owner.entity_id.value: owner.owner_id.value
-            for owner in boundary.owners
+            owner.entity_id.value: owner.owner_id.value for owner in boundary.owners
         }
         actions = applied_actions_from_world_events(
             boundary.events, entity_to_agent=entity_to_agent
         )
         cultural_inputs = cultural_evolution_inputs_from_capture(
-            tuple(
-                _cultural_frame_for(item)
-                for item in history
-            ),
+            tuple(_cultural_frame_for(item) for item in history),
             run_id=boundary.run_id.value,
             source_revision=boundary.config_fingerprint,
             window=CulturalAnalysisWindow(
@@ -257,9 +244,7 @@ class PathDependenceEvidenceRecorder:
             ),
             living_agent_ids=living_ids,
             action_rows=actions,
-            action_agent_ids=tuple(
-                owner.owner_id.value for owner in boundary.owners
-            ),
+            action_agent_ids=tuple(owner.owner_id.value for owner in boundary.owners),
         )
 
 
@@ -316,15 +301,16 @@ def _relationship_rows(
     return tuple(rows)
 
 
-def _relationship_row(revision: RelationshipRevision) -> RelationshipEdgeRow:
-    dimensions = {
-        state.dimension.value: state
-        for state in getattr(revision, "dimensions", ())
-    }
-    trust = dimensions.get(RelationshipDimension.TRUST.value)
+def _relationship_row(revision: object) -> RelationshipEdgeRow:
+    dimensions: dict[str, object] = {}
+    for state in getattr(revision, "dimensions", ()):
+        key = getattr(getattr(state, "dimension", None), "value", None)
+        if type(key) is str:
+            dimensions[key] = state
+    trust = dimensions.get("trust")
     values = {
         name: (
-            float(trust.value)
+            float(trust.value)  # type: ignore[attr-defined]
             if name == "trust" and trust is not None
             else _dimension_value(dimensions, name)
         )
@@ -340,23 +326,23 @@ def _relationship_row(revision: RelationshipRevision) -> RelationshipEdgeRow:
         )
     }
     return RelationshipEdgeRow(
-        source_id=revision.source_id.value,
-        target_id=revision.target_id.value,
-        logical_tick=revision.logical_tick,
-        activation_state=revision.activation_state.value,
-        ordinal=revision.ordinal,
+        source_id=revision.source_id.value,  # type: ignore[attr-defined]
+        target_id=revision.target_id.value,  # type: ignore[attr-defined]
+        logical_tick=revision.logical_tick,  # type: ignore[attr-defined]
+        activation_state=revision.activation_state.value,  # type: ignore[attr-defined]
+        ordinal=revision.ordinal,  # type: ignore[attr-defined]
         trust_confidence=(
-            float(trust.confidence.confidence) if trust is not None else None
+            float(trust.confidence.confidence)  # type: ignore[attr-defined]
+            if trust is not None
+            else None
         ),
         **values,
     )
 
 
-def _dimension_value(
-    dimensions: Mapping[str, RelationshipDimensionState], name: str
-) -> float | None:
+def _dimension_value(dimensions: Mapping[str, object], name: str) -> float | None:
     state = dimensions.get(name)
-    return None if state is None else float(state.value)
+    return None if state is None else float(state.value)  # type: ignore[attr-defined]
 
 
 def _institution_lane_rows(

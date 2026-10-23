@@ -206,6 +206,7 @@ __all__ = [
     "TickCommit",
     "TickJournalRepository",
     "WorldEvent",
+    "WorldRevision",
     "WorldSnapshot",
     "persistence_diagnostic_fields",
     "require_commit_hash",

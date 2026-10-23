@@ -11,7 +11,7 @@ from typing import Final
 from analysis.cultural_evolution_evidence import CulturalEvolutionInputs
 from analysis.institution_emergence import InstitutionLaneRow
 from analysis.models import AppliedActionRow, RelationshipEdgeRow, ResourceHoldingRow
-from experiments.path_dependence_models import (
+from analysis.path_dependence_contracts import (
     OutcomeDomain,
     OutcomeSelector,
     OutcomeWindow,
