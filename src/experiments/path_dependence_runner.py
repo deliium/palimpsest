@@ -57,6 +57,9 @@ class BranchExecutionResult:
     stop_reason: str | None = None
     error_code: str | None = None
     treatment_ledger: tuple[TreatmentLedgerEntry, ...] = ()
+    complete_state_digest: str | None = None
+    objective_head_hash: str | None = None
+    terminal_revision: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +69,13 @@ class PrefixExecutionResult:
     eligible: bool
     reason_code: str
     child_results: tuple[BranchExecutionResult, ...] = ()
+    boundary_revision: int = 0
+    config_fingerprint: str = ""
+    complete_state_digest: str = ""
+    bootstrap_hash: str = ""
+    snapshot_hash: str = ""
+    objective_head_hash: str = ""
+    eligibility_witness: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +170,9 @@ class PathDependenceBatchRunner:
                             "prefix_execution_aborted"
                         )
                 checkpoint = await parent.capture_fork_checkpoint()
+                from simulation.fork_checkpoint import fork_state_digest
+
+                prefix_state_digest = fork_state_digest(checkpoint)
                 eligibility = (
                     resolve_food_opportunity_eligibility(checkpoint)
                     if context.eligibility is None
@@ -218,6 +231,25 @@ class PathDependenceBatchRunner:
                                 failed = runner_stop_is_failure(
                                     result.stop_reason
                                 )
+                                child_digest = None
+                                child_head = None
+                                child_rev = None
+                                if not failed:
+                                    try:
+                                        child_checkpoint = (
+                                            await child.capture_fork_checkpoint()
+                                        )
+                                        child_digest = fork_state_digest(
+                                            child_checkpoint
+                                        )
+                                        child_head = (
+                                            child_checkpoint.snapshot.integrity_hash.value
+                                        )
+                                        child_rev = (
+                                            child_checkpoint.boundary_revision.value
+                                        )
+                                    except Exception:
+                                        child_digest = None
                                 children.append(
                                     BranchExecutionResult(
                                         slot_ordinal=slot.slot_ordinal,
@@ -236,6 +268,9 @@ class PathDependenceBatchRunner:
                                         treatment_ledger=(
                                             arbiter.treatment_ledger
                                         ),
+                                        complete_state_digest=child_digest,
+                                        objective_head_hash=child_head,
+                                        terminal_revision=child_rev,
                                     )
                                 )
                             finally:
@@ -263,6 +298,38 @@ class PathDependenceBatchRunner:
                         eligible=eligibility.eligible,
                         reason_code=eligibility.reason_code,
                         child_results=tuple(children),
+                        boundary_revision=checkpoint.boundary_revision.value,
+                        config_fingerprint=checkpoint.config_fingerprint,
+                        complete_state_digest=prefix_state_digest,
+                        bootstrap_hash=(
+                            checkpoint.bootstrap_snapshot.integrity_hash.value
+                        ),
+                        snapshot_hash=checkpoint.snapshot.integrity_hash.value,
+                        objective_head_hash=(
+                            checkpoint.snapshot.integrity_hash.value
+                        ),
+                        eligibility_witness=(
+                            ()
+                            if eligibility.witness is None
+                            else (
+                                {
+                                    "founder_agent_id": (
+                                        eligibility.witness.founder_agent_id.value
+                                    ),
+                                    "founder_body_id": (
+                                        eligibility.witness.founder_body_id.value
+                                    ),
+                                    "recipient_body_id": (
+                                        eligibility.witness.recipient_body_id.value
+                                    ),
+                                    "item_id": eligibility.witness.item_id.value,
+                                    "item_name": eligibility.witness.item_name,
+                                    "location_id": (
+                                        eligibility.witness.location_id.value
+                                    ),
+                                },
+                            )
+                        ),
                     )
                 )
             return PathDependenceExecutionSummary(

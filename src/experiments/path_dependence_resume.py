@@ -27,9 +27,9 @@ class ResumeDecision(StrEnum):
 
 
 class ResumeRepositoryReader(Protocol):
-    def exists(self, run_id: str) -> bool: ...
+    async def exists(self, run_id: str) -> bool: ...
 
-    def terminal(self, run_id: str) -> Mapping[str, object] | None: ...
+    async def terminal(self, run_id: str) -> Mapping[str, object] | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +82,7 @@ def _expected_fields(expected: Mapping[str, object]) -> tuple[str, str, str, int
     return ensemble_id, child_id, child_attempt, fork_tick
 
 
-def classify_path_dependence_resume(
+async def classify_path_dependence_resume(
     *,
     expected: Mapping[str, object],
     store: PathDependenceArtifactStore,
@@ -136,9 +136,9 @@ def classify_path_dependence_resume(
             fork_tick=fork_tick,
             reason_code="prefix_ineligible",
         )
-    if repositories.exists(child_id):
+    if await repositories.exists(child_id):
         try:
-            branch = verify_path_dependence_branch(
+            branch = await verify_path_dependence_branch(
                 expected=expected, store=store, repositories=repositories
             )
         except PathDependenceArtifactError as exc:

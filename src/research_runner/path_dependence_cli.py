@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 from pathlib import Path
 from typing import Final
@@ -15,15 +16,35 @@ from analysis.path_dependence_comparison import (
 )
 from experiments.path_dependence_artifacts import (
     PathDependenceArtifactStore,
+    build_branch_document,
     build_comparison_document,
     build_ensemble_document,
+    build_outcomes_document,
+    build_prefix_document,
 )
 from experiments.path_dependence_models import PathDependenceSpec
 from experiments.path_dependence_resume import (
     ResumeDecision,
     classify_path_dependence_resume,
 )
-from experiments.path_dependence_serialization import decode_path_dependence_spec
+from experiments.path_dependence_runner import (
+    PathDependenceBatchRunner,
+    PathDependenceExecutionContext,
+    PathDependenceExecutionSummary,
+)
+from experiments.path_dependence_serialization import (
+    action_schedule_digest,
+    decode_path_dependence_spec,
+)
+from research_runner.path_dependence_composition import (
+    build_path_dependence_postgres_composition,
+)
+from simulation.branch_service import rematerialize_snapshot
+from simulation.clock import Tick
+from simulation.engine import WorldEngine
+from simulation.models import RunId
+from simulation.persistence import SnapshotId
+from simulation.runner import RunnerDependencyFactories
 
 _LOG: Final[logging.Logger] = logging.getLogger("research_runner.path_dependence_cli")
 
@@ -274,7 +295,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_resume(args: argparse.Namespace) -> int:
+async def _resume(args: argparse.Namespace) -> int:
     store = _store(Path(args.ensemble))
     ensemble = _ensemble(store, args.ensemble_id)
     spec = _spec(ensemble)
@@ -284,13 +305,20 @@ def cmd_resume(args: argparse.Namespace) -> int:
     }
 
     class _NoRuns:
-        def exists(self, run_id: str) -> bool:
+        async def exists(self, run_id: str) -> bool:
             return False
 
-        def terminal(self, run_id: str) -> dict[str, object] | None:
+        async def terminal(self, run_id: str) -> dict[str, object] | None:
             return None
 
     counts = {decision.value: 0 for decision in ResumeDecision}
+    composition = None
+    reader: object = _NoRuns()
+    if getattr(args, "database", False):
+        from infrastructure.settings import Settings
+
+        composition = build_path_dependence_postgres_composition(Settings())
+        reader = composition.presence
     for slot in _slots(ensemble).values():
         expected = {
             **expected_base,
@@ -300,8 +328,10 @@ def cmd_resume(args: argparse.Namespace) -> int:
             "child_attempt": "attempt-1",
             "fork_tick": slot["fork_tick"],
         }
-        classification = classify_path_dependence_resume(
-            expected=expected, store=store, repositories=_NoRuns()
+        classification = await classify_path_dependence_resume(
+            expected=expected,
+            store=store,
+            repositories=reader,  # type: ignore[arg-type]
         )
         counts[classification.decision.value] += 1
         print(
@@ -310,6 +340,8 @@ def cmd_resume(args: argparse.Namespace) -> int:
             f"reason={classification.reason_code}"
         )
     del spec
+    if composition is not None:
+        await composition.close()
     _LOG.info(
         "path_dependence_resume_inventory ensemble_id=%s %s",
         ensemble["ensemble_id"],
@@ -318,23 +350,235 @@ def cmd_resume(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    """Preflight a spec and seal its immutable ensemble document."""
-    root = Path(args.artifact_root)
-    store = _store(root)
-    spec = decode_path_dependence_spec(Path(args.spec).read_bytes())
-    document = build_ensemble_document(
-        spec,
-        source_revision=args.code_revision,
-        source_artifact_digest=args.source_artifact_digest,
+def cmd_resume(args: argparse.Namespace) -> int:
+    return asyncio.run(_resume(args))
+
+
+async def _materialize(checkpoint: object, child_run: RunId) -> object:
+    snapshot = rematerialize_snapshot(
+        checkpoint.snapshot,  # type: ignore[attr-defined]
+        child_run_id=child_run,
+        snapshot_id=SnapshotId(f"child-{child_run.value}"),
+        predecessor_commit_hash=None,
+        next_tick=Tick(checkpoint.boundary_tick.value),  # type: ignore[attr-defined]
     )
-    store.write_ensemble(document)
-    print(f"ensemble_id={document['ensemble_id']}")
-    slots = document["slots"]
+    config = checkpoint.config  # type: ignore[attr-defined]
+    return WorldEngine.restore_from_snapshot(
+        snapshot,
+        population_lifecycle=config.population_lifecycle,
+        new_agent_initialization=config.new_agent_initialization,
+        kinship_spec=config.kinship,
+        environmental_dynamics=config.environmental_dynamics,
+        artifacts_enabled=config.artifacts_enabled,
+    )
+
+
+async def _execute(
+    *,
+    spec_path: Path,
+    root: Path,
+    code_revision: str,
+    source_artifact_digest: str,
+) -> tuple[dict[str, object], PathDependenceExecutionSummary]:
+    store = _store(root)
+    payload = await asyncio.to_thread(spec_path.read_bytes)
+    spec = decode_path_dependence_spec(payload)
+    ensemble = build_ensemble_document(
+        spec,
+        source_revision=code_revision,
+        source_artifact_digest=source_artifact_digest,
+    )
+    store.write_ensemble(ensemble)
+    summary = await PathDependenceBatchRunner().run(
+        spec,
+        PathDependenceExecutionContext(
+            factories=RunnerDependencyFactories(),
+            materialize_engine=_materialize,  # type: ignore[arg-type]
+            source_identity=code_revision,
+        ),
+    )
+    ensemble_id = str(ensemble["ensemble_id"])
+    provider = spec.base.provider
+    for prefix in summary.prefixes:
+        prefix_document = build_prefix_document(
+            ensemble_id=ensemble_id,
+            parent_scientific_id=prefix.parent_run_id,
+            parent_attempt_id="attempt-1",
+            fork_tick=prefix.fork_tick,
+            boundary_revision=prefix.boundary_revision,
+            config_fingerprint=prefix.config_fingerprint,
+            source_revision=code_revision,
+            provider_identity=provider.adapter_kind.value,
+            complete_state_digest=prefix.complete_state_digest,
+            checkpoint_format_version="runner-fork-checkpoint-v1",
+            bootstrap_hash=prefix.bootstrap_hash,
+            snapshot_hash=prefix.snapshot_hash,
+            objective_head_hash=prefix.objective_head_hash,
+            common_setup_digest="0" * 64,
+            eligible=prefix.eligible,
+            eligibility_reason=prefix.reason_code,
+            eligibility_witness=prefix.eligibility_witness,
+        )
+        store.write_prefix(
+            ensemble_id=ensemble_id,
+            parent_id=prefix.parent_run_id,
+            attempt_id="attempt-1",
+            fork_tick=prefix.fork_tick,
+            document=prefix_document,
+        )
+        for child in prefix.child_results:
+            actions = spec.arms[
+                next(
+                    index
+                    for index, arm in enumerate(spec.arms)
+                    if arm.arm_id == child.arm_id
+                )
+            ].actions_for(Tick(prefix.fork_tick))
+            schedule_digest = action_schedule_digest(actions)
+            base = {
+                "ensemble_id": ensemble_id,
+                "parent_scientific_id": prefix.parent_run_id,
+                "parent_attempt_id": "attempt-1",
+                "fork_tick": prefix.fork_tick,
+                "child_scientific_id": child.child_run_id,
+                "child_attempt_id": "attempt-1",
+                "slot_ordinal": child.slot_ordinal,
+                "arm_id": child.arm_id,
+                "action_schedule_digest": schedule_digest,
+                "assignment_seed": spec.assignment_seed,
+                "assignment_policy": "permuted-treatment-blind-slots-v1",
+                "prefix_digest": str(prefix_document["digest"]),
+            }
+            store.write_branch(
+                ensemble_id=ensemble_id,
+                child_id=child.child_run_id,
+                attempt_id="attempt-1",
+                kind="preparation",
+                document=build_branch_document(
+                    kind="preparation",
+                    **base,  # type: ignore[arg-type]
+                    details={
+                        "expected_checkpoint_digest": prefix.complete_state_digest
+                    },
+                ),
+            )
+            outcome_rows = [
+                {
+                    "selector_id": selector.selector_id,
+                    "domain": selector.domain.value,
+                    "window_id": selector.window_id,
+                    "value": None,
+                    "availability": "unknown",
+                    "coverage": "missing",
+                    "reason_code": "outcome_not_collected",
+                }
+                for selector in spec.selectors
+            ]
+            outcomes = build_outcomes_document(
+                ensemble_id=ensemble_id,
+                child_scientific_id=child.child_run_id,
+                child_attempt_id="attempt-1",
+                slot_ordinal=child.slot_ordinal,
+                fork_tick=prefix.fork_tick,
+                rows=outcome_rows,
+                coverage={"complete": False, "reason_code": "outcome_capture_partial"},
+                evidence_refs=(),
+            )
+            store.write_outcomes(
+                ensemble_id=ensemble_id,
+                child_id=child.child_run_id,
+                attempt_id="attempt-1",
+                document=outcomes,
+            )
+            if child.status == "completed":
+                result = build_branch_document(
+                    kind="result",
+                    **base,  # type: ignore[arg-type]
+                    details={
+                        "child_run_id": child.child_run_id,
+                        "requested_actions": len(actions),
+                        "treatment_ledger": tuple(
+                            {
+                                "intervention_id": entry.intervention_id,
+                                "tick": entry.tick,
+                                "actor_id": entry.actor_id.value,
+                                "action_kind": entry.action_kind,
+                                "status": entry.status.value,
+                                "resolution_status": entry.resolution_status,
+                            }
+                            for entry in child.treatment_ledger
+                        ),
+                        "stop_reason": child.stop_reason or "unknown",
+                        "terminal_tick": child.ticks_committed,
+                        "terminal_revision": child.terminal_revision or 0,
+                        "pre_treatment_state_digest": prefix.complete_state_digest,
+                        "channel_manifest": (provider.adapter_kind.value,),
+                        "outcomes_digest": str(outcomes["digest"]),
+                    },
+                )
+                store.write_branch(
+                    ensemble_id=ensemble_id,
+                    child_id=child.child_run_id,
+                    attempt_id="attempt-1",
+                    kind="result",
+                    document=result,
+                )
+                completion = build_branch_document(
+                    kind="completion",
+                    **base,  # type: ignore[arg-type]
+                    details={
+                        "result_digest": str(result["digest"]),
+                        "outcomes_digest": str(outcomes["digest"]),
+                        "objective_head_hash": (child.objective_head_hash or "0" * 64),
+                        "terminal_tick": child.ticks_committed,
+                        "terminal_revision": child.terminal_revision or 0,
+                    },
+                )
+                store.write_branch(
+                    ensemble_id=ensemble_id,
+                    child_id=child.child_run_id,
+                    attempt_id="attempt-1",
+                    kind="completion",
+                    document=completion,
+                )
+            else:
+                store.write_branch(
+                    ensemble_id=ensemble_id,
+                    child_id=child.child_run_id,
+                    attempt_id="attempt-1",
+                    kind="failure",
+                    document=build_branch_document(
+                        kind="failure",
+                        **base,  # type: ignore[arg-type]
+                        details={
+                            "last_durable_tick": child.ticks_committed,
+                            "stage": "child_execution",
+                            "committed_status": child.status,
+                            "reason_code": child.error_code or "child_failed",
+                        },
+                    ),
+                )
+    return ensemble, summary
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Execute a fake-only ensemble and seal its lineage artifacts."""
+    root = Path(args.artifact_root)
+    ensemble, summary = asyncio.run(
+        _execute(
+            spec_path=Path(args.spec),
+            root=root,
+            code_revision=args.code_revision,
+            source_artifact_digest=args.source_artifact_digest,
+        )
+    )
+    slots = ensemble["slots"]
     if not isinstance(slots, list):
         raise PathDependenceCliError("artifact_identity_mismatch")
+    print(f"ensemble_id={ensemble['ensemble_id']}")
     print(f"slots={len(slots)}")
-    print("execution=not_started")
+    print(f"prefixes={len(summary.prefixes)}")
+    print(f"completed={summary.completed_count} failed={summary.failed_count}")
     return 0
 
 
@@ -357,6 +601,11 @@ def add_path_dependence_parser(
     resume_p = nested.add_parser("resume", help="Classify every planned slot")
     resume_p.add_argument("--ensemble", required=True)
     resume_p.add_argument("--ensemble-id", required=True)
+    resume_p.add_argument(
+        "--database",
+        action="store_true",
+        help="Check objective presence in the configured PALIMPSEST database",
+    )
     resume_p.set_defaults(func=cmd_resume)
 
     inspect_p = nested.add_parser("inspect", help="Read-only lineage inventory")

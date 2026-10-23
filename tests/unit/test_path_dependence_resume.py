@@ -36,10 +36,10 @@ class _Reader:
         self._run_ids = run_ids
         self._terminal = terminal
 
-    def exists(self, run_id: str) -> bool:
+    async def exists(self, run_id: str) -> bool:
         return run_id in self._run_ids
 
-    def terminal(self, run_id: str) -> dict[str, object] | None:
+    async def terminal(self, run_id: str) -> dict[str, object] | None:
         return self._terminal
 
 
@@ -202,12 +202,13 @@ def _expected(ensemble: dict[str, object]) -> dict[str, object]:
     }
 
 
-def test_uncreated_slot_requires_preparation_then_reconstructs(
+@pytest.mark.asyncio
+async def test_uncreated_slot_requires_preparation_then_reconstructs(
     tmp_path: Path,
 ) -> None:
     store, ensemble, prefix = _store(tmp_path)
     expected = _expected(ensemble)
-    missing = classify_path_dependence_resume(
+    missing = await classify_path_dependence_resume(
         expected=expected, store=store, repositories=_Reader(set(), None)
     )
     assert missing.decision is ResumeDecision.BLOCKED
@@ -219,14 +220,17 @@ def test_uncreated_slot_requires_preparation_then_reconstructs(
         kind="preparation",
         document=preparation,
     )
-    decision = classify_path_dependence_resume(
+    decision = await classify_path_dependence_resume(
         expected=expected, store=store, repositories=_Reader(set(), None)
     )
     assert decision.decision is ResumeDecision.RECONSTRUCT_FOR_UNCREATED_SLOT
     assert decision.reason_code is None
 
 
-def test_existing_child_without_completion_is_failed_partial(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_existing_child_without_completion_is_failed_partial(
+    tmp_path: Path,
+) -> None:
     store, ensemble, prefix = _store(tmp_path)
     preparation, _result, _outcomes, _completion = _documents(ensemble, prefix)
     store.write_branch(
@@ -236,7 +240,7 @@ def test_existing_child_without_completion_is_failed_partial(tmp_path: Path) -> 
         kind="preparation",
         document=preparation,
     )
-    decision = classify_path_dependence_resume(
+    decision = await classify_path_dependence_resume(
         expected=_expected(ensemble),
         store=store,
         repositories=_Reader({CHILD}, None),
@@ -245,7 +249,8 @@ def test_existing_child_without_completion_is_failed_partial(tmp_path: Path) -> 
     assert decision.reason_code == "branch_unsealed"
 
 
-def test_completed_branch_is_adopted_without_rerun(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_completed_branch_is_adopted_without_rerun(tmp_path: Path) -> None:
     store, ensemble, prefix = _store(tmp_path)
     preparation, result, outcomes, completion = _documents(ensemble, prefix)
     for kind, document in (
@@ -266,7 +271,7 @@ def test_completed_branch_is_adopted_without_rerun(tmp_path: Path) -> None:
         attempt_id=ATTEMPT,
         document=outcomes,
     )
-    decision = classify_path_dependence_resume(
+    decision = await classify_path_dependence_resume(
         expected=_expected(ensemble),
         store=store,
         repositories=_Reader(
@@ -279,9 +284,10 @@ def test_completed_branch_is_adopted_without_rerun(tmp_path: Path) -> None:
     assert decision.branch.outcomes["schema_version"] == "path-dependence-outcomes-v1"
 
 
-def test_ineligible_prefix_and_reconstruction_mismatch(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_ineligible_prefix_and_reconstruction_mismatch(tmp_path: Path) -> None:
     store, ensemble, _prefix_doc = _store(tmp_path, eligible=False)
-    decision = classify_path_dependence_resume(
+    decision = await classify_path_dependence_resume(
         expected=_expected(ensemble),
         store=store,
         repositories=_Reader(set(), None),
@@ -298,13 +304,9 @@ def test_ineligible_prefix_and_reconstruction_mismatch(tmp_path: Path) -> None:
         return _Checkpoint()
 
     with pytest.raises(PathDependenceResumeError, match="prefix_reconstruction"):
-        import asyncio
-
-        asyncio.run(
-            reconstruct_prefix(
-                expected=expected,
-                store=good_store,
-                reconstruct=_reconstruct,
-                digest_of=lambda _value: "0" * 64,
-            )
+        await reconstruct_prefix(
+            expected=expected,
+            store=good_store,
+            reconstruct=_reconstruct,
+            digest_of=lambda _value: "0" * 64,
         )

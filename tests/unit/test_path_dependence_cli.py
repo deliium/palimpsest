@@ -58,6 +58,8 @@ def test_run_seals_ensemble_and_inspect_is_read_only(tmp_path: Path) -> None:
     store = PathDependenceArtifactStore(root)
     ensemble = store.read_ensemble(ensemble_id)
     assert ensemble["schema_version"] == "path-dependence-ensemble-v1"
+    assert len(list((root / ensemble_id / "prefixes").rglob("prefix.json"))) == 1
+    assert len(list((root / ensemble_id / "branches").rglob("completion.json"))) == 2
     before = sorted(path.relative_to(root).as_posix() for path in root.rglob("*"))
     assert (
         main(

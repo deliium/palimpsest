@@ -31,10 +31,10 @@ class _Reader:
     def __init__(self, terminal: dict[str, object] | None) -> None:
         self._terminal = terminal
 
-    def exists(self, run_id: str) -> bool:
+    async def exists(self, run_id: str) -> bool:
         return self._terminal is not None
 
-    def terminal(self, run_id: str) -> dict[str, object] | None:
+    async def terminal(self, run_id: str) -> dict[str, object] | None:
         return self._terminal
 
 
@@ -213,7 +213,8 @@ def test_ensemble_and_multi_f_prefix_paths_round_trip(tmp_path: Path) -> None:
     )
 
 
-def test_all_branch_kinds_round_trip_and_verify(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_all_branch_kinds_round_trip_and_verify(tmp_path: Path) -> None:
     store = PathDependenceArtifactStore(tmp_path)
     ensemble = _ensemble()
     prefix = _prefix(ensemble)
@@ -244,7 +245,7 @@ def test_all_branch_kinds_round_trip_and_verify(tmp_path: Path) -> None:
         attempt_id="attempt-1",
         document=outcomes,
     )
-    verified = verify_path_dependence_branch(
+    verified = await verify_path_dependence_branch(
         expected={
             "ensemble_id": ensemble["ensemble_id"],
             "parent_id": "pd-parent-unit",
@@ -266,7 +267,8 @@ def test_all_branch_kinds_round_trip_and_verify(tmp_path: Path) -> None:
     assert verified.result["child_run_id"] == "child-unit"
 
 
-def test_tampered_identity_and_terminal_head_are_rejected(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_tampered_identity_and_terminal_head_are_rejected(tmp_path: Path) -> None:
     store = PathDependenceArtifactStore(tmp_path)
     ensemble = _ensemble()
     prefix = _prefix(ensemble)
@@ -297,7 +299,7 @@ def test_tampered_identity_and_terminal_head_are_rejected(tmp_path: Path) -> Non
         document=outcomes,
     )
     with pytest.raises(PathDependenceArtifactError, match="objective_completion"):
-        verify_path_dependence_branch(
+        await verify_path_dependence_branch(
             expected={
                 "ensemble_id": ensemble["ensemble_id"],
                 "parent_id": "pd-parent-unit",
@@ -437,7 +439,8 @@ def _failure(
     )
 
 
-def test_failure_is_not_a_completion_and_substituted_child_is_rejected(
+@pytest.mark.asyncio
+async def test_failure_is_not_a_completion_and_substituted_child_is_rejected(
     tmp_path: Path,
 ) -> None:
     store = PathDependenceArtifactStore(tmp_path)
@@ -459,7 +462,7 @@ def test_failure_is_not_a_completion_and_substituted_child_is_rejected(
         document=_failure(ensemble, prefix),
     )
     with pytest.raises(PathDependenceArtifactError, match="branch_unsealed"):
-        verify_path_dependence_branch(
+        await verify_path_dependence_branch(
             expected={
                 "ensemble_id": ensemble["ensemble_id"],
                 "parent_id": "pd-parent-unit",
@@ -472,7 +475,7 @@ def test_failure_is_not_a_completion_and_substituted_child_is_rejected(
             repositories=_Reader(None),
         )
     with pytest.raises(PathDependenceArtifactError, match="branch_unsealed"):
-        verify_path_dependence_branch(
+        await verify_path_dependence_branch(
             expected={
                 "ensemble_id": ensemble["ensemble_id"],
                 "parent_id": "pd-parent-unit",

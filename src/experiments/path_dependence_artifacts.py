@@ -184,9 +184,9 @@ class PathDependenceArtifactError(RuntimeError):
 class ObjectiveRunReader(Protocol):
     """Read-only objective presence needed by completion verification."""
 
-    def exists(self, run_id: str) -> bool: ...
+    async def exists(self, run_id: str) -> bool: ...
 
-    def terminal(self, run_id: str) -> Mapping[str, object] | None: ...
+    async def terminal(self, run_id: str) -> Mapping[str, object] | None: ...
 
 
 def canonical_bytes(payload: object) -> bytes:
@@ -740,7 +740,7 @@ class PathDependenceArtifactStore:
         )
 
 
-def verify_path_dependence_branch(
+async def verify_path_dependence_branch(
     *,
     expected: Mapping[str, object],
     store: PathDependenceArtifactStore,
@@ -800,7 +800,7 @@ def verify_path_dependence_branch(
         raise PathDependenceArtifactError("artifact_identity_mismatch")
     if child_run_id != child_id:
         raise PathDependenceArtifactError("artifact_identity_mismatch")
-    terminal = repositories.terminal(child_run_id)
+    terminal = await repositories.terminal(child_run_id)
     if terminal is None:
         raise PathDependenceArtifactError("objective_completion_unverified")
     if (
