@@ -182,6 +182,7 @@ class CulturalEvidenceRecorder:
     """Store immutable frames without eviction or endpoint fabrication."""
 
     __slots__ = (
+        "_baseline_boundary",
         "_frames",
         "_gaps",
         "_max_frames",
@@ -202,6 +203,7 @@ class CulturalEvidenceRecorder:
                 raise ValueError(f"{name}: must_be_positive_integer")
         self._max_frames = max_frames
         self._max_rows = max_rows
+        self._baseline_boundary: int | None = None
         self._frames: list[CulturalBoundaryExport] = []
         self._gaps: list[str] = []
         self._rows = 0
@@ -221,12 +223,33 @@ class CulturalEvidenceRecorder:
     def truncated(self) -> bool:
         return self._truncated
 
+    def start_at_boundary(self, boundary_tick: int) -> None:
+        """Declare the first allowed capture after restoring a fork boundary."""
+        if isinstance(boundary_tick, bool) or type(boundary_tick) is not int:
+            raise TypeError("boundary_tick must be an int")
+        if boundary_tick < 0:
+            raise ValueError("boundary_tick must be non-negative")
+        if self._frames:
+            raise ValueError("cultural_evidence_baseline_after_capture")
+        if self._baseline_boundary is not None:
+            raise ValueError("cultural_evidence_baseline_already_set")
+        self._baseline_boundary = boundary_tick
+        _LOG.info(
+            "cultural_evidence_baseline_start boundary_tick=%s",
+            boundary_tick,
+        )
+
     def capture(self, frame: CulturalBoundaryExport) -> None:
         """Retain one complete boundary or record an explicit truncation gap."""
         if type(frame) is not CulturalBoundaryExport:
             raise TypeError("frame must be CulturalBoundaryExport")
         if self._status.failed:
             return
+        if (
+            self._baseline_boundary is not None
+            and frame.boundary_tick < self._baseline_boundary
+        ):
+            raise ValueError("cultural_evidence_before_baseline")
         for existing in self._frames:
             if existing.boundary_tick != frame.boundary_tick:
                 continue

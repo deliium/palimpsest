@@ -164,6 +164,7 @@ async def test_fork_restore_publishes_exactly_one_baseline_then_next_tick() -> N
             if event.tick < checkpoint.boundary_tick.value
         )
         recorder = CulturalEvidenceRecorder()
+        recorder.start_at_boundary(checkpoint.boundary_tick.value)
         child_run = RunId("baseline-child")
         child = await SimulationRunner.from_fork_checkpoint(
             config,
