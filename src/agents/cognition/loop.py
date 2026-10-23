@@ -5932,9 +5932,11 @@ def _build_narrative_cue_summary(
         concepts: list[str] = []
         for concept in getattr(item, "concepts", ()) or ():
             token = getattr(concept, "concept", None)
-            if isinstance(token, str) and token:
+            if isinstance(token, str) and _NARRATIVE_TOKEN_RE.fullmatch(token):
                 concepts.append(token)
-            elif isinstance(concept, str):
+            elif isinstance(concept, str) and _NARRATIVE_TOKEN_RE.fullmatch(
+                concept
+            ):
                 concepts.append(concept)
         relations: list[tuple[str, str, str]] = []
         for rel in getattr(item, "relations", ()) or ():
@@ -5949,6 +5951,9 @@ def _build_narrative_cue_summary(
                 isinstance(subject_token, str)
                 and isinstance(predicate, str)
                 and isinstance(object_token, str)
+                and _NARRATIVE_TOKEN_RE.fullmatch(subject_token)
+                and _NARRATIVE_TOKEN_RE.fullmatch(predicate)
+                and _NARRATIVE_TOKEN_RE.fullmatch(object_token)
             ):
                 relations.append((subject_token, predicate, object_token))
         reconstructions.append(

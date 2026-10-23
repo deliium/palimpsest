@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from experiments.interventions import MilestoneInterventionArbiter, MilestoneOverride
 from experiments.path_dependence_models import (
     ArmRole,
     OutcomeDomain,
@@ -135,6 +136,19 @@ async def test_food_opportunity_is_eligible_at_finalized_fork() -> None:
     parent = await SimulationRunner.from_config(
         spec.base, run_id=RunId("bn-parent")
     )
+    setup = MilestoneInterventionArbiter(
+        [
+            MilestoneOverride(
+                f"setup-{index}",
+                command.tick.value,
+                command.actor_id,
+                build_command=lambda value=command.command: value,
+            )
+            for index, command in enumerate(spec.common_setup)
+        ],
+        override_budget=len(spec.common_setup),
+    )
+    parent.set_intervention_arbiter(setup)
     try:
         await parent.initialize_finalized_boundary()
         for _ in range(spec.fork_ticks[0].value):
