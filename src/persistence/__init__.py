@@ -22,6 +22,12 @@ from persistence.errors import (
     PersistenceCorruptionError,
     PersistenceNotFoundError,
 )
+from persistence.lineage_filesystem import (
+    FilesystemLineagePublisher,
+    FilesystemLineageReader,
+    create_lineage_publisher,
+    create_lineage_reader,
+)
 from simulation.persistence import (
     ExperimentRepository,
     SimulationRunRepository,
@@ -62,6 +68,8 @@ if TYPE_CHECKING:
     from social.relationships import RelationshipFormationPolicy
 
 __all__ = [
+    "FilesystemLineagePublisher",
+    "FilesystemLineageReader",
     "PersistenceAdapterError",
     "PersistenceConflictError",
     "PersistenceCorruptionError",
@@ -74,6 +82,8 @@ __all__ = [
     "create_experiment_record_repository",
     "create_experiment_repository",
     "create_inspection_evidence_loader",
+    "create_lineage_publisher",
+    "create_lineage_reader",
     "create_memory_service",
     "create_metric_document_repository",
     "create_metric_set_repository",

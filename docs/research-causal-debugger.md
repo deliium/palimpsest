@@ -117,3 +117,6 @@ Godot presentation labels (Observed…Acted, expanded chain names, artifact-kind
 - [Godot observer](godot-observer.md)
 - [Research API](research-api.md)
 - [Read-only observer](observer.md)
+
+
+For paginated historical graph navigation, see [Historical lineage explorer](lineage-explorer.md).

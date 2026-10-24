@@ -14,6 +14,24 @@ from enum import StrEnum
 from typing import Final
 
 from analysis.historical_memory import _death_ticks_from_events, is_agent_living_at
+from simulation.lineage_identity import (
+    LineageEvidenceClass,
+    LineageEvidenceRef,
+    LineageFamily,
+    LineageNativeKind,
+    LineageNodeRef,
+    lineage_edge_key,
+)
+from simulation.lineage_models import (
+    LineageCoverage,
+    LineageCoverageState,
+    LineageEdge,
+    LineageError,
+    LineageNode,
+    LineageNodeState,
+)
+from simulation.lineage_ports import LineageSourceProjection
+from simulation.models import RunId
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.knowledge_genealogy")
@@ -31,6 +49,7 @@ __all__ = [
     "KnowledgeGenealogyQueryId",
     "KnowledgeGenealogyQueryResult",
     "build_knowledge_genealogy_graph",
+    "build_qualified_knowledge_lineage",
     "death_ticks_for_knowledge_genealogy",
     "query_independent_emergence_count",
     "query_oldest_surviving_lineage_origin",
@@ -855,3 +874,322 @@ def run_knowledge_genealogy_query(
             max_query_depth=max_query_depth,
         )
     raise ValueError(f"unknown knowledge genealogy query: {qid!r}")
+
+
+def _qualified_entry_ref(
+    run_id: RunId,
+    owner_id: str,
+    entry_id: str,
+    *,
+    family: LineageFamily = LineageFamily.KNOWLEDGE,
+) -> LineageNodeRef:
+    return LineageNodeRef(
+        run_id=run_id,
+        family=family,
+        evidence_class=LineageEvidenceClass.ANALYTICAL,
+        native_kind=LineageNativeKind.KNOWLEDGE_ENTRY,
+        native_id=entry_id,
+        identity_owner=owner_id,
+    )
+
+
+def _qualified_agent_ref(
+    run_id: RunId, agent_id: str, *, family: LineageFamily = LineageFamily.KNOWLEDGE
+) -> LineageNodeRef:
+    return LineageNodeRef(
+        run_id=run_id,
+        family=family,
+        evidence_class=LineageEvidenceClass.ANALYTICAL,
+        native_kind=LineageNativeKind.AGENT,
+        native_id=agent_id,
+    )
+
+
+def _qualified_audits(rows: Sequence[object]) -> tuple[_AuditRow, ...]:
+    grouped: dict[str, list[object]] = {}
+    for row in rows:
+        owner = _token(getattr(row, "owner_id", None), field="owner_id")
+        if owner is None:
+            continue
+        grouped.setdefault(owner, []).append(row)
+    normalized: list[_AuditRow] = []
+    for owner in sorted(grouped):
+        normalized.extend(_normalize_audits(grouped[owner]))
+    return tuple(normalized)
+
+
+def _add_qualified_edge(
+    edges: dict[str, LineageEdge],
+    *,
+    run_id: RunId,
+    relation: str,
+    source_ref: LineageNodeRef,
+    target_ref: LineageNodeRef,
+    native_kind: LineageNativeKind,
+    native_id: str,
+    observed_tick: int,
+    status_code: str,
+    claim_owner_id: str | None = None,
+) -> None:
+    evidence = LineageEvidenceRef(
+        evidence_class=LineageEvidenceClass.ANALYTICAL,
+        native_kind=native_kind,
+        native_id=native_id,
+        owner_id=(None if native_kind is LineageNativeKind.AGENT else claim_owner_id),
+        observed_tick=observed_tick,
+    )
+    key = lineage_edge_key(
+        relation=relation,
+        source_key=source_ref.key,
+        target_key=target_ref.key,
+        native_kind=native_kind,
+        native_id=native_id,
+        claim_owner_id=claim_owner_id,
+        evidence_keys=(evidence.key,),
+    )
+    edges.setdefault(
+        key,
+        LineageEdge(
+            edge_key=key,
+            source_key=source_ref.key,
+            target_key=target_ref.key,
+            relation=relation,
+            native_kind=native_kind,
+            native_id=native_id,
+            claim_owner_id=claim_owner_id,
+            evidence_refs=(evidence,),
+            observed_tick=observed_tick,
+            status_code=status_code,
+        ),
+    )
+
+
+def build_qualified_knowledge_lineage(
+    audit_rows: Sequence[object],
+    *,
+    run_id: RunId,
+    as_of_tick: int,
+    family: LineageFamily = LineageFamily.KNOWLEDGE,
+    coverage: LineageCoverage | None = None,
+    policy_version: str = "knowledge-analytical-lineage.v1",
+) -> LineageSourceProjection:
+    """Owner-qualified explorer DAG reusing legacy eligibility/tie-breaking."""
+    if type(run_id) is not RunId:
+        raise ValueError("run_id must be RunId")
+    if family not in {LineageFamily.KNOWLEDGE, LineageFamily.TECHNOLOGY}:
+        raise LineageError("invalid_lineage_scope")
+    boundary = require_exact_nonneg_int("as_of_tick", as_of_tick)
+    audits = tuple(
+        row for row in _qualified_audits(audit_rows) if row.acquired_tick <= boundary
+    )
+    by_owner: dict[str, tuple[_AuditRow, ...]] = {}
+    for row in audits:
+        by_owner.setdefault(row.owner_id, ())
+        by_owner[row.owner_id] += (row,)
+    coverage_value = coverage or LineageCoverage(
+        state=LineageCoverageState.COMPLETE,
+        capture_start_tick=0,
+        capture_end_tick=boundary,
+        policy_version=policy_version,
+    )
+    if coverage_value.state is LineageCoverageState.DISABLED:
+        return LineageSourceProjection(nodes=(), edges=(), coverage=coverage_value)
+
+    nodes: dict[str, LineageNode] = {}
+    edges: dict[str, LineageEdge] = {}
+    anchors: dict[str, str | None] = {}
+    for row in audits:
+        holder_ref = _qualified_agent_ref(run_id, row.owner_id, family=family)
+        nodes.setdefault(
+            holder_ref.key,
+            LineageNode(
+                ref=holder_ref,
+                state=LineageNodeState.OBSERVED,
+                observed_tick=row.acquired_tick,
+                status_code="analytical_agent_reference",
+            ),
+        )
+        entry_ref = _qualified_entry_ref(
+            run_id, row.owner_id, row.entry_id, family=family
+        )
+        entry_key = entry_ref.key
+        anchors[entry_key] = row.capability_anchor
+        nodes[entry_key] = LineageNode(
+            ref=entry_ref,
+            state=(
+                LineageNodeState.OBSERVED if row.active else LineageNodeState.ARCHIVED
+            ),
+            observed_tick=row.tick,
+            status_code=row.kind if row.active else f"inactive:{row.kind}",
+            confidence_code=row.origin,
+            counts=(("hop", row.hop_index),),
+            source_observed_boundary=row.tick,
+        )
+        if row.active:
+            _add_qualified_edge(
+                edges,
+                run_id=run_id,
+                relation=KnowledgeGenealogyEdgeKind.HOLDS.value,
+                source_ref=holder_ref,
+                target_ref=entry_ref,
+                native_kind=LineageNativeKind.AGENT,
+                native_id=row.entry_id,
+                observed_tick=row.tick,
+                status_code="holder",
+                claim_owner_id=row.owner_id,
+            )
+        if row.origin == "independent_discovery":
+            root_ref = _qualified_entry_ref(
+                run_id, row.owner_id, f"root:{row.lineage_root_id}", family=family
+            )
+            nodes.setdefault(
+                root_ref.key,
+                LineageNode(
+                    ref=root_ref,
+                    state=LineageNodeState.OBSERVED,
+                    observed_tick=row.acquired_tick,
+                    status_code="independent_root",
+                    counts=(("hop", 0),),
+                ),
+            )
+            _add_qualified_edge(
+                edges,
+                run_id=run_id,
+                relation=KnowledgeGenealogyEdgeKind.TRANSMITTED_FROM.value,
+                source_ref=root_ref,
+                target_ref=entry_ref,
+                native_kind=LineageNativeKind.KNOWLEDGE_ENTRY,
+                native_id=row.entry_id,
+                observed_tick=row.acquired_tick,
+                status_code="independent_root",
+                claim_owner_id=row.owner_id,
+            )
+        for parent_id in row.parent_entry_ids:
+            parent_ref = _qualified_entry_ref(
+                run_id, row.owner_id, parent_id, family=family
+            )
+            if parent_ref.key not in nodes:
+                nodes[parent_ref.key] = LineageNode(
+                    ref=parent_ref,
+                    state=LineageNodeState.UNRESOLVED,
+                    unresolved_reason="owner_local_parent_not_observed",
+                )
+                anchors[parent_ref.key] = None
+            relation = (
+                KnowledgeGenealogyEdgeKind.COMBINED_FROM.value
+                if row.origin == "combination" or len(row.parent_entry_ids) >= 2
+                else KnowledgeGenealogyEdgeKind.MUTATED_FROM.value
+                if row.mutated or len(row.parent_entry_ids) == 1
+                else KnowledgeGenealogyEdgeKind.TRANSMITTED_FROM.value
+            )
+            _add_qualified_edge(
+                edges,
+                run_id=run_id,
+                relation=relation,
+                source_ref=parent_ref,
+                target_ref=entry_ref,
+                native_kind=LineageNativeKind.KNOWLEDGE_ENTRY,
+                native_id=row.entry_id,
+                observed_tick=row.acquired_tick,
+                status_code=row.origin,
+                claim_owner_id=row.owner_id,
+            )
+        peer_source = row.source_agent_id or row.teacher_agent_id
+        if (
+            peer_source
+            and not row.parent_entry_ids
+            and row.origin != "independent_discovery"
+        ):
+            peer = _find_peer_source_entry(
+                source_agent_id=peer_source,
+                content_key=row.content_key,
+                child_tick=row.acquired_tick,
+                by_owner=by_owner,
+            )
+            peer_ref = (
+                _qualified_entry_ref(run_id, peer_source, peer.entry_id, family=family)
+                if peer is not None
+                else _qualified_agent_ref(run_id, peer_source, family=family)
+            )
+            if peer is None:
+                nodes.setdefault(
+                    peer_ref.key,
+                    LineageNode(
+                        ref=peer_ref,
+                        state=LineageNodeState.OBSERVED,
+                        observed_tick=row.acquired_tick,
+                        status_code="analytical_agent_reference",
+                    ),
+                )
+                _add_qualified_edge(
+                    edges,
+                    run_id=run_id,
+                    relation=(KnowledgeGenealogyEdgeKind.UNRESOLVED_TRANSMISSION.value),
+                    source_ref=peer_ref,
+                    target_ref=entry_ref,
+                    native_kind=LineageNativeKind.AGENT,
+                    native_id=row.entry_id,
+                    observed_tick=row.acquired_tick,
+                    status_code="unresolved_teacher",
+                    claim_owner_id=row.owner_id,
+                )
+            else:
+                _add_qualified_edge(
+                    edges,
+                    run_id=run_id,
+                    relation=KnowledgeGenealogyEdgeKind.TRANSMITTED_FROM.value,
+                    source_ref=peer_ref,
+                    target_ref=entry_ref,
+                    native_kind=LineageNativeKind.KNOWLEDGE_ENTRY,
+                    native_id=row.entry_id,
+                    observed_tick=row.acquired_tick,
+                    status_code="analytical_transmission",
+                    claim_owner_id=row.owner_id,
+                )
+
+    selected_keys = set(nodes)
+    if family is LineageFamily.TECHNOLOGY:
+        selected_keys = {key for key, anchor in anchors.items() if anchor is not None}
+        frontier = list(selected_keys)
+        sources_by_target: dict[str, list[str]] = {}
+        for edge in edges.values():
+            sources_by_target.setdefault(edge.target_key, []).append(edge.source_key)
+        while frontier:
+            target = frontier.pop()
+            for source in sources_by_target.get(target, ()):
+                if source not in selected_keys:
+                    selected_keys.add(source)
+                    frontier.append(source)
+        selected_keys.update(
+            key
+            for key, node in nodes.items()
+            if node.ref.native_kind is LineageNativeKind.AGENT
+            and any(
+                edge.source_key == key or edge.target_key == key
+                for edge in edges.values()
+                if edge.source_key in selected_keys or edge.target_key in selected_keys
+            )
+        )
+
+    filtered_nodes = tuple(nodes[key] for key in sorted(selected_keys) if key in nodes)
+    filtered_edges = tuple(
+        edges[key]
+        for key in sorted(edges)
+        if edges[key].source_key in selected_keys
+        and edges[key].target_key in selected_keys
+    )
+    _LOG.debug(
+        "knowledge_qualified_lineage_projected run_id=%s as_of=%s family=%s "
+        "row_count=%s node_count=%s edge_count=%s",
+        run_id.value,
+        boundary,
+        family.value,
+        len(audits),
+        len(filtered_nodes),
+        len(filtered_edges),
+    )
+    return LineageSourceProjection(
+        nodes=filtered_nodes,
+        edges=filtered_edges,
+        coverage=coverage_value,
+    )

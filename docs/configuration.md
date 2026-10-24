@@ -316,3 +316,9 @@ entry rate may differ only for the `population_size` axis.
 ## Path-dependence research artifacts
 
 `historical_contingency@1` is composition-only research surface. It adds sibling artifact schemas and no runner-config field, capability flag, or migration. See [Historical contingency](historical-contingency.md).
+
+## Lineage explorer
+
+- `PALIMPSEST_LINEAGE_ROOT`: reader-only root for captured lineage artifacts. Absent disables the service; it never starts capture.
+- `PALIMPSEST_LINEAGE_CURSOR_KEY`: optional signing key of at least 32 UTF-8 bytes for restart-stable lineage cursors.
+- `palimpsest-matrix generational --lineage-root ... --lineage-cadence ... --lineage-max-publications ... --lineage-max-bytes ...`: trusted capture composition. Non-root flags require the root. See `docs/lineage-explorer.md`.

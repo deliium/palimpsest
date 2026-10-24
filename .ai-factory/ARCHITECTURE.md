@@ -419,3 +419,19 @@ v4/result v2, commands stay 43, observer semantic types stay 73, replay stays
 ### V3-38 historical contingency seam
 
 `historical_contingency@1` is an opt-in grouped experiment protocol, not a runner capability. `experiments` owns predeclared designs, treatment-blind slots, eligibility, ordinary-admission arbiters, bounded finalized evidence collection, detached outcome projection, and strict sibling artifacts. `analysis` owns selector calculators and paired seed-block comparison over detached rows and never imports experiments or live services. `research_runner` composes the CLI and read-only objective presence; it never starts HTTP. Common prefix state is process-local only: completed children may be adopted, but durable subjective restart is not claimed and an unused planned child requires exact deterministic prefix reconstruction. No runner v56, capability flag, command/event, observer semantic, write-pair, API route, migration, or metric family is added.
+
+
+### V3-39 lineage explorer seam
+
+`simulation.lineage_*` owns qualified eight-family DTOs, pure projections, bounded
+traversal, canonical `lineage-snapshot-v1` artifacts, catalogue discovery and the
+neutral capture session. Objective genealogy/record evidence uses
+`OBJECTIVE_INSPECTION`; subjective and analytical evidence uses `SUBJECTIVE_DEBUG`.
+`persistence.lineage_filesystem` implements separate reader/publisher ports with a
+single atomic `state.json.committed_ref` publication point and cumulative per-run
+quotas. `experiments.lineage_publication` is the trusted analytical composer;
+`research_runner` owns the opt-in CLI producer. HTTP is GET-only under
+`/v1/simulations/{run_id}/lineage`; API reads never build, repair or mutate
+lineage artifacts and never import analysis. This feature adds no command, event,
+observer semantic, metric family, runner/result version, SQL migration, capability
+ownership or `/v2` route; Alembic stays `0017` and default writes stay v4/v2.

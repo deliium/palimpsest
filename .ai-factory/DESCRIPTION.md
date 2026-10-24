@@ -133,3 +133,19 @@ Cultural evolution metrics (V3-37) add opt-in, composition-only capture of owner
 
 
 Historical contingency experiments (V3-38) add Experiment BN / `historical_contingency@1` as a trusted grouped research protocol. A common generational prefix is sealed at finalized boundary F, complete owner state is captured in-process, independent replay children receive small ordinary commands, and detached outcomes cover norms, relationships, institutions, technology, cultural narratives, inequality, and cooperation. Sibling `path-dependence-*-v1` artifacts carry lineage, prefix, branch, outcome, and comparison identity; repeated numeric seeds define independent blocks and single-run causality is never claimed. No capability flag, runner schema (no v56), command/event, observer semantic, API route, migration, or metric family is added; default writes remain runner v4/result v2 and latest feature runner stays v55. Full subjective resume remains unsupported: completed children may be adopted, while an unused planned child requires deterministic prefix reconstruction after process loss.
+
+
+Historical lineage explorer (V3-39) adds a read-only, evidence-scoped query
+backend over existing generational, knowledge, cultural and institutional
+evidence. Eight families (genealogy, mentorship, technology, knowledge, record,
+narrative, institution, office succession) share qualified identities, bounded
+snapshot-pinned traversal and purpose-specific signed cursors. Optional
+default-off capture publishes immutable `lineage-snapshot-v1` sibling artifacts
+through a filesystem read model with cumulative per-run quotas; it never feeds
+cognition or world state. Objective genealogy/record queries use inspection;
+subjective and analytical queries use subjective debug. No command, event,
+observer semantic, metric family, runner/result schema, SQL migration, capability
+ownership or API version is added; default writes remain runner v4/result v2,
+Alembic head stays `0017`, commands 43, observer semantic types 73, metric
+families 136, replay-v22/codec v20 when selected, `/v1` and
+`observer-protocol-v1`.

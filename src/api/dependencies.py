@@ -7,6 +7,7 @@ from typing import cast
 from fastapi import Request
 
 from api.branch_api import BranchApiService
+from api.lineage_service import LineageApiService
 from api.observer_service import ObserverReadService
 from api.services import (
     CausalDebuggerApiService,
@@ -132,6 +133,13 @@ def get_replay_api_service(request: Request) -> ReplayApiService:
     if service is None:
         return ReplayApiService()
     return cast(ReplayApiService, service)
+
+
+def get_lineage_service(request: Request) -> LineageApiService | None:
+    service = getattr(request.app.state, "lineage_service", None)
+    if service is None:
+        return None
+    return cast(LineageApiService, service)
 
 
 def get_debugger_service(request: Request) -> CausalDebuggerApiService:

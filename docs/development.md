@@ -354,3 +354,11 @@ and migration pins are unchanged.
 ## Historical contingency checks
 
 `uv run pytest tests/unit/test_path_dependence_end_to_end.py -q` runs the fake-only smoke workflow. PostgreSQL path-dependence integration and the tick-100 scale profile are opt-in and reported as separate verification gaps when infrastructure is unavailable. See [Historical contingency](historical-contingency.md).
+
+## Lineage explorer checks
+
+```sh
+uv run --frozen --python 3.12.14 pytest tests/unit/test_lineage_* tests/architecture/test_lineage_explorer_boundaries.py
+```
+
+Capture and catalog tests use temporary filesystem roots; no PostgreSQL is required.

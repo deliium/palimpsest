@@ -211,6 +211,8 @@ class Settings(BaseSettings):
     presentation_web_root: Path | None = None
     research_web_root: Path | None = None
     research_matrix_root: Path | None = None
+    lineage_root: Path | None = None
+    lineage_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -256,6 +258,7 @@ class Settings(BaseSettings):
         "presentation_web_root",
         "research_web_root",
         "research_matrix_root",
+        "lineage_root",
         mode="before",
     )
     @classmethod
@@ -264,6 +267,16 @@ class Settings(BaseSettings):
             return None
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("lineage_cursor_key")
+    @classmethod
+    def validate_lineage_cursor_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        raw = value.get_secret_value()
+        if len(raw.encode("utf-8")) < 32:
+            raise ValueError("lineage cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("revision", mode="before")
@@ -523,6 +536,8 @@ class Settings(BaseSettings):
             "has_presentation_web_root": self.presentation_web_root is not None,
             "has_research_web_root": self.research_web_root is not None,
             "has_research_matrix_root": self.research_matrix_root is not None,
+            "has_lineage_root": self.lineage_root is not None,
+            "has_lineage_cursor_key": self.lineage_cursor_key is not None,
             "has_revision": bool(self.revision),
         }
 

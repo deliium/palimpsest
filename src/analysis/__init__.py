@@ -292,6 +292,7 @@ from analysis.institutional_decay_metrics import (
     compute_institution_lifecycle_metric,
     compute_institution_lineage_metric,
     compute_institutional_decay_metric,
+    encode_institution_lineage_graph,
 )
 from analysis.institutional_memory import (
     InstitutionalCarrierRow,
@@ -1274,6 +1275,7 @@ __all__ = [
     "derive_community_id",
     "detect_lineage_cycle",
     "documents_compatible",
+    "encode_institution_lineage_graph",
     "encode_metric_document",
     "evaluate_claim_against_truth",
     "evidence_from_reconstructed_memory",

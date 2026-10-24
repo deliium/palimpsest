@@ -8,9 +8,9 @@ import logging
 import os
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
 from analysis.cultural_metric_comparison import (
@@ -581,6 +581,56 @@ def _load_recipe(path: Path) -> GenerationalExecutionRecipe:
     )
 
 
+def _lineage_producer_options(
+    root: Path,
+    cadence: int,
+    max_publications: int,
+    max_artifact_bytes: int,
+    artifact_root: Path,
+) -> Any:
+    from research_runner.lineage_composition import LineageProducerOptions
+    from simulation.lineage_capture import LineageCaptureOptions
+
+    return LineageProducerOptions(
+        root=root,
+        capture=LineageCaptureOptions(
+            cadence=cadence,
+            max_publications=max_publications,
+            max_artifact_bytes=max_artifact_bytes,
+        ),
+        artifact_root=artifact_root,
+    )
+
+
+def _lineage_installer(root: Path, cadence: int) -> Callable[[Any], object]:
+    from research_runner.lineage_composition import install_lineage_capture
+
+    options = _lineage_producer_options(root, cadence, 1_000, 268_435_456, root)
+
+    def _install(runner: Any) -> object:
+        return install_lineage_capture(runner, options)
+
+    return _install
+
+
+def _make_lineage_installer(options: Any) -> Callable[[Any], object]:
+    from research_runner.lineage_composition import install_lineage_capture
+
+    def _install(runner: Any) -> object:
+        return install_lineage_capture(runner, options)
+
+    return _install
+
+
+def _lineage_finalizer(options: Any) -> Callable[[Any, Any], Any]:
+    from research_runner.lineage_composition import finalize_lineage_capture
+
+    async def _finalize(arm: Any, session: Any) -> object:
+        return await finalize_lineage_capture(arm, session, options)
+
+    return _finalize
+
+
 def _cmd_generational(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
@@ -614,6 +664,33 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             raise ValueError("choose --source-clean or --source-artifact-digest")
         if not args.source_clean and not args.source_artifact_digest:
             raise ValueError("source clean assertion or artifact digest required")
+        lineage_root = getattr(args, "lineage_root", None)
+        lineage_cadence = getattr(args, "lineage_cadence", 1)
+        lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
+        lineage_max_bytes = getattr(args, "lineage_max_bytes", 268435456)
+        if lineage_root is None and (
+            lineage_cadence != 1
+            or lineage_max_publications != 1000
+            or lineage_max_bytes != 268435456
+        ):
+            raise ValueError("lineage options require --lineage-root")
+        if lineage_cadence < 1:
+            raise ValueError("lineage cadence must be positive")
+        if not 1 <= lineage_max_publications <= 1_000:
+            raise ValueError("lineage publication cap is outside the supported range")
+        if not 1 <= lineage_max_bytes <= 268_435_456:
+            raise ValueError("lineage byte cap is outside the supported range")
+        lineage_options = (
+            None
+            if lineage_root is None
+            else _lineage_producer_options(
+                Path(lineage_root),
+                lineage_cadence,
+                lineage_max_publications,
+                lineage_max_bytes,
+                Path(args.artifact_root),
+            )
+        )
         source_identity = {
             "code_revision": args.code_revision,
             "source_clean": bool(args.source_clean),
@@ -732,11 +809,34 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 if config.generational_run is None
                 else config.generational_run.sample_on_generation_change
             ),
+            lineage_installer=(
+                None
+                if lineage_options is None
+                else _make_lineage_installer(lineage_options)
+            ),
+            lineage_finalizer=(
+                None
+                if lineage_options is None
+                else _lineage_finalizer(lineage_options)
+            ),
         )
         arm = asyncio.run(execute_generational_assignment(assignment, context))
         print(f"run_id={assignment.run_id.value}")
         print(f"stop_reason={arm.runner_result.stop_reason.value}")
         print(f"ticks_committed={arm.runner_result.ticks_committed}")
+        if lineage_options is not None:
+            import json
+
+            status_path = Path(args.artifact_root) / (
+                f"lineage-capture-status-{assignment.run_id.value}.json"
+            )
+            if status_path.is_file():
+                status = json.loads(status_path.read_text(encoding="utf-8"))
+                print(f"lineage_capture_published={len(status.get('published', []))}")
+                print(
+                    f"lineage_capture_unavailable={len(status.get('unavailable', []))}"
+                )
+                print(f"lineage_capture_failure={status.get('failure_code')}")
         return 0
     except Exception as exc:
         _LOG.error(
@@ -763,6 +863,10 @@ def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Opt in to detached cultural evidence capture",
     )
+    parser.add_argument("--lineage-root", default=None)
+    parser.add_argument("--lineage-cadence", type=int, default=1)
+    parser.add_argument("--lineage-max-publications", type=int, default=1000)
+    parser.add_argument("--lineage-max-bytes", type=int, default=268435456)
     parser.add_argument("--cultural-max-frames", type=int, default=None)
     parser.add_argument("--cultural-max-rows", type=int, default=None)
     parser.add_argument("--cultural-baseline-boundary", type=int, default=None)
@@ -874,6 +978,10 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--recording-artifact-id", default=None)
     gen_p.add_argument("--recording-namespace", default=None)
     gen_p.add_argument("--recording-lookup-mode", default=None)
+    gen_p.add_argument("--lineage-root", default=None)
+    gen_p.add_argument("--lineage-cadence", type=int, default=1)
+    gen_p.add_argument("--lineage-max-publications", type=int, default=1000)
+    gen_p.add_argument("--lineage-max-bytes", type=int, default=268435456)
     gen_p.set_defaults(func=_cmd_generational)
     add_path_dependence_parser(sub)
 

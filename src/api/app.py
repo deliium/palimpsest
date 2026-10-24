@@ -26,6 +26,7 @@ from api.routes import (
     debugger_router,
     health_router,
     inspection_router,
+    lineage_router,
     observer_router,
     observer_stream_router,
     replay_router,
@@ -197,6 +198,33 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         log_lifecycle("app_stopped")
 
 
+def _attach_lineage_service(app: FastAPI) -> None:
+    from api.lineage_cursor import LineageCursorCodec
+
+    settings: Settings = app.state.settings
+    secret = (
+        settings.lineage_cursor_key.get_secret_value().encode("utf-8")
+        if settings.lineage_cursor_key is not None
+        else None
+    )
+    try:
+        codec = getattr(app.state, "lineage_cursor_codec", None)
+        if codec is None:
+            codec = LineageCursorCodec.from_secret(secret)
+            app.state.lineage_cursor_codec = codec
+        if getattr(app.state, "lineage_service", None) is not None:
+            return
+        if settings.lineage_root is None:
+            return
+        from api.lineage_service import ArtifactLineageApiService
+
+        app.state.lineage_service = ArtifactLineageApiService(
+            root=settings.lineage_root, codec=codec
+        )
+    except Exception:
+        app.state.lineage_service = None
+
+
 def create_app(
     settings: Settings | None = None,
     database_factory: DatabaseFactory | None = None,
@@ -216,6 +244,7 @@ def create_app(
         openapi_url=None,
     )
     app.state.settings = resolved
+    _attach_lineage_service(app)
     app.state.database_factory = database_factory or create_database_resources
     app.state.attach_default_manager = attach_default_manager
     if simulation_manager is not None:
@@ -229,6 +258,7 @@ def create_app(
     app.include_router(research_router)
     app.include_router(research_matrix_router)
     app.include_router(debugger_router)
+    app.include_router(lineage_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

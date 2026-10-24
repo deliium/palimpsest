@@ -353,6 +353,13 @@ def _lineage_payload(lineage: InstitutionLineageResult) -> str:
     )
 
 
+def encode_institution_lineage_graph(lineage: InstitutionLineageResult) -> str:
+    """Serialize the public institution-lineage-graph-v1 payload."""
+    if type(lineage) is not InstitutionLineageResult:
+        raise TypeError("lineage must be InstitutionLineageResult")
+    return _lineage_payload(lineage)
+
+
 def compute_institution_lineage_metric(
     rows: object,
     *,

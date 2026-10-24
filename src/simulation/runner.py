@@ -1697,6 +1697,11 @@ class SimulationRunner:
         "_goal_transition_receipts",
         "_injected_stop",
         "_intervention_arbiter",
+        "_lineage_boundary_sink",
+        "_lineage_capture_failed",
+        "_lineage_capture_failure_boundary",
+        "_lineage_capture_failure_code",
+        "_lineage_capture_last_boundary",
         "_observation_sink",
         "_pending_finalizations",
         "_provider",
@@ -1778,6 +1783,11 @@ class SimulationRunner:
         self._cultural_capture_failure_code: str | None = None
         self._cultural_capture_last_boundary: int | None = None
         self._cultural_missing_prefix_through: int | None = None
+        self._lineage_boundary_sink: object | None = None
+        self._lineage_capture_failed = False
+        self._lineage_capture_failure_boundary: int | None = None
+        self._lineage_capture_failure_code: str | None = None
+        self._lineage_capture_last_boundary: int | None = None
         self._published_boundaries: set[int] = set()
         self._attempt_receipts: list[RunnerAttemptReceipt] = []
         self._finished_result: SimulationRunnerResult | None = None
@@ -2528,6 +2538,7 @@ class SimulationRunner:
         restored_engine: WorldEngine,
         factories: RunnerDependencyFactories | None = None,
         cultural_sink: object | None = None,
+        lineage_sink: object | None = None,
     ) -> SimulationRunner:
         """Build a child runner from complete fork state and a restored engine."""
         if type(config) is not SimulationRunnerConfig:
@@ -2694,21 +2705,19 @@ class SimulationRunner:
             )
             if cultural_sink is not None:
                 runner.set_cultural_boundary_sink(cultural_sink)  # type: ignore[arg-type]
+            if lineage_sink is not None:
+                runner.set_lineage_boundary_sink(lineage_sink)
             for bundle in bundles:
                 owner = bundle.runtime.agent_id
                 owner_state = checkpoint.owner_state(owner)
-                if not isinstance(
-                    bundle.bundle, ForkCapableSubjectiveOwnerBundle
-                ):
+                if not isinstance(bundle.bundle, ForkCapableSubjectiveOwnerBundle):
                     raise ForkCheckpointError(
                         "fork_state_unsupported", "owner bundle is not fork capable"
                     )
                 await bundle.bundle.restore_fork_state(
                     owner_state, parent_scope=owner_state.scope
                 )
-                bundle.runtime.restore_fork_state(
-                    checkpoint.runtime_state(owner)
-                )
+                bundle.runtime.restore_fork_state(checkpoint.runtime_state(owner))
             control = checkpoint.runner_control
             runner._ticks_committed = checkpoint.boundary_tick.value
             runner._finalized_tick_receipts = list(control.finalized_tick_receipts)
@@ -2741,9 +2750,17 @@ class SimulationRunner:
                         "fork_boundary_not_finalized",
                         "baseline publication failed",
                     )
+            if lineage_sink is not None:
+                try:
+                    await runner._publish_lineage_boundary_if_complete(
+                        checkpoint.boundary_tick.value
+                    )
+                except Exception:
+                    runner._mark_lineage_capture_failure(
+                        checkpoint.boundary_tick.value, "capture_failed"
+                    )
             _LOG.info(
-                "runner_fork_constructed run_id=%s boundary_tick=%s "
-                "owner_count=%s",
+                "runner_fork_constructed run_id=%s boundary_tick=%s owner_count=%s",
                 run_id.value,
                 checkpoint.boundary_tick.value,
                 len(bundles),
@@ -2855,6 +2872,7 @@ class SimulationRunner:
             )
         self._ensure_started()
         await self._publish_initial_cultural_boundary()
+        await self._publish_initial_lineage_boundary()
         if self._finished_result is not None:
             raise RunnerConstructionError(
                 RunnerConstructionErrorCode.INVALID_CONFIG,
@@ -2976,6 +2994,7 @@ class SimulationRunner:
                 )
             self._refresh_generational_progress(tick_result)
             self._publish_cultural_boundary_if_complete(tick_value + 1)
+            await self._publish_lineage_boundary_if_complete(tick_value + 1)
             try:
                 stop_reason = await self._evaluate_stop()
             except asyncio.CancelledError:
@@ -3360,6 +3379,7 @@ class SimulationRunner:
             )
             await self._sync_mid_run_population_entries()
             self._publish_cultural_boundary_if_complete(tick + 1)
+            await self._publish_lineage_boundary_if_complete(tick + 1)
             total_finalized += finalized
             last_tick = tick
             _LOG.info(
@@ -3520,6 +3540,246 @@ class SimulationRunner:
                 return
         self._publish_cultural_boundary_if_complete(0)
 
+    def set_lineage_boundary_sink(self, sink: object | None) -> None:
+        """Install the observational lineage sink before execution or restore."""
+        if self._started or self._ticks_committed > 0:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="lineage_sink_after_start",
+            )
+        if self._lineage_boundary_sink is not None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="lineage_sink_replacement",
+            )
+        if sink is not None and not callable(getattr(sink, "capture", None)):
+            raise TypeError("sink must implement LineageBoundarySink")
+        self._lineage_boundary_sink = sink
+        _LOG.debug(
+            "lineage_capture_sink_installed run_id=%s active=%s",
+            self._run_id.value,
+            sink is not None,
+        )
+
+    def _mark_lineage_capture_failure(self, boundary_tick: int, code: str) -> None:
+        if self._lineage_capture_failed:
+            return
+        self._lineage_capture_failed = True
+        self._lineage_capture_failure_boundary = boundary_tick
+        self._lineage_capture_failure_code = code
+        _LOG.warning(
+            "lineage_capture_failed run_id=%s boundary_tick=%s reason_code=%s",
+            self._run_id.value,
+            boundary_tick,
+            code,
+        )
+
+    async def _publish_lineage_boundary_if_complete(self, boundary_tick: int) -> None:
+        sink = self._lineage_boundary_sink
+        if sink is None or self._lineage_capture_failed:
+            return
+        if (
+            self._lineage_capture_last_boundary is not None
+            and boundary_tick <= self._lineage_capture_last_boundary
+        ):
+            return
+        try:
+            frames = self._build_lineage_frames(boundary_tick)
+        except Exception:
+            self._mark_lineage_capture_failure(boundary_tick, "capture_build_failed")
+            return
+        try:
+            for frame in frames:
+                await sink.capture(frame)  # type: ignore[attr-defined]
+        except Exception:
+            self._mark_lineage_capture_failure(boundary_tick, "capture_failed")
+            return
+        self._lineage_capture_last_boundary = boundary_tick
+        _LOG.debug(
+            "lineage_boundary_published run_id=%s boundary_tick=%s scope_count=%s",
+            self._run_id.value,
+            boundary_tick,
+            len(frames),
+        )
+
+    async def _publish_initial_lineage_boundary(self) -> None:
+        if self._lineage_boundary_sink is None or self._lineage_capture_failed:
+            return
+        if self._lineage_capture_last_boundary is not None:
+            return
+        if self._ticks_committed != 0:
+            return
+        if self._pending_finalizations is not None:
+            try:
+                records = await self._pending_finalizations.list_pending_for_run(
+                    run_id=self._run_id
+                )
+            except Exception:
+                self._mark_lineage_capture_failure(0, "capture_pending_check_failed")
+                return
+            if records:
+                return
+        await self._publish_lineage_boundary_if_complete(0)
+
+    def _build_lineage_frames(self, boundary_tick: int) -> tuple[object, ...]:
+        from simulation.lineage_identity import (
+            LineageEvidenceClass,
+            LineageFamily,
+        )
+        from simulation.lineage_models import (
+            LineageCoverage,
+            LineageCoverageState,
+            LineageScope,
+        )
+        from simulation.lineage_objective import (
+            extract_agent_lifecycle_facts,
+            extract_kinship_source_edges,
+            extract_record_source_artifacts,
+            project_genealogy_lineage,
+            project_record_lineage,
+        )
+        from simulation.lineage_ports import LineageBoundaryFrame
+        from simulation.lineage_subjective import (
+            extract_owner_lineage_source,
+            project_owner_lineage,
+        )
+
+        frames: list[object] = []
+        coverage = LineageCoverage(
+            state=LineageCoverageState.COMPLETE,
+            capture_start_tick=0,
+            capture_end_tick=boundary_tick,
+            policy_version="lineage-capture.v1",
+        )
+
+        genealogy_scope = LineageScope(
+            run_id=self._run_id,
+            family=LineageFamily.GENEALOGY,
+            evidence_class=LineageEvidenceClass.OBJECTIVE,
+        )
+        if self._engine.kinship_channel_active:
+            objective_projection = self._engine.detached_objective_projection()
+            registrations = self._engine.ordered_registrations
+            body_status = {
+                body.entity_id: body.life_status for body in objective_projection.bodies
+            }
+            entry_ticks: dict[str, int] = {}
+            for record in self._engine.lifecycle_records:
+                record_agent = getattr(record, "agent_id", None)
+                record_entry = getattr(record, "entry_tick", None)
+                if isinstance(record_agent, str) and isinstance(record_entry, int):
+                    entry_ticks[record_agent] = record_entry
+            facts = extract_agent_lifecycle_facts(
+                bodies=tuple(
+                    (
+                        registration.agent_id.value,
+                        registration.entity_id.value,
+                        body_status[registration.entity_id],
+                    )
+                    for registration in registrations
+                    if registration.entity_id in body_status
+                ),
+                lifecycle_entry_ticks=entry_ticks,
+                observed_tick=boundary_tick,
+            )
+            from world.kinship import KinshipGraph
+
+            kinship_graph = self._engine.kinship_graph
+            if type(kinship_graph) is not KinshipGraph:
+                return ()
+            genealogy = project_genealogy_lineage(
+                run_id=self._run_id,
+                boundary_tick=boundary_tick,
+                source_edges=extract_kinship_source_edges(kinship_graph),
+                lifecycle_facts=facts,
+                coverage=coverage,
+            )
+            if genealogy.nodes or genealogy.edges:
+                frames.append(
+                    LineageBoundaryFrame(
+                        run_id=self._run_id,
+                        scope=genealogy_scope,
+                        boundary_tick=boundary_tick,
+                        observed_boundary=boundary_tick,
+                        nodes=genealogy.nodes,
+                        edges=genealogy.edges,
+                        coverage=coverage,
+                        source_revision="objective-v1",
+                    )
+                )
+
+        record_scope = LineageScope(
+            run_id=self._run_id,
+            family=LineageFamily.RECORD,
+            evidence_class=LineageEvidenceClass.OBJECTIVE,
+        )
+        try:
+            sample = _engine_snapshot(
+                self._engine,
+                snapshot_id=SnapshotId(f"lineage-{self._run_id.value}-{boundary_tick}"),
+                next_tick=Tick(boundary_tick),
+            )
+            artifacts = extract_record_source_artifacts(
+                sample.artifacts, observed_tick=boundary_tick
+            )
+        except Exception:
+            artifacts = ()
+        if artifacts:
+            records = project_record_lineage(
+                run_id=self._run_id,
+                boundary_tick=boundary_tick,
+                artifacts=artifacts,
+                events=(),
+                coverage=coverage,
+            )
+            frames.append(
+                LineageBoundaryFrame(
+                    run_id=self._run_id,
+                    scope=record_scope,
+                    boundary_tick=boundary_tick,
+                    observed_boundary=boundary_tick,
+                    nodes=records.nodes,
+                    edges=records.edges,
+                    coverage=coverage,
+                    source_revision="objective-v1",
+                )
+            )
+
+        families = (
+            LineageFamily.MENTORSHIP,
+            LineageFamily.KNOWLEDGE,
+            LineageFamily.TECHNOLOGY,
+            LineageFamily.NARRATIVE,
+            LineageFamily.OFFICE_SUCCESSION,
+        )
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_lineage_owner_state()
+            source = extract_owner_lineage_source(
+                checkpoint, run_id=self._run_id, boundary_tick=boundary_tick
+            )
+            for family in families:
+                owner_projection = project_owner_lineage(source, family, boundary_tick)
+                if not owner_projection.nodes and not owner_projection.edges:
+                    continue
+                frames.append(
+                    LineageBoundaryFrame(
+                        run_id=self._run_id,
+                        scope=LineageScope(
+                            run_id=self._run_id,
+                            family=family,
+                            evidence_class=LineageEvidenceClass.SUBJECTIVE,
+                            owner_id=runtime.agent_id.value,
+                        ),
+                        boundary_tick=boundary_tick,
+                        observed_boundary=boundary_tick,
+                        nodes=owner_projection.nodes,
+                        edges=owner_projection.edges,
+                        coverage=owner_projection.coverage,
+                        source_revision="owner-checkpoint-v1",
+                    )
+                )
+        return tuple(frames)
+
     async def initialize_finalized_boundary(self) -> None:
         """Start runtimes and publish boundary zero without advancing a tick."""
         if self._closed:
@@ -3544,6 +3804,7 @@ class SimulationRunner:
                     )
             self._started = True
         await self._publish_initial_cultural_boundary()
+        await self._publish_initial_lineage_boundary()
         _LOG.info(
             "runner_finalized_boundary_initialized run_id=%s owner_count=%s",
             self._run_id.value,
@@ -3632,8 +3893,7 @@ class SimulationRunner:
             runner_control=self.export_runtime_checkpoint(),
         )
         _LOG.info(
-            "runner_fork_checkpoint_captured run_id=%s boundary_tick=%s "
-            "owner_count=%s",
+            "runner_fork_checkpoint_captured run_id=%s boundary_tick=%s owner_count=%s",
             self._run_id.value,
             self._ticks_committed,
             len(registrations),
@@ -3687,34 +3947,22 @@ class SimulationRunner:
                 FinalizedResearchOwnerSnapshot(
                     owner_id=registration.agent_id,
                     entity_id=registration.entity_id,
-                    generation_index=generations.get(
-                        registration.agent_id.value, 0
-                    ),
-                    living=living_by_owner.get(
-                        registration.agent_id.value, False
-                    ),
+                    generation_index=generations.get(registration.agent_id.value, 0),
+                    living=living_by_owner.get(registration.agent_id.value, False),
                     memories=tuple(owner_state.memory.traces),
-                    memory_reconstructions=tuple(
-                        owner_state.memory.reconstructions
-                    ),
+                    memory_reconstructions=tuple(owner_state.memory.reconstructions),
                     memory_access_operations=tuple(
                         owner_state.memory.access_operations
                     ),
                     beliefs=tuple(owner_state.belief.beliefs),
                     belief_histories=tuple(owner_state.belief.histories),
-                    relationship_profiles=tuple(
-                        owner_state.relationship.profiles
-                    ),
-                    relationship_histories=tuple(
-                        owner_state.relationship.histories
-                    ),
+                    relationship_profiles=tuple(owner_state.relationship.profiles),
+                    relationship_histories=tuple(owner_state.relationship.histories),
                     norm_ledger=runtime_checkpoint.social_norms,
                     institution_concept_ledger=(
                         runtime_checkpoint.institution_concepts
                     ),
-                    practical_knowledge_ledger=(
-                        runtime_checkpoint.practical_knowledge
-                    ),
+                    practical_knowledge_ledger=(runtime_checkpoint.practical_knowledge),
                     narrative_ledger=runtime_checkpoint.cultural_narratives,
                     cultural_owner=live_runtime_by_agent[
                         registration.agent_id
@@ -3722,9 +3970,7 @@ class SimulationRunner:
                         generation_index=generations.get(
                             registration.agent_id.value, 0
                         ),
-                        living=living_by_owner.get(
-                            registration.agent_id.value, False
-                        ),
+                        living=living_by_owner.get(registration.agent_id.value, False),
                     ),
                 )
             )
@@ -3737,8 +3983,7 @@ class SimulationRunner:
             agent_id.value: 0 for agent_id in entity_by_agent
         }
         entity_to_agent = {
-            entity.value: agent.value
-            for agent, entity in entity_by_agent.items()
+            entity.value: agent.value for agent, entity in entity_by_agent.items()
         }
         for item in checkpoint.snapshot.items:
             holder = getattr(item, "holder_id", None)
@@ -5755,8 +6000,7 @@ def _construct_agent_bundle(
         reconstruction_policy=reconstruction_policy,
         belief_reader=None,
         emotion_bias=(
-            loop_config.emotional_state_mode
-            is CognitionEmotionalStateMode.ENABLED
+            loop_config.emotional_state_mode is CognitionEmotionalStateMode.ENABLED
         ),
         destination_memory_limit=(
             config.regions_migration.destination_memory_limit
@@ -5821,9 +6065,7 @@ def _construct_agent_bundle(
         scientific_evidence=deps.scientific_evidence,
     )
     if mark_mid_run_admit:
-        mark_admit = getattr(
-            cognitive_loop, "mark_developmental_mid_run_admit", None
-        )
+        mark_admit = getattr(cognitive_loop, "mark_developmental_mid_run_admit", None)
         if callable(mark_admit):
             mark_admit()
     return _AgentBundle(

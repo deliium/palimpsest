@@ -98,3 +98,7 @@ See [docs/architecture.md](docs/architecture.md) and [docs/physical-simulation.m
 ## License
 
 CC0-1.0
+
+## Historical lineage explorer
+
+See `docs/lineage-explorer.md` for the eight-family read-only graph API, capture flags, cursors and availability semantics.

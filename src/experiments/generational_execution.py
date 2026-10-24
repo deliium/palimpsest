@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
@@ -87,6 +87,8 @@ class GenerationalExecutionContext:
     sample_on_generation_change: bool = True
     configurator: Callable[[SimulationRunner], object] | None = None
     cultural_capture: CulturalCaptureOptions | None = None
+    lineage_installer: Callable[[SimulationRunner], object] | None = None
+    lineage_finalizer: Callable[[object, object], Awaitable[object]] | None = None
 
     def preflight(self, config: SimulationRunnerConfig) -> None:
         _validate_recipe(self.recipe, config)
@@ -153,6 +155,7 @@ async def execute_generational_assignment(
         factories = factories.with_criterion_factory(context.criterion_factory)
     try:
         recorder = None
+        lineage_session: object | None = None
         kinship_edges: tuple[tuple[str, str], ...] = ()
         async with await SimulationRunner.from_config(
             config, run_id=assignment.run_id, factories=factories
@@ -163,6 +166,15 @@ async def execute_generational_assignment(
             )
 
             recorder = install_cultural_recorder(runner, context.cultural_capture)
+            if context.lineage_installer is not None:
+                try:
+                    lineage_session = context.lineage_installer(runner)
+                except Exception:
+                    _LOG.warning(
+                        "lineage_capture_setup_failed run_id=%s reason_code=%s",
+                        assignment.run_id.value,
+                        "lineage_capture_setup_failed",
+                    )
             if context.configurator is not None:
                 context.configurator(runner)
             elif config.experiment is not None:
@@ -275,7 +287,21 @@ async def execute_generational_assignment(
         regional_destination_evidence=evidence,
         **cultural_fields,  # type: ignore[arg-type]
     )
-    return replace(arm, metrics=collect_for_experiment(arm))
+    arm = replace(arm, metrics=collect_for_experiment(arm))
+    if (
+        lineage_session is not None
+        and context.lineage_finalizer is not None
+        and not runner_stop_is_failure(result.stop_reason)
+    ):
+        try:
+            await context.lineage_finalizer(arm, lineage_session)
+        except Exception:
+            _LOG.warning(
+                "lineage_finalization_failed run_id=%s reason_code=%s",
+                assignment.run_id.value,
+                "lineage_finalization_failed",
+            )
+    return arm
 
 
 __all__ = [

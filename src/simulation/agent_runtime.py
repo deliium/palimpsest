@@ -3254,6 +3254,10 @@ class AgentRuntime:
             },
         )
 
+    def export_lineage_owner_state(self) -> object:
+        """Export only the detached owner state used by lineage projection."""
+        return self.export_runtime_checkpoint()
+
     def export_runtime_checkpoint(self) -> object:
         """Export detached runtime state for rehydration."""
         from simulation.run_control import AgentRuntimeCheckpoint
