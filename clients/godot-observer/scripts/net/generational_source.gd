@@ -4,6 +4,7 @@ class_name GenerationalSource
 ## never derives generation, cohort, age, or ancestry locally.
 
 const Demographics := preload("res://scripts/protocol/demographics.gd")
+const ObserverLog := preload("res://scripts/log.gd")
 
 const PAGE_SIZE := 100
 const MAX_PAGES := 8
@@ -141,6 +142,12 @@ func on_frame(frame: Variant, epoch: int, credential_generation: int) -> void:
 	markers = []
 	markers_truncated = false
 	next_after_generation_index = null
+	ObserverLog.debug(
+		"acceptance",
+		"generational_on_frame enabled=%s cursor=%s" % [
+			demographics_enabled, cursor.get("tick", -1),
+		],
+	)
 	if demographics_enabled:
 		_fetch_first_page()
 	if markers_enabled:

@@ -514,6 +514,7 @@ func _on_debugger_provenance(lineage_kind: String, subject_id: String, owner_id:
 func _on_credentials_apply(inspection_token: String, debug_token: String) -> void:
 	var ok := bool(_session.configure_credentials(inspection_token, debug_token))
 	_ui.note_credentials_result(ok, "" if ok else "invalid_credential")
+	ObserverLog.debug("acceptance", "credentials_applied ok=%s" % ok)
 
 
 func _on_credentials_forget() -> void:
@@ -535,6 +536,7 @@ func _agent_id_for_entity(entity_id: String) -> String:
 
 
 func _on_population_toggled(enabled: bool) -> void:
+	ObserverLog.debug("acceptance", "main_population_toggled enabled=%s opened=%s" % [enabled, _session._opened])
 	_session.set_demographics_enabled(enabled)
 	if enabled:
 		_session.set_generation_markers_enabled(_ui.is_generational_overlay_enabled("generation"))

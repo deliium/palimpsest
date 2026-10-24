@@ -349,52 +349,12 @@ func close_debugger() -> void:
 
 
 func note_credentials_result(ok: bool, reason_code: String) -> void:
-	var generational = get_node_or_null("GenerationalPanel")
-	if generational != null:
-		generational.population_toggled.connect(
-			func(enabled: bool) -> void: population_toggled.emit(enabled)
-		)
-		generational.section_selected.connect(
-			func(section: String) -> void: demographic_section_selected.emit(section)
-		)
-		generational.load_more_requested.connect(
-			func() -> void: demographic_load_more_requested.emit()
-		)
-		generational.agent_selected.connect(
-			func(agent_id: String) -> void: generational_agent_selected.emit(agent_id)
-		)
-		generational.lineage_tab_selected.connect(
-			func(tab: String) -> void: lineage_tab_selected.emit(tab)
-		)
-		generational.back_requested.connect(
-			func() -> void: lineage_back_requested.emit()
-		)
 	var credentials = get_node_or_null("CredentialsPanel")
 	if credentials != null:
 		credentials.note_result(ok, reason_code)
 
 
 func set_credential_state(inspection_present: bool, debug_present: bool) -> void:
-	var generational = get_node_or_null("GenerationalPanel")
-	if generational != null:
-		generational.population_toggled.connect(
-			func(enabled: bool) -> void: population_toggled.emit(enabled)
-		)
-		generational.section_selected.connect(
-			func(section: String) -> void: demographic_section_selected.emit(section)
-		)
-		generational.load_more_requested.connect(
-			func() -> void: demographic_load_more_requested.emit()
-		)
-		generational.agent_selected.connect(
-			func(agent_id: String) -> void: generational_agent_selected.emit(agent_id)
-		)
-		generational.lineage_tab_selected.connect(
-			func(tab: String) -> void: lineage_tab_selected.emit(tab)
-		)
-		generational.back_requested.connect(
-			func() -> void: lineage_back_requested.emit()
-		)
 	var credentials = get_node_or_null("CredentialsPanel")
 	if credentials != null:
 		credentials.set_present(inspection_present, debug_present)

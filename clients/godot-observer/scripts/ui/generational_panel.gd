@@ -8,6 +8,7 @@ signal lineage_tab_selected(tab: String)
 signal back_requested
 
 const EvidenceClass := preload("res://scripts/presentation/evidence_class.gd")
+const ObserverLog := preload("res://scripts/log.gd")
 
 @onready var _population: CheckButton = $Column/Population
 @onready var _summary: Label = $Column/Summary
@@ -27,10 +28,12 @@ var _agent_ids: Array = []
 
 
 func _ready() -> void:
-	visible = false
+	visible = true
 	_population.toggled.connect(func(enabled: bool) -> void:
 		visible = true
+		ObserverLog.debug("acceptance", "population_toggle_state enabled=%s" % enabled)
 		population_toggled.emit(enabled)
+		call_deferred("_log_acceptance_controls")
 	)
 	_agents.item_selected.connect(func(index: int) -> void:
 		if index >= 0 and index < _agent_ids.size():
@@ -50,6 +53,7 @@ func _ready() -> void:
 		_tabs.add_child(button)
 	show_unavailable("unselected")
 	apply_selection(null, "unselected")
+	call_deferred("_log_acceptance_controls")
 
 
 func is_population_enabled() -> bool:
@@ -107,6 +111,18 @@ func apply_demographics(model: Variant) -> void:
 		model.next_after_agent_id != null or model.next_after_group_key != null
 	)
 	_back.visible = not selected_agent_id.is_empty()
+	ObserverLog.debug(
+		"acceptance",
+		"demographics_rendered living=%s admitted=%s dead=%s max_generation=%s stage_truncated=%s stale=%s" % [
+			model.population.living,
+			model.population.admitted,
+			model.population.dead,
+			model.population.max_generation_index,
+			model.stage_counts_truncated,
+			model.availability != "available",
+		],
+	)
+	_log_acceptance_controls()
 
 
 func apply_selection(row: Variant, state: String) -> void:
@@ -182,3 +198,30 @@ func _agent_list(values: Array) -> String:
 	for node in values:
 		ids.append(str(node.ref.native_id))
 	return "none" if ids.is_empty() else ", ".join(ids)
+
+
+func _log_acceptance_controls() -> void:
+	var controls: Array = [
+		["population_toggle", _population],
+		["population_load_more", _load_more],
+		["population_back", _back],
+	]
+	var index := 0
+	for child in $Column/Sections.get_children():
+		controls.append(["demographic_section_%s" % index, child])
+		index += 1
+	index = 0
+	for child in _tabs.get_children():
+		controls.append(["lineage_tab_%s" % index, child])
+		index += 1
+	for entry in controls:
+		var control := entry[1] as Control
+		if control == null:
+			continue
+		var rect := control.get_global_rect()
+		ObserverLog.debug(
+			"acceptance",
+			"control id=%s x=%s y=%s w=%s h=%s" % [
+				entry[0], rect.position.x, rect.position.y, rect.size.x, rect.size.y,
+			],
+		)

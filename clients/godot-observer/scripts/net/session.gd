@@ -104,6 +104,7 @@ var _focus_probe_left := 0
 var _focus_nav := ""
 var _probe_tick := 0
 var _probe_sequence: Variant = null
+var _last_frame: Variant = null
 
 
 func _ready() -> void:
@@ -541,11 +542,15 @@ func _probe_previous_focused() -> void:
 func set_demographics_enabled(value: bool) -> void:
 	if generational != null:
 		generational.set_demographics_enabled(value)
+		if value and _opened and _last_frame != null:
+			_generational_frame(_last_frame)
 
 
 func set_generation_markers_enabled(value: bool) -> void:
 	if generational != null:
 		generational.set_markers_enabled(value)
+		if value and _opened and _last_frame != null:
+			_generational_frame(_last_frame)
 
 
 func choose_demographic_section(value: String) -> void:
@@ -667,6 +672,8 @@ func configure_credentials(inspection_token: String, debug_token: String) -> boo
 			_stream.close_stream(false)
 		_request("state_live", {}, _seek_serial)
 		_open_socket()
+	elif not _opened:
+		_start()
 	return true
 
 
@@ -1558,6 +1565,7 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 
 
 func _adopt_frame(frame: Variant, adopt_cursor: bool) -> void:
+	_last_frame = frame
 	world = frame.world
 	if adopt_cursor:
 		cursor_after_tick = frame.cursor.after_tick
@@ -1569,6 +1577,7 @@ func _adopt_frame(frame: Variant, adopt_cursor: bool) -> void:
 
 func _apply_sought_frame(frame: Variant, seek_id: int) -> void:
 	var meta: Dictionary = _seek_meta.get(seek_id, {})
+	_last_frame = frame
 	world = frame.world
 	cursor_after_tick = frame.cursor.after_tick
 	cursor_after_sequence = frame.cursor.after_sequence
