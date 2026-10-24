@@ -198,8 +198,8 @@ Representative acceptance uses unmodified real Experiment BL (`generational_runn
 
 ### Phase 5: Acceptance and docs
 
-- [ ] Task 11: Prove exported browser behavior and architecture noninterference ([details](phase-05-acceptance-and-docs.md#task-11-prove-exported-browser-behavior-and-architecture-noninterference)) (depends on 1–10)
-- [ ] Task 12: Document evidence semantics and release the browser workflow ([details](phase-05-acceptance-and-docs.md#task-12-document-evidence-semantics-and-release-the-browser-workflow)) (depends on 11)
+- [x] Task 11: Prove exported browser behavior and architecture noninterference ([details](phase-05-acceptance-and-docs.md#task-11-prove-exported-browser-behavior-and-architecture-noninterference)) (depends on 1–10)
+- [x] Task 12: Document evidence semantics and release the browser workflow ([details](phase-05-acceptance-and-docs.md#task-12-document-evidence-semantics-and-release-the-browser-workflow)) (depends on 11)
 
 ## Commit Plan
 
