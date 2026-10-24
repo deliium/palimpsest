@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import NoReturn, Protocol, cast
 
 from simulation.clock import Tick
 from simulation.registrations import AgentRegistration
@@ -18,6 +18,7 @@ from world.environment import (
 )
 from world.events import WorldEvent
 from world.identifiers import WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.models import AgentBody, Item, Location, PhysicalRules, Resource, Weather
 from world.production import Structure
 from world.regions import Journey, RegionsMigrationSpec
@@ -51,6 +52,8 @@ class SnapshotFacts(Protocol):
     @property
     def registrations(self) -> Sequence[AgentRegistration]: ...
     @property
+    def lifecycle_records(self) -> Sequence[object]: ...
+    @property
     def structures(self) -> Sequence[Structure]: ...
     @property
     def artifacts(self) -> Sequence[InformationArtifact]: ...
@@ -77,7 +80,7 @@ class ObjectiveFactsError(ValueError):
         super().__init__(reason_code)
 
 
-def _reject(reason_code: str) -> None:
+def _reject(reason_code: str) -> NoReturn:
     _LOGGER.error("objective_scene_rejected reason_code=%s", reason_code)
     raise ObjectiveFactsError(reason_code)
 
@@ -105,6 +108,7 @@ class ObjectiveFacts:
     hazards: tuple[tuple[str, str, int], ...] = ()
     regions_migration: RegionsMigrationSpec | None = None
     journeys: tuple[Journey, ...] = ()
+    lifecycle_records: tuple[AgentLifecycleRecord, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +134,41 @@ class ObjectiveScene:
     hazards: tuple[tuple[str, str, int], ...] = ()
     regions_migration: RegionsMigrationSpec | None = None
     journeys: tuple[Journey, ...] = ()
+    lifecycle_records: tuple[AgentLifecycleRecord, ...] | None = None
+
+
+def _freeze_lifecycle_records(
+    values: object,
+    registrations: Sequence[AgentRegistration],
+) -> tuple[AgentLifecycleRecord, ...] | None:
+    """Copy optional lifecycle metadata and validate binding consistency."""
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes, set, frozenset)) or not isinstance(
+        values, Sequence
+    ):
+        _reject("invalid_lifecycle_records")
+    by_body = {
+        registration.entity_id.value: registration for registration in registrations
+    }
+    seen_bodies: set[str] = set()
+    seen_agents: set[str] = set()
+    copied: list[AgentLifecycleRecord] = []
+    for record in values:
+        if type(record) is not AgentLifecycleRecord:
+            _reject("invalid_lifecycle_record")
+        body_key = record.body_id.value
+        if body_key in seen_bodies or record.agent_id in seen_agents:
+            _reject("lifecycle_record_duplicate")
+        registration = by_body.get(body_key)
+        if registration is None:
+            _reject("lifecycle_body_missing")
+        if registration.agent_id.value != record.agent_id:
+            _reject("lifecycle_identity_mismatch")
+        seen_bodies.add(body_key)
+        seen_agents.add(record.agent_id)
+        copied.append(record)
+    return tuple(copied)
 
 
 def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
@@ -147,6 +186,10 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         set(location_ids)
     ):
         _reject("weather_incomplete")
+    registrations = tuple(facts.registrations)
+    lifecycle_records = _freeze_lifecycle_records(
+        facts.lifecycle_records, registrations
+    )
     scene = ObjectiveScene(
         run_id=facts.run_id,
         world_id=facts.world_id,
@@ -157,7 +200,7 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         items=tuple(facts.items),
         resources=tuple(facts.resources),
         weather=weather,
-        registrations=tuple(facts.registrations),
+        registrations=registrations,
         structures=tuple(facts.structures),
         artifacts=tuple(facts.artifacts),
         repositories=tuple(facts.repositories),
@@ -167,15 +210,23 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         hazards=tuple(facts.hazards),
         regions_migration=facts.regions_migration,
         journeys=tuple(facts.journeys),
+        lifecycle_records=lifecycle_records,
     )
     _LOGGER.debug(
         "objective_scene_built run_id=%s tick=%s location_count=%s "
-        "body_count=%s item_count=%s",
+        "body_count=%s item_count=%s lifecycle_record_count=%s "
+        "lifecycle_channel=%s",
         scene.run_id,
         scene.tick,
         len(scene.locations),
         len(scene.bodies),
         len(scene.items),
+        None if scene.lifecycle_records is None else len(scene.lifecycle_records),
+        "unknown"
+        if scene.lifecycle_records is None
+        else "active"
+        if scene.lifecycle_records
+        else "active_empty",
     )
     return scene
 
@@ -238,6 +289,7 @@ def scene_from_snapshot(
     *,
     events: Sequence[WorldEvent] = (),
     requested_tick: int | None = None,
+    lifecycle_active: bool | None = None,
 ) -> ObjectiveScene:
     """Build a scene only when the snapshot cursor is already the request."""
     if (type(snapshot).__module__, type(snapshot).__name__) != (
@@ -249,9 +301,25 @@ def scene_from_snapshot(
         _reject("invalid_events")
     if len(events) != 0:
         _reject("later_events_require_fold")
+    if lifecycle_active is not None and type(lifecycle_active) is not bool:
+        _reject("invalid_lifecycle_selector")
     cursor = snapshot.next_tick.value
     if requested_tick is not None and requested_tick != cursor:
         _reject("snapshot_cursor_mismatch")
+    raw_lifecycle_records = tuple(snapshot.lifecycle_records)
+    copied_lifecycle_records = cast(
+        "tuple[AgentLifecycleRecord, ...]", raw_lifecycle_records
+    )
+    if lifecycle_active is False:
+        if raw_lifecycle_records:
+            _reject("lifecycle_records_with_inactive_channel")
+        lifecycle_records: tuple[AgentLifecycleRecord, ...] | None = None
+    elif lifecycle_active is True:
+        lifecycle_records = copied_lifecycle_records
+    else:
+        lifecycle_records = (
+            copied_lifecycle_records if raw_lifecycle_records else None
+        )
     facts = ObjectiveFacts(
         run_id=snapshot.run_id.value,
         world_id=snapshot.world_id.value,
@@ -269,6 +337,7 @@ def scene_from_snapshot(
         collective_projects=tuple(snapshot.collective_projects),
         regions_migration=snapshot.regions_migration,
         journeys=tuple(snapshot.journeys or ()),
+        lifecycle_records=lifecycle_records,
     )
     return scene_from_facts(facts)
 

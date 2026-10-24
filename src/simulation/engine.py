@@ -68,6 +68,7 @@ from simulation.lifecycle import (
 )
 from simulation.models import RunId, SimulationExport, SimulationRunConfig
 from simulation.persistence import WorldSnapshot
+from simulation.population_replay import fold_population_metadata
 from simulation.randomness import (
     StreamScope,
     create_named_stream,
@@ -1174,6 +1175,26 @@ class WorldEngine:
             engine._population_lifecycle = None
             engine._lifecycle_records = ()
             engine._new_agent_initialization = None
+        metadata = fold_population_metadata(
+            registrations=engine._registrations,
+            lifecycle_records=engine._lifecycle_records,
+            events=normalized_events,
+            population_lifecycle=engine._population_lifecycle,
+            run_config=snapshot.config,
+            run_id=snapshot.run_id.value,
+            world_id=snapshot.world_id.value,
+        )
+        engine._registrations = metadata.registrations
+        engine._lifecycle_records = metadata.lifecycle_records
+        engine._translator = _translator_from_registrations(engine._registrations)
+        _LOGGER.debug(
+            "population_metadata_restore run_id=%s registration_count=%s "
+            "lifecycle_record_count=%s pending_count=%s",
+            snapshot.run_id.value,
+            len(engine._registrations),
+            len(engine._lifecycle_records),
+            len(metadata.pending_reservations),
+        )
         from simulation.runner_models import KinshipSpec
         from world.kinship import KinshipEdge, KinshipGraph, establish_edge
 
@@ -2756,6 +2777,16 @@ class WorldEngine:
             season=season,
             temperature_bands=bands,
             hazards=hazards,
+            lifecycle_records=(
+                None
+                if self._population_lifecycle is None
+                else tuple(
+                    sorted(
+                        self._lifecycle_records,
+                        key=lambda item: (item.agent_id, item.body_id.value),
+                    )
+                )
+            ),
         )
         if self._snapshot.tick != tick_before or state.revision != revision_before:
             raise RuntimeError("detached_objective_facts mutated engine state")
@@ -2817,6 +2848,15 @@ class WorldEngine:
         restored_tick = (
             Tick(tick_before.value + 1) if includes_last_event else tick_before
         )
+        metadata = fold_population_metadata(
+            registrations=self._registrations,
+            lifecycle_records=self._lifecycle_records,
+            events=events,
+            population_lifecycle=self._population_lifecycle,
+            run_config=self._config,
+            run_id=self._run_id.value,
+            world_id=self.world_id.value,
+        )
         folded = self._snapshot.event_history.append(events)
         world = _materialize_projected_world(world_id=self.world_id, state=projected)
         self._snapshot = _EngineSnapshot(
@@ -2829,14 +2869,21 @@ class WorldEngine:
             event_history=folded,
             prior_event_window=self._snapshot.prior_event_window,
         )
+        self._registrations = metadata.registrations
+        self._lifecycle_records = metadata.lifecycle_records
+        self._translator = _translator_from_registrations(self._registrations)
         _LOGGER.debug(
             "event_prefix_applied tick=%s sequence_count=%s includes_last=%s "
-            "revision=%s restored_tick=%s",
+            "revision=%s restored_tick=%s registration_count=%s "
+            "lifecycle_record_count=%s pending_count=%s",
             tick_before.value,
             len(folded),
             includes_last_event,
             projected.revision.value,
             restored_tick.value,
+            len(self._registrations),
+            len(self._lifecycle_records),
+            len(metadata.pending_reservations),
         )
 
     def detached_bodies(self) -> tuple[AgentBody, ...]:

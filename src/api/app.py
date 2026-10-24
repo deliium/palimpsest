@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from api.durable_runner import make_durable_runner_factory
 from api.errors import ApiError, api_error_handler
 from api.middleware import RequestIdMiddleware
+from api.observer_replay_context import PersistenceObserverReplayContextSource
 from api.observer_service import ObserverReadService
 from api.persistence_services import (
     PersistenceCausalDebuggerService,
@@ -117,6 +118,9 @@ def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
             replay=replay,
             relationships=RelationshipDimensionReader(session_factory),  # type: ignore[arg-type]
             lineage=create_branch_lineage_repository(session_factory),  # type: ignore[arg-type]
+            replay_context=PersistenceObserverReplayContextSource(
+                run_control=create_run_control_repository(session_factory)  # type: ignore[arg-type]
+            ),
         )
         _LOGGER.info(
             "observer_service_attached",

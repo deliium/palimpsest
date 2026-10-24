@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from simulation.clock import Tick
 from simulation.engine import EventPrefixError, WorldEngine
@@ -44,11 +45,16 @@ from simulation.persistence import (
 )
 from simulation.service import PersistentSimulationService
 
+if TYPE_CHECKING:
+    from simulation.new_agent_initialization import NewAgentInitializationSpec
+    from simulation.runner_models import KinshipSpec, PopulationLifecycleSpec
+
 _LOGGER = logging.getLogger("simulation.replay")
 
 __all__ = [
     "FoldedObjectiveHistory",
     "ObserverHistoryError",
+    "ObserverReplayContext",
     "ReplayOutcome",
     "ReplayService",
     "scene_at_tick",
@@ -129,11 +135,42 @@ class FoldedObjectiveHistory:
             raise TypeError("FoldedObjectiveHistory.result must be ReplayResult")
 
 
+@dataclass(frozen=True, slots=True)
+class ObserverReplayContext:
+    """Trusted in-process runner features needed to reconstruct historical facts.
+
+    Missing specs remain ``None`` so legacy and feature-off runs replay without
+    guessed defaults. They are never read from a live engine.
+    """
+
+    population_lifecycle: PopulationLifecycleSpec | None = None
+    new_agent_initialization: NewAgentInitializationSpec | None = None
+    kinship_spec: KinshipSpec | None = None
+
+
+def _replay_request(
+    run_id: RunId,
+    *,
+    target_tick: Tick | None,
+    context: ObserverReplayContext | None,
+) -> ReplayRequest:
+    if context is None:
+        return ReplayRequest(run_id=run_id, target_tick=target_tick)
+    return ReplayRequest(
+        run_id=run_id,
+        target_tick=target_tick,
+        population_lifecycle=context.population_lifecycle,
+        new_agent_initialization=context.new_agent_initialization,
+        kinship_spec=context.kinship_spec,
+    )
+
+
 async def scene_at_tick(
     service: ReplayService,
     run_id: RunId,
     *,
     target_tick: Tick | None,
+    context: ObserverReplayContext | None = None,
 ) -> FoldedObjectiveHistory:
     """Replay to a cursor, copy facts, and drop the restored engine."""
     if type(service) is not ReplayService:
@@ -142,9 +179,11 @@ async def scene_at_tick(
         raise TypeError("run_id must be RunId")
     if target_tick is not None and type(target_tick) is not Tick:
         raise TypeError("target_tick must be Tick or None")
+    if context is not None and type(context) is not ObserverReplayContext:
+        raise TypeError("context must be ObserverReplayContext or None")
     started = time.perf_counter()
     outcome = await service.replay(
-        ReplayRequest(run_id=run_id, target_tick=target_tick)
+        _replay_request(run_id, target_tick=target_tick, context=context)
     )
     if outcome.result.status is not ReplayStatus.OK or outcome.engine is None:
         raise ObserverHistoryError(outcome.result.status.value, outcome.result)
@@ -182,6 +221,7 @@ async def scene_through_event(
     *,
     tick: Tick,
     through_sequence: int,
+    context: ObserverReplayContext | None = None,
 ) -> FoldedObjectiveHistory:
     """Replay to the start of ``tick``, fold one event prefix, and drop the engine.
 
@@ -199,8 +239,12 @@ async def scene_through_event(
         raise TypeError("through_sequence must be int")
     if through_sequence < 0:
         raise ValueError("through_sequence must be >= 0")
+    if context is not None and type(context) is not ObserverReplayContext:
+        raise TypeError("context must be ObserverReplayContext or None")
 
-    outcome = await service.replay(ReplayRequest(run_id=run_id, target_tick=tick))
+    outcome = await service.replay(
+        _replay_request(run_id, target_tick=tick, context=context)
+    )
     if outcome.result.status is not ReplayStatus.OK or outcome.engine is None:
         raise ObserverHistoryError(outcome.result.status.value, outcome.result)
 
@@ -600,6 +644,8 @@ class ReplayService:
                 production_catalog=request.production_catalog,
                 environmental_dynamics=request.environmental_dynamics,
                 population_lifecycle=request.population_lifecycle,
+                new_agent_initialization=request.new_agent_initialization,
+                kinship_spec=request.kinship_spec,
             )
         except Exception as exc:
             _LOGGER.error(

@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import NoReturn, Protocol
 
-from api.errors import bad_request, conflict, not_found
+from api.errors import bad_request, conflict, internal, not_found, service_unavailable
+from api.observer_demographic_schemas import (
+    DemographicAgentRowOut,
+    DemographicCohortRowOut,
+    DemographicGenerationRowOut,
+    DemographicPopulationOut,
+    DemographicStageRowOut,
+    GenerationMarkerRowOut,
+    ObserverDemographicsOut,
+    ObserverGenerationMarkersOut,
+)
+from api.observer_replay_context import (
+    ObserverReplayContextError,
+    ObserverReplayContextSource,
+)
 from api.observer_schemas import (
     ObserverDimensionScoreOut,
     ObserverEventOut,
@@ -36,16 +50,25 @@ from observer.version import DEFAULT_LAYOUT_ID, OBSERVER_PROTOCOL_VERSION
 from simulation.branching import BranchLineage
 from simulation.clock import Tick
 from simulation.models import RunId
-from simulation.persistence import BranchLineageRepository
+from simulation.observer_demographics import (
+    DemographicsError,
+    decode_group_cursor,
+    encode_group_cursor,
+    project_demographics,
+    project_generation_markers,
+)
+from simulation.persistence import BranchLineageRepository, ReplayStatus
 from simulation.replay import (
     FoldedObjectiveHistory,
     ObserverHistoryError,
+    ObserverReplayContext,
     ReplayService,
     scene_at_tick,
     scene_through_event,
 )
 
 _LOGGER = logging.getLogger("api.observer")
+_MAX_DEMOGRAPHIC_RESPONSE_BYTES = 1_048_576
 
 
 class RelationshipScoreSource(Protocol):
@@ -57,19 +80,21 @@ class RelationshipScoreSource(Protocol):
 class ObserverReadService:
     """Read-only observer queries. Route handlers must not advance a tick."""
 
-    __slots__ = ("_lineage", "_relationships", "_replay")
+    __slots__ = ("_lineage", "_relationships", "_replay", "_replay_context")
 
     def __init__(
         self,
         replay: ReplayService,
         relationships: RelationshipScoreSource | None = None,
         lineage: BranchLineageRepository | None = None,
+        replay_context: ObserverReplayContextSource | None = None,
     ) -> None:
         if type(replay) is not ReplayService:
             raise TypeError("ObserverReadService requires ReplayService")
         self._replay = replay
         self._relationships = relationships
         self._lineage = lineage
+        self._replay_context = replay_context
 
     @property
     def replay(self) -> ReplayService:
@@ -140,6 +165,217 @@ class ObserverReadService:
         branch = await self._branch_fields(run_id)
         source = _source(history, layout, mode=mode, branch=branch)
         return _frame_out(source.frame())
+
+    async def demographics(
+        self,
+        run_id: str,
+        *,
+        tick: int | None,
+        through_sequence: int | None,
+        section: str,
+        agent_id: str | None = None,
+        after_agent_id: str | None = None,
+        after_group_key: str | None = None,
+        limit: int = 100,
+    ) -> ObserverDemographicsOut:
+        """Bounded demographic rows with exact full-population scalar totals."""
+        if section not in {"agents", "cohorts", "generations"}:
+            raise bad_request(code="demographics_unknown_section", run_id=run_id)
+        if tick is None and (after_agent_id is not None or after_group_key is not None):
+            raise bad_request(code="incomplete_demographic_cursor", run_id=run_id)
+        history = await self._demographic_history(
+            run_id, tick=tick, through_sequence=through_sequence
+        )
+        requested_tick = history.scene.tick if tick is None else tick
+        decoded_group_key: str | None = None
+        if after_group_key is not None:
+            try:
+                decoded_group_key = decode_group_cursor(
+                    after_group_key,
+                    section=section,
+                    tick=requested_tick,
+                    sequence=through_sequence,
+                )
+            except DemographicsError as exc:
+                raise bad_request(code=exc.reason_code, run_id=run_id) from exc
+        try:
+            projection = project_demographics(
+                history.scene,
+                requested_tick=requested_tick,
+                through_sequence=through_sequence,
+                section=section,
+                agent_id=agent_id,
+                after_agent_id=after_agent_id,
+                after_group_key=decoded_group_key,
+                limit=limit,
+            )
+        except DemographicsError as exc:
+            raise bad_request(code=exc.reason_code, run_id=run_id) from exc
+        next_after_group_key = None
+        if projection.next_after_group_key is not None:
+            next_after_group_key = encode_group_cursor(
+                section=section,
+                tick=requested_tick,
+                sequence=through_sequence,
+                key=projection.next_after_group_key,
+            )
+        population = projection.population
+        response = ObserverDemographicsOut(
+            run_id=history.scene.run_id,
+            requested_tick=requested_tick,
+            requested_through_sequence=through_sequence,
+            resolved_tick=history.scene.tick,
+            revision=history.scene.revision,
+            availability=projection.availability,  # type: ignore[arg-type]
+            reason_code=projection.reason_code,  # type: ignore[arg-type]
+            section=projection.section,  # type: ignore[arg-type]
+            selection_state=projection.selection_state,  # type: ignore[arg-type]
+            population=(
+                None
+                if population is None
+                else DemographicPopulationOut(
+                    living=population.living,
+                    admitted=population.admitted,
+                    dead=population.dead,
+                    max_generation_index=population.max_generation_index,
+                )
+            ),
+            stage_rows=tuple(
+                DemographicStageRowOut(
+                    stage=row.stage,
+                    life_status=row.life_status,  # type: ignore[arg-type]
+                    count=row.count,
+                )
+                for row in projection.stage_rows
+            ),
+            stage_counts_truncated=projection.stage_counts_truncated,
+            agents=tuple(
+                DemographicAgentRowOut(
+                    agent_id=row.agent_id,
+                    entity_id=row.entity_id,
+                    entry_tick=row.entry_tick,
+                    generation_index=row.generation_index,
+                    cohort_id=row.cohort_id,
+                    stage=row.stage,
+                    dependency_status=row.dependency_status,  # type: ignore[arg-type]
+                    life_status=row.life_status,  # type: ignore[arg-type]
+                    age_ticks=row.age_ticks,
+                    age_reason_code=row.age_reason_code,  # type: ignore[arg-type]
+                )
+                for row in projection.agents
+            ),
+            cohorts=tuple(
+                DemographicCohortRowOut(
+                    generation_index=row.generation_index,
+                    entry_tick=row.entry_tick,
+                    cohort_id=row.cohort_id,
+                    admitted=row.admitted,
+                    living=row.living,
+                    dead=row.dead,
+                )
+                for row in projection.cohorts
+            ),
+            generations=tuple(
+                DemographicGenerationRowOut(
+                    generation_index=row.generation_index,
+                    admitted=row.admitted,
+                    living=row.living,
+                    dead=row.dead,
+                )
+                for row in projection.generations
+            ),
+            next_after_agent_id=projection.next_after_agent_id,
+            next_after_group_key=next_after_group_key,
+            limit=projection.limit,
+        )
+        _enforce_response_ceiling(response, run_id=run_id)
+        _LOGGER.debug(
+            "demographics_fetched run_id=%s section=%s tick=%s through_sequence=%s "
+            "selection_state=%s availability=%s",
+            run_id,
+            section,
+            requested_tick,
+            None if through_sequence is None else through_sequence,
+            projection.selection_state,
+            projection.availability,
+        )
+        return response
+
+    async def generation_markers(
+        self,
+        run_id: str,
+        *,
+        tick: int,
+        from_tick: int | None = None,
+        to_tick: int | None = None,
+        after_generation_index: int | None = None,
+        limit: int = 100,
+    ) -> ObserverGenerationMarkersOut:
+        """Admitted-generation markers at one sealed full boundary."""
+        if tick < 0:
+            raise bad_request(code="invalid_marker_tick", run_id=run_id)
+        history = await self._history(run_id, target_tick=Tick(tick))
+        try:
+            projection = project_generation_markers(
+                history.scene,
+                requested_tick=tick,
+                from_tick=from_tick,
+                to_tick=to_tick,
+                after_generation_index=after_generation_index,
+                limit=limit,
+            )
+        except DemographicsError as exc:
+            raise bad_request(code=exc.reason_code, run_id=run_id) from exc
+        response = ObserverGenerationMarkersOut(
+            run_id=history.scene.run_id,
+            requested_tick=tick,
+            resolved_tick=history.scene.tick,
+            revision=history.scene.revision,
+            availability=projection.availability,  # type: ignore[arg-type]
+            reason_code=projection.reason_code,  # type: ignore[arg-type]
+            markers=tuple(
+                GenerationMarkerRowOut(
+                    generation_index=row.generation_index,
+                    first_entry_tick=row.first_entry_tick,
+                    seek_tick=row.seek_tick,
+                    admitted_count=row.admitted_count,
+                    label_code=row.label_code,  # type: ignore[arg-type]
+                )
+                for row in projection.markers
+            ),
+            next_after_generation_index=projection.next_after_generation_index,
+            limit=projection.limit,
+        )
+        _enforce_response_ceiling(response, run_id=run_id)
+        _LOGGER.debug(
+            "generation_markers_fetched run_id=%s tick=%s count=%s "
+            "availability=%s",
+            run_id,
+            tick,
+            len(response.markers),
+            projection.availability,
+        )
+        return response
+
+    async def _demographic_history(
+        self, run_id: str, *, tick: int | None, through_sequence: int | None
+    ) -> FoldedObjectiveHistory:
+        if through_sequence is not None and tick is None:
+            raise bad_request(code="incomplete_event_cursor", run_id=run_id)
+        if through_sequence is not None and (
+            isinstance(through_sequence, bool)
+            or type(through_sequence) is not int
+            or through_sequence < 0
+        ):
+            raise bad_request(code="incomplete_event_cursor", run_id=run_id)
+        if through_sequence is not None:
+            assert tick is not None
+            return await self._history_through_event(
+                run_id, tick=tick, through_sequence=through_sequence
+            )
+        return await self._history(
+            run_id, target_tick=None if tick is None else Tick(tick)
+        )
 
     async def events(
         self,
@@ -365,11 +601,18 @@ class ObserverReadService:
         self, run_id: str, *, target_tick: Tick | None
     ) -> FoldedObjectiveHistory:
         typed = _run_id(run_id)
+        context, context_error = await self._resolve_replay_context(run_id)
         try:
-            history = await scene_at_tick(self._replay, typed, target_tick=target_tick)
+            history = await scene_at_tick(
+                self._replay, typed, target_tick=target_tick, context=context
+            )
         except ObserverHistoryError as exc:
             _LOGGER.error("observer_replay_failed reason_code=%s", exc.reason_code)
-            raise not_found(code=exc.reason_code, run_id=run_id) from exc
+            _raise_context_or_history(
+                context_error,
+                exc,
+                run_id=run_id,
+            )
         self._log_loaded(
             run_id, history, target_tick=target_tick, through_sequence=None
         )
@@ -384,12 +627,14 @@ class ObserverReadService:
         live = await self._history(run_id, target_tick=None)
         if tick >= live.scene.tick:
             raise conflict(code="cursor_ahead_of_high_water", run_id=run_id)
+        context, context_error = await self._resolve_replay_context(run_id)
         try:
             history = await scene_through_event(
                 self._replay,
                 typed,
                 tick=Tick(tick),
                 through_sequence=through_sequence,
+                context=context,
             )
         except ObserverHistoryError as exc:
             _LOGGER.error("observer_replay_failed reason_code=%s", exc.reason_code)
@@ -399,7 +644,11 @@ class ObserverReadService:
                 raise conflict(
                     code="cursor_ahead_of_high_water", run_id=run_id
                 ) from exc
-            raise not_found(code=exc.reason_code, run_id=run_id) from exc
+            _raise_context_or_history(
+                context_error,
+                exc,
+                run_id=run_id,
+            )
         self._log_loaded(
             run_id,
             history,
@@ -409,6 +658,26 @@ class ObserverReadService:
         if hasattr(history, "engine"):
             raise RuntimeError("observer history retained an engine")
         return history
+
+    async def _resolve_replay_context(
+        self, run_id: str
+    ) -> tuple[ObserverReplayContext | None, ObserverReplayContextError | None]:
+        if self._replay_context is None:
+            return None, None
+        try:
+            context = await self._replay_context.read_context(run_id)
+        except ObserverReplayContextError as exc:
+            _LOGGER.warning(
+                "observer_replay_context_rejected run_id=%s reason_code=%s",
+                run_id,
+                exc.reason_code,
+            )
+            return None, exc
+        if context is None:
+            return None, ObserverReplayContextError(
+                "observer_replay_context_unavailable"
+            )
+        return context, None
 
     def _log_loaded(
         self,
@@ -439,6 +708,32 @@ def _run_id(run_id: str) -> RunId:
         return RunId(run_id)
     except (TypeError, ValueError) as exc:
         raise not_found(code="run_not_found", run_id=run_id) from exc
+
+
+def _raise_context_or_history(
+    context_error: ObserverReplayContextError | None,
+    history_error: ObserverHistoryError,
+    *,
+    run_id: str,
+) -> NoReturn:
+    """Map a restore failure to the stored-context problem when relevant."""
+    if (
+        context_error is not None
+        and history_error.result.status is ReplayStatus.STREAM_DISCONTINUITY
+    ):
+        raise service_unavailable(code=context_error.reason_code) from history_error
+    raise not_found(code=history_error.reason_code, run_id=run_id) from history_error
+
+
+def _enforce_response_ceiling(response: object, *, run_id: str) -> None:
+    payload = response.model_dump_json()  # type: ignore[attr-defined]
+    if len(payload.encode("utf-8")) > _MAX_DEMOGRAPHIC_RESPONSE_BYTES:
+        _LOGGER.warning(
+            "observer_projection_response_too_large run_id=%s bytes=%s",
+            run_id,
+            len(payload.encode("utf-8")),
+        )
+        raise internal(code="observer_demographics_response_too_large")
 
 
 def _layout(layout_id: str) -> ObserverLayoutCatalog:

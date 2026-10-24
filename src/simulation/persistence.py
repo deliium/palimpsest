@@ -1528,6 +1528,8 @@ class ReplayRequest:
     production_catalog: object | None = None
     environmental_dynamics: object | None = None
     population_lifecycle: object | None = None
+    new_agent_initialization: object | None = None
+    kinship_spec: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

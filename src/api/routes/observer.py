@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import time
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from api.dependencies import get_observer_service, get_settings
 from api.errors import bad_request, not_found
+from api.observer_demographic_schemas import (
+    ObserverDemographicsOut,
+    ObserverGenerationMarkersOut,
+)
 from api.observer_schemas import (
     NarrativeHopOverlayOut,
     NarrativeHopVariantOut,
@@ -114,6 +119,112 @@ async def get_observer_state(
         run_id=run_id,
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
         tick=result.world.tick,
+    )
+    del request
+    return result
+
+
+@router.get(
+    "/{run_id}/observer/demographics",
+    response_model=ObserverDemographicsOut,
+)
+async def get_observer_demographics(
+    run_id: str,
+    request: Request,
+    response: Response,
+    _: None = Depends(_inspect),
+    service: ObserverReadService = Depends(get_observer_service),
+    settings: Settings = Depends(get_settings),
+    tick: int | None = Query(default=None, ge=0),
+    through_sequence: int | None = Query(default=None, ge=0),
+    section: Literal["agents", "cohorts", "generations"] = Query(
+        default="agents"
+    ),
+    agent_id: str | None = Query(default=None, min_length=1, max_length=128),
+    after_agent_id: str | None = Query(
+        default=None, min_length=1, max_length=128
+    ),
+    after_group_key: str | None = Query(
+        default=None, min_length=1, max_length=512
+    ),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> ObserverDemographicsOut:
+    """Bounded demographic rows plus exact full-population totals."""
+    if limit > settings.api_max_page_size:
+        raise bad_request(code="limit_exceeds_maximum", run_id=run_id)
+    if through_sequence is not None and tick is None:
+        raise bad_request(code="incomplete_event_cursor", run_id=run_id)
+    started = time.perf_counter()
+    result = await service.demographics(
+        run_id,
+        tick=tick,
+        through_sequence=through_sequence,
+        section=section,
+        agent_id=agent_id,
+        after_agent_id=after_agent_id,
+        after_group_key=after_group_key,
+        limit=limit,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    _LOGGER.info(
+        "route_observer_demographics",
+        route_template="GET /v1/simulations/{run_id}/observer/demographics",
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        section=result.section,
+        count=len(result.agents) + len(result.cohorts) + len(result.generations),
+    )
+    _LOGGER.debug(
+        "route_observer_demographics_cursor",
+        run_id=run_id,
+        tick=tick,
+        through_sequence=through_sequence,
+        selection_state=result.selection_state,
+    )
+    del request
+    return result
+
+
+@router.get(
+    "/{run_id}/observer/generation-markers",
+    response_model=ObserverGenerationMarkersOut,
+)
+async def get_observer_generation_markers(
+    run_id: str,
+    request: Request,
+    response: Response,
+    _: None = Depends(_inspect),
+    service: ObserverReadService = Depends(get_observer_service),
+    settings: Settings = Depends(get_settings),
+    tick: int = Query(ge=0),
+    from_tick: int | None = Query(default=None, ge=0),
+    to_tick: int | None = Query(default=None, ge=0),
+    after_generation_index: int | None = Query(default=None, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> ObserverGenerationMarkersOut:
+    """Plausible admitted-generation timeline markers at one full boundary."""
+    if limit > settings.api_max_page_size:
+        raise bad_request(code="limit_exceeds_maximum", run_id=run_id)
+    started = time.perf_counter()
+    result = await service.generation_markers(
+        run_id,
+        tick=tick,
+        from_tick=from_tick,
+        to_tick=to_tick,
+        after_generation_index=after_generation_index,
+        limit=limit,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    _LOGGER.info(
+        "route_observer_generation_markers",
+        route_template=(
+            "GET /v1/simulations/{run_id}/observer/generation-markers"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        count=len(result.markers),
     )
     del request
     return result
