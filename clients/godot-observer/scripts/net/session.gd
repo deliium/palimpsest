@@ -543,14 +543,14 @@ func set_demographics_enabled(value: bool) -> void:
 	if generational != null:
 		generational.set_demographics_enabled(value)
 		if value and _opened and _last_frame != null:
-			_generational_frame(_last_frame)
+			call_deferred("_generational_frame", _last_frame)
 
 
 func set_generation_markers_enabled(value: bool) -> void:
 	if generational != null:
 		generational.set_markers_enabled(value)
 		if value and _opened and _last_frame != null:
-			_generational_frame(_last_frame)
+			call_deferred("_generational_frame", _last_frame)
 
 
 func choose_demographic_section(value: String) -> void:
