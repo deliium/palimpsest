@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -216,7 +217,9 @@ def _frame(payload: dict[str, object]) -> ObserverFrame:
     events_raw = payload.get("events")
     events = None
     if events_raw is not None:
-        events = tuple(ObserverEvent(**_mapping(item)) for item in _items(events_raw))
+        events = tuple(
+            ObserverEvent(**cast(Any, _mapping(item))) for item in _items(events_raw)
+        )
     return ObserverFrame(
         protocol_version=str(payload["protocol_version"]),
         cursor=ObserverPlaybackCursor(
@@ -237,12 +240,30 @@ def _world(payload: dict[str, object]) -> ObserverWorldState:
     return ObserverWorldState(
         tick=int(str(payload["tick"])),
         revision=int(str(payload["revision"])),
-        locations=tuple(_location(item) for item in _items(payload.get("locations"))),
-        agents=tuple(_agent(item) for item in _items(payload.get("agents"))),
-        items=tuple(_item(item) for item in _items(payload.get("items"))),
-        resources=tuple(_resource(item) for item in _items(payload.get("resources"))),
-        weather=tuple(_weather(item) for item in _items(payload.get("weather"))),
-        artifacts=tuple(_artifact(item) for item in _items(payload.get("artifacts"))),
+        locations=tuple(
+            _location(cast(dict[str, object], item))
+            for item in _items(payload.get("locations"))
+        ),
+        agents=tuple(
+            _agent(cast(dict[str, object], item))
+            for item in _items(payload.get("agents"))
+        ),
+        items=tuple(
+            _item(cast(dict[str, object], item))
+            for item in _items(payload.get("items"))
+        ),
+        resources=tuple(
+            _resource(cast(dict[str, object], item))
+            for item in _items(payload.get("resources"))
+        ),
+        weather=tuple(
+            _weather(cast(dict[str, object], item))
+            for item in _items(payload.get("weather"))
+        ),
+        artifacts=tuple(
+            _artifact(cast(dict[str, object], item))
+            for item in _items(payload.get("artifacts"))
+        ),
     )
 
 
@@ -386,11 +407,11 @@ def _bounds(value: object) -> VisualBounds | None:
     )
 
 
-def _mode(value: object) -> str:
+def _mode(value: object) -> Literal["live", "replay"]:
     mode = str(value)
     if mode not in {"live", "replay"}:
         raise AssertionError(mode)
-    return mode
+    return mode  # type: ignore[return-value]
 
 
 def _mapping(value: object) -> dict[str, object]:
@@ -445,9 +466,7 @@ def test_generational_fixtures_use_independent_sidecar_schemas() -> None:
         assert isinstance(row["age_ticks"], int | None)
         assert "seed" not in row
 
-    markers = json.loads(
-        (GENERATIONAL / "markers.json").read_text(encoding="utf-8")
-    )
+    markers = json.loads((GENERATIONAL / "markers.json").read_text(encoding="utf-8"))
     assert markers["schema_version"] == "observer-generation-markers-v1"
     assert all(marker["seek_tick"] >= 0 for marker in markers["markers"])
     assert markers["markers"][1]["seek_tick"] == (

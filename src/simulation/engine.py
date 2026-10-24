@@ -1097,6 +1097,7 @@ class WorldEngine:
                 "v17",
                 "v18",
                 "v19",
+                "v20",
             }
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
@@ -1115,6 +1116,7 @@ class WorldEngine:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -1158,7 +1160,15 @@ class WorldEngine:
                 "v17",
                 "v18",
                 "v19",
-            } and snapshot.event_schema_version in {10, 11, 12, 13, 14}:
+                "v20",
+            } and snapshot.event_schema_version in {
+                10,
+                11,
+                12,
+                13,
+                14,
+                22,
+            }:
                 # Prefer explicit restore arg; else pull from snapshot config when v25+.
                 config_init = getattr(snapshot.config, "new_agent_initialization", None)
                 if config_init is not None:
@@ -1215,6 +1225,7 @@ class WorldEngine:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             from simulation.runner_models import DurableRecordsSpec
 
@@ -1245,6 +1256,7 @@ class WorldEngine:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
@@ -1280,6 +1292,7 @@ class WorldEngine:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
@@ -1314,6 +1327,7 @@ class WorldEngine:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
@@ -1387,6 +1401,7 @@ class WorldEngine:
             "v17",
             "v18",
             "v19",
+            "v20",
         }:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister

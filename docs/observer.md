@@ -84,13 +84,17 @@ Demographics accepts optional `tick`, `through_sequence`, `section`
 API page ceiling). Only the selected section carries rows; scalar living,
 admitted, dead, and maximum-generation totals always cover the whole resolved
 roster. Continuations require an explicit `tick` and an opaque group
-continuation binds the section, tick, and sequence. Selecting an exact
-`agent_id` does not depend on previously loaded roster pages. Feature-off runs
+continuation binds the section, tick, and sequence. Unknown or duplicate query
+keys are rejected with `invalid_observer_query`. Selecting an exact `agent_id`
+does not depend on previously loaded roster pages. Responses are capped at
+1 MiB of UTF-8; an oversize page fails closed with
+`observer_demographics_response_too_large` instead of dropping rows. Feature-off runs
 return `availability="unavailable"`, `reason_code="lifecycle_disabled"`, and
 `population=null`; an active empty channel returns complete zero totals.
 
 Generation markers require a full boundary `tick` (no `through_sequence`) and
-optional `from_tick`, `to_tick`, `after_generation_index`, and `limit`. Each
+optional `from_tick`, `to_tick`, `after_generation_index`, and `limit`; window
+bounds must satisfy `0 <= from_tick <= to_tick <= tick`. Each
 marker is the first successful admission in a calendar generation: founders
 seek tick 0, later generations seek `first_entry_tick + 1`. Markers never mean
 pedigree depth or a scheduled birth. A full frame that still carries an

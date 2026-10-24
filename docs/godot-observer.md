@@ -42,6 +42,47 @@ The client parses `world.structures` and paints kind / integrity / stored-quanti
 and evidence-labeled mentorship links are now available from the generational
 researcher controls described below. `CONTACT_RECORDED` is presentation-only: it carries location and participant/present IDs, grants no write authority, and adds no new layout. Tool-like item kinds use local theme mapping. Season / weather / band / hazard / depleted paints come from frame refresh; scarcity outlines use objective quantity (`0` depleted; soft scarce cue for small positive quantities).
 
+## Generational researcher controls
+
+The published runtime image serves a prebuilt Web export; researchers do not
+install Godot or rebuild the client. Open the observer with `?run_id=<run_id>`
+and use the top-level **Credentials** panel to enter the inspection credential
+and, when authorized, the separate debug credential. Values stay in memory only,
+are cleared from the masked fields after **Apply**, and are never written to
+ProjectSettings, files, browser storage, query strings, screenshots, or logs.
+**Forget** clears both and origin changes clear them automatically.
+
+The default-off **Population** control opens the generational panel without
+requiring an agent selection. It shows exact living/admitted/dead totals and the
+backend stage rows (with a truncation marker), Objective cursor/revision chrome,
+and its own paged Agents/Cohorts/Generations sections with explicit **Load more**
+buttons. Totals always come from the backend; the client never sums one loaded
+page. A selected agent may be outside the cached roster, in which case an exact
+agent request loads that row independently.
+
+**Generation**, **Cohort**, and **Age/stage** overlays badge location-based
+tokens with server labels. Dead tokens keep the death cross and show the last
+recorded stage with age unavailable (`n/a`). Missing or loading rows show
+unknown, never generation 0. **Kinship** and **Caregiving** are separate
+objective layers: kinship links come only from backend genealogy edges and care
+rows/links come from committed `AGENT_FED`/`AGENT_TRANSPORTED` events in the
+loaded window. Arrivals are labeled “arrival/admitted” and deduplicated per body
+and tick; they are not biological births.
+
+Selecting a token reveals the independent lineage tabs Parents, Children,
+Teachers, Students, Knowledge, and Mentorship. Rows are clickable backend
+references; Back returns through the bounded in-session navigation stack.
+Teacher/student and mentorship claims remain subjective or analytical evidence,
+and participant/knowledge-graph cards retain their owner and coverage labels.
+Attempt-only cards are grouped separately from learning evidence. Load more is
+explicit; scan-limited, partial coverage, missing exact capture boundary,
+restricted debug, and cursor-gone states are shown rather than treated as an
+empty society. Clicking a generation marker seeks the committed post-admission
+full-boundary tick; ordinary event marks still seek event prefixes. Live events
+mark accepted demographic summaries stale until the next state frame, and
+backward seeks clear transient arrival/care chrome. Capture screenshots only
+after credential fields are cleared.
+
 ## Perspective limits
 
 Selected-agent perspective loads only SUBJECTIVE projections: labels, relationships, territorial claims, and narrative-ledger hops when toggled. `GET .../agents/{id}/observation` returns counts-only (`AgentVisibleOut`) and is not used as a known-artifact payload. Clearing perspective removes SUBJECTIVE layers. ANALYTICAL overlays stay independent researcher toggles.

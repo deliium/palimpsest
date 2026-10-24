@@ -305,9 +305,7 @@ class ArtifactLineageApiService:
             for node in rows:
                 scanned += 1
                 last_examined = node.key
-                card = project_participant_card(
-                    node, agent_id=agent_id, role=role
-                )
+                card = project_participant_card(node, agent_id=agent_id, role=role)
                 if card is None:
                     if node.mentorship_record is None:
                         unprojectable += 1
@@ -358,8 +356,6 @@ def node_filter_fingerprint(
     return hashlib.sha256(payload).hexdigest()
 
 
-def participant_filter_fingerprint(
-    *, agent_id: str, role: str, page_size: int
-) -> str:
+def participant_filter_fingerprint(*, agent_id: str, role: str, page_size: int) -> str:
     payload = f"{agent_id}|{role}|{page_size}".encode()
     return hashlib.sha256(payload).hexdigest()

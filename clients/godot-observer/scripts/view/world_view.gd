@@ -476,7 +476,27 @@ func set_generational_overlay_enabled(kind: String, enabled: bool) -> void:
 func apply_generational_links(links: Array) -> void:
 	if _generational == null:
 		return
+	_generational.set_positions(_agents.capture_positions())
 	_generational.set_links(links)
+
+
+func generational_care_count() -> int:
+	if _generational == null or not _generational.has_method("care_count"):
+		return 0
+	return int(_generational.care_count())
+
+
+func generational_link_count() -> int:
+	if _generational == null or not _generational.has_method("link_count"):
+		return 0
+	return int(_generational.link_count())
+
+
+func clear_generational_transients() -> void:
+	if _generational == null:
+		return
+	_generational.clear()
+	_generational.set_positions(_agents.capture_positions())
 
 
 func agent_entity_for(agent_id: String) -> String:

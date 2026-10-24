@@ -21,8 +21,8 @@ EXPORT = GODOT / "export_presets.cfg"
 def test_routes_remain_get_only() -> None:
     for router in (observer_router, lineage_router):
         for route in router.routes:
-            methods = getattr(route, "methods", set()) or set()
-            assert methods <= {"GET"}, (route.path, methods)
+            methods: set[str] = getattr(route, "methods", set()) or set()
+            assert methods <= {"GET"}, (getattr(route, "path", ""), methods)
 
 
 def test_pins_renderer_and_threads_are_unchanged() -> None:

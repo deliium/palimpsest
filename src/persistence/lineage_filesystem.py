@@ -921,9 +921,7 @@ class _FilesystemReadSession(LineageReadSession):
         relative: str,
     ) -> bytes:
         try:
-            content = self._read(
-                *head.snapshot_path.split("/"), *relative.split("/")
-            )
+            content = self._read(*head.snapshot_path.split("/"), *relative.split("/"))
         except FileNotFoundError:
             if _declared(manifest, relative):
                 raise LineageError("lineage_snapshot_corrupt") from None

@@ -18,9 +18,7 @@ from simulation.observer_facts import ObjectiveScene
 from world.lifecycle import AgentLifecycleRecord, chronological_age
 from world.models import AgentBody, LifeStatus
 
-_LOGGER: Final[logging.Logger] = logging.getLogger(
-    "simulation.observer_demographics"
-)
+_LOGGER: Final[logging.Logger] = logging.getLogger("simulation.observer_demographics")
 
 __all__ = [
     "SECTIONS",
@@ -291,9 +289,7 @@ def project_demographics(
         )
         if after_group_key is not None:
             cohort_rows = tuple(
-                row
-                for row in cohort_rows
-                if _cohort_key(row) > after_group_key
+                row for row in cohort_rows if _cohort_key(row) > after_group_key
             )
         cohort_page = cohort_rows[: limit + 1]
         if len(cohort_page) > limit:
@@ -311,9 +307,7 @@ def project_demographics(
         )
         if after_group_key is not None:
             generation_rows = tuple(
-                row
-                for row in generation_rows
-                if _generation_key(row) > after_group_key
+                row for row in generation_rows if _generation_key(row) > after_group_key
             )
         generation_page = generation_rows[: limit + 1]
         if len(generation_page) > limit:
@@ -396,9 +390,7 @@ def _agent_rows(
 
 
 def _cohort_key(row: DemographicCohortRow) -> str:
-    return (
-        f"cohort|{row.generation_index:012d}|{row.entry_tick:012d}|{row.cohort_id}"
-    )
+    return f"cohort|{row.generation_index:012d}|{row.entry_tick:012d}|{row.cohort_id}"
 
 
 def _generation_key(row: DemographicGenerationRow) -> str:
@@ -472,6 +464,8 @@ def project_generation_markers(
         _require_nonneg("from_tick", from_tick)
     if to_tick is not None:
         _require_nonneg("to_tick", to_tick)
+    if from_tick is not None and from_tick > requested_tick:
+        _reject("invalid_marker_window")
     if from_tick is not None and to_tick is not None and from_tick > to_tick:
         _reject("invalid_marker_window")
     if to_tick is not None and to_tick > requested_tick:
@@ -520,8 +514,7 @@ def project_generation_markers(
     page = markers[: limit + 1]
     next_index = page[limit - 1].generation_index if len(page) > limit else None
     _LOGGER.debug(
-        "generation_markers_projected run_id=%s tick=%s marker_count=%s "
-        "next_after=%s",
+        "generation_markers_projected run_id=%s tick=%s marker_count=%s next_after=%s",
         scene.run_id,
         scene.tick,
         min(len(page), limit),

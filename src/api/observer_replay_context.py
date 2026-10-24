@@ -70,9 +70,7 @@ class PersistenceObserverReplayContextSource:
                 run_id,
                 type(exc).__name__,
             )
-            raise ObserverReplayContextError(
-                "observer_replay_context_invalid"
-            ) from exc
+            raise ObserverReplayContextError("observer_replay_context_invalid") from exc
         if (
             record.config_schema_version is not None
             and config.schema_version != record.config_schema_version

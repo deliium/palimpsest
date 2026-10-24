@@ -1088,7 +1088,6 @@ class LineageReadSession(Protocol):
         """Coverage envelope declared by one pinned publication."""
 
 
-
 class LineageReadPort(Protocol):
     """Reader capability. Queries accept only this port."""
 

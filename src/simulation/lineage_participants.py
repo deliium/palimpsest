@@ -25,9 +25,7 @@ from simulation.lineage_models import (
     MentorshipLineageRecord,
 )
 
-_LOGGER: Final[logging.Logger] = logging.getLogger(
-    "simulation.lineage_participants"
-)
+_LOGGER: Final[logging.Logger] = logging.getLogger("simulation.lineage_participants")
 
 ParticipantRole = Literal["teacher", "learner", "both"]
 _ROLES: Final[frozenset[str]] = frozenset({"teacher", "learner", "both"})
@@ -174,9 +172,7 @@ def order_participant_cards(
             ),
         )
     )
-    attempt_only = sum(
-        1 for card in ordered if card.learning_state == "attempt_only"
-    )
+    attempt_only = sum(1 for card in ordered if card.learning_state == "attempt_only")
     _LOGGER.debug(
         "participant_cards_ordered card_count=%s attempt_only=%s",
         len(ordered),

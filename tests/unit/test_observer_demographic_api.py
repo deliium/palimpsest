@@ -29,6 +29,7 @@ from simulation.observer_demographics import (
     project_generation_markers,
 )
 from simulation.observer_facts import ObjectiveFacts, ObjectiveScene, scene_from_facts
+from simulation.replay import ObserverReplayContext
 from tests.simulation_helpers import alive_body, make_location, weather_for_locations
 from tests.unit.test_observer_population_replay import (
     RUN_ID,
@@ -127,9 +128,7 @@ def test_feature_off_is_unavailable_not_zero_population() -> None:
             lifecycle_records=None,
         )
     )
-    projection = project_demographics(
-        scene, requested_tick=3, through_sequence=None
-    )
+    projection = project_demographics(scene, requested_tick=3, through_sequence=None)
     assert projection.availability == "unavailable"
     assert projection.reason_code == "lifecycle_disabled"
     assert projection.population is None
@@ -210,7 +209,7 @@ def test_agent_pagination_keeps_identical_scalar_totals() -> None:
         scene,
         requested_tick=5,
         through_sequence=None,
-        after_agent_id=first.next_after_agent_id,  # type: ignore[arg-type]
+        after_agent_id=first.next_after_agent_id,
         limit=100,
     )
     assert len(second.agents) == 100
@@ -219,7 +218,7 @@ def test_agent_pagination_keeps_identical_scalar_totals() -> None:
         scene,
         requested_tick=5,
         through_sequence=None,
-        after_agent_id=second.next_after_agent_id,  # type: ignore[arg-type]
+        after_agent_id=second.next_after_agent_id,
         limit=100,
     )
     assert len(third.agents) == 1
@@ -285,7 +284,7 @@ def test_cohort_and_generation_sections_page_independently() -> None:
 def test_stage_rows_are_capped_with_an_explicit_flag() -> None:
     records = tuple(_record(index, stage=f"stage-{index:04d}") for index in range(250))
     projection = project_demographics(
-        _scene(records, tick=3),  # type: ignore[arg-type]
+        _scene(records, tick=3),
         requested_tick=3,
         through_sequence=None,
     )
@@ -502,6 +501,7 @@ class _FakeEngine:
 class _FakeResources:
     def __init__(self) -> None:
         self.engine: DisposableEngine = _FakeEngine()
+        self.session_factory: object = object()
 
 
 @asynccontextmanager
@@ -525,10 +525,10 @@ def _reader() -> ObserverReadService:
 
 
 class _StaticContext:
-    def __init__(self, value: object) -> None:
+    def __init__(self, value: ObserverReplayContext | None) -> None:
         self._value = value
 
-    async def read_context(self, run_id: str) -> object | None:
+    async def read_context(self, run_id: str) -> ObserverReplayContext | None:
         return self._value
 
 
@@ -694,3 +694,36 @@ async def test_response_ceiling_fails_closed_without_dropping_rows(
 
     assert isinstance(too_large.value, ApiError)
     assert too_large.value.code == "observer_demographics_response_too_large"
+
+
+@pytest.mark.asyncio
+async def test_observer_routes_reject_unknown_and_duplicate_query_keys() -> None:
+    async with _client(_app()) as client:
+        unknown_demographics = await client.get(
+            f"/v1/simulations/{RUN_ID}/observer/demographics",
+            params={"tick": 6, "unexpected": "value"},
+        )
+        duplicate_demographics = await client.get(
+            f"/v1/simulations/{RUN_ID}/observer/demographics?tick=6&tick=6"
+        )
+        unknown_markers = await client.get(
+            f"/v1/simulations/{RUN_ID}/observer/generation-markers",
+            params={"tick": 6, "unexpected": "value"},
+        )
+    assert unknown_demographics.status_code == 400
+    assert unknown_demographics.json()["code"] == "invalid_observer_query"
+    assert duplicate_demographics.status_code == 400
+    assert duplicate_demographics.json()["code"] == "invalid_observer_query"
+    assert unknown_markers.status_code == 400
+    assert unknown_markers.json()["code"] == "invalid_observer_query"
+
+
+@pytest.mark.asyncio
+async def test_generation_marker_window_rejects_from_tick_beyond_boundary() -> None:
+    async with _client(_app()) as client:
+        response = await client.get(
+            f"/v1/simulations/{RUN_ID}/observer/generation-markers",
+            params={"tick": 6, "from_tick": 9},
+        )
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_marker_window"

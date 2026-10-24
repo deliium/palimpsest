@@ -98,6 +98,7 @@ func _ready() -> void:
 	_ui.demographic_load_more_requested.connect(_on_demographic_load_more)
 	_ui.generational_agent_selected.connect(_on_generational_agent)
 	_ui.lineage_tab_selected.connect(_on_lineage_tab)
+	_ui.lineage_entry_selected.connect(_on_lineage_entry)
 	_ui.lineage_back_requested.connect(_on_lineage_back)
 	if _ui.has_signal("generation_seek_requested"):
 		_ui.generation_seek_requested.connect(_session.seek_tick)
@@ -105,8 +106,13 @@ func _ready() -> void:
 	_session.begin()
 
 
+var _last_events: Array = []
+
+
 func _on_events_loaded(events: Array, focus_tick: int, focus_sequence: int) -> void:
 	_ui.replace_events(events, focus_tick, focus_sequence, _session.world)
+	_last_events = events.duplicate()
+	_world.clear_generational_transients()
 	_world.apply_arrival_events(events)
 	if _ui.is_generational_overlay_enabled("caregiving"):
 		_world.apply_care_events(events)
@@ -116,6 +122,8 @@ func _on_events_loaded(events: Array, focus_tick: int, focus_sequence: int) -> v
 func _on_source_cleared() -> void:
 	_world.clear_world()
 	_ui.clear_for_source_switch()
+	_lineage_history.clear()
+	_selected_agent_id = ""
 	ObserverLog.debug("main", "source_cleared")
 
 
@@ -382,19 +390,30 @@ func _on_narrative_variant_selected(variant_id: String) -> void:
 
 func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) -> void:
 	if kind == "population":
+		_ui.set_generational_panel_visible(enabled)
 		_session.set_demographics_enabled(enabled)
 		_session.set_generation_markers_enabled(enabled)
 	if kind == "generation":
 		_session.set_generation_markers_enabled(enabled)
+		if not enabled:
+			_ui.set_generation_markers([])
 	if kind in ["generation", "cohort", "age_stage"]:
 		var kinds: Array = []
 		for candidate in ["generation", "cohort", "age_stage"]:
 			if _ui.is_generational_overlay_enabled(candidate):
 				kinds.append(candidate)
-		_world.apply_demographics(_session.generational, kinds)
-	if kind == "caregiving":
+		_world.apply_demographics(_session.generational.model_view, kinds)
+	if kind == "kinship" or kind in ["mentorship_subjective", "mentorship_analytical"]:
 		_world.set_generational_overlay_enabled(kind, enabled)
 		if not enabled:
+			_world.apply_generational_links([])
+		else:
+			_apply_lineage_links()
+	if kind == "caregiving":
+		_world.set_generational_overlay_enabled(kind, enabled)
+		if enabled:
+			_world.apply_care_events(_last_events)
+		else:
 			_world.apply_care_events([])
 	ObserverLog.debug(
 		"main",
@@ -538,6 +557,7 @@ func _agent_id_for_entity(entity_id: String) -> String:
 
 func _on_population_toggled(enabled: bool) -> void:
 	ObserverLog.debug("acceptance", "main_population_toggled enabled=%s opened=%s" % [enabled, _session._opened])
+	_ui.set_generational_panel_visible(enabled)
 	_session.set_demographics_enabled(enabled)
 	if enabled:
 		_session.set_generation_markers_enabled(_ui.is_generational_overlay_enabled("generation"))
@@ -554,38 +574,64 @@ func _on_demographic_load_more() -> void:
 
 
 func _on_generational_updated() -> void:
-	var model: Variant = _session.generational.model_view
+	var source: Variant = _session.generational
+	var model: Variant = source.model_view
 	_ui.apply_demographics(model)
 	var kinds: Array = []
 	for candidate in ["generation", "cohort", "age_stage"]:
 		if _ui.is_generational_overlay_enabled(candidate):
 			kinds.append(candidate)
 	_world.apply_demographics(model, kinds)
-	if model != null:
-		_ui.set_generation_markers(model.markers)
-		if model.selected_agent_id != "":
-			_ui.apply_demographic_selection(model.selected_row, model.selection_state)
-			_ui.show_demographic_inspector(model.selected_row)
+	_ui.set_generation_markers(source.markers, _session.run_id)
+	if source.selected_agent_id != "":
+		_ui.apply_demographic_selection(source.selected_row, source.selection_state)
+		_ui.show_demographic_inspector(source.selected_row)
+	ObserverLog.debug(
+		"acceptance",
+		"generational_rendered demographics=%s care=%s links=%s markers=%s" % [
+			model != null,
+			_world.generational_care_count(),
+			_world.generational_link_count(),
+			source.markers.size(),
+		],
+	)
 
 
 func _on_lineage_updated() -> void:
-	_ui.apply_lineage_panel(_active_lineage_tab, _session.private_lineage.genealogy if _active_lineage_tab == "genealogy" else _session.private_lineage.participants)
+	var data: Dictionary = (
+		_session.private_lineage.genealogy
+		if _active_lineage_tab == "genealogy"
+		else _session.private_lineage.participants
+	)
+	_ui.apply_lineage_panel(_active_lineage_tab, data)
+	_apply_lineage_links()
 
 
 var _active_lineage_tab := "genealogy"
+var _active_lineage_ui_tab := "parents"
 var _selected_agent_id := ""
+var _lineage_history: Array = []
+
+
+func _lineage_agent_id() -> String:
+	if not _selected_agent_id.is_empty():
+		return _selected_agent_id
+	if not _session.private_lineage.selected_agent_id.is_empty():
+		return _session.private_lineage.selected_agent_id
+	return _agent_id_for_entity(_session.focus_agent_id)
 
 
 func _on_lineage_tab(tab: String) -> void:
 	ObserverLog.debug("acceptance", "lineage_tab_clicked tab=%s" % tab)
-	_active_lineage_tab = "genealogy" if tab in ["parents", "children"] else "participants"
-	var agent_id: String = _selected_agent_id
-	if agent_id == "":
-		agent_id = _session.private_lineage.selected_agent_id
-	if agent_id == "":
-		agent_id = _agent_id_for_entity(_session.focus_agent_id)
-	if agent_id == "":
+	_active_lineage_ui_tab = tab
+	var agent_id := _lineage_agent_id()
+	if agent_id.is_empty():
 		return
+	_request_lineage_tab(tab, agent_id)
+
+
+func _request_lineage_tab(tab: String, agent_id: String) -> void:
+	_active_lineage_tab = "genealogy" if tab in ["parents", "children"] else "participants"
 	_session.set_lineage_enabled(true)
 	_session.set_generational_agent(agent_id)
 	if tab == "parents":
@@ -600,10 +646,11 @@ func _on_lineage_tab(tab: String) -> void:
 		_session.request_participants(agent_id, "both", "subjective", agent_id)
 
 
-func _on_generational_agent(agent_id: String) -> void:
-	ObserverLog.debug("acceptance", "panel_agent_selected agent_id=%s" % agent_id)
+func _select_lineage_agent(agent_id: String) -> void:
 	_selected_agent_id = agent_id
 	_session.select_demographic_agent(agent_id)
+	_session.set_generational_agent(agent_id)
+	_session.set_lineage_enabled(true)
 	_session.set_generational_agent(agent_id)
 	var entity_id: String = _world.agent_entity_for(agent_id)
 	if entity_id != "":
@@ -611,6 +658,73 @@ func _on_generational_agent(agent_id: String) -> void:
 		_world.highlight_selected(entity_id)
 
 
+func _push_lineage_history() -> void:
+	var agent_id := _lineage_agent_id()
+	if agent_id.is_empty():
+		return
+	_lineage_history.append({
+		"run_id": _session.run_id,
+		"agent_id": agent_id,
+		"tab": _active_lineage_ui_tab,
+	})
+	while _lineage_history.size() > 20:
+		_lineage_history.pop_front()
+
+
+func _on_lineage_entry(kind: String, native_kind: String, ref_id: String) -> void:
+	ObserverLog.debug(
+		"acceptance",
+		"lineage_entry_selected kind=%s native_kind=%s ref=%s" % [kind, native_kind, ref_id],
+	)
+	if ref_id.is_empty():
+		return
+	if kind == "content":
+		var owner_id := str(_session.private_lineage.participants.get("owner_id", ""))
+		_session.set_lineage_enabled(true)
+		_session.request_knowledge_root(native_kind, ref_id, "subjective", owner_id)
+		return
+	_push_lineage_history()
+	_select_lineage_agent(ref_id)
+	_request_lineage_tab(_active_lineage_ui_tab, ref_id)
+
+
+func _on_generational_agent(agent_id: String) -> void:
+	ObserverLog.debug("acceptance", "panel_agent_selected agent_id=%s" % agent_id)
+	_select_lineage_agent(agent_id)
+
+
 func _on_lineage_back() -> void:
+	if not _lineage_history.is_empty():
+		var previous: Dictionary = _lineage_history.pop_back()
+		if str(previous.get("run_id", "")) == _session.run_id:
+			_select_lineage_agent(str(previous.get("agent_id", "")))
+			_request_lineage_tab(str(previous.get("tab", "parents")), str(previous.get("agent_id", "")))
+			return
 	_ui.set_generational_agent("")
 	_session.set_lineage_enabled(false)
+
+
+func _apply_lineage_links() -> void:
+	var links: Array = []
+	if _ui.is_generational_overlay_enabled("kinship"):
+		var genealogy: Dictionary = _session.private_lineage.genealogy
+		var selected_entity: String = _world.agent_entity_for(_lineage_agent_id())
+		if genealogy.get("status", "") == "available" and not selected_entity.is_empty():
+			for group in ["parents", "children"]:
+				for node in genealogy.get(group, []):
+					var entity: String = _world.agent_entity_for(str(node.ref.native_id))
+					if entity.is_empty():
+						continue
+					links.append({"from": entity, "to": selected_entity})
+	if (
+		_ui.is_generational_overlay_enabled("mentorship_subjective")
+		or _ui.is_generational_overlay_enabled("mentorship_analytical")
+	):
+		var participants: Dictionary = _session.private_lineage.participants
+		if participants.get("status", "") == "available":
+			for card in participants.get("items", []):
+				var teacher: String = _world.agent_entity_for(str(card.teacher_id))
+				var learner: String = _world.agent_entity_for(str(card.learner_id))
+				if not teacher.is_empty() and not learner.is_empty():
+					links.append({"from": teacher, "to": learner})
+	_world.apply_generational_links(links)

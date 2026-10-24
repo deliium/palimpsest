@@ -37,6 +37,7 @@ var _buttons := {}
 func _ready() -> void:
 	_build_legend()
 	_build_toggles()
+	call_deferred("_log_acceptance_controls")
 
 
 func is_overlay_enabled(kind: String) -> bool:
@@ -100,8 +101,22 @@ func _build_toggles() -> void:
 		button.toggled.connect(func(pressed: bool) -> void:
 			_on_toggle(kind, evidence, pressed)
 		)
+		button.set_meta("acceptance_id", "legend_%s" % kind)
 		_buttons[kind] = button
 		grid.add_child(button)
+	call_deferred("_log_acceptance_controls")
+
+
+func _log_acceptance_controls() -> void:
+	for kind in _buttons.keys():
+		var button: CheckButton = _buttons[kind]
+		var rect := button.get_global_rect()
+		ObserverLog.debug(
+			"acceptance",
+			"control id=legend_%s x=%s y=%s w=%s h=%s" % [
+				kind, rect.position.x, rect.position.y, rect.size.x, rect.size.y,
+			],
+		)
 
 
 func _on_toggle(kind: String, evidence_class: String, enabled: bool) -> void:

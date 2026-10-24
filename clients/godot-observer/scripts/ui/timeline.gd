@@ -37,6 +37,7 @@ var _events: Array = []
 var _enriched: Array = []
 var _branch_ticks: Array = []
 var _generation_marks: Array = []
+var _generation_keys := {}
 var _marks: Array = []
 var _categories := {
 	"birth": true,
@@ -73,14 +74,26 @@ func set_enriched_events(events: Array) -> void:
 	queue_redraw()
 
 
-func set_generation_markers(markers: Array) -> void:
+func set_generation_markers(markers: Array, run_id: String = "") -> void:
 	_generation_marks = []
+	_generation_keys.clear()
 	for marker in markers:
 		if typeof(marker) != TYPE_OBJECT and typeof(marker) != TYPE_DICTIONARY:
 			continue
 		var index := int(_marker_field(marker, "generation_index"))
+		var marker_run := run_id
+		if marker_run.is_empty() and typeof(marker) == TYPE_DICTIONARY:
+			marker_run = str(marker.get("run_id", ""))
+		var key := "%s|%s" % [marker_run, index]
+		if _generation_keys.has(key):
+			continue
+		_generation_keys[key] = true
 		var seek_tick := int(_marker_field(marker, "seek_tick"))
-		_generation_marks.append({"generation_index": index, "seek_tick": seek_tick})
+		_generation_marks.append({
+			"run_id": marker_run,
+			"generation_index": index,
+			"seek_tick": seek_tick,
+		})
 	_collect()
 	queue_redraw()
 
@@ -149,6 +162,8 @@ func clear_marks() -> void:
 	_events = []
 	_enriched = []
 	_branch_ticks = []
+	_generation_marks = []
+	_generation_keys.clear()
 	_selected = []
 	_marks = []
 	_selected_id = ""

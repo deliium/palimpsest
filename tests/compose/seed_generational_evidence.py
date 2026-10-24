@@ -1,28 +1,39 @@
-"""Publish explicitly constructed native lineage presentation fixtures.
+"""Create controlled generational evidence and publish native lineage fixtures.
 
-This producer is test-only. It reads the persisted run roster through the
-observer API, then writes immutable genealogy/mentorship publications for the
-same run and boundary. Mentorship records are constructed presentation
-fixtures, not evidence of spontaneous teaching or successful learner cognition.
+This producer is test-only. It persists a real durable generational run through
+the installed manager/runner/database composition, commits one ordinary Feed
+care command through the trusted intervention seam, projects the resulting
+objective genealogy, and publishes explicitly constructed native mentorship
+presentation fixtures for the same run/boundary. The mentorship records prove
+rendering and API provenance handling, not spontaneous teaching.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
+import hashlib
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import httpx
 
+from api.durable_runner import make_durable_runner_factory
+from api.errors import ApiError
+from api.simulation_manager import SimulationManager
+from experiments.generational_runner_scenario import generational_runner_scenario
+from infrastructure.database import create_database_resources
+from infrastructure.settings import load_settings
+from persistence import create_run_control_repository
 from persistence.lineage_filesystem import create_lineage_publisher
 from simulation.lineage_identity import (
     LineageEvidenceClass,
-    LineageEvidenceRef,
     LineageFamily,
     LineageNativeKind,
     LineageNodeRef,
-    lineage_edge_key,
 )
 from simulation.lineage_models import (
     LineageCoverage,
@@ -34,8 +45,234 @@ from simulation.lineage_models import (
     LineageSnapshotRef,
     MentorshipLineageRecord,
 )
-from simulation.lineage_ports import LineageBoundaryFrame, LineagePublication
+from simulation.lineage_objective import (
+    extract_agent_lifecycle_facts,
+    extract_kinship_source_edges,
+    project_genealogy_lineage,
+)
+from simulation.lineage_ports import (
+    LineageBoundaryFrame,
+    LineagePublication,
+    LineageSourceProjection,
+)
 from simulation.models import RunId
+from simulation.run_control import RunControlRecord
+from simulation.runner import SimulationRunner
+from simulation.runner_models import (
+    KinshipBootstrapEdgeSpec,
+    KinshipSpec,
+    MortalityMode,
+    SimulationRunnerConfig,
+    example_dependency_care_spec,
+)
+from simulation.runner_serialization import (
+    encode_runner_config,
+    runner_config_fingerprint,
+)
+from world.actions import Feed
+from world.identifiers import AgentId, EntityId
+from world.lifecycle import DependencyStatus
+from world.models import Item, LifeStatus, non_lethal_physical_rules
+from world.values import BodyCapacity, ItemKind, ItemLoad
+
+_HORIZON = 16
+_FOOD_ITEM = EntityId("item-acceptance-food")
+_CAREGIVER = "agent-origin"
+_SPAWN = EntityId("loc-origin")
+_CONDITION_ID = "bl-generational-unassisted"
+
+
+class FeedCareArbiter:
+    """Trusted test arbiter: one ordinary Feed to a colocated dependent."""
+
+    def __init__(self) -> None:
+        self._runner: Any = None
+        self.fired = False
+        self.feed_tick: int | None = None
+        self.actor_id: str | None = None
+        self.target_id: str | None = None
+
+    def bind(self, runner: Any) -> None:
+        self._runner = runner
+
+    def maybe_replace(
+        self, *, tick: int, agent_id: AgentId, proposed_command: object
+    ) -> object | None:
+        del proposed_command
+        if self.fired or self._runner is None:
+            return None
+        engine = self._runner.engine
+        records = tuple(engine.lifecycle_records)
+        bodies = {body.entity_id: body for body in engine.detached_bodies()}
+        caregiver = next(
+            (record for record in records if record.agent_id == agent_id.value),
+            None,
+        )
+        if (
+            caregiver is None
+            or caregiver.dependency_status is not DependencyStatus.INDEPENDENT
+        ):
+            return None
+        actor_body = bodies.get(caregiver.body_id)
+        if (
+            actor_body is None
+            or actor_body.life_status is not LifeStatus.ALIVE
+            or _FOOD_ITEM not in actor_body.inventory
+        ):
+            return None
+        for record in records:
+            if record.agent_id == agent_id.value:
+                continue
+            if record.dependency_status is not DependencyStatus.DEPENDENT:
+                continue
+            target_body = bodies.get(record.body_id)
+            if target_body is None or target_body.life_status is not LifeStatus.ALIVE:
+                continue
+            if target_body.location_id != actor_body.location_id:
+                continue
+            self.fired = True
+            self.feed_tick = tick
+            self.actor_id = caregiver.agent_id
+            self.target_id = record.agent_id
+            return Feed(target_id=record.body_id, item_id=_FOOD_ITEM)
+        return None
+
+    def acknowledge_resolutions(self, resolutions: object) -> None:
+        del resolutions
+
+
+def _bl_config() -> SimulationRunnerConfig:
+    definition = generational_runner_scenario(seed=23, max_ticks=_HORIZON)
+    for condition in definition.conditions:
+        if condition.condition_id == _CONDITION_ID:
+            return condition.runner_config
+    raise RuntimeError("acceptance_bl_condition_missing")
+
+
+def _controlled_config() -> SimulationRunnerConfig:
+    config = _bl_config()
+    if config.population_lifecycle is None:
+        raise RuntimeError("acceptance_lifecycle_missing")
+    scenario = config.scenario
+    bodies = []
+    for body in scenario.bodies:
+        inventory = (
+            (_FOOD_ITEM,) if body.entity_id.value == "body-origin" else body.inventory
+        )
+        bodies.append(
+            replace(
+                body,
+                location_id=_SPAWN,
+                inventory=inventory,
+            )
+        )
+    locations = tuple(
+        replace(location, body_capacity=BodyCapacity(16))
+        if location.entity_id == _SPAWN
+        else location
+        for location in scenario.locations
+    )
+    scenario = replace(
+        scenario,
+        physical_rules=non_lethal_physical_rules(base=scenario.physical_rules),
+        locations=locations,
+        bodies=tuple(bodies),
+        items=(
+            *scenario.items,
+            Item(
+                entity_id=_FOOD_ITEM,
+                name="Acceptance grain",
+                kind=ItemKind.FOOD,
+                load=ItemLoad(1),
+                holder_id=EntityId("body-origin"),
+            ),
+        ),
+    )
+    lifecycle = replace(
+        config.population_lifecycle,
+        max_population=12,
+        demographic_policy_params={
+            **config.population_lifecycle.demographic_policy_params,
+            "spawn_location_ids": [_SPAWN.value],
+        },
+    )
+    return replace(
+        config,
+        scenario=scenario,
+        mortality_mode=MortalityMode.DISABLED,
+        population_lifecycle=lifecycle,
+        v3_capability_flags=replace(
+            config.v3_capability_flags,
+            generational_population=True,
+            kinship_inheritance=True,
+        ),
+        kinship=KinshipSpec(
+            bootstrap_edges=(
+                KinshipBootstrapEdgeSpec(
+                    parent_agent_id=AgentId("agent-origin"),
+                    child_agent_id=AgentId("agent-spring"),
+                ),
+            ),
+        ),
+        dependency_care=example_dependency_care_spec(
+            enabled_needs=("food",),
+            caregiving_cognition_mode="disabled",
+            perception_mode="none",
+            allow_feed=True,
+            allow_transport=True,
+        ),
+    )
+
+
+async def _create_controlled_run() -> tuple[str, int, Any]:
+    settings = load_settings()
+    resources = create_database_resources(settings)
+    try:
+        base_factory = make_durable_runner_factory(resources.session_factory, settings)
+        arbiter = FeedCareArbiter()
+        holder: dict[str, Any] = {}
+
+        async def factory(record: RunControlRecord) -> SimulationRunner:
+            runner = await base_factory(record)
+            arbiter.bind(runner)
+            runner.set_intervention_arbiter(arbiter)
+            holder["runner"] = runner
+            return runner
+
+        manager = SimulationManager(
+            settings=settings,
+            run_control=create_run_control_repository(resources.session_factory),
+            runner_factory=factory,
+            owner_id="acceptance-producer",
+        )
+        config = _controlled_config()
+        seed_digest = hashlib.sha256(config.seed.to_bytes(8, "big")).hexdigest()
+        run_id = f"acceptance-gen-{seed_digest[:12]}"
+        payload = encode_runner_config(config)
+        await manager.create(
+            run_id=run_id,
+            config_schema_version=config.schema_version,
+            config_fingerprint=runner_config_fingerprint(config),
+            config_payload=payload,
+        )
+        await manager.start(run_id=run_id)
+        for _ in range(_HORIZON):
+            try:
+                await manager.tick(run_id=run_id)
+            except ApiError as exc:
+                if exc.code in {"lifecycle_conflict", "run_task_active"}:
+                    break
+                raise
+        status = await manager.status(run_id=run_id)
+        boundary = int(status.ticks_committed)
+        if not arbiter.fired:
+            raise RuntimeError("acceptance_feed_not_committed")
+        runner = holder.get("runner")
+        if runner is None:
+            raise RuntimeError("acceptance_runner_missing")
+        return run_id, boundary, runner
+    finally:
+        await resources.engine.dispose()
 
 
 def _node_ref(
@@ -56,13 +293,16 @@ def _node_ref(
     )
 
 
-def _coverage(boundary: int, policy: str) -> LineageCoverage:
-    return LineageCoverage(
-        state=LineageCoverageState.COMPLETE,
-        capture_start_tick=0,
-        capture_end_tick=boundary,
-        policy_version=policy,
-    )
+def _digest(nodes: tuple[LineageNode, ...], edges: tuple[LineageEdge, ...]) -> str:
+    payload = json.dumps(
+        {
+            "nodes": [repr(item) for item in nodes],
+            "edges": [repr(item) for item in edges],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _publish_scope(
@@ -75,9 +315,12 @@ def _publish_scope(
     edges: tuple[LineageEdge, ...],
     policy: str,
 ) -> str:
+    digest = _digest(nodes, edges)
     publication = LineagePublication(
         snapshot=LineageSnapshotRef(
-            publication_id="placeholder", digest="a" * 64, boundary_tick=boundary
+            publication_id=f"lineage-{digest[:16]}",
+            digest=digest,
+            boundary_tick=boundary,
         ),
         frame=LineageBoundaryFrame(
             run_id=run_id,
@@ -86,121 +329,126 @@ def _publish_scope(
             observed_boundary=boundary,
             nodes=nodes,
             edges=edges,
-            coverage=_coverage(boundary, policy),
+            coverage=LineageCoverage(
+                state=LineageCoverageState.COMPLETE,
+                capture_start_tick=0,
+                capture_end_tick=boundary,
+                policy_version=policy,
+            ),
             source_revision="acceptance-v1",
         ),
     )
-    import asyncio
-
     published = asyncio.run(create_lineage_publisher(root).publish(publication))
     return published.publication_id
 
 
-def _roster(
-    base_url: str, run_id: str, boundary: int, inspection_token: str
-) -> tuple[str, str, list[dict[str, object]]]:
-    headers = (
-        {"x-palimpsest-token": inspection_token} if inspection_token else {}
+def _roster(runner: Any, boundary: int) -> tuple[str, str, list[dict[str, object]]]:
+    engine = runner.engine
+    records = tuple(engine.lifecycle_records)
+    bodies = {body.entity_id: body for body in engine.detached_bodies()}
+    caregiver = next(
+        (
+            record
+            for record in records
+            if record.agent_id == _CAREGIVER
+            and record.dependency_status is DependencyStatus.INDEPENDENT
+        ),
+        None,
     )
-    with httpx.Client(base_url=base_url.rstrip("/"), timeout=60.0) as client:
-        response = client.get(
-            f"/v1/simulations/{run_id}/observer/demographics",
-            params={"tick": boundary, "limit": 100},
-            headers=headers,
-        )
-        response.raise_for_status()
-        document = response.json()
-    if document.get("availability") != "available":
-        raise RuntimeError("demographics_unavailable")
-    agents = document["agents"]
-    founders = [item for item in agents if item["generation_index"] == 0]
-    children = [item for item in agents if item["generation_index"] > 0]
-    if not founders or not children:
-        raise RuntimeError("founder_or_child_missing")
-    return (
-        str(founders[0]["agent_id"]),
-        str(children[0]["agent_id"]),
-        agents,
+    learner = next(
+        (
+            record
+            for record in records
+            if record.dependency_status is DependencyStatus.DEPENDENT
+            and record.generation_index > 0
+        ),
+        None,
     )
+    if caregiver is None or learner is None:
+        raise RuntimeError("acceptance_care_pair_missing")
+    roster = [
+        {
+            "agent_id": record.agent_id,
+            "body_id": record.body_id.value,
+            "generation_index": record.generation_index,
+            "stage": record.stage.value,
+            "dependency_status": record.dependency_status.value,
+            "life_status": (
+                "alive"
+                if bodies[record.body_id].life_status is LifeStatus.ALIVE
+                else "dead"
+            ),
+            "entry_tick": record.entry_tick,
+            "observed_tick": boundary,
+        }
+        for record in records
+        if record.body_id in bodies
+    ]
+    return caregiver.agent_id, learner.agent_id, roster
 
 
-def seed(
+def _genealogy(
     *,
-    base_url: str,
-    lineage_root: Path,
-    run_id: str,
+    runner: Any,
+    run_id: RunId,
     boundary: int,
-    inspection_token: str = "",
+) -> LineageSourceProjection:
+    engine = runner.engine
+    records = tuple(engine.lifecycle_records)
+    bodies = {body.entity_id: body for body in engine.detached_bodies()}
+    registrations = tuple(engine.ordered_registrations)
+    facts = extract_agent_lifecycle_facts(
+        bodies=tuple(
+            (
+                registration.agent_id.value,
+                registration.entity_id.value,
+                bodies[registration.entity_id].life_status,
+            )
+            for registration in registrations
+            if registration.entity_id in bodies
+        ),
+        lifecycle_entry_ticks={
+            record.agent_id: record.entry_tick for record in records
+        },
+        observed_tick=boundary,
+    )
+    projection = project_genealogy_lineage(
+        run_id=run_id,
+        boundary_tick=boundary,
+        source_edges=extract_kinship_source_edges(engine.kinship_graph),
+        lifecycle_facts=facts,
+        coverage=LineageCoverage(
+            state=LineageCoverageState.COMPLETE,
+            capture_start_tick=0,
+            capture_end_tick=boundary,
+            policy_version="objective-genealogy.v1",
+        ),
+    )
+    return projection
+
+
+def _publish_lineage(
+    *,
+    runner: Any,
+    run_id: str,
+    lineage_root: Path,
+    boundary: int,
 ) -> dict[str, object]:
     typed_run = RunId(run_id)
-    founder, child, agents = _roster(base_url, run_id, boundary, inspection_token)
+    founder, child, roster = _roster(runner, boundary)
     objective = LineageScope(
         run_id=typed_run,
         family=LineageFamily.GENEALOGY,
         evidence_class=LineageEvidenceClass.OBJECTIVE,
     )
-    founder_ref = _node_ref(
-        typed_run,
-        LineageFamily.GENEALOGY,
-        LineageEvidenceClass.OBJECTIVE,
-        LineageNativeKind.AGENT,
-        founder,
-        None,
-    )
-    child_ref = _node_ref(
-        typed_run,
-        LineageFamily.GENEALOGY,
-        LineageEvidenceClass.OBJECTIVE,
-        LineageNativeKind.AGENT,
-        child,
-        None,
-    )
-    evidence = LineageEvidenceRef(
-        evidence_class=LineageEvidenceClass.OBJECTIVE,
-        native_kind=LineageNativeKind.AGENT,
-        native_id=f"{founder}->{child}",
-        observed_tick=boundary,
-    )
-    edge = LineageEdge(
-        edge_key=lineage_edge_key(
-            relation="parent_of",
-            source_key=founder_ref.key,
-            target_key=child_ref.key,
-            native_kind=LineageNativeKind.AGENT,
-            native_id=f"{founder}->{child}",
-            evidence_keys=(evidence.key,),
-        ),
-        source_key=founder_ref.key,
-        target_key=child_ref.key,
-        relation="parent_of",
-        native_kind=LineageNativeKind.AGENT,
-        native_id=f"{founder}->{child}",
-        evidence_refs=(evidence,),
-        observed_tick=boundary,
-    )
-    nodes = (
-        LineageNode(
-            ref=founder_ref,
-            state=LineageNodeState.OBSERVED,
-            living=True,
-            observed_tick=boundary,
-            status_code="alive",
-        ),
-        LineageNode(
-            ref=child_ref,
-            state=LineageNodeState.OBSERVED,
-            living=True,
-            observed_tick=boundary,
-            status_code="alive",
-        ),
-    )
+    genealogy = _genealogy(runner=runner, run_id=typed_run, boundary=boundary)
     genealogy_id = _publish_scope(
         root=lineage_root,
         run_id=typed_run,
         scope=objective,
         boundary=boundary,
-        nodes=nodes,
-        edges=(edge,),
+        nodes=genealogy.nodes,
+        edges=genealogy.edges,
         policy="objective-genealogy.v1",
     )
 
@@ -221,8 +469,8 @@ def seed(
             content_kind="skill",
             content_key="acceptance-content-attempt",
             hop=1,
-            acquisition_tick=boundary - 2,
-            update_tick=boundary - 1,
+            acquisition_tick=max(0, boundary - 2),
+            update_tick=max(0, boundary - 1),
             attempt_count=2,
             learning_evidence_count=0,
             confidence_band="low",
@@ -244,8 +492,8 @@ def seed(
             content_kind="skill",
             content_key="acceptance-content-learned",
             hop=1,
-            acquisition_tick=boundary - 3,
-            update_tick=boundary - 1,
+            acquisition_tick=max(0, boundary - 3),
+            update_tick=max(0, boundary - 1),
             attempt_count=1,
             learning_evidence_count=2,
             confidence_band="medium",
@@ -321,7 +569,7 @@ def seed(
     return {
         "run_id": run_id,
         "boundary_tick": boundary,
-        "roster_count": len(agents),
+        "roster_count": len(roster),
         "founder": founder,
         "child": child,
         "genealogy_publication": genealogy_id,
@@ -329,15 +577,100 @@ def seed(
         "analytical_publication": analytical_id,
         "attempt_only_records": 1,
         "learning_evidence_records": 1,
+        "genealogy_node_count": len(genealogy.nodes),
+        "roster": roster,
     }
+
+
+def _verify_api(
+    *,
+    base_url: str,
+    run_id: str,
+    boundary: int,
+    inspection_token: str,
+) -> dict[str, object]:
+    headers = {"x-palimpsest-token": inspection_token} if inspection_token else {}
+    with httpx.Client(base_url=base_url.rstrip("/"), timeout=60.0) as client:
+        demographics = client.get(
+            f"/v1/simulations/{run_id}/observer/demographics",
+            params={"tick": boundary},
+            headers=headers,
+        )
+        demographics.raise_for_status()
+        document = demographics.json()
+        if document.get("availability") != "available":
+            raise RuntimeError("acceptance_demographics_unavailable")
+        feed_events = client.get(
+            f"/v1/simulations/{run_id}/observer/events",
+            params={
+                "event_type": "AGENT_FED",
+                "limit": 50,
+                "catch_up": True,
+            },
+            headers=headers,
+        )
+        feed_events.raise_for_status()
+        feed_items = list(feed_events.json().get("events", []))
+        if not feed_items:
+            raise RuntimeError("acceptance_feed_event_missing")
+        participants = client.get(
+            f"/v1/simulations/{run_id}/lineage/mentorship/participants",
+            params={
+                "evidence_class": "subjective",
+                "agent_id": str(document["agents"][0]["agent_id"]),
+                "owner_id": str(document["agents"][0]["agent_id"]),
+                "boundary_tick": boundary,
+                "role": "both",
+                "limit": 100,
+            },
+            headers=headers,
+        )
+        if participants.status_code not in {200, 401, 403}:
+            raise RuntimeError(
+                f"acceptance_participants_failed status={participants.status_code}"
+            )
+        return {
+            "demographics_available": True,
+            "feed_events": len(feed_items),
+            "participants_status": participants.status_code,
+        }
+
+
+def seed(
+    *,
+    base_url: str,
+    lineage_root: Path,
+    run_id: str | None = None,
+    boundary: int | None = None,
+    inspection_token: str = "",
+) -> dict[str, object]:
+    del boundary
+    if run_id is None:
+        run_id, boundary_tick, runner = asyncio.run(_create_controlled_run())
+    else:
+        raise RuntimeError("acceptance_controlled_run_required")
+    checks = _verify_api(
+        base_url=base_url,
+        run_id=run_id,
+        boundary=boundary_tick,
+        inspection_token=inspection_token,
+    )
+    manifest = _publish_lineage(
+        runner=runner,
+        run_id=run_id,
+        lineage_root=lineage_root,
+        boundary=boundary_tick,
+    )
+    manifest.update(checks)
+    return manifest
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--lineage-root", required=True)
-    parser.add_argument("--run-id", required=True)
-    parser.add_argument("--boundary-tick", required=True, type=int)
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--boundary-tick", type=int, default=None)
     parser.add_argument("--inspection-token", default="")
     args = parser.parse_args(argv)
     try:
@@ -348,17 +681,15 @@ def main(argv: list[str] | None = None) -> int:
             boundary=args.boundary_tick,
             inspection_token=args.inspection_token,
         )
-    except httpx.HTTPStatusError as exc:
+    except (RuntimeError, ApiError, httpx.HTTPError) as exc:
         print(
-            f"seed_failed reason_code=http_status status={exc.response.status_code} "
-            f"path={exc.request.url.path}",
-            file=sys.stderr,
+            json.dumps(
+                {"error": type(exc).__name__, "reason": str(exc)},
+                separators=(",", ":"),
+            )
         )
         return 1
-    except Exception as exc:
-        print(f"seed_failed reason_code={type(exc).__name__}", file=sys.stderr)
-        return 1
-    print(json.dumps(manifest, sort_keys=True))
+    print(json.dumps(manifest, default=str, separators=(",", ":"), sort_keys=True))
     return 0
 
 

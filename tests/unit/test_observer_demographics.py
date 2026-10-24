@@ -45,7 +45,7 @@ pytestmark = pytest.mark.unit
 _STAGE = LifecycleStageId("infant")
 
 
-def _record(body_id: str = "body-1", agent_id: str = "agent-1"):
+def _record(body_id: str = "body-1", agent_id: str = "agent-1") -> AgentLifecycleRecord:
     return AgentLifecycleRecord(
         body_id=EntityId(body_id),
         agent_id=agent_id,
@@ -59,11 +59,17 @@ def _record(body_id: str = "body-1", agent_id: str = "agent-1"):
     )
 
 
-def _registration(body_id: str = "body-1", agent_id: str = "agent-1"):
+def _registration(
+    body_id: str = "body-1", agent_id: str = "agent-1"
+) -> AgentRegistration:
     return AgentRegistration(AgentId(agent_id), EntityId(body_id))
 
 
-def _facts(*, lifecycle_records=None, records=True) -> ObjectiveFacts:
+def _facts(
+    *,
+    lifecycle_records: tuple[AgentLifecycleRecord, ...] | None = None,
+    records: bool = True,
+) -> ObjectiveFacts:
     locations = (make_location("loc-1"),)
     registrations = (_registration(),) if records else ()
     return ObjectiveFacts(
@@ -131,20 +137,16 @@ def test_lifecycle_records_reject_duplicate_body_and_agent() -> None:
 
 def test_lifecycle_records_reject_missing_body_and_identity_mismatch() -> None:
     with pytest.raises(ObjectiveFactsError) as missing:
-        scene_from_facts(
-            _facts(lifecycle_records=(_record(body_id="body-9"),))
-        )
+        scene_from_facts(_facts(lifecycle_records=(_record(body_id="body-9"),)))
     assert missing.value.reason_code == "lifecycle_body_missing"
     with pytest.raises(ObjectiveFactsError) as mismatch:
-        scene_from_facts(
-            _facts(lifecycle_records=(_record(agent_id="agent-9"),))
-        )
+        scene_from_facts(_facts(lifecycle_records=(_record(agent_id="agent-9"),)))
     assert mismatch.value.reason_code == "lifecycle_identity_mismatch"
 
 
 def _snapshot(
     *,
-    lifecycle_records=(),
+    lifecycle_records: tuple[AgentLifecycleRecord, ...] = (),
     schema_version: int = EVENT_SCHEMA_REPLAY_V10,
     codec: str = "v7",
 ) -> WorldSnapshot:
@@ -201,9 +203,7 @@ def test_scene_from_snapshot_distinguishes_absent_and_active_empty() -> None:
     assert active_empty.lifecycle_records == ()
     inactive = scene_from_snapshot(_snapshot(), lifecycle_active=False)
     assert inactive.lifecycle_records is None
-    with_records = scene_from_snapshot(
-        _snapshot(lifecycle_records=(_record(),))
-    )
+    with_records = scene_from_snapshot(_snapshot(lifecycle_records=(_record(),)))
     assert with_records.lifecycle_records == (_record(),)
     with pytest.raises(ObjectiveFactsError) as invalid:
         scene_from_snapshot(
@@ -271,6 +271,24 @@ def test_engine_facts_copy_sorted_lifecycle_records(
         "agent-2",
     ]
     assert scene.lifecycle_records == facts.lifecycle_records
-    assert any(
-        "lifecycle_record_count=2" in message for message in caplog.messages
+    assert any("lifecycle_record_count=2" in message for message in caplog.messages)
+
+
+def test_lifecycle_record_requires_matching_body_not_only_registration() -> None:
+    locations = (make_location("loc-1"),)
+    facts = ObjectiveFacts(
+        run_id="run-1",
+        world_id="world-1",
+        tick=0,
+        revision=0,
+        locations=locations,
+        bodies=(),
+        items=(),
+        resources=(),
+        weather=weather_for_locations(locations),
+        registrations=(_registration(),),
+        lifecycle_records=(_record(),),
     )
+    with pytest.raises(ObjectiveFactsError) as rejected:
+        scene_from_facts(facts)
+    assert rejected.value.reason_code == "lifecycle_body_missing"

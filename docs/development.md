@@ -198,10 +198,16 @@ suites now include `test_generational_http`, `test_demographic_models`,
 Published-image acceptance requires Docker and Playwright:
 `tests/compose/test_observer_browser.py` remains the V2 smoke, and the
 generational suite is expected to run against the same built image with
-separate inspection/debug credentials and a test-owned lineage volume. The
-producer creates real Experiment BL demography and a separately controlled
-evidence run; explicitly constructed mentorship/knowledge fixtures are labeled
-as presentation fixtures, not emergent-learning proof. A skipped image,
+separate inspection/debug credentials and a test-owned lineage volume. `start_bl_generational`
+starts the unmodified real Experiment BL condition (seed 23, horizon 16) and
+asserts two nonfounder generations and committed stage changes through the API;
+BL uses regional locations, so it is an API/scientific proof rather than a
+Godot-layout browser run. `start_generational` starts a layout-compatible
+reference-location generational run for the exported-browser assertions. The
+producer creates a separate controlled durable v55 run with a trusted ordinary
+Feed command, projects its objective genealogy, and publishes explicitly
+constructed mentorship/knowledge fixtures for the same run/boundary; those
+fixtures are labeled as presentation evidence, not emergent-learning proof. A skipped image,
 browser, or editor prerequisite is an unexecuted gate and must be reported as
 such.
 

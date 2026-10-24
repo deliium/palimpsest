@@ -10,6 +10,7 @@ import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -27,7 +28,7 @@ def docker_cli() -> str:
     return docker
 
 
-def playwright_api():
+def playwright_api() -> Any:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -98,14 +99,24 @@ def _generational_stack(
         }
     )
     override = tmp_path / "compose.override.yaml"
+    dsn = "postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest_test"
     lines = [
         "services:",
+        "  db:",
+        "    environment:",
+        '      POSTGRES_DB: "palimpsest_test"',
+        "    healthcheck:",
+        '      test: ["CMD-SHELL", "pg_isready -U palimpsest -d palimpsest_test"]',
+        "  migrate:",
+        "    environment:",
+        f'      PALIMPSEST_DATABASE_URL: "{dsn}"',
         "  api:",
         "    environment:",
+        f'      PALIMPSEST_DATABASE_URL: "{dsn}"',
         '      PALIMPSEST_API_AUTH_REQUIRED: "true"',
         '      PALIMPSEST_API_CONTROL_CREDENTIAL: "${PALIMPSEST_ACCEPT_CONTROL}"',
         '      PALIMPSEST_API_INSPECTION_CREDENTIAL: "${PALIMPSEST_ACCEPT_INSPECTION}"',
-        '      PALIMPSEST_API_AGENT_VISIBLE_CREDENTIAL: '
+        "      PALIMPSEST_API_AGENT_VISIBLE_CREDENTIAL: "
         '"${PALIMPSEST_ACCEPT_AGENT_VISIBLE}"',
         '      PALIMPSEST_API_DEBUG_ENABLED: "true"',
         '      PALIMPSEST_API_DEBUG_CREDENTIAL: "${PALIMPSEST_ACCEPT_DEBUG}"',
@@ -213,16 +224,42 @@ def published_generational_capture_off(
     yield from _generational_stack(tmp_path, lineage_enabled=False)
 
 
-def seed_lineage(
-    stack: GenerationalStack, *, run_id: str, boundary_tick: int
-) -> str:
+def stack_api_logs(stack: GenerationalStack) -> str:
     docker = docker_cli()
+    completed = subprocess.run(
+        [
+            docker,
+            "compose",
+            "-p",
+            stack.project,
+            "-f",
+            str(COMPOSE_FILE),
+            "logs",
+            "--no-color",
+            "api",
+        ],
+        cwd=str(ROOT),
+        env=stack.env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return redact_secrets(completed.stdout + completed.stderr)
+
+
+def seed_lineage(stack: GenerationalStack) -> str:
+    docker = docker_cli()
+    dsn = "postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest_test"
     args = [
         docker,
         "run",
         "--rm",
         "--network",
         f"{stack.project}_default",
+        "-e",
+        f"PALIMPSEST_DATABASE_URL={dsn}",
+        "-e",
+        "PALIMPSEST_ENVIRONMENT=production",
         "-v",
         f"{stack.lineage_root}:/lineage",
         "-v",
@@ -235,10 +272,6 @@ def seed_lineage(
         "http://api:8080",
         "--lineage-root",
         "/lineage",
-        "--run-id",
-        run_id,
-        "--boundary-tick",
-        str(boundary_tick),
         "--inspection-token",
         stack.inspection_token,
     ]
@@ -247,4 +280,7 @@ def seed_lineage(
     )
     if completed.returncode != 0:
         pytest.fail(redact_secrets(completed.stdout + completed.stderr))
-    return completed.stdout.strip()
+    for line in reversed(completed.stdout.splitlines()):
+        if line.strip().startswith("{"):
+            return line.strip()
+    pytest.fail(redact_secrets(completed.stdout + completed.stderr))

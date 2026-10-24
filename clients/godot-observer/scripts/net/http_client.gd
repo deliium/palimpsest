@@ -2,6 +2,44 @@ extends Node
 
 const ObserverLog := preload("res://scripts/log.gd")
 
+## Closed allowlist of API problem codes safe to surface in presentation state.
+const SAFE_ERROR_CODES := [
+	"cursor_ahead_of_high_water",
+	"demographics_unknown_section",
+	"incomplete_demographic_cursor",
+	"incomplete_event_cursor",
+	"invalid_lineage_cursor",
+	"invalid_lineage_query",
+	"invalid_lineage_scope",
+	"invalid_marker_tick",
+	"invalid_native_filter",
+	"invalid_native_kind",
+	"invalid_observer_query",
+	"invalid_page_limit",
+	"invalid_participant_role",
+	"invalid_tick_range",
+	"labels_unavailable_at_tick",
+	"limit_exceeds_maximum",
+	"lineage_digest_mismatch",
+	"lineage_disabled",
+	"lineage_publication_conflict",
+	"lineage_record_oversize",
+	"lineage_response_too_large",
+	"lineage_root_not_found",
+	"lineage_scope_mismatch",
+	"lineage_snapshot_corrupt",
+	"lineage_source_budget",
+	"lineage_storage_unavailable",
+	"lineage_writer_busy",
+	"observer_demographics_response_too_large",
+	"observer_event_not_found",
+	"observer_relationships_unavailable",
+	"run_not_found",
+	"snapshot_unavailable",
+	"symbolic_unavailable_at_tick",
+	"tick_range_exceeds_maximum",
+]
+
 signal get_completed(route: String, status: int, body: Variant, reason_code: String)
 
 var _http: HTTPRequest
@@ -127,4 +165,6 @@ static func safe_error_code(body: PackedByteArray) -> String:
 		)
 		if not allowed:
 			return ""
+	if code not in SAFE_ERROR_CODES:
+		return ""
 	return code

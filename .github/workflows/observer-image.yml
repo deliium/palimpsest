@@ -172,7 +172,8 @@ jobs:
         run: |
           set -euo pipefail
           uv run --no-sync pytest -m compose \
-            tests/compose/test_observer_browser.py -q
+            tests/compose/test_observer_browser.py \
+            tests/compose/test_observer_generational_browser.py -q
 
       - name: Publish the release image
         if: startsWith(github.ref, 'refs/tags/v')

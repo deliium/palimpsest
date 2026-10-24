@@ -105,19 +105,12 @@ def test_teacher_and_learner_roles_match_explicit_fields() -> None:
     node = _node(_record(teacher_id="owner-1", learner_id="learner-1"))
     teacher = project_participant_card(node, agent_id="owner-1", role="teacher")
     assert teacher is not None
-    learner = project_participant_card(
-        node, agent_id="learner-1", role="learner"
-    )
+    learner = project_participant_card(node, agent_id="learner-1", role="learner")
     assert learner is not None
     both = project_participant_card(node, agent_id="owner-1", role="both")
     assert both is not None
-    assert (
-        project_participant_card(node, agent_id="owner-1", role="learner")
-        is None
-    )
-    assert (
-        project_participant_card(node, agent_id="nobody", role="both") is None
-    )
+    assert project_participant_card(node, agent_id="owner-1", role="learner") is None
+    assert project_participant_card(node, agent_id="nobody", role="both") is None
 
 
 def test_same_agent_can_be_teacher_and_learner() -> None:
@@ -154,9 +147,7 @@ def test_owner_local_ids_do_not_merge_across_owners() -> None:
         owner_id="owner-b",
     )
     left_card = project_participant_card(left, agent_id="owner-a", role="teacher")
-    right_card = project_participant_card(
-        right, agent_id="owner-b", role="teacher"
-    )
+    right_card = project_participant_card(right, agent_id="owner-b", role="teacher")
     assert left_card is not None and right_card is not None
     assert left_card.ref.key != right_card.ref.key
     assert left_card.owner_id == "owner-a"
@@ -185,9 +176,9 @@ def test_subjective_scope_requires_matching_owner() -> None:
 
 
 def test_absent_metadata_and_archived_states_are_explicit() -> None:
-    assert project_participant_card(
-        _node(None), agent_id="learner-1", role="both"
-    ) is None
+    assert (
+        project_participant_card(_node(None), agent_id="learner-1", role="both") is None
+    )
     archived = _node(_record(), state=LineageNodeState.ARCHIVED)
     card = project_participant_card(archived, agent_id="learner-1", role="learner")
     assert card is not None

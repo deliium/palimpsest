@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -25,7 +26,7 @@ from simulation.journal import (
 )
 from simulation.models import RunId
 from simulation.new_agent_initialization import default_new_agent_initialization_spec
-from simulation.observer_facts import scene_from_facts
+from simulation.observer_facts import ObjectiveScene, scene_from_facts
 from simulation.persistence import (
     PROJECTOR_VERSION,
     CommitHash,
@@ -60,6 +61,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
@@ -68,6 +70,7 @@ from simulation.runner_serialization import encode_runner_config
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.events import (
     EVENT_SCHEMA_REPLAY_V10,
+    EVENT_SCHEMA_REPLAY_V22,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -84,7 +87,7 @@ WORLD_ID = "world-observer-generations"
 TICKS = 22
 
 
-def _config(*, max_ticks: int = TICKS):
+def _config(*, max_ticks: int = TICKS) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return replace(
@@ -121,8 +124,14 @@ def _config(*, max_ticks: int = TICKS):
     )
 
 
-def _snapshot_from_engine(engine: object) -> WorldSnapshot:
+def _snapshot_from_engine(
+    engine: object,
+    *,
+    event_schema_version: int = EVENT_SCHEMA_REPLAY_V10,
+    persistence_codec_version: str = "v7",
+) -> WorldSnapshot:
     state = engine._snapshot.world.state  # type: ignore[attr-defined]
+    regional_codec = persistence_codec_version in {"v19", "v20"}
     draft = WorldSnapshot(
         snapshot_id=SnapshotId("snap-generations"),
         run_id=RunId(RUN_ID),
@@ -137,13 +146,19 @@ def _snapshot_from_engine(engine: object) -> WorldSnapshot:
         weather=tuple(state.weather.values()),
         next_tick=engine._snapshot.tick,  # type: ignore[attr-defined]
         revision=engine.revision,  # type: ignore[attr-defined]
-        event_schema_version=EVENT_SCHEMA_REPLAY_V10,
+        event_schema_version=event_schema_version,
         projector_version=PROJECTOR_VERSION,
-        persistence_codec_version="v7",
+        persistence_codec_version=persistence_codec_version,
         derivation_version=engine._config.derivation_version,  # type: ignore[attr-defined]
         integrity_hash=PayloadHash("a" * 64),
         predecessor_commit_hash=None,
         lifecycle_records=engine.lifecycle_records,  # type: ignore[attr-defined]
+        regions_migration=(state.regions_migration if regional_codec else None),
+        journeys=(
+            tuple(state.journeys.values())
+            if regional_codec and state.journeys is not None
+            else None
+        ),
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -166,6 +181,8 @@ def _snapshot_from_engine(engine: object) -> WorldSnapshot:
         integrity_hash=hash_snapshot(draft),
         predecessor_commit_hash=None,
         lifecycle_records=draft.lifecycle_records,
+        regions_migration=draft.regions_migration,
+        journeys=draft.journeys,
     )
 
 
@@ -207,7 +224,7 @@ class _Snapshots:
 
 class _Journal:
     def __init__(
-        self, events: tuple[object, ...], commits: tuple[TickCommit, ...]
+        self, events: tuple[Any, ...], commits: tuple[TickCommit, ...]
     ) -> None:
         self._events = events
         self._commits = commits
@@ -215,9 +232,7 @@ class _Journal:
     async def append_tick(self, request: TickAppendRequest) -> TickCommit:
         raise NotImplementedError
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None:
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         return next(
             (
                 item
@@ -235,7 +250,7 @@ class _Journal:
         to_tick: Tick | None,
         limit: int,
         offset: int,
-    ) -> tuple[object, ...]:
+    ) -> tuple[Any, ...]:
         selected = [
             event
             for event in self._events
@@ -262,8 +277,8 @@ class _Journal:
         return tuple(selected)
 
 
-def _commits_for(events: tuple[object, ...]) -> tuple[TickCommit, ...]:
-    by_tick: dict[int, list[object]] = {}
+def _commits_for(events: tuple[Any, ...]) -> tuple[TickCommit, ...]:
+    by_tick: dict[int, list[Any]] = {}
     for event in events:
         by_tick.setdefault(event.tick, []).append(event)
     if not by_tick:
@@ -319,7 +334,12 @@ def _commits_for(events: tuple[object, ...]) -> tuple[TickCommit, ...]:
 
 async def _run_scenario(
     *, ticks: int = TICKS
-) -> tuple[WorldSnapshot, tuple[object, ...], object, object]:
+) -> tuple[
+    WorldSnapshot,
+    tuple[Any, ...],
+    SimulationRunnerConfig,
+    ObjectiveScene,
+]:
     config = _config(max_ticks=ticks)
     async with await SimulationRunner.from_config(
         config, run_id=RunId(RUN_ID)
@@ -333,7 +353,7 @@ async def _run_scenario(
     return snapshot, events, config, live_scene
 
 
-def _service(snapshot: WorldSnapshot, events: tuple[object, ...]) -> ReplayService:
+def _service(snapshot: WorldSnapshot, events: tuple[Any, ...]) -> ReplayService:
     return ReplayService(
         _Runs(snapshot),
         _Journal(events, _commits_for(events)),
@@ -341,10 +361,10 @@ def _service(snapshot: WorldSnapshot, events: tuple[object, ...]) -> ReplayServi
     )
 
 
-def _context(config: object) -> ObserverReplayContext:
+def _context(config: SimulationRunnerConfig) -> ObserverReplayContext:
     return ObserverReplayContext(
-        population_lifecycle=config.population_lifecycle,  # type: ignore[attr-defined]
-        new_agent_initialization=config.new_agent_initialization,  # type: ignore[attr-defined]
+        population_lifecycle=config.population_lifecycle,
+        new_agent_initialization=config.new_agent_initialization,
     )
 
 
@@ -365,9 +385,9 @@ async def test_scene_at_tick_rebuilds_registrations_lifecycle_and_death(
     assert history.scene.tick == TICKS
     assert history.scene.registrations == live_scene.registrations
     assert history.scene.lifecycle_records == live_scene.lifecycle_records
-    assert {
-        body.entity_id.value for body in history.scene.bodies
-    } == {body.entity_id.value for body in live_scene.bodies}
+    assert {body.entity_id.value for body in history.scene.bodies} == {
+        body.entity_id.value for body in live_scene.bodies
+    }
     assert any(type(event.details) is Died for event in events)
     dead = [
         record
@@ -388,8 +408,7 @@ async def test_scene_through_event_withholds_unentered_agents(
     created = next(
         event
         for event in events
-        if type(event.details) is AgentCreated
-        and event.details.agent_id != "agent-1"
+        if type(event.details) is AgentCreated and event.details.agent_id != "agent-1"
     )
     tick = created.tick
     recorded = next(
@@ -446,9 +465,7 @@ async def test_scene_through_event_withholds_unentered_agents(
         record.agent_id == entered.details.agent_id
         for record in entered_history.scene.lifecycle_records or ()
     )
-    last_sequence = max(
-        event.sequence for event in events if event.tick == tick
-    )
+    last_sequence = max(event.sequence for event in events if event.tick == tick)
     full = await scene_through_event(
         service,
         RunId(RUN_ID),
@@ -502,12 +519,13 @@ async def test_stage_change_prefix_keeps_the_last_recorded_stage() -> None:
     assert after_record.stage.value == changed.details.new_stage
 
 
-def _first_admission(events: tuple[object, ...]) -> tuple[object, object, object]:
+def _first_admission(
+    events: tuple[Any, ...],
+) -> tuple[Any, Any, Any]:
     created = next(
         event
         for event in events
-        if type(event.details) is AgentCreated
-        and event.details.agent_id != "agent-1"
+        if type(event.details) is AgentCreated and event.details.agent_id != "agent-1"
     )
     recorded = next(
         event
@@ -557,8 +575,7 @@ def test_fold_reserves_identity_until_entered_world() -> None:
     )
     assert not folded.pending_reservations
     assert any(
-        item.agent_id.value == entered.details.agent_id
-        for item in folded.registrations
+        item.agent_id.value == entered.details.agent_id for item in folded.registrations
     )
     assert any(
         record.agent_id == entered.details.agent_id
@@ -603,8 +620,7 @@ def test_fold_rejects_missing_and_duplicate_witnesses() -> None:
         world_id=WORLD_ID,
     )
     assert any(
-        item.agent_id.value == entered.details.agent_id
-        for item in folded.registrations
+        item.agent_id.value == entered.details.agent_id for item in folded.registrations
     )
     with pytest.raises(PopulationMetadataError) as repeated:
         fold_population_metadata(
@@ -650,10 +666,10 @@ def test_fold_rejects_channel_off_and_wrong_event_order() -> None:
 
 
 class _ContextSource:
-    def __init__(self, value: object | None) -> None:
+    def __init__(self, value: ObserverReplayContext | None) -> None:
         self._value = value
 
-    async def read_context(self, run_id: str) -> object | None:
+    async def read_context(self, run_id: str) -> ObserverReplayContext | None:
         return self._value
 
 
@@ -696,21 +712,21 @@ async def test_persistence_context_source_validates_fingerprint_and_schema() -> 
         values.update(overrides)
         return RunControlRecord(**values)  # type: ignore[arg-type]
 
-    missing = PersistenceObserverReplayContextSource(_RunControl(None))
+    missing = PersistenceObserverReplayContextSource(_RunControl(None))  # type: ignore[arg-type]
     assert await missing.read_context(RUN_ID) is None
-    source = PersistenceObserverReplayContextSource(_RunControl(_record()))
+    source = PersistenceObserverReplayContextSource(_RunControl(_record()))  # type: ignore[arg-type]
     context = await source.read_context(RUN_ID)
     assert context is not None
     assert context.population_lifecycle == config.population_lifecycle
     assert context.new_agent_initialization == config.new_agent_initialization
     tampered = PersistenceObserverReplayContextSource(
-        _RunControl(_record(config_fingerprint="0" * 64))
+        _RunControl(_record(config_fingerprint="0" * 64))  # type: ignore[arg-type]
     )
     with pytest.raises(ObserverReplayContextError) as invalid:
         await tampered.read_context(RUN_ID)
     assert invalid.value.reason_code == "observer_replay_context_invalid"
     wrong_schema = PersistenceObserverReplayContextSource(
-        _RunControl(_record(config_schema_version="runner-config-v4"))
+        _RunControl(_record(config_schema_version="runner-config-v4"))  # type: ignore[arg-type]
     )
     with pytest.raises(ObserverReplayContextError):
         await wrong_schema.read_context(RUN_ID)
@@ -743,3 +759,39 @@ def test_app_attaches_the_persistence_replay_context_source() -> None:
         reader._replay_context,
         PersistenceObserverReplayContextSource,
     )
+
+
+@pytest.mark.asyncio
+async def test_v20_historical_scene_retains_lifecycle_records() -> None:
+    from experiments.generational_runner_scenario import (
+        generational_runner_scenario,
+    )
+
+    definition = generational_runner_scenario(seed=23, max_ticks=6)
+    config = next(
+        condition.runner_config
+        for condition in definition.conditions
+        if condition.condition_id == "bl-generational-unassisted"
+    )
+    async with await SimulationRunner.from_config(
+        config, run_id=RunId(RUN_ID)
+    ) as runner:
+        for _ in range(6):
+            await runner.run_tick()
+        events = tuple(runner.engine._snapshot.event_history)
+        live_scene = scene_from_facts(runner.engine.detached_objective_facts())
+        v20_snapshot = _snapshot_from_engine(
+            runner.engine,
+            event_schema_version=EVENT_SCHEMA_REPLAY_V22,
+            persistence_codec_version="v20",
+        )
+    history = await scene_at_tick(
+        _service(v20_snapshot, events),
+        RunId(RUN_ID),
+        target_tick=Tick(6),
+        context=_context(config),
+    )
+    assert history.result.status is ReplayStatus.OK
+    assert history.scene.lifecycle_records is not None
+    assert history.scene.lifecycle_records == live_scene.lifecycle_records
+    assert history.scene.registrations == live_scene.registrations

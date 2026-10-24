@@ -140,6 +140,7 @@ class ObjectiveScene:
 def _freeze_lifecycle_records(
     values: object,
     registrations: Sequence[AgentRegistration],
+    bodies: Sequence[AgentBody],
 ) -> tuple[AgentLifecycleRecord, ...] | None:
     """Copy optional lifecycle metadata and validate binding consistency."""
     if values is None:
@@ -151,6 +152,7 @@ def _freeze_lifecycle_records(
     by_body = {
         registration.entity_id.value: registration for registration in registrations
     }
+    body_ids = {body.entity_id.value for body in bodies}
     seen_bodies: set[str] = set()
     seen_agents: set[str] = set()
     copied: list[AgentLifecycleRecord] = []
@@ -161,7 +163,7 @@ def _freeze_lifecycle_records(
         if body_key in seen_bodies or record.agent_id in seen_agents:
             _reject("lifecycle_record_duplicate")
         registration = by_body.get(body_key)
-        if registration is None:
+        if registration is None or body_key not in body_ids:
             _reject("lifecycle_body_missing")
         if registration.agent_id.value != record.agent_id:
             _reject("lifecycle_identity_mismatch")
@@ -188,7 +190,7 @@ def _freeze_facts(facts: ObjectiveFacts) -> ObjectiveScene:
         _reject("weather_incomplete")
     registrations = tuple(facts.registrations)
     lifecycle_records = _freeze_lifecycle_records(
-        facts.lifecycle_records, registrations
+        facts.lifecycle_records, registrations, facts.bodies
     )
     scene = ObjectiveScene(
         run_id=facts.run_id,
@@ -317,9 +319,7 @@ def scene_from_snapshot(
     elif lifecycle_active is True:
         lifecycle_records = copied_lifecycle_records
     else:
-        lifecycle_records = (
-            copied_lifecycle_records if raw_lifecycle_records else None
-        )
+        lifecycle_records = copied_lifecycle_records if raw_lifecycle_records else None
     facts = ObjectiveFacts(
         run_id=snapshot.run_id.value,
         world_id=snapshot.world_id.value,

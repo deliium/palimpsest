@@ -9,6 +9,7 @@ signal demographic_section_selected(section: String)
 signal demographic_load_more_requested
 signal generational_agent_selected(agent_id: String)
 signal lineage_tab_selected(tab: String)
+signal lineage_entry_selected(kind: String, native_kind: String, ref_id: String)
 signal lineage_back_requested
 signal connect_requested(run_id: String)
 signal zoom_in_requested
@@ -149,6 +150,10 @@ func _ready() -> void:
 		)
 		generational.lineage_tab_selected.connect(
 			func(tab: String) -> void: lineage_tab_selected.emit(tab)
+		)
+		generational.lineage_entry_selected.connect(
+			func(kind: String, native_kind: String, ref_id: String) -> void:
+				lineage_entry_selected.emit(kind, native_kind, ref_id)
 		)
 		generational.back_requested.connect(
 			func() -> void: lineage_back_requested.emit()
@@ -384,10 +389,16 @@ func set_generational_agent(agent_id: String) -> void:
 		panel.set_selected_agent(agent_id)
 
 
-func set_generation_markers(markers: Array) -> void:
+func set_generation_markers(markers: Array, run_id: String = "") -> void:
 	var timeline = get_node_or_null("Timeline")
 	if timeline != null and timeline.has_method("set_generation_markers"):
-		timeline.set_generation_markers(markers)
+		timeline.set_generation_markers(markers, run_id)
+
+
+func set_generational_panel_visible(value: bool) -> void:
+	var panel = get_node_or_null("GenerationalPanel")
+	if panel != null:
+		panel.visible = value
 
 
 func generational_panel_visible() -> bool:

@@ -549,8 +549,9 @@ func set_demographics_enabled(value: bool) -> void:
 func set_generation_markers_enabled(value: bool) -> void:
 	if generational != null:
 		generational.set_markers_enabled(value)
-		if value and _opened and _last_frame != null:
-			call_deferred("_generational_frame", _last_frame)
+		if value and _opened:
+			generational.set_context(run_id, _http_epoch, _credential_generation)
+			generational.request_markers()
 
 
 func choose_demographic_section(value: String) -> void:
@@ -712,6 +713,8 @@ func has_debug_credential() -> bool:
 func _teardown_source() -> void:
 	if generational != null:
 		generational.clear()
+	if private_lineage != null:
+		private_lineage.clear()
 	_switching = true
 	status_changed.emit("switching_run", "Switching run")
 	if _stream != null:
@@ -766,6 +769,8 @@ func _start() -> void:
 		_credential_generation += 1
 		if generational != null:
 			generational.clear()
+		if private_lineage != null:
+			private_lineage.clear()
 		credentials_changed.emit(false, false)
 	_credential_origin = resolved_origin
 	origin = resolved_origin
@@ -891,22 +896,22 @@ func _is_forward(event_tick: int, event_sequence: int) -> bool:
 
 func request_claim_overlay(owner_id: String) -> void:
 	var path := "/v1/simulations/%s/owners/%s/territorial-claims" % [run_id, owner_id]
-	_request_path("territorial_claims", path)
+	_request_path("territorial_claims", path, {"capability": "debug"})
 
 
 func request_label_overlay(agent_id: String) -> void:
 	var path := "/v1/simulations/%s/observer/agents/%s/labels" % [run_id, agent_id]
-	_request_path("subjective_labels", path)
+	_request_path("subjective_labels", path, {"capability": "debug"})
 
 
 func request_relationship_overlay(agent_id: String) -> void:
 	var path := "/v1/simulations/%s/observer/agents/%s/relationships" % [run_id, agent_id]
-	_request_path("relationships", path)
+	_request_path("relationships", path, {"capability": "debug"})
 
 
 func request_narrative_hop_overlay(agent_id: String) -> void:
 	var path := "/v1/simulations/%s/observer/agents/%s/narrative-hops" % [run_id, agent_id]
-	_request_path("narrative_hops", path)
+	_request_path("narrative_hops", path, {"capability": "debug"})
 
 
 func request_causal_trace(
@@ -925,7 +930,7 @@ func request_causal_trace(
 			"observer.debugger",
 			"causal_trace_request event_id=%s" % event_id,
 		)
-		_request_path("causal_debugger", path)
+		_request_path("causal_debugger", path, {"capability": "debug"})
 		return
 	if tick == null or sequence == null:
 		_emit_overlay_unavailable("causal_debugger", "incomplete_event_cursor")
@@ -938,7 +943,7 @@ func request_causal_trace(
 	_request_path(
 		"causal_debugger",
 		path,
-		{},
+		{"capability": "debug"},
 		{"tick": int(tick), "sequence": int(sequence)},
 	)
 
@@ -977,7 +982,7 @@ func request_debugger_lineage(kind: String, subject_id: String, owner_id: String
 	_request_path(
 		"causal_debugger_lineage",
 		path,
-		{},
+		{"capability": "debug"},
 		{"owner_id": trimmed_owner},
 	)
 
@@ -990,7 +995,7 @@ func request_analytics_overlay(_metric_set_id: String = "") -> void:
 func request_strategy_audit_overlay() -> void:
 	## Research/debug ANALYTICAL payload. Ordinary speech must not read this.
 	var path := "/v1/simulations/%s/observer/communication-strategy-audit" % run_id
-	_request_path("communication_strategy_audit", path)
+	_request_path("communication_strategy_audit", path, {"capability": "debug"})
 
 
 func request_metric_family_overlay(family: String, overlay_kind: String = "") -> void:

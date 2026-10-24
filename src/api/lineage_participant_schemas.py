@@ -47,9 +47,7 @@ class LineageParticipantCardOut(StrictModel):
 
 
 class LineageParticipantsOut(StrictModel):
-    schema_version: Literal["lineage-participants-v1"] = (
-        PARTICIPANTS_SCHEMA_VERSION
-    )
+    schema_version: Literal["lineage-participants-v1"] = PARTICIPANTS_SCHEMA_VERSION
     snapshot: LineageSnapshotOut
     requested_boundary_tick: int | None = Field(default=None, ge=0)
     captured_boundary_tick: int = Field(ge=0)

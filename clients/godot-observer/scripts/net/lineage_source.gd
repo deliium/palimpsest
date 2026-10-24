@@ -26,6 +26,8 @@ var _panel_generation := 0
 var _families_loaded := false
 var _families: Array = []
 var _pending := {}
+var _inflight := {}
+var _queued := {}
 var _cache := {}
 
 signal changed
@@ -75,6 +77,8 @@ func clear() -> void:
 	_families_loaded = false
 	_families = []
 	_pending.clear()
+	_inflight.clear()
+	_queued.clear()
 	_cache.clear()
 	_panel_generation += 1
 	changed.emit()
@@ -86,6 +90,8 @@ func _clear_private(reason: String) -> void:
 	knowledge = {}
 	reason_code = reason
 	_pending.clear()
+	_inflight.clear()
+	_queued.clear()
 	_panel_generation += 1
 	changed.emit()
 
@@ -206,29 +212,47 @@ func load_more_lineage(panel: String) -> void:
 
 
 func handle_response(meta: Dictionary, body: Variant, reason: String, _status: int) -> void:
+	var panel := str(meta.get("panel", ""))
+	_inflight.erase(panel)
+	var current := true
 	if int(meta.get("epoch", _epoch)) != _epoch:
-		return
-	if int(meta.get("credential_generation", _credential_generation)) != _credential_generation:
-		return
-	if int(meta.get("panel_generation", -1)) != _panel_generation:
-		return
+		current = false
+	elif int(meta.get("credential_generation", _credential_generation)) != _credential_generation:
+		current = false
+	elif int(meta.get("panel_generation", -1)) != _panel_generation:
+		current = false
 	var kind := str(meta.get("kind", ""))
-	if reason != "":
-		_apply_error(meta, reason)
+	if current:
+		if reason != "":
+			_apply_error(meta, reason)
+		else:
+			match kind:
+				"lineage_families":
+					_apply_families(meta, body)
+				"lineage_genealogy_nodes":
+					_apply_genealogy_nodes(meta, body)
+				"lineage_traverse":
+					_apply_traverse(meta, body)
+				"lineage_participants":
+					_apply_participants(meta, body)
+				"lineage_knowledge_nodes":
+					_apply_knowledge_nodes(meta, body)
+				"lineage_knowledge_traverse":
+					_apply_knowledge_traverse(meta, body)
+	_flush_queued(panel)
+
+
+func _flush_queued(panel: String) -> void:
+	if not _queued.has(panel):
 		return
-	match kind:
-		"lineage_families":
-			_apply_families(meta, body)
-		"lineage_genealogy_nodes":
-			_apply_genealogy_nodes(meta, body)
-		"lineage_traverse":
-			_apply_traverse(meta, body)
-		"lineage_participants":
-			_apply_participants(meta, body)
-		"lineage_knowledge_nodes":
-			_apply_knowledge_nodes(meta, body)
-		"lineage_knowledge_traverse":
-			_apply_knowledge_traverse(meta, body)
+	var queued: Dictionary = _queued[panel]
+	_queued.erase(panel)
+	_request(
+		str(queued["kind"]),
+		str(queued["path"]),
+		queued["meta"],
+		queued["query"],
+	)
 
 
 func _request_families(panel: String, carry: Dictionary) -> void:
@@ -259,6 +283,30 @@ func _request_genealogy_nodes(carry: Dictionary) -> void:
 	)
 
 
+func _apply_availability(body: Variant, meta: Dictionary) -> bool:
+	if typeof(body) != TYPE_DICTIONARY:
+		return false
+	if body.get("schema_version", "") != "lineage-availability-v1":
+		return false
+	var parsed: Dictionary = Lineage.parse_availability(body)
+	var code := (
+		"unavailable"
+		if not bool(parsed.get("ok", false))
+		else str(parsed["value"].reason_code)
+	)
+	var panel := str(meta.get("panel", ""))
+	var state := {"status": "unavailable", "reason_code": code}
+	if panel == "participants":
+		participants = state
+	elif panel == "knowledge":
+		knowledge = state
+	else:
+		genealogy = state
+	reason_code = code
+	changed.emit()
+	return true
+
+
 func _apply_families(meta: Dictionary, body: Variant) -> void:
 	var parsed: Dictionary = Lineage.parse_families(body)
 	if not bool(parsed.get("ok", false)):
@@ -275,6 +323,8 @@ func _apply_families(meta: Dictionary, body: Variant) -> void:
 
 
 func _apply_genealogy_nodes(meta: Dictionary, body: Variant) -> void:
+	if _apply_availability(body, meta):
+		return
 	var parsed: Dictionary = Lineage.parse_node_list(body)
 	if not bool(parsed.get("ok", false)):
 		_apply_error(meta, str(parsed.get("reason_code", "lineage_invalid")))
@@ -302,23 +352,39 @@ func _apply_genealogy_nodes(meta: Dictionary, body: Variant) -> void:
 	_request(
 		"lineage_traverse",
 		"/v1/simulations/%s/lineage/genealogy/traverse" % _run_id,
-		{"panel": "genealogy", "capability": "inspection", "carry": carry.duplicate(true)},
+		{
+			"panel": "genealogy",
+			"capability": "inspection",
+			"carry": {
+				"direction": direction,
+				"root_key": root_key,
+			},
+		},
 		query,
 	)
 
 
 func _apply_traverse(meta: Dictionary, body: Variant) -> void:
+	if _apply_availability(body, meta):
+		return
 	var parsed: Dictionary = Lineage.parse_graph(body)
 	if not bool(parsed.get("ok", false)):
 		_apply_error(meta, str(parsed.get("reason_code", "lineage_invalid")))
 		return
 	var model = parsed["value"]
+	var append: bool = bool(meta.get("append", false)) and genealogy.get("status", "") == "available"
+	var nodes: Array = model.nodes.duplicate()
+	var edges: Array = model.edges.duplicate()
+	if append:
+		nodes = _merge_by_key(genealogy.get("nodes", []), model.nodes)
+		edges = _merge_by_identity(genealogy.get("edges", []), model.edges)
+	var carry: Dictionary = meta.get("carry", {})
 	var parents: Array = []
 	var children: Array = []
 	var nodes_by_key: Dictionary = {}
-	for node in model.nodes:
+	for node in nodes:
 		nodes_by_key[node.ref.key] = node
-	for edge in model.edges:
+	for edge in edges:
 		if edge.relation != "parent_of":
 			continue
 		var source = nodes_by_key.get(edge.source_key)
@@ -333,20 +399,50 @@ func _apply_traverse(meta: Dictionary, body: Variant) -> void:
 		"status": "available",
 		"parents": _cap_nodes(parents),
 		"children": _cap_nodes(children),
-		"nodes": _cap_nodes(model.nodes),
-		"edges": model.edges.slice(0, MAX_EDGES),
+		"nodes": _cap_nodes(nodes),
+		"edges": edges.slice(0, MAX_EDGES),
 		"next_cursor": model.next_cursor,
 		"coverage": model.coverage,
 		"publication": model.snapshot,
-		"truncated": model.truncated or model.nodes.size() > MAX_NODES or model.edges.size() > MAX_EDGES,
+		"truncated": (
+			model.truncated
+			or nodes.size() > MAX_NODES
+			or edges.size() > MAX_EDGES
+		),
 		"requested_boundary_tick": model.requested_boundary_tick,
 		"captured_boundary_tick": model.captured_boundary_tick,
+		"root_key": str(carry.get("root_key", genealogy.get("root_key", ""))),
+		"direction": str(carry.get("direction", genealogy.get("direction", "both"))),
 	}
 	remember_publication(model.snapshot)
 	changed.emit()
 
 
+func _merge_by_key(existing: Array, incoming: Array) -> Array:
+	var merged: Dictionary = {}
+	for node in existing:
+		merged[node.ref.key] = node
+	for node in incoming:
+		merged[node.ref.key] = node
+	var ordered: Array = merged.values()
+	ordered.sort_custom(func(a: Variant, b: Variant) -> bool:
+		return str(a.ref.key) < str(b.ref.key)
+	)
+	return ordered
+
+
+func _merge_by_identity(existing: Array, incoming: Array) -> Array:
+	var merged: Dictionary = {}
+	for edge in existing:
+		merged["%s|%s|%s" % [edge.source_key, edge.relation, edge.target_key]] = edge
+	for edge in incoming:
+		merged["%s|%s|%s" % [edge.source_key, edge.relation, edge.target_key]] = edge
+	return merged.values()
+
+
 func _apply_participants(meta: Dictionary, body: Variant) -> void:
+	if _apply_availability(body, meta):
+		return
 	var parsed: Dictionary = Lineage.parse_participants(body)
 	if not bool(parsed.get("ok", false)):
 		_apply_error(meta, str(parsed.get("reason_code", "lineage_invalid")))
@@ -392,6 +488,8 @@ func _apply_participants(meta: Dictionary, body: Variant) -> void:
 
 
 func _apply_knowledge_nodes(meta: Dictionary, body: Variant) -> void:
+	if _apply_availability(body, meta):
+		return
 	var parsed: Dictionary = Lineage.parse_node_list(body)
 	if not bool(parsed.get("ok", false)):
 		_apply_error(meta, str(parsed.get("reason_code", "lineage_invalid")))
@@ -430,25 +528,39 @@ func _apply_knowledge_nodes(meta: Dictionary, body: Variant) -> void:
 			"capability": "debug",
 			"evidence_class": query["evidence_class"],
 			"owner_id": query.get("owner_id", ""),
+			"root_key": root.ref.key,
+			"direction": "both",
 		},
 		query,
 	)
 
 
 func _apply_knowledge_traverse(meta: Dictionary, body: Variant) -> void:
+	if _apply_availability(body, meta):
+		return
 	var parsed: Dictionary = Lineage.parse_graph(body)
 	if not bool(parsed.get("ok", false)):
 		_apply_error(meta, str(parsed.get("reason_code", "lineage_invalid")))
 		return
 	var model = parsed["value"]
+	var append: bool = bool(meta.get("append", false)) and knowledge.get("status", "") == "available"
+	var nodes: Array = model.nodes.duplicate()
+	var edges: Array = model.edges.duplicate()
+	if append:
+		nodes = _merge_by_key(knowledge.get("items", []), model.nodes)
+		edges = _merge_by_identity(knowledge.get("edges", []), model.edges)
 	knowledge = {
 		"status": "available",
-		"items": _cap_nodes(model.nodes),
-		"edges": model.edges.slice(0, MAX_EDGES),
+		"items": _cap_nodes(nodes),
+		"edges": edges.slice(0, MAX_EDGES),
 		"next_cursor": model.next_cursor,
 		"coverage": model.coverage,
 		"publication": model.snapshot,
-		"truncated": model.truncated,
+		"truncated": model.truncated or nodes.size() > MAX_NODES,
+		"root_key": str(meta.get("root_key", knowledge.get("root_key", ""))),
+		"direction": str(meta.get("direction", knowledge.get("direction", "both"))),
+		"evidence_class": str(meta.get("evidence_class", knowledge.get("evidence_class", "subjective"))),
+		"owner_id": str(meta.get("owner_id", knowledge.get("owner_id", ""))),
 	}
 	changed.emit()
 
@@ -483,14 +595,71 @@ func _load_more_participants() -> void:
 
 
 func _load_more_genealogy() -> void:
-	# Direct parents/children stay complete; deeper exploration is explicit.
+	if genealogy.get("status", "") != "available":
+		return
 	if genealogy.get("next_cursor", null) == null:
 		return
+	var root_key := str(genealogy.get("root_key", ""))
+	if root_key.is_empty():
+		return
+	var direction := str(genealogy.get("direction", "both"))
+	var query := _boundary_query()
+	query["evidence_class"] = "objective"
+	query["root_key"] = root_key
+	query["direction"] = direction
+	query["max_depth"] = 1
+	query["max_nodes"] = 100
+	query["max_edges"] = 200
+	query["limit"] = 100
+	query["after"] = genealogy["next_cursor"]
+	_request(
+		"lineage_traverse",
+		"/v1/simulations/%s/lineage/genealogy/traverse" % _run_id,
+		{
+			"panel": "genealogy",
+			"capability": "inspection",
+			"append": true,
+			"carry": {"direction": direction, "root_key": root_key},
+		},
+		query,
+	)
 
 
 func _load_more_knowledge() -> void:
+	if knowledge.get("status", "") != "available":
+		return
 	if knowledge.get("next_cursor", null) == null:
 		return
+	var root_key := str(knowledge.get("root_key", ""))
+	if root_key.is_empty():
+		return
+	var evidence_class := str(knowledge.get("evidence_class", "subjective"))
+	var owner_id := str(knowledge.get("owner_id", ""))
+	var query := _boundary_query()
+	query["evidence_class"] = evidence_class
+	query["root_key"] = root_key
+	query["direction"] = str(knowledge.get("direction", "both"))
+	query["max_depth"] = 1
+	query["max_nodes"] = 100
+	query["max_edges"] = 200
+	query["limit"] = 100
+	query["after"] = knowledge["next_cursor"]
+	if evidence_class == "subjective":
+		query["owner_id"] = owner_id
+	_request(
+		"lineage_knowledge_traverse",
+		"/v1/simulations/%s/lineage/knowledge/traverse" % _run_id,
+		{
+			"panel": "knowledge",
+			"capability": "debug",
+			"append": true,
+			"evidence_class": evidence_class,
+			"owner_id": owner_id,
+			"root_key": root_key,
+			"direction": query["direction"],
+		},
+		query,
+	)
 
 
 func _boundary_query() -> Dictionary:
@@ -531,12 +700,25 @@ func _apply_error(meta: Dictionary, reason: String) -> void:
 		code = "unsupported"
 	elif reason == "lineage_cursor_expired":
 		code = "cursor_gone"
+	var restart := code in ["cursor_gone", "expired"]
 	if panel == "participants":
-		participants = {"status": "unavailable", "reason_code": code}
+		participants = {
+			"status": "unavailable",
+			"reason_code": code,
+			"restart_required": restart,
+		}
 	elif panel == "knowledge":
-		knowledge = {"status": "unavailable", "reason_code": code}
+		knowledge = {
+			"status": "unavailable",
+			"reason_code": code,
+			"restart_required": restart,
+		}
 	else:
-		genealogy = {"status": "unavailable", "reason_code": code}
+		genealogy = {
+			"status": "unavailable",
+			"reason_code": code,
+			"restart_required": restart,
+		}
 	reason_code = code
 	changed.emit()
 
@@ -544,6 +726,16 @@ func _apply_error(meta: Dictionary, reason: String) -> void:
 func _request(kind: String, path: String, meta: Dictionary, query: Dictionary) -> void:
 	if _sink.is_null() or _run_id.is_empty():
 		return
+	var panel := str(meta.get("panel", ""))
+	if _inflight.has(panel):
+		_queued[panel] = {
+			"kind": kind,
+			"path": path,
+			"meta": meta.duplicate(true),
+			"query": query.duplicate(true),
+		}
+		return
+	_inflight[panel] = true
 	_pending[kind] = int(_pending.get(kind, 0)) + 1
 	var payload := {
 		"source": "lineage",
@@ -555,4 +747,5 @@ func _request(kind: String, path: String, meta: Dictionary, query: Dictionary) -
 	}
 	for key in meta.keys():
 		payload[key] = meta[key]
+	payload["panel_generation"] = _panel_generation
 	_sink.call(kind, path, payload, query)

@@ -5,6 +5,7 @@ signal section_selected(section: String)
 signal load_more_requested
 signal agent_selected(agent_id: String)
 signal lineage_tab_selected(tab: String)
+signal lineage_entry_selected(kind: String, native_kind: String, ref_id: String)
 signal back_requested
 
 const EvidenceClass := preload("res://scripts/presentation/evidence_class.gd")
@@ -25,10 +26,17 @@ const ObserverLog := preload("res://scripts/log.gd")
 var selected_agent_id := ""
 var selection_state := "unselected"
 var _agent_ids: Array = []
+var _lineage_list: ItemList
+var _lineage_entries: Array = []
 
 
 func _ready() -> void:
-	visible = true
+	visible = false
+	_agents.custom_minimum_size = Vector2(400, 120)
+	_agents.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_groups.custom_minimum_size = Vector2(400, 80)
+	_groups.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_set_lineage_visible(false)
 	_population.toggled.connect(func(enabled: bool) -> void:
 		visible = true
 		ObserverLog.debug("acceptance", "population_toggle_state enabled=%s" % enabled)
@@ -41,6 +49,19 @@ func _ready() -> void:
 	)
 	_load_more.pressed.connect(func() -> void: load_more_requested.emit())
 	_back.pressed.connect(func() -> void: back_requested.emit())
+	_lineage_list = ItemList.new()
+	_lineage_list.custom_minimum_size = Vector2(0, 96)
+	_lineage_list.item_selected.connect(func(index: int) -> void:
+		if index < 0 or index >= _lineage_entries.size():
+			return
+		var entry: Dictionary = _lineage_entries[index]
+		lineage_entry_selected.emit(
+			str(entry.get("kind", "")),
+			str(entry.get("native_kind", "")),
+			str(entry.get("id", "")),
+		)
+	)
+	$Column.add_child(_lineage_list)
 	for section in ["agents", "cohorts", "generations"]:
 		var button := Button.new()
 		button.text = section.capitalize()
@@ -146,6 +167,8 @@ func apply_selection(row: Variant, state: String) -> void:
 
 func apply_lineage(panel: String, data: Dictionary) -> void:
 	_lineage_title.text = panel.capitalize()
+	_lineage_list.clear()
+	_lineage_entries.clear()
 	if data.is_empty():
 		_lineage_body.text = "unavailable"
 		return
@@ -157,6 +180,8 @@ func apply_lineage(panel: String, data: Dictionary) -> void:
 	if panel == "genealogy":
 		lines.append("parents: " + _agent_list(data.get("parents", [])))
 		lines.append("children: " + _agent_list(data.get("children", [])))
+		_add_entries("parent", data.get("parents", []))
+		_add_entries("child", data.get("children", []))
 	elif panel == "participants":
 		lines.append("evidence: %s | owner %s | role %s" % [
 			data.get("evidence_class", ""), data.get("owner_id", ""), data.get("role", "")
@@ -168,6 +193,10 @@ func apply_lineage(panel: String, data: Dictionary) -> void:
 				card.teacher_id, card.learner_id, card.content_kind,
 				card.learning_state, card.learning_evidence_count, card.attempt_count,
 			])
+			if str(card.teacher_id) != selected_agent_id:
+				_add_entry("teacher", "agent", str(card.teacher_id), "teacher %s" % card.teacher_id)
+			if str(card.learner_id) != selected_agent_id:
+				_add_entry("student", "agent", str(card.learner_id), "student %s" % card.learner_id)
 			if card.learning_state == "attempt_only":
 				attempt += 1
 			else:
@@ -179,6 +208,7 @@ func apply_lineage(panel: String, data: Dictionary) -> void:
 			lines.append("scan limited: more candidates remain")
 	else:
 		lines.append("nodes: %s" % data.get("items", []).size())
+		_add_entries("content", data.get("items", []))
 	_lineage_body.text = "\n".join(lines)
 	ObserverLog.debug(
 		"acceptance",
@@ -191,13 +221,22 @@ func apply_lineage(panel: String, data: Dictionary) -> void:
 
 func set_selected_agent(agent_id: String) -> void:
 	selected_agent_id = agent_id
-	_back.visible = not agent_id.is_empty()
+	_set_lineage_visible(not agent_id.is_empty())
 	if agent_id.is_empty():
 		_lineage_body.text = "Select an agent to navigate lineage."
 
 
 func set_back_available(available: bool) -> void:
-	_back.visible = available
+	_back.visible = available and not selected_agent_id.is_empty()
+
+
+func _set_lineage_visible(value: bool) -> void:
+	_tabs.visible = value
+	_lineage_title.visible = value
+	_lineage_body.visible = value
+	if _lineage_list != null:
+		_lineage_list.visible = value
+	_back.visible = value
 
 
 func show_unavailable(reason: String) -> void:
@@ -206,6 +245,29 @@ func show_unavailable(reason: String) -> void:
 	_stages.text = ""
 	_groups.clear()
 	_agents.clear()
+
+
+func _add_entries(kind: String, nodes: Array) -> void:
+	for node in nodes:
+		_add_entry(
+			kind,
+			str(node.ref.native_kind),
+			str(node.ref.native_id),
+			"%s %s" % [kind, node.ref.native_id],
+		)
+
+
+func _add_entry(
+	kind: String, native_kind: String, ref_id: String, label: String
+) -> void:
+	if ref_id.is_empty():
+		return
+	_lineage_entries.append({
+		"kind": kind,
+		"native_kind": native_kind,
+		"id": ref_id,
+	})
+	_lineage_list.add_item(label)
 
 
 func _agent_list(values: Array) -> String:

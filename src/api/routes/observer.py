@@ -60,6 +60,17 @@ def _debug(request: Request, settings: Settings = Depends(get_settings)) -> None
     )
 
 
+def _reject_unknown_query(request: Request, allowed: set[str]) -> None:
+    unknown = set(request.query_params.keys()) - allowed
+    if unknown:
+        raise bad_request(code="invalid_observer_query")
+    seen: set[str] = set()
+    for key, _value in request.query_params.multi_items():
+        if key in seen:
+            raise bad_request(code="invalid_observer_query")
+        seen.add(key)
+
+
 @router.get(
     "/{run_id}/observer/manifest",
     response_model=ObserverManifestOut,
@@ -137,19 +148,25 @@ async def get_observer_demographics(
     settings: Settings = Depends(get_settings),
     tick: int | None = Query(default=None, ge=0),
     through_sequence: int | None = Query(default=None, ge=0),
-    section: Literal["agents", "cohorts", "generations"] = Query(
-        default="agents"
-    ),
+    section: Literal["agents", "cohorts", "generations"] = Query(default="agents"),
     agent_id: str | None = Query(default=None, min_length=1, max_length=128),
-    after_agent_id: str | None = Query(
-        default=None, min_length=1, max_length=128
-    ),
-    after_group_key: str | None = Query(
-        default=None, min_length=1, max_length=512
-    ),
+    after_agent_id: str | None = Query(default=None, min_length=1, max_length=128),
+    after_group_key: str | None = Query(default=None, min_length=1, max_length=512),
     limit: int = Query(default=100, ge=1, le=200),
 ) -> ObserverDemographicsOut:
     """Bounded demographic rows plus exact full-population totals."""
+    _reject_unknown_query(
+        request,
+        {
+            "tick",
+            "through_sequence",
+            "section",
+            "agent_id",
+            "after_agent_id",
+            "after_group_key",
+            "limit",
+        },
+    )
     if limit > settings.api_max_page_size:
         raise bad_request(code="limit_exceeds_maximum", run_id=run_id)
     if through_sequence is not None and tick is None:
@@ -204,6 +221,10 @@ async def get_observer_generation_markers(
     limit: int = Query(default=100, ge=1, le=200),
 ) -> ObserverGenerationMarkersOut:
     """Plausible admitted-generation timeline markers at one full boundary."""
+    _reject_unknown_query(
+        request,
+        {"tick", "from_tick", "to_tick", "after_generation_index", "limit"},
+    )
     if limit > settings.api_max_page_size:
         raise bad_request(code="limit_exceeds_maximum", run_id=run_id)
     started = time.perf_counter()
@@ -218,9 +239,7 @@ async def get_observer_generation_markers(
     response.headers["Cache-Control"] = "no-store"
     _LOGGER.info(
         "route_observer_generation_markers",
-        route_template=(
-            "GET /v1/simulations/{run_id}/observer/generation-markers"
-        ),
+        route_template=("GET /v1/simulations/{run_id}/observer/generation-markers"),
         status=200,
         run_id=run_id,
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
@@ -633,8 +652,7 @@ async def get_observer_symbolic_language(
     _LOGGER.info(
         "route_observer_symbolic_language",
         route_template=(
-            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/"
-            "symbolic-language"
+            "GET /v1/simulations/{run_id}/observer/agents/{agent_id}/symbolic-language"
         ),
         status=200,
         run_id=run_id,

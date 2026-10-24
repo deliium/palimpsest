@@ -165,14 +165,13 @@ async def _publish_sparse(root: Path) -> tuple[str, str]:
     nodes = [_node(record) for record in records]
     nodes.sort(key=lambda node: node.key)
     target = nodes[400]
+    assert target.mentorship_record is not None
     match_record = replace(
         target.mentorship_record,
         learner_id="target-agent",
         learning_evidence_count=2,
     )
-    nodes[400] = replace(
-        target, mentorship_record=match_record, status_code="learned"
-    )
+    nodes[400] = replace(target, mentorship_record=match_record, status_code="learned")
     published = await create_lineage_publisher(root).publish(
         _publication(_SUBJECTIVE, tuple(nodes))
     )
@@ -181,9 +180,7 @@ async def _publish_sparse(root: Path) -> tuple[str, str]:
 
 async def _publish_owner_duplicate(root: Path) -> None:
     record = _record("shared-lineage", learner="target-agent")
-    second = _record(
-        "shared-lineage-2", teacher="teacher-y", learner="target-agent"
-    )
+    second = _record("shared-lineage-2", teacher="teacher-y", learner="target-agent")
     await create_lineage_publisher(root).publish(
         _publication(_SUBJECTIVE, (_node(record), _node(second)))
     )
@@ -206,9 +203,7 @@ async def _publish_analytical(root: Path) -> None:
         evidence=3,
     )
     node = _node(record, evidence_class=LineageEvidenceClass.ANALYTICAL)
-    await create_lineage_publisher(root).publish(
-        _publication(_ANALYTICAL, (node,))
-    )
+    await create_lineage_publisher(root).publish(_publication(_ANALYTICAL, (node,)))
 
 
 def _settings(root: Path) -> Settings:
@@ -229,8 +224,10 @@ def _headers() -> dict[str, str]:
     return {"x-palimpsest-token": _DEBUG_SECRET}
 
 
-def _participant_params(**overrides: object) -> dict[str, object]:
-    values: dict[str, object] = {
+def _participant_params(
+    **overrides: str | int | None,
+) -> dict[str, str | int]:
+    values: dict[str, str | int | None] = {
         "evidence_class": "subjective",
         "owner_id": _OWNER,
         "agent_id": "target-agent",
@@ -313,18 +310,14 @@ async def test_participant_roles_owner_isolation_and_analytical_scope(
         assert len(teacher.json()["items"]) == 1
         other_owner = await client.get(
             f"/v1/simulations/{_RUN.value}/lineage/mentorship/participants",
-            params=_participant_params(
-                owner_id=_OTHER_OWNER, agent_id="target-agent"
-            ),
+            params=_participant_params(owner_id=_OTHER_OWNER, agent_id="target-agent"),
             headers=_headers(),
         )
         assert other_owner.status_code == 200
         assert other_owner.json()["items"] == []
         analytical = await client.get(
             f"/v1/simulations/{_RUN.value}/lineage/mentorship/participants",
-            params=_participant_params(
-                evidence_class="analytical", owner_id=None
-            ),
+            params=_participant_params(evidence_class="analytical", owner_id=None),
             headers=_headers(),
         )
         assert analytical.status_code == 200
@@ -384,17 +377,13 @@ async def test_cursor_scope_role_agent_and_cross_purpose_rejections(
         assert wrong_role.status_code == 400
         wrong_agent = await client.get(
             f"/v1/simulations/{_RUN.value}/lineage/mentorship/participants",
-            params=_participant_params(
-                limit=1, agent_id="teacher-x", after=cursor
-            ),
+            params=_participant_params(limit=1, agent_id="teacher-x", after=cursor),
             headers=_headers(),
         )
         assert wrong_agent.status_code == 400
         wrong_scope = await client.get(
             f"/v1/simulations/{_RUN.value}/lineage/mentorship/participants",
-            params=_participant_params(
-                limit=1, owner_id=_OTHER_OWNER, after=cursor
-            ),
+            params=_participant_params(limit=1, owner_id=_OTHER_OWNER, after=cursor),
             headers=_headers(),
         )
         assert wrong_scope.status_code == 400

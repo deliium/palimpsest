@@ -544,10 +544,7 @@ async def lineage_mentorship_participants(
             payload = codec.decode(after, purpose="participants", scope=scope)
         except LineageError as exc:
             raise _map_error(exc, run_id=run_id) from exc
-        if (
-            payload.filter_fingerprint != filter_fp
-            or payload.page_size != limit
-        ):
+        if payload.filter_fingerprint != filter_fp or payload.page_size != limit:
             raise bad_request(code="invalid_lineage_cursor", run_id=run_id)
         if (
             boundary_tick is not None
@@ -614,9 +611,7 @@ async def lineage_mentorship_participants(
     _enforce_response_bytes(model)
     _LOGGER.info(
         "route_lineage_participants",
-        route_template=(
-            "GET /v1/simulations/{run_id}/lineage/mentorship/participants"
-        ),
+        route_template=("GET /v1/simulations/{run_id}/lineage/mentorship/participants"),
         status=200,
         run_id=run_id,
         duration_ms=round((time.perf_counter() - started) * 1000, 3),

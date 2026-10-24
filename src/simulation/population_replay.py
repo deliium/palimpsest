@@ -35,9 +35,7 @@ from world.lifecycle import (
     resolve_lifecycle_stage,
 )
 
-_LOGGER: Final[logging.Logger] = logging.getLogger(
-    "simulation.population_replay"
-)
+_LOGGER: Final[logging.Logger] = logging.getLogger("simulation.population_replay")
 
 __all__ = [
     "PendingPopulationReservation",
@@ -97,13 +95,10 @@ class PopulationMetadataFold:
     pending_reservations: tuple[PendingPopulationReservation, ...] = ()
 
     def __post_init__(self) -> None:
-        if any(
-            type(item) is not AgentRegistration for item in self.registrations
-        ):
+        if any(type(item) is not AgentRegistration for item in self.registrations):
             raise TypeError("registrations entries must be AgentRegistration")
         if any(
-            type(item) is not AgentLifecycleRecord
-            for item in self.lifecycle_records
+            type(item) is not AgentLifecycleRecord for item in self.lifecycle_records
         ):
             raise TypeError("lifecycle_records entries must be AgentLifecycleRecord")
         if any(
@@ -132,14 +127,12 @@ def fold_population_metadata(
     record, and ``LifecycleStageChanged`` replaces the recorded stage. Events
     are applied once; folding the same events twice fails closed.
     """
-    if (
-        isinstance(registrations, (str, bytes, set, frozenset))
-        or not isinstance(registrations, Sequence)
+    if isinstance(registrations, (str, bytes, set, frozenset)) or not isinstance(
+        registrations, Sequence
     ):
         raise TypeError("registrations must be an ordered sequence")
-    if (
-        isinstance(lifecycle_records, (str, bytes, set, frozenset))
-        or not isinstance(lifecycle_records, Sequence)
+    if isinstance(lifecycle_records, (str, bytes, set, frozenset)) or not isinstance(
+        lifecycle_records, Sequence
     ):
         raise TypeError("lifecycle_records must be an ordered sequence")
     if isinstance(events, (str, bytes, set, frozenset)) or not isinstance(

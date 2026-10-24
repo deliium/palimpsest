@@ -39,6 +39,7 @@ var _credential_generation := 0
 var _epoch := 0
 var _pending := {}
 var _inflight := {}
+var _queued := {}
 
 signal changed
 
@@ -57,6 +58,11 @@ func set_demographics_enabled(value: bool) -> void:
 	demographics_enabled = value
 	if not value:
 		_clear_demographics("disabled")
+
+
+func request_markers() -> void:
+	if markers_enabled and not cursor.is_empty():
+		_request_markers()
 
 
 func set_markers_enabled(value: bool) -> void:
@@ -175,10 +181,14 @@ func clear() -> void:
 	next_after_generation_index = null
 	markers_truncated = false
 	availability = "unavailable"
+	model_view = null
 	reason_code = "unavailable"
+	selected_agent_id = ""
+	section = "agents"
 	stale = false
 	_pending.clear()
 	_inflight.clear()
+	_queued.clear()
 	changed.emit()
 
 
@@ -187,7 +197,7 @@ func load_more_agents() -> void:
 		return
 	var query := _base_query()
 	query["after_agent_id"] = next_after_agent_id
-	_request("demographics_page", query)
+	_request("demographics_page", query, true)
 
 
 func load_more_section() -> void:
@@ -196,7 +206,7 @@ func load_more_section() -> void:
 	var query := _base_query()
 	query["section"] = section
 	query["after_group_key"] = next_after_group_key
-	_request("demographics_page", query)
+	_request("demographics_page", query, true)
 
 
 func load_more_markers() -> void:
@@ -204,7 +214,7 @@ func load_more_markers() -> void:
 		return
 	var query := _marker_query()
 	query["after_generation_index"] = next_after_generation_index
-	_request("demographics_markers", query)
+	_request("demographics_markers", query, true)
 
 
 func handle_response(meta: Dictionary, body: Variant, reason: String, status: int) -> void:
@@ -218,24 +228,35 @@ func handle_response(meta: Dictionary, body: Variant, reason: String, status: in
 		],
 	)
 	_inflight.erase(kind)
+	var current := true
 	if int(meta.get("epoch", _epoch)) != _epoch:
-		return
-	if int(meta.get("credential_generation", _credential_generation)) != _credential_generation:
-		return
-	if int(meta.get("generation", _generation)) != _generation:
+		current = false
+	elif int(meta.get("credential_generation", _credential_generation)) != _credential_generation:
+		current = false
+	elif int(meta.get("generation", _generation)) != _generation:
 		ObserverLog.debug("acceptance", "generational_ignored reason=stale_generation")
-		return
-	if serial != int(_pending.get(kind, -1)):
+		current = false
+	elif serial != int(_pending.get(kind, -1)):
 		ObserverLog.debug("acceptance", "generational_ignored reason=stale_serial")
+		current = false
+	if current:
+		if reason != "":
+			_apply_error(kind, reason, status)
+		elif kind == "demographics_markers":
+			_apply_markers(meta, body)
+		else:
+			_apply_demographics(meta, body)
+		ObserverLog.debug("acceptance", "generational_response_applied kind=%s" % kind)
+	_flush_queued(kind)
+
+
+func _flush_queued(kind: String) -> void:
+	## A newer frame may have arrived while a request was in flight.
+	if not _queued.has(kind):
 		return
-	if reason != "":
-		_apply_error(kind, reason, status)
-		return
-	if kind == "demographics_markers":
-		_apply_markers(meta, body)
-	else:
-		_apply_demographics(meta, body)
-	ObserverLog.debug("acceptance", "generational_response_applied kind=%s" % kind)
+	var queued: Dictionary = _queued[kind]
+	_queued.erase(kind)
+	_request(kind, queued["query"], bool(queued["append"]))
 
 
 func _fetch_first_page() -> void:
@@ -257,7 +278,7 @@ func _base_query() -> Dictionary:
 
 
 func _marker_query() -> Dictionary:
-	var query := {"limit": PAGE_SIZE}
+	var query := {"limit": 50}
 	if cursor.has("tick"):
 		if str(cursor.get("kind", "")) == "prefix":
 			query["tick"] = int(cursor["tick"])
@@ -268,10 +289,11 @@ func _marker_query() -> Dictionary:
 	return query
 
 
-func _request(kind: String, query: Dictionary) -> void:
+func _request(kind: String, query: Dictionary, append: bool = false) -> void:
 	if _sink.is_null() or run_id.is_empty():
 		return
 	if _inflight.has(kind):
+		_queued[kind] = {"query": query, "append": append}
 		return
 	var path := "/v1/simulations/%s/observer" % run_id
 	if kind == "demographics_markers":
@@ -293,6 +315,7 @@ func _request(kind: String, query: Dictionary) -> void:
 		"section": section,
 		"selected_agent": selected_agent_id,
 		"revision": int(_revision),
+		"append": append,
 	}
 	_sink.call(kind, path, meta, query)
 
@@ -333,6 +356,8 @@ func _apply_demographics(meta: Dictionary, body: Variant) -> void:
 		return
 	var selected := str(meta.get("selected_agent", ""))
 	if selected != "":
+		if selected != selected_agent_id or model.section != "agents":
+			return
 		if model.selection_state not in ["selected", "not_present_at_cursor"]:
 			return
 		selected_row = model.agents[0] if not model.agents.is_empty() else null

@@ -348,8 +348,7 @@ class ObserverReadService:
         )
         _enforce_response_ceiling(response, run_id=run_id)
         _LOGGER.debug(
-            "generation_markers_fetched run_id=%s tick=%s count=%s "
-            "availability=%s",
+            "generation_markers_fetched run_id=%s tick=%s count=%s availability=%s",
             run_id,
             tick,
             len(response.markers),

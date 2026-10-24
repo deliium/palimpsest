@@ -11,9 +11,9 @@ from api.schemas import StrictModel
 DEMOGRAPHICS_SCHEMA_VERSION: Final[Literal["observer-demographics-v1"]] = (
     "observer-demographics-v1"
 )
-GENERATION_MARKERS_SCHEMA_VERSION: Final[
-    Literal["observer-generation-markers-v1"]
-] = "observer-generation-markers-v1"
+GENERATION_MARKERS_SCHEMA_VERSION: Final[Literal["observer-generation-markers-v1"]] = (
+    "observer-generation-markers-v1"
+)
 
 
 class DemographicPopulationOut(StrictModel):
@@ -69,9 +69,7 @@ class ObserverDemographicsOut(StrictModel):
     availability: Literal["available", "unavailable"]
     reason_code: Literal["lifecycle_disabled"] | None = None
     section: Literal["agents", "cohorts", "generations"]
-    selection_state: Literal[
-        "all", "selected", "not_present_at_cursor", "unavailable"
-    ]
+    selection_state: Literal["all", "selected", "not_present_at_cursor", "unavailable"]
     population: DemographicPopulationOut | None = None
     stage_rows: tuple[DemographicStageRowOut, ...] = ()
     stage_counts_truncated: bool = False
