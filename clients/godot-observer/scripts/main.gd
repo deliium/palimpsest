@@ -69,6 +69,7 @@ func _ready() -> void:
 		_session.set_agent_focus(entity_id)
 		var logical_agent := _agent_id_for_entity(entity_id)
 		if logical_agent != "":
+			_selected_agent_id = logical_agent
 			_session.set_lineage_enabled(true)
 			_session.select_demographic_agent(logical_agent)
 			_ui.set_generational_agent(logical_agent)
@@ -553,7 +554,7 @@ func _on_demographic_load_more() -> void:
 
 
 func _on_generational_updated() -> void:
-	var model: Variant = _session.generational
+	var model: Variant = _session.generational.model_view
 	_ui.apply_demographics(model)
 	var kinds: Array = []
 	for candidate in ["generation", "cohort", "age_stage"]:
@@ -572,11 +573,15 @@ func _on_lineage_updated() -> void:
 
 
 var _active_lineage_tab := "genealogy"
+var _selected_agent_id := ""
 
 
 func _on_lineage_tab(tab: String) -> void:
+	ObserverLog.debug("acceptance", "lineage_tab_clicked tab=%s" % tab)
 	_active_lineage_tab = "genealogy" if tab in ["parents", "children"] else "participants"
-	var agent_id: String = _session.private_lineage.selected_agent_id
+	var agent_id: String = _selected_agent_id
+	if agent_id == "":
+		agent_id = _session.private_lineage.selected_agent_id
 	if agent_id == "":
 		agent_id = _agent_id_for_entity(_session.focus_agent_id)
 	if agent_id == "":
@@ -596,6 +601,8 @@ func _on_lineage_tab(tab: String) -> void:
 
 
 func _on_generational_agent(agent_id: String) -> void:
+	ObserverLog.debug("acceptance", "panel_agent_selected agent_id=%s" % agent_id)
+	_selected_agent_id = agent_id
 	_session.select_demographic_agent(agent_id)
 	_session.set_generational_agent(agent_id)
 	var entity_id: String = _world.agent_entity_for(agent_id)

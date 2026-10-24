@@ -102,9 +102,13 @@ def _generational_stack(
         "services:",
         "  api:",
         "    environment:",
+        '      PALIMPSEST_API_AUTH_REQUIRED: "true"',
+        '      PALIMPSEST_API_CONTROL_CREDENTIAL: "${PALIMPSEST_ACCEPT_CONTROL}"',
+        '      PALIMPSEST_API_INSPECTION_CREDENTIAL: "${PALIMPSEST_ACCEPT_INSPECTION}"',
+        '      PALIMPSEST_API_AGENT_VISIBLE_CREDENTIAL: '
+        '"${PALIMPSEST_ACCEPT_AGENT_VISIBLE}"',
         '      PALIMPSEST_API_DEBUG_ENABLED: "true"',
         '      PALIMPSEST_API_DEBUG_CREDENTIAL: "${PALIMPSEST_ACCEPT_DEBUG}"',
-
     ]
     if lineage_enabled:
         lines.extend(

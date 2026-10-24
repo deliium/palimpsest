@@ -70,10 +70,6 @@ def _click(page, console: list[str], control_id: str) -> None:
     page.mouse.click(min(x, 1270.0), rect[1] + rect[3] / 2.0)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="Generational browser fetch gate unresolved; release blocker.",
-)
 def test_generational_browser_population_and_credentials(
     published_generational_stack: GenerationalStack,
 ) -> None:
@@ -183,12 +179,20 @@ def test_generational_browser_population_and_credentials(
             controls = _controls(console)
             assert "credentials_inspection" in controls
             assert "credentials_apply" in controls
+            _click(page, console, "credentials_inspection")
+            page.wait_for_timeout(150)
+            page.keyboard.type(stack.inspection_token, delay=10)
+            page.wait_for_timeout(150)
+            _click(page, console, "credentials_debug")
+            page.wait_for_timeout(150)
+            page.keyboard.type(stack.debug_token, delay=10)
+            page.wait_for_timeout(150)
+            _click(page, console, "credentials_apply")
             _wait_for(console, page, lambda text: "map_built" in text)
             page.wait_for_timeout(300)
             controls = _controls(console)
             assert "population_toggle" in controls
             _click(page, console, "population_toggle")
-            page.keyboard.press("space")
             _wait_for(console, page, lambda text: "demographics_rendered" in text)
             joined = "\n".join(console)
             expected = (
@@ -204,6 +208,26 @@ def test_generational_browser_population_and_credentials(
                     f"rendered_mismatch expected={expected} "
                     f"actual={rendered[-1] if rendered else 'missing'}"
                 )
+            # Selected-agent lineage navigation through real rendered controls.
+            rect = _controls(console).get("population_agents")
+            if rect is None:
+                pytest.fail("population_agents_control_missing")
+            page.mouse.click(rect[0] + 40, rect[1] + 20)
+            page.wait_for_timeout(700)
+            _click(page, console, "lineage_tab_2")
+            _wait_for(
+                console,
+                page,
+                lambda text: "/lineage/mentorship/participants" in text
+                or "lineage_applied panel=participants" in text,
+            )
+            _click(page, console, "lineage_tab_0")
+            _wait_for(
+                console,
+                page,
+                lambda text: "/lineage/genealogy/traverse" in text
+                or "lineage_applied panel=genealogy" in text,
+            )
             page.screenshot(path=str(stack.lineage_root.parent / "generational.png"))
             browser.close()
     except Exception:

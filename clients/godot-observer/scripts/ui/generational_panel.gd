@@ -67,6 +67,14 @@ func set_population_enabled(enabled: bool) -> void:
 
 
 func apply_demographics(model: Variant) -> void:
+	ObserverLog.debug(
+		"acceptance",
+		"panel_apply_demographics null=%s availability=%s population_null=%s" % [
+			model == null,
+			"missing" if model == null else str(model.availability),
+			true if model == null else model.population == null,
+		],
+	)
 	if model == null:
 		show_unavailable("unavailable")
 		return
@@ -133,6 +141,7 @@ func apply_selection(row: Variant, state: String) -> void:
 	_lineage_title.text = "Selected %s | %s | %s" % [
 		row.agent_id, row.stage, row.life_status
 	]
+	call_deferred("_log_acceptance_controls")
 
 
 func apply_lineage(panel: String, data: Dictionary) -> void:
@@ -171,6 +180,12 @@ func apply_lineage(panel: String, data: Dictionary) -> void:
 	else:
 		lines.append("nodes: %s" % data.get("items", []).size())
 	_lineage_body.text = "\n".join(lines)
+	ObserverLog.debug(
+		"acceptance",
+		"lineage_applied panel=%s status=%s item_count=%s" % [
+			panel, status, data.get("items", []).size() if panel == "participants" else lines.size(),
+		],
+	)
 	_back.visible = not selected_agent_id.is_empty()
 
 
@@ -205,6 +220,7 @@ func _log_acceptance_controls() -> void:
 		["population_toggle", _population],
 		["population_load_more", _load_more],
 		["population_back", _back],
+		["population_agents", _agents],
 	]
 	var index := 0
 	for child in $Column/Sections.get_children():

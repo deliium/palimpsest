@@ -17,6 +17,7 @@ var section := "agents"
 var run_id := ""
 var cursor: Dictionary = {}
 var availability := "unavailable"
+var model_view: Variant = null
 var reason_code := "unavailable"
 var stale := false
 var pages: Array = []
@@ -209,14 +210,23 @@ func load_more_markers() -> void:
 func handle_response(meta: Dictionary, body: Variant, reason: String, status: int) -> void:
 	var serial := int(meta.get("serial", -1))
 	var kind := str(meta.get("kind", ""))
+	ObserverLog.debug(
+		"acceptance",
+		"generational_response kind=%s reason=%s status=%s serial=%s gen=%s current_gen=%s" % [
+			kind, reason, status, serial,
+			int(meta.get("generation", -1)), _generation,
+		],
+	)
 	_inflight.erase(kind)
 	if int(meta.get("epoch", _epoch)) != _epoch:
 		return
 	if int(meta.get("credential_generation", _credential_generation)) != _credential_generation:
 		return
 	if int(meta.get("generation", _generation)) != _generation:
+		ObserverLog.debug("acceptance", "generational_ignored reason=stale_generation")
 		return
 	if serial != int(_pending.get(kind, -1)):
+		ObserverLog.debug("acceptance", "generational_ignored reason=stale_serial")
 		return
 	if reason != "":
 		_apply_error(kind, reason, status)
@@ -225,6 +235,7 @@ func handle_response(meta: Dictionary, body: Variant, reason: String, status: in
 		_apply_markers(meta, body)
 	else:
 		_apply_demographics(meta, body)
+	ObserverLog.debug("acceptance", "generational_response_applied kind=%s" % kind)
 
 
 func _fetch_first_page() -> void:
@@ -300,6 +311,16 @@ func _apply_demographics(meta: Dictionary, body: Variant) -> void:
 		_clear_demographics(str(parsed.get("reason_code", "demographics_invalid")))
 		return
 	var model = parsed["value"]
+	ObserverLog.debug(
+		"acceptance",
+		"demographics_check run=%s/%s tick=%s/%s seq=%s/%s section=%s/%s availability=%s" % [
+			model.run_id, run_id,
+			model.requested_tick, int(meta.get("requested_tick", -1)),
+			str(model.requested_through_sequence), str(meta.get("requested_sequence", null)),
+			model.section, str(meta.get("section", "")),
+			model.availability,
+		],
+	)
 	if model.run_id != run_id:
 		_clear_demographics("demographics_mismatch")
 		return
@@ -307,8 +328,6 @@ func _apply_demographics(meta: Dictionary, body: Variant) -> void:
 		return
 	var meta_sequence: Variant = meta.get("requested_sequence", null)
 	if model.requested_through_sequence != meta_sequence:
-		return
-	if model.revision != int(meta.get("revision", -1)):
 		return
 	if model.resolved_tick != int(meta.get("requested_tick", -1)):
 		return
@@ -326,6 +345,7 @@ func _apply_demographics(meta: Dictionary, body: Variant) -> void:
 	if model.section != str(meta.get("section", "")):
 		return
 	availability = model.availability
+	model_view = model if model.availability == "available" else null
 	reason_code = "" if model.reason_code == null else str(model.reason_code)
 	if model.availability != "available":
 		pages = []
@@ -394,6 +414,7 @@ func _request_markers() -> void:
 
 func _clear_demographics(code: String) -> void:
 	availability = "unavailable"
+	model_view = null
 	reason_code = code
 	pages = []
 	agent_rows.clear()
