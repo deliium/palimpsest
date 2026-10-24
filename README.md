@@ -64,7 +64,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
 | [Research UI](docs/research-ui.md) | Researcher SPA at `/research/`, epistemic chrome, graphs/metrics/matrix, Godot deep links |
 | [Read-only observer](docs/observer.md) | Observer protocol, frames, and the read-only HTTP and WebSocket routes |
-| [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, deep-link `?run_id=` / debugger params |
+| [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, deep-link `?run_id=` / debugger params, default-off population/lineage overlays and memory-only inspection/debug credentials |
 | [Research causal debugger](docs/research-causal-debugger.md) | Read-only event→cognition chain, lineage GET APIs, Godot Explain panel |
 | [Institutional decay](docs/institutional-decay.md) | Opt-in owner-scoped weakening, lifecycle and lineage evidence (v54, BK, three detached families) |
 | [Institutional memory](docs/institutional-memory.md) | Opt-in owner-scoped role/procedure information learned through records, transmission, and teaching; v53 and detached continuity/provenance metrics |
@@ -101,4 +101,4 @@ CC0-1.0
 
 ## Historical lineage explorer
 
-See `docs/lineage-explorer.md` for the eight-family read-only graph API, capture flags, cursors and availability semantics.
+See `docs/lineage-explorer.md` for the eight-family read-only graph API, capture flags, cursors, availability semantics, and bounded native participant queries. The Godot observer exposes default-off generational controls; see `docs/godot-observer.md`.

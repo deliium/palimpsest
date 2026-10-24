@@ -29,6 +29,7 @@ var _reducer = ReducerScript.new()
 @onready var _agents: Node2D = $AgentLayer
 @onready var _effects: Node2D = $EffectsLayer
 @onready var _camera: Camera2D = $Camera2D
+@onready var _generational: Node2D = get_node_or_null("GenerationalOverlay")
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
@@ -98,6 +99,8 @@ func show_world(world: Variant) -> void:
 	if _narrative != null:
 		_narrative.set_centers(_centers)
 		_narrative.set_agent_points(agent_points)
+	if _generational != null:
+		_generational.set_positions(agent_points)
 
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
@@ -181,6 +184,11 @@ func clear_world() -> void:
 	if _comm_flows != null and _comm_flows.has_method("clear_edges"):
 		_comm_flows.clear_edges()
 	clear_subjective_overlays()
+	if _generational != null:
+		_generational.clear()
+		_generational.set_enabled(false)
+	if _agents != null and _agents.has_method("clear_demographic_badges"):
+		_agents.clear_demographic_badges()
 	apply_research_analytics(null)
 	apply_strategy_audit(null)
 	for kind in [
@@ -422,3 +430,76 @@ func _centroid() -> Vector2:
 	for location_id in _centers.keys():
 		total += _centers[location_id]
 	return total / float(_centers.size())
+
+
+func apply_demographics(model: Variant, enabled_kinds: Array = []) -> void:
+	if _agents == null or model == null:
+		return
+	var rows: Dictionary = {}
+	if model.availability == "available":
+		for row in model.agents:
+			var parts: Array[String] = []
+			if "age_stage" in enabled_kinds:
+				parts.append(str(row.stage))
+			if "generation" in enabled_kinds:
+				parts.append("g%s" % row.generation_index)
+			if "cohort" in enabled_kinds:
+				parts.append(str(row.cohort_id))
+			if not parts.is_empty():
+				rows[row.entity_id] = " ".join(parts)
+	_agents.apply_demographic_badges(rows)
+	if _generational != null:
+		_generational.set_positions(_agents.capture_positions())
+
+
+func apply_arrival_events(events: Array) -> void:
+	if _generational == null:
+		return
+	_generational.set_positions(_agents.capture_positions())
+	_generational.apply_arrival_events(events)
+
+
+func apply_care_events(events: Array) -> void:
+	if _generational == null:
+		return
+	_generational.set_positions(_agents.capture_positions())
+	_generational.apply_care_events(events)
+
+
+func set_generational_overlay_enabled(kind: String, enabled: bool) -> void:
+	if _generational == null:
+		return
+	if kind == "caregiving" or kind == "kinship" or kind == "mentorship_subjective" or kind == "mentorship_analytical":
+		_generational.set_enabled(enabled or _generational.care_count() > 0)
+
+
+func apply_generational_links(links: Array) -> void:
+	if _generational == null:
+		return
+	_generational.set_links(links)
+
+
+func agent_entity_for(agent_id: String) -> String:
+	if _world_state == null or agent_id.is_empty():
+		return ""
+	var found := ""
+	for agent in _world_state.agents:
+		var bound := "" if agent.agent_id == null else str(agent.agent_id)
+		if bound == agent_id:
+			if found != "" and found != str(agent.entity_id):
+				return ""
+			found = str(agent.entity_id)
+	return found
+
+
+func demographic_badges_for_test() -> Dictionary:
+	var badges := {}
+	for child in _agents.get_children():
+		if child.has_method("set_demographic_badge"):
+			badges[str(child.entity_id)] = str(child.demographic_badge)
+	return badges
+
+
+func highlight_selected(entity_id: String) -> void:
+	if _agents != null:
+		_agents.highlight(entity_id)

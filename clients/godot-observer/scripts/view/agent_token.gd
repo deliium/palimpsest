@@ -8,6 +8,7 @@ var dead := false
 var selected := false
 var activity := ""
 var fill := Color.WHITE
+var demographic_badge := ""
 
 
 func setup(agent: Variant, slot_label: String) -> void:
@@ -33,6 +34,11 @@ func set_activity(text: String) -> void:
 	queue_redraw()
 
 
+func set_demographic_badge(text: String) -> void:
+	demographic_badge = text
+	queue_redraw()
+
+
 func _draw() -> void:
 	if dead:
 		draw_line(Vector2(-8, -8), Vector2(8, 8), Color(0.75, 0.75, 0.75), 2.0)
@@ -44,5 +50,10 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var font_size := 12
 	draw_string(font, Vector2(-16, -12), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.96, 0.95, 0.92))
+	if demographic_badge != "":
+		var badge_rect := Rect2(Vector2(-18, -34), Vector2(maxf(36.0, demographic_badge.length() * 6.0), 14))
+		draw_rect(badge_rect, Color(0.12, 0.16, 0.18, 0.9))
+		draw_rect(badge_rect, Color(0.45, 0.75, 0.6), false, 1.0)
+		draw_string(font, Vector2(-15, -23), demographic_badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.86, 0.96, 0.9))
 	if activity != "":
 		draw_string(font, Vector2(-16, 22), activity, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.85, 0.88, 0.8))

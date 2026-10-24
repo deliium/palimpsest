@@ -20,6 +20,14 @@ const _TOGGLE_ROWS: Array = [
 	{"kind": "communication_strategy_audit", "caption": "Strategy audit", "class": EvidenceClass.ANALYTICAL},
 	{"kind": "cultural_transmission", "caption": "Teaching", "class": EvidenceClass.ANALYTICAL},
 	{"kind": "skill_learning", "caption": "Skills", "class": EvidenceClass.ANALYTICAL},
+	{"kind": "population", "caption": "Population", "class": EvidenceClass.OBJECTIVE},
+	{"kind": "generation", "caption": "Generation", "class": EvidenceClass.OBJECTIVE},
+	{"kind": "cohort", "caption": "Cohort", "class": EvidenceClass.OBJECTIVE},
+	{"kind": "age_stage", "caption": "Age/stage", "class": EvidenceClass.OBJECTIVE},
+	{"kind": "kinship", "caption": "Kinship links", "class": EvidenceClass.OBJECTIVE},
+	{"kind": "caregiving", "caption": "Caregiving", "class": EvidenceClass.OBJECTIVE},
+	{"kind": "mentorship_subjective", "caption": "Mentorship (subjective)", "class": EvidenceClass.SUBJECTIVE},
+	{"kind": "mentorship_analytical", "caption": "Mentorship (analytical)", "class": EvidenceClass.ANALYTICAL},
 ]
 
 var _enabled := {}

@@ -4,6 +4,12 @@ const ObserverLog := preload("res://scripts/log.gd")
 
 signal credentials_apply_requested(inspection_token: String, debug_token: String)
 signal credentials_forget_requested
+signal population_toggled(enabled: bool)
+signal demographic_section_selected(section: String)
+signal demographic_load_more_requested
+signal generational_agent_selected(agent_id: String)
+signal lineage_tab_selected(tab: String)
+signal lineage_back_requested
 signal connect_requested(run_id: String)
 signal zoom_in_requested
 signal zoom_out_requested
@@ -127,6 +133,26 @@ func _ready() -> void:
 				open_child_branch_requested.emit(child_run_id, fork_tick)
 		)
 		branch.load_more_children_requested.connect(func() -> void: load_more_branches_requested.emit())
+	var generational = get_node_or_null("GenerationalPanel")
+	if generational != null:
+		generational.population_toggled.connect(
+			func(enabled: bool) -> void: population_toggled.emit(enabled)
+		)
+		generational.section_selected.connect(
+			func(section: String) -> void: demographic_section_selected.emit(section)
+		)
+		generational.load_more_requested.connect(
+			func() -> void: demographic_load_more_requested.emit()
+		)
+		generational.agent_selected.connect(
+			func(agent_id: String) -> void: generational_agent_selected.emit(agent_id)
+		)
+		generational.lineage_tab_selected.connect(
+			func(tab: String) -> void: lineage_tab_selected.emit(tab)
+		)
+		generational.back_requested.connect(
+			func() -> void: lineage_back_requested.emit()
+		)
 	var credentials = get_node_or_null("CredentialsPanel")
 	if credentials != null:
 		credentials.apply_requested.connect(
@@ -323,12 +349,98 @@ func close_debugger() -> void:
 
 
 func note_credentials_result(ok: bool, reason_code: String) -> void:
+	var generational = get_node_or_null("GenerationalPanel")
+	if generational != null:
+		generational.population_toggled.connect(
+			func(enabled: bool) -> void: population_toggled.emit(enabled)
+		)
+		generational.section_selected.connect(
+			func(section: String) -> void: demographic_section_selected.emit(section)
+		)
+		generational.load_more_requested.connect(
+			func() -> void: demographic_load_more_requested.emit()
+		)
+		generational.agent_selected.connect(
+			func(agent_id: String) -> void: generational_agent_selected.emit(agent_id)
+		)
+		generational.lineage_tab_selected.connect(
+			func(tab: String) -> void: lineage_tab_selected.emit(tab)
+		)
+		generational.back_requested.connect(
+			func() -> void: lineage_back_requested.emit()
+		)
 	var credentials = get_node_or_null("CredentialsPanel")
 	if credentials != null:
 		credentials.note_result(ok, reason_code)
 
 
 func set_credential_state(inspection_present: bool, debug_present: bool) -> void:
+	var generational = get_node_or_null("GenerationalPanel")
+	if generational != null:
+		generational.population_toggled.connect(
+			func(enabled: bool) -> void: population_toggled.emit(enabled)
+		)
+		generational.section_selected.connect(
+			func(section: String) -> void: demographic_section_selected.emit(section)
+		)
+		generational.load_more_requested.connect(
+			func() -> void: demographic_load_more_requested.emit()
+		)
+		generational.agent_selected.connect(
+			func(agent_id: String) -> void: generational_agent_selected.emit(agent_id)
+		)
+		generational.lineage_tab_selected.connect(
+			func(tab: String) -> void: lineage_tab_selected.emit(tab)
+		)
+		generational.back_requested.connect(
+			func() -> void: lineage_back_requested.emit()
+		)
 	var credentials = get_node_or_null("CredentialsPanel")
 	if credentials != null:
 		credentials.set_present(inspection_present, debug_present)
+
+
+func apply_demographics(model: Variant) -> void:
+	var panel = get_node_or_null("GenerationalPanel")
+	if panel != null:
+		panel.apply_demographics(model)
+
+
+func apply_demographic_selection(row: Variant, state: String) -> void:
+	var panel = get_node_or_null("GenerationalPanel")
+	if panel != null:
+		panel.apply_selection(row, state)
+
+
+func apply_lineage_panel(panel_name: String, data: Dictionary) -> void:
+	var panel = get_node_or_null("GenerationalPanel")
+	if panel != null:
+		panel.apply_lineage(panel_name, data)
+
+
+func set_generational_agent(agent_id: String) -> void:
+	var panel = get_node_or_null("GenerationalPanel")
+	if panel != null:
+		panel.set_selected_agent(agent_id)
+
+
+func set_generation_markers(markers: Array) -> void:
+	var timeline = get_node_or_null("Timeline")
+	if timeline != null and timeline.has_method("set_generation_markers"):
+		timeline.set_generation_markers(markers)
+
+
+func generational_panel_visible() -> bool:
+	var panel = get_node_or_null("GenerationalPanel")
+	return panel != null and panel.visible
+
+
+func is_generational_overlay_enabled(kind: String) -> bool:
+	var legend = get_node_or_null("OverlayLegend")
+	return legend != null and bool(legend.is_overlay_enabled(kind))
+
+
+func show_demographic_inspector(row: Variant) -> void:
+	var inspector = get_node_or_null("Inspector")
+	if inspector != null and inspector.has_method("show_demographics"):
+		inspector.show_demographics(row)

@@ -36,6 +36,7 @@ var _generation := 0
 var _credential_generation := 0
 var _epoch := 0
 var _pending := {}
+var _inflight := {}
 
 signal changed
 
@@ -169,6 +170,7 @@ func clear() -> void:
 	reason_code = "unavailable"
 	stale = false
 	_pending.clear()
+	_inflight.clear()
 	changed.emit()
 
 
@@ -200,6 +202,7 @@ func load_more_markers() -> void:
 func handle_response(meta: Dictionary, body: Variant, reason: String, status: int) -> void:
 	var serial := int(meta.get("serial", -1))
 	var kind := str(meta.get("kind", ""))
+	_inflight.erase(kind)
 	if int(meta.get("epoch", _epoch)) != _epoch:
 		return
 	if int(meta.get("credential_generation", _credential_generation)) != _credential_generation:
@@ -250,11 +253,14 @@ func _marker_query() -> Dictionary:
 func _request(kind: String, query: Dictionary) -> void:
 	if _sink.is_null() or run_id.is_empty():
 		return
+	if _inflight.has(kind):
+		return
 	var path := "/v1/simulations/%s/observer" % run_id
 	if kind == "demographics_markers":
 		path += "/generation-markers"
 	else:
 		path += "/demographics"
+	_inflight[kind] = true
 	_pending[kind] = int(_pending.get(kind, 0)) + 1
 	var meta := {
 		"source": "generational",

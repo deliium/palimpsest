@@ -73,7 +73,13 @@ static func route(event: Variant, policy: Dictionary, logical: Dictionary) -> Di
 			_:
 				action = "activity"
 	var other := ""
-	if str(event.type) in _SPEECH or action in ["strike", "link", "item"]:
+	if str(event.type) in _SPEECH or action in [
+		"strike",
+		"link",
+		"item",
+		"feed",
+		"transport",
+	]:
 		other = "" if event.target_id == null else str(event.target_id)
 	var recipe_id := "" if event.recipe_id == null else str(event.recipe_id)
 	var structure_id := "" if event.structure_id == null else str(event.structure_id)

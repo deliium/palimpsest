@@ -423,3 +423,90 @@ def _optional_float(value: object) -> float | None:
     if value is None:
         return None
     return float(str(value))
+
+
+GENERATIONAL = FIXTURES / "generational"
+
+
+def test_generational_fixtures_use_independent_sidecar_schemas() -> None:
+    demographics = json.loads(
+        (GENERATIONAL / "demographics_agents.json").read_text(encoding="utf-8")
+    )
+    assert demographics["schema_version"] == "observer-demographics-v1"
+    assert demographics["evidence_class"] == "objective"
+    population = demographics["population"]
+    assert population["living"] + population["dead"] == population["admitted"]
+    assert population["living"] == sum(
+        row["count"]
+        for row in demographics["stage_rows"]
+        if row["life_status"] == "alive"
+    )
+    for row in demographics["agents"]:
+        assert isinstance(row["age_ticks"], int | None)
+        assert "seed" not in row
+
+    markers = json.loads(
+        (GENERATIONAL / "markers.json").read_text(encoding="utf-8")
+    )
+    assert markers["schema_version"] == "observer-generation-markers-v1"
+    assert all(marker["seek_tick"] >= 0 for marker in markers["markers"])
+    assert markers["markers"][1]["seek_tick"] == (
+        markers["markers"][1]["first_entry_tick"] + 1
+    )
+
+    unavailable = json.loads(
+        (GENERATIONAL / "demographics_unavailable.json").read_text(encoding="utf-8")
+    )
+    assert unavailable["availability"] == "unavailable"
+    assert unavailable["population"] is None
+    assert unavailable["agents"] == []
+
+
+def test_generational_lineage_fixtures_preserve_qualified_keys() -> None:
+    participants = json.loads(
+        (GENERATIONAL / "lineage_participants.json").read_text(encoding="utf-8")
+    )
+    assert participants["schema_version"] == "lineage-participants-v1"
+    assert participants["family"] == "mentorship"
+    for card in participants["items"]:
+        ref = card["ref"]
+        assert ref["family"] == "mentorship"
+        assert ref["native_kind"] == "mentorship_entry"
+        assert ref["key"]
+        assert card["learning_state"] in {"attempt_only", "learning_evidence"}
+        assert "content_text" not in card
+
+    graph = json.loads(
+        (GENERATIONAL / "lineage_graph.json").read_text(encoding="utf-8")
+    )
+    node_keys = {node["ref"]["key"] for node in graph["nodes"]}
+    for edge in graph["edges"]:
+        assert edge["source_key"] in node_keys
+        assert edge["target_key"] in node_keys
+
+    families = json.loads(
+        (GENERATIONAL / "lineage_families.json").read_text(encoding="utf-8")
+    )
+    assert isinstance(families, list)
+    assert any(item["family"] == "mentorship" for item in families)
+
+
+def test_generational_smoke_manifest_matches_controls() -> None:
+    manifest = json.loads(
+        (
+            ROOT
+            / "clients"
+            / "godot-observer"
+            / "fixtures"
+            / "smoke"
+            / "generational_v3.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert manifest["scenario"] == "generational_runner_scenario"
+    assert manifest["seed"] == 23
+    assert manifest["horizon"] == 16
+    assert "population" in manifest["controls"]
+    assert manifest["evidence_classes"]["population"] == "OBJECTIVE"
+    assert manifest["evidence_classes"]["mentorship_subjective"] == "SUBJECTIVE"
+    assert manifest["evidence_classes"]["mentorship_analytical"] == "ANALYTICAL"
+    assert "birth_assertion" not in manifest

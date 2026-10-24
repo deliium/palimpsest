@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/ui_layer.gd" id="1_ui"]
 [ext_resource type="PackedScene" path="res://scenes/ui/status_bar.tscn" id="2_status"]
@@ -12,6 +12,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/branch_panel.tscn" id="10_branch"]
 [ext_resource type="PackedScene" path="res://scenes/ui/bookmarks_panel.tscn" id="11_bookmarks"]
 [ext_resource type="PackedScene" path="res://scenes/ui/credentials_panel.tscn" id="12_credentials"]
+[ext_resource type="PackedScene" path="res://scenes/ui/generational_panel.tscn" id="13_generational"]
 
 [node name="UILayer" type="CanvasLayer"]
 script = ExtResource("1_ui")
@@ -175,3 +176,5 @@ offset_bottom = 420.0
 [node name="Inspector" parent="." instance=ExtResource("4_inspector")]
 
 [node name="CredentialsPanel" parent="." instance=ExtResource("12_credentials")]
+
+[node name="GenerationalPanel" parent="." instance=ExtResource("13_generational")]

@@ -168,6 +168,43 @@ external-LLM reproduction needs deterministic fakes or validated recordings;
 source revision plus a clean assertion/digest and the registered execution
 recipe are archive inputs. See [Generational runner](generational-runner.md).
 
+## Generational observer verification
+
+Focused Python gates for the demographic/lineage projections:
+
+```bash
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term \
+  tests/unit/test_observer_demographics.py \
+  tests/unit/test_observer_population_replay.py \
+  tests/unit/test_observer_demographic_api.py \
+  tests/unit/test_lineage_participants.py \
+  tests/unit/test_lineage_participant_api.py \
+  tests/unit/test_lineage_filesystem.py \
+  tests/unit/test_lineage_api.py \
+  tests/unit/test_lineage_pagination.py \
+  tests/unit/test_godot_observer_fixtures.py \
+  tests/unit/test_godot_protocol_mirror.py \
+  tests/unit/test_observer_export_pins.py \
+  tests/architecture/test_godot_generational_boundaries.py \
+  tests/architecture/test_observer_isolation.py \
+  tests/architecture/test_lineage_explorer_boundaries.py -q
+```
+
+The pinned Godot suite is the same two-pass sequence used above; registered
+suites now include `test_generational_http`, `test_demographic_models`,
+`test_lineage_models`, `test_generational_session`, `test_lineage_session`,
+`test_generational_view`, and `test_generational_navigation`.
+
+Published-image acceptance requires Docker and Playwright:
+`tests/compose/test_observer_browser.py` remains the V2 smoke, and the
+generational suite is expected to run against the same built image with
+separate inspection/debug credentials and a test-owned lineage volume. The
+producer creates real Experiment BL demography and a separately controlled
+evidence run; explicitly constructed mentorship/knowledge fixtures are labeled
+as presentation fixtures, not emergent-learning proof. A skipped image,
+browser, or editor prerequisite is an unexecuted gate and must be reported as
+such.
+
 ## Regional migration verification
 
 Focused reproduction and contract checks:

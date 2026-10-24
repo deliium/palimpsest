@@ -188,13 +188,13 @@ Representative acceptance uses unmodified real Experiment BL (`generational_runn
 ### Phase 3: Client data
 
 - [x] Task 6: Parse sidecar projections and preserve lineage query parameters ([details](phase-03-client-data.md#task-6-parse-sidecar-projections-and-preserve-lineage-query-parameters)) (depends on 2, 3, 5)
-- [ ] Task 7: Fetch demographic pages and marker windows for the displayed cursor ([details](phase-03-client-data.md#task-7-fetch-demographic-pages-and-marker-windows-for-the-displayed-cursor)) (depends on 6)
-- [ ] Task 8: Fetch on-demand genealogy, mentorship and knowledge projections ([details](phase-03-client-data.md#task-8-fetch-on-demand-genealogy-mentorship-and-knowledge-projections)) (depends on 5, 6, 7)
+- [x] Task 7: Fetch demographic pages and marker windows for the displayed cursor ([details](phase-03-client-data.md#task-7-fetch-demographic-pages-and-marker-windows-for-the-displayed-cursor)) (depends on 6)
+- [x] Task 8: Fetch on-demand genealogy, mentorship and knowledge projections ([details](phase-03-client-data.md#task-8-fetch-on-demand-genealogy-mentorship-and-knowledge-projections)) (depends on 5, 6, 7)
 
 ### Phase 4: Generational UI
 
-- [ ] Task 9: Render population, lifecycle, arrival, death and care ([details](phase-04-generational-ui.md#task-9-render-population-lifecycle-arrival-death-and-care)) (depends on 2, 7)
-- [ ] Task 10: Add generation timeline and selected-agent lineage navigation ([details](phase-04-generational-ui.md#task-10-add-generation-timeline-and-selected-agent-lineage-navigation)) (depends on 3, 8, 9)
+- [x] Task 9: Render population, lifecycle, arrival, death and care ([details](phase-04-generational-ui.md#task-9-render-population-lifecycle-arrival-death-and-care)) (depends on 2, 7)
+- [x] Task 10: Add generation timeline and selected-agent lineage navigation ([details](phase-04-generational-ui.md#task-10-add-generation-timeline-and-selected-agent-lineage-navigation)) (depends on 3, 8, 9)
 
 ### Phase 5: Acceptance and docs
 

@@ -4,6 +4,7 @@ const ObserverLog := preload("res://scripts/log.gd")
 
 @onready var _body: Label = $Margin/Body
 @onready var _measures: Label = $Margin/Measures
+@onready var _demographics: Label = $Margin/Demographics
 
 
 func _ready() -> void:
@@ -69,6 +70,21 @@ func _optional_ids(snapshot: Dictionary) -> String:
 	return "\n" + "\n".join(lines)
 
 
+func show_demographics(row: Variant) -> void:
+	if _demographics == null:
+		return
+	if row == null:
+		_demographics.text = ""
+		return
+	_demographics.text = "generation %s | cohort %s | stage %s | %s | age %s" % [
+		row.generation_index,
+		row.cohort_id,
+		row.stage,
+		row.life_status,
+		"n/a" if row.age_ticks == null else str(row.age_ticks),
+	]
+
+
 func clear_agent() -> void:
 	visible = false
 	if _body != null:
@@ -76,3 +92,5 @@ func clear_agent() -> void:
 	if _measures != null:
 		_measures.text = ""
 		_measures.visible = false
+	if _demographics != null:
+		_demographics.text = ""

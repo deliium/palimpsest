@@ -81,6 +81,40 @@ capture. `PALIMPSEST_LINEAGE_CURSOR_KEY` (at least 32 UTF-8 bytes) is optional
 for multi-worker or restart-stable cursors; otherwise a process-local key is
 generated.
 
+### Native mentorship participants
+
+`GET /v1/simulations/{run_id}/lineage/mentorship/participants` returns
+`lineage-participants-v1`. It is the learner-side discovery path because a
+captured mentorship graph does not connect every learner. Required
+`evidence_class` (`subjective` or `analytical`) and `agent_id`; subjective also
+requires `owner_id`. Optional `role` (`teacher|learner|both`), `boundary_tick`,
+opaque `after`, and `limit` (default 100, maximum 200).
+
+The service walks the native node catalogue in canonical key order and examines
+at most 200 candidate nodes per request, stopping earlier after `limit` matching
+cards. A sparse scan returns an empty page with a continuation and
+`scan_limited=true`; it is not a complete "no teacher/student" claim. The cursor
+position is the last examined node, not the last match. Physical-read/source-byte
+budget exhaustion is an error, never a fabricated continuation. Signed
+continuations bind purpose, scope/run/owner/evidence, publication ID/digest,
+boundary, filter fingerprint (agent, role, page size), and last examined key,
+with the same 15-minute TTL. A replacement publication at the same boundary
+cannot reuse an old cursor.
+
+Cards retain native teacher, learner, owner, lineage/root, parent, kind, opaque
+content key, hop, acquisition/update ticks, attempt count, learning-evidence
+count, confidence, mutation flag, native status, evidence references, policy
+version, and observed boundaries. `learning_state` is `attempt_only` when the
+evidence count is zero, otherwise `learning_evidence`. A page is ordered by
+learning-evidence count descending, attempts descending, acquisition tick
+ascending, then qualified node key. This is disclosed evidence priority within
+loaded records, not global cultural importance. Attempt-only cards remain a
+separate group and never assert successful learning. Owner-local identities are
+never merged across owners; analytical cards retain native owner provenance.
+Content keys never become knowledge-entry IDs by string matching. The native
+catalogue read correction changes completeness of scanning, not the stored
+artifact format.
+
 ## HTTP
 
 All routes are GET-only and return `Cache-Control: no-store`:
@@ -90,6 +124,7 @@ GET /v1/simulations/{run_id}/lineage/families
 GET /v1/simulations/{run_id}/lineage/{family}/snapshots
 GET /v1/simulations/{run_id}/lineage/{family}/nodes
 GET /v1/simulations/{run_id}/lineage/{family}/traverse
+GET /v1/simulations/{run_id}/lineage/mentorship/participants
 ```
 
 Common query parameters: `evidence_class`, `owner_id` (subjective only),

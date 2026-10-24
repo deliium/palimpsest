@@ -1,0 +1,26 @@
+{
+  "scenario": "generational_runner_scenario",
+  "seed": 23,
+  "horizon": 16,
+  "controls": [
+    "population",
+    "generation",
+    "cohort",
+    "age_stage",
+    "kinship",
+    "caregiving",
+    "mentorship_subjective",
+    "mentorship_analytical"
+  ],
+  "evidence_classes": {
+    "population": "OBJECTIVE",
+    "generation": "OBJECTIVE",
+    "cohort": "OBJECTIVE",
+    "age_stage": "OBJECTIVE",
+    "kinship": "OBJECTIVE",
+    "caregiving": "OBJECTIVE",
+    "mentorship_subjective": "SUBJECTIVE",
+    "mentorship_analytical": "ANALYTICAL"
+  },
+  "arrival_semantics": "admitted_to_world"
+}

@@ -128,6 +128,20 @@ func selected_position() -> Variant:
 	return _tokens[selected_entity_id].position
 
 
+func apply_demographic_badges(rows_by_entity: Dictionary) -> void:
+	for entity_id in _tokens.keys():
+		var token = _tokens[entity_id]
+		if rows_by_entity.has(str(entity_id)):
+			token.set_demographic_badge(str(rows_by_entity[str(entity_id)]))
+		else:
+			token.set_demographic_badge("")
+
+
+func clear_demographic_badges() -> void:
+	for entity_id in _tokens.keys():
+		_tokens[entity_id].set_demographic_badge("")
+
+
 func set_activity(entity_id: String, text: String) -> void:
 	if _tokens.has(entity_id):
 		_tokens[entity_id].set_activity(text)

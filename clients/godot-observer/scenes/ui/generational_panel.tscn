@@ -1,0 +1,62 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/generational_panel.gd" id="1_generational"]
+
+[node name="GenerationalPanel" type="PanelContainer"]
+offset_left = 1120.0
+offset_top = 120.0
+offset_right = 1660.0
+offset_bottom = 720.0
+script = ExtResource("1_generational")
+
+[node name="Column" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Population" type="CheckButton" parent="Column"]
+layout_mode = 2
+text = "Population (OBJECTIVE)"
+
+[node name="Summary" type="Label" parent="Column"]
+layout_mode = 2
+text = "N/A"
+
+[node name="Stages" type="Label" parent="Column"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Status" type="Label" parent="Column"]
+layout_mode = 2
+
+[node name="Sections" type="HBoxContainer" parent="Column"]
+layout_mode = 2
+
+[node name="Agents" type="ItemList" parent="Column"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+
+[node name="Groups" type="ItemList" parent="Column"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+
+[node name="LoadMore" type="Button" parent="Column"]
+layout_mode = 2
+text = "Load more"
+
+[node name="Tabs" type="HBoxContainer" parent="Column"]
+layout_mode = 2
+
+[node name="LineageTitle" type="Label" parent="Column"]
+layout_mode = 2
+text = "Selection"
+
+[node name="LineageBody" type="Label" parent="Column"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Actions" type="HBoxContainer" parent="Column"]
+layout_mode = 2
+
+[node name="Back" type="Button" parent="Column/Actions"]
+layout_mode = 2
+text = "Back"

@@ -38,7 +38,9 @@ Every researcher overlay marker carries exactly one class: **OBJECTIVE**, **SUBJ
 
 ## V2 physical visuals
 
-The client parses `world.structures` and paints kind / integrity / stored-quantity cues at location anchors. Production semantic types (`RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, `ITEM_STORED`) have dedicated effect actions and log phrases. Lifecycle / kinship / care / contact types (`AGENT_CREATED`, `AGENT_ENTERED_WORLD`, `AGENT_INITIALIZED`, `LIFECYCLE_STAGE_CHANGED`, `KINSHIP_EDGE_RECORDED`, `AGENT_FED`, `AGENT_TRANSPORTED`, `CONTACT_RECORDED`) are recognized for log routing only — no family-care presentation chrome. `CONTACT_RECORDED` is presentation-only: it carries location and participant/present IDs, grants no write authority, and adds no new layout. Tool-like item kinds use local theme mapping. Season / weather / band / hazard / depleted paints come from frame refresh; scarcity outlines use objective quantity (`0` depleted; soft scarce cue for small positive quantities).
+The client parses `world.structures` and paints kind / integrity / stored-quantity cues at location anchors. Production semantic types (`RESOURCE_HARVESTED`, `CRAFT_STARTED`, `ITEM_CRAFTED`, `STRUCTURE_BUILT`, `STRUCTURE_REPAIRED`, `ITEM_STORED`) have dedicated effect actions and log phrases. Lifecycle / kinship / care / contact types (`AGENT_CREATED`, `AGENT_ENTERED_WORLD`, `AGENT_INITIALIZED`, `LIFECYCLE_STAGE_CHANGED`, `KINSHIP_EDGE_RECORDED`, `AGENT_FED`, `AGENT_TRANSPORTED`, `CONTACT_RECORDED`) are recognized for log routing. Objective population/lifecycle/kinship/care chrome
+and evidence-labeled mentorship links are now available from the generational
+researcher controls described below. `CONTACT_RECORDED` is presentation-only: it carries location and participant/present IDs, grants no write authority, and adds no new layout. Tool-like item kinds use local theme mapping. Season / weather / band / hazard / depleted paints come from frame refresh; scarcity outlines use objective quantity (`0` depleted; soft scarce cue for small positive quantities).
 
 ## Perspective limits
 
@@ -232,7 +234,10 @@ Agent focus and location focus may combine in the log filter. **Follow** is mutu
 
 ## Timeline markers
 
-The bar shows the viewed event tick and the live tick from `GET .../observer/run`. Configurable category toggles (ProjectSettings / local config) paint marks for death, attack, major weather/environment, artifact creation, structure creation, birth (`AGENT_CREATED` / `AGENT_ENTERED_WORLD` / `AGENT_INITIALIZED`), and synthetic **branch_point** ticks from lineage. Birth marks come only from those protocol types — roster presence is not invented as birth.
+The bar shows the viewed event tick and the live tick from `GET .../observer/run`. Configurable category toggles (ProjectSettings / local config) paint marks for death, attack, major weather/environment, artifact creation, structure creation, birth (`AGENT_CREATED` / `AGENT_ENTERED_WORLD` / `AGENT_INITIALIZED`), and synthetic **branch_point** ticks from lineage. Birth marks come only from those protocol types — roster presence is not
+invented as birth. A separate default-off **generation** category uses backend
+admission markers; clicking one seeks the committed post-admission boundary.
+Generation markers are now displayed from `observer-generation-markers-v1`.
 
 Loading strategy: paint first from the bounded log window; optional enrichment runs at most one refresh with ≤3 sequential `event_type` pages; drawn marks cap at 64 (DEBUG when truncated). The client does not scan the whole journal. Clicking a mark seeks that event (branch points use tick-start `state?tick=`).
 
@@ -262,6 +267,13 @@ Deterministic `observer-graphical-v2` (see [V2 benchmark suite](v2-benchmark-sui
 Normal researchers use the prebuilt Web export via `./run.sh` — not the Godot editor. Zero-install acceptance is Docker/container + browser only.
 
 ## Headless checks
+
+Generational browser acceptance additionally requires a published image and
+Playwright. The test producer publishes objective genealogy plus explicitly
+constructed native mentorship/knowledge presentation fixtures; those fixtures
+prove rendering and API provenance, not spontaneous teaching or successful live
+learner cognition. Missing Docker, image, editor, or Playwright is reported as an
+unexecuted gate, not as a pass.
 
 Godot protocol tests are outside default pytest. Pytest only checks that the golden JSON still constructs `observer-protocol-v1` values and that the smoke file's unknown type is outside the closed semantic list.
 

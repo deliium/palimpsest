@@ -4,6 +4,7 @@ const ObserverLog := preload("res://scripts/log.gd")
 const Themes := preload("res://scripts/presentation/theme_catalog.gd")
 
 signal seek_requested(tick: int, sequence: int)
+signal generation_seek_requested(tick: int)
 signal category_toggled(category: String, enabled: bool)
 
 const MARK_CAP := 64
@@ -23,6 +24,7 @@ const CATEGORY_TYPES := {
 	"artifact_creation": ["ARTIFACT_CREATED"],
 	"structure_creation": ["STRUCTURE_BUILT"],
 	"branch_point": [],  # synthetic
+	"generation": [],  # backend admitted-generation markers
 }
 
 var viewed_tick := 0
@@ -34,6 +36,7 @@ var _selected_id := ""
 var _events: Array = []
 var _enriched: Array = []
 var _branch_ticks: Array = []
+var _generation_marks: Array = []
 var _marks: Array = []
 var _categories := {
 	"birth": true,
@@ -43,6 +46,7 @@ var _categories := {
 	"artifact_creation": true,
 	"structure_creation": true,
 	"branch_point": true,
+	"generation": true,
 }
 var _truncated := false
 
@@ -67,6 +71,22 @@ func set_enriched_events(events: Array) -> void:
 	_enriched = events
 	_collect()
 	queue_redraw()
+
+
+func set_generation_markers(markers: Array) -> void:
+	_generation_marks = []
+	for marker in markers:
+		if typeof(marker) != TYPE_OBJECT and typeof(marker) != TYPE_DICTIONARY:
+			continue
+		var index := int(_marker_field(marker, "generation_index"))
+		var seek_tick := int(_marker_field(marker, "seek_tick"))
+		_generation_marks.append({"generation_index": index, "seek_tick": seek_tick})
+	_collect()
+	queue_redraw()
+
+
+func generation_mark_count() -> int:
+	return _generation_marks.size()
 
 
 func set_branch_points(ticks: Array) -> void:
@@ -175,7 +195,7 @@ func _build_category_toggles() -> void:
 		return
 	for child in row.get_children():
 		child.queue_free()
-	for category in ["death", "attack", "weather_environment", "artifact_creation", "structure_creation", "branch_point", "birth"]:
+	for category in ["death", "attack", "weather_environment", "artifact_creation", "structure_creation", "branch_point", "generation", "birth"]:
 		var button := CheckButton.new()
 		button.text = category
 		button.button_pressed = bool(_categories.get(category, true))
@@ -216,6 +236,16 @@ func _collect() -> void:
 				"seek_tick_start": true,
 			})
 			counts["branch_point"] = int(counts.get("branch_point", 0)) + 1
+	if bool(_categories.get("generation", true)):
+		for marker in _generation_marks:
+			collected.append({
+				"tick": int(marker["seek_tick"]),
+				"sequence": 0,
+				"category": "generation",
+				"seek_tick_start": true,
+				"generation_index": int(marker["generation_index"]),
+			})
+			counts["generation"] = int(counts.get("generation", 0)) + 1
 	collected.sort_custom(func(a, b) -> bool:
 		if int(a["tick"]) != int(b["tick"]):
 			return int(a["tick"]) < int(b["tick"])
@@ -313,7 +343,9 @@ func _gui_input(event: InputEvent) -> void:
 			int(mark["tick"]), int(mark["sequence"]), str(mark.get("category", "")),
 		],
 	)
-	if bool(mark.get("seek_tick_start", false)):
+	if str(mark.get("category", "")) == "generation":
+		generation_seek_requested.emit(int(mark["tick"]))
+	elif bool(mark.get("seek_tick_start", false)):
 		seek_requested.emit(int(mark["tick"]), 0)
 	else:
 		seek_requested.emit(int(mark["tick"]), int(mark["sequence"]))
@@ -341,3 +373,9 @@ func _draw() -> void:
 	if _truncated:
 		caption += " (marks truncated)"
 	draw_string(font, Vector2(4, 22), caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.9, 0.9, 0.86))
+
+
+func _marker_field(marker: Variant, key: String) -> Variant:
+	if typeof(marker) == TYPE_DICTIONARY:
+		return marker.get(key, 0)
+	return marker.get(key)

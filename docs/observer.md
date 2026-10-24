@@ -29,7 +29,7 @@ A frame may include ordered `artifacts`. Each `ObserverArtifact` carries `artifa
 
 Artifact semantic types are `ARTIFACT_CREATED`, `ARTIFACT_MODIFIED`, `ARTIFACT_MOVED`, `ARTIFACT_DESTROYED`, plus durable `ARTIFACT_COPIED`, `ARTIFACT_ANNOTATED`, `ARTIFACT_DAMAGED`, and `ARTIFACT_PARTIALLY_LOST`. Knowledge repositories add `REPOSITORY_ESTABLISHED`, `REPOSITORY_MEMBER_DEPOSITED`, `REPOSITORY_MEMBER_RETRIEVED`, `REPOSITORY_MAINTAINED`, `REPOSITORY_INDEXED`, and `REPOSITORY_NEGLECTED`. Lifecycle appends `AGENT_CREATED`, `AGENT_ENTERED_WORLD`, `AGENT_INITIALIZED`, and `LIFECYCLE_STAGE_CHANGED`. Kinship adds `KINSHIP_EDGE_RECORDED`. Dependency care adds `AGENT_FED` and `AGENT_TRANSPORTED` (`len(SEMANTIC_EVENT_TYPES) == 53`). `ObserverArtifact` may carry optional objective lineage/integrity fields (`record_genre`, `parent_artifact_id`, `source_artifact_id`, `copy_generation`, `integrity`, …) when durable meta is present — never private readings. `ObserverRepository` projects objective container fields only (status, access_mode, membership counts, index meta when perception allows) — never cultural archive/library labels. `ObserverEvent` may add optional `artifact_id` / `repository_id` only when set. Possession succession adds `CORPSE_CUSTODY_OPENED`, `AGENT_TOOK_FROM_CORPSE`, and `POSSESSION_CLAIM_ASSERTED`. The closed semantic tuple length is 57. Those labels do not name a legal owner. Protocol stays `observer-protocol-v1`. Frames never carry per-agent interpretation ledgers. Domain/world payloads still reject `pixels`, `sprite`, `animation`, `dx`, `dy`, and inverse agent types (`presentation_instruction_forbidden`).
 
-The Godot client replaces its world from `state_tick` / `world_replaced`, parses `world.artifacts`, and paints ground artifacts from kind → local theme/icon mapping in `theme_catalog.gd`. Held artifacts may appear in a slot cue only when `holder_id` matches a visible body. No interpretation overlays. Event router/log/`KNOWN_TYPES` recognize artifact, lifecycle, kinship, and care semantic types (no family-care chrome). Timeline `birth` marks map to `AGENT_CREATED` / `AGENT_ENTERED_WORLD` / `AGENT_INITIALIZED` only (never invent births from roster presence alone). Lifespan death remains `AGENT_DIED`.
+The Godot client replaces its world from `state_tick` / `world_replaced`, parses `world.artifacts`, and paints ground artifacts from kind → local theme/icon mapping in `theme_catalog.gd`. Held artifacts may appear in a slot cue only when `holder_id` matches a visible body. No interpretation overlays. Event router/log/`KNOWN_TYPES` recognize artifact, lifecycle, kinship, and care semantic types (including objective population, lifecycle, kinship, and care chrome described below). Timeline `birth` marks map to `AGENT_CREATED` / `AGENT_ENTERED_WORLD` / `AGENT_INITIALIZED` only (never invent births from roster presence alone). Lifespan death remains `AGENT_DIED`.
 
 `observer.project` and `observer.adapt` log `artifacts_projected`. An unknown kind logs `unknown_event_kind`. A presentation command logs `presentation_instruction_forbidden`. Do not log icon keys at INFO.
 
@@ -57,6 +57,8 @@ All HTTP methods are GET. The capability is `objective_inspection` except resear
 | `GET /v1/simulations/{run_id}/observer/state?tick=&through_sequence=` | Frame through one committed event |
 | `GET /v1/simulations/{run_id}/observer/events` | Adapted events after an exclusive cursor |
 | `GET /v1/simulations/{run_id}/observer/ticks` | Tick summaries |
+| `GET /v1/simulations/{run_id}/observer/demographics` | `observer-demographics-v1` — bounded agents/cohorts/generations sections plus exact totals |
+| `GET /v1/simulations/{run_id}/observer/generation-markers` | `observer-generation-markers-v1` — admitted-generation timeline markers |
 | `GET /v1/simulations/{run_id}/observer/events/{event_id}` | One adapted event |
 | `GET /v1/simulations/{run_id}/observer/run` | Run metadata without seed or credentials |
 | `GET /v1/simulations/{run_id}/observer/agents/{agent_id}/relationships` | SUBJECTIVE dimension summaries when debug is on |
@@ -68,6 +70,40 @@ All HTTP methods are GET. The capability is `objective_inspection` except resear
 Analytical metric overlays resolve a `metric_set_id` via `GET /v1/simulations/{run_id}/metrics` (`objective_inspection`) before fetching a family document. Aggregate `cultural_narrative_lineage@1` and `communication_strategy@1` rates are not enough for hop order or per-event deception labels.
 
 Optional `layout_id` defaults to `reference-v1`. Event cursors are `after_tick` and `after_sequence` together, or neither. An incomplete pair returns `incomplete_event_cursor`. A cursor at or past the high water returns `cursor_ahead_of_high_water`.
+
+## Demographic and generation projections
+
+`observer-demographics-v1` and `observer-generation-markers-v1` are independent
+GET sidecars; they do not widen `observer-protocol-v1` frames or stream
+envelopes. Both require `objective_inspection` and return `Cache-Control:
+no-store`.
+
+Demographics accepts optional `tick`, `through_sequence`, `section`
+(`agents|cohorts|generations`), `agent_id`, `after_agent_id`,
+`after_group_key`, and `limit` (default 100, maximum 200 and no more than the
+API page ceiling). Only the selected section carries rows; scalar living,
+admitted, dead, and maximum-generation totals always cover the whole resolved
+roster. Continuations require an explicit `tick` and an opaque group
+continuation binds the section, tick, and sequence. Selecting an exact
+`agent_id` does not depend on previously loaded roster pages. Feature-off runs
+return `availability="unavailable"`, `reason_code="lifecycle_disabled"`, and
+`population=null`; an active empty channel returns complete zero totals.
+
+Generation markers require a full boundary `tick` (no `through_sequence`) and
+optional `from_tick`, `to_tick`, `after_generation_index`, and `limit`. Each
+marker is the first successful admission in a calendar generation: founders
+seek tick 0, later generations seek `first_entry_tick + 1`. Markers never mean
+pedigree depth or a scheduled birth. A full frame that still carries an
+event-resume cursor uses `world.tick` as the full boundary; only
+`world.tick == after_tick` is a genuine prefix.
+
+When the exact stored runner configuration needed to reconstruct historical
+lifecycle metadata is unavailable or invalid, the demographic route returns a
+safe `503` (`observer_replay_context_unavailable` or
+`observer_replay_context_invalid`) instead of guessing live state. Demographics
+are objective projection data; kinship comes from lineage APIs and care comes
+from committed feed/transport events. They are not biological birth, affection,
+caregiver status, or inheritance authority.
 
 ## Live and replay
 

@@ -358,9 +358,16 @@ func _apply_participants(meta: Dictionary, body: Variant) -> void:
 		return
 	if model.owner_id != meta.get("owner_id", null) and str(meta.get("owner_id", "")) != "":
 		return
+	var items: Array = model.items.duplicate()
+	if bool(meta.get("append", false)) and not participants.is_empty():
+		items = participants.get("items", []).duplicate()
+		for item in model.items:
+			if items.size() >= MAX_PARTICIPANTS:
+				break
+			items.append(item)
 	participants = {
 		"status": "available",
-		"items": model.items.slice(0, MAX_PARTICIPANTS),
+		"items": items.slice(0, MAX_PARTICIPANTS),
 		"scanned_count": model.scanned_count,
 		"unprojectable_count": model.unprojectable_count,
 		"scan_limited": model.scan_limited,
@@ -374,6 +381,12 @@ func _apply_participants(meta: Dictionary, body: Variant) -> void:
 		"requested_boundary_tick": model.requested_boundary_tick,
 		"captured_boundary_tick": model.captured_boundary_tick,
 	}
+	if (
+		meta.get("after", null) != null
+		and model.next_cursor != null
+		and str(model.next_cursor) == str(meta.get("after", ""))
+	):
+		participants["status"] = "non_progressing_cursor"
 	remember_publication(model.snapshot)
 	changed.emit()
 
@@ -388,14 +401,38 @@ func _apply_knowledge_nodes(meta: Dictionary, body: Variant) -> void:
 	for node in model.items:
 		if node.ref.native_kind == str(meta.get("native_kind", "")) and node.ref.native_id == str(meta.get("native_id", "")):
 			matches.append(node)
-	knowledge = {
-		"status": "available" if not matches.is_empty() else "missing_root",
-		"items": _cap_nodes(matches),
-		"publication": model.snapshot,
-		"next_cursor": model.next_cursor,
-		"coverage": model.coverage,
-	}
-	changed.emit()
+	if matches.is_empty():
+		knowledge = {
+			"status": "missing_root",
+			"items": [],
+			"publication": model.snapshot,
+			"next_cursor": model.next_cursor,
+			"coverage": model.coverage,
+		}
+		changed.emit()
+		return
+	var root = matches[0]
+	var query := _boundary_query()
+	query["evidence_class"] = str(meta.get("evidence_class", "subjective"))
+	query["root_key"] = root.ref.key
+	query["direction"] = "both"
+	query["max_depth"] = 1
+	query["max_nodes"] = 100
+	query["max_edges"] = 200
+	query["limit"] = 100
+	if str(meta.get("evidence_class", "")) == "subjective":
+		query["owner_id"] = str(meta.get("owner_id", ""))
+	_request(
+		"lineage_knowledge_traverse",
+		"/v1/simulations/%s/lineage/knowledge/traverse" % _run_id,
+		{
+			"panel": "knowledge",
+			"capability": "debug",
+			"evidence_class": query["evidence_class"],
+			"owner_id": query.get("owner_id", ""),
+		},
+		query,
+	)
 
 
 func _apply_knowledge_traverse(meta: Dictionary, body: Variant) -> void:
@@ -439,6 +476,7 @@ func _load_more_participants() -> void:
 			"capability": "debug",
 			"append": true,
 			"panel_generation": _panel_generation,
+			"after": participants["next_cursor"],
 		},
 		query,
 	)

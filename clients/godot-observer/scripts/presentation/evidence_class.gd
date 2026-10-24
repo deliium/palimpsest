@@ -27,7 +27,27 @@ const OVERLAY_CLASSES := {
 	"communication_strategy_audit": ANALYTICAL,
 	"cultural_transmission": ANALYTICAL,
 	"skill_learning": ANALYTICAL,
+	"population": OBJECTIVE,
+	"generation": OBJECTIVE,
+	"cohort": OBJECTIVE,
+	"age_stage": OBJECTIVE,
+	"kinship": OBJECTIVE,
+	"caregiving": OBJECTIVE,
+	"mentorship_subjective": SUBJECTIVE,
+	"mentorship_analytical": ANALYTICAL,
 }
+
+
+static func from_wire(value: String) -> String:
+	match value:
+		"objective":
+			return OBJECTIVE
+		"subjective":
+			return SUBJECTIVE
+		"analytical":
+			return ANALYTICAL
+		_:
+			return ""
 
 
 static func short_label(evidence_class: String) -> String:

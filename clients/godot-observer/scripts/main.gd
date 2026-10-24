@@ -36,6 +36,9 @@ func _ready() -> void:
 	_ui.control_pressed.connect(_on_control)
 	_ui.event_seek_requested.connect(_on_event_seek)
 	_ui.timeline_seek_requested.connect(_on_event_seek)
+	var timeline = _ui.get_node_or_null("Timeline")
+	if timeline != null and timeline.has_signal("generation_seek_requested"):
+		timeline.generation_seek_requested.connect(_session.seek_tick)
 	_ui.play_fixture_requested.connect(_play_fixture)
 	_ui.perspective_requested.connect(_on_perspective)
 	_ui.labels_cleared.connect(_on_labels_cleared)
@@ -64,6 +67,11 @@ func _ready() -> void:
 		var entity_id := str(snapshot.get("entity_id", ""))
 		_ui.note_selection(entity_id)
 		_session.set_agent_focus(entity_id)
+		var logical_agent := _agent_id_for_entity(entity_id)
+		if logical_agent != "":
+			_session.set_lineage_enabled(true)
+			_session.select_demographic_agent(logical_agent)
+			_ui.set_generational_agent(logical_agent)
 		_ui.set_filters_from_focus(entity_id, _session.focus_location_id)
 		snapshot["follow"] = _session.follow_mode == "agent"
 		_ui.show_inspector(snapshot)
@@ -82,12 +90,25 @@ func _ready() -> void:
 	_ui.credentials_forget_requested.connect(_on_credentials_forget)
 	_session.credentials_changed.connect(_ui.set_credential_state)
 	_session.credentials_error.connect(_on_credentials_error)
+	_session.generational_updated.connect(_on_generational_updated)
+	_session.lineage_source_updated.connect(_on_lineage_updated)
+	_ui.population_toggled.connect(_on_population_toggled)
+	_ui.demographic_section_selected.connect(_on_demographic_section)
+	_ui.demographic_load_more_requested.connect(_on_demographic_load_more)
+	_ui.generational_agent_selected.connect(_on_generational_agent)
+	_ui.lineage_tab_selected.connect(_on_lineage_tab)
+	_ui.lineage_back_requested.connect(_on_lineage_back)
+	if _ui.has_signal("generation_seek_requested"):
+		_ui.generation_seek_requested.connect(_session.seek_tick)
 	_session.run_id_applied.connect(_reload_bookmarks)
 	_session.begin()
 
 
 func _on_events_loaded(events: Array, focus_tick: int, focus_sequence: int) -> void:
 	_ui.replace_events(events, focus_tick, focus_sequence, _session.world)
+	_world.apply_arrival_events(events)
+	if _ui.is_generational_overlay_enabled("caregiving"):
+		_world.apply_care_events(events)
 	_refresh_markers()
 
 
@@ -158,7 +179,10 @@ func _on_frame_for_follow(_frame: Variant, _event: Variant, _forward: bool) -> v
 	_apply_follow_camera()
 
 
-func _on_live_for_follow(_event: Variant) -> void:
+func _on_live_for_follow(event: Variant) -> void:
+	_world.apply_arrival_events([event])
+	if _ui.is_generational_overlay_enabled("caregiving"):
+		_world.apply_care_events([event])
 	_apply_follow_camera()
 
 
@@ -356,6 +380,21 @@ func _on_narrative_variant_selected(variant_id: String) -> void:
 
 
 func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) -> void:
+	if kind == "population":
+		_session.set_demographics_enabled(enabled)
+		_session.set_generation_markers_enabled(enabled)
+	if kind == "generation":
+		_session.set_generation_markers_enabled(enabled)
+	if kind in ["generation", "cohort", "age_stage"]:
+		var kinds: Array = []
+		for candidate in ["generation", "cohort", "age_stage"]:
+			if _ui.is_generational_overlay_enabled(candidate):
+				kinds.append(candidate)
+		_world.apply_demographics(_session.generational, kinds)
+	if kind == "caregiving":
+		_world.set_generational_overlay_enabled(kind, enabled)
+		if not enabled:
+			_world.apply_care_events([])
 	ObserverLog.debug(
 		"main",
 		"overlay_toggled kind=%s evidence_class=%s enabled=%s" % [kind, evidence_class, enabled],
@@ -484,3 +523,85 @@ func _on_credentials_forget() -> void:
 
 func _on_credentials_error(reason_code: String) -> void:
 	_ui.note_credentials_result(false, reason_code)
+
+
+func _agent_id_for_entity(entity_id: String) -> String:
+	if _session.world == null:
+		return ""
+	for agent in _session.world.agents:
+		if str(agent.entity_id) == entity_id and agent.agent_id != null:
+			return str(agent.agent_id)
+	return ""
+
+
+func _on_population_toggled(enabled: bool) -> void:
+	_session.set_demographics_enabled(enabled)
+	if enabled:
+		_session.set_generation_markers_enabled(_ui.is_generational_overlay_enabled("generation"))
+
+
+func _on_demographic_section(section: String) -> void:
+	_session.choose_demographic_section(section)
+
+
+func _on_demographic_load_more() -> void:
+	_session.load_more_demographics()
+	_session.load_more_demographic_section()
+	_session.load_more_generation_markers()
+
+
+func _on_generational_updated() -> void:
+	var model: Variant = _session.generational
+	_ui.apply_demographics(model)
+	var kinds: Array = []
+	for candidate in ["generation", "cohort", "age_stage"]:
+		if _ui.is_generational_overlay_enabled(candidate):
+			kinds.append(candidate)
+	_world.apply_demographics(model, kinds)
+	if model != null:
+		_ui.set_generation_markers(model.markers)
+		if model.selected_agent_id != "":
+			_ui.apply_demographic_selection(model.selected_row, model.selection_state)
+			_ui.show_demographic_inspector(model.selected_row)
+
+
+func _on_lineage_updated() -> void:
+	_ui.apply_lineage_panel(_active_lineage_tab, _session.private_lineage.genealogy if _active_lineage_tab == "genealogy" else _session.private_lineage.participants)
+
+
+var _active_lineage_tab := "genealogy"
+
+
+func _on_lineage_tab(tab: String) -> void:
+	_active_lineage_tab = "genealogy" if tab in ["parents", "children"] else "participants"
+	var agent_id: String = _session.private_lineage.selected_agent_id
+	if agent_id == "":
+		agent_id = _agent_id_for_entity(_session.focus_agent_id)
+	if agent_id == "":
+		return
+	_session.set_lineage_enabled(true)
+	_session.set_generational_agent(agent_id)
+	if tab == "parents":
+		_session.request_genealogy(agent_id, "ancestors")
+	elif tab == "children":
+		_session.request_genealogy(agent_id, "descendants")
+	elif tab == "teachers":
+		_session.request_participants(agent_id, "teacher", "subjective", agent_id)
+	elif tab == "students":
+		_session.request_participants(agent_id, "learner", "subjective", agent_id)
+	else:
+		_session.request_participants(agent_id, "both", "subjective", agent_id)
+
+
+func _on_generational_agent(agent_id: String) -> void:
+	_session.select_demographic_agent(agent_id)
+	_session.set_generational_agent(agent_id)
+	var entity_id: String = _world.agent_entity_for(agent_id)
+	if entity_id != "":
+		_world.focus_agent(entity_id)
+		_world.highlight_selected(entity_id)
+
+
+func _on_lineage_back() -> void:
+	_ui.set_generational_agent("")
+	_session.set_lineage_enabled(false)
