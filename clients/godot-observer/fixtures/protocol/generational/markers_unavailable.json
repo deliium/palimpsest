@@ -1,0 +1,13 @@
+{
+  "schema_version": "observer-generation-markers-v1",
+  "run_id": "run-legacy",
+  "requested_tick": 4,
+  "resolved_tick": 4,
+  "revision": 3,
+  "evidence_class": "objective",
+  "availability": "unavailable",
+  "reason_code": "lifecycle_disabled",
+  "markers": [],
+  "next_after_generation_index": null,
+  "limit": 100
+}

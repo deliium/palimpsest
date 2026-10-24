@@ -1084,6 +1084,9 @@ class LineageReadSession(Protocol):
     ) -> LineageSnapshotCataloguePage:
         """Bounded snapshot-catalogue page for one scope."""
 
+    async def coverage(self, snapshot: LineageSnapshotRef) -> LineageCoverage:
+        """Coverage envelope declared by one pinned publication."""
+
 
 
 class LineageReadPort(Protocol):

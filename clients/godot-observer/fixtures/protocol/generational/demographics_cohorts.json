@@ -1,0 +1,44 @@
+{
+  "schema_version": "observer-demographics-v1",
+  "run_id": "run-generational-23",
+  "requested_tick": 16,
+  "requested_through_sequence": null,
+  "resolved_tick": 16,
+  "revision": 42,
+  "evidence_class": "objective",
+  "availability": "available",
+  "reason_code": null,
+  "section": "cohorts",
+  "selection_state": "all",
+  "population": {
+    "living": 2,
+    "admitted": 3,
+    "dead": 1,
+    "max_generation_index": 1
+  },
+  "stage_rows": [],
+  "stage_counts_truncated": false,
+  "agents": [],
+  "cohorts": [
+    {
+      "generation_index": 0,
+      "entry_tick": 0,
+      "cohort_id": "founders",
+      "admitted": 1,
+      "living": 1,
+      "dead": 0
+    },
+    {
+      "generation_index": 1,
+      "entry_tick": 5,
+      "cohort_id": "cohort-5",
+      "admitted": 1,
+      "living": 1,
+      "dead": 0
+    }
+  ],
+  "generations": [],
+  "next_after_agent_id": null,
+  "next_after_group_key": null,
+  "limit": 100
+}

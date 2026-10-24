@@ -1,0 +1,73 @@
+{
+  "schema_version": "lineage-participants-v1",
+  "snapshot": {
+    "publication_id": "publication-2026-10-24-01",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "boundary_tick": 16,
+    "schema_version": "lineage-snapshot-v1"
+  },
+  "requested_boundary_tick": 16,
+  "captured_boundary_tick": 16,
+  "family": "mentorship",
+  "evidence_class": "subjective",
+  "owner_id": "agent-founder",
+  "agent_id": "agent-child",
+  "role": "learner",
+  "items": [
+    {
+      "ref": {
+        "run_id": "run-generational-23",
+        "family": "mentorship",
+        "evidence_class": "subjective",
+        "native_kind": "mentorship_entry",
+        "native_id": "lineage-1",
+        "identity_owner": "agent-founder",
+        "key": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "teacher_id": "agent-founder",
+      "learner_id": "agent-child",
+      "owner_id": "agent-founder",
+      "lineage_id": "lineage-1",
+      "root_id": "root-1",
+      "parent_ids": [],
+      "content_kind": "skill",
+      "content_key": "content-1",
+      "hop": 1,
+      "acquisition_tick": 5,
+      "update_tick": 6,
+      "attempt_count": 2,
+      "learning_evidence_count": 1,
+      "confidence_band": "medium",
+      "mutated": false,
+      "native_status": "learned",
+      "evidence_refs": [
+        {
+          "evidence_class": "subjective",
+          "native_kind": "mentorship_entry",
+          "native_id": "lineage-1",
+          "owner_id": "agent-founder",
+          "observed_tick": 6
+        }
+      ],
+      "policy_version": "mentorship-reciprocity.v1",
+      "observed_boundary": 16,
+      "source_observed_boundary": 16,
+      "learning_state": "learning_evidence"
+    }
+  ],
+  "scanned_count": 3,
+  "unprojectable_count": 1,
+  "scan_limited": false,
+  "coverage": {
+    "state": "complete",
+    "reason_codes": [],
+    "capture_start_tick": 0,
+    "capture_end_tick": 16,
+    "missing_prefix_tick": null,
+    "pruned_count": 0,
+    "unresolved_count": 0,
+    "policy_version": "lineage-v1"
+  },
+  "next_cursor": null,
+  "effective_page_size": 100
+}

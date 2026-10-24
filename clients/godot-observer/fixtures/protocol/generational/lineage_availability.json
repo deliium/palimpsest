@@ -1,0 +1,9 @@
+{
+  "schema_version": "lineage-availability-v1",
+  "availability": "unavailable",
+  "reason_code": "snapshot_unavailable",
+  "family": "genealogy",
+  "evidence_class": "objective",
+  "requested_boundary_tick": 12,
+  "captured_boundary_tick": null
+}

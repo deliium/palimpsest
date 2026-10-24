@@ -1,0 +1,63 @@
+{
+  "schema_version": "observer-demographics-v1",
+  "run_id": "run-generational-23",
+  "requested_tick": 16,
+  "requested_through_sequence": null,
+  "resolved_tick": 16,
+  "revision": 42,
+  "evidence_class": "objective",
+  "availability": "available",
+  "reason_code": null,
+  "section": "agents",
+  "selection_state": "all",
+  "population": {
+    "living": 2,
+    "admitted": 3,
+    "dead": 1,
+    "max_generation_index": 1
+  },
+  "stage_rows": [
+    {
+      "stage": "adult",
+      "life_status": "alive",
+      "count": 2
+    },
+    {
+      "stage": "infant",
+      "life_status": "dead",
+      "count": 1
+    }
+  ],
+  "stage_counts_truncated": false,
+  "agents": [
+    {
+      "agent_id": "agent-founder",
+      "entity_id": "body-founder",
+      "entry_tick": 0,
+      "generation_index": 0,
+      "cohort_id": "founders",
+      "stage": "adult",
+      "dependency_status": "independent",
+      "life_status": "alive",
+      "age_ticks": 16,
+      "age_reason_code": null
+    },
+    {
+      "agent_id": "agent-child",
+      "entity_id": "body-child",
+      "entry_tick": 5,
+      "generation_index": 1,
+      "cohort_id": "cohort-5",
+      "stage": "adult",
+      "dependency_status": "independent",
+      "life_status": "alive",
+      "age_ticks": 11,
+      "age_reason_code": null
+    }
+  ],
+  "cohorts": [],
+  "generations": [],
+  "next_after_agent_id": null,
+  "next_after_group_key": null,
+  "limit": 100
+}

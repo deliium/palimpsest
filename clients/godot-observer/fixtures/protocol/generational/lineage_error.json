@@ -1,0 +1,7 @@
+{
+  "type": "urn:palimpsest:problem:lineage_disabled",
+  "title": "Service Unavailable",
+  "status": 503,
+  "code": "lineage_disabled",
+  "detail": "lineage_disabled"
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -10,6 +11,10 @@ from fastapi.responses import JSONResponse
 from api.dependencies import get_lineage_service, get_settings
 from api.errors import ApiError, bad_request, gone, not_found, service_unavailable
 from api.lineage_cursor import LineageCursorCodec
+from api.lineage_participant_schemas import (
+    LineageParticipantCardOut,
+    LineageParticipantsOut,
+)
 from api.lineage_schemas import (
     LineageAvailabilityOut,
     LineageCoverageOut,
@@ -23,7 +28,11 @@ from api.lineage_schemas import (
     LineageSnapshotListOut,
     LineageSnapshotOut,
 )
-from api.lineage_service import LineageApiService, node_filter_fingerprint
+from api.lineage_service import (
+    LineageApiService,
+    node_filter_fingerprint,
+    participant_filter_fingerprint,
+)
 from api.security import ApiCapability, require_http_capability
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
@@ -205,6 +214,36 @@ def _node_out(node: LineageNode) -> LineageNodeOut:
         evidence_refs=[_evidence_out(item) for item in node.evidence_refs],
         counts=dict(node.counts),
         source_observed_boundary=node.source_observed_boundary,
+    )
+
+
+def _participant_out(card: object) -> LineageParticipantCardOut:
+    from simulation.lineage_participants import LineageParticipantCard
+
+    assert type(card) is LineageParticipantCard
+    return LineageParticipantCardOut(
+        ref=_ref_out(card.ref),
+        teacher_id=card.teacher_id,
+        learner_id=card.learner_id,
+        owner_id=card.owner_id,
+        lineage_id=card.lineage_id,
+        root_id=card.root_id,
+        parent_ids=list(card.parent_ids),
+        content_kind=card.content_kind,
+        content_key=card.content_key,
+        hop=card.hop,
+        acquisition_tick=card.acquisition_tick,
+        update_tick=card.update_tick,
+        attempt_count=card.attempt_count,
+        learning_evidence_count=card.learning_evidence_count,
+        confidence_band=card.confidence_band,
+        mutated=card.mutated,
+        native_status=card.native_status,
+        evidence_refs=[_evidence_out(item) for item in card.evidence_refs],
+        policy_version=card.policy_version,
+        observed_boundary=card.observed_boundary,
+        source_observed_boundary=card.source_observed_boundary,
+        learning_state=card.learning_state,
     )
 
 
@@ -454,6 +493,144 @@ async def lineage_nodes(
         effective_page_size=limit,
     )
     _enforce_response_bytes(model)
+    return model
+
+
+@router.get(
+    "/{run_id}/lineage/mentorship/participants",
+    response_model=LineageParticipantsOut,
+)
+async def lineage_mentorship_participants(
+    run_id: str,
+    request: Request,
+    response: Response,
+    evidence_class: str = Query(...),
+    agent_id: str = Query(..., min_length=1, max_length=128),
+    owner_id: str | None = Query(default=None, max_length=128),
+    role: str = Query(default="both"),
+    boundary_tick: int | None = Query(default=None, ge=0),
+    after: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    settings: Settings = Depends(get_settings),
+    service: LineageApiService | None = Depends(get_lineage_service),
+) -> LineageParticipantsOut | JSONResponse:
+    """Bounded native teacher/learner participant cards for one publication."""
+    response.headers["Cache-Control"] = "no-store"
+    _reject_unknown(
+        request,
+        {
+            "evidence_class",
+            "agent_id",
+            "owner_id",
+            "role",
+            "boundary_tick",
+            "after",
+            "limit",
+        },
+    )
+    if role not in {"teacher", "learner", "both"}:
+        raise bad_request(code="invalid_participant_role", run_id=run_id)
+    scope = _scope(run_id, "mentorship", evidence_class, owner_id)
+    _authorize(request, settings, scope)
+    service = _require_service(service)
+    codec: LineageCursorCodec = request.app.state.lineage_cursor_codec
+    filter_fp = participant_filter_fingerprint(
+        agent_id=agent_id, role=role, page_size=limit
+    )
+    snapshot = None
+    node_after = after
+    if after is not None:
+        try:
+            payload = codec.decode(after, purpose="participants", scope=scope)
+        except LineageError as exc:
+            raise _map_error(exc, run_id=run_id) from exc
+        if (
+            payload.filter_fingerprint != filter_fp
+            or payload.page_size != limit
+        ):
+            raise bad_request(code="invalid_lineage_cursor", run_id=run_id)
+        if (
+            boundary_tick is not None
+            and boundary_tick != payload.snapshot_boundary_tick
+        ):
+            raise bad_request(code="invalid_lineage_cursor", run_id=run_id)
+        snapshot = LineageSnapshotRef(
+            publication_id=payload.snapshot_id or "",
+            digest=payload.snapshot_digest or "",
+            boundary_tick=payload.snapshot_boundary_tick or 0,
+        )
+        node_after = payload.last_node_key
+    started = time.perf_counter()
+    try:
+        page = await service.participants(
+            scope,
+            agent_id=agent_id,
+            role=role,
+            snapshot=snapshot,
+            boundary_tick=boundary_tick,
+            after=node_after,
+            limit=limit,
+        )
+    except LineageError as exc:
+        if (
+            exc.code == "snapshot_unavailable"
+            and after is None
+            and boundary_tick is not None
+        ):
+            return _availability_response(scope, boundary_tick)
+        raise _map_error(exc, run_id=run_id) from exc
+    if page.has_more and page.last_examined_key is None:
+        raise service_unavailable(code="lineage_snapshot_corrupt")
+    next_cursor = None
+    if page.has_more and page.last_examined_key is not None:
+        next_cursor = codec.encode_participants(
+            scope,
+            snapshot_id=page.snapshot.publication_id,
+            snapshot_digest=page.snapshot.digest,
+            snapshot_boundary_tick=page.snapshot.boundary_tick,
+            filter_fingerprint=filter_fp,
+            last_node_key=page.last_examined_key,
+            page_size=limit,
+        )
+    model = LineageParticipantsOut(
+        snapshot=_snapshot_out(page.snapshot),
+        requested_boundary_tick=boundary_tick,
+        captured_boundary_tick=page.snapshot.boundary_tick,
+        evidence_class=cast(
+            "Literal['subjective', 'analytical']",
+            scope.evidence_class.value,
+        ),
+        owner_id=scope.owner_id,
+        agent_id=agent_id,
+        role=cast("Literal['teacher', 'learner', 'both']", role),
+        items=[_participant_out(card) for card in page.items],
+        scanned_count=page.scanned_count,
+        unprojectable_count=page.unprojectable_count,
+        scan_limited=page.scan_limited,
+        coverage=_coverage_out(page.coverage),
+        next_cursor=next_cursor,
+        effective_page_size=limit,
+    )
+    _enforce_response_bytes(model)
+    _LOGGER.info(
+        "route_lineage_participants",
+        route_template=(
+            "GET /v1/simulations/{run_id}/lineage/mentorship/participants"
+        ),
+        status=200,
+        run_id=run_id,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        scanned_count=page.scanned_count,
+        matched_count=len(page.items),
+        scan_limited=page.scan_limited,
+    )
+    _LOGGER.debug(
+        "route_lineage_participants_scope",
+        run_id=run_id,
+        evidence_class=scope.evidence_class.value,
+        boundary_tick=boundary_tick,
+        limit=limit,
+    )
     return model
 
 

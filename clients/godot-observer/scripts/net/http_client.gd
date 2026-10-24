@@ -16,8 +16,15 @@ func _ready() -> void:
 	_http.request_completed.connect(_on_completed)
 
 
-func get_json(url: String, route: String, token: String) -> void:
-	_queue.append({"url": url, "route": route, "token": token})
+func get_json(url: String, route: String, token: String, expected_root: String = "object") -> void:
+	if expected_root not in ["object", "array"]:
+		expected_root = "object"
+	_queue.append({
+		"url": url,
+		"route": route,
+		"token": token,
+		"expected_root": expected_root,
+	})
 	ObserverLog.debug("http", "queued route=%s depth=%s" % [route, _queue.size()])
 	_pump()
 
@@ -36,10 +43,7 @@ func _pump() -> void:
 	if not _active.is_empty() or _queue.is_empty():
 		return
 	_active = _queue.pop_front()
-	var headers := PackedStringArray(["Accept: application/json"])
-	var token := str(_active.get("token", ""))
-	if not token.is_empty():
-		headers.append("x-palimpsest-token: %s" % token)
+	var headers := build_headers(str(_active.get("token", "")))
 	var err := _http.request(str(_active["url"]), headers, HTTPClient.METHOD_GET)
 	if err != OK:
 		var route := str(_active["route"])
@@ -51,24 +55,76 @@ func _pump() -> void:
 
 func _on_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var route := str(_active.get("route", ""))
+	var expected_root := str(_active.get("expected_root", "object"))
 	_active = {}
 	ObserverLog.debug("http", "get_finished route=%s status=%s" % [route, response_code])
 	var reason := ""
 	var parsed: Variant = null
 	if result != HTTPRequest.RESULT_SUCCESS:
 		reason = "request_failed"
-	elif response_code == 401 or response_code == 403:
-		reason = "unauthorized"
-	elif response_code == 404:
-		reason = "not_found"
-	elif response_code == 409:
-		reason = "cursor_ahead"
 	elif response_code < 200 or response_code >= 300:
-		reason = "http_%s" % response_code
+		reason = error_reason(response_code, body)
 	else:
-		parsed = JSON.parse_string(body.get_string_from_utf8())
-		if typeof(parsed) != TYPE_DICTIONARY:
-			reason = "invalid_json"
-			parsed = null
+		var parsed_result := parse_success(body, expected_root)
+		parsed = parsed_result["value"]
+		reason = str(parsed_result["reason_code"])
 	get_completed.emit(route, response_code, parsed, reason)
 	_pump()
+
+
+static func build_headers(token: String) -> PackedStringArray:
+	var headers := PackedStringArray(["Accept: application/json"])
+	if not token.is_empty():
+		headers.append("x-palimpsest-token: %s" % token)
+	return headers
+
+
+static func parse_success(body: PackedByteArray, expected_root: String) -> Dictionary:
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	var expected := TYPE_ARRAY if expected_root == "array" else TYPE_DICTIONARY
+	if typeof(parsed) != expected:
+		return {"value": null, "reason_code": "invalid_json"}
+	return {"value": parsed, "reason_code": ""}
+
+
+static func error_reason(status: int, body: PackedByteArray) -> String:
+	## Never leak the raw error body; only a bounded stable code is forwarded.
+	if status == 401:
+		return "unauthorized"
+	if status == 403:
+		return "forbidden"
+	if status == 404:
+		return "not_found"
+	if status == 409:
+		return "cursor_ahead"
+	if status == 410:
+		return "gone"
+	var code := safe_error_code(body)
+	if not code.is_empty():
+		return code
+	return "http_%s" % status
+
+
+static func safe_error_code(body: PackedByteArray) -> String:
+	var text := body.get_string_from_utf8()
+	if text.is_empty() or text.length() > 4096:
+		return ""
+	var parsed: Variant = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return ""
+	var raw: Variant = parsed.get("code")
+	if typeof(raw) != TYPE_STRING:
+		return ""
+	var code := str(raw)
+	if code.is_empty() or code.length() > 128:
+		return ""
+	for index in code.length():
+		var character := code[index]
+		var allowed := (
+			(character >= "a" and character <= "z")
+			or (character >= "0" and character <= "9")
+			or character == "_"
+		)
+		if not allowed:
+			return ""
+	return code

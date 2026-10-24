@@ -1,0 +1,28 @@
+{
+  "schema_version": "observer-generation-markers-v1",
+  "run_id": "run-generational-23",
+  "requested_tick": 16,
+  "resolved_tick": 16,
+  "revision": 42,
+  "evidence_class": "objective",
+  "availability": "available",
+  "reason_code": null,
+  "markers": [
+    {
+      "generation_index": 0,
+      "first_entry_tick": 0,
+      "seek_tick": 0,
+      "admitted_count": 1,
+      "label_code": "founders"
+    },
+    {
+      "generation_index": 1,
+      "first_entry_tick": 5,
+      "seek_tick": 6,
+      "admitted_count": 1,
+      "label_code": "generation_first_admission"
+    }
+  ],
+  "next_after_generation_index": null,
+  "limit": 100
+}

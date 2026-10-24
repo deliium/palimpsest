@@ -88,4 +88,81 @@ func run() -> Array:
 	]:
 		if key not in focused_url:
 			failures.append("focus/branch allowlist missing %s" % key)
+	var lineage: Dictionary = Urls.build_get(ORIGIN, "/v1/simulations/run-1/lineage/mentorship/participants", {
+		"evidence_class": "subjective",
+		"owner_id": "owner-1",
+		"agent_id": "agent-1",
+		"role": "learner",
+		"boundary_tick": 12,
+		"after": "opaque-cursor",
+		"limit": 50,
+	})
+	var lineage_url := str(lineage["url"])
+	for key in [
+		"evidence_class=subjective",
+		"owner_id=owner-1",
+		"agent_id=agent-1",
+		"role=learner",
+		"boundary_tick=12",
+		"after=opaque-cursor",
+		"limit=50",
+	]:
+		if key not in lineage_url:
+			failures.append("lineage selector missing %s" % key)
+	if "after_tick" in lineage_url or "after_sequence" in lineage_url:
+		failures.append("lineage after must not become the event resume pair")
+	var catalog: Dictionary = Urls.build_get(ORIGIN, "/v1/simulations/run-1/lineage/genealogy/nodes", {
+		"evidence_class": "objective",
+		"native_kind": "agent",
+		"native_id": "agent-1",
+		"boundary_tick": 9,
+		"after": "key",
+		"include_restricted": true,
+	})
+	var catalog_url := str(catalog["url"])
+	for key in [
+		"native_kind=agent",
+		"native_id=agent-1",
+		"boundary_tick=9",
+		"after=key",
+		"include_restricted=true",
+	]:
+		if key not in catalog_url:
+			failures.append("catalogue selector missing %s" % key)
+	var graph: Dictionary = Urls.build_get(ORIGIN, "/v1/simulations/run-1/lineage/genealogy/traverse", {
+		"root_key": "root",
+		"direction": "ancestors",
+		"max_depth": 2,
+		"max_nodes": 50,
+		"max_edges": 80,
+		"living_only": false,
+	})
+	var graph_url := str(graph["url"])
+	for key in [
+		"root_key=root",
+		"direction=ancestors",
+		"max_depth=2",
+		"max_nodes=50",
+		"max_edges=80",
+		"living_only=false",
+	]:
+		if key not in graph_url:
+			failures.append("graph selector missing %s" % key)
+	var demographic: Dictionary = Urls.build_get(ORIGIN, "/v1/simulations/run-1/observer/demographics", {
+		"section": "cohorts",
+		"after_group_key": "group",
+		"after_generation_index": 3,
+		"after_agent_id": "agent-9",
+		"tick": 12,
+	})
+	var demographic_url := str(demographic["url"])
+	for key in [
+		"section=cohorts",
+		"after_group_key=group",
+		"after_generation_index=3",
+		"after_agent_id=agent-9",
+		"tick=12",
+	]:
+		if key not in demographic_url:
+			failures.append("demographic selector missing %s" % key)
 	return failures

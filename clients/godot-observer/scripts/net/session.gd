@@ -9,6 +9,8 @@ const Playback := preload("res://scripts/protocol/playback.gd")
 const Origin := preload("res://scripts/net/origin.gd")
 const HttpClient := preload("res://scripts/net/http_client.gd")
 const StreamClient := preload("res://scripts/net/stream_client.gd")
+const GenerationalSourceScript := preload("res://scripts/net/generational_source.gd")
+const LineageSourceScript := preload("res://scripts/net/lineage_source.gd")
 
 const PAGE_LIMIT := 100
 const EVENT_WINDOW := 200
@@ -36,6 +38,10 @@ signal nav_stack_changed(depth: int)
 signal marker_enrichment_loaded(events: Array)
 signal focus_changed
 signal follow_changed(mode: String)
+signal generational_updated
+signal credentials_changed(inspection_present: bool, debug_present: bool)
+signal credentials_error(reason_code: String)
+signal lineage_source_updated
 
 const NAV_STACK_LIMIT := 16
 const BRANCH_PAGE_LIMIT := 50
@@ -63,6 +69,12 @@ var follow_mode := ""  # "", "agent", "location"
 var follow_snap_location := false
 
 var _token := ""
+var _inspection_token := ""
+var _debug_token := ""
+var _credential_generation := 0
+var _credential_origin := ""
+var generational
+var private_lineage
 var _http: Node
 var _stream: Node
 var _pending := {}
@@ -99,6 +111,12 @@ func _ready() -> void:
 	_http.name = "HttpClient"
 	add_child(_http)
 	_http.get_completed.connect(_on_http)
+	generational = GenerationalSourceScript.new()
+	generational.set_request_sink(Callable(self, "_request_path"))
+	generational.changed.connect(func() -> void: generational_updated.emit())
+	private_lineage = LineageSourceScript.new()
+	private_lineage.set_request_sink(Callable(self, "_request_path"))
+	private_lineage.changed.connect(func() -> void: lineage_source_updated.emit())
 	_stream = StreamClient.new()
 	_stream.name = "StreamClient"
 	add_child(_stream)
@@ -520,7 +538,173 @@ func _probe_previous_focused() -> void:
 	_navigation = "focus_previous_tick"
 
 
+func set_demographics_enabled(value: bool) -> void:
+	if generational != null:
+		generational.set_demographics_enabled(value)
+
+
+func set_generation_markers_enabled(value: bool) -> void:
+	if generational != null:
+		generational.set_markers_enabled(value)
+
+
+func choose_demographic_section(value: String) -> void:
+	if generational != null:
+		generational.choose_section(value)
+
+
+func select_demographic_agent(agent_id: String) -> void:
+	if generational != null:
+		generational.select_agent(agent_id)
+
+
+func load_more_demographics() -> void:
+	if generational != null:
+		generational.load_more_agents()
+
+
+func load_more_demographic_section() -> void:
+	if generational != null:
+		generational.load_more_section()
+
+
+func load_more_generation_markers() -> void:
+	if generational != null:
+		generational.load_more_markers()
+
+
+func set_lineage_enabled(value: bool) -> void:
+	if private_lineage != null:
+		private_lineage.enabled = value
+		if not value:
+			private_lineage.clear()
+
+
+func request_genealogy(agent_id: String, direction: String = "both") -> void:
+	if private_lineage != null:
+		private_lineage.request_genealogy(agent_id, direction)
+
+
+func request_participants(
+	agent_id: String,
+	role: String = "both",
+	evidence_class: String = "subjective",
+	owner_id: String = "",
+) -> void:
+	if private_lineage != null:
+		private_lineage.request_participants(agent_id, role, evidence_class, owner_id)
+
+
+func request_knowledge_root(
+	native_kind: String,
+	native_id: String,
+	evidence_class: String = "subjective",
+	owner_id: String = "",
+) -> void:
+	if private_lineage != null:
+		private_lineage.request_knowledge_root(native_kind, native_id, evidence_class, owner_id)
+
+
+func load_more_lineage(panel: String) -> void:
+	if private_lineage != null:
+		private_lineage.load_more_lineage(panel)
+
+
+func _generational_frame(frame: Variant) -> void:
+	if generational == null or not _opened:
+		return
+	generational.note_world(frame.world)
+	if generational != null:
+		generational.set_context(run_id, _http_epoch, _credential_generation)
+	generational.on_frame(frame, _http_epoch, _credential_generation)
+	if private_lineage != null:
+		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
+		private_lineage.on_frame(frame)
+
+
+func _token_for(capability: String) -> String:
+	if capability == "debug":
+		return _debug_token
+	return _inspection_token
+
+
+static func valid_credential(value: String) -> bool:
+	if value.length() > 4096:
+		return false
+	if value.contains("\n") or value.contains("\r") or value.contains("\t"):
+		return false
+	return true
+
+
+func configure_credentials(inspection_token: String, debug_token: String) -> bool:
+	if not valid_credential(inspection_token) or not valid_credential(debug_token):
+		credentials_error.emit("invalid_credential")
+		return false
+	var inspection_changed := inspection_token != _inspection_token
+	_inspection_token = inspection_token
+	_debug_token = debug_token
+	_token = _inspection_token
+	_credential_generation += 1
+	_cancel_http("credentials")
+	if generational != null:
+		if inspection_changed:
+			generational.clear()
+		generational.set_context(run_id, _http_epoch, _credential_generation)
+	if private_lineage != null:
+		private_lineage.clear()
+		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
+	credentials_changed.emit(not _inspection_token.is_empty(), not _debug_token.is_empty())
+	ObserverLog.info(
+		"session",
+		"credentials_configured inspection_present=%s debug_present=%s generation=%s" % [
+			not _inspection_token.is_empty(),
+			not _debug_token.is_empty(),
+			_credential_generation,
+		],
+	)
+	if _opened and inspection_changed:
+		if _stream != null:
+			_stream.close_stream(false)
+		_request("state_live", {}, _seek_serial)
+		_open_socket()
+	return true
+
+
+func forget_credentials() -> void:
+	_inspection_token = ""
+	_debug_token = ""
+	_token = ""
+	_credential_generation += 1
+	_credential_origin = ""
+	_cancel_http("credentials_forgotten")
+	if generational != null:
+		generational.clear()
+	if private_lineage != null:
+		private_lineage.clear()
+	credentials_changed.emit(false, false)
+	ObserverLog.info("session", "credentials_forgotten generation=%s" % _credential_generation)
+	if _opened:
+		if _stream != null:
+			_stream.close_stream(false)
+		_request("state_live", {}, _seek_serial)
+		_open_socket()
+
+
+func credential_generation() -> int:
+	return _credential_generation
+
+
+func has_inspection_credential() -> bool:
+	return not _inspection_token.is_empty()
+
+
+func has_debug_credential() -> bool:
+	return not _debug_token.is_empty()
+
+
 func _teardown_source() -> void:
+	if generational != null:
+		generational.clear()
 	_switching = true
 	status_changed.emit("switching_run", "Switching run")
 	if _stream != null:
@@ -568,8 +752,25 @@ func _teardown_source() -> void:
 
 
 func _start() -> void:
-	origin = Origin.resolve()
-	_token = str(ProjectSettings.get_setting("palimpsest/api_token", ""))
+	var resolved_origin := Origin.resolve()
+	if not _credential_origin.is_empty() and _credential_origin != resolved_origin:
+		_inspection_token = ""
+		_debug_token = ""
+		_credential_generation += 1
+		if generational != null:
+			generational.clear()
+		credentials_changed.emit(false, false)
+	_credential_origin = resolved_origin
+	origin = resolved_origin
+	if _inspection_token.is_empty() and _credential_generation == 0:
+		_inspection_token = str(
+			ProjectSettings.get_setting("palimpsest/api_token", "")
+		)
+	_token = _token_for("inspection")
+	if generational != null:
+		generational.set_context(run_id, _http_epoch, _credential_generation)
+	if private_lineage != null:
+		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
 	if Origin.is_missing(origin):
 		_fail("observer_origin_missing")
 		return
@@ -918,11 +1119,19 @@ func _request_path(
 		"kind": kind,
 		"seek_id": int(meta.get("seek_id", -1)),
 		"epoch": _http_epoch,
+		"credential_generation": _credential_generation,
 	}
 	for key in meta.keys():
 		pending[key] = meta[key]
 	_pending[request_id] = pending
-	_http.get_json(str(built["url"]), request_id, _token)
+	var capability := str(meta.get("capability", "inspection"))
+	var expected_root := str(meta.get("expected_root", "object"))
+	_http.get_json(
+		str(built["url"]),
+		request_id,
+		_token_for(capability),
+		expected_root,
+	)
 
 
 func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
@@ -967,7 +1176,7 @@ func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
 	_http.get_json(str(built["url"]), request_id, _token)
 
 
-func _on_http(route: String, _status: int, body: Variant, reason_code: String) -> void:
+func _on_http(route: String, status: int, body: Variant, reason_code: String) -> void:
 	var meta: Dictionary = _pending.get(route, {})
 	_pending.erase(route)
 	if meta.is_empty():
@@ -982,6 +1191,12 @@ func _on_http(route: String, _status: int, body: Variant, reason_code: String) -
 	var seek_id := int(meta.get("seek_id", -1))
 	if seek_id >= 0 and seek_id < _seek_serial:
 		ObserverLog.debug("session", "seek_ignored reason_code=stale_response")
+		return
+	if str(meta.get("source", "")) == "generational":
+		generational.handle_response(meta, body, reason_code, status)
+		return
+	if str(meta.get("source", "")) == "lineage":
+		private_lineage.handle_response(meta, body, reason_code, status)
 		return
 	if (
 		kind == "territorial_claims"
@@ -1349,6 +1564,7 @@ func _adopt_frame(frame: Variant, adopt_cursor: bool) -> void:
 		cursor_after_sequence = frame.cursor.after_sequence
 		_view_transport(frame)
 	world_replaced.emit(world)
+	_generational_frame(frame)
 
 
 func _apply_sought_frame(frame: Variant, seek_id: int) -> void:
@@ -1367,6 +1583,7 @@ func _apply_sought_frame(frame: Variant, seek_id: int) -> void:
 		"%s tick %s" % [transport.mode, transport.tick],
 	)
 	frame_sought.emit(frame, meta.get("event", null), bool(meta.get("forward", false)))
+	_generational_frame(frame)
 	if _playing:
 		_schedule_step()
 
@@ -1468,6 +1685,10 @@ func _apply_live_event(event: Variant) -> void:
 	cursor_after_sequence = decision["after_sequence"]
 	if transport.mode == TransportScript.MODE_LIVE:
 		transport.view_event(int(event.tick), int(event.sequence))
+	if generational != null:
+		generational.on_live_event()
+	if private_lineage != null:
+		private_lineage.invalidate_private("live_event")
 	live_event.emit(event)
 
 

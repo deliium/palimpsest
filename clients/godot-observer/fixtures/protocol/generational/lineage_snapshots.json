@@ -1,0 +1,13 @@
+{
+  "schema_version": "lineage-snapshot-list-v1",
+  "items": [
+    {
+      "publication_id": "publication-2026-10-24-01",
+      "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "boundary_tick": 16,
+      "schema_version": "lineage-snapshot-v1"
+    }
+  ],
+  "declared_count": 1,
+  "next_cursor": null
+}

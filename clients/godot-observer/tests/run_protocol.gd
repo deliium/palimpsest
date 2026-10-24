@@ -33,6 +33,11 @@ const SUITES: Array[String] = [
 	"res://tests/test_debugger_panel.gd",
 	"res://tests/test_debugger_labels.gd",
 	"res://tests/test_session_debugger.gd",
+	"res://tests/test_generational_http.gd",
+	"res://tests/test_demographic_models.gd",
+	"res://tests/test_lineage_models.gd",
+	"res://tests/test_generational_session.gd",
+	"res://tests/test_lineage_session.gd",
 ]
 
 

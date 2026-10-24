@@ -1,0 +1,35 @@
+[
+  {
+    "family": "genealogy",
+    "available_classes": [
+      "objective"
+    ],
+    "owner_required": false,
+    "directions": [
+      "ancestors",
+      "descendants",
+      "both"
+    ],
+    "max_depth": 4,
+    "max_nodes": 200,
+    "max_edges": 500,
+    "max_page_size": 200
+  },
+  {
+    "family": "mentorship",
+    "available_classes": [
+      "subjective",
+      "analytical"
+    ],
+    "owner_required": false,
+    "directions": [
+      "ancestors",
+      "descendants",
+      "both"
+    ],
+    "max_depth": 4,
+    "max_nodes": 200,
+    "max_edges": 500,
+    "max_page_size": 200
+  }
+]

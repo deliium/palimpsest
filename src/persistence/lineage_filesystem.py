@@ -1053,21 +1053,18 @@ class _FilesystemReadSession(LineageReadSession):
             for path, _digest_value in manifest.page_digests
             if path.startswith("catalog/nodes-")
         ]
-        nodes: list[LineageNode] = []
+        eligible: list[LineageNode] = []
         for path in sorted(pages):
             page = decode_lineage_node_page(self._read_verified(head, manifest, path))
-            nodes.extend(page.nodes)
-            if len(nodes) >= (limit + (1 if after else 0)):
-                break
-        filtered = sorted(
-            (node for node in nodes if after is None or node.key > after),
-            key=lambda node: node.key,
-        )
-        selected = filtered[:limit]
+            for node in page.nodes:
+                if after is None or node.key > after:
+                    eligible.append(node)
+        eligible.sort(key=lambda node: node.key)
+        selected = eligible[:limit]
         return LineageNodeCataloguePage(
             rows=tuple(selected),
-            declared_count=len(filtered),
-            continuation=selected[-1].key if len(filtered) > limit else None,
+            declared_count=len(eligible),
+            continuation=selected[-1].key if len(eligible) > limit else None,
             coverage=manifest.coverage,
         )
 

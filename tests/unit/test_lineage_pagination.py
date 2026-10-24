@@ -159,3 +159,34 @@ def test_signed_duplicate_deep_json_and_oversize_are_rejected() -> None:
         codec.decode(f"{body}.{mac}", purpose="traverse", scope=_SCOPE)
     with pytest.raises(LineageError, match="invalid_lineage_cursor"):
         codec.decode("x" * 5000, purpose="traverse", scope=_SCOPE)
+
+
+def test_participant_cursor_round_trip_and_cross_purpose_rejection() -> None:
+    codec = _codec()
+    token = codec.encode_participants(
+        _SCOPE,
+        snapshot_id="publication-1",
+        snapshot_digest="a" * 64,
+        snapshot_boundary_tick=5,
+        filter_fingerprint="d" * 64,
+        last_node_key="e" * 64,
+        page_size=100,
+    )
+    payload = codec.decode(token, purpose="participants", scope=_SCOPE)
+    assert payload.last_node_key == "e" * 64
+    assert payload.filter_fingerprint == "d" * 64
+    assert payload.snapshot_boundary_tick == 5
+    for purpose in ("nodes", "snapshots", "traverse"):
+        with pytest.raises(LineageError, match="invalid_lineage_cursor"):
+            codec.decode(token, purpose=purpose, scope=_SCOPE)
+    nodes = codec.encode_nodes(
+        _SCOPE,
+        snapshot_id="publication-1",
+        snapshot_digest="a" * 64,
+        snapshot_boundary_tick=5,
+        filter_fingerprint="d" * 64,
+        last_node_key="e" * 64,
+        page_size=100,
+    )
+    with pytest.raises(LineageError, match="invalid_lineage_cursor"):
+        codec.decode(nodes, purpose="participants", scope=_SCOPE)

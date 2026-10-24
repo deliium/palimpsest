@@ -47,6 +47,16 @@ _PURPOSE_KEYS: Final[dict[str, frozenset[str]]] = {
             "limit",
         }
     ),
+    "participants": frozenset(
+        {
+            "snapshot_id",
+            "snapshot_digest",
+            "snapshot_boundary",
+            "filter",
+            "last_node",
+            "limit",
+        }
+    ),
     "snapshots": frozenset(
         {"commit", "generation", "last_boundary", "last_publication", "limit"}
     ),
@@ -182,6 +192,30 @@ class LineageCursorCodec:
             },
         )
 
+    def encode_participants(
+        self,
+        scope: LineageScope,
+        *,
+        snapshot_id: str,
+        snapshot_digest: str,
+        snapshot_boundary_tick: int,
+        filter_fingerprint: str,
+        last_node_key: str,
+        page_size: int,
+    ) -> str:
+        return self._encode(
+            scope,
+            "participants",
+            {
+                "snapshot_id": snapshot_id,
+                "snapshot_digest": snapshot_digest,
+                "snapshot_boundary": snapshot_boundary_tick,
+                "filter": filter_fingerprint,
+                "last_node": last_node_key,
+                "limit": page_size,
+            },
+        )
+
     def encode_snapshots(
         self,
         scope: LineageScope,
@@ -292,7 +326,7 @@ class LineageCursorCodec:
                 query_fingerprint=_str(payload["qf"]),
                 record_offset=_int(payload["offset"]),
             )
-        if purpose == "nodes":
+        if purpose in {"nodes", "participants"}:
             return LineageCursorPayload(
                 purpose=purpose,
                 scope=scope,

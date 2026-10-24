@@ -2,6 +2,8 @@ extends CanvasLayer
 
 const ObserverLog := preload("res://scripts/log.gd")
 
+signal credentials_apply_requested(inspection_token: String, debug_token: String)
+signal credentials_forget_requested
 signal connect_requested(run_id: String)
 signal zoom_in_requested
 signal zoom_out_requested
@@ -125,6 +127,15 @@ func _ready() -> void:
 				open_child_branch_requested.emit(child_run_id, fork_tick)
 		)
 		branch.load_more_children_requested.connect(func() -> void: load_more_branches_requested.emit())
+	var credentials = get_node_or_null("CredentialsPanel")
+	if credentials != null:
+		credentials.apply_requested.connect(
+			func(inspection_token: String, debug_token: String) -> void:
+				credentials_apply_requested.emit(inspection_token, debug_token)
+		)
+		credentials.forget_requested.connect(
+			func() -> void: credentials_forget_requested.emit()
+		)
 	var bookmarks = $BookmarksPanel
 	if bookmarks != null:
 		bookmarks.add_requested.connect(func(note: String) -> void: bookmark_add_requested.emit(note))
@@ -309,3 +320,15 @@ func show_debugger_lineage_unavailable(reason_code: String) -> void:
 
 func close_debugger() -> void:
 	$DebuggerPanel.close_panel()
+
+
+func note_credentials_result(ok: bool, reason_code: String) -> void:
+	var credentials = get_node_or_null("CredentialsPanel")
+	if credentials != null:
+		credentials.note_result(ok, reason_code)
+
+
+func set_credential_state(inspection_present: bool, debug_present: bool) -> void:
+	var credentials = get_node_or_null("CredentialsPanel")
+	if credentials != null:
+		credentials.set_present(inspection_present, debug_present)

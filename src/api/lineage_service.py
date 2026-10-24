@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -11,6 +12,7 @@ from persistence.lineage_filesystem import create_lineage_reader
 from simulation.lineage_catalog import LineageCatalogService, LineageFamilyDescriptor
 from simulation.lineage_identity import LineageNativeKind
 from simulation.lineage_models import (
+    LineageCoverage,
     LineageDirection,
     LineageError,
     LineageNode,
@@ -18,6 +20,11 @@ from simulation.lineage_models import (
     LineageQuery,
     LineageScope,
     LineageSnapshotRef,
+)
+from simulation.lineage_participants import (
+    LineageParticipantCard,
+    order_participant_cards,
+    project_participant_card,
 )
 from simulation.lineage_ports import (
     LineageNodeCataloguePage,
@@ -28,7 +35,30 @@ from simulation.lineage_ports import (
 from simulation.lineage_query import LineageQueryService
 from simulation.models import RunId
 
-__all__ = ["ArtifactLineageApiService", "LineageApiService"]
+__all__ = [
+    "MAX_PARTICIPANT_SCAN",
+    "ArtifactLineageApiService",
+    "LineageApiService",
+    "LineageParticipantPage",
+    "participant_filter_fingerprint",
+]
+
+MAX_PARTICIPANT_SCAN = 200
+
+
+@dataclass(frozen=True, slots=True)
+class LineageParticipantPage:
+    """Bounded participant scan result for one pinned publication."""
+
+    snapshot: LineageSnapshotRef
+    items: tuple[LineageParticipantCard, ...]
+    scanned_count: int
+    unprojectable_count: int
+    scan_limited: bool
+    has_more: bool
+    last_examined_key: str | None
+    coverage: LineageCoverage
+    run_commit_ref: str
 
 
 class LineageApiService(Protocol):
@@ -86,6 +116,19 @@ class LineageApiService(Protocol):
     async def get_node(
         self, scope: LineageScope, snapshot: LineageSnapshotRef, key: str
     ) -> LineageNode | None: ...
+
+    async def participants(
+        self,
+        scope: LineageScope,
+        *,
+        agent_id: str,
+        role: str,
+        snapshot: LineageSnapshotRef | None,
+        boundary_tick: int | None,
+        after: str | None,
+        limit: int,
+    ) -> LineageParticipantPage: ...
+
 
 class ArtifactLineageApiService:
     """Inject reader/cursor; opens one shared session per authenticated call."""
@@ -229,6 +272,71 @@ class ArtifactLineageApiService:
             )
             return snapshot, root, page
 
+    async def participants(
+        self,
+        scope: LineageScope,
+        *,
+        agent_id: str,
+        role: str,
+        snapshot: LineageSnapshotRef | None,
+        boundary_tick: int | None,
+        after: str | None,
+        limit: int,
+    ) -> LineageParticipantPage:
+        """Scan one bounded catalogue window for native participant cards."""
+        if scope.family.value != "mentorship":
+            raise LineageError("invalid_lineage_scope")
+        self._require_run(scope.run_id)
+        budget = LineageReadBudget.for_query()
+        async with self._read_port.open_read(
+            run_id=scope.run_id, budget=budget
+        ) as session:
+            resolved = snapshot or await session.resolve_snapshot(scope, boundary_tick)
+            page = await session.node_page(resolved, after, MAX_PARTICIPANT_SCAN)
+            rows = page.rows
+            if not rows and page.continuation is not None:
+                raise LineageError("lineage_snapshot_corrupt")
+            if after is not None and rows and rows[0].key <= after:
+                raise LineageError("lineage_snapshot_corrupt")
+            cards: list[LineageParticipantCard] = []
+            scanned = 0
+            unprojectable = 0
+            last_examined: str | None = None
+            for node in rows:
+                scanned += 1
+                last_examined = node.key
+                card = project_participant_card(
+                    node, agent_id=agent_id, role=role
+                )
+                if card is None:
+                    if node.mentorship_record is None:
+                        unprojectable += 1
+                    continue
+                cards.append(card)
+                if len(cards) >= limit:
+                    break
+            has_more = scanned < len(rows) or page.continuation is not None
+            if (
+                page.continuation is not None
+                and after is not None
+                and page.continuation <= after
+            ):
+                raise LineageError("lineage_snapshot_corrupt")
+            coverage = page.coverage
+            if coverage is None:
+                coverage = await session.coverage(resolved)
+            return LineageParticipantPage(
+                snapshot=resolved,
+                items=order_participant_cards(cards),
+                scanned_count=scanned,
+                unprojectable_count=unprojectable,
+                scan_limited=has_more and scanned >= MAX_PARTICIPANT_SCAN,
+                has_more=has_more,
+                last_examined_key=last_examined,
+                coverage=coverage,
+                run_commit_ref=session.run_commit_ref,
+            )
+
     async def resolve_snapshot(
         self, scope: LineageScope, boundary_tick: int | None
     ) -> tuple[LineageSnapshotRef, str]:
@@ -247,4 +355,11 @@ def node_filter_fingerprint(
     native_kind: LineageNativeKind | None, native_id: str | None
 ) -> str:
     payload = f"{native_kind.value if native_kind else '-'}|{native_id or '-'}".encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def participant_filter_fingerprint(
+    *, agent_id: str, role: str, page_size: int
+) -> str:
+    payload = f"{agent_id}|{role}|{page_size}".encode()
     return hashlib.sha256(payload).hexdigest()

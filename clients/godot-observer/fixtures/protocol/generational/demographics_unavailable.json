@@ -1,0 +1,22 @@
+{
+  "schema_version": "observer-demographics-v1",
+  "run_id": "run-legacy",
+  "requested_tick": 4,
+  "requested_through_sequence": null,
+  "resolved_tick": 4,
+  "revision": 3,
+  "evidence_class": "objective",
+  "availability": "unavailable",
+  "reason_code": "lifecycle_disabled",
+  "section": "agents",
+  "selection_state": "unavailable",
+  "population": null,
+  "stage_rows": [],
+  "stage_counts_truncated": false,
+  "agents": [],
+  "cohorts": [],
+  "generations": [],
+  "next_after_agent_id": null,
+  "next_after_group_key": null,
+  "limit": 100
+}

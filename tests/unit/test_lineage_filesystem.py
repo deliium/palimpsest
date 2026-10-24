@@ -333,3 +333,57 @@ async def test_declared_but_missing_node_is_corruption(tmp_path: Path) -> None:
         snapshot = await session.resolve_snapshot(_SCOPE)
         with pytest.raises(LineageError, match="lineage_snapshot_corrupt"):
             await session.get_node(snapshot, father_key)
+
+
+@pytest.mark.asyncio
+async def test_catalogue_pagination_reaches_every_node_across_physical_pages(
+    tmp_path: Path,
+) -> None:
+    nodes = tuple(_node(f"node-{index:04d}") for index in range(450))
+    await create_lineage_publisher(tmp_path).publish(
+        _publication(nodes=nodes, edges=())
+    )
+    async with create_lineage_reader(tmp_path).open_read(
+        run_id=_RUN, budget=LineageReadBudget.for_query()
+    ) as session:
+        snapshot = await session.resolve_snapshot(_SCOPE)
+        collected: list[LineageNode] = []
+        after: str | None = None
+        while True:
+            page = await session.node_page(snapshot, after, 200)
+            collected.extend(page.rows)
+            if page.continuation is None:
+                break
+            after = page.continuation
+        assert len(collected) == 450
+        keys = [node.key for node in collected]
+        assert len(set(keys)) == 450
+        assert keys == sorted(keys)
+
+        second_pass: list[LineageNode] = []
+        after = None
+        while True:
+            page = await session.node_page(snapshot, after, 100)
+            second_pass.extend(page.rows)
+            if page.continuation is None:
+                break
+            after = page.continuation
+        assert [node.key for node in second_pass] == keys
+
+        largest_pages: list[LineageNode] = []
+        after = None
+        while True:
+            page = await session.node_page(snapshot, after, 256)
+            largest_pages.extend(page.rows)
+            if page.continuation is None:
+                break
+            after = page.continuation
+        assert [node.key for node in largest_pages] == keys
+
+        later = await session.node_page(snapshot, keys[300], 200)
+        assert [node.key for node in later.rows] == keys[301:450]
+        assert later.continuation is None
+
+        beyond = await session.node_page(snapshot, keys[-1], 200)
+        assert beyond.rows == ()
+        assert beyond.continuation is None

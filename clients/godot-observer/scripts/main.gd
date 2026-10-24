@@ -78,6 +78,10 @@ func _ready() -> void:
 	_ui.bookmark_jump_requested.connect(_on_bookmark_jump)
 	_ui.bookmark_delete_requested.connect(_on_bookmark_delete)
 	_ui.bookmark_edit_requested.connect(_on_bookmark_edit)
+	_ui.credentials_apply_requested.connect(_on_credentials_apply)
+	_ui.credentials_forget_requested.connect(_on_credentials_forget)
+	_session.credentials_changed.connect(_ui.set_credential_state)
+	_session.credentials_error.connect(_on_credentials_error)
 	_session.run_id_applied.connect(_reload_bookmarks)
 	_session.begin()
 
@@ -466,3 +470,17 @@ func _on_debugger_provenance(lineage_kind: String, subject_id: String, owner_id:
 		],
 	)
 	_session.request_debugger_lineage(lineage_kind, subject_id, owner_id)
+
+
+func _on_credentials_apply(inspection_token: String, debug_token: String) -> void:
+	var ok := bool(_session.configure_credentials(inspection_token, debug_token))
+	_ui.note_credentials_result(ok, "" if ok else "invalid_credential")
+
+
+func _on_credentials_forget() -> void:
+	_session.forget_credentials()
+	_ui.note_credentials_result(true, "")
+
+
+func _on_credentials_error(reason_code: String) -> void:
+	_ui.note_credentials_result(false, reason_code)

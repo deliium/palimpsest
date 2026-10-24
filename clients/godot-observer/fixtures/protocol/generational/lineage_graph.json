@@ -1,0 +1,92 @@
+{
+  "schema_version": "lineage-graph-page-v1",
+  "snapshot": {
+    "publication_id": "publication-2026-10-24-01",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "boundary_tick": 16,
+    "schema_version": "lineage-snapshot-v1"
+  },
+  "nodes": [
+    {
+      "ref": {
+        "run_id": "run-generational-23",
+        "family": "genealogy",
+        "evidence_class": "objective",
+        "native_kind": "agent",
+        "native_id": "agent-founder",
+        "identity_owner": null,
+        "key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "state": "observed",
+      "living": true,
+      "observed_tick": 16,
+      "status_code": "alive",
+      "confidence_code": null,
+      "confidence_value": null,
+      "unresolved_reason": null,
+      "native_revision": "1",
+      "evidence_refs": [],
+      "counts": {
+        "children": 1
+      },
+      "source_observed_boundary": 16
+    },
+    {
+      "ref": {
+        "run_id": "run-generational-23",
+        "family": "genealogy",
+        "evidence_class": "objective",
+        "native_kind": "agent",
+        "native_id": "agent-child",
+        "identity_owner": null,
+        "key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "state": "observed",
+      "living": true,
+      "observed_tick": 16,
+      "status_code": "alive",
+      "confidence_code": null,
+      "confidence_value": null,
+      "unresolved_reason": null,
+      "native_revision": "1",
+      "evidence_refs": [],
+      "counts": {},
+      "source_observed_boundary": 16
+    }
+  ],
+  "edges": [
+    {
+      "edge_key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "source_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "target_key": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "relation": "parent_of",
+      "native_kind": "agent",
+      "native_id": "agent-founder->agent-child",
+      "claim_owner_id": null,
+      "observed_tick": 5,
+      "status_code": "parent"
+    }
+  ],
+  "matched_node_keys": [
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "context_only_node_keys": [
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  ],
+  "next_cursor": null,
+  "coverage": {
+    "state": "complete",
+    "reason_codes": [],
+    "capture_start_tick": 0,
+    "capture_end_tick": 16,
+    "missing_prefix_tick": null,
+    "pruned_count": 0,
+    "unresolved_count": 0,
+    "policy_version": "lineage-v1"
+  },
+  "truncated": false,
+  "stop_reason_code": null,
+  "requested_boundary_tick": 16,
+  "captured_boundary_tick": 16,
+  "effective_page_size": 100
+}
