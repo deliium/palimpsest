@@ -84,8 +84,13 @@ DatabaseFactory = Callable[[Settings], DatabaseResourcesLike]
 def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
     """Wire default persistence-backed facades unless tests already overrode them."""
     runs = create_run_repository(session_factory)  # type: ignore[arg-type]
-    settings: Settings = app.state.settings
-    if (
+    settings: Settings | None = getattr(app.state, "settings", None)
+    if settings is None:
+        _LOGGER.debug(
+            "civilization_service_attach_skipped",
+            reason_code="settings_unavailable",
+        )
+    elif (
         settings.civilization_root is not None
         and getattr(app.state, "civilization_service", None) is None
     ):

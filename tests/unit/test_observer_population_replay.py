@@ -761,6 +761,18 @@ def test_app_attaches_the_persistence_replay_context_source() -> None:
     )
 
 
+def test_persistence_services_skip_optional_civilization_without_settings() -> None:
+    from fastapi import FastAPI
+
+    from api.app import _attach_persistence_services
+
+    app = FastAPI()
+    _attach_persistence_services(app, object())
+
+    assert getattr(app.state, "civilization_service", None) is None
+    assert app.state.observer_service is not None
+
+
 @pytest.mark.asyncio
 async def test_v20_historical_scene_retains_lifecycle_records() -> None:
     from experiments.generational_runner_scenario import (
