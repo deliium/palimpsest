@@ -70,6 +70,7 @@ func run() -> Array:
 	var failures: Array = []
 	_expect(failures, _target_derivation(), "target derivation")
 	_expect(failures, _staged_bundle_acceptance(), "staged bundle acceptance")
+	_expect(failures, _three_intermediate_bundles(), "three intermediate bundles")
 	_expect(failures, _latest_target_replaces_queued(), "latest target")
 	_expect(failures, _presentation_deadline(), "presentation deadline")
 	_expect(failures, _pause_invalidates_staging(), "pause invalidation")
@@ -213,6 +214,26 @@ func _staged_bundle_acceptance() -> String:
 	if int(session.civilization._cursor.get("tick", -1)) != 4:
 		session.free()
 		return "accepted boundary not adopted by the source"
+	session.free()
+	return ""
+
+
+func _three_intermediate_bundles() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	var signals: Array = pair[2]
+	session._playing = true
+	for tick in [1, 2, 3]:
+		var before := signals.size()
+		session._playback_last_accepted_tick = tick - 1
+		session._stage_playback_frame(_frame(tick))
+		_release_at(session, "settlements", tick)
+		if signals.size() != before + 1:
+			session.free()
+			return "intermediate bundle %s was not displayed" % tick
+		if int(signals[-1]["tick"]) != tick:
+			session.free()
+			return "intermediate bundle %s displayed the wrong boundary" % tick
 	session.free()
 	return ""
 

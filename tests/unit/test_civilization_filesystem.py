@@ -14,9 +14,11 @@ from persistence.civilization_filesystem import (
     create_civilization_publisher,
     create_civilization_reader,
 )
+from simulation.civilization_capture import CivilizationOwnerTrait
 from simulation.civilization_models import (
     CivilizationCursor,
     CivilizationError,
+    CivilizationEvidenceClass,
     CivilizationLayer,
     CivilizationScope,
 )
@@ -81,6 +83,68 @@ async def test_publish_seal_catalogue_and_exact_row_reads(tmp_path: Path):
         cursor, publication=publication, budget=CivilizationReadBudget()
     )
     assert isinstance(markers, tuple)
+
+
+@pytest.mark.asyncio
+async def test_dense_scope_pages_skip_prior_shards_within_budget(
+    tmp_path: Path,
+) -> None:
+    from tests.unit.test_civilization_publication import (
+        _inventory,
+    )
+
+    traits = tuple(
+        CivilizationOwnerTrait(f"trait-{index:04d}", f"fp-{index:04d}", 0, 4)
+        for index in range(450)
+    )
+    inventory = _inventory("owner-dense", cultural=traits)
+    history = _history_with_inventory(inventory)
+    publication = compose_civilization_boundary(history, 4)
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-dense", publication)
+    sealed = await publisher.seal_catalogue(history.run_id, "pub-dense")
+    reader = create_civilization_reader(tmp_path)
+    cursor = CivilizationCursor(history.run_id, history.world_id, 4, None, 4, 4)
+    scope = CivilizationScope(
+        CivilizationLayer.CULTURE, CivilizationEvidenceClass.ANALYTICAL
+    )
+    after: str | None = None
+    pages = 0
+    rows = 0
+    while True:
+        budget = CivilizationReadBudget(limit=200)
+        page = await reader.rows(
+            cursor,
+            scope,
+            publication=sealed,
+            after_key=after,
+            entity_id=None,
+            budget=budget,
+        )
+        pages += 1
+        rows += len(page.rows)
+        assert budget.scanned_rows <= 260
+        if page.next_cursor is None:
+            break
+        after = page.next_cursor
+        assert pages <= 4
+    assert rows == 450
+    assert pages == 3
+
+
+def _history_with_inventory(inventory: object) -> CivilizationCapturedHistory:
+    from tests.unit.test_civilization_publication import (
+        _RUN,
+        _WORLD,
+        _frame,
+    )
+
+    return CivilizationCapturedHistory(
+        _RUN,
+        _WORLD,
+        (_frame(4, inventories=(inventory,)),),
+        (),
+    )
 
 
 @pytest.mark.asyncio

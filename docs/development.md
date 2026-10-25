@@ -405,3 +405,59 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_lineage_* tests/architec
 ```
 
 Capture and catalog tests use temporary filesystem roots; no PostgreSQL is required.
+
+## Civilization overlay verification
+
+Focused Python/API/architecture and producer gate:
+
+```bash
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term \
+  tests/unit/test_observer_civilization.py \
+  tests/unit/test_observer_civilization_api.py \
+  tests/unit/test_civilization_capture.py \
+  tests/unit/test_civilization_publication.py \
+  tests/unit/test_civilization_filesystem.py \
+  tests/unit/test_civilization_cli.py \
+  tests/unit/test_civilization_overlay_api.py \
+  tests/unit/test_civilization_markers_api.py \
+  tests/unit/test_civilization_fixtures.py \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
+  tests/architecture -q
+```
+
+Dense render/read load fixture (no PostgreSQL required):
+
+```bash
+uv run --frozen --python 3.12.14 pytest -m "integration and scale" \
+  tests/benchmarks/test_civilization_playback.py -q
+```
+
+Published-image browser acceptance uses the same built image and a disposable
+database. The civilization fixture mounts the Task 6 `compose.civilization.yaml`
+override, a read-only host root, capability credentials, and the real 256-tick
+`civ-real-` producer:
+
+```bash
+PALIMPSEST_API_IMAGE=<built-image> \
+  uv run --frozen --python 3.12.14 pytest --cov --cov-report=term -m compose \
+  tests/compose/test_observer_browser.py \
+  tests/compose/test_observer_generational_browser.py \
+  tests/compose/test_observer_civilization_browser.py -q
+```
+
+Pinned Godot 4.7.2 checks (the editor pass registers global classes on a fresh
+checkout):
+
+```bash
+"${GODOT_BIN}" --headless --editor --path clients/godot-observer --quit
+"${GODOT_BIN}" --headless --path clients/godot-observer --script res://tests/run_protocol.gd
+```
+
+The civilization acceptance covers real/full versus aggregate LOD semantic
+digests, warmed control-to-visible p95, a 50-seek request/cache bound,
+capture-off objective playback, GET-only traffic, and inspection/debug
+separation. Missing Docker, image, Playwright, or the pinned editor is an
+unexecuted gate, not a pass. See
+[Godot civilization overlays](godot-civilization-overlays.md#verification-handoff)
+for the measured handoff and real-versus-constructed provenance.

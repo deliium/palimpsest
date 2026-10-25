@@ -322,3 +322,40 @@ entry rate may differ only for the `population_size` axis.
 - `PALIMPSEST_LINEAGE_ROOT`: reader-only root for captured lineage artifacts. Absent disables the service; it never starts capture.
 - `PALIMPSEST_LINEAGE_CURSOR_KEY`: optional signing key of at least 32 UTF-8 bytes for restart-stable lineage cursors.
 - `palimpsest-matrix generational --lineage-root ... --lineage-cadence ... --lineage-max-publications ... --lineage-max-bytes ...`: trusted capture composition. Non-root flags require the root. See `docs/lineage-explorer.md`.
+
+## Civilization overlay reader
+
+Optional V3 civilization overlays are read from a finished-run publication. The
+API has no capture switch: it only reads a configured root.
+
+| Variable | Purpose |
+| --- | --- |
+| `PALIMPSEST_CIVILIZATION_ROOT` | Reader-only root for `civilization-snapshot-v1`/`civilization-catalogue-v1` artifacts. Absent leaves the civilization service unavailable; objective observer routes remain unchanged. |
+| `PALIMPSEST_CIVILIZATION_CURSOR_KEY` | Persistent signing key of at least 32 UTF-8 bytes for restart-stable purpose-specific cursors. Required when the root is configured. |
+| `PALIMPSEST_API_INSPECTION_CREDENTIAL` | Objective map access. Unchanged existing capability. |
+| `PALIMPSEST_API_DEBUG_ENABLED` / `PALIMPSEST_API_DEBUG_CREDENTIAL` | Required for analytical and selected-owner subjective overlays. Existing debug permissions are unchanged. |
+
+The trusted producer is `palimpsest-matrix run|resume|generational` with
+`--civilization-overlays-root` and optional
+`--civilization-cadence` (default 1), `--civilization-max-boundaries`
+(10,000), `--civilization-max-rows` (1,000,000), and
+`--civilization-max-bytes` (268,435,456). Capture is default off; publication
+happens after successful scientific completion and never reruns a completed
+run. Browser-targeted capture requires a durable run in the API's configured
+database.
+
+Optional same-database Web deployment:
+
+```bash
+PALIMPSEST_CIVILIZATION_HOST_ROOT=<host-root> \
+PALIMPSEST_CIVILIZATION_CURSOR_KEY=<32+-byte-secret> \
+PALIMPSEST_API_INSPECTION_CREDENTIAL=<inspection-secret> \
+PALIMPSEST_API_DEBUG_ENABLED=true \
+PALIMPSEST_API_DEBUG_CREDENTIAL=<debug-secret> \
+docker compose -f compose.yaml -f compose.civilization.yaml up -d --wait
+```
+
+The API mounts the host root read-only (UID 1001); the producer writes it
+separately. Plain `./run.sh` and `compose.yaml` remain the root-off zero-install
+baseline. See [Godot civilization overlays](godot-civilization-overlays.md) for
+selectors, availability semantics, and the verification handoff.

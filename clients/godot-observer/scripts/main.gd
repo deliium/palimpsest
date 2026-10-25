@@ -224,6 +224,8 @@ func _on_follow_changed(_mode: String) -> void:
 
 
 func _on_world_for_follow(_world_state: Variant) -> void:
+	if not _session.civilization_detail.is_empty():
+		_world.set_presentation_detail(_session.civilization_detail)
 	_apply_follow_camera()
 
 
@@ -585,6 +587,8 @@ func _on_credentials_apply(inspection_token: String, debug_token: String) -> voi
 	var ok := bool(_session.configure_credentials(inspection_token, debug_token))
 	_ui.note_credentials_result(ok, "" if ok else "invalid_credential")
 	ObserverLog.debug("acceptance", "credentials_applied ok=%s" % ok)
+	if ok and not _session._opened:
+		_session.retry_start()
 
 
 func _on_credentials_forget() -> void:

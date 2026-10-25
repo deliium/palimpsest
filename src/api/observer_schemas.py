@@ -236,6 +236,7 @@ class ObserverEventOut(StrictModel):
     recipe_id: str | None = None
     structure_id: str | None = None
     artifact_id: str | None = None
+    repository_id: str | None = None
     season: str | None = None
     temperature_band: str | None = None
     hazard_kind: str | None = None
@@ -259,6 +260,7 @@ class ObserverEventOut(StrictModel):
             "temperature_band",
             "hazard_kind",
             "artifact_id",
+            "repository_id",
             "declared_confidence_band",
         ):
             if payload.get(key) is None:

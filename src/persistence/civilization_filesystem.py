@@ -290,6 +290,7 @@ class FilesystemCivilizationPublisher:
         for row in boundary.rows:
             rows_by_scope.setdefault(_scope_key(row.history.scope), []).append(row)
         files: dict[str, bytes] = {}
+        shard_keys: dict[str, tuple[str, str]] = {}
         marker_chunk: list[CivilizationMarker] = []
         marker_part = 0
         for marker in boundary.markers:
@@ -323,17 +324,20 @@ class FilesystemCivilizationPublisher:
                     len(candidate) > CIVILIZATION_MAX_SHARD_ROWS
                     or len(encoded) > CIVILIZATION_MAX_SHARD_BYTES
                 ):
-                    files[f"rows/{scope_key}/part-{part:04d}.jsonl"] = _encode_rows(
-                        tuple(chunk)
+                    shard_name = f"rows/{scope_key}/part-{part:04d}.jsonl"
+                    files[shard_name] = _encode_rows(tuple(chunk))
+                    shard_keys[shard_name] = (
+                        _row_key(chunk[0]),
+                        _row_key(chunk[-1]),
                     )
                     part += 1
                     chunk = [row]
                 else:
                     chunk = list(candidate)
             if chunk:
-                files[f"rows/{scope_key}/part-{part:04d}.jsonl"] = _encode_rows(
-                    tuple(chunk)
-                )
+                shard_name = f"rows/{scope_key}/part-{part:04d}.jsonl"
+                files[shard_name] = _encode_rows(tuple(chunk))
+                shard_keys[shard_name] = (_row_key(chunk[0]), _row_key(chunk[-1]))
         total_bytes = sum(len(value) for value in files.values())
         if (
             total_bytes > CIVILIZATION_MAX_BOUNDARY_BYTES
@@ -827,7 +831,25 @@ class FilesystemCivilizationReader:
                 raise
             if civilization_digest(content) != child.digest:
                 raise CivilizationError("civilization_storage_corrupt")
-            for line in content.splitlines(keepends=True):
+            lines = content.splitlines(keepends=True)
+            if not lines:
+                continue
+            if after_key is not None:
+                budget.reserve_scan(1)
+                first_row = decode_civilization_value(lines[0])
+                budget.reserve_scan(1)
+                last_row = decode_civilization_value(lines[-1])
+                if (
+                    type(first_row) not in _ROW_TYPES
+                    or type(last_row) not in _ROW_TYPES
+                ):
+                    raise CivilizationError("civilization_storage_corrupt")
+                typed_last = cast(
+                    CivilizationMapRow | CivilizationCapturedRow, last_row
+                )
+                if typed_last.context.row_id <= after_key:
+                    continue
+            for line in lines:
                 if not line.endswith(b"\n"):
                     raise CivilizationError("civilization_storage_corrupt")
                 try:

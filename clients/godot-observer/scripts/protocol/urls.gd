@@ -20,8 +20,11 @@ static func build_websocket(
 	after_tick: Variant,
 	after_sequence: Variant,
 	world_tick: int,
+	layout_id: String = "",
 ) -> Dictionary:
 	var query := {}
+	if not layout_id.is_empty():
+		query["layout_id"] = layout_id
 	if resume_allowed(after_tick, after_sequence):
 		if int(after_tick) >= world_tick:
 			ObserverLog.debug("net", "url_built route=%s" % path)
@@ -93,6 +96,8 @@ static func _build(origin: String, path: String, query: Dictionary, method: Stri
 		"sequence",
 		"evidence_class",
 		"owner_id",
+		"layer",
+		"publication_id",
 		"boundary_tick",
 		"native_kind",
 		"native_id",

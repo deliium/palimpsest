@@ -26,13 +26,13 @@ from persistence.civilization_filesystem import (
     create_civilization_publisher,
     create_civilization_reader,
 )
+from simulation.civilization_boundaries import project_civilization_boundary
 from simulation.civilization_capture import (
     CivilizationOwnerGroup,
     CivilizationOwnerKnowledge,
     CivilizationOwnerTrait,
     project_civilization_events,
 )
-from simulation.civilization_boundaries import project_civilization_boundary
 from simulation.civilization_ports import CivilizationReadBudget
 from world.effects import ActionCause
 from world.events import (
@@ -50,7 +50,9 @@ def _identity(seed: str) -> tuple[str, str]:
     return f"civ-constructed-{digest}", f"world-constructed-{digest}"
 
 
-def _trait(trait_id: str, fingerprint: str, first: int, last: int) -> CivilizationOwnerTrait:
+def _trait(
+    trait_id: str, fingerprint: str, first: int, last: int
+) -> CivilizationOwnerTrait:
     return CivilizationOwnerTrait(trait_id, fingerprint, first, last)
 
 
@@ -60,20 +62,21 @@ def _inventory(
     cultural: tuple[CivilizationOwnerTrait, ...] = (),
     knowledge: tuple[CivilizationOwnerKnowledge, ...] = (),
     groups: tuple[CivilizationOwnerGroup, ...] = (),
-    concepts: tuple[CivilizationOwnerConcept, ...] = (),
 ) -> Any:
     from simulation.civilization_capture import (
         CivilizationInventoryChannel,
         CivilizationInventoryCoverage,
         CivilizationOwnerInventory,
     )
-    from simulation.civilization_models import CivilizationCoverage, CivilizationCoverageState
+    from simulation.civilization_models import (
+        CivilizationCoverage,
+        CivilizationCoverageState,
+    )
 
     present = {
         CivilizationInventoryChannel.CULTURAL_FEATURES: bool(cultural),
         CivilizationInventoryChannel.PRACTICAL_KNOWLEDGE: bool(knowledge),
         CivilizationInventoryChannel.GROUPS: bool(groups),
-        CivilizationInventoryChannel.INSTITUTION_CONCEPTS: bool(concepts),
     }
     channels = tuple(
         CivilizationInventoryCoverage(
@@ -81,7 +84,9 @@ def _inventory(
             (
                 CivilizationCoverage(CivilizationCoverageState.COMPLETE)
                 if present.get(channel, False)
-                else CivilizationCoverage(CivilizationCoverageState.DISABLED, "capture_off")
+                else CivilizationCoverage(
+                    CivilizationCoverageState.DISABLED, "capture_off"
+                )
             ),
         )
         for channel in CivilizationInventoryChannel
@@ -96,7 +101,7 @@ def _inventory(
         (),
         knowledge,
         groups,
-        concepts,
+        (),
         (),
         (),
     )
@@ -109,7 +114,6 @@ def _boundary(
     tick: int,
     inventories: tuple[Any, ...],
     structures: tuple[Structure, ...],
-    grounding: tuple[Any, ...] = (),
 ) -> Any:
     from tests.unit.test_observer_civilization import _physical_scene
 
@@ -124,7 +128,6 @@ def _boundary(
     return project_civilization_boundary(
         scene,
         owner_inventories=inventories,
-        grounding_observations=grounding,
     )
 
 
@@ -161,7 +164,9 @@ def _exchange_batch(run_id: str, world_id: str, tick: int) -> Any:
     )
 
 
-def constructed_history(*, seed: str = "v3-41-constructed") -> CivilizationCapturedHistory:
+def constructed_history(
+    *, seed: str = "v3-41-constructed"
+) -> CivilizationCapturedHistory:
     run_id, world_id = _identity(seed)
     knowledge = (
         CivilizationOwnerKnowledge(

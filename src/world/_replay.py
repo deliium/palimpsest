@@ -2083,7 +2083,7 @@ def _without_exchange_offer(
 def _project_exchange_proposed(
     state: WorldState, event: WorldEvent, details: ExchangeProposed
 ) -> WorldState:
-    if event.schema_version != EVENT_SCHEMA_REPLAY_V18:
+    if event.schema_version < EVENT_SCHEMA_REPLAY_V18:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     if event.actor_id != details.actor_id:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
@@ -2115,7 +2115,7 @@ def _project_exchange_proposed(
 def _project_exchange_withdrawn(
     state: WorldState, event: WorldEvent, details: ExchangeWithdrawn
 ) -> WorldState:
-    if event.schema_version != EVENT_SCHEMA_REPLAY_V18:
+    if event.schema_version < EVENT_SCHEMA_REPLAY_V18:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     from world.subjective_value import exchange_party_ids
 
@@ -2158,7 +2158,7 @@ def _move_held_item(
 def _project_exchange_completed(
     state: WorldState, event: WorldEvent, details: ExchangeCompleted
 ) -> WorldState:
-    if event.schema_version != EVENT_SCHEMA_REPLAY_V18:
+    if event.schema_version < EVENT_SCHEMA_REPLAY_V18:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
     if event.actor_id != details.actor_id:
         raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)

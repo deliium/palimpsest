@@ -7221,7 +7221,6 @@ def _decode_exchange_details(kind: str, fields: dict[str, Any], *, path: str) ->
         "actor_id",
         "counterparty_id",
         "give_item_ids",
-        "kind",
         "take_item_ids",
     }
     if kind == "exchange_completed":
@@ -8916,7 +8915,7 @@ def _decode_project_or_public_details(
     kind: str, fields: dict[str, Any], *, path: str, schema_version: int
 ) -> object:
     if kind == "project_completed" and "decay_millis" in fields:
-        if schema_version != EVENT_SCHEMA_REPLAY_V20:
+        if schema_version < EVENT_SCHEMA_REPLAY_V20:
             _LOG.warning(
                 "decay_millis rejected on pre-v20 payload schema_version=%s",
                 schema_version,

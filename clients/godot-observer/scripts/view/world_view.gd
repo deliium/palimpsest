@@ -46,7 +46,6 @@ signal inspect_cleared
 signal location_selected(location_id: String)
 signal civilization_inspect_requested(summary: Dictionary)
 
-
 func _ready() -> void:
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
@@ -67,7 +66,6 @@ func _ready() -> void:
 			civilization_inspect_requested.emit(summary)
 		)
 
-
 func replace_sought_frame(frame: Variant, event: Variant, forward: bool) -> void:
 	var prior: Dictionary = _agents.capture_positions()
 	var selected: String = _agents.selected_entity_id
@@ -85,7 +83,6 @@ func replace_sought_frame(frame: Variant, event: Variant, forward: bool) -> void
 		return
 	_on_agent_selected(selected)
 	_maybe_tween(event, forward, prior)
-
 
 func show_world(world: Variant) -> void:
 	_world_state = world
@@ -126,64 +123,52 @@ func show_world(world: Variant) -> void:
 		_generational.set_positions(agent_points)
 	_rebuild_civilization()
 
-
 func set_claim_overlay_enabled(enabled: bool) -> void:
 	if _claims != null:
 		_claims.set_enabled(enabled)
-
 
 func apply_subjective_claims(payload: Variant) -> void:
 	if _claims != null:
 		_claims.apply_payload(payload)
 
-
 func set_analytics_overlay_enabled(enabled: bool) -> void:
 	if _analytics != null:
 		_analytics.set_enabled(enabled)
-
 
 func apply_research_analytics(payload: Variant) -> void:
 	if _analytics != null:
 		_analytics.apply_payload(payload)
 
-
 func set_label_overlay_enabled(enabled: bool) -> void:
 	if _labels != null:
 		_labels.set_enabled(enabled)
-
 
 func apply_subjective_labels(payload: Variant) -> void:
 	if _labels != null:
 		_labels.apply_payload(payload)
 		_labels.set_enabled(payload != null)
 
-
 func set_relationship_overlay_enabled(enabled: bool) -> void:
 	if _relationships != null:
 		_relationships.set_enabled(enabled)
-
 
 func apply_relationships(payload: Variant) -> void:
 	if _relationships != null:
 		_relationships.apply_payload(payload)
 
-
 func set_communication_flows_enabled(enabled: bool) -> void:
 	if _comm_flows != null:
 		_comm_flows.set_enabled(enabled)
-
 
 func set_metric_overlay_enabled(kind: String, enabled: bool) -> void:
 	var layer := _metric_layer(kind)
 	if layer != null:
 		layer.set_enabled(enabled)
 
-
 func apply_metric_overlay(kind: String, payload: Variant) -> void:
 	var layer := _metric_layer(kind)
 	if layer != null:
 		layer.apply_payload(payload)
-
 
 func clear_subjective_overlays() -> void:
 	apply_subjective_labels(null)
@@ -195,7 +180,6 @@ func clear_subjective_overlays() -> void:
 	set_narrative_overlay_enabled(false)
 	if _labels != null:
 		_labels.set_enabled(false)
-
 
 func clear_world() -> void:
 	## Drop occupancy/overlays for the prior ObserverSource. Bookmarks stay on disk.
@@ -240,12 +224,10 @@ func clear_world() -> void:
 	inspect_cleared.emit()
 	ObserverLog.debug("view", "world_cleared")
 
-
 func apply_civilization_bundle(cursor: Dictionary, states: Dictionary) -> void:
 	_civilization_cursor = cursor.duplicate(true)
 	_civilization_states = states.duplicate(true)
 	_rebuild_civilization()
-
 
 func apply_civilization_plan(plan: Dictionary) -> void:
 	if plan.is_empty() or not bool(plan.get("ok", false)):
@@ -265,7 +247,6 @@ func apply_civilization_plan(plan: Dictionary) -> void:
 	if _civilization_beliefs != null:
 		_civilization_beliefs.apply_plan(_civilization_plan)
 
-
 func set_presentation_detail(lod: String) -> void:
 	if lod not in ["full", "reduced", "snap", "aggregate"]:
 		return
@@ -284,10 +265,8 @@ func set_presentation_detail(lod: String) -> void:
 		_agents.set_presentation_detail(lod)
 	ObserverLog.debug("view", "presentation_detail lod=%s" % lod)
 
-
 func presentation_lod() -> String:
 	return presentation_detail
-
 
 func semantic_snapshot() -> Dictionary:
 	var layers := {}
@@ -306,7 +285,7 @@ func semantic_snapshot() -> Dictionary:
 			"status": str(state.get("status", "")),
 			"evidence_class": str(state.get("evidence_class", "")),
 			"owner_id": state.get("owner_id", null),
-			"coverage": state.get("coverage", null),
+			"coverage": _coverage_identity(state.get("coverage", null)),
 			"publication": (
 				null if publication == null else {
 					"publication_id": publication.get("publication_id", null),
@@ -324,10 +303,8 @@ func semantic_snapshot() -> Dictionary:
 		"counts": {"layers": layers.size(), "rows": total_rows},
 	}
 
-
 func semantic_digest() -> String:
 	return JSON.stringify(semantic_snapshot()).sha256_text()
-
 
 func _world_semantics() -> Dictionary:
 	if _world_state == null:
@@ -365,13 +342,20 @@ func _world_semantics() -> Dictionary:
 		"items": items,
 	}
 
-
 func _world_items(source: Variant, key: String) -> Array:
 	var value: Variant = _value(source, key, [])
 	if value == null or typeof(value) != TYPE_ARRAY:
 		return []
 	return value
 
+func _coverage_identity(value: Variant) -> Variant:
+	if value == null:
+		return null
+	if typeof(value) == TYPE_DICTIONARY:
+		return value.duplicate(true)
+	if value is Object:
+		return {"state": value.get("state"), "reason": value.get("reason")}
+	return null
 
 func _row_identity(row: Variant) -> String:
 	if typeof(row) == TYPE_DICTIONARY:
@@ -380,8 +364,16 @@ func _row_identity(row: Variant) -> String:
 			return str(context["row_id"])
 		if row.get("row_id", null) != null:
 			return str(row["row_id"])
-	return JSON.stringify(row)
-
+	if row is Object:
+		var object_context: Variant = row.get("context")
+		if object_context != null:
+			var object_row_id: Variant = object_context.get("row_id")
+			if object_row_id != null and str(object_row_id) != "":
+				return str(object_row_id)
+		var direct_row_id: Variant = row.get("row_id")
+		if direct_row_id != null and str(direct_row_id) != "":
+			return str(direct_row_id)
+	return ""
 
 func _value(source: Variant, key: String, fallback: Variant = null) -> Variant:
 	if source == null:
@@ -392,7 +384,6 @@ func _value(source: Variant, key: String, fallback: Variant = null) -> Variant:
 		var value: Variant = source.get(key)
 		return fallback if value == null else value
 	return fallback
-
 
 func apply_civilization_layer(layer_id: String, state: Dictionary) -> void:
 	var status := str(state.get("status", "off"))
@@ -406,11 +397,9 @@ func apply_civilization_layer(layer_id: String, state: Dictionary) -> void:
 		_civilization_cursor = cursor.duplicate(true)
 	_rebuild_civilization()
 
-
 func clear_civilization_layer(layer_id: String) -> void:
 	if _civilization_states.erase(layer_id):
 		_rebuild_civilization()
-
 
 func clear_civilization_layers() -> void:
 	_civilization_states.clear()
@@ -424,12 +413,10 @@ func clear_civilization_layers() -> void:
 	if _civilization_beliefs != null:
 		_civilization_beliefs.clear_plan()
 
-
 func civilization_plan() -> Dictionary:
 	if _civilization == null:
 		return {}
 	return _civilization.semantic_plan()
-
 
 func _rebuild_civilization() -> void:
 	if _civilization == null:
@@ -473,44 +460,66 @@ func _rebuild_civilization() -> void:
 			int(plan.get("unresolved_anchor_count", 0)),
 		],
 	)
-
+	var rendered_counts: Dictionary = plan.get("counts", {})
+	var rendered_format := (
+		"civilization_rendered digest=%s layers=%s locations=%s regions=%s routes=%s "
+		+ "settlements=%s projects=%s public_acts=%s repositories=%s records=%s "
+		+ "migration=%s trade=%s culture=%s technology=%s groups=%s institutions=%s "
+		+ "unplaced=%s lod=%s"
+	)
+	ObserverLog.debug(
+		"acceptance",
+		rendered_format % [
+			semantic_digest(),
+			_civilization_states.size(),
+			int(rendered_counts.get("locations", 0)),
+			int(rendered_counts.get("regions", 0)),
+			int(rendered_counts.get("routes", 0)),
+			int(rendered_counts.get("settlements", 0)),
+			int(rendered_counts.get("projects", 0)),
+			int(rendered_counts.get("public_act", 0)),
+			int(rendered_counts.get("repositories", 0)),
+			int(rendered_counts.get("records", 0)),
+			int(rendered_counts.get("migration", 0)),
+			int(rendered_counts.get("trade", 0)),
+			int(rendered_counts.get("culture", 0)),
+			int(rendered_counts.get("technology", 0)),
+			int(rendered_counts.get("social_groups", 0)),
+			int(rendered_counts.get("institutions", 0)),
+			int(plan.get("unresolved_anchor_count", 0)),
+			presentation_detail,
+		],
+	)
 
 func set_narrative_overlay_enabled(enabled: bool) -> void:
 	if _narrative != null:
 		_narrative.set_enabled(enabled)
 
-
 func apply_narrative_hops(payload: Variant) -> void:
 	if _narrative != null:
 		_narrative.apply_payload(payload)
 
-
 func select_narrative_variant(variant_id: String) -> void:
 	if _narrative != null:
 		_narrative.select_variant(variant_id)
-
 
 func narrative_variant_ids() -> Array:
 	if _narrative != null:
 		return _narrative.variant_ids()
 	return []
 
-
 func narrative_opaque_event_ids() -> Array:
 	if _narrative != null and _narrative.has_method("selected_opaque_event_ids"):
 		return _narrative.selected_opaque_event_ids()
 	return []
 
-
 func apply_strategy_audit(payload: Variant) -> void:
 	if _effects != null and _effects.has_method("set_strategy_audit"):
 		_effects.set_strategy_audit(payload)
 
-
 func set_research_speech_enabled(enabled: bool) -> void:
 	if _effects != null and _effects.has_method("set_research_speech_enabled"):
 		_effects.set_research_speech_enabled(enabled)
-
 
 func _metric_layer(kind: String) -> Node2D:
 	match kind:
@@ -528,7 +537,6 @@ func _metric_layer(kind: String) -> Node2D:
 			return _skills
 		_:
 			return null
-
 
 func play_event(event: Variant) -> void:
 	if _world_state == null or not bool(event.known):
@@ -549,29 +557,23 @@ func play_event(event: Variant) -> void:
 			str(command.get("type", "")),
 		)
 
-
 func set_playback_speed(speed: float) -> void:
 	playback_speed = speed
 	set_presentation_detail(Playback.level_of_detail(speed))
 
-
 func set_playback_paused(paused: bool) -> void:
 	set_presentation_detail("full" if paused else Playback.level_of_detail(playback_speed))
-
 
 func zoom_in() -> void:
 	_camera.zoom_step(1.1)
 
-
 func zoom_out() -> void:
 	_camera.zoom_step(0.9)
-
 
 func reset_view() -> void:
 	var selected: Variant = _agents.selected_position()
 	var target: Vector2 = _centroid() if selected == null else selected
 	_camera.reset_to(target)
-
 
 func focus_selected() -> void:
 	var selected: Variant = _agents.selected_position()
@@ -579,14 +581,12 @@ func focus_selected() -> void:
 		return
 	_camera.focus_on(selected)
 
-
 func focus_agent(entity_id: String) -> void:
 	var point: Variant = _agents.token_position(entity_id)
 	if point == null:
 		return
 	_camera.focus_on(point)
 	ObserverLog.debug("view", "follow_camera entity_id=%s" % entity_id)
-
 
 func focus_location(location_id: String) -> void:
 	if location_id.is_empty() or not _centers.has(location_id):
@@ -616,7 +616,6 @@ func _maybe_tween(event: Variant, forward: bool, prior: Dictionary) -> void:
 	if str(command.get("action", "")) == "move" and body != "" and prior.has(body):
 		_agents.restore_position(body, prior[body])
 	_effects.play(command, _agents, _locations, _connections, _objects)
-
 
 func _on_agent_selected(entity_id: String) -> void:
 	if _world_state == null:
@@ -666,7 +665,6 @@ func _on_agent_selected(entity_id: String) -> void:
 		"measures": agent.measures,
 	})
 
-
 func _item_ground(event: Variant) -> Vector2:
 	var type_name := str(event.type)
 	if type_name != "AGENT_TOOK_ITEM" and type_name != "AGENT_DROPPED_ITEM":
@@ -685,7 +683,6 @@ func _item_ground(event: Variant) -> Vector2:
 	var item_id := "" if event.item_id == null else str(event.item_id)
 	return _objects.ground_point(location_id, item_id)
 
-
 func _item_location(item_id: Variant) -> String:
 	if item_id == null or _world_state == null:
 		return ""
@@ -694,7 +691,6 @@ func _item_location(item_id: Variant) -> String:
 			return str(item.location_id)
 	return ""
 
-
 func _centroid() -> Vector2:
 	if _centers.is_empty():
 		return Vector2.ZERO
@@ -702,7 +698,6 @@ func _centroid() -> Vector2:
 	for location_id in _centers.keys():
 		total += _centers[location_id]
 	return total / float(_centers.size())
-
 
 func apply_demographics(model: Variant, enabled_kinds: Array = []) -> void:
 	if _agents == null or model == null:
@@ -723,13 +718,11 @@ func apply_demographics(model: Variant, enabled_kinds: Array = []) -> void:
 	if _generational != null:
 		_generational.set_positions(_agents.capture_positions())
 
-
 func apply_arrival_events(events: Array) -> void:
 	if _generational == null:
 		return
 	_generational.set_positions(_agents.capture_positions())
 	_generational.apply_arrival_events(events)
-
 
 func apply_care_events(events: Array) -> void:
 	if _generational == null:
@@ -737,13 +730,11 @@ func apply_care_events(events: Array) -> void:
 	_generational.set_positions(_agents.capture_positions())
 	_generational.apply_care_events(events)
 
-
 func set_generational_overlay_enabled(kind: String, enabled: bool) -> void:
 	if _generational == null:
 		return
 	if kind == "caregiving" or kind == "kinship" or kind == "mentorship_subjective" or kind == "mentorship_analytical":
 		_generational.set_enabled(enabled or _generational.care_count() > 0)
-
 
 func apply_generational_links(links: Array) -> void:
 	if _generational == null:
@@ -751,25 +742,21 @@ func apply_generational_links(links: Array) -> void:
 	_generational.set_positions(_agents.capture_positions())
 	_generational.set_links(links)
 
-
 func generational_care_count() -> int:
 	if _generational == null or not _generational.has_method("care_count"):
 		return 0
 	return int(_generational.care_count())
-
 
 func generational_link_count() -> int:
 	if _generational == null or not _generational.has_method("link_count"):
 		return 0
 	return int(_generational.link_count())
 
-
 func clear_generational_transients() -> void:
 	if _generational == null:
 		return
 	_generational.clear()
 	_generational.set_positions(_agents.capture_positions())
-
 
 func agent_entity_for(agent_id: String) -> String:
 	if _world_state == null or agent_id.is_empty():
@@ -783,14 +770,12 @@ func agent_entity_for(agent_id: String) -> String:
 			found = str(agent.entity_id)
 	return found
 
-
 func demographic_badges_for_test() -> Dictionary:
 	var badges := {}
 	for child in _agents.get_children():
 		if child.has_method("set_demographic_badge"):
 			badges[str(child.entity_id)] = str(child.demographic_badge)
 	return badges
-
 
 func highlight_selected(entity_id: String) -> void:
 	if _agents != null:

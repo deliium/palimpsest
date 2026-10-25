@@ -71,6 +71,26 @@ Analytical metric overlays resolve a `metric_set_id` via `GET /v1/simulations/{r
 
 Optional `layout_id` defaults to `reference-v1`. Event cursors are `after_tick` and `after_sequence` together, or neither. An incomplete pair returns `incomplete_event_cursor`. A cursor at or past the high water returns `cursor_ahead_of_high_water`.
 
+### Civilization sidecars
+
+Optional read-only civilization overlays use independent GET envelopes and do not
+widen observer frames or stream envelopes:
+
+- `GET /v1/simulations/{run_id}/observer/civilization/map` — objective sections
+  `regions`, `routes`, `locations`, `projects`, `repositories`, `records` at the
+  displayed cursor.
+- `GET /v1/simulations/{run_id}/observer/civilization/catalogue` — sorted pinned
+  finalized boundaries for history navigation.
+- `GET /v1/simulations/{run_id}/observer/civilization/overlays` — analytical or
+  selected-owner layers at an exact finalized boundary `B`.
+- `GET /v1/simulations/{run_id}/observer/civilization/markers` — post-event
+  boundary markers with explicit missing intervals.
+
+They require `objective_inspection` for objective evidence and
+`subjective_debug` for subjective/analytical evidence, use
+`observer-civilization-*-v1` schemas, and return explicit availability states
+instead of nearest/zero data. See [Godot civilization overlays](godot-civilization-overlays.md).
+
 ## Demographic and generation projections
 
 `observer-demographics-v1` and `observer-generation-markers-v1` are independent
@@ -164,6 +184,7 @@ Causal explanation of a selected event uses the separate research debugger surfa
 - [Physical simulation](physical-simulation.md#discrete-regional-journeys)
 - [Experiments](experiments.md#experiment-ay-regional-migration)
 - [Godot observer](godot-observer.md)
+- [Godot civilization overlays](godot-civilization-overlays.md)
 
 
 ## `CONTACT_RECORDED`

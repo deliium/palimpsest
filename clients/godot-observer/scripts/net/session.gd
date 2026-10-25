@@ -14,7 +14,7 @@ const LineageSourceScript := preload("res://scripts/net/lineage_source.gd")
 const CivilizationSourceScript := preload("res://scripts/net/civilization_source.gd")
 
 const PAGE_LIMIT := 100
-const EVENT_WINDOW := 200
+const EVENT_WINDOW := 100
 const BUFFER_LIMIT := 256
 const CLOSE_REASONS := {
 	"4400": "invalid_cursor",
@@ -58,6 +58,13 @@ const FOCUS_PROBE_LIMIT := 32
 const PLAYBACK_PRESENTATION_DEADLINE_MS := 2000
 
 var run_id := ""
+var _layout_id := ""
+var _civilization_layers: Array = []
+var _acceptance_seek_cycles := 0
+var _acceptance_seek_remaining := 0
+var _acceptance_seek_count := 0
+var _acceptance_seek_started := 0
+var civilization_detail := ""
 var origin := ""
 var world: Variant = null
 var cursor_after_tick: Variant = null
@@ -204,6 +211,16 @@ func apply_web_query(search: String) -> bool:
 	if parsed.is_empty():
 		return false
 	run_id = parsed
+	_layout_id = str(state.get("layout_id", "")).strip_edges()
+	civilization_detail = str(state.get("civilization_detail", "")).strip_edges()
+	_acceptance_seek_cycles = clampi(
+		int(str(state.get("civilization_seek_cycles", "0"))), 0, 100
+	)
+	_civilization_layers = []
+	for part in str(state.get("civilization_layers", "")).split(",", false):
+		var layer_id := part.strip_edges()
+		if not layer_id.is_empty():
+			_civilization_layers.append(layer_id)
 	_pending_deeplink = {
 		"tick": state.get("tick", null),
 		"sequence": state.get("sequence", null),
@@ -224,6 +241,10 @@ func apply_web_query(search: String) -> bool:
 	run_id_applied.emit(run_id)
 	_start()
 	return true
+
+
+func retry_start() -> void:
+	_start()
 
 
 func start_with_run_id(requested: String) -> void:
@@ -1237,6 +1258,10 @@ func _teardown_source() -> void:
 
 func _start() -> void:
 	var resolved_origin := Origin.resolve()
+	if _layout_id.is_empty():
+		_layout_id = str(
+			ProjectSettings.get_setting("palimpsest/layout_id", "")
+		).strip_edges()
 	if not _credential_origin.is_empty() and _credential_origin != resolved_origin:
 		_inspection_token = ""
 		_debug_token = ""
@@ -1657,6 +1682,11 @@ func _request(
 			"after_tick": cursor_after_tick,
 			"after_sequence": cursor_after_sequence,
 		}
+	if not _layout_id.is_empty() and (
+		kind == "manifest" or kind.begins_with("state")
+	):
+		request_query = request_query.duplicate()
+		request_query["layout_id"] = _layout_id
 	last_request = {"kind": kind, "query": request_query.duplicate()}
 	request_log.append(last_request)
 	if _http == null:
@@ -1992,6 +2022,13 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		_adopt_frame(parsed.value, kind == "state")
 		if kind == "state" and not _opened:
 			_opened = true
+			for layer_id in _civilization_layers:
+				set_civilization_layer_enabled(str(layer_id), true)
+			if _acceptance_seek_cycles > 0:
+				_acceptance_seek_remaining = _acceptance_seek_cycles
+				_acceptance_seek_count = _acceptance_seek_cycles
+				_acceptance_seek_started = Time.get_ticks_msec()
+				_acceptance_seek_step()
 			ObserverLog.info("session", "bootstrap_ready tick=%s" % str(world.tick))
 			status_changed.emit("ready", "tick %s" % str(world.tick))
 			if not _failed:
@@ -2133,6 +2170,38 @@ func _view_transport(frame: Variant) -> void:
 		transport.view_event(frame.cursor.after_tick, frame.cursor.after_sequence)
 
 
+func _acceptance_seek_step() -> void:
+	if _acceptance_seek_remaining <= 0:
+		get_tree().create_timer(1.0).timeout.connect(_finish_acceptance_seeks)
+		return
+	var index := _acceptance_seek_count - _acceptance_seek_remaining
+	var tick := 1 + (index * 5) % 255
+	seek_tick(tick)
+	_acceptance_seek_remaining -= 1
+	get_tree().create_timer(0.1).timeout.connect(_acceptance_seek_step)
+
+
+func _finish_acceptance_seeks() -> void:
+	var snapshot: Dictionary = {}
+	if civilization != null:
+		snapshot = civilization.acceptance_snapshot()
+	var seeks_format := (
+		"civilization_seeks_done count=%s elapsed_ms=%s inflight=%s queued=%s "
+		+ "states=%s enabled=%s"
+	)
+	ObserverLog.debug(
+		"acceptance",
+		seeks_format % [
+			_acceptance_seek_count,
+			Time.get_ticks_msec() - _acceptance_seek_started,
+			int(snapshot.get("inflight", 0)),
+			int(snapshot.get("queued", 0)),
+			int(snapshot.get("states", 0)),
+			int(snapshot.get("enabled", 0)),
+		],
+	)
+
+
 func _open_socket() -> void:
 	if _failed or world == null:
 		return
@@ -2143,7 +2212,9 @@ func _open_socket() -> void:
 		# Sending this pair closes the socket with 4409. Omit it so the server keeps its own cursor.
 		after_tick = null
 		after_sequence = null
-	var built: Dictionary = Urls.build_websocket(origin, path, after_tick, after_sequence, int(world.tick))
+	var built: Dictionary = Urls.build_websocket(
+		origin, path, after_tick, after_sequence, int(world.tick), _layout_id
+	)
 	if not bool(built.get("connect", false)):
 		status_changed.emit(str(built.get("reason_code", "cursor_ahead")), str(built.get("reason_code", "")))
 		return

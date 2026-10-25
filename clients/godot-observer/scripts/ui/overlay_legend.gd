@@ -87,7 +87,7 @@ func _build_toggles() -> void:
 	title.text = "Researcher overlays (default off)"
 	add_child(title)
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 4)
 	add_child(grid)

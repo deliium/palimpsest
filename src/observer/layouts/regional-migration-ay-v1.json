@@ -1,0 +1,90 @@
+{
+  "schema_version": "observer-layout-v1",
+  "layout_id": "regional-migration-ay-v1",
+  "locations": [
+    {
+      "location_id": "loc-origin",
+      "display_name": "Origin",
+      "screen_position": {"x": 0.0, "y": 0.0},
+      "visual_bounds": {"x": -40.0, "y": -30.0, "width": 80.0, "height": 60.0},
+      "theme": "camp",
+      "icon_ref": "icon-origin",
+      "background_ref": "bg-origin",
+      "connection_anchors": {
+        "loc-spring": {"x": 0.0, "y": -30.0}
+      },
+      "slot_anchors": [
+        {"x": -12.0, "y": 0.0},
+        {"x": 0.0, "y": 8.0},
+        {"x": 12.0, "y": 0.0}
+      ]
+    },
+    {
+      "location_id": "loc-spring",
+      "display_name": "Spring",
+      "screen_position": {"x": 0.0, "y": -90.0},
+      "visual_bounds": {"x": -30.0, "y": -110.0, "width": 60.0, "height": 40.0},
+      "theme": "spring",
+      "icon_ref": "icon-spring",
+      "background_ref": "bg-spring",
+      "connection_anchors": {
+        "loc-origin": {"x": 0.0, "y": -70.0},
+        "loc-crossroads": {"x": 30.0, "y": -90.0}
+      },
+      "slot_anchors": [
+        {"x": -8.0, "y": -90.0},
+        {"x": 8.0, "y": -90.0}
+      ]
+    },
+    {
+      "location_id": "loc-crossroads",
+      "display_name": "Crossroads",
+      "screen_position": {"x": 90.0, "y": -90.0},
+      "visual_bounds": {"x": 60.0, "y": -110.0, "width": 60.0, "height": 40.0},
+      "theme": "crossroads",
+      "icon_ref": "icon-crossroads",
+      "background_ref": "bg-crossroads",
+      "connection_anchors": {
+        "loc-spring": {"x": 60.0, "y": -90.0},
+        "loc-grain": {"x": 120.0, "y": -90.0}
+      },
+      "slot_anchors": [
+        {"x": 82.0, "y": -90.0},
+        {"x": 98.0, "y": -90.0}
+      ]
+    },
+    {
+      "location_id": "loc-grain",
+      "display_name": "Grain",
+      "screen_position": {"x": 180.0, "y": -90.0},
+      "visual_bounds": {"x": 150.0, "y": -110.0, "width": 60.0, "height": 40.0},
+      "theme": "grain",
+      "icon_ref": "icon-grain",
+      "background_ref": "bg-grain",
+      "connection_anchors": {
+        "loc-crossroads": {"x": 150.0, "y": -90.0},
+        "loc-remote": {"x": 210.0, "y": -90.0}
+      },
+      "slot_anchors": [
+        {"x": 172.0, "y": -90.0},
+        {"x": 188.0, "y": -90.0}
+      ]
+    },
+    {
+      "location_id": "loc-remote",
+      "display_name": "Remote",
+      "screen_position": {"x": 270.0, "y": -90.0},
+      "visual_bounds": {"x": 240.0, "y": -110.0, "width": 60.0, "height": 40.0},
+      "theme": "remote",
+      "icon_ref": "icon-remote",
+      "background_ref": "bg-remote",
+      "connection_anchors": {
+        "loc-grain": {"x": 240.0, "y": -90.0}
+      },
+      "slot_anchors": [
+        {"x": 262.0, "y": -90.0},
+        {"x": 278.0, "y": -90.0}
+      ]
+    }
+  ]
+}

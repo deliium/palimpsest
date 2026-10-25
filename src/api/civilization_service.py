@@ -133,8 +133,15 @@ class CivilizationApiService:
                     code="civilization_replay_unavailable"
                 ) from None
             raise
-        except Exception:
-            _LOG.warning("civilization_replay_failed reason_code=storage_unavailable")
+        except Exception as exc:
+            _LOG.warning(
+                "civilization_replay_failed reason_code=storage_unavailable "
+                "error=%s code=%s path=%s version=%s",
+                type(exc).__name__,
+                getattr(exc, "code", "-"),
+                getattr(exc, "path", "-"),
+                getattr(exc, "version", "-"),
+            )
             raise service_unavailable(code="civilization_replay_unavailable") from None
         scene = history.scene
         if tick is not None:

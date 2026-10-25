@@ -19,6 +19,9 @@ from infrastructure.settings import redact_secrets
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = ROOT / "compose.yaml"
 SEED_SCRIPT = ROOT / "tests" / "compose" / "seed_generational_evidence.py"
+CIVILIZATION_SEED = ROOT / "tests" / "compose" / "seed_civilization_evidence.py"
+CIVILIZATION_PRODUCER = ROOT / "tests" / "compose" / "start_civilization.py"
+CIVILIZATION_OVERRIDE = ROOT / "compose.civilization.yaml"
 
 
 def docker_cli() -> str:
@@ -69,10 +72,15 @@ class GenerationalStack:
     inspection_token: str
     debug_token: str
     lineage_enabled: bool
+    civilization_root: Path | None = None
+    compose_files: tuple[Path, ...] = (COMPOSE_FILE,)
 
 
 def _generational_stack(
-    tmp_path: Path, *, lineage_enabled: bool
+    tmp_path: Path,
+    *,
+    lineage_enabled: bool,
+    civilization_enabled: bool = False,
 ) -> Iterator[GenerationalStack]:
     image = os.environ.get("PALIMPSEST_API_IMAGE", "").strip()
     if not image:
@@ -84,6 +92,9 @@ def _generational_stack(
     lineage_root = tmp_path / "lineage"
     lineage_root.mkdir()
     lineage_root.chmod(0o777)
+    civilization_root = tmp_path / "civilization"
+    civilization_root.mkdir()
+    civilization_root.chmod(0o777)
     control = secrets.token_urlsafe(32)
     inspection = secrets.token_urlsafe(32)
     debug = secrets.token_urlsafe(32)
@@ -96,8 +107,13 @@ def _generational_stack(
             "PALIMPSEST_ACCEPT_INSPECTION": inspection,
             "PALIMPSEST_ACCEPT_DEBUG": debug,
             "PALIMPSEST_ACCEPT_AGENT_VISIBLE": secrets.token_urlsafe(32),
+            "PALIMPSEST_CIVILIZATION_HOST_ROOT": str(civilization_root),
+            "PALIMPSEST_CIVILIZATION_CURSOR_KEY": secrets.token_urlsafe(32),
         }
     )
+    env["PALIMPSEST_API_INSPECTION_CREDENTIAL"] = inspection
+    env["PALIMPSEST_API_DEBUG_ENABLED"] = "true"
+    env["PALIMPSEST_API_DEBUG_CREDENTIAL"] = debug
     override = tmp_path / "compose.override.yaml"
     dsn = "postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest_test"
     lines = [
@@ -133,15 +149,19 @@ def _generational_stack(
             ]
         )
     override.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    compose_files = [COMPOSE_FILE, override]
+    if civilization_enabled:
+        compose_files.insert(1, CIVILIZATION_OVERRIDE)
     compose = [
         docker,
         "compose",
         "-p",
         project,
-        "-f",
-        str(COMPOSE_FILE),
-        "-f",
-        str(override),
+        *(
+            argument
+            for compose_file in compose_files
+            for argument in ("-f", str(compose_file))
+        ),
     ]
     try:
         _run([docker, "pull", _database_image()], env=env)
@@ -168,6 +188,8 @@ def _generational_stack(
             inspection_token=inspection,
             debug_token=debug,
             lineage_enabled=lineage_enabled,
+            civilization_root=civilization_root if civilization_enabled else None,
+            compose_files=tuple(compose_files),
         )
     except Exception:
         logs = subprocess.run(
@@ -185,7 +207,12 @@ def _generational_stack(
             env=env,
             check=False,
         )
-        if lineage_enabled:
+        for host_root, target in (
+            (lineage_root, "/lineage"),
+            (civilization_root, "/civilization"),
+        ):
+            if not host_root.exists():
+                continue
             subprocess.run(
                 [
                     docker,
@@ -194,13 +221,13 @@ def _generational_stack(
                     "--user",
                     "root",
                     "-v",
-                    f"{lineage_root}:/lineage",
+                    f"{host_root}:{target}",
                     "--entrypoint",
                     "sh",
                     image,
                     "-c",
-                    "rm -rf /lineage/* /lineage/.[!.]* "
-                    "/lineage/..?* 2>/dev/null || true",
+                    f"rm -rf {target}/* {target}/.[!.]* {target}/..?* "
+                    "2>/dev/null || true",
                 ],
                 cwd=str(ROOT),
                 env=env,
@@ -224,20 +251,42 @@ def published_generational_capture_off(
     yield from _generational_stack(tmp_path, lineage_enabled=False)
 
 
+@pytest.fixture
+def published_civilization_stack(
+    tmp_path: Path,
+) -> Iterator[GenerationalStack]:
+    yield from _generational_stack(
+        tmp_path, lineage_enabled=False, civilization_enabled=True
+    )
+
+
+@pytest.fixture
+def published_civilization_capture_off(
+    tmp_path: Path,
+) -> Iterator[GenerationalStack]:
+    yield from _generational_stack(
+        tmp_path, lineage_enabled=False, civilization_enabled=False
+    )
+
+
 def stack_api_logs(stack: GenerationalStack) -> str:
     docker = docker_cli()
+    compose = [
+        docker,
+        "compose",
+        "-p",
+        stack.project,
+        *(
+            argument
+            for compose_file in stack.compose_files
+            for argument in ("-f", str(compose_file))
+        ),
+        "logs",
+        "--no-color",
+        "api",
+    ]
     completed = subprocess.run(
-        [
-            docker,
-            "compose",
-            "-p",
-            stack.project,
-            "-f",
-            str(COMPOSE_FILE),
-            "logs",
-            "--no-color",
-            "api",
-        ],
+        compose,
         cwd=str(ROOT),
         env=stack.env,
         check=False,
@@ -279,7 +328,82 @@ def seed_lineage(stack: GenerationalStack) -> str:
         args, cwd=str(ROOT), env=stack.env, check=False, capture_output=True, text=True
     )
     if completed.returncode != 0:
-        pytest.fail(redact_secrets(completed.stdout + completed.stderr))
+        pytest.fail(
+            redact_secrets(
+                completed.stdout
+                + completed.stderr
+                + "\n--- API ---\n"
+                + stack_api_logs(stack)
+            )
+        )
+    for line in reversed(completed.stdout.splitlines()):
+        if line.strip().startswith("{"):
+            return line.strip()
+    pytest.fail(redact_secrets(completed.stdout + completed.stderr))
+
+
+def seed_civilization(
+    stack: GenerationalStack,
+    *,
+    constructed: bool = False,
+    allow_missing_positive: bool = True,
+) -> str:
+    docker = docker_cli()
+    if stack.civilization_root is None:
+        raise AssertionError("civilization root is not mounted")
+    dsn = "postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest_test"
+    script = CIVILIZATION_SEED if constructed else CIVILIZATION_PRODUCER
+    command = [
+        "/acceptance/producer.py",
+        "--civilization-root",
+        "/civilization",
+    ]
+    if constructed:
+        command.extend(["--seed", "v3-41-browser-constructed"])
+    else:
+        command.extend(
+            [
+                "--base-url",
+                "http://api:8080",
+                "--inspection-token",
+                stack.inspection_token,
+                "--debug-token",
+                stack.debug_token,
+            ]
+        )
+        if allow_missing_positive:
+            command.append("--allow-missing-positive")
+    args = [
+        docker,
+        "run",
+        "--rm",
+        "--network",
+        f"{stack.project}_default",
+        "-e",
+        f"PALIMPSEST_DATABASE_URL={dsn}",
+        "-e",
+        "PALIMPSEST_ENVIRONMENT=production",
+        "-v",
+        f"{stack.civilization_root}:/civilization",
+        "-v",
+        f"{script}:/acceptance/producer.py:ro",
+        "--entrypoint",
+        "/app/.venv/bin/python",
+        stack.image,
+        *command,
+    ]
+    completed = subprocess.run(
+        args, cwd=str(ROOT), env=stack.env, check=False, capture_output=True, text=True
+    )
+    if completed.returncode != 0:
+        pytest.fail(
+            redact_secrets(
+                completed.stdout
+                + completed.stderr
+                + "\n--- API ---\n"
+                + stack_api_logs(stack)
+            )
+        )
     for line in reversed(completed.stdout.splitlines()):
         if line.strip().startswith("{"):
             return line.strip()

@@ -24,10 +24,12 @@ from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
+    EVENT_SCHEMA_REPLAY_V21,
     EventValidationCode,
     ExchangeCompleted,
     ExchangeProposed,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
@@ -102,6 +104,51 @@ def test_proposed_stores_offer_and_leaves_holders() -> None:
     assert offer.give_item_ids == (tool.entity_id,)
     assert offer.take_item_ids == (food.entity_id,)
     assert not hasattr(offer, "reservation")
+
+
+def test_replay_v21_exchange_events_decode_and_project() -> None:
+    state, tool, food, alice, bob = _state()
+    proposed = _event(
+        ExchangeProposed(
+            alice.entity_id,
+            bob.entity_id,
+            "offer",
+            (tool.entity_id,),
+            (food.entity_id,),
+        ),
+        event_id="evt-offer-v21",
+        actor=alice.entity_id,
+        schema=EVENT_SCHEMA_REPLAY_V21,
+        tick=1,
+    )
+    completed = _event(
+        ExchangeCompleted(
+            bob.entity_id,
+            alice.entity_id,
+            "accept",
+            (food.entity_id,),
+            (tool.entity_id,),
+            ("food",),
+            ("tool",),
+        ),
+        event_id="evt-completed-v21",
+        actor=bob.entity_id,
+        schema=EVENT_SCHEMA_REPLAY_V21,
+        tick=2,
+    )
+    decoded = tuple(
+        decode_persistence(encode_persistence(event), WorldEvent)
+        for event in (proposed, completed)
+    )
+    after = project_events(
+        state,
+        decoded,
+        expected_run_id=_RUN,
+        expected_world_id=_WORLD,
+    )
+    assert after.items[tool.entity_id].holder_id == bob.entity_id
+    assert after.items[food.entity_id].holder_id == alice.entity_id
+    assert after.exchange_offers == ()
 
 
 def test_completed_swaps_holders_and_drops_offer() -> None:

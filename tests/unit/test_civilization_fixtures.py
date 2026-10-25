@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import pytest
 
@@ -186,13 +187,21 @@ def test_marker_fixtures_are_post_event_sorted_and_owner_scoped() -> None:
             )
             assert marker["coverage"]["state"] == "complete"
             assert marker["source_refs"]
-            assert all(ref["tick"] < marker["seek_boundary"] for ref in marker["source_refs"])
+            assert all(
+                ref["tick"] < marker["seek_boundary"]
+                for ref in marker["source_refs"]
+            )
             assert marker["marker_id"] not in seen
             seen.add(marker["marker_id"])
         assert _sorted_unique(marker["marker_id"] for marker in markers)
         assert payload["truncated"] == (payload["next_cursor"] is not None)
         for band in payload["missing_intervals"]:
-            assert window["start_tick"] <= band["start_tick"] <= band["end_tick"] < window["end_tick"]
+            assert (
+                window["start_tick"]
+                <= band["start_tick"]
+                <= band["end_tick"]
+                < window["end_tick"]
+            )
     assert pages[0]["missing_intervals"]
 
 
@@ -213,7 +222,9 @@ def test_real_producer_config_is_v55_long_horizon_and_feature_complete() -> None
     assert _run_id(config).startswith("civ-real-")
 
 
-def test_constructed_pack_uses_real_composer_and_separate_identity(tmp_path: Path) -> None:
+def test_constructed_pack_uses_real_composer_and_separate_identity(
+    tmp_path: Path,
+) -> None:
     from tests.compose.seed_civilization_evidence import seed
 
     manifest = seed(root=tmp_path)

@@ -1,6 +1,6 @@
 # Godot observer
 
-[← Read-only observer](observer.md) · [Research API](research-api.md) · [Back to README](../README.md)
+[← Read-only observer](observer.md) · [Back to README](../README.md) · [Godot civilization overlays →](godot-civilization-overlays.md)
 
 The Godot observer is a read-only 2D presentation of a running world. It lives in `clients/godot-observer/` and is not a Python package. Simulation code does not import it. The published API serves the already-exported files at `/` and does not import the client.
 
@@ -82,6 +82,27 @@ full-boundary tick; ordinary event marks still seek event prefixes. Live events
 mark accepted demographic summaries stale until the next state frame, and
 backward seeks clear transient arrival/care chrome. Capture screenshots only
 after credential fields are cleared.
+
+## Civilization overlays
+
+The packed **Civilization** panel adds default-off, evidence-labeled overlays for
+regions/routes, location counts, settlement candidates, migration, completed-
+exchange trade, projects/public goods, repositories/records, culture,
+technology, groups, and institutions. The independent timeline tracks
+movement/population context, analytical settlements, knowledge
+acquisition/diffusion, and institution evidence. Controls expose loading,
+complete-empty, ready, partial/truncated, stale, unavailable, restricted, and
+error states with safe reasons; no unavailable layer is treated as zero.
+
+All requests are GET sidecars under
+`/v1/simulations/{run_id}/observer/civilization/{map,catalogue,overlays,markers}`.
+They use memory-only inspection/debug credentials, exact finalized boundaries,
+purpose-specific cursors, and publication pins. Recorded-boundaries-only
+playback advances between pinned catalogue boundaries; ordinary objective
+playback is unchanged. High-speed tiers simplify drawing without dropping
+scientific state. See [Godot civilization overlays](godot-civilization-overlays.md)
+for category rules, availability semantics, the optional read-only deployment,
+and the exact verification handoff.
 
 ## Perspective limits
 
@@ -333,3 +354,9 @@ These fields stay out of logs:
 - utterance text
 
 Coordinates are not logged at INFO. Relationship scores are not shown or logged.
+
+## See Also
+
+- [Read-only observer](observer.md) — frames, routes, and privacy
+- [Godot civilization overlays](godot-civilization-overlays.md) — optional V3 overlays and capture/history
+- [Research API](research-api.md) — capabilities, WebSocket cursors, and debug

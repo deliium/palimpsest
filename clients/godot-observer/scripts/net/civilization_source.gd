@@ -87,6 +87,7 @@ func set_layer_enabled(layer_id: String, value: bool) -> void:
 	if value:
 		enabled_layers[layer_id] = true
 		if not _cursor.is_empty():
+			_set_loading(layer_id, _cursor)
 			_request_layer(layer_id, _cursor, "", false)
 	else:
 		enabled_layers.erase(layer_id)
@@ -133,6 +134,15 @@ func set_filters(layer_id: String, values: Dictionary) -> void:
 	_cancel_layer_requests(layer_id)
 	if enabled_layers.has(layer_id) and not _cursor.is_empty():
 		_request_layer(layer_id, _cursor, "", false)
+
+
+func acceptance_snapshot() -> Dictionary:
+	return {
+		"inflight": _inflight.size(),
+		"queued": _queued_layers.size(),
+		"states": states.size(),
+		"enabled": enabled_layers.size(),
+	}
 
 
 func enabled_ids() -> Array:

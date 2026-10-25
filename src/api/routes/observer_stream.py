@@ -261,6 +261,7 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
         )
         await websocket.close(code=4401)
         return
+    layout_id = websocket.query_params.get("layout_id") or DEFAULT_LAYOUT_ID
     raw_tick = websocket.query_params.get("after_tick")
     raw_sequence = websocket.query_params.get("after_sequence")
     if (raw_tick is None) != (raw_sequence is None):
@@ -281,8 +282,8 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
     service: ObserverReadService = websocket.app.state.observer_service
     replay: ReplayService = service.replay
     try:
-        frame = await service.state(run_id, tick=None, layout_id=DEFAULT_LAYOUT_ID)
-        manifest = await service.manifest(run_id, layout_id=DEFAULT_LAYOUT_ID)
+        frame = await service.state(run_id, tick=None, layout_id=layout_id)
+        manifest = await service.manifest(run_id, layout_id=layout_id)
     except ApiError as exc:
         await websocket.close(code=4404)
         _LOGGER.warning(
@@ -333,7 +334,7 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
         return adapted
 
     async def current_head() -> int:
-        live = await service.state(run_id, tick=None, layout_id=DEFAULT_LAYOUT_ID)
+        live = await service.state(run_id, tick=None, layout_id=layout_id)
         return live.world.tick
 
     async def completed() -> bool:

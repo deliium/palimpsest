@@ -35,7 +35,16 @@ from simulation.persistence import (
 )
 from simulation.serialization import DomainSerializationError, encode_domain
 from tests.simulation_helpers import make_location, make_weather
-from world.events import Waited, WorldEvent, make_replayable_event
+from world.effects import ActionCause
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V21,
+    OccurrenceContext,
+    ProjectCompleted,
+    Waited,
+    WorldEvent,
+    make_physical_replayable_event,
+    make_replayable_event,
+)
 from world.identifiers import (
     EntityId,
     EventId,
@@ -162,6 +171,29 @@ def test_round_trip_run_manifest_snapshot_commit_and_event() -> None:
     assert decode_persistence(encode_persistence(snapshot), WorldSnapshot) == snapshot
     assert decode_persistence(encode_persistence(commit), TickCommit) == commit
     assert decode_persistence(encode_persistence(event), "world_event") == event
+
+
+def test_replay_v21_project_completed_decay_round_trip() -> None:
+    details = ProjectCompleted(
+        EntityId("project-1"),
+        "well",
+        EntityId("structure-1"),
+        decay_millis=10,
+    )
+    event = make_physical_replayable_event(
+        event_id=EventId("evt-project-v21"),
+        run_id="run-1",
+        world_id=WorldId("world-1"),
+        tick=3,
+        sequence=0,
+        cause=ActionCause(RequestId("req-1"), EntityId("body-1")),
+        resulting_revision=WorldRevision(3),
+        details=details,
+        occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
+        schema_version=EVENT_SCHEMA_REPLAY_V21,
+    )
+    decoded = decode_persistence(encode_persistence(event), WorldEvent)
+    assert decoded.details == details
 
 
 def test_deterministic_bytes_and_hashes() -> None:

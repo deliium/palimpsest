@@ -41,6 +41,10 @@ static func web_debugger_state(search: String) -> Dictionary:
 		text = text.substr(1)
 	var out := {
 		"run_id": "",
+		"layout_id": "",
+		"civilization_layers": "",
+		"civilization_detail": "",
+		"civilization_seek_cycles": "",
 		"tick": null,
 		"sequence": null,
 		"event_id": "",
@@ -75,6 +79,14 @@ static func web_debugger_state(search: String) -> Dictionary:
 		match key:
 			"run_id":
 				out["run_id"] = value
+			"layout_id":
+				out["layout_id"] = value
+			"civilization_layers":
+				out["civilization_layers"] = value
+			"civilization_detail":
+				out["civilization_detail"] = value
+			"civilization_seek_cycles":
+				out["civilization_seek_cycles"] = value
 			"tick":
 				if value.is_valid_int():
 					out["tick"] = int(value)
