@@ -51,6 +51,12 @@ signal civilization_restart_requested(layer_id: String)
 signal civilization_retry_requested(layer_id: String)
 signal civilization_layer_cleared(layer_id: String, reason_code: String)
 signal civilization_credentials_help_requested
+signal civilization_timeline_seek_requested(tick: int)
+signal civilization_marker_window_requested(from_tick: int, to_tick: int, evidence_class: String, owner_id: String, layer: String)
+signal civilization_marker_load_more_requested(from_tick: int, to_tick: int, evidence_class: String, owner_id: String, layer: String)
+signal civilization_catalogue_requested(evidence_class: String, owner_id: String)
+signal civilization_catalogue_load_more_requested(evidence_class: String, owner_id: String)
+signal civilization_recorded_mode_changed(enabled: bool)
 
 var _live_tick := 0
 var _selected_id := ""
@@ -161,6 +167,30 @@ func _ready() -> void:
 	$Timeline.seek_requested.connect(func(tick: int, sequence: int) -> void:
 		timeline_seek_requested.emit(tick, sequence)
 	)
+	var civilization_timeline = get_node_or_null("CivilizationTimeline")
+	if civilization_timeline != null:
+		civilization_timeline.seek_requested.connect(func(tick: int) -> void:
+			civilization_timeline_seek_requested.emit(tick)
+		)
+		civilization_timeline.marker_window_requested.connect(
+			func(from_tick: int, to_tick: int, evidence_class: String, owner_id: String, layer: String) -> void:
+				civilization_marker_window_requested.emit(from_tick, to_tick, evidence_class, owner_id, layer)
+		)
+		civilization_timeline.marker_load_more_requested.connect(
+			func(from_tick: int, to_tick: int, evidence_class: String, owner_id: String, layer: String) -> void:
+				civilization_marker_load_more_requested.emit(from_tick, to_tick, evidence_class, owner_id, layer)
+		)
+		civilization_timeline.catalogue_requested.connect(
+			func(evidence_class: String, owner_id: String) -> void:
+				civilization_catalogue_requested.emit(evidence_class, owner_id)
+		)
+		civilization_timeline.catalogue_load_more_requested.connect(
+			func(evidence_class: String, owner_id: String) -> void:
+				civilization_catalogue_load_more_requested.emit(evidence_class, owner_id)
+		)
+		civilization_timeline.recorded_mode_changed.connect(func(enabled: bool) -> void:
+			civilization_recorded_mode_changed.emit(enabled)
+		)
 	var debugger = $DebuggerPanel
 	if debugger != null and debugger.has_signal("focus_requested"):
 		debugger.focus_requested.connect(func(tick: int, sequence: int, event_id: String) -> void:
@@ -324,6 +354,7 @@ func clear_for_source_switch() -> void:
 	## Clear presentation chrome for a new ObserverSource. Bookmark files stay.
 	$EventLog.replace_window([], 0, 0)
 	$Timeline.clear_marks()
+	clear_civilization_timeline()
 	clear_inspector()
 	clear_narrative_variants()
 	note_selection("")
@@ -504,6 +535,13 @@ func set_civilization_owner(owner_id: String) -> void:
 		panel.set_selected_owner(owner_id)
 
 
+func selected_civilization_owner() -> String:
+	var panel = get_node_or_null("CivilizationPanel")
+	if panel != null and panel.has_method("selected_owner"):
+		return str(panel.selected_owner())
+	return ""
+
+
 func clear_civilization_views(reason_code: String = "cleared") -> void:
 	var panel = get_node_or_null("CivilizationPanel")
 	if panel != null:
@@ -513,6 +551,68 @@ func clear_civilization_views(reason_code: String = "cleared") -> void:
 func civilization_panel_visible() -> bool:
 	var panel = get_node_or_null("CivilizationPanel")
 	return panel != null and panel.visible
+
+
+func set_civilization_timeline_context(
+	run_id: String,
+	owner_id: String,
+	debug_present: bool,
+	inspection_present: bool,
+) -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.set_context(run_id, owner_id, debug_present, inspection_present)
+
+
+func refresh_civilization_timeline() -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.refresh()
+
+
+func apply_civilization_timeline_catalogue(state: Dictionary) -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.apply_catalogue(state)
+
+
+func apply_civilization_timeline_markers(state: Dictionary) -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.apply_markers(state)
+
+
+func note_civilization_timeline_tick(tick: int, live_tick: int = -1) -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline == null:
+		return
+	var next_live := _live_tick if live_tick < 0 else live_tick
+	timeline.set_span(tick, next_live)
+	timeline.set_playback_state(tick, -1, 0)
+
+
+func note_civilization_playback_state(accepted_tick: int, target_tick: int, skipped: int) -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.set_playback_state(accepted_tick, target_tick, skipped)
+
+
+func set_civilization_population_context(model: Variant) -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.set_population_context(model)
+
+
+func clear_civilization_timeline() -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.clear_all()
+
+
+func clear_civilization_timeline_private() -> void:
+	var timeline = get_node_or_null("CivilizationTimeline")
+	if timeline != null:
+		timeline.clear_private()
 
 
 func focus_credentials() -> void:

@@ -15,6 +15,7 @@ var _tokens := {}
 var _motions := 0
 var _world: Variant = null
 var _centers := {}
+var _detail := "full"
 
 
 func _ready() -> void:
@@ -54,7 +55,24 @@ func show_world(world: Variant, zone_centers: Dictionary = {}, activity: Diction
 				token.set_activity("Travel: %s (at origin)" % str(agent.journey.phase))
 			add_child(token)
 			_tokens[str(agent.entity_id)] = token
+	_apply_label_detail()
 	ObserverLog.debug("agents", "tokens_built agent_count=%s" % _tokens.size())
+
+
+func set_presentation_detail(lod: String) -> void:
+	if lod == _detail:
+		return
+	_detail = lod
+	_apply_label_detail()
+	ObserverLog.debug("agents", "label_detail lod=%s" % _detail)
+
+
+func _apply_label_detail() -> void:
+	var show_individual := _detail != "aggregate"
+	for token_id in _tokens.keys():
+		var token = _tokens[token_id]
+		if token.has_method("set_label_visible"):
+			token.set_label_visible(show_individual or str(token_id) == selected_entity_id)
 
 
 func active_motions() -> int:
@@ -119,6 +137,7 @@ func highlight(entity_id: String) -> bool:
 			found = true
 	if not found:
 		selected_entity_id = ""
+	_apply_label_detail()
 	return found
 
 

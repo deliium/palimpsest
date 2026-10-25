@@ -15,6 +15,8 @@ var _civilization_states := {}
 var _civilization_cursor := {}
 var _civilization_warning := ""
 var _civilization_anchor_warning := ""
+var _civilization_plan: Dictionary = {}
+var presentation_detail := "full"
 
 @onready var _locations: Node2D = $LocationLayer
 @onready var _claims: Node2D = $ClaimOverlay
@@ -228,6 +230,7 @@ func clear_world() -> void:
 	_reducer.clear()
 	_civilization_states.clear()
 	_civilization_cursor.clear()
+	_civilization_plan = {}
 	if _civilization != null:
 		_civilization.clear_plan()
 	if _civilization_flows != null:
@@ -242,6 +245,153 @@ func apply_civilization_bundle(cursor: Dictionary, states: Dictionary) -> void:
 	_civilization_cursor = cursor.duplicate(true)
 	_civilization_states = states.duplicate(true)
 	_rebuild_civilization()
+
+
+func apply_civilization_plan(plan: Dictionary) -> void:
+	if plan.is_empty() or not bool(plan.get("ok", false)):
+		_civilization_plan = {}
+		if _civilization != null:
+			_civilization.clear_plan()
+		if _civilization_flows != null:
+			_civilization_flows.clear_plan()
+		if _civilization_beliefs != null:
+			_civilization_beliefs.clear_plan()
+		return
+	_civilization_plan = plan.duplicate(true)
+	if _civilization != null:
+		_civilization.apply_plan(_civilization_plan)
+	if _civilization_flows != null:
+		_civilization_flows.apply_plan(_civilization_plan)
+	if _civilization_beliefs != null:
+		_civilization_beliefs.apply_plan(_civilization_plan)
+
+
+func set_presentation_detail(lod: String) -> void:
+	if lod not in ["full", "reduced", "snap", "aggregate"]:
+		return
+	if lod == presentation_detail:
+		return
+	presentation_detail = lod
+	if _civilization != null:
+		_civilization.set_lod(lod)
+	if _civilization_flows != null:
+		_civilization_flows.set_lod(lod)
+	if _civilization_beliefs != null:
+		_civilization_beliefs.set_lod(lod)
+	if _effects != null and _effects.has_method("set_lod"):
+		_effects.set_lod(lod)
+	if _agents != null and _agents.has_method("set_presentation_detail"):
+		_agents.set_presentation_detail(lod)
+	ObserverLog.debug("view", "presentation_detail lod=%s" % lod)
+
+
+func presentation_lod() -> String:
+	return presentation_detail
+
+
+func semantic_snapshot() -> Dictionary:
+	var layers := {}
+	var keys: Array = _civilization_states.keys()
+	keys.sort()
+	var total_rows := 0
+	for layer_id in keys:
+		var state: Dictionary = _civilization_states[layer_id]
+		var rows: Array = state.get("rows", [])
+		total_rows += rows.size()
+		var identities: Array = []
+		for row in rows:
+			identities.append(_row_identity(row))
+		var publication: Variant = state.get("publication", null)
+		layers[str(layer_id)] = {
+			"status": str(state.get("status", "")),
+			"evidence_class": str(state.get("evidence_class", "")),
+			"owner_id": state.get("owner_id", null),
+			"coverage": state.get("coverage", null),
+			"publication": (
+				null if publication == null else {
+					"publication_id": publication.get("publication_id", null),
+					"digest": publication.get("digest", null),
+				}
+			),
+			"cursor": state.get("cursor", {}),
+			"row_count": rows.size(),
+			"row_ids": identities,
+		}
+	return {
+		"world": _world_semantics(),
+		"cursor": _civilization_cursor.duplicate(true),
+		"layers": layers,
+		"counts": {"layers": layers.size(), "rows": total_rows},
+	}
+
+
+func semantic_digest() -> String:
+	return JSON.stringify(semantic_snapshot()).sha256_text()
+
+
+func _world_semantics() -> Dictionary:
+	if _world_state == null:
+		return {}
+	var locations: Array = []
+	for location in _world_items(_world_state, "locations"):
+		locations.append(str(_value(location, "location_id", "")))
+	locations.sort()
+	var agents: Array = []
+	for agent in _world_items(_world_state, "agents"):
+		agents.append({
+			"entity_id": str(_value(agent, "entity_id", "")),
+			"agent_id": _value(agent, "agent_id", null),
+			"location_id": _value(agent, "location_id", null),
+			"life_status": _value(agent, "life_status", null),
+		})
+	agents.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return str(left["entity_id"]) < str(right["entity_id"])
+	)
+	var structures: Array = []
+	for structure in _world_items(_world_state, "structures"):
+		structures.append(str(_value(structure, "structure_id", "")))
+	structures.sort()
+	var items: Array = []
+	for item in _world_items(_world_state, "items"):
+		items.append(str(_value(item, "item_id", "")))
+	items.sort()
+	return {
+		"world_id": _value(_world_state, "world_id", null),
+		"tick": _value(_world_state, "tick", null),
+		"revision": _value(_world_state, "revision", null),
+		"locations": locations,
+		"agents": agents,
+		"structures": structures,
+		"items": items,
+	}
+
+
+func _world_items(source: Variant, key: String) -> Array:
+	var value: Variant = _value(source, key, [])
+	if value == null or typeof(value) != TYPE_ARRAY:
+		return []
+	return value
+
+
+func _row_identity(row: Variant) -> String:
+	if typeof(row) == TYPE_DICTIONARY:
+		var context: Variant = row.get("context", null)
+		if typeof(context) == TYPE_DICTIONARY and context.get("row_id", null) != null:
+			return str(context["row_id"])
+		if row.get("row_id", null) != null:
+			return str(row["row_id"])
+	return JSON.stringify(row)
+
+
+func _value(source: Variant, key: String, fallback: Variant = null) -> Variant:
+	if source == null:
+		return fallback
+	if typeof(source) == TYPE_DICTIONARY:
+		return source.get(key, fallback)
+	if source is Object:
+		var value: Variant = source.get(key)
+		return fallback if value == null else value
+	return fallback
 
 
 func apply_civilization_layer(layer_id: String, state: Dictionary) -> void:
@@ -285,11 +435,7 @@ func _rebuild_civilization() -> void:
 	if _civilization == null:
 		return
 	if _world_state == null or _civilization_states.is_empty() or _civilization_cursor.is_empty():
-		_civilization.clear_plan()
-		if _civilization_flows != null:
-			_civilization_flows.clear_plan()
-		if _civilization_beliefs != null:
-			_civilization_beliefs.clear_plan()
+		apply_civilization_plan({})
 		return
 	var plan: Dictionary = CivilizationPlan.build_semantic(
 		_world_state,
@@ -302,18 +448,10 @@ func _rebuild_civilization() -> void:
 		if reason != _civilization_warning:
 			_civilization_warning = reason
 			ObserverLog.warn("civilization", "render_plan_rejected reason=%s" % reason)
-		_civilization.clear_plan()
-		if _civilization_flows != null:
-			_civilization_flows.clear_plan()
-		if _civilization_beliefs != null:
-			_civilization_beliefs.clear_plan()
+		apply_civilization_plan({})
 		return
 	_civilization_warning = ""
-	_civilization.apply_plan(plan)
-	if _civilization_flows != null:
-		_civilization_flows.apply_plan(plan)
-	if _civilization_beliefs != null:
-		_civilization_beliefs.apply_plan(plan)
+	apply_civilization_plan(plan)
 	if int(plan.get("unresolved_anchor_count", 0)) > 0:
 		var anchor_key := "%s|%s" % [
 			str(_civilization_cursor.get("tick", "")),
@@ -414,6 +552,11 @@ func play_event(event: Variant) -> void:
 
 func set_playback_speed(speed: float) -> void:
 	playback_speed = speed
+	set_presentation_detail(Playback.level_of_detail(speed))
+
+
+func set_playback_paused(paused: bool) -> void:
+	set_presentation_detail("full" if paused else Playback.level_of_detail(playback_speed))
 
 
 func zoom_in() -> void:

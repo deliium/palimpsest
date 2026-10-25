@@ -5,7 +5,15 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from analysis.civilization_overlays import CIVILIZATION_OVERLAYS_POLICY_VERSION
 from observer.version import OBSERVER_LAYOUT_SCHEMA_VERSION, OBSERVER_PROTOCOL_VERSION
+from simulation.civilization_models import (
+    CIVILIZATION_CATALOGUE_SCHEMA,
+    CIVILIZATION_MAP_SCHEMA,
+    CIVILIZATION_MARKERS_SCHEMA,
+    CIVILIZATION_OVERLAY_SCHEMA,
+    CivilizationMarkerType,
+)
 from simulation.compatibility import (
     OBSERVER_LAYOUT_SCHEMA_VERSION as compat_layout,
 )
@@ -15,6 +23,9 @@ from simulation.compatibility import (
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS_GD = ROOT / "clients" / "godot-observer" / "scripts" / "protocol" / "models.gd"
+CIVILIZATION_GD = (
+    ROOT / "clients" / "godot-observer" / "scripts" / "protocol" / "civilization.gd"
+)
 
 
 def _gd_const(name: str) -> str:
@@ -52,3 +63,61 @@ def test_version_payload_source_has_no_v3_capability_fields() -> None:
         "cultural_historical_memory",
     ):
         assert forbidden not in source
+
+
+def test_civilization_schema_and_marker_mirror_python() -> None:
+    text = CIVILIZATION_GD.read_text(encoding="utf-8")
+    expected = {
+        "MAP_SCHEMA": CIVILIZATION_MAP_SCHEMA,
+        "CATALOGUE_SCHEMA": CIVILIZATION_CATALOGUE_SCHEMA,
+        "OVERLAY_SCHEMA": CIVILIZATION_OVERLAY_SCHEMA,
+        "MARKERS_SCHEMA": CIVILIZATION_MARKERS_SCHEMA,
+    }
+    for name, value in expected.items():
+        match = re.search(rf'const\s+{name}\s*:=\s*"([^"]+)"', text)
+        assert match is not None and match.group(1) == value
+    marker_block = re.search(
+        r"const MARKER_TYPES := \{(?P<body>.*?)\n\}", text, re.DOTALL
+    )
+    assert marker_block is not None
+    pairs = dict(
+        re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', marker_block.group("body"))
+    )
+    assert pairs == {
+        marker.value: {
+            CivilizationMarkerType.SETTLEMENT_ACTIVATED: "settlements",
+            CivilizationMarkerType.SETTLEMENT_DEACTIVATED: "settlements",
+            CivilizationMarkerType.JOURNEY_STARTED: "migration",
+            CivilizationMarkerType.JOURNEY_ARRIVED: "migration",
+            CivilizationMarkerType.JOURNEY_ENDED: "migration",
+            CivilizationMarkerType.TECHNOLOGY_ACQUIRED: "technology",
+            CivilizationMarkerType.INSTITUTION_TRANSITION: "institutions",
+        }[marker]
+        for marker in CivilizationMarkerType
+    }
+    assert CIVILIZATION_OVERLAYS_POLICY_VERSION == "civilization-overlays.v1"
+
+
+def test_civilization_client_caps_remain_bounded() -> None:
+    source = (
+        ROOT
+        / "clients"
+        / "godot-observer"
+        / "scripts"
+        / "net"
+        / "civilization_source.gd"
+    ).read_text(encoding="utf-8")
+    assert "const MAX_MARKERS := 200" in source
+    assert "const MAX_MARKER_PAGES := 8" in source
+    assert "const MAX_MARKER_WINDOWS := 4" in source
+    assert "const MAX_INFLIGHT := 2" in source
+    timeline = (
+        ROOT
+        / "clients"
+        / "godot-observer"
+        / "scripts"
+        / "ui"
+        / "civilization_timeline.gd"
+    ).read_text(encoding="utf-8")
+    assert "const MAX_MARKERS := 200" in timeline
+    assert "const MAX_WINDOWS := 4" in timeline

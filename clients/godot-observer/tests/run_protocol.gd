@@ -7,6 +7,7 @@ const SUITES: Array[String] = [
 	"res://tests/test_urls.gd",
 	"res://tests/test_research_ui_link.gd",
 	"res://tests/test_playback.gd",
+	"res://tests/test_civilization_playback.gd",
 	"res://tests/test_transport.gd",
 	"res://tests/test_slots.gd",
 	"res://tests/test_session_cursor.gd",
@@ -42,6 +43,7 @@ const SUITES: Array[String] = [
 	"res://tests/test_civilization_source.gd",
 	"res://tests/test_civilization_controls.gd",
 	"res://tests/test_civilization_rendering.gd",
+	"res://tests/test_civilization_timeline.gd",
 	"res://tests/test_generational_view.gd",
 	"res://tests/test_generational_navigation.gd",
 ]

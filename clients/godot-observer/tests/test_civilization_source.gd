@@ -255,12 +255,38 @@ func _markers_and_catalogue() -> String:
 	_respond(source, requests[0], _load("markers_positive.json"))
 	if source.markers.get("markers", []).size() != 2:
 		return "marker response not applied"
+	if source.markers.get("next_cursor", null) == null:
+		return "marker continuation missing"
+	source.load_more_markers(3, 5, "SUBJECTIVE", "agent-a", "")
+	var marker_append: Dictionary = requests[1]
+	if not bool(marker_append["meta"].get("append", false)) or marker_append["query"].get("cursor", null) == null:
+		return "marker append request missing"
+	_respond(source, marker_append, _load("markers_positive_page2.json"))
+	if source.markers.get("markers", []).size() != 4 or int(source.markers.get("pages", 0)) != 2:
+		return "marker append not merged"
 	source.request_catalogue("ANALYTICAL")
-	if requests.size() != 2 or str(requests[1]["kind"]) != "civilization_catalogue":
+	if requests.size() != 3 or str(requests[2]["kind"]) != "civilization_catalogue":
 		return "catalogue request missing"
-	_respond(source, requests[1], _load("catalogue.json"))
+	var catalogue_first: Dictionary = _load("catalogue.json")
+	catalogue_first["next_cursor"] = "next-page"
+	catalogue_first["truncated"] = true
+	_respond(source, requests[2], catalogue_first)
 	if source.catalogue.get("boundaries", []).is_empty():
 		return "catalogue response not applied"
+	source.load_more_catalogue("ANALYTICAL")
+	var catalogue_append: Dictionary = requests[3]
+	if not bool(catalogue_append["meta"].get("append", false)) or catalogue_append["query"].get("cursor", null) == null:
+		return "catalogue append request missing"
+	var catalogue_second: Dictionary = _load("catalogue.json")
+	var boundary: Dictionary = catalogue_first["boundaries"][0].duplicate(true)
+	boundary["boundary_tick"] = 6
+	boundary["revision"] = 6
+	catalogue_second["boundaries"] = [boundary]
+	catalogue_second["next_cursor"] = null
+	catalogue_second["truncated"] = false
+	_respond(source, requests[3], catalogue_second)
+	if source.catalogue.get("boundaries", []).size() != 2 or int(source.catalogue.get("pages", 0)) != 2:
+		return "catalogue append not merged"
 	return ""
 
 

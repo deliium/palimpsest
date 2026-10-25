@@ -14,6 +14,7 @@ func _ready() -> void:
 	ObserverLog.info("main", "client_boot renderer=gl_compatibility")
 	_ensure_shortcuts()
 	_session.status_changed.connect(_ui.show_status)
+	_session.status_changed.connect(_on_status_changed)
 	_session.world_replaced.connect(_world.show_world)
 	_session.frame_sought.connect(_world.replace_sought_frame)
 	_session.events_loaded.connect(_on_events_loaded)
@@ -90,11 +91,22 @@ func _ready() -> void:
 	_ui.credentials_apply_requested.connect(_on_credentials_apply)
 	_ui.credentials_forget_requested.connect(_on_credentials_forget)
 	_session.credentials_changed.connect(_ui.set_credential_state)
+	_session.credentials_changed.connect(func(_inspection: bool, _debug: bool) -> void:
+		_refresh_civilization_timeline_context()
+		_ui.clear_civilization_timeline_private()
+		_ui.refresh_civilization_timeline()
+	)
 	_session.credentials_error.connect(_on_credentials_error)
 	_session.generational_updated.connect(_on_generational_updated)
 	_session.lineage_source_updated.connect(_on_lineage_updated)
 	_session.civilization_layer_changed.connect(_on_civilization_layer_changed)
 	_session.civilization_bundle_ready.connect(_on_civilization_bundle)
+	_session.civilization_markers_changed.connect(_on_civilization_markers)
+	_session.civilization_catalogue_changed.connect(_on_civilization_catalogue)
+	_session.playback_bundle_ready.connect(_on_civilization_playback_bundle)
+	_session.playback_target_changed.connect(func(target: int, accepted: int, skipped: int) -> void:
+		_ui.note_civilization_playback_state(accepted, target, skipped)
+	)
 	_session.frame_sought.connect(_on_civilization_frame_sought)
 	_world.civilization_inspect_requested.connect(_ui.show_civilization_inspector)
 	_ui.population_toggled.connect(_on_population_toggled)
@@ -107,6 +119,12 @@ func _ready() -> void:
 	_ui.civilization_retry_requested.connect(_on_civilization_restart)
 	_ui.civilization_layer_cleared.connect(_on_civilization_layer_cleared)
 	_ui.civilization_credentials_help_requested.connect(_on_civilization_credentials_help)
+	_ui.civilization_timeline_seek_requested.connect(_on_civilization_timeline_seek)
+	_ui.civilization_marker_window_requested.connect(_on_civilization_marker_window)
+	_ui.civilization_marker_load_more_requested.connect(_on_civilization_marker_load_more)
+	_ui.civilization_catalogue_requested.connect(_on_civilization_catalogue_requested)
+	_ui.civilization_catalogue_load_more_requested.connect(_on_civilization_catalogue_load_more)
+	_ui.civilization_recorded_mode_changed.connect(_on_civilization_recorded_mode)
 	_ui.demographic_section_selected.connect(_on_demographic_section)
 	_ui.demographic_load_more_requested.connect(_on_demographic_load_more)
 	_ui.generational_agent_selected.connect(_on_generational_agent)
@@ -132,7 +150,19 @@ func _on_events_loaded(events: Array, focus_tick: int, focus_sequence: int) -> v
 	_refresh_markers()
 
 
+var _timeline_initialized := false
+
+
+func _on_status_changed(code: String, _detail: String) -> void:
+	if code == "ready" and not _timeline_initialized:
+		_timeline_initialized = true
+		_refresh_civilization_timeline_context()
+		_ui.refresh_civilization_timeline()
+
+
 func _on_source_cleared() -> void:
+	_timeline_initialized = false
+	_ui.clear_civilization_timeline()
 	_world.clear_world()
 	_ui.clear_for_source_switch()
 	_lineage_history.clear()
@@ -332,6 +362,11 @@ func _text_field_focused() -> bool:
 
 func _on_run_loaded(record: Dictionary) -> void:
 	_ui.note_live_tick(int(record.get("tick", 0)))
+	_ui.note_civilization_timeline_tick(_session.transport.tick, int(record.get("tick", 0)))
+	if not _timeline_initialized:
+		_timeline_initialized = true
+		_refresh_civilization_timeline_context()
+		_ui.refresh_civilization_timeline()
 
 
 func _on_event_seek(tick: int, sequence: int) -> void:
@@ -341,9 +376,11 @@ func _on_event_seek(tick: int, sequence: int) -> void:
 func _on_control(action: String) -> void:
 	match action:
 		"play":
+			_world.set_playback_paused(false)
 			_session.play()
 		"pause":
 			_session.pause()
+			_world.set_playback_paused(true)
 		"previous_event":
 			_session.previous_event()
 		"next_event":
@@ -601,8 +638,45 @@ func _on_civilization_bundle(cursor: Dictionary, states: Dictionary) -> void:
 	_world.apply_civilization_bundle(cursor, states)
 
 
+func _on_civilization_markers(state: Dictionary) -> void:
+	_ui.apply_civilization_timeline_markers(state)
+
+
+func _on_civilization_catalogue(state: Dictionary) -> void:
+	_ui.apply_civilization_timeline_catalogue(state)
+	if _session.recorded_boundaries_only and (
+		str(state.get("status", "")) != "available" or state.get("boundaries", []).is_empty()
+	):
+		_session.set_recorded_boundaries_only(false)
+
+
+func _on_civilization_playback_bundle(frame: Variant, cursor: Dictionary, states: Dictionary) -> void:
+	_world.replace_sought_frame(frame, null, true)
+	_world.apply_civilization_bundle(cursor, states)
+	for layer_id in states.keys():
+		_ui.apply_civilization_layer(str(layer_id), states[layer_id])
+	var snapshot: Dictionary = _session.playback_snapshot()
+	_ui.note_civilization_timeline_tick(int(frame.world.tick), _session.transport.live_tick)
+	_ui.note_civilization_playback_state(
+		int(frame.world.tick),
+		int(snapshot.get("desired_tick", -1)),
+		int(snapshot.get("skipped", 0)),
+	)
+	_on_frame_for_follow(frame, null, true)
+	ObserverLog.debug(
+		"acceptance",
+		"civilization_playback_bundle tick=%s layers=%s" % [
+			str(frame.world.tick),
+			states.size(),
+		],
+	)
+
+
 func _on_civilization_frame_sought(_frame: Variant, _event: Variant, _forward: bool) -> void:
 	_world.clear_civilization_layers()
+	_ui.note_civilization_timeline_tick(_session.transport.tick, _session.transport.live_tick)
+	_refresh_civilization_timeline_context()
+	_ui.refresh_civilization_timeline()
 
 
 func _on_civilization_mode(layer_id: String, mode: String, owner_id: String) -> void:
@@ -615,6 +689,8 @@ func _on_civilization_mode(layer_id: String, mode: String, owner_id: String) -> 
 func _on_civilization_owner(owner_id: String) -> void:
 	_session.set_civilization_owner(owner_id)
 	_ui.set_civilization_owner(owner_id)
+	_refresh_civilization_timeline_context()
+	_ui.refresh_civilization_timeline()
 
 
 func _on_civilization_filters(layer_id: String, filters: Dictionary) -> void:
@@ -639,6 +715,53 @@ func _on_civilization_credentials_help() -> void:
 	_ui.focus_credentials()
 
 
+func _on_civilization_timeline_seek(tick: int) -> void:
+	_session.seek_tick(tick)
+
+
+func _on_civilization_marker_window(
+	from_tick: int,
+	to_tick: int,
+	evidence_class: String,
+	owner_id: String,
+	layer: String,
+) -> void:
+	_session.request_civilization_markers(from_tick, to_tick, evidence_class, owner_id, layer)
+
+
+func _on_civilization_marker_load_more(
+	from_tick: int,
+	to_tick: int,
+	evidence_class: String,
+	owner_id: String,
+	layer: String,
+) -> void:
+	_session.load_more_civilization_markers(from_tick, to_tick, evidence_class, owner_id, layer)
+
+
+func _on_civilization_catalogue_requested(evidence_class: String, owner_id: String) -> void:
+	_session.request_civilization_catalogue(evidence_class, owner_id)
+
+
+func _on_civilization_catalogue_load_more(evidence_class: String, owner_id: String) -> void:
+	_session.load_more_civilization_catalogue(evidence_class, owner_id)
+
+
+func _on_civilization_recorded_mode(enabled: bool) -> void:
+	var active: bool = _session.set_recorded_boundaries_only(enabled)
+	if enabled and not active:
+		_ui.show_status("recorded_unavailable", "Recorded boundaries unavailable")
+
+
+func _refresh_civilization_timeline_context() -> void:
+	_ui.set_civilization_timeline_context(
+		_session.run_id,
+		_ui.selected_civilization_owner(),
+		_session.has_debug_credential(),
+		_session.has_inspection_credential(),
+	)
+
+
 func _on_generational_updated() -> void:
 	var source: Variant = _session.generational
 	var model: Variant = source.model_view
@@ -649,6 +772,7 @@ func _on_generational_updated() -> void:
 			kinds.append(candidate)
 	_world.apply_demographics(model, kinds)
 	_ui.set_generation_markers(source.markers, _session.run_id)
+	_ui.set_civilization_population_context(model)
 	if source.selected_agent_id != "":
 		_ui.apply_demographic_selection(source.selected_row, source.selection_state)
 		_ui.show_demographic_inspector(source.selected_row)

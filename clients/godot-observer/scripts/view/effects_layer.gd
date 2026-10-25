@@ -6,6 +6,7 @@ const ItemTravel := preload("res://scripts/view/item_travel.gd")
 
 const _SPEECH_CAP := 8
 const _COALESCE_WINDOW := 0.12
+const _TRANSIENT_CAP := 32
 
 var _marks: Array = []
 var _bubbles: Array = []
@@ -13,8 +14,10 @@ var _objects: Node = null
 var _strategy_by_event := {}
 var _research_speech := false
 var _coalesce_keys := {}
+var _lod := "full"
 var effects_coalesced := 0
 var speech_dropped := 0
+var transients_dropped := 0
 
 
 func _ready() -> void:
@@ -23,6 +26,26 @@ func _ready() -> void:
 
 func active_count() -> int:
 	return _marks.size() + _bubbles.size()
+
+
+func set_lod(lod: String) -> void:
+	if lod == _lod:
+		return
+	_lod = lod
+	if _lod in ["snap", "aggregate"]:
+		_marks.clear()
+		_bubbles.clear()
+	else:
+		var cap := maxi(0, _TRANSIENT_CAP - _bubbles.size())
+		if _marks.size() > cap:
+			transients_dropped += _marks.size() - cap
+			_marks = _marks.slice(_marks.size() - cap)
+	queue_redraw()
+	ObserverLog.debug("effects", "lod_changed lod=%s marks=%s" % [_lod, _marks.size()])
+
+
+func lod() -> String:
+	return _lod
 
 
 func set_strategy_audit(payload: Variant) -> void:
@@ -69,7 +92,7 @@ func play(command: Dictionary, agents: Node, locations: Node, connections: Node 
 	if action == "move":
 		var destination: Vector2 = agents.slot_for(entity_id)
 		var path := PackedVector2Array()
-		if not skip:
+		if not skip and _lod == "full":
 			path = _move_path(command, agents.token_position(entity_id), destination, connections)
 		agents.move_token(
 			entity_id,
@@ -121,7 +144,7 @@ func play(command: Dictionary, agents: Node, locations: Node, connections: Node 
 		_show_item(command, agents)
 		return
 	var point := _point_for(action, command, agents, locations)
-	_marks.append({
+	_append_mark({
 		"action": action,
 		"point": point,
 		"target": _target_point(command, agents),
@@ -129,6 +152,19 @@ func play(command: Dictionary, agents: Node, locations: Node, connections: Node 
 		"age": 0.0,
 	})
 	queue_redraw()
+
+
+func _append_mark(mark: Dictionary) -> void:
+	if _lod in ["snap", "aggregate"]:
+		return
+	var cap := maxi(0, _TRANSIENT_CAP - _bubbles.size())
+	if cap == 0:
+		transients_dropped += 1
+		return
+	if _marks.size() >= cap:
+		_marks.pop_front()
+		transients_dropped += 1
+	_marks.append(mark)
 
 
 func _process(delta: float) -> void:
@@ -268,7 +304,7 @@ func _show_item(command: Dictionary, agents: Node) -> void:
 	if _objects != null:
 		_objects.hold_item(item_id)
 	ObserverLog.debug("motion", "item_started type=%s item_id=%s" % [type_name, item_id])
-	_marks.append({
+	_append_mark({
 		"action": "item",
 		"from": travel["from"],
 		"to": travel["to"],

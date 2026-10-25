@@ -48,11 +48,14 @@ signal civilization_layer_changed(layer_id: String, state: Dictionary)
 signal civilization_bundle_ready(cursor: Dictionary, layer_states: Dictionary)
 signal civilization_catalogue_changed(state: Dictionary)
 signal civilization_markers_changed(state: Dictionary)
+signal playback_bundle_ready(frame: Variant, cursor: Dictionary, states: Dictionary)
+signal playback_target_changed(target_tick: int, accepted_tick: int, skipped: int)
 
 const NAV_STACK_LIMIT := 16
 const BRANCH_PAGE_LIMIT := 50
 const MARKER_TYPE_BUDGET := 3
 const FOCUS_PROBE_LIMIT := 32
+const PLAYBACK_PRESENTATION_DEADLINE_MS := 2000
 
 var run_id := ""
 var origin := ""
@@ -112,6 +115,19 @@ var _focus_nav := ""
 var _probe_tick := 0
 var _probe_sequence: Variant = null
 var _last_frame: Variant = null
+var _playback_epoch := 0
+var _playback_request_id := ""
+var _playback_desired_tick := -1
+var _playback_pending_frame: Variant = null
+var _playback_pending_cursor: Dictionary = {}
+var _playback_last_accepted_tick := -1
+var _playback_last_step_usec := 0
+var _playback_detail := "full"
+var _playback_staged_count := 0
+var _playback_accepted_count := 0
+var _playback_skipped_count := 0
+var _playback_deadline: Timer
+var recorded_boundaries_only := false
 
 
 func _ready() -> void:
@@ -131,10 +147,7 @@ func _ready() -> void:
 		civilization_layer_changed.emit(layer_id, state)
 		civilization_source_updated.emit()
 	)
-	civilization.bundle_ready.connect(func(cursor: Dictionary, states: Dictionary) -> void:
-		civilization_bundle_ready.emit(cursor, states)
-		civilization_source_updated.emit()
-	)
+	civilization.bundle_ready.connect(_on_civilization_bundle_ready)
 	civilization.catalogue_changed.connect(func(state: Dictionary) -> void:
 		civilization_catalogue_changed.emit(state)
 		civilization_source_updated.emit()
@@ -153,6 +166,11 @@ func _ready() -> void:
 	_play_timer.name = "PlayTimer"
 	add_child(_play_timer)
 	_play_timer.timeout.connect(_on_play_step)
+	_playback_deadline = Timer.new()
+	_playback_deadline.one_shot = true
+	_playback_deadline.name = "PlaybackPresentationDeadline"
+	add_child(_playback_deadline)
+	_playback_deadline.timeout.connect(_on_playback_deadline)
 	var head_timer := Timer.new()
 	head_timer.wait_time = 2.0
 	head_timer.autostart = true
@@ -642,21 +660,25 @@ func load_more_lineage(panel: String) -> void:
 
 
 func set_civilization_layer_enabled(layer_id: String, value: bool) -> void:
+	_cancel_playback_staging("selector", _playing)
 	if civilization != null:
 		civilization.set_layer_enabled(layer_id, value)
 
 
 func set_civilization_layer_mode(layer_id: String, mode: String, owner_id: String = "") -> void:
+	_cancel_playback_staging("selector", _playing)
 	if civilization != null:
 		civilization.set_layer_mode(layer_id, mode, owner_id)
 
 
 func set_civilization_owner(owner_id: String) -> void:
+	_cancel_playback_staging("selector", _playing)
 	if civilization != null:
 		civilization.set_owner(owner_id)
 
 
 func set_civilization_filters(layer_id: String, values: Dictionary) -> void:
+	_cancel_playback_staging("selector", _playing)
 	if civilization != null:
 		civilization.set_filters(layer_id, values)
 
@@ -686,17 +708,379 @@ func load_more_civilization(layer_id: String) -> void:
 		civilization.load_more(layer_id)
 
 
+func load_more_civilization_markers(
+	from_tick: int,
+	to_tick: int,
+	evidence_class: String = "ANALYTICAL",
+	owner_id: String = "",
+	layer: String = "",
+) -> void:
+	if civilization != null:
+		civilization.load_more_markers(from_tick, to_tick, evidence_class, owner_id, layer)
+
+
+func load_more_civilization_catalogue(
+	evidence_class: String = "ANALYTICAL",
+	owner_id: String = "",
+	layer: String = "",
+) -> void:
+	if civilization != null:
+		civilization.load_more_catalogue(evidence_class, owner_id, layer)
+
+
+func set_recorded_boundaries_only(enabled: bool) -> bool:
+	_cancel_playback_staging("recorded_mode", false)
+	recorded_boundaries_only = enabled and not _catalogue_boundary_ticks().is_empty()
+	if _playing and not transport.paused:
+		_request_playback_state()
+	ObserverLog.debug(
+		"session",
+		"recorded_boundaries_only enabled=%s boundaries=%s" % [
+			recorded_boundaries_only,
+			_catalogue_boundary_ticks().size(),
+		],
+	)
+	return recorded_boundaries_only
+
+
 func refresh_civilization() -> void:
 	if civilization != null:
 		civilization.refresh_enabled()
 
 
 func restart_civilization_layer(layer_id: String) -> void:
+	_cancel_playback_staging("selector", _playing)
 	if civilization != null:
 		civilization.restart_layer(layer_id)
 
 
-func _generational_frame(frame: Variant) -> void:
+func _on_civilization_bundle_ready(cursor: Dictionary, states: Dictionary) -> void:
+	if _playback_pending_frame != null and _same_playback_cursor(cursor, _playback_pending_cursor):
+		_accept_playback_bundle(cursor, states)
+		return
+	civilization_bundle_ready.emit(cursor, states)
+	civilization_source_updated.emit()
+
+
+func playback_snapshot() -> Dictionary:
+	## Bounded test instrumentation: no payloads, digests or raw cursors.
+	return {
+		"playing": _playing,
+		"epoch": _playback_epoch,
+		"detail": _playback_detail,
+		"inflight": 0 if _playback_request_id.is_empty() else 1,
+		"pending_frame": _playback_pending_frame != null,
+		"desired_tick": _playback_desired_tick,
+		"last_accepted_tick": _playback_last_accepted_tick,
+		"staged": _playback_staged_count,
+		"accepted": _playback_accepted_count,
+		"skipped": _playback_skipped_count,
+	}
+
+
+func request_playback_state(target_tick: int = -1) -> void:
+	_request_playback_state(target_tick)
+
+
+func _request_playback_state(target_tick: int = -1) -> void:
+	if transport.mode != TransportScript.MODE_REPLAY:
+		return
+	var accepted_at_start := _playback_accepted_tick()
+	var paused_retry := transport.paused and target_tick > 0 and target_tick == accepted_at_start
+	if not _playing and not paused_retry:
+		return
+	if transport.paused and not paused_retry:
+		return
+	if not _playback_request_id.is_empty():
+		var inflight_target := target_tick if target_tick > 0 else _playback_target(-1)
+		if inflight_target > _playback_desired_tick:
+			_playback_desired_tick = inflight_target
+		return
+	if _playback_pending_frame != null:
+		var staged_target := target_tick if target_tick > 0 else _playback_target(-1)
+		if staged_target > _playback_desired_tick:
+			_playback_desired_tick = staged_target
+		return
+	var target := 0
+	if recorded_boundaries_only and not paused_retry:
+		target = _next_recorded_boundary(accepted_at_start)
+		if target <= 0:
+			_stop_at_horizon(accepted_at_start)
+			return
+	else:
+		target = target_tick if paused_retry else _playback_target(target_tick)
+	if target <= 0:
+		return
+	var horizon := _playback_horizon()
+	if horizon > 0 and target > horizon:
+		target = horizon
+	var accepted := accepted_at_start if not paused_retry else _playback_accepted_tick()
+	if target <= accepted and not paused_retry:
+		_stop_at_horizon(accepted)
+		return
+	_playback_desired_tick = target
+	_playback_request_id = _request(
+		"state_playback",
+		{"tick": target},
+		-1,
+		{"playback_epoch": _playback_epoch, "playback_tick": target},
+	)
+	if _playback_request_id.is_empty():
+		status_changed.emit("playback_unavailable", "playback_unavailable")
+		ObserverLog.warn("session", "playback_request_failed reason_code=read_only")
+		return
+	status_changed.emit("playback_loading", "tick %s" % target)
+	playback_target_changed.emit(target, _playback_accepted_tick(), _playback_skipped_count)
+	ObserverLog.debug(
+		"session",
+		"playback_target tick=%s detail=%s inflight=1" % [target, _playback_detail],
+	)
+
+
+func _playback_target(target_tick: int) -> int:
+	var accepted := _playback_accepted_tick()
+	if target_tick > accepted:
+		return target_tick
+	var base := maxi(accepted, _playback_desired_tick)
+	var now := Time.get_ticks_usec()
+	var elapsed := 0.6
+	if _playback_last_step_usec > 0:
+		elapsed = clampf(float(now - _playback_last_step_usec) / 1000000.0, 0.02, 2.0)
+	_playback_last_step_usec = now
+	var advance := maxi(1, int(ceil(float(transport.speed) * elapsed)))
+	return base + advance
+
+
+func _playback_accepted_tick() -> int:
+	if _playback_last_accepted_tick >= 0:
+		return _playback_last_accepted_tick
+	if world != null:
+		return int(world.tick)
+	return int(transport.tick)
+
+
+func _catalogue_boundary_ticks() -> Array:
+	var ticks: Array = []
+	if civilization == null:
+		return ticks
+	if str(civilization.catalogue.get("status", "")) != "available":
+		return ticks
+	for boundary in civilization.catalogue.get("boundaries", []):
+		var tick := 0
+		if typeof(boundary) == TYPE_DICTIONARY:
+			tick = int(boundary.get("boundary_tick", 0))
+		elif boundary is Object:
+			tick = int(boundary.get("boundary_tick"))
+		if tick > 0:
+			ticks.append(tick)
+	ticks.sort()
+	return ticks
+
+
+func _next_recorded_boundary(after_tick: int) -> int:
+	for tick in _catalogue_boundary_ticks():
+		if int(tick) > after_tick:
+			return int(tick)
+	return -1
+
+
+func _playback_horizon() -> int:
+	var horizon := int(transport.live_tick)
+	if transport.latest_tick != null:
+		horizon = maxi(horizon, int(transport.latest_tick))
+	if civilization != null:
+		for boundary in civilization.catalogue.get("boundaries", []):
+			if typeof(boundary) == TYPE_DICTIONARY:
+				horizon = maxi(horizon, int(boundary.get("tick", 0)))
+	return horizon
+
+
+func _stop_at_horizon(tick: int) -> void:
+	_playing = false
+	_playback_desired_tick = -1
+	if _play_timer != null:
+		_play_timer.stop()
+	if _playback_deadline != null:
+		_playback_deadline.stop()
+	status_changed.emit("playback_complete", "tick %s" % tick)
+	ObserverLog.info("session", "playback_horizon tick=%s" % tick)
+
+
+func _stage_playback_frame(frame: Variant, playback_epoch: int = -1) -> void:
+	if playback_epoch >= 0 and playback_epoch != _playback_epoch:
+		ObserverLog.debug("session", "playback_ignored reason_code=stale_epoch")
+		return
+	if frame == null or frame.world == null or frame.cursor == null:
+		ObserverLog.warn("session", "playback_ignored reason_code=invalid_frame")
+		return
+	_playback_request_id = ""
+	_playback_staged_count += 1
+	var cursor: Dictionary = _playback_cursor_for(frame)
+	_playback_pending_frame = frame
+	_playback_pending_cursor = cursor
+	var staged_tick := int(frame.world.tick)
+	if _playback_desired_tick <= staged_tick:
+		_playback_desired_tick = staged_tick
+	if civilization == null:
+		_accept_playback_bundle(cursor, {})
+		return
+	var layers: Array = civilization.enabled_ids()
+	if layers.is_empty():
+		_accept_playback_bundle(cursor, {})
+		return
+	status_changed.emit("playback_staging", "tick %s" % str(frame.world.tick))
+	if _playback_deadline != null:
+		_playback_deadline.start(float(PLAYBACK_PRESENTATION_DEADLINE_MS) / 1000.0)
+	civilization.prepare_bundle(cursor, layers)
+	ObserverLog.debug(
+		"session",
+		"playback_staged tick=%s layers=%s detail=%s" % [
+			str(frame.world.tick),
+			layers.size(),
+			_playback_detail,
+		],
+	)
+
+
+func _accept_playback_bundle(cursor: Dictionary, states: Dictionary) -> void:
+	if _playback_pending_frame == null:
+		return
+	if not _same_playback_cursor(cursor, _playback_pending_cursor):
+		ObserverLog.debug("session", "playback_ignored reason_code=bundle_cursor_mismatch")
+		return
+	if _playback_deadline != null:
+		_playback_deadline.stop()
+	var frame: Variant = _playback_pending_frame
+	_playback_pending_frame = null
+	_playback_pending_cursor = {}
+	_playback_request_id = ""
+	var tick := int(frame.world.tick)
+	var previous := _playback_last_accepted_tick
+	if previous >= 0 and tick > previous + 1:
+		_playback_skipped_count += tick - previous - 1
+	_playback_last_accepted_tick = tick
+	_playback_last_step_usec = Time.get_ticks_usec()
+	_playback_accepted_count += 1
+	if civilization != null:
+		civilization.adopt_cursor(cursor)
+	_last_frame = frame
+	world = frame.world
+	cursor_after_tick = frame.cursor.after_tick
+	cursor_after_sequence = frame.cursor.after_sequence
+	_view_transport(frame)
+	_generational_frame(frame, false)
+	playback_bundle_ready.emit(frame, cursor, states)
+	status_changed.emit("playback", "tick %s" % tick)
+	ObserverLog.debug(
+		"session",
+		"playback_accepted tick=%s layers=%s ready=1" % [tick, states.size()],
+	)
+	if _playing and not transport.paused:
+		if _playback_desired_tick > tick:
+			_request_playback_state(_playback_desired_tick)
+		else:
+			_schedule_step()
+
+
+func _on_playback_deadline() -> void:
+	if _playback_pending_frame == null:
+		return
+	var cursor: Dictionary = _playback_pending_cursor.duplicate(true)
+	var settled := false
+	if civilization != null:
+		settled = civilization.settle_bundle(cursor, "presentation_timeout")
+	if _playback_pending_frame == null:
+		ObserverLog.warn(
+			"session",
+			"playback_timeout tick=%s layers=0" % int(cursor.get("tick", 0)),
+		)
+		return
+	if not settled and civilization != null:
+		civilization.cancel_bundle("presentation_timeout")
+	var states := {}
+	if civilization != null:
+		for layer_id in civilization.enabled_ids():
+			var existing: Dictionary = civilization.states.get(layer_id, {}).duplicate(true)
+			existing["status"] = "unavailable"
+			existing["reason_code"] = "presentation_timeout"
+			existing["layer"] = layer_id
+			existing["rows"] = []
+			existing["next_cursor"] = null
+			existing["truncated"] = false
+			states[layer_id] = existing
+	ObserverLog.warn(
+		"session",
+		"playback_timeout tick=%s layers=%s settled=%s" % [
+			int(cursor.get("tick", 0)),
+			states.size(),
+			settled,
+		],
+	)
+	_accept_playback_bundle(cursor, states)
+
+
+func _cancel_playback_staging(reason: String, resume: bool) -> void:
+	_playback_epoch += 1
+	_playback_desired_tick = -1
+	_playback_request_id = ""
+	var had_pending := _playback_pending_frame != null
+	_playback_pending_frame = null
+	_playback_pending_cursor = {}
+	if _playback_deadline != null:
+		_playback_deadline.stop()
+	if _play_timer != null:
+		_play_timer.stop()
+	if had_pending and civilization != null:
+		civilization.cancel_bundle(reason)
+	ObserverLog.debug("session", "playback_cancelled reason=%s epoch=%s" % [reason, _playback_epoch])
+	if resume and _playing:
+		_schedule_step()
+
+
+func _reset_playback() -> void:
+	_playback_epoch += 1
+	_playback_request_id = ""
+	_playback_desired_tick = -1
+	_playback_pending_frame = null
+	_playback_pending_cursor = {}
+	_playback_last_accepted_tick = -1
+	_playback_last_step_usec = 0
+	_playback_detail = "full"
+	_playback_staged_count = 0
+	_playback_accepted_count = 0
+	_playback_skipped_count = 0
+	recorded_boundaries_only = false
+	if _playback_deadline != null:
+		_playback_deadline.stop()
+	if _play_timer != null:
+		_play_timer.stop()
+
+
+func _playback_cursor_for(frame: Variant) -> Dictionary:
+	var tick := int(frame.world.tick)
+	var after_tick: Variant = frame.cursor.after_tick
+	var partial := after_tick != null and tick <= int(after_tick)
+	return {
+		"run_id": run_id,
+		"tick": int(after_tick) if partial else tick,
+		"revision": int(frame.world.revision),
+		"boundary_tick": null if partial else tick,
+		"through_sequence": frame.cursor.after_sequence if partial else null,
+	}
+
+
+func _same_playback_cursor(left: Dictionary, right: Dictionary) -> bool:
+	if left.is_empty() or right.is_empty():
+		return false
+	return (
+		str(left.get("run_id", "")) == str(right.get("run_id", ""))
+		and int(left.get("tick", -1)) == int(right.get("tick", -2))
+		and int(left.get("revision", -1)) == int(right.get("revision", -2))
+		and left.get("boundary_tick", null) == right.get("boundary_tick", null)
+	)
+
+
+func _generational_frame(frame: Variant, refresh_civilization: bool = true) -> void:
 	if generational == null or not _opened:
 		return
 	generational.note_world(frame.world)
@@ -706,7 +1090,7 @@ func _generational_frame(frame: Variant) -> void:
 	if private_lineage != null:
 		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
 		private_lineage.on_frame(frame)
-	if civilization != null:
+	if civilization != null and refresh_civilization:
 		civilization.set_context(run_id, _http_epoch, _credential_generation)
 		civilization.on_frame(frame, _http_epoch, _credential_generation)
 
@@ -734,6 +1118,7 @@ func configure_credentials(inspection_token: String, debug_token: String) -> boo
 	_debug_token = debug_token
 	_token = _inspection_token
 	_credential_generation += 1
+	_cancel_playback_staging("credentials", false)
 	_cancel_http("credentials")
 	if generational != null:
 		if inspection_changed:
@@ -811,8 +1196,7 @@ func _teardown_source() -> void:
 		_stream.close_stream(true)
 	ObserverLog.debug("session", "stream_closed")
 	_playing = false
-	if _play_timer != null:
-		_play_timer.stop()
+	_reset_playback()
 	_seek_serial += 1
 	_seek_meta.clear()
 	_cancel_http("switch_run")
@@ -857,6 +1241,7 @@ func _start() -> void:
 		_inspection_token = ""
 		_debug_token = ""
 		_credential_generation += 1
+		_cancel_playback_staging("credentials", false)
 		if generational != null:
 			generational.clear()
 		if private_lineage != null:
@@ -937,6 +1322,7 @@ func fetch_run(seek_id: int = -1) -> void:
 func _begin_seek(event_tick: int, event_sequence: int, event: Variant) -> void:
 	var forward := _is_forward(event_tick, event_sequence)
 	_enter_replay()
+	_cancel_playback_staging("seek", false)
 	if civilization != null:
 		civilization.on_seek()
 	_cancel_http("seek")
@@ -1244,7 +1630,12 @@ func _request_path(
 	)
 
 
-func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
+func _request(
+	kind: String,
+	query: Dictionary = {},
+	seek_id: int = -1,
+	extra: Dictionary = {},
+) -> String:
 	var route_name := kind
 	if (
 		kind == "gap"
@@ -1269,7 +1660,7 @@ func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
 	last_request = {"kind": kind, "query": request_query.duplicate()}
 	request_log.append(last_request)
 	if _http == null:
-		return
+		return ""
 	var built: Dictionary = Urls.build_get(origin, path, request_query)
 	if not bool(built.get("ok", false)):
 		if seek_id >= 0:
@@ -1279,11 +1670,15 @@ func _request(kind: String, query: Dictionary = {}, seek_id: int = -1) -> void:
 			)
 		else:
 			_fail(str(built.get("reason_code", "read_only")))
-		return
+		return ""
 	_request_serial += 1
 	var request_id := str(_request_serial)
-	_pending[request_id] = {"kind": kind, "seek_id": seek_id, "epoch": _http_epoch}
+	var pending := {"kind": kind, "seek_id": seek_id, "epoch": _http_epoch}
+	for key in extra.keys():
+		pending[key] = extra[key]
+	_pending[request_id] = pending
 	_http.get_json(str(built["url"]), request_id, _token)
+	return request_id
 
 
 func _on_http(route: String, status: int, body: Variant, reason_code: String) -> void:
@@ -1301,6 +1696,30 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 	var seek_id := int(meta.get("seek_id", -1))
 	if seek_id >= 0 and seek_id < _seek_serial:
 		ObserverLog.debug("session", "seek_ignored reason_code=stale_response")
+		return
+	if kind == "state_playback":
+		if int(meta.get("playback_epoch", -1)) != _playback_epoch:
+			ObserverLog.debug("session", "playback_ignored reason_code=stale_epoch")
+			return
+		if route == _playback_request_id:
+			_playback_request_id = ""
+		if reason_code != "":
+			_playing = false
+			if _play_timer != null:
+				_play_timer.stop()
+			status_changed.emit("playback_stopped", reason_code)
+			ObserverLog.warn("session", "playback_stopped reason_code=%s" % reason_code)
+			return
+		var playback_frame = Protocol.parse_frame(body)
+		if not playback_frame.ok:
+			_playing = false
+			status_changed.emit("playback_stopped", playback_frame.reason_code)
+			ObserverLog.warn(
+				"session",
+				"playback_stopped reason_code=%s" % playback_frame.reason_code,
+			)
+			return
+		_stage_playback_frame(playback_frame.value, int(meta.get("playback_epoch", -1)))
 		return
 	if str(meta.get("source", "")) == "generational":
 		generational.handle_response(meta, body, reason_code, status)
@@ -1684,6 +2103,9 @@ func _adopt_frame(frame: Variant, adopt_cursor: bool) -> void:
 func _apply_sought_frame(frame: Variant, seek_id: int) -> void:
 	var meta: Dictionary = _seek_meta.get(seek_id, {})
 	_last_frame = frame
+	_playback_last_accepted_tick = int(frame.world.tick)
+	_playback_last_step_usec = Time.get_ticks_usec()
+	_playback_desired_tick = -1
 	world = frame.world
 	cursor_after_tick = frame.cursor.after_tick
 	cursor_after_sequence = frame.cursor.after_sequence
@@ -1845,14 +2267,19 @@ func play() -> void:
 		_live_buffer.clear()
 		return
 	_playing = true
+	_playback_last_step_usec = 0
+	_playback_desired_tick = -1
+	_request_playback_state()
 	_schedule_step()
 
 
 func pause() -> void:
 	_playing = false
 	transport.set_paused(true)
-	if _play_timer != null:
-		_play_timer.stop()
+	var was_staging := _playback_pending_frame != null
+	_cancel_playback_staging("pause", false)
+	if was_staging and civilization != null:
+		civilization.refresh_enabled()
 	if transport.mode == TransportScript.MODE_LIVE:
 		var sequence_text := "null" if transport.sequence == null else str(int(transport.sequence))
 		ObserverLog.info(
@@ -1923,8 +2350,7 @@ func jump_to_event(event_tick: int, event_sequence: int) -> void:
 
 func return_to_live() -> void:
 	_playing = false
-	if _play_timer != null:
-		_play_timer.stop()
+	_cancel_playback_staging("return_live", false)
 	_live_buffer.clear()
 	transport.clear_behind()
 	var sequence_text := "null" if transport.sequence == null else str(int(transport.sequence))
@@ -1940,7 +2366,10 @@ func return_to_live() -> void:
 
 
 func set_speed(next_speed: float) -> void:
-	transport.set_speed(next_speed)
+	var changed := transport.set_speed(next_speed)
+	_playback_detail = Playback.level_of_detail(next_speed)
+	if changed and _playing and _playback_pending_frame == null:
+		_schedule_step()
 
 
 func _poll_live_head() -> void:
@@ -1962,7 +2391,7 @@ func _schedule_step() -> void:
 func _on_play_step() -> void:
 	if not _playing or transport.paused or transport.mode != TransportScript.MODE_REPLAY:
 		return
-	next_event()
+	_request_playback_state()
 
 
 func _seek_target(target: Dictionary) -> void:

@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/civilization_timeline.gd" id="1_civilization_timeline"]
+
+[node name="CivilizationTimeline" type="Control"]
+custom_minimum_size = Vector2(900, 112)
+offset_left = 16.0
+offset_top = 356.0
+offset_right = 1100.0
+offset_bottom = 468.0
+script = ExtResource("1_civilization_timeline")

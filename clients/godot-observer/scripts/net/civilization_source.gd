@@ -13,6 +13,12 @@ const MAX_LAYER_BYTES := 8 * 1024 * 1024
 const MAX_CACHE_BOUNDARIES := 4
 const MAX_CACHE_BYTES := 32 * 1024 * 1024
 const MAX_INFLIGHT := 2
+const MAX_MARKER_WINDOWS := 4
+const MAX_MARKER_PAGES := 8
+const MAX_CATALOGUE_PAGES := 8
+const MAX_MARKERS := 200
+const MAX_CATALOGUE_BOUNDARIES := 200
+const MAX_MARKER_CACHE_BYTES := 8 * 1024 * 1024
 const PAGE_LIMIT := 100
 const MAP_LAYERS := ["regions", "routes", "locations", "projects", "repositories", "records"]
 const CAPTURED_LAYERS := ["settlements", "migration", "trade", "culture", "technology", "social_groups", "institutions"]
@@ -27,7 +33,9 @@ var filters: Dictionary = {}
 var selected_owner_id := ""
 var selected_owner_generation := 0
 var catalogue: Dictionary = {}
+var catalogue_pages := 0
 var markers: Dictionary = {}
+var marker_windows: Dictionary = {}
 
 var _sink: Callable
 var _run_id := ""
@@ -47,6 +55,8 @@ var _active_bundle: Dictionary = {}
 var _queued_bundle: Dictionary = {}
 var _boundary_order: Array = []
 var _boundary_bytes: Dictionary = {}
+var _marker_window_order: Array = []
+var _marker_window_bytes: Dictionary = {}
 var _cursor: Dictionary = {}
 var _partial_prefix := false
 var _last_frame_epoch := -1
@@ -163,6 +173,33 @@ func on_frame(frame: Variant, epoch: int = -1, credential_generation: int = -1) 
 		refresh_enabled()
 
 
+func adopt_cursor(cursor: Dictionary) -> void:
+	_cursor = _normalize_cursor(cursor)
+	_partial_prefix = _cursor.get("boundary_tick", null) == null
+	_mark_stale()
+
+
+func settle_bundle(cursor: Dictionary, reason_code: String) -> bool:
+	## Presentation deadline: terminalize only this bundle's pending layers.
+	if _active_bundle.is_empty():
+		return false
+	if not _same_cursor(_active_bundle["cursor"], _normalize_cursor(cursor)):
+		return false
+	var pending: Array = _active_bundle["pending"].keys()
+	for request_key in _inflight.keys().duplicate():
+		if str(_inflight[request_key]) in pending:
+			_cancelled_keys[request_key] = true
+			_inflight.erase(request_key)
+	for layer_id in pending:
+		_queued_layers.erase(layer_id)
+		var state: Dictionary = _unavailable(layer_id, reason_code)
+		_set_state(layer_id, state, false)
+		_active_bundle["pending"].erase(layer_id)
+		_active_bundle["states"][layer_id] = state.duplicate(true)
+	_check_bundle()
+	return true
+
+
 func note_live_event_ahead() -> void:
 	_frame_generation += 1
 	cancel_bundle("event_ahead")
@@ -194,7 +231,11 @@ func clear(reason: String = "") -> void:
 	layer_modes.clear()
 	filters.clear()
 	catalogue.clear()
+	catalogue_pages = 0
 	markers.clear()
+	marker_windows.clear()
+	_marker_window_order.clear()
+	_marker_window_bytes.clear()
 	selected_owner_id = ""
 	_inflight.clear()
 	_cancelled_keys.clear()
@@ -225,6 +266,15 @@ func clear_private(reason_code: String = "debug_revoked") -> void:
 			_cancel_layer_requests(layer_id)
 	if not catalogue.is_empty() and str(catalogue.get("evidence_class", "")) != Evidence.OBJECTIVE:
 		catalogue = {}
+		catalogue_pages = 0
+	var private_keys: Array = []
+	for key in marker_windows.keys():
+		if str(marker_windows[key].get("evidence_class", "")) != Evidence.OBJECTIVE:
+			private_keys.append(key)
+	for key in private_keys:
+		marker_windows.erase(key)
+		_marker_window_order.erase(key)
+		_marker_window_bytes.erase(key)
 	if not markers.is_empty() and str(markers.get("evidence_class", "")) != Evidence.OBJECTIVE:
 		markers = {}
 
@@ -244,7 +294,11 @@ func on_seek() -> void:
 	_selector_generation += 1
 	states.clear()
 	catalogue.clear()
+	catalogue_pages = 0
 	markers.clear()
+	marker_windows.clear()
+	_marker_window_order.clear()
+	_marker_window_bytes.clear()
 	_queue.clear()
 	_queued_layers.clear()
 	_inflight.clear()
@@ -304,7 +358,30 @@ func request_markers(
 ) -> void:
 	if _run_id.is_empty():
 		return
-	markers = {"status": "loading", "markers": [], "requested_window": {"start_tick": from_tick, "end_tick": to_tick}}
+	var key := _marker_key(evidence_class, owner_id, layer, from_tick, to_tick)
+	var existing: Dictionary = marker_windows.get(key, {})
+	if str(existing.get("status", "")) == "loading":
+		return
+	var requested_window := {"start_tick": from_tick, "end_tick": to_tick}
+	var state := {
+		"status": "loading",
+		"reason_code": null,
+		"restart_required": false,
+		"evidence_class": evidence_class,
+		"owner_id": "" if owner_id.is_empty() else owner_id,
+		"layer": layer,
+		"markers": [],
+		"missing_intervals": [],
+		"requested_window": requested_window,
+		"next_cursor": null,
+		"truncated": false,
+		"pages": 0,
+		"window_key": key,
+		"publication": null,
+		"coverage": null,
+	}
+	_store_marker_window(key, state)
+	markers = state.duplicate(true)
 	var query := {
 		"evidence_class": evidence_class,
 		"from_tick": from_tick,
@@ -325,6 +402,7 @@ func request_markers(
 			"layer": "markers",
 			"capability": "debug" if evidence_class != "OBJECTIVE" else "inspection",
 			"request_key": request_key,
+			"marker_key": key,
 			"evidence_class": evidence_class,
 			"owner_id": owner_id,
 			"filters": {"layer": layer},
@@ -336,6 +414,85 @@ func request_markers(
 		},
 		query,
 	)
+
+
+func load_more_markers(
+	from_tick: int,
+	to_tick: int,
+	evidence_class: String = "ANALYTICAL",
+	owner_id: String = "",
+	layer: String = "",
+) -> void:
+	var key := _marker_key(evidence_class, owner_id, layer, from_tick, to_tick)
+	var state: Dictionary = marker_windows.get(key, {})
+	if state.is_empty() or state.get("next_cursor", null) == null:
+		return
+	if int(state.get("pages", 0)) >= MAX_MARKER_PAGES:
+		state["truncated"] = true
+		state["next_cursor"] = null
+		state["reason_code"] = "page_cap"
+		_store_marker_window(key, state)
+		markers = state.duplicate(true)
+		markers_changed.emit(markers.duplicate(true))
+		return
+	var query := {
+		"evidence_class": evidence_class,
+		"from_tick": from_tick,
+		"to_tick": to_tick,
+		"limit": PAGE_LIMIT,
+		"cursor": state["next_cursor"],
+	}
+	if not owner_id.is_empty():
+		query["owner_id"] = owner_id
+	if not layer.is_empty():
+		query["layer"] = layer
+	var request_key := _request_key("markers", {"tick": from_tick, "end_tick": to_tick}, evidence_class, owner_id, layer, null)
+	request_key = "%s|append|%s" % [request_key, str(state["next_cursor"])]
+	if _has_pending(request_key):
+		return
+	_request(
+		"civilization_markers",
+		"/v1/simulations/%s/observer/civilization/markers" % _run_id,
+		{
+			"source": "civilization",
+			"kind": "civilization_markers",
+			"layer": "markers",
+			"capability": "debug" if evidence_class != "OBJECTIVE" else "inspection",
+			"request_key": request_key,
+			"marker_key": key,
+			"append": true,
+			"evidence_class": evidence_class,
+			"owner_id": owner_id,
+			"filters": {"layer": layer},
+			"cursor": {"tick": from_tick, "end_tick": to_tick},
+			"source_generation": _source_generation,
+			"frame_generation": _frame_generation,
+			"selector_generation": _selector_generation,
+			"private_generation": _private_generation,
+		},
+		query,
+	)
+
+
+func _marker_key(evidence_class: String, owner_id: String, layer: String, from_tick: int, to_tick: int) -> String:
+	return "markers|%s|%s|%s|%s|%s" % [evidence_class, owner_id, layer, from_tick, to_tick]
+
+
+func _store_marker_window(key: String, state: Dictionary) -> void:
+	if not marker_windows.has(key):
+		_marker_window_order.append(key)
+	marker_windows[key] = state
+	_marker_window_bytes[key] = JSON.stringify(state).to_utf8_buffer().size()
+	var total := 0
+	for value in _marker_window_bytes.values():
+		total += int(value)
+	while _marker_window_order.size() > MAX_MARKER_WINDOWS or (
+		total > MAX_MARKER_CACHE_BYTES and _marker_window_order.size() > 1
+	):
+		var evicted: String = _marker_window_order.pop_front()
+		total -= int(_marker_window_bytes.get(evicted, 0))
+		_marker_window_bytes.erase(evicted)
+		marker_windows.erase(evicted)
 
 
 func handle_response(meta: Dictionary, body: Variant, reason: String, _status: int) -> void:
@@ -499,7 +656,17 @@ func restart_layer(layer_id: String) -> void:
 func request_catalogue(evidence_class: String = "ANALYTICAL", owner_id: String = "", layer: String = "") -> void:
 	if _run_id.is_empty():
 		return
-	catalogue = {"status": "loading"}
+	catalogue_pages = 0
+	catalogue = {
+		"status": "loading",
+		"evidence_class": evidence_class,
+		"owner_id": "" if owner_id.is_empty() else owner_id,
+		"layer": layer,
+		"boundaries": [],
+		"next_cursor": null,
+		"truncated": false,
+		"pages": 0,
+	}
 	var query := {"evidence_class": evidence_class, "limit": PAGE_LIMIT}
 	if not owner_id.is_empty():
 		query["owner_id"] = owner_id
@@ -515,6 +682,41 @@ func request_catalogue(evidence_class: String = "ANALYTICAL", owner_id: String =
 			"layer": "catalogue",
 			"capability": "debug" if evidence_class != "OBJECTIVE" else "inspection",
 			"request_key": request_key,
+			"evidence_class": evidence_class,
+			"owner_id": owner_id,
+			"filters": {"layer": layer},
+			"source_generation": _source_generation,
+			"frame_generation": _frame_generation,
+			"selector_generation": _selector_generation,
+			"private_generation": _private_generation,
+		},
+		query,
+	)
+
+
+func load_more_catalogue(evidence_class: String = "ANALYTICAL", owner_id: String = "", layer: String = "") -> void:
+	if catalogue.get("next_cursor", null) == null or int(catalogue.get("pages", 0)) >= MAX_CATALOGUE_PAGES:
+		return
+	var query := {
+		"evidence_class": evidence_class,
+		"limit": PAGE_LIMIT,
+		"cursor": catalogue["next_cursor"],
+	}
+	if not owner_id.is_empty():
+		query["owner_id"] = owner_id
+	if not layer.is_empty():
+		query["layer"] = layer
+	var request_key := _request_key("catalogue", {"evidence_class": evidence_class, "owner_id": owner_id, "layer": layer, "cursor": str(catalogue["next_cursor"])}, evidence_class, owner_id, layer, null)
+	_request(
+		"civilization_catalogue",
+		"/v1/simulations/%s/observer/civilization/catalogue" % _run_id,
+		{
+			"source": "civilization",
+			"kind": "civilization_catalogue",
+			"layer": "catalogue",
+			"capability": "debug" if evidence_class != "OBJECTIVE" else "inspection",
+			"request_key": request_key,
+			"append": true,
 			"evidence_class": evidence_class,
 			"owner_id": owner_id,
 			"filters": {"layer": layer},
@@ -737,21 +939,58 @@ func _apply_markers(meta: Dictionary, parsed: Dictionary) -> void:
 	if model.requested_window.start_tick != int(meta.get("cursor", {}).get("tick", -1)):
 		_apply_error(meta, "civilization_scope_mismatch")
 		return
-	markers = {
+	var key := str(meta.get("marker_key", ""))
+	var previous: Dictionary = marker_windows.get(key, {})
+	var append := bool(meta.get("append", false))
+	var publication: Variant = _publication_dict(model.publication)
+	if append and not previous.is_empty() and not _same_publication_dict(previous.get("publication", null), publication):
+		_apply_error(meta, "civilization_publication_changed")
+		return
+	var merged: Array = []
+	var seen := {}
+	if append and previous.get("requested_window", null) == _window_dict(model.requested_window):
+		for row in previous.get("markers", []):
+			seen[str(row.marker_id)] = row
+			merged.append(row)
+	for row in model.markers:
+		if seen.has(str(row.marker_id)):
+			continue
+		seen[str(row.marker_id)] = row
+		merged.append(row)
+	merged.sort_custom(func(left: Variant, right: Variant) -> bool:
+		if int(left.seek_boundary) != int(right.seek_boundary):
+			return int(left.seek_boundary) < int(right.seek_boundary)
+		if str(left.marker_type) != str(right.marker_type):
+			return str(left.marker_type) < str(right.marker_type)
+		return str(left.marker_id) < str(right.marker_id)
+	)
+	var pages := int(previous.get("pages", 0)) + 1 if append else 1
+	var truncated := bool(model.truncated) or merged.size() >= MAX_MARKERS
+	var next_cursor: Variant = model.next_cursor
+	if merged.size() >= MAX_MARKERS or pages >= MAX_MARKER_PAGES:
+		merged = merged.slice(0, MAX_MARKERS)
+		truncated = truncated or next_cursor != null
+		next_cursor = null
+	var state := {
 		"status": "available" if model.availability == "available" else "unavailable",
 		"reason_code": model.reason,
+		"restart_required": false,
 		"evidence_class": _evidence_display(model.scope.evidence_class),
 		"owner_id": model.scope.owner_id,
 		"layer": model.scope.layer,
-		"publication": _publication_dict(model.publication),
-		"markers": model.markers.slice(0, 200),
+		"publication": publication,
+		"markers": merged,
 		"missing_intervals": _windows_list(model.missing_intervals),
 		"coverage": model.coverage,
-		"next_cursor": model.next_cursor,
-		"truncated": model.truncated,
+		"next_cursor": next_cursor,
+		"truncated": truncated,
 		"requested_window": _window_dict(model.requested_window),
 		"request_key": str(meta.get("request_key", "")),
+		"window_key": key,
+		"pages": pages,
 	}
+	_store_marker_window(key, state)
+	markers = state.duplicate(true)
 	markers_changed.emit(markers.duplicate(true))
 
 
@@ -773,17 +1012,44 @@ func _apply_catalogue(meta: Dictionary, parsed: Dictionary) -> void:
 	if _scope_layer_text(model.scope.layer) != str(meta.get("filters", {}).get("layer", "")):
 		_apply_error(meta, "civilization_scope_mismatch")
 		return
+	var append := bool(meta.get("append", false))
+	var publication: Variant = _publication_dict(model.publication)
+	if append and not catalogue.is_empty() and not _same_publication_dict(catalogue.get("publication", null), publication):
+		_apply_error(meta, "civilization_publication_changed")
+		return
+	var boundaries: Array = []
+	var seen := {}
+	if append:
+		for boundary in catalogue.get("boundaries", []):
+			seen[int(boundary.boundary_tick)] = boundary
+			boundaries.append(boundary)
+	for boundary in model.boundaries:
+		if seen.has(int(boundary.boundary_tick)):
+			continue
+		seen[int(boundary.boundary_tick)] = boundary
+		boundaries.append(boundary)
+	boundaries.sort_custom(func(left: Variant, right: Variant) -> bool:
+		return int(left.boundary_tick) < int(right.boundary_tick)
+	)
+	catalogue_pages = int(catalogue.get("pages", 0)) + 1 if append else 1
+	var truncated := bool(model.truncated) or boundaries.size() >= MAX_CATALOGUE_BOUNDARIES
+	var next_cursor: Variant = model.next_cursor
+	if boundaries.size() >= MAX_CATALOGUE_BOUNDARIES or catalogue_pages >= MAX_CATALOGUE_PAGES:
+		boundaries = boundaries.slice(0, MAX_CATALOGUE_BOUNDARIES)
+		truncated = truncated or next_cursor != null
+		next_cursor = null
 	catalogue = {
 		"status": "available" if model.availability == "available" else "unavailable",
 		"reason_code": model.reason,
 		"evidence_class": _evidence_display(model.scope.evidence_class),
 		"owner_id": model.scope.owner_id,
 		"layer": model.scope.layer,
-		"publication": _publication_dict(model.publication),
-		"boundaries": model.boundaries,
+		"publication": publication,
+		"boundaries": boundaries,
 		"coverage": model.coverage,
-		"next_cursor": model.next_cursor,
-		"truncated": model.truncated,
+		"next_cursor": next_cursor,
+		"truncated": truncated,
+		"pages": catalogue_pages,
 		"request_key": str(meta.get("request_key", "")),
 	}
 	catalogue_changed.emit(catalogue.duplicate(true))
@@ -803,13 +1069,28 @@ func _apply_error(meta: Dictionary, reason: String) -> void:
 	elif reason == "gone" or reason in ["civilization_cursor_expired", "civilization_publication_gone"]:
 		code = "cursor_gone"
 	if layer_id == "markers":
-		markers = {
+		var marker_key := str(meta.get("marker_key", ""))
+		var requested: Dictionary = meta.get("cursor", {})
+		var unavailable := {
 			"status": "unavailable",
 			"reason_code": code,
 			"restart_required": code == "cursor_gone",
+			"evidence_class": _evidence_display(str(meta.get("evidence_class", ""))),
+			"owner_id": meta.get("owner_id", null),
+			"layer": str(meta.get("filters", {}).get("layer", "")),
 			"markers": [],
 			"missing_intervals": [],
+			"requested_window": {
+				"start_tick": int(requested.get("tick", 0)),
+				"end_tick": int(requested.get("end_tick", 0)),
+			},
+			"window_key": marker_key,
+			"next_cursor": null,
+			"truncated": false,
+			"pages": int(marker_windows.get(marker_key, {}).get("pages", 0)),
 		}
+		_store_marker_window(marker_key, unavailable)
+		markers = unavailable.duplicate(true)
 		markers_changed.emit(markers.duplicate(true))
 		return
 	if layer_id == "catalogue":
@@ -817,8 +1098,15 @@ func _apply_error(meta: Dictionary, reason: String) -> void:
 			"status": "unavailable",
 			"reason_code": code,
 			"restart_required": code == "cursor_gone",
+			"evidence_class": _evidence_display(str(meta.get("evidence_class", ""))),
+			"owner_id": meta.get("owner_id", null),
+			"layer": str(meta.get("filters", {}).get("layer", "")),
 			"boundaries": [],
+			"next_cursor": null,
+			"truncated": false,
+			"pages": int(catalogue.get("pages", 0)),
 		}
+		catalogue_pages = int(catalogue.get("pages", 0))
 		catalogue_changed.emit(catalogue.duplicate(true))
 		return
 	var state := _unavailable(layer_id, code)
@@ -869,7 +1157,7 @@ func _set_terminal(layer_id: String, state: Dictionary) -> void:
 	_bundle_terminal(layer_id, state)
 
 
-func _set_state(layer_id: String, state: Dictionary) -> void:
+func _set_state(layer_id: String, state: Dictionary, register_boundary: bool = true) -> void:
 	state["layer"] = layer_id
 	var rows: Array = state.get("rows", [])
 	var coverage: Variant = state.get("coverage", null)
@@ -890,7 +1178,8 @@ func _set_state(layer_id: String, state: Dictionary) -> void:
 		state["status"] = "partial"
 	else:
 		state["status"] = "available"
-	_register_boundary(state)
+	if register_boundary:
+		_register_boundary(state)
 	states[layer_id] = state
 	layer_changed.emit(layer_id, state.duplicate(true))
 
@@ -1054,7 +1343,11 @@ func _cancel_layer_requests(layer_id: String) -> void:
 func _mark_stale() -> void:
 	for layer_id in enabled_ids():
 		var state: Dictionary = states.get(layer_id, {})
-		if not state.is_empty() and not _state_matches_cursor(state, _cursor):
+		if state.is_empty():
+			continue
+		if str(state.get("status", "")) in ["unavailable", "restricted", "error", "loading", "stale"]:
+			continue
+		if not _state_matches_cursor(state, _cursor):
 			state["status"] = "stale"
 			state["reason_code"] = "stale"
 			state["rows"] = []
@@ -1126,6 +1419,17 @@ func _same_publication(left: Variant, right: Variant) -> bool:
 	if left == null or right == null:
 		return left == right
 	return left.publication_id == right.publication_id and left.digest == right.digest
+
+
+func _same_publication_dict(left: Variant, right: Variant) -> bool:
+	if left == null or right == null:
+		return left == right
+	if typeof(left) != TYPE_DICTIONARY or typeof(right) != TYPE_DICTIONARY:
+		return false
+	return (
+		left.get("publication_id", null) == right.get("publication_id", null)
+		and left.get("digest", null) == right.get("digest", null)
+	)
 
 
 func _normalize_owner(value: Variant) -> String:

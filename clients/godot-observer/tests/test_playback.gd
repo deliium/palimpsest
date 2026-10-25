@@ -33,6 +33,20 @@ func run() -> Array:
 	var sixteen: Dictionary = Playback.policy(16.0, 0)
 	if not sixteen["skip"] or float(sixteen["duration"]) != 0.0:
 		failures.append("speed 16 should skip")
+	if str(normal.get("lod", "")) != "full" or not bool(normal.get("trails", false)):
+		failures.append("speed 1 should keep full detail and trails")
+	var reduced: Dictionary = Playback.policy(4.0, 0)
+	if str(reduced.get("lod", "")) != "reduced" or reduced["skip"]:
+		failures.append("speed 4 should reduce detail without snapping")
+	if bool(reduced.get("trails", true)) or int(reduced.get("transient_cap", 0)) != 32:
+		failures.append("speed 4 should drop trails and cap transients")
+	var snap: Dictionary = Playback.policy(8.0, 0)
+	if str(snap.get("lod", "")) != "snap" or int(snap.get("transient_cap", -1)) != 0:
+		failures.append("speed 8 should snap transitions")
+	if str(sixteen.get("lod", "")) != "aggregate" or not bool(sixteen.get("aggregate_labels", false)):
+		failures.append("speed 16 should aggregate labels")
+	if bool(sixteen.get("individual_labels", true)):
+		failures.append("speed 16 should hide individual labels")
 	var kept: Array = Playback.coalesce_tick_envelopes([1, 2, 3, 4], 8.0, 0)
 	if kept.size() != 1 or kept[0] != 4:
 		failures.append("high-speed should coalesce to latest tick envelope")
