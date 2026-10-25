@@ -1,0 +1,117 @@
+{
+  "schema_version": "observer-civilization-map-v1",
+  "run_id": "run-physical",
+  "world_id": "world-physical",
+  "requested_cursor": {
+    "tick": 4,
+    "through_sequence": null
+  },
+  "resolved_cursor": {
+    "run_id": "run-physical",
+    "world_id": "world-physical",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "section": "locations",
+  "scope": {
+    "layer": "locations",
+    "evidence_class": "OBJECTIVE",
+    "owner_id": null
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": 2,
+    "expected_count": 2
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "locations:loc-1",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "locations:loc-1",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [
+          {
+            "kind": "location",
+            "location_id": "loc-1",
+            "entity_id": "loc-1",
+            "evidence_ref": {
+              "source_kind": "scene",
+              "source_id": "locations:loc-1",
+              "tick": 4,
+              "owner_id": null
+            },
+            "evidence_tick": 4
+          }
+        ],
+        "detail_truncated": false
+      },
+      "location_id": "loc-1",
+      "region_id": null,
+      "living_body_count": 1,
+      "dead_body_count": 1,
+      "registered_agent_count": 1,
+      "lifecycle_living_count": null,
+      "lifecycle_dead_count": null,
+      "structure_count": 0,
+      "repository_count": 2,
+      "project_count": 0,
+      "active_journey_count": 0,
+      "active_journey_ids": []
+    },
+    {
+      "context": {
+        "row_id": "locations:loc-2",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "locations:loc-2",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [
+          {
+            "kind": "location",
+            "location_id": "loc-2",
+            "entity_id": "loc-2",
+            "evidence_ref": {
+              "source_kind": "scene",
+              "source_id": "locations:loc-2",
+              "tick": 4,
+              "owner_id": null
+            },
+            "evidence_tick": 4
+          }
+        ],
+        "detail_truncated": false
+      },
+      "location_id": "loc-2",
+      "region_id": null,
+      "living_body_count": 1,
+      "dead_body_count": 0,
+      "registered_agent_count": 0,
+      "lifecycle_living_count": null,
+      "lifecycle_dead_count": null,
+      "structure_count": 0,
+      "repository_count": 0,
+      "project_count": 0,
+      "active_journey_count": 0,
+      "active_journey_ids": []
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

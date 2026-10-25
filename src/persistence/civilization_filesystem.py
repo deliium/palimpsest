@@ -28,7 +28,9 @@ from simulation.civilization_models import (
     CivilizationCoverage,
     CivilizationCursor,
     CivilizationError,
+    CivilizationEvidenceClass,
     CivilizationHashManifest,
+    CivilizationLayer,
     CivilizationMarker,
     CivilizationPublicationRef,
     CivilizationScope,
@@ -44,6 +46,7 @@ from simulation.civilization_ports import (
     CivilizationBoundaryPublication,
     CivilizationBoundaryRef,
     CivilizationCataloguePage,
+    CivilizationMarkerSelection,
     CivilizationPage,
     CivilizationReadBudget,
 )
@@ -587,6 +590,23 @@ class FilesystemCivilizationReader:
             raise CivilizationError("civilization_storage_corrupt")
         return state
 
+    async def publication(
+        self, run_id: str, *, budget: CivilizationReadBudget
+    ) -> CivilizationPublicationRef | None:
+        """Return the current commit, or None only when no commit exists.
+
+        An existing but invalid state file is corruption, never "not published".
+        """
+        state_path = _safe_path(_run_root(self._root, run_id), _STATE)
+        if not state_path.is_file():
+            return None
+        state = self._state(run_id, budget)
+        return CivilizationPublicationRef(
+            str(state["publication_id"]),
+            str(state["catalogue_digest"]),
+            _POLICY,
+        )
+
     def _loaded_refs(
         self,
         run_id: str,
@@ -595,13 +615,14 @@ class FilesystemCivilizationReader:
         *,
         after_boundary: int | None = None,
         limit: int | None = None,
-    ) -> tuple[dict[str, object], tuple[CivilizationBoundaryRef, ...]]:
+    ) -> tuple[dict[str, object], tuple[CivilizationBoundaryRef, ...], bool]:
+        """Stream verified catalogue pages; never decode an unneeded shard."""
         state = self._state(run_id, budget)
         if publication is not None and (
             publication.publication_id != state["publication_id"]
             or publication.digest != state["catalogue_digest"]
         ):
-            raise CivilizationError("civilization_storage_corrupt")
+            raise CivilizationError("civilization_publication_gone")
         publication_root = _safe_path(
             _run_root(self._root, run_id),
             "publications",
@@ -621,27 +642,59 @@ class FilesystemCivilizationReader:
         if type(index) is not CivilizationHashManifest:
             raise CivilizationError("civilization_storage_corrupt")
         refs: list[CivilizationBoundaryRef] = []
+        more = False
+        wanted = None if limit is None else limit + 1
         for child in index.children:
-            content = _read_budgeted(
-                _safe_path(publication_root, *child.key.split("/")),
-                budget,
-                metadata=True,
-            )
+            if after_boundary is not None and int(child.last_key) <= after_boundary:
+                continue
+            if wanted is not None and len(refs) >= wanted:
+                more = True
+                break
+            try:
+                content = _read_budgeted(
+                    _safe_path(publication_root, *child.key.split("/")),
+                    budget,
+                )
+            except CivilizationError as exc:
+                if (
+                    exc.code == "civilization_read_budget"
+                    and refs
+                    and (after_boundary is None or refs[-1].cursor.boundary_tick)
+                ):
+                    more = True
+                    break
+                raise
             if civilization_digest(content) != child.digest:
                 raise CivilizationError("civilization_storage_corrupt")
-            for value in _decode_lines(
-                content,
-                expected_type=CivilizationBoundaryRef,
-                budget=budget,
-            ):
-                refs.append(cast(CivilizationBoundaryRef, value))
-        if after_boundary is not None:
-            refs = [
-                ref for ref in refs if (ref.cursor.boundary_tick or 0) > after_boundary
-            ]
-        if limit is not None:
-            refs = refs[:limit]
-        return state, tuple(refs)
+            for line in content.splitlines(keepends=True):
+                if not line.endswith(b"\n"):
+                    raise CivilizationError("civilization_storage_corrupt")
+                try:
+                    budget.reserve_scan(1)
+                except CivilizationError:
+                    if not refs:
+                        raise
+                    more = True
+                    break
+                value = decode_civilization_value(line)
+                if type(value) is not CivilizationBoundaryRef:
+                    raise CivilizationError("civilization_storage_corrupt")
+                ref = value
+                tick = ref.cursor.boundary_tick
+                if tick is None:
+                    raise CivilizationError("civilization_storage_corrupt")
+                if after_boundary is not None and tick <= after_boundary:
+                    continue
+                refs.append(ref)
+                if wanted is not None and len(refs) >= wanted:
+                    more = True
+                    break
+            if more:
+                break
+        if wanted is not None and limit is not None and len(refs) > limit:
+            more = True
+        selected = refs if limit is None else refs[:limit]
+        return state, tuple(selected), more
 
     async def catalogue(
         self,
@@ -651,16 +704,22 @@ class FilesystemCivilizationReader:
         publication: CivilizationPublicationRef | None,
         budget: CivilizationReadBudget,
     ) -> CivilizationCataloguePage:
-        state, refs = self._loaded_refs(
+        state, selected, more = self._loaded_refs(
             run_id,
             publication,
             budget,
             after_boundary=after_boundary,
-            limit=budget.limit + 1,
+            limit=budget.limit,
         )
-        truncated = len(refs) > budget.limit
-        selected = refs[: budget.limit]
-        world_id = selected[0].cursor.world_id if selected else ""
+        truncated = more and bool(selected)
+        next_cursor = (
+            None
+            if not truncated or not selected
+            else str(selected[-1].cursor.boundary_tick)
+        )
+        if more and not selected:
+            raise CivilizationError("civilization_read_budget")
+        first_world = selected[0].cursor.world_id if selected else ""
         publication_ref = CivilizationPublicationRef(
             str(state["publication_id"]),
             str(state["catalogue_digest"]),
@@ -668,14 +727,10 @@ class FilesystemCivilizationReader:
         )
         return CivilizationCataloguePage(
             run_id,
-            world_id,
+            first_world,
             publication_ref,
             selected,
-            (
-                None
-                if not truncated or not selected
-                else str(selected[-1].cursor.boundary_tick)
-            ),
+            next_cursor,
             truncated,
         )
 
@@ -686,14 +741,21 @@ class FilesystemCivilizationReader:
         publication: CivilizationPublicationRef,
         budget: CivilizationReadBudget,
     ) -> CivilizationBoundaryRef:
-        _, refs = self._loaded_refs(cursor.run_id, publication, budget)
-        for ref in refs:
-            if (
-                ref.cursor.boundary_tick == cursor.boundary_tick
-                and ref.cursor.world_id == cursor.world_id
-            ):
-                return ref
-        raise CivilizationError("civilization_storage_corrupt")
+        boundary_tick = cursor.boundary_tick
+        if boundary_tick is None:
+            raise CivilizationError("civilization_boundary_missing")
+        _, refs, _ = self._loaded_refs(
+            cursor.run_id,
+            publication,
+            budget,
+            after_boundary=None if boundary_tick == 0 else boundary_tick - 1,
+            limit=1,
+        )
+        if not refs or refs[0].cursor.boundary_tick != boundary_tick:
+            raise CivilizationError("civilization_boundary_missing")
+        if refs[0].cursor.world_id != cursor.world_id:
+            raise CivilizationError("civilization_identity_conflict")
+        return refs[0]
 
     async def rows(
         self,
@@ -703,16 +765,31 @@ class FilesystemCivilizationReader:
         publication: CivilizationPublicationRef,
         after_key: str | None,
         entity_id: str | None,
+        location_id: str | None = None,
+        region_id: str | None = None,
         budget: CivilizationReadBudget,
     ) -> CivilizationPage:
-        ref = await self.exact_snapshot(cursor, publication=publication, budget=budget)
-        state, _ = self._loaded_refs(cursor.run_id, publication, budget)
+        boundary = cursor.boundary_tick
+        if boundary is None:
+            raise CivilizationError("civilization_boundary_missing")
+        _, refs, _ = self._loaded_refs(
+            cursor.run_id,
+            publication,
+            budget,
+            after_boundary=None if boundary == 0 else boundary - 1,
+            limit=1,
+        )
+        if not refs or refs[0].cursor.boundary_tick != boundary:
+            raise CivilizationError("civilization_boundary_missing")
+        if refs[0].cursor.world_id != cursor.world_id:
+            raise CivilizationError("civilization_identity_conflict")
+        ref = refs[0]
+        state = self._state(cursor.run_id, budget)
         publication_root = _safe_path(
             _run_root(self._root, cursor.run_id),
             "publications",
             str(state["publication_id"]),
         )
-        boundary = cursor.boundary_tick or 0
         boundary_root = _safe_path(publication_root, "boundaries", f"{boundary:08d}")
         manifest_content = _read_budgeted(
             _safe_path(boundary_root, "manifest.json"),
@@ -726,9 +803,9 @@ class FilesystemCivilizationReader:
             raise CivilizationError("civilization_storage_corrupt")
         scope_key = _scope_key(scope)
         rows: list[CivilizationMapRow | CivilizationCapturedRow] = []
-        scanned = 0
         next_key: str | None = None
         truncated = False
+        last_scanned = after_key
         for child in sorted(
             (
                 child
@@ -737,15 +814,30 @@ class FilesystemCivilizationReader:
             ),
             key=lambda child: child.key,
         ):
-            content = _read_budgeted(
-                _safe_path(publication_root, *child.key.split("/")),
-                budget,
-            )
+            try:
+                content = _read_budgeted(
+                    _safe_path(publication_root, *child.key.split("/")),
+                    budget,
+                )
+            except CivilizationError as exc:
+                if exc.code == "civilization_read_budget" and last_scanned != after_key:
+                    truncated = True
+                    next_key = last_scanned
+                    break
+                raise
             if civilization_digest(content) != child.digest:
                 raise CivilizationError("civilization_storage_corrupt")
             for line in content.splitlines(keepends=True):
-                budget.reserve_scan(1)
-                scanned += 1
+                if not line.endswith(b"\n"):
+                    raise CivilizationError("civilization_storage_corrupt")
+                try:
+                    budget.reserve_scan(1)
+                except CivilizationError:
+                    if last_scanned == after_key:
+                        raise
+                    truncated = True
+                    next_key = last_scanned
+                    break
                 decoded = decode_civilization_value(line)
                 if type(decoded) not in _ROW_TYPES:
                     raise CivilizationError("civilization_storage_corrupt")
@@ -753,20 +845,32 @@ class FilesystemCivilizationReader:
                 key = value.context.row_id
                 if after_key is not None and key <= after_key:
                     continue
-                if entity_id is not None and not _matches_entity(value, entity_id):
+                if (
+                    (entity_id is not None and not _matches_entity(value, entity_id))
+                    or (
+                        location_id is not None
+                        and not _matches_location(value, location_id)
+                    )
+                    or (region_id is not None and not _matches_region(value, region_id))
+                ):
+                    last_scanned = key
                     continue
                 if len(rows) >= budget.limit:
                     truncated = True
-                    next_key = rows[-1].context.row_id if rows else after_key
+                    next_key = rows[-1].context.row_id if rows else last_scanned
                     break
-                encoded_row = encode_civilization_value(value)
                 try:
-                    budget.reserve_response(len(encoded_row), rows=1)
+                    budget.reserve_response(
+                        len(encode_civilization_value(value)), rows=1
+                    )
                 except CivilizationError:
+                    if not rows and last_scanned == after_key:
+                        raise
                     truncated = True
-                    next_key = rows[-1].context.row_id if rows else after_key
+                    next_key = rows[-1].context.row_id if rows else last_scanned
                     break
                 rows.append(value)
+                last_scanned = key
             if truncated:
                 break
         if not truncated:
@@ -797,13 +901,38 @@ class FilesystemCivilizationReader:
         budget: CivilizationReadBudget,
     ) -> tuple[CivilizationMarker, ...]:
         ref = await self.exact_snapshot(cursor, publication=publication, budget=budget)
-        state, _ = self._loaded_refs(cursor.run_id, publication, budget)
-        publication_root = _safe_path(
-            _run_root(self._root, cursor.run_id),
-            "publications",
-            str(state["publication_id"]),
+        selection = await self.markers_at(
+            ref,
+            publication=publication,
+            after_key=None,
+            evidence_class=None,
+            owner_id=None,
+            layer=None,
+            limit=200,
+            budget=budget,
         )
-        boundary = cursor.boundary_tick or 0
+        return selection.markers
+
+    async def markers_at(
+        self,
+        ref: CivilizationBoundaryRef,
+        *,
+        publication: CivilizationPublicationRef,
+        after_key: str | None,
+        evidence_class: CivilizationEvidenceClass | None,
+        owner_id: str | None,
+        layer: CivilizationLayer | None,
+        limit: int,
+        budget: CivilizationReadBudget,
+    ) -> CivilizationMarkerSelection:
+        boundary = ref.cursor.boundary_tick
+        if boundary is None:
+            raise CivilizationError("civilization_boundary_missing")
+        publication_root = _safe_path(
+            _run_root(self._root, ref.cursor.run_id),
+            "publications",
+            publication.publication_id,
+        )
         boundary_root = _safe_path(publication_root, "boundaries", f"{boundary:08d}")
         manifest_content = _read_budgeted(
             _safe_path(boundary_root, "manifest.json"),
@@ -824,22 +953,73 @@ class FilesystemCivilizationReader:
             key=lambda item: item.key,
         )
         markers: list[CivilizationMarker] = []
+        next_key: str | None = None
+        truncated = False
+        last_scanned = after_key
         for item in children:
-            content = _read_budgeted(
-                _safe_path(publication_root, *item.key.split("/")),
-                budget,
-            )
+            try:
+                content = _read_budgeted(
+                    _safe_path(publication_root, *item.key.split("/")),
+                    budget,
+                )
+            except CivilizationError as exc:
+                if exc.code == "civilization_read_budget" and last_scanned != after_key:
+                    truncated = True
+                    next_key = last_scanned
+                    break
+                raise
             if civilization_digest(content) != item.digest:
                 raise CivilizationError("civilization_storage_corrupt")
-            markers.extend(
-                cast(CivilizationMarker, value)
-                for value in _decode_lines(
-                    content,
-                    expected_type=CivilizationMarker,
-                    budget=budget,
-                )
-            )
-        return tuple(markers)
+            for line in content.splitlines(keepends=True):
+                if not line.endswith(b"\n"):
+                    raise CivilizationError("civilization_storage_corrupt")
+                try:
+                    budget.reserve_scan(1)
+                except CivilizationError:
+                    if last_scanned == after_key:
+                        raise
+                    truncated = True
+                    next_key = last_scanned
+                    break
+                decoded = decode_civilization_value(line)
+                if type(decoded) is not CivilizationMarker:
+                    raise CivilizationError("civilization_storage_corrupt")
+                marker = decoded
+                key = marker.marker_id
+                if after_key is not None and key <= after_key:
+                    continue
+                if (
+                    (
+                        evidence_class is not None
+                        and marker.evidence_class is not evidence_class
+                    )
+                    or (owner_id is not None and marker.owner_id != owner_id)
+                    or (owner_id is None and marker.owner_id is not None)
+                    or (layer is not None and marker.layer is not layer)
+                ):
+                    last_scanned = key
+                    continue
+                if len(markers) >= limit:
+                    truncated = True
+                    next_key = markers[-1].marker_id if markers else last_scanned
+                    break
+                try:
+                    budget.reserve_response(
+                        len(encode_civilization_value(marker)), rows=1
+                    )
+                except CivilizationError:
+                    if not markers and last_scanned == after_key:
+                        raise
+                    truncated = True
+                    next_key = markers[-1].marker_id if markers else last_scanned
+                    break
+                markers.append(marker)
+                last_scanned = key
+            if truncated:
+                break
+        if not truncated:
+            next_key = None
+        return CivilizationMarkerSelection(tuple(markers), next_key, truncated)
 
 
 def _matches_entity(row: object, entity_id: str) -> bool:
@@ -857,6 +1037,29 @@ def _matches_entity(row: object, entity_id: str) -> bool:
         "institution_id",
     ):
         if getattr(row, name, None) == entity_id:
+            return True
+    return False
+
+
+def _matches_location(row: object, location_id: str) -> bool:
+    context = getattr(row, "context", None)
+    for anchor in getattr(context, "anchors", ()) or ():
+        if getattr(anchor, "location_id", None) == location_id:
+            return True
+    for name in (
+        "location_id",
+        "origin_location_id",
+        "destination_location_id",
+        "occurrence_location_id",
+    ):
+        if getattr(row, name, None) == location_id:
+            return True
+    return False
+
+
+def _matches_region(row: object, region_id: str) -> bool:
+    for name in ("region_id", "region_a", "region_b"):
+        if getattr(row, name, None) == region_id:
             return True
     return False
 

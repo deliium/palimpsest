@@ -38,6 +38,9 @@ const SUITES: Array[String] = [
 	"res://tests/test_lineage_models.gd",
 	"res://tests/test_generational_session.gd",
 	"res://tests/test_lineage_session.gd",
+	"res://tests/test_civilization_protocol.gd",
+	"res://tests/test_civilization_source.gd",
+	"res://tests/test_civilization_controls.gd",
 	"res://tests/test_generational_view.gd",
 	"res://tests/test_generational_navigation.gd",
 ]

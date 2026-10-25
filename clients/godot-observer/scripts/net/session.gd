@@ -11,6 +11,7 @@ const HttpClient := preload("res://scripts/net/http_client.gd")
 const StreamClient := preload("res://scripts/net/stream_client.gd")
 const GenerationalSourceScript := preload("res://scripts/net/generational_source.gd")
 const LineageSourceScript := preload("res://scripts/net/lineage_source.gd")
+const CivilizationSourceScript := preload("res://scripts/net/civilization_source.gd")
 
 const PAGE_LIMIT := 100
 const EVENT_WINDOW := 200
@@ -42,6 +43,11 @@ signal generational_updated
 signal credentials_changed(inspection_present: bool, debug_present: bool)
 signal credentials_error(reason_code: String)
 signal lineage_source_updated
+signal civilization_source_updated
+signal civilization_layer_changed(layer_id: String, state: Dictionary)
+signal civilization_bundle_ready(cursor: Dictionary, layer_states: Dictionary)
+signal civilization_catalogue_changed(state: Dictionary)
+signal civilization_markers_changed(state: Dictionary)
 
 const NAV_STACK_LIMIT := 16
 const BRANCH_PAGE_LIMIT := 50
@@ -75,6 +81,7 @@ var _credential_generation := 0
 var _credential_origin := ""
 var generational
 var private_lineage
+var civilization
 var _http: Node
 var _stream: Node
 var _pending := {}
@@ -118,6 +125,24 @@ func _ready() -> void:
 	private_lineage = LineageSourceScript.new()
 	private_lineage.set_request_sink(Callable(self, "_request_path"))
 	private_lineage.changed.connect(func() -> void: lineage_source_updated.emit())
+	civilization = CivilizationSourceScript.new()
+	civilization.set_request_sink(Callable(self, "_request_path"))
+	civilization.layer_changed.connect(func(layer_id: String, state: Dictionary) -> void:
+		civilization_layer_changed.emit(layer_id, state)
+		civilization_source_updated.emit()
+	)
+	civilization.bundle_ready.connect(func(cursor: Dictionary, states: Dictionary) -> void:
+		civilization_bundle_ready.emit(cursor, states)
+		civilization_source_updated.emit()
+	)
+	civilization.catalogue_changed.connect(func(state: Dictionary) -> void:
+		civilization_catalogue_changed.emit(state)
+		civilization_source_updated.emit()
+	)
+	civilization.markers_changed.connect(func(state: Dictionary) -> void:
+		civilization_markers_changed.emit(state)
+		civilization_source_updated.emit()
+	)
 	_stream = StreamClient.new()
 	_stream.name = "StreamClient"
 	add_child(_stream)
@@ -616,6 +641,61 @@ func load_more_lineage(panel: String) -> void:
 		private_lineage.load_more_lineage(panel)
 
 
+func set_civilization_layer_enabled(layer_id: String, value: bool) -> void:
+	if civilization != null:
+		civilization.set_layer_enabled(layer_id, value)
+
+
+func set_civilization_layer_mode(layer_id: String, mode: String, owner_id: String = "") -> void:
+	if civilization != null:
+		civilization.set_layer_mode(layer_id, mode, owner_id)
+
+
+func set_civilization_owner(owner_id: String) -> void:
+	if civilization != null:
+		civilization.set_owner(owner_id)
+
+
+func set_civilization_filters(layer_id: String, values: Dictionary) -> void:
+	if civilization != null:
+		civilization.set_filters(layer_id, values)
+
+
+func request_civilization_catalogue(evidence_class: String = "ANALYTICAL", owner_id: String = "", layer: String = "") -> void:
+	if civilization != null:
+		civilization.request_catalogue(evidence_class, owner_id, layer)
+
+
+func request_civilization_markers(from_tick: int, to_tick: int, evidence_class: String = "ANALYTICAL", owner_id: String = "", layer: String = "") -> void:
+	if civilization != null:
+		civilization.request_markers(from_tick, to_tick, evidence_class, owner_id, layer)
+
+
+func prepare_civilization_bundle(cursor: Dictionary, layers: Array) -> void:
+	if civilization != null:
+		civilization.prepare_bundle(cursor, layers)
+
+
+func cancel_civilization_bundle(reason: String = "") -> void:
+	if civilization != null:
+		civilization.cancel_bundle(reason)
+
+
+func load_more_civilization(layer_id: String) -> void:
+	if civilization != null:
+		civilization.load_more(layer_id)
+
+
+func refresh_civilization() -> void:
+	if civilization != null:
+		civilization.refresh_enabled()
+
+
+func restart_civilization_layer(layer_id: String) -> void:
+	if civilization != null:
+		civilization.restart_layer(layer_id)
+
+
 func _generational_frame(frame: Variant) -> void:
 	if generational == null or not _opened:
 		return
@@ -626,6 +706,9 @@ func _generational_frame(frame: Variant) -> void:
 	if private_lineage != null:
 		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
 		private_lineage.on_frame(frame)
+	if civilization != null:
+		civilization.set_context(run_id, _http_epoch, _credential_generation)
+		civilization.on_frame(frame, _http_epoch, _credential_generation)
 
 
 func _token_for(capability: String) -> String:
@@ -659,6 +742,9 @@ func configure_credentials(inspection_token: String, debug_token: String) -> boo
 	if private_lineage != null:
 		private_lineage.clear()
 		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
+	if civilization != null:
+		civilization.set_context(run_id, _http_epoch, _credential_generation)
+		civilization.on_credentials_changed(not _inspection_token.is_empty(), not _debug_token.is_empty(), _credential_generation)
 	credentials_changed.emit(not _inspection_token.is_empty(), not _debug_token.is_empty())
 	ObserverLog.info(
 		"session",
@@ -689,6 +775,8 @@ func forget_credentials() -> void:
 		generational.clear()
 	if private_lineage != null:
 		private_lineage.clear()
+	if civilization != null:
+		civilization.clear("credentials_forgotten")
 	credentials_changed.emit(false, false)
 	ObserverLog.info("session", "credentials_forgotten generation=%s" % _credential_generation)
 	if _opened:
@@ -715,6 +803,8 @@ func _teardown_source() -> void:
 		generational.clear()
 	if private_lineage != null:
 		private_lineage.clear()
+	if civilization != null:
+		civilization.clear("switch_run")
 	_switching = true
 	status_changed.emit("switching_run", "Switching run")
 	if _stream != null:
@@ -771,6 +861,8 @@ func _start() -> void:
 			generational.clear()
 		if private_lineage != null:
 			private_lineage.clear()
+		if civilization != null:
+			civilization.clear("credentials")
 		credentials_changed.emit(false, false)
 	_credential_origin = resolved_origin
 	origin = resolved_origin
@@ -783,6 +875,8 @@ func _start() -> void:
 		generational.set_context(run_id, _http_epoch, _credential_generation)
 	if private_lineage != null:
 		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
+	if civilization != null:
+		civilization.set_context(run_id, _http_epoch, _credential_generation)
 	if Origin.is_missing(origin):
 		_fail("observer_origin_missing")
 		return
@@ -843,6 +937,8 @@ func fetch_run(seek_id: int = -1) -> void:
 func _begin_seek(event_tick: int, event_sequence: int, event: Variant) -> void:
 	var forward := _is_forward(event_tick, event_sequence)
 	_enter_replay()
+	if civilization != null:
+		civilization.on_seek()
 	_cancel_http("seek")
 	_seek_serial += 1
 	_seek_meta[_seek_serial] = {
@@ -1115,7 +1211,9 @@ func _request_path(
 			"session",
 			"read_only reason_code=%s kind=%s" % [reason, kind],
 		)
-		if kind == "metric_catalog" or kind == "metric_document":
+		if str(meta.get("source", "")) == "civilization" and civilization != null:
+			civilization.handle_response(meta, null, reason, 0)
+		elif kind == "metric_catalog" or kind == "metric_document":
 			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), reason)
 		elif kind == "causal_debugger" or kind == "causal_debugger_lineage":
 			_emit_overlay_unavailable(kind, reason)
@@ -1209,6 +1307,9 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		return
 	if str(meta.get("source", "")) == "lineage":
 		private_lineage.handle_response(meta, body, reason_code, status)
+		return
+	if str(meta.get("source", "")) == "civilization":
+		civilization.handle_response(meta, body, reason_code, status)
 		return
 	if (
 		kind == "territorial_claims"
@@ -1703,6 +1804,8 @@ func _apply_live_event(event: Variant) -> void:
 		generational.on_live_event()
 	if private_lineage != null:
 		private_lineage.invalidate_private("live_event")
+	if civilization != null:
+		civilization.note_live_event_ahead()
 	live_event.emit(event)
 
 

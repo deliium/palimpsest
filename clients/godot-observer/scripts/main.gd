@@ -93,7 +93,17 @@ func _ready() -> void:
 	_session.credentials_error.connect(_on_credentials_error)
 	_session.generational_updated.connect(_on_generational_updated)
 	_session.lineage_source_updated.connect(_on_lineage_updated)
+	_session.civilization_layer_changed.connect(_ui.apply_civilization_layer)
 	_ui.population_toggled.connect(_on_population_toggled)
+	_ui.civilization_layer_toggled.connect(_on_civilization_layer_toggled)
+	_ui.civilization_layer_mode_selected.connect(_on_civilization_mode)
+	_ui.civilization_owner_changed.connect(_on_civilization_owner)
+	_ui.civilization_filters_changed.connect(_on_civilization_filters)
+	_ui.civilization_load_more_requested.connect(_on_civilization_load_more)
+	_ui.civilization_restart_requested.connect(_on_civilization_restart)
+	_ui.civilization_retry_requested.connect(_on_civilization_restart)
+	_ui.civilization_layer_cleared.connect(_on_civilization_layer_cleared)
+	_ui.civilization_credentials_help_requested.connect(_on_civilization_credentials_help)
 	_ui.demographic_section_selected.connect(_on_demographic_section)
 	_ui.demographic_load_more_requested.connect(_on_demographic_load_more)
 	_ui.generational_agent_selected.connect(_on_generational_agent)
@@ -571,6 +581,45 @@ func _on_demographic_load_more() -> void:
 	_session.load_more_demographics()
 	_session.load_more_demographic_section()
 	_session.load_more_generation_markers()
+
+
+func _on_civilization_layer_toggled(layer_id: String, enabled: bool) -> void:
+	_session.set_civilization_layer_enabled(layer_id, enabled)
+	ObserverLog.debug("acceptance", "civilization_toggle layer=%s enabled=%s" % [layer_id, enabled])
+
+
+func _on_civilization_mode(layer_id: String, mode: String, owner_id: String) -> void:
+	if mode == "subjective" and owner_id.is_empty():
+		_ui.show_status("restricted", "Selected owner required")
+		return
+	_session.set_civilization_layer_mode(layer_id, mode, owner_id)
+
+
+func _on_civilization_owner(owner_id: String) -> void:
+	_session.set_civilization_owner(owner_id)
+	_ui.set_civilization_owner(owner_id)
+
+
+func _on_civilization_filters(layer_id: String, filters: Dictionary) -> void:
+	_session.set_civilization_filters(layer_id, filters)
+
+
+func _on_civilization_load_more(layer_id: String) -> void:
+	_session.load_more_civilization(layer_id)
+
+
+func _on_civilization_restart(layer_id: String) -> void:
+	_session.restart_civilization_layer(layer_id)
+
+
+func _on_civilization_layer_cleared(layer_id: String, reason_code: String) -> void:
+	if _world.has_method("clear_civilization_layer"):
+		_world.clear_civilization_layer(layer_id)
+	ObserverLog.debug("acceptance", "civilization_layer_cleared layer=%s reason=%s" % [layer_id, reason_code])
+
+
+func _on_civilization_credentials_help() -> void:
+	_ui.focus_credentials()
 
 
 func _on_generational_updated() -> void:

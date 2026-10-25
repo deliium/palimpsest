@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/civilization_panel.gd" id="1_civilization"]
+
+[node name="CivilizationPanel" type="PanelContainer"]
+offset_left = 560.0
+offset_top = 430.0
+offset_right = 1100.0
+offset_bottom = 720.0
+script = ExtResource("1_civilization")
+
+[node name="Scroll" type="ScrollContainer" parent="."]
+layout_mode = 2
+
+[node name="Column" type="VBoxContainer" parent="Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3

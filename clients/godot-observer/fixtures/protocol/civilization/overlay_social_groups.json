@@ -1,0 +1,93 @@
+{
+  "schema_version": "observer-civilization-overlay-v1",
+  "run_id": "run-capture",
+  "world_id": "world-capture",
+  "scope": {
+    "layer": "social_groups",
+    "evidence_class": "ANALYTICAL",
+    "owner_id": null
+  },
+  "requested_tick": 4,
+  "requested_publication_id": null,
+  "publication": {
+    "publication_id": "pub-1",
+    "digest": "dc53fd54c8051df81fea7502893c97f43907a7f4eeb23641d1e183556986c7fc",
+    "policy_version": "civilization-overlays.v1"
+  },
+  "availability": "available",
+  "reason": null,
+  "resolved_cursor": {
+    "run_id": "run-capture",
+    "world_id": "world-capture",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "window": {
+    "start_tick": 4,
+    "end_tick": 4
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": null,
+    "expected_count": null
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "group:residence:loc-1",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "loc-1",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "history": {
+        "scope": {
+          "layer": "social_groups",
+          "evidence_class": "ANALYTICAL",
+          "owner_id": null
+        },
+        "boundary_tick": 4,
+        "window": {
+          "start_tick": 4,
+          "end_tick": 4
+        },
+        "policy_version": "civilization-overlays.v1",
+        "coverage": {
+          "state": "complete",
+          "reason": null,
+          "capture_start": null,
+          "capture_end": null,
+          "missing_intervals": [],
+          "observed_count": null,
+          "expected_count": null
+        }
+      },
+      "group_id": "residence:loc-1",
+      "basis": "interaction_residence",
+      "member_count": 2,
+      "member_ids": [
+        "agent-a",
+        "agent-b"
+      ],
+      "missing_lanes": [
+        "interaction",
+        "trust"
+      ]
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

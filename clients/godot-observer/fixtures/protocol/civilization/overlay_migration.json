@@ -1,0 +1,99 @@
+{
+  "schema_version": "observer-civilization-overlay-v1",
+  "run_id": "run-capture",
+  "world_id": "world-capture",
+  "scope": {
+    "layer": "migration",
+    "evidence_class": "OBJECTIVE",
+    "owner_id": null
+  },
+  "requested_tick": 4,
+  "requested_publication_id": null,
+  "publication": {
+    "publication_id": "pub-1",
+    "digest": "c59e22fad6b59c88514c75c1375fbf42718dd5f18f2cb5345c7c2570b47cc27b",
+    "policy_version": "civilization-overlays.v1"
+  },
+  "availability": "available",
+  "reason": null,
+  "resolved_cursor": {
+    "run_id": "run-capture",
+    "world_id": "world-capture",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "window": {
+    "start_tick": 3,
+    "end_tick": 4
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": null,
+    "expected_count": null
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "migration:journey-1",
+        "source_refs": [
+          {
+            "source_kind": "event",
+            "source_id": "journey-started",
+            "tick": 3,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "history": {
+        "scope": {
+          "layer": "migration",
+          "evidence_class": "OBJECTIVE",
+          "owner_id": null
+        },
+        "boundary_tick": 4,
+        "window": {
+          "start_tick": 3,
+          "end_tick": 4
+        },
+        "policy_version": "civilization-overlays.v1",
+        "coverage": {
+          "state": "complete",
+          "reason": null,
+          "capture_start": null,
+          "capture_end": null,
+          "missing_intervals": [],
+          "observed_count": null,
+          "expected_count": null
+        }
+      },
+      "journey_id": "journey-1",
+      "route_id": "route:loc-1->loc-2",
+      "origin_location_id": "loc-1",
+      "destination_location_id": "loc-2",
+      "participant_count": 2,
+      "participant_ids": [
+        "agent-a",
+        "agent-b"
+      ],
+      "phase": "arrived",
+      "started_tick": 3,
+      "arrived_tick": 3,
+      "ended_tick": null,
+      "start_count": 1,
+      "arrival_count": 1,
+      "capacity_wait_count": 0,
+      "ended_count": 0
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

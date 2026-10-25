@@ -1,0 +1,87 @@
+{
+  "schema_version": "observer-civilization-markers-v1",
+  "run_id": "run-capture",
+  "world_id": "world-capture",
+  "scope": {
+    "evidence_class": "SUBJECTIVE",
+    "owner_id": "agent-a",
+    "layer": null
+  },
+  "requested_window": {
+    "start_tick": 3,
+    "end_tick": 6
+  },
+  "publication": {
+    "publication_id": "pub-1",
+    "digest": "fe6050f66a691c1697781885881d1ec53e7cab515d75fa7f2bf43f2581d02f6a",
+    "policy_version": "civilization-overlays.v1"
+  },
+  "availability": "available",
+  "reason": null,
+  "markers": [
+    {
+      "marker_id": "marker:technology:agent-a:0002",
+      "marker_type": "technology_acquired",
+      "seek_boundary": 4,
+      "evidence_class": "SUBJECTIVE",
+      "owner_id": "agent-a",
+      "layer": "technology",
+      "row_id": "technology:agent-a:knowledge-0002",
+      "source_refs": [
+        {
+          "source_kind": "knowledge",
+          "source_id": "knowledge-0002",
+          "tick": 3,
+          "owner_id": "agent-a"
+        }
+      ],
+      "coverage": {
+        "state": "complete",
+        "reason": null,
+        "capture_start": null,
+        "capture_end": null,
+        "missing_intervals": [],
+        "observed_count": null,
+        "expected_count": null
+      }
+    },
+    {
+      "marker_id": "marker:technology:agent-a:future",
+      "marker_type": "technology_acquired",
+      "seek_boundary": 5,
+      "evidence_class": "SUBJECTIVE",
+      "owner_id": "agent-a",
+      "layer": "technology",
+      "row_id": "technology:agent-a:knowledge-future",
+      "source_refs": [
+        {
+          "source_kind": "knowledge",
+          "source_id": "knowledge-future",
+          "tick": 4,
+          "owner_id": "agent-a"
+        }
+      ],
+      "coverage": {
+        "state": "complete",
+        "reason": null,
+        "capture_start": null,
+        "capture_end": null,
+        "missing_intervals": [],
+        "observed_count": null,
+        "expected_count": null
+      }
+    }
+  ],
+  "missing_intervals": [],
+  "coverage": {
+    "state": "partial",
+    "reason": "capture_limit",
+    "capture_start": 4,
+    "capture_end": 6,
+    "missing_intervals": [],
+    "observed_count": null,
+    "expected_count": null
+  },
+  "next_cursor": "eyJhZnRlciI6Im1hcmtlcjp0ZWNobm9sb2d5OmFnZW50LWE6ZnV0dXJlIiwiYWZ0ZXJfdGljayI6NSwiZXZpZGVuY2UiOiJTVUJKRUNUSVZFIiwiZXhwaXJlcyI6MTc5MjkzOTAyNCwiZnJvbSI6MywiaXNzdWVkIjoxNzkyOTM1NDI0LCJsYXllciI6bnVsbCwibGltaXQiOjIsIm9yZGVyaW5nIjoxLCJvd25lciI6ImFnZW50LWEiLCJwb2xpY3kiOiJjaXZpbGl6YXRpb24tb3ZlcmxheXMudjEiLCJwdWIiOiJwdWItMSIsInB1Yl9kaWdlc3QiOiJmZTYwNTBmNjZhNjkxYzE2OTc3ODE4ODU4ODFkMWVjNTNlN2NhYjUxNWQ3NWZhN2YyYmY0M2YyNTgxZDAyZjZhIiwicHVycG9zZSI6ImNpdmlsaXphdGlvbi1tYXJrZXJzLXYxIiwicnVuIjoicnVuLWNhcHR1cmUiLCJ0byI6Nn0.Garh3YGkJguZTDabrvW4iG-7Q-b8_lNuei6BCCdsf4A",
+  "truncated": true
+}

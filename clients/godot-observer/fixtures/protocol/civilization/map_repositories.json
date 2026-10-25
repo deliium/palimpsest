@@ -1,0 +1,113 @@
+{
+  "schema_version": "observer-civilization-map-v1",
+  "run_id": "run-physical",
+  "world_id": "world-physical",
+  "requested_cursor": {
+    "tick": 4,
+    "through_sequence": null
+  },
+  "resolved_cursor": {
+    "run_id": "run-physical",
+    "world_id": "world-physical",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "section": "repositories",
+  "scope": {
+    "layer": "repositories",
+    "evidence_class": "OBJECTIVE",
+    "owner_id": null
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": 2,
+    "expected_count": 2
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "repositories:repo-0000",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "repositories:repo-0000",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [
+          {
+            "kind": "repository",
+            "location_id": "loc-1",
+            "entity_id": "repo-0000",
+            "evidence_ref": {
+              "source_kind": "scene",
+              "source_id": "repositories:repo-0000",
+              "tick": 4,
+              "owner_id": null
+            },
+            "evidence_tick": 4
+          }
+        ],
+        "detail_truncated": false
+      },
+      "repository_id": "repo-0000",
+      "location_id": "loc-1",
+      "status": "intact",
+      "access_mode": "open",
+      "member_count": 0,
+      "member_ids": [],
+      "linked_structure_id": null,
+      "established_tick": 0,
+      "last_maintained_tick": 0,
+      "neglect_streak": 0
+    },
+    {
+      "context": {
+        "row_id": "repositories:repo-0001",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "repositories:repo-0001",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [
+          {
+            "kind": "repository",
+            "location_id": "loc-1",
+            "entity_id": "repo-0001",
+            "evidence_ref": {
+              "source_kind": "scene",
+              "source_id": "repositories:repo-0001",
+              "tick": 4,
+              "owner_id": null
+            },
+            "evidence_tick": 4
+          }
+        ],
+        "detail_truncated": false
+      },
+      "repository_id": "repo-0001",
+      "location_id": "loc-1",
+      "status": "intact",
+      "access_mode": "open",
+      "member_count": 0,
+      "member_ids": [],
+      "linked_structure_id": null,
+      "established_tick": 0,
+      "last_maintained_tick": 0,
+      "neglect_streak": 0
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

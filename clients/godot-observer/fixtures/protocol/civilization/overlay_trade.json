@@ -1,0 +1,100 @@
+{
+  "schema_version": "observer-civilization-overlay-v1",
+  "run_id": "run-capture",
+  "world_id": "world-capture",
+  "scope": {
+    "layer": "trade",
+    "evidence_class": "ANALYTICAL",
+    "owner_id": null
+  },
+  "requested_tick": 4,
+  "requested_publication_id": null,
+  "publication": {
+    "publication_id": "pub-1",
+    "digest": "dc53fd54c8051df81fea7502893c97f43907a7f4eeb23641d1e183556986c7fc",
+    "policy_version": "civilization-overlays.v1"
+  },
+  "availability": "available",
+  "reason": null,
+  "resolved_cursor": {
+    "run_id": "run-capture",
+    "world_id": "world-capture",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "window": {
+    "start_tick": 3,
+    "end_tick": 4
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": null,
+    "expected_count": null
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "trade:agent-a|agent-b:loc-1",
+        "source_refs": [
+          {
+            "source_kind": "event",
+            "source_id": "exchange-1",
+            "tick": 3,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "history": {
+        "scope": {
+          "layer": "trade",
+          "evidence_class": "ANALYTICAL",
+          "owner_id": null
+        },
+        "boundary_tick": 4,
+        "window": {
+          "start_tick": 3,
+          "end_tick": 4
+        },
+        "policy_version": "civilization-overlays.v1",
+        "coverage": {
+          "state": "complete",
+          "reason": null,
+          "capture_start": null,
+          "capture_end": null,
+          "missing_intervals": [],
+          "observed_count": null,
+          "expected_count": null
+        }
+      },
+      "participant_ids": [
+        "agent-a",
+        "agent-b"
+      ],
+      "completed_exchange_count": 1,
+      "forward_items": [
+        {
+          "kind": "tool",
+          "count": 1
+        }
+      ],
+      "reverse_items": [
+        {
+          "kind": "food",
+          "count": 1
+        }
+      ],
+      "occurrence_location_id": "loc-1"
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

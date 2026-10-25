@@ -1,0 +1,80 @@
+{
+  "schema_version": "observer-civilization-map-v1",
+  "run_id": "run-physical",
+  "world_id": "world-physical",
+  "requested_cursor": {
+    "tick": 4,
+    "through_sequence": null
+  },
+  "resolved_cursor": {
+    "run_id": "run-physical",
+    "world_id": "world-physical",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "section": "projects",
+  "scope": {
+    "layer": "projects",
+    "evidence_class": "OBJECTIVE",
+    "owner_id": null
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": 1,
+    "expected_count": 1
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "projects:1",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "locations:loc-1",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "project_id": "project-1",
+      "location_id": "loc-1",
+      "kind": "well",
+      "status": "open",
+      "labor_progress": 1,
+      "labor_required": 3,
+      "material_progress": 0,
+      "material_required": 2,
+      "material_kind": "material",
+      "accepted_contribution_count": 1,
+      "accepted_contributions": [
+        {
+          "actor_id": "agent-a",
+          "tick": 3,
+          "labor_units": 1,
+          "material_count": 0,
+          "item_id": null
+        }
+      ],
+      "linked_structure_id": "structure-1",
+      "linked_structure_kind": "well",
+      "shortage_count": 0,
+      "public_acts": {
+        "benefit_count": 0,
+        "draw_count": 0,
+        "maintenance_count": 0,
+        "opposition_count": 0
+      }
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": "observer-civilization-catalogue-v1",
+  "run_id": "run-capture",
+  "world_id": "world-capture",
+  "scope": {
+    "evidence_class": "ANALYTICAL",
+    "owner_id": null,
+    "layer": null
+  },
+  "publication": {
+    "publication_id": "pub-1",
+    "digest": "43bcdac05ec6949bb658985b6f7f48db94a7f2319820b0320c119ddaadf9d9a8",
+    "policy_version": "civilization-overlays.v1"
+  },
+  "availability": "available",
+  "reason": null,
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": null,
+    "expected_count": null
+  },
+  "boundaries": [
+    {
+      "boundary_tick": 4,
+      "revision": 4,
+      "coverage": {
+        "state": "complete",
+        "reason": null,
+        "capture_start": null,
+        "capture_end": null,
+        "missing_intervals": [],
+        "observed_count": null,
+        "expected_count": null
+      },
+      "layers": [
+        "culture",
+        "settlements",
+        "technology"
+      ]
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false
+}

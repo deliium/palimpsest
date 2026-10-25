@@ -1,0 +1,137 @@
+{
+  "schema_version": "observer-civilization-overlay-v1",
+  "run_id": "run-capture",
+  "world_id": "world-capture",
+  "scope": {
+    "layer": "settlements",
+    "evidence_class": "ANALYTICAL",
+    "owner_id": null
+  },
+  "requested_tick": 4,
+  "requested_publication_id": null,
+  "publication": {
+    "publication_id": "pub-1",
+    "digest": "43bcdac05ec6949bb658985b6f7f48db94a7f2319820b0320c119ddaadf9d9a8",
+    "policy_version": "civilization-overlays.v1"
+  },
+  "availability": "available",
+  "reason": null,
+  "resolved_cursor": {
+    "run_id": "run-capture",
+    "world_id": "world-capture",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "window": {
+    "start_tick": 0,
+    "end_tick": 4
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": null,
+    "expected_count": null
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "settlement:loc-1",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "locations:loc-1",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "history": {
+        "scope": {
+          "layer": "settlements",
+          "evidence_class": "ANALYTICAL",
+          "owner_id": null
+        },
+        "boundary_tick": 4,
+        "window": {
+          "start_tick": 0,
+          "end_tick": 4
+        },
+        "policy_version": "civilization-overlays.v1",
+        "coverage": {
+          "state": "complete",
+          "reason": null,
+          "capture_start": null,
+          "capture_end": null,
+          "missing_intervals": [],
+          "observed_count": null,
+          "expected_count": null
+        }
+      },
+      "candidate_id": "settlement:loc-1",
+      "location_id": "loc-1",
+      "eligible_occupancy": 1,
+      "infrastructure_count": 1,
+      "first_supported_boundary": 3,
+      "last_supported_boundary": 4,
+      "observed_streak": 2,
+      "episode_start_boundary": 3,
+      "status": "active"
+    },
+    {
+      "context": {
+        "row_id": "settlement:loc-2",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "locations:loc-2",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "history": {
+        "scope": {
+          "layer": "settlements",
+          "evidence_class": "ANALYTICAL",
+          "owner_id": null
+        },
+        "boundary_tick": 4,
+        "window": {
+          "start_tick": 0,
+          "end_tick": 4
+        },
+        "policy_version": "civilization-overlays.v1",
+        "coverage": {
+          "state": "complete",
+          "reason": null,
+          "capture_start": null,
+          "capture_end": null,
+          "missing_intervals": [],
+          "observed_count": null,
+          "expected_count": null
+        }
+      },
+      "candidate_id": "settlement:loc-2",
+      "location_id": "loc-2",
+      "eligible_occupancy": 0,
+      "infrastructure_count": 0,
+      "first_supported_boundary": null,
+      "last_supported_boundary": null,
+      "observed_streak": 0,
+      "episode_start_boundary": null,
+      "status": "inactive"
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

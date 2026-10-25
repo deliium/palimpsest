@@ -84,6 +84,30 @@ DatabaseFactory = Callable[[Settings], DatabaseResourcesLike]
 def _attach_persistence_services(app: FastAPI, session_factory: object) -> None:
     """Wire default persistence-backed facades unless tests already overrode them."""
     runs = create_run_repository(session_factory)  # type: ignore[arg-type]
+    settings: Settings = app.state.settings
+    if (
+        settings.civilization_root is not None
+        and getattr(app.state, "civilization_service", None) is None
+    ):
+        try:
+            from api.civilization_service import ArtifactCivilizationApiService
+            from persistence.civilization_filesystem import create_civilization_reader
+
+            app.state.civilization_service = ArtifactCivilizationApiService(
+                create_civilization_reader(settings.civilization_root),
+                cast(CivilizationCursorCodec, app.state.civilization_cursor_codec),
+                runs,
+            )
+            _LOGGER.info(
+                "civilization_service_attached",
+                service="ArtifactCivilizationApiService",
+            )
+        except Exception:
+            app.state.civilization_service = None
+            _LOGGER.warning(
+                "civilization_service_attach_failed",
+                reason_code="civilization_storage_unavailable",
+            )
     journal = create_tick_journal_repository(session_factory)  # type: ignore[arg-type]
     snapshots = create_snapshot_repository(session_factory)  # type: ignore[arg-type]
     replay = ReplayService(runs, journal, snapshots)
@@ -256,7 +280,6 @@ def create_app(
         if resolved.civilization_cursor_key is None
         else resolved.civilization_cursor_key.get_secret_value().encode("utf-8")
     )
-    _LOGGER.info("civilization_service_attached", service="CivilizationApiService")
     app.state.database_factory = database_factory or create_database_resources
     app.state.attach_default_manager = attach_default_manager
     if simulation_manager is not None:

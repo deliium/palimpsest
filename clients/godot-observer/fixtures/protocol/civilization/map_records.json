@@ -1,0 +1,65 @@
+{
+  "schema_version": "observer-civilization-map-v1",
+  "run_id": "run-physical",
+  "world_id": "world-physical",
+  "requested_cursor": {
+    "tick": 4,
+    "through_sequence": null
+  },
+  "resolved_cursor": {
+    "run_id": "run-physical",
+    "world_id": "world-physical",
+    "tick": 4,
+    "through_sequence": null,
+    "boundary_tick": 4,
+    "revision": 4
+  },
+  "section": "records",
+  "scope": {
+    "layer": "records",
+    "evidence_class": "OBJECTIVE",
+    "owner_id": null
+  },
+  "coverage": {
+    "state": "complete",
+    "reason": null,
+    "capture_start": null,
+    "capture_end": null,
+    "missing_intervals": [],
+    "observed_count": 1,
+    "expected_count": 1
+  },
+  "rows": [
+    {
+      "context": {
+        "row_id": "records:1",
+        "source_refs": [
+          {
+            "source_kind": "scene",
+            "source_id": "locations:loc-1",
+            "tick": 4,
+            "owner_id": null
+          }
+        ],
+        "anchors": [],
+        "detail_truncated": false
+      },
+      "record_id": "record-1",
+      "kind": "note",
+      "genre": "story",
+      "integrity": "intact",
+      "location_id": "loc-2",
+      "holder_id": "body-b",
+      "custodian_repository_id": null,
+      "parent_record_id": null,
+      "source_record_id": null,
+      "created_tick": 1,
+      "copy_generation": 0,
+      "annotation_revisions": 0,
+      "lost_mark_count": 0
+    }
+  ],
+  "next_cursor": null,
+  "truncated": false,
+  "source_revision": 4
+}

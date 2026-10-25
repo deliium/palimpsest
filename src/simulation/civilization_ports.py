@@ -14,6 +14,8 @@ from simulation.civilization_models import (
     CivilizationCoverage,
     CivilizationCursor,
     CivilizationError,
+    CivilizationEvidenceClass,
+    CivilizationLayer,
     CivilizationMarker,
     CivilizationPublicationRef,
     CivilizationScope,
@@ -40,6 +42,7 @@ __all__ = [
     "CivilizationBoundarySink",
     "CivilizationCataloguePage",
     "CivilizationFinalizedInput",
+    "CivilizationMarkerSelection",
     "CivilizationPage",
     "CivilizationPublicationPort",
     "CivilizationReadBudget",
@@ -238,6 +241,33 @@ class CivilizationPage:
 
 
 @dataclass(frozen=True, slots=True)
+class CivilizationMarkerSelection:
+    """One boundary's keyset page; keys are local marker IDs in tick order."""
+
+    markers: tuple[CivilizationMarker, ...]
+    continuation_after: str | None
+    truncated: bool
+
+    def __post_init__(self) -> None:
+        markers = tuple(self.markers)
+        if any(type(marker) is not CivilizationMarker for marker in markers):
+            raise CivilizationError()
+        keys = [marker.marker_id for marker in markers]
+        if keys != sorted(set(keys)):
+            raise CivilizationError()
+        if self.continuation_after is not None and (
+            type(self.continuation_after) is not str
+            or not 1 <= len(self.continuation_after) <= 512
+        ):
+            raise CivilizationError()
+        if type(self.truncated) is not bool or self.truncated != (
+            self.continuation_after is not None
+        ):
+            raise CivilizationError()
+        object.__setattr__(self, "markers", markers)
+
+
+@dataclass(frozen=True, slots=True)
 class CivilizationCataloguePage:
     run_id: str
     world_id: str
@@ -306,6 +336,10 @@ class CivilizationBoundaryPublication:
 class CivilizationReadPort(Protocol):
     """Read-only consumers cannot publish, repair or seal artifacts."""
 
+    async def publication(
+        self, run_id: str, *, budget: CivilizationReadBudget
+    ) -> CivilizationPublicationRef | None: ...
+
     async def catalogue(
         self,
         run_id: str,
@@ -331,8 +365,23 @@ class CivilizationReadPort(Protocol):
         publication: CivilizationPublicationRef,
         after_key: str | None,
         entity_id: str | None,
+        location_id: str | None = None,
+        region_id: str | None = None,
         budget: CivilizationReadBudget,
     ) -> CivilizationPage: ...
+
+    async def markers_at(
+        self,
+        ref: CivilizationBoundaryRef,
+        *,
+        publication: CivilizationPublicationRef,
+        after_key: str | None,
+        evidence_class: CivilizationEvidenceClass,
+        owner_id: str | None,
+        layer: CivilizationLayer | None,
+        limit: int,
+        budget: CivilizationReadBudget,
+    ) -> CivilizationMarkerSelection: ...
 
 
 class CivilizationPublicationPort(Protocol):

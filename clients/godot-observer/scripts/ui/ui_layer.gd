@@ -42,9 +42,19 @@ signal bookmark_add_requested(note: String)
 signal bookmark_jump_requested(tick: int, sequence: Variant)
 signal bookmark_delete_requested(index: int)
 signal bookmark_edit_requested(index: int, note: String)
+signal civilization_layer_toggled(layer_id: String, enabled: bool)
+signal civilization_layer_mode_selected(layer_id: String, mode: String, owner_id: String)
+signal civilization_owner_changed(owner_id: String)
+signal civilization_filters_changed(layer_id: String, filters: Dictionary)
+signal civilization_load_more_requested(layer_id: String)
+signal civilization_restart_requested(layer_id: String)
+signal civilization_retry_requested(layer_id: String)
+signal civilization_layer_cleared(layer_id: String, reason_code: String)
+signal civilization_credentials_help_requested
 
 var _live_tick := 0
 var _selected_id := ""
+var _population_enabled := false
 
 
 func _ready() -> void:
@@ -78,6 +88,42 @@ func _ready() -> void:
 	$OverlayLegend.overlay_toggled.connect(func(kind: String, evidence_class: String, enabled: bool) -> void:
 		overlay_toggled.emit(kind, evidence_class, enabled)
 	)
+	var civilization = get_node_or_null("CivilizationPanel")
+	if civilization != null:
+		civilization.population_toggled.connect(func(enabled: bool) -> void:
+			set_population_enabled(enabled)
+		)
+		civilization.layer_toggled.connect(func(layer_id: String, enabled: bool) -> void:
+			civilization_layer_toggled.emit(layer_id, enabled)
+		)
+		civilization.layer_mode_selected.connect(
+			func(layer_id: String, mode: String, owner_id: String) -> void:
+				civilization_layer_mode_selected.emit(layer_id, mode, owner_id)
+		)
+		civilization.owner_changed.connect(func(owner_id: String) -> void:
+			civilization_owner_changed.emit(owner_id)
+		)
+		civilization.filters_changed.connect(
+			func(layer_id: String, filters: Dictionary) -> void:
+				civilization_filters_changed.emit(layer_id, filters)
+		)
+		civilization.load_more_requested.connect(func(layer_id: String) -> void:
+			civilization_load_more_requested.emit(layer_id)
+		)
+		civilization.restart_requested.connect(func(layer_id: String) -> void:
+			civilization_restart_requested.emit(layer_id)
+		)
+		civilization.retry_requested.connect(func(layer_id: String) -> void:
+			civilization_retry_requested.emit(layer_id)
+		)
+		civilization.layer_cleared.connect(
+			func(layer_id: String, reason_code: String) -> void:
+				civilization_layer_cleared.emit(layer_id, reason_code)
+		)
+		civilization.credentials_help_requested.connect(func() -> void:
+			civilization_credentials_help_requested.emit()
+		)
+		civilization.set_population_pressed_no_signal(_population_enabled)
 	$NarrativeSelector.variant_selected.connect(func(variant_id: String) -> void:
 		narrative_variant_selected.emit(variant_id)
 	)
@@ -137,8 +183,9 @@ func _ready() -> void:
 	var generational = get_node_or_null("GenerationalPanel")
 	if generational != null:
 		generational.population_toggled.connect(
-			func(enabled: bool) -> void: population_toggled.emit(enabled)
+			func(enabled: bool) -> void: set_population_enabled(enabled)
 		)
+		generational.set_population_enabled(_population_enabled)
 		generational.section_selected.connect(
 			func(section: String) -> void: demographic_section_selected.emit(section)
 		)
@@ -415,3 +462,59 @@ func show_demographic_inspector(row: Variant) -> void:
 	var inspector = get_node_or_null("Inspector")
 	if inspector != null and inspector.has_method("show_demographics"):
 		inspector.show_demographics(row)
+
+
+func population_enabled() -> bool:
+	return _population_enabled
+
+
+func set_population_enabled(enabled: bool) -> void:
+	var changed := enabled != _population_enabled
+	_population_enabled = enabled
+	var generational = get_node_or_null("GenerationalPanel")
+	if generational != null:
+		generational.set_population_enabled(enabled)
+	var civilization = get_node_or_null("CivilizationPanel")
+	if civilization != null:
+		civilization.set_population_pressed_no_signal(enabled)
+	if changed:
+		ObserverLog.debug("acceptance", "population_toggle_state enabled=%s" % enabled)
+		population_toggled.emit(enabled)
+
+
+func set_civilization_layer_enabled(layer_id: String, enabled: bool) -> void:
+	var panel = get_node_or_null("CivilizationPanel")
+	if panel != null:
+		panel.set_layer_enabled(layer_id, enabled)
+
+
+func apply_civilization_layer(layer_id: String, state: Dictionary) -> void:
+	var panel = get_node_or_null("CivilizationPanel")
+	if panel != null:
+		panel.apply_layer_state(layer_id, state)
+
+
+func set_civilization_owner(owner_id: String) -> void:
+	var panel = get_node_or_null("CivilizationPanel")
+	if panel != null:
+		panel.set_selected_owner(owner_id)
+
+
+func clear_civilization_views(reason_code: String = "cleared") -> void:
+	var panel = get_node_or_null("CivilizationPanel")
+	if panel != null:
+		panel.clear_all_states(reason_code)
+
+
+func civilization_panel_visible() -> bool:
+	var panel = get_node_or_null("CivilizationPanel")
+	return panel != null and panel.visible
+
+
+func focus_credentials() -> void:
+	var credentials = get_node_or_null("CredentialsPanel")
+	if credentials == null:
+		return
+	var debug = credentials.get_node_or_null("Column/Debug")
+	if debug != null and debug.has_method("grab_focus"):
+		debug.grab_focus()

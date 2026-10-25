@@ -58,6 +58,9 @@ class CivilizationError(ValueError):
             "civilization_read_budget",
             "civilization_response_budget",
             "civilization_storage_corrupt",
+            "civilization_boundary_missing",
+            "civilization_identity_conflict",
+            "civilization_publication_gone",
         }:
             code = "invalid_civilization_contract"
         self.code = code
