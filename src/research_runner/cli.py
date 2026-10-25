@@ -170,12 +170,35 @@ def _cmd_run(args: argparse.Namespace) -> int:
             extra={"experiment": {"reason_code": str(exc)}},
         )
         return 2
+    try:
+        civilization_options = _civilization_options_from_args(args)
+    except (TypeError, ValueError) as exc:
+        _LOG.error(
+            "cli_civilization_options_invalid",
+            extra={"experiment": {"reason_code": str(exc)}},
+        )
+        return 2
     store = build_manifest_store(Path(args.manifest_root))
     deps = build_batch_dependencies(code_revision=args.code_revision)
     if capture_options is not None:
         from dataclasses import replace
 
         deps = replace(deps, cultural_capture=capture_options)
+    if civilization_options is not None:
+        from dataclasses import replace
+
+        from persistence.civilization_filesystem import (
+            create_civilization_reader,
+        )
+
+        civilization_reader = create_civilization_reader(civilization_options.root)
+        deps = replace(
+            deps,
+            civilization_installer=_civilization_installer(civilization_options),
+            civilization_finalizer=_civilization_finalizer(civilization_options),
+            civilization_require_durable=True,
+            civilization_publication_exists=civilization_reader.has_run,
+        )
     resources = None
     try:
         if args.generational_artifact_root is not None:
@@ -631,6 +654,87 @@ def _lineage_finalizer(options: Any) -> Callable[[Any, Any], Any]:
     return _finalize
 
 
+def _civilization_producer_options(
+    root: Path,
+    cadence: int,
+    max_boundaries: int,
+    max_rows: int,
+    max_bytes: int,
+    status_root: Path | None,
+) -> Any:
+    from research_runner.civilization_composition import (
+        CivilizationProducerOptions,
+    )
+    from simulation.civilization_capture import CivilizationCaptureOptions
+
+    return CivilizationProducerOptions(
+        root=root,
+        capture=CivilizationCaptureOptions(
+            enabled=True,
+            cadence=cadence,
+            max_boundaries=max_boundaries,
+            max_rows=max_rows,
+            max_bytes=max_bytes,
+        ),
+        status_root=status_root,
+    )
+
+
+def _civilization_installer(options: Any) -> Callable[[Any], object]:
+    from research_runner.civilization_composition import (
+        install_civilization_capture,
+    )
+
+    def _install(runner: Any) -> object:
+        return install_civilization_capture(runner, options)
+
+    return _install
+
+
+def _civilization_finalizer(options: Any) -> Callable[[Any, Any], Any]:
+    from research_runner.civilization_composition import (
+        finalize_civilization_capture,
+    )
+
+    async def _finalize(arm: Any, session: Any) -> object:
+        return await finalize_civilization_capture(arm, session, options)
+
+    return _finalize
+
+
+def _civilization_options_from_args(args: argparse.Namespace) -> Any:
+    root = getattr(args, "civilization_overlays_root", None)
+    cadence = getattr(args, "civilization_cadence", 1)
+    max_boundaries = getattr(args, "civilization_max_boundaries", 10_000)
+    max_rows = getattr(args, "civilization_max_rows", 1_000_000)
+    max_bytes = getattr(args, "civilization_max_bytes", 268_435_456)
+    if root is None and (
+        cadence != 1
+        or max_boundaries != 10_000
+        or max_rows != 1_000_000
+        or max_bytes != 268_435_456
+    ):
+        raise ValueError("civilization options require --civilization-overlays-root")
+    if not 1 <= cadence <= 10_000:
+        raise ValueError("civilization cadence is outside the supported range")
+    if not 1 <= max_boundaries <= 10_000:
+        raise ValueError("civilization boundary cap is outside the supported range")
+    if not 1 <= max_rows <= 1_000_000:
+        raise ValueError("civilization row cap is outside the supported range")
+    if not 1 <= max_bytes <= 268_435_456:
+        raise ValueError("civilization byte cap is outside the supported range")
+    if root is None:
+        return None
+    return _civilization_producer_options(
+        Path(root),
+        cadence,
+        max_boundaries,
+        max_rows,
+        max_bytes,
+        Path(root),
+    )
+
+
 def _cmd_generational(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
@@ -680,6 +784,46 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             raise ValueError("lineage publication cap is outside the supported range")
         if not 1 <= lineage_max_bytes <= 268_435_456:
             raise ValueError("lineage byte cap is outside the supported range")
+        try:
+            civilization_options = _civilization_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_civilization_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
+        if civilization_options is not None and not config.persistence.durable:
+            _LOG.error(
+                "cli_civilization_preflight_failed",
+                extra={
+                    "experiment": {
+                        "reason_code": "civilization_capture_requires_durable_run"
+                    }
+                },
+            )
+            return 2
+        if civilization_options is not None:
+            from experiments.generational_adoption import verify_completed_archive
+            from persistence.civilization_filesystem import (
+                create_civilization_reader,
+            )
+
+            archive = verify_completed_archive(
+                root=Path(args.artifact_root),
+                run_id=RunId(args.run_id),
+                expected_config=config,
+                expected_code_revision=args.code_revision,
+            )
+            if archive is not None and not create_civilization_reader(
+                civilization_options.root
+            ).has_run(args.run_id):
+                _LOG.error(
+                    "cli_civilization_preflight_failed",
+                    extra={
+                        "experiment": {"reason_code": "civilization_capture_missing"}
+                    },
+                )
+                return 2
         lineage_options = (
             None
             if lineage_root is None
@@ -815,9 +959,17 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 else _make_lineage_installer(lineage_options)
             ),
             lineage_finalizer=(
+                None if lineage_options is None else _lineage_finalizer(lineage_options)
+            ),
+            civilization_installer=(
                 None
-                if lineage_options is None
-                else _lineage_finalizer(lineage_options)
+                if civilization_options is None
+                else _civilization_installer(civilization_options)
+            ),
+            civilization_finalizer=(
+                None
+                if civilization_options is None
+                else _civilization_finalizer(civilization_options)
             ),
         )
         arm = asyncio.run(execute_generational_assignment(assignment, context))
@@ -867,6 +1019,11 @@ def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--lineage-cadence", type=int, default=1)
     parser.add_argument("--lineage-max-publications", type=int, default=1000)
     parser.add_argument("--lineage-max-bytes", type=int, default=268435456)
+    parser.add_argument("--civilization-overlays-root", default=None)
+    parser.add_argument("--civilization-cadence", type=int, default=1)
+    parser.add_argument("--civilization-max-boundaries", type=int, default=10_000)
+    parser.add_argument("--civilization-max-rows", type=int, default=1_000_000)
+    parser.add_argument("--civilization-max-bytes", type=int, default=268_435_456)
     parser.add_argument("--cultural-max-frames", type=int, default=None)
     parser.add_argument("--cultural-max-rows", type=int, default=None)
     parser.add_argument("--cultural-baseline-boundary", type=int, default=None)
@@ -982,6 +1139,11 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)
     gen_p.add_argument("--lineage-max-bytes", type=int, default=268435456)
+    gen_p.add_argument("--civilization-overlays-root", default=None)
+    gen_p.add_argument("--civilization-cadence", type=int, default=1)
+    gen_p.add_argument("--civilization-max-boundaries", type=int, default=10_000)
+    gen_p.add_argument("--civilization-max-rows", type=int, default=1_000_000)
+    gen_p.add_argument("--civilization-max-bytes", type=int, default=268435456)
     gen_p.set_defaults(func=_cmd_generational)
     add_path_dependence_parser(sub)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
@@ -60,6 +60,10 @@ class MatrixBatchDependencies:
     ) = None
     require_generational_context: bool = False
     cultural_capture: object | None = None
+    civilization_installer: Callable[[object], object] | None = None
+    civilization_finalizer: Callable[[object, object], Awaitable[object]] | None = None
+    civilization_require_durable: bool = False
+    civilization_publication_exists: Callable[[str], bool] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +84,9 @@ async def run_one_assignment(
     *,
     capture_options: object | None = None,
     source_revision: str = "unknown",
+    civilization_installer: object | None = None,
+    civilization_finalizer: object | None = None,
+    civilization_require_durable: bool = False,
 ) -> ExperimentArmResult:
     """Run one assignment with a fresh SimulationRunner (shared helper)."""
     from experiments.cultural_evidence import (
@@ -87,13 +94,27 @@ async def run_one_assignment(
         kinship_parent_child_edges,
     )
 
+    if civilization_installer is not None and civilization_require_durable:
+        if not assignment.runner_config.persistence.durable:
+            raise ValueError("civilization_capture_requires_durable_run")
     recorder = None
+    civilization_session: object | None = None
     kinship_edges: tuple[tuple[str, str], ...] = ()
     async with await SimulationRunner.from_config(
         assignment.runner_config,
         run_id=assignment.run_id,
     ) as runner:
         recorder = install_cultural_recorder(runner, capture_options)  # type: ignore[arg-type]
+        if civilization_installer is not None:
+            try:
+                civilization_session = civilization_installer(runner)  # type: ignore[operator]
+            except Exception:
+                civilization_session = None
+                _LOG.warning(
+                    "civilization_capture_setup_failed run_id=%s reason_code=%s",
+                    assignment.run_id.value,
+                    "civilization_capture_setup_failed",
+                )
         if assignment.experiment_id == "cultural_contact@1":
             from experiments.cultural_contact_scenario import (
                 cultural_contact_arbiter,
@@ -150,7 +171,28 @@ async def run_one_assignment(
         regional_destination_evidence=evidence,
         **cultural_fields,  # type: ignore[arg-type]
     )
-    return replace(arm, metrics=collect_for_experiment(arm))
+    arm = replace(arm, metrics=collect_for_experiment(arm))
+    if (
+        civilization_session is not None
+        and civilization_finalizer is not None
+        and _stop_is_success(runner_result)
+    ):
+        try:
+            await civilization_finalizer(arm, civilization_session)  # type: ignore[operator]
+        except Exception:
+            _LOG.warning(
+                "civilization_finalization_failed run_id=%s reason_code=%s",
+                assignment.run_id.value,
+                "civilization_finalization_failed",
+            )
+    return arm
+
+
+def _civilization_ready(deps: MatrixBatchDependencies, run_id: str) -> bool:
+    if deps.civilization_installer is None:
+        return True
+    exists = deps.civilization_publication_exists
+    return bool(exists is not None and exists(run_id))
 
 
 def _assignment_for_cell(
@@ -406,6 +448,15 @@ class MatrixBatchRunner:
                             failure,
                         )
                         continue
+                if not _civilization_ready(self._deps, assignment.run_id.value):
+                    store.transition(
+                        record.cell_id,
+                        state=MatrixCellState.FAILED,
+                        last_error_code="civilization_capture_missing",
+                        run_id=assignment.run_id.value,
+                    )
+                    failed += 1
+                    continue
                 if self._deps.archive_root is not None:
                     if assignment.runner_config.generational_run is not None:
                         archive = verify_completed_archive(
@@ -484,6 +535,15 @@ class MatrixBatchRunner:
                             failure,
                         )
                         return
+                if not _civilization_ready(self._deps, assignment.run_id.value):
+                    store.transition(
+                        cell_id,
+                        state=MatrixCellState.FAILED,
+                        last_error_code="civilization_capture_missing",
+                        run_id=assignment.run_id.value,
+                    )
+                    failed += 1
+                    return
                 store.transition(cell_id, state=MatrixCellState.SKIPPED_VALID)
                 skipped_valid += 1
                 _LOG.debug(
@@ -569,6 +629,17 @@ class MatrixBatchRunner:
                                 version_identity=identity,
                             )
                         )
+                        if not _civilization_ready(self._deps, assignment.run_id.value):
+                            store.transition(
+                                cell_id,
+                                state=MatrixCellState.FAILED,
+                                last_error_code="civilization_capture_missing",
+                                run_id=assignment.run_id.value,
+                            )
+                            failed += 1
+                            if spec.execution.stop_on_first_error:
+                                stop_batch = True
+                            return
                         store.transition(cell_id, state=MatrixCellState.SKIPPED_VALID)
                         skipped_valid += 1
                         _LOG.info(
@@ -634,6 +705,16 @@ class MatrixBatchRunner:
                                 context = replace(
                                     context, cultural_capture=cultural_options
                                 )
+                            if type(context) is GenerationalExecutionContext:
+                                context = replace(
+                                    context,
+                                    civilization_installer=(
+                                        self._deps.civilization_installer
+                                    ),
+                                    civilization_finalizer=(
+                                        self._deps.civilization_finalizer
+                                    ),
+                                )
                             arm = await execute_generational_assignment(
                                 assignment,
                                 context,  # type: ignore[arg-type]
@@ -643,6 +724,11 @@ class MatrixBatchRunner:
                                 assignment,
                                 capture_options=cultural_options,
                                 source_revision=source_revision,
+                                civilization_installer=self._deps.civilization_installer,
+                                civilization_finalizer=self._deps.civilization_finalizer,
+                                civilization_require_durable=(
+                                    self._deps.civilization_require_durable
+                                ),
                             )
                     except Exception as exc:
                         reason = type(exc).__name__

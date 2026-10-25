@@ -83,6 +83,7 @@ if TYPE_CHECKING:
         DecisionOutcomeCode,
         SubjectiveDecisionRecord,
     )
+    from simulation.civilization_capture import CivilizationOwnerInventory
     from simulation.cultural_evidence import (
         CulturalChannelExport,
         CulturalOwnerExport,
@@ -4155,6 +4156,33 @@ class AgentRuntime:
                 self._cultural_channel_export(channel)
                 for channel in CULTURAL_EVIDENCE_CHANNELS
             ),
+        )
+
+    def export_civilization_owner_state(
+        self, *, generation_index: int, living: bool
+    ) -> CivilizationOwnerInventory:
+        """Return a metadata-only inventory; never a checkpoint or raw ledger."""
+        from simulation.civilization_owner_export import (
+            owner_inventory_from_runtime,
+        )
+
+        def enabled(name: str) -> bool:
+            return getattr(getattr(self._loop, name, None), "value", None) == (
+                "deterministic"
+            )
+
+        return owner_inventory_from_runtime(
+            self.export_cultural_owner_state(
+                generation_index=generation_index, living=living
+            ),
+            groups=self._group_formation,
+            groups_enabled=enabled("_group_formation_mode"),
+            concepts=self._institution_concepts,
+            concepts_enabled=enabled("_institution_concept_mode"),
+            offices=self._office_concepts,
+            offices_enabled=enabled("_office_succession_mode"),
+            decay=self._institutional_decay,
+            decay_enabled=enabled("_institutional_decay_mode"),
         )
 
     def export_cultural_narratives(self) -> object | None:

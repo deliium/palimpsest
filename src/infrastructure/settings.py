@@ -212,6 +212,7 @@ class Settings(BaseSettings):
     research_web_root: Path | None = None
     research_matrix_root: Path | None = None
     lineage_root: Path | None = None
+    civilization_root: Path | None = None
     lineage_cursor_key: SecretStr | None = Field(default=None, repr=False)
     civilization_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
@@ -260,6 +261,7 @@ class Settings(BaseSettings):
         "research_web_root",
         "research_matrix_root",
         "lineage_root",
+        "civilization_root",
         mode="before",
     )
     @classmethod
@@ -547,6 +549,7 @@ class Settings(BaseSettings):
             "has_research_web_root": self.research_web_root is not None,
             "has_research_matrix_root": self.research_matrix_root is not None,
             "has_lineage_root": self.lineage_root is not None,
+            "has_civilization_root": self.civilization_root is not None,
             "has_lineage_cursor_key": self.lineage_cursor_key is not None,
             "has_revision": bool(self.revision),
         }

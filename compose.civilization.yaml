@@ -1,0 +1,21 @@
+# Optional read-only civilization overlay deployment.
+#
+# Usage:
+#   PALIMPSEST_CIVILIZATION_HOST_ROOT=/srv/palimpsest/civilization \
+#   PALIMPSEST_CIVILIZATION_CURSOR_KEY=... \
+#   PALIMPSEST_API_INSPECTION_CREDENTIAL=... \
+#   docker compose -f compose.yaml -f compose.civilization.yaml up -d --wait
+#
+# The producer writes the host root separately. Plain ./run.sh and compose.yaml
+# remain unchanged and serve objective state only.
+
+services:
+  api:
+    environment:
+      PALIMPSEST_CIVILIZATION_ROOT: /civilization
+      PALIMPSEST_CIVILIZATION_CURSOR_KEY: ${PALIMPSEST_CIVILIZATION_CURSOR_KEY:?}
+      PALIMPSEST_API_INSPECTION_CREDENTIAL: ${PALIMPSEST_API_INSPECTION_CREDENTIAL:?}
+      PALIMPSEST_API_DEBUG_ENABLED: ${PALIMPSEST_API_DEBUG_ENABLED:-false}
+      PALIMPSEST_API_DEBUG_CREDENTIAL: ${PALIMPSEST_API_DEBUG_CREDENTIAL:-}
+    volumes:
+      - ${PALIMPSEST_CIVILIZATION_HOST_ROOT:?}:/civilization:ro

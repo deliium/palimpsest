@@ -92,6 +92,15 @@ from simulation.bootstrap import (
     WorldBootstrap,
     registration_translator,
 )
+from simulation.civilization_boundaries import (
+    CivilizationCaptureCoordinator,
+    CivilizationCaptureSink,
+    CivilizationRunnerCaptureStatus,
+)
+from simulation.civilization_capture import (
+    CivilizationOwnerInventory,
+    recover_civilization_events,
+)
 from simulation.clock import Tick
 from simulation.cognition_trace import (
     CognitionTraceRepository,
@@ -1672,6 +1681,7 @@ class SimulationRunner:
         "_bootstrap",
         "_bootstrap_checkpoint",
         "_boundary_observer",
+        "_civilization_capture",
         "_closed",
         "_cognition_counters",
         "_config",
@@ -1777,6 +1787,7 @@ class SimulationRunner:
         self._criterion_decisions: dict[tuple[int, str, str], object] = {}
         self._generational_boundary_stage = GenerationalBoundaryStage.IDLE
         self._boundary_observer = boundary_observer
+        self._civilization_capture: CivilizationCaptureCoordinator | None = None
         self._cultural_boundary_sink: CulturalBoundarySink | None = None
         self._cultural_capture_failed = False
         self._cultural_capture_failure_boundary: int | None = None
@@ -2873,6 +2884,7 @@ class SimulationRunner:
         self._ensure_started()
         await self._publish_initial_cultural_boundary()
         await self._publish_initial_lineage_boundary()
+        await self._publish_initial_civilization_boundary()
         if self._finished_result is not None:
             raise RunnerConstructionError(
                 RunnerConstructionErrorCode.INVALID_CONFIG,
@@ -2917,10 +2929,16 @@ class SimulationRunner:
         pendings: list[PendingRuntimeFinalization] = []
         commands: list[FinalizationCommand] = []
         submissions: list[ActionSubmission] = []
+        civilization = self._civilization_capture
+        stage_grounding = civilization is not None and civilization.wants_events()
+        if civilization is not None:
+            civilization.discard_staging()
 
         try:
             for ordinal, runtime in enumerate(self._runtimes):
                 observation = self._engine.observation_for(runtime.agent_id)
+                if stage_grounding and civilization is not None:
+                    civilization.stage_observation(runtime.agent_id.value, observation)
                 prepared = await runtime.prepare_observation(
                     observation, token=batch.token
                 )
@@ -2952,6 +2970,8 @@ class SimulationRunner:
                 pendings.append(pending)
                 commands.append(command)
                 submissions.append(pending.submission)
+            if stage_grounding and civilization is not None:
+                civilization.complete_staging()
 
             if self._pending_finalizations is not None:
                 for command in commands:
@@ -2995,6 +3015,9 @@ class SimulationRunner:
             self._refresh_generational_progress(tick_result)
             self._publish_cultural_boundary_if_complete(tick_value + 1)
             await self._publish_lineage_boundary_if_complete(tick_value + 1)
+            await self._publish_civilization_boundary_if_complete(
+                tick_value + 1, result=tick_result
+            )
             try:
                 stop_reason = await self._evaluate_stop()
             except asyncio.CancelledError:
@@ -3028,6 +3051,8 @@ class SimulationRunner:
                     self._generational_boundary_stage = (
                         GenerationalBoundaryStage.TERMINAL
                     )
+                if civilization is not None:
+                    civilization.discard_staging()
                 _LOG.info(
                     "runner_cancelled_at_boundary run_id=%s tick=%s",
                     self._run_id.value,
@@ -3061,6 +3086,8 @@ class SimulationRunner:
             )
             return receipt
         except RunnerCrashInjected as crash:
+            if civilization is not None:
+                civilization.discard_staging()
             _LOG.warning(
                 "runner_crash_injected run_id=%s tick=%s point=%s",
                 self._run_id.value,
@@ -3092,6 +3119,8 @@ class SimulationRunner:
                             )
             raise
         except AgentRuntimeError:
+            if civilization is not None:
+                civilization.discard_staging()
             for pending in reversed(pendings):
                 try:
                     self._runtimes_by_agent(pending.submission.agent_id).abort_pending(
@@ -3130,6 +3159,8 @@ class SimulationRunner:
                 )
             raise
         except Exception as exc:
+            if civilization is not None:
+                civilization.discard_staging()
             for pending in reversed(pendings):
                 try:
                     self._runtimes_by_agent(pending.submission.agent_id).abort_pending(
@@ -3380,6 +3411,9 @@ class SimulationRunner:
             await self._sync_mid_run_population_entries()
             self._publish_cultural_boundary_if_complete(tick + 1)
             await self._publish_lineage_boundary_if_complete(tick + 1)
+            await self._publish_civilization_boundary_if_complete(
+                tick + 1, recovery=True
+            )
             total_finalized += finalized
             last_tick = tick
             _LOG.info(
@@ -3409,6 +3443,123 @@ class SimulationRunner:
                 else GenerationalBoundaryStage.PUBLISHED
             )
         return receipt
+
+    def set_civilization_boundary_sink(
+        self, sink: CivilizationCaptureSink | None
+    ) -> None:
+        """Install a detached observational sink before execution or restoration."""
+        if self._started or self._ticks_committed > 0:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="civilization_sink_after_start",
+            )
+        if self._civilization_capture is not None:
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="civilization_sink_replacement",
+            )
+        if sink is not None:
+            if any(
+                not callable(getattr(sink, name, None))
+                for name in (
+                    "wants_events",
+                    "wants_boundary",
+                    "capture_events",
+                    "capture_boundary",
+                )
+            ):
+                raise TypeError("sink must implement CivilizationCaptureSink")
+            self._civilization_capture = CivilizationCaptureCoordinator(
+                sink, self._run_id.value
+            )
+        _LOG.debug(
+            "civilization_sink_installed run_id=%s installed=%s",
+            self._run_id.value,
+            sink is not None,
+        )
+
+    def export_civilization_capture_status(
+        self,
+    ) -> CivilizationRunnerCaptureStatus | None:
+        capture = self._civilization_capture
+        return None if capture is None else capture.status
+
+    async def _publish_civilization_boundary_if_complete(
+        self,
+        boundary_tick: int,
+        *,
+        result: TickResult | None = None,
+        recovery: bool = False,
+    ) -> None:
+        capture = self._civilization_capture
+        if capture is None:
+            return
+        event_batch = None
+        if recovery and boundary_tick > 0:
+            journal = self._factories.journal
+            if journal is not None:
+                event_batch = await recover_civilization_events(
+                    journal,
+                    self._run_id.value,
+                    boundary_tick - 1,
+                )
+        capture.publish(
+            boundary_tick,
+            self._engine.detached_objective_facts,
+            result=result,
+            recovery=recovery,
+            event_batch=event_batch,
+            owner_inventory_factory=self._export_civilization_owners,
+        )
+
+    def _export_civilization_owners(self) -> tuple[CivilizationOwnerInventory, ...]:
+        generation_by_owner: dict[str, int] = {}
+        for record in self._engine.lifecycle_records:
+            owner = getattr(record, "agent_id", None)
+            generation = getattr(record, "generation_index", None)
+            if not isinstance(owner, str) or not owner:
+                continue
+            if isinstance(generation, bool) or not isinstance(generation, int):
+                continue
+            if generation < 0:
+                continue
+            generation_by_owner[owner] = generation
+        owners = []
+        for runtime in self._runtimes:
+            living = runtime.status is not AgentRuntimeStatus.TERMINAL
+            generation_index = generation_by_owner.get(runtime.agent_id.value, 0)
+            owners.append(
+                runtime.export_civilization_owner_state(
+                    generation_index=generation_index,
+                    living=living,
+                )
+            )
+        return tuple(owners)
+
+    async def _publish_initial_civilization_boundary(self) -> None:
+        capture = self._civilization_capture
+        if capture is None:
+            return
+        if capture.status.last_finalized_boundary is not None:
+            return
+        if not capture.wants_events():
+            return
+        boundary = max(self._ticks_committed, self._engine.tick.value)
+        if boundary != 0:
+            capture.note_missing_prefix(boundary)
+            return
+        if self._pending_finalizations is not None:
+            try:
+                records = await self._pending_finalizations.list_pending_for_run(
+                    run_id=self._run_id
+                )
+            except Exception:
+                capture.mark_failure(0, "capture_pending_check_failed")
+                return
+            if records:
+                capture.note_missing_prefix(0)
+                return
+        await self._publish_civilization_boundary_if_complete(0)
 
     def set_cultural_boundary_sink(self, sink: CulturalBoundarySink | None) -> None:
         """Install the observational sink once before execution or restore."""
@@ -3805,6 +3956,7 @@ class SimulationRunner:
             self._started = True
         await self._publish_initial_cultural_boundary()
         await self._publish_initial_lineage_boundary()
+        await self._publish_initial_civilization_boundary()
         _LOG.info(
             "runner_finalized_boundary_initialized run_id=%s owner_count=%s",
             self._run_id.value,

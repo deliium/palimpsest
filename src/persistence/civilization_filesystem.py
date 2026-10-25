@@ -1,0 +1,869 @@
+"""Immutable filesystem publication and bounded read model for civilization.
+
+Rows and manifests are encoded with the independent civilization codec. Hashes
+are child-first; the only commit point is the atomic ``state.json`` reference.
+Readers never glob uncommitted files or repair orphan writes.
+"""
+
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import json
+import logging
+import os
+import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal, cast
+
+from simulation.civilization_codec import (
+    civilization_digest,
+    decode_civilization_value,
+    encode_civilization_value,
+)
+from simulation.civilization_models import (
+    CivilizationArtifactRef,
+    CivilizationCoverage,
+    CivilizationCursor,
+    CivilizationError,
+    CivilizationHashManifest,
+    CivilizationMarker,
+    CivilizationPublicationRef,
+    CivilizationScope,
+    CivilizationWindow,
+)
+from simulation.civilization_ports import (
+    CIVILIZATION_MAX_BOUNDARIES,
+    CIVILIZATION_MAX_BOUNDARY_BYTES,
+    CIVILIZATION_MAX_CAPTURE_BYTES,
+    CIVILIZATION_MAX_METADATA_BYTES,
+    CIVILIZATION_MAX_SHARD_BYTES,
+    CIVILIZATION_MAX_SHARD_ROWS,
+    CivilizationBoundaryPublication,
+    CivilizationBoundaryRef,
+    CivilizationCataloguePage,
+    CivilizationPage,
+    CivilizationReadBudget,
+)
+from simulation.civilization_rows import (
+    CivilizationCapturedRow,
+    CivilizationCultureRow,
+    CivilizationGroupRow,
+    CivilizationInstitutionRow,
+    CivilizationLocationRow,
+    CivilizationMapRow,
+    CivilizationMigrationRow,
+    CivilizationProjectRow,
+    CivilizationRecordRow,
+    CivilizationRegionRow,
+    CivilizationRepositoryRow,
+    CivilizationRouteRow,
+    CivilizationSettlementRow,
+    CivilizationTechnologyRow,
+    CivilizationTradeRow,
+)
+
+_ROW_TYPES = (
+    CivilizationRegionRow,
+    CivilizationRouteRow,
+    CivilizationLocationRow,
+    CivilizationProjectRow,
+    CivilizationRepositoryRow,
+    CivilizationRecordRow,
+    CivilizationSettlementRow,
+    CivilizationMigrationRow,
+    CivilizationTradeRow,
+    CivilizationCultureRow,
+    CivilizationTechnologyRow,
+    CivilizationGroupRow,
+    CivilizationInstitutionRow,
+)
+
+__all__ = [
+    "FilesystemCivilizationPublisher",
+    "FilesystemCivilizationReader",
+    "create_civilization_publisher",
+    "create_civilization_reader",
+]
+
+_LOG = logging.getLogger(__name__)
+_POLICY = "civilization-overlays.v1"
+_SAFE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+_STATE = "state.json"
+
+
+class CivilizationFilesystemError(CivilizationError):
+    """Closed storage/publication codes only."""
+
+
+def _safe_component(value: object) -> str:
+    if type(value) is not str or not _SAFE.fullmatch(value) or value in {".", ".."}:
+        raise CivilizationError("civilization_storage_corrupt")
+    return value
+
+
+def _digest_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _run_root(root: Path, run_id: str) -> Path:
+    if type(run_id) is not str or not run_id:
+        raise CivilizationError("civilization_storage_corrupt")
+    return root / _digest_text(run_id)
+
+
+def _safe_path(root: Path, *parts: str) -> Path:
+    for part in parts:
+        if (
+            type(part) is not str
+            or not part
+            or part in {".", ".."}
+            or "/" in part
+            or "\\" in part
+        ):
+            raise CivilizationError("civilization_storage_corrupt")
+    path = root.joinpath(*parts)
+    if not path.resolve(strict=False).is_relative_to(root.resolve(strict=False)):
+        raise CivilizationError("civilization_storage_corrupt")
+    return path
+
+
+def _scope_key(scope: CivilizationScope) -> str:
+    return _digest_text(
+        "|".join(
+            (
+                scope.layer.value,
+                scope.evidence_class.value,
+                scope.owner_id or "",
+            )
+        )
+    )
+
+
+def _row_key(row: object) -> str:
+    context = getattr(row, "context", None)
+    key = getattr(context, "row_id", None)
+    if not isinstance(key, str):
+        raise CivilizationError()
+    return key
+
+
+def _write_atomic(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def _read_budgeted(
+    path: Path,
+    budget: CivilizationReadBudget,
+    *,
+    metadata: bool = False,
+) -> bytes:
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        raise CivilizationError("civilization_storage_corrupt") from None
+    reservation = budget.reserve_file(size, metadata=metadata)
+    try:
+        content = path.read_bytes()
+    except OSError:
+        raise CivilizationError("civilization_storage_corrupt") from None
+    reservation.require_actual_bytes(len(content))
+    return content
+
+
+def _encode_rows(rows: tuple[object, ...]) -> bytes:
+    return b"".join(encode_civilization_value(row) for row in rows)
+
+
+def _decode_lines(
+    content: bytes,
+    *,
+    expected_type: type,
+    budget: CivilizationReadBudget,
+) -> tuple[object, ...]:
+    values: list[object] = []
+    for line in content.splitlines(keepends=True):
+        if not line.endswith(b"\n"):
+            raise CivilizationError("civilization_storage_corrupt")
+        budget.reserve_scan(1)
+        value = decode_civilization_value(line)
+        if type(value) is not expected_type:
+            raise CivilizationError("civilization_storage_corrupt")
+        values.append(value)
+    return tuple(values)
+
+
+def _encode_state(payload: dict[str, object]) -> bytes:
+    return (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _decode_state(content: bytes) -> dict[str, object]:
+    try:
+        value = json.loads(content.decode("utf-8"))
+    except (UnicodeError, ValueError):
+        raise CivilizationError("civilization_storage_corrupt") from None
+    if type(value) is not dict:
+        raise CivilizationError("civilization_storage_corrupt")
+    return value
+
+
+@contextmanager
+def _locked(run_root: Path) -> Iterator[None]:
+    run_root.mkdir(parents=True, exist_ok=True)
+    lock_path = run_root / ".lock"
+    with lock_path.open("a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _directory_bytes(root: Path) -> int:
+    total = 0
+    if not root.exists():
+        return 0
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise CivilizationError("civilization_storage_corrupt")
+        if path.is_file():
+            total += path.stat().st_size
+    return total
+
+
+class FilesystemCivilizationPublisher:
+    """Single-writer, atomic, quota-aware publication of finalized boundaries."""
+
+    def __init__(self, root: Path | str) -> None:
+        resolved = Path(root)
+        if resolved.is_symlink():
+            raise CivilizationError("civilization_storage_corrupt")
+        resolved.mkdir(parents=True, exist_ok=True)
+        self._root = resolved.resolve()
+
+    def _publication_root(self, run_id: str, publication_id: str) -> Path:
+        _safe_component(publication_id)
+        return _safe_path(
+            self._root,
+            _digest_text(run_id),
+            "publications",
+            publication_id,
+        )
+
+    async def publish_boundary(
+        self, publication_id: str, boundary: CivilizationBoundaryPublication
+    ) -> None:
+        if type(boundary) is not CivilizationBoundaryPublication:
+            raise CivilizationError()
+        run_id = boundary.cursor.run_id
+        run_root = _run_root(self._root, run_id)
+        publication_root = self._publication_root(run_id, publication_id)
+        boundary_tick = boundary.cursor.boundary_tick
+        if boundary_tick is None:
+            raise CivilizationError()
+        rows_by_scope: dict[str, list[CivilizationCapturedRow]] = {}
+        for row in boundary.rows:
+            rows_by_scope.setdefault(_scope_key(row.history.scope), []).append(row)
+        files: dict[str, bytes] = {}
+        marker_chunk: list[CivilizationMarker] = []
+        marker_part = 0
+        for marker in boundary.markers:
+            candidate_markers = (*marker_chunk, marker)
+            encoded_markers = _encode_rows(candidate_markers)
+            if marker_chunk and (
+                len(candidate_markers) > CIVILIZATION_MAX_SHARD_ROWS
+                or len(encoded_markers) > CIVILIZATION_MAX_SHARD_BYTES
+            ):
+                files[f"markers/part-{marker_part:04d}.jsonl"] = _encode_rows(
+                    tuple(marker_chunk)
+                )
+                marker_part += 1
+                marker_chunk = [marker]
+            else:
+                marker_chunk = list(candidate_markers)
+        if marker_chunk:
+            files[f"markers/part-{marker_part:04d}.jsonl"] = _encode_rows(
+                tuple(marker_chunk)
+            )
+        for scope_key, rows in sorted(rows_by_scope.items()):
+            ordered: tuple[CivilizationCapturedRow, ...] = tuple(
+                sorted(rows, key=_row_key)
+            )
+            chunk: list[CivilizationCapturedRow] = []
+            part = 0
+            for row in ordered:
+                candidate = (*chunk, row)
+                encoded = _encode_rows(candidate)
+                if (
+                    len(candidate) > CIVILIZATION_MAX_SHARD_ROWS
+                    or len(encoded) > CIVILIZATION_MAX_SHARD_BYTES
+                ):
+                    files[f"rows/{scope_key}/part-{part:04d}.jsonl"] = _encode_rows(
+                        tuple(chunk)
+                    )
+                    part += 1
+                    chunk = [row]
+                else:
+                    chunk = list(candidate)
+            if chunk:
+                files[f"rows/{scope_key}/part-{part:04d}.jsonl"] = _encode_rows(
+                    tuple(chunk)
+                )
+        total_bytes = sum(len(value) for value in files.values())
+        if (
+            total_bytes > CIVILIZATION_MAX_BOUNDARY_BYTES
+            or len(files) > CIVILIZATION_MAX_BOUNDARIES
+        ):
+            raise CivilizationError("civilization_row_too_large")
+        with _locked(run_root):
+            if (
+                _directory_bytes(run_root) + total_bytes
+                > CIVILIZATION_MAX_CAPTURE_BYTES
+            ):
+                raise CivilizationError("civilization_read_budget")
+            boundary_root = _safe_path(
+                publication_root, "boundaries", f"{boundary_tick:08d}"
+            )
+            manifest_children = []
+            for relative, encoded in sorted(files.items()):
+                key = f"boundaries/{boundary_tick:08d}/{relative}"
+                target = _safe_path(publication_root, *key.split("/"))
+                if target.exists():
+                    if target.read_bytes() != encoded:
+                        raise CivilizationError("civilization_storage_corrupt")
+                else:
+                    _write_atomic(target, encoded)
+                row_count = encoded.count(b"\n")
+                first_key = last_key = relative
+                manifest_children.append(
+                    _artifact_ref(
+                        kind="row_shard",
+                        key=key,
+                        digest=civilization_digest(encoded),
+                        byte_count=len(encoded),
+                        row_count=row_count,
+                        first_key=first_key,
+                        last_key=last_key,
+                    )
+                )
+            from simulation.civilization_models import (
+                CivilizationArtifactRef,
+                CivilizationHashManifest,
+            )
+
+            manifest = CivilizationHashManifest(
+                "boundary_manifest",
+                run_id,
+                boundary.cursor.world_id,
+                publication_id,
+                "civilization-capture-v1",
+                publication_id,
+                _POLICY,
+                boundary_tick,
+                tuple(manifest_children),
+            )
+            try:
+                manifest_bytes = encode_civilization_value(manifest)
+            except CivilizationError:
+                raise
+            if len(manifest_bytes) > CIVILIZATION_MAX_METADATA_BYTES:
+                raise CivilizationError("civilization_row_too_large")
+            manifest_path = _safe_path(
+                publication_root, *boundary_root.parts[-2:], "manifest.json"
+            )
+            _write_atomic(manifest_path, manifest_bytes)
+            ref = CivilizationBoundaryRef(
+                boundary.cursor,
+                civilization_digest(manifest_bytes),
+                boundary.scopes,
+                _overall_coverage(boundary),
+            )
+            ref_path = _safe_path(
+                publication_root, *boundary_root.parts[-2:], "ref.json"
+            )
+            _write_atomic(ref_path, encode_civilization_value(ref))
+            del CivilizationArtifactRef
+
+    async def seal_catalogue(
+        self, run_id: str, publication_id: str
+    ) -> CivilizationPublicationRef:
+        from simulation.civilization_models import (
+            CivilizationHashManifest,
+        )
+
+        publication_root = self._publication_root(run_id, publication_id)
+        run_root = _run_root(self._root, run_id)
+        with _locked(run_root):
+            refs: list[CivilizationBoundaryRef] = []
+            for path in sorted(publication_root.glob("boundaries/*/ref.json")):
+                content = path.read_bytes()
+                value = decode_civilization_value(content)
+                if type(value) is not CivilizationBoundaryRef:
+                    raise CivilizationError("civilization_storage_corrupt")
+                refs.append(value)
+            if len(refs) > CIVILIZATION_MAX_BOUNDARIES or not refs:
+                raise CivilizationError("civilization_read_budget")
+            page_children: list[CivilizationArtifactRef] = []
+            page_chunk: list[CivilizationBoundaryRef] = []
+            page_bytes = b""
+            for ref in refs:
+                encoded = encode_civilization_value(ref)
+                if page_chunk and (
+                    len(page_chunk) >= CIVILIZATION_MAX_SHARD_ROWS
+                    or len(page_bytes) + len(encoded) > CIVILIZATION_MAX_SHARD_BYTES
+                ):
+                    relative = f"catalogue/page-{len(page_children):04d}.jsonl"
+                    target = _safe_path(publication_root, *relative.split("/"))
+                    _write_atomic(target, page_bytes)
+                    page_children.append(
+                        _artifact_ref(
+                            kind="catalogue_page",
+                            key=relative,
+                            digest=civilization_digest(page_bytes),
+                            byte_count=len(page_bytes),
+                            row_count=len(page_chunk),
+                            first_key=f"{page_chunk[0].cursor.boundary_tick:08d}",
+                            last_key=f"{page_chunk[-1].cursor.boundary_tick:08d}",
+                        )
+                    )
+                    page_chunk = []
+                    page_bytes = b""
+                page_chunk.append(ref)
+                page_bytes += encoded
+            if page_chunk:
+                relative = f"catalogue/page-{len(page_children):04d}.jsonl"
+                target = _safe_path(publication_root, *relative.split("/"))
+                _write_atomic(target, page_bytes)
+                page_children.append(
+                    _artifact_ref(
+                        kind="catalogue_page",
+                        key=relative,
+                        digest=civilization_digest(page_bytes),
+                        byte_count=len(page_bytes),
+                        row_count=len(page_chunk),
+                        first_key=f"{page_chunk[0].cursor.boundary_tick:08d}",
+                        last_key=f"{page_chunk[-1].cursor.boundary_tick:08d}",
+                    )
+                )
+            index = CivilizationHashManifest(
+                "catalogue_index",
+                run_id,
+                refs[0].cursor.world_id if refs else "",
+                publication_id,
+                "civilization-capture-v1",
+                publication_id,
+                _POLICY,
+                None,
+                tuple(page_children),
+            )
+            index_bytes = encode_civilization_value(index)
+            if len(index_bytes) > CIVILIZATION_MAX_METADATA_BYTES:
+                raise CivilizationError("civilization_row_too_large")
+            _write_atomic(
+                _safe_path(publication_root, "catalogue", "index.json"),
+                index_bytes,
+            )
+            digest = civilization_digest(index_bytes)
+            state: dict[str, object] = {
+                "run_id": run_id,
+                "publication_id": publication_id,
+                "catalogue_ref": "catalogue/index.json",
+                "catalogue_digest": digest,
+                "policy_version": _POLICY,
+            }
+            _write_atomic(
+                _safe_path(run_root, _STATE),
+                _encode_state(state),
+            )
+            return CivilizationPublicationRef(publication_id, digest, _POLICY)
+
+
+def _artifact_ref(
+    *,
+    kind: Literal[
+        "row_shard", "boundary_manifest", "catalogue_page", "catalogue_index"
+    ],
+    key: str,
+    digest: str,
+    byte_count: int,
+    row_count: int,
+    first_key: str,
+    last_key: str,
+) -> CivilizationArtifactRef:
+    return CivilizationArtifactRef(
+        kind,
+        key,
+        digest,
+        byte_count,
+        row_count,
+        first_key,
+        last_key,
+    )
+
+
+def _overall_coverage(
+    boundary: CivilizationBoundaryPublication,
+) -> CivilizationCoverage:
+    from simulation.civilization_models import CivilizationCoverageState
+
+    states = {row.history.coverage.state for row in boundary.rows}
+    if states and states == {CivilizationCoverageState.COMPLETE}:
+        return CivilizationCoverage(CivilizationCoverageState.COMPLETE)
+    if not states:
+        return CivilizationCoverage(CivilizationCoverageState.COMPLETE)
+    return CivilizationCoverage(CivilizationCoverageState.PARTIAL, "capture_gap")
+
+
+class FilesystemCivilizationReader:
+    """Read-only committed state; never writes, repairs or globs uncommitted data."""
+
+    def __init__(self, root: Path | str) -> None:
+        resolved = Path(root)
+        if resolved.is_symlink():
+            raise CivilizationError("civilization_storage_corrupt")
+        self._root = resolved.resolve()
+
+    def has_run(self, run_id: str) -> bool:
+        try:
+            state = _decode_state(
+                _read_budgeted(
+                    _safe_path(_run_root(self._root, run_id), _STATE),
+                    CivilizationReadBudget(),
+                    metadata=True,
+                )
+            )
+            publication_root = _safe_path(
+                _run_root(self._root, run_id),
+                "publications",
+                str(state["publication_id"]),
+            )
+            index_content = _read_budgeted(
+                _safe_path(publication_root, "catalogue", "index.json"),
+                CivilizationReadBudget(),
+                metadata=True,
+            )
+            return (
+                state.get("run_id") == run_id
+                and civilization_digest(index_content) == state["catalogue_digest"]
+            )
+        except (CivilizationError, KeyError, TypeError):
+            return False
+
+    def _state(self, run_id: str, budget: CivilizationReadBudget) -> dict[str, object]:
+        content = _read_budgeted(
+            _safe_path(_run_root(self._root, run_id), _STATE),
+            budget,
+            metadata=True,
+        )
+        state = _decode_state(content)
+        if (
+            state.get("run_id") != run_id
+            or type(state.get("publication_id")) is not str
+            or type(state.get("catalogue_digest")) is not str
+            or state.get("catalogue_ref") != "catalogue/index.json"
+        ):
+            raise CivilizationError("civilization_storage_corrupt")
+        return state
+
+    def _loaded_refs(
+        self,
+        run_id: str,
+        publication: CivilizationPublicationRef | None,
+        budget: CivilizationReadBudget,
+        *,
+        after_boundary: int | None = None,
+        limit: int | None = None,
+    ) -> tuple[dict[str, object], tuple[CivilizationBoundaryRef, ...]]:
+        state = self._state(run_id, budget)
+        if publication is not None and (
+            publication.publication_id != state["publication_id"]
+            or publication.digest != state["catalogue_digest"]
+        ):
+            raise CivilizationError("civilization_storage_corrupt")
+        publication_root = _safe_path(
+            _run_root(self._root, run_id),
+            "publications",
+            str(state["publication_id"]),
+        )
+        index_content = _read_budgeted(
+            _safe_path(publication_root, "catalogue", "index.json"),
+            budget,
+            metadata=True,
+        )
+        expected_digest = state["catalogue_digest"]
+        if civilization_digest(index_content) != expected_digest:
+            raise CivilizationError("civilization_storage_corrupt")
+        index = decode_civilization_value(index_content)
+        from simulation.civilization_models import CivilizationHashManifest
+
+        if type(index) is not CivilizationHashManifest:
+            raise CivilizationError("civilization_storage_corrupt")
+        refs: list[CivilizationBoundaryRef] = []
+        for child in index.children:
+            content = _read_budgeted(
+                _safe_path(publication_root, *child.key.split("/")),
+                budget,
+                metadata=True,
+            )
+            if civilization_digest(content) != child.digest:
+                raise CivilizationError("civilization_storage_corrupt")
+            for value in _decode_lines(
+                content,
+                expected_type=CivilizationBoundaryRef,
+                budget=budget,
+            ):
+                refs.append(cast(CivilizationBoundaryRef, value))
+        if after_boundary is not None:
+            refs = [
+                ref for ref in refs if (ref.cursor.boundary_tick or 0) > after_boundary
+            ]
+        if limit is not None:
+            refs = refs[:limit]
+        return state, tuple(refs)
+
+    async def catalogue(
+        self,
+        run_id: str,
+        *,
+        after_boundary: int | None,
+        publication: CivilizationPublicationRef | None,
+        budget: CivilizationReadBudget,
+    ) -> CivilizationCataloguePage:
+        state, refs = self._loaded_refs(
+            run_id,
+            publication,
+            budget,
+            after_boundary=after_boundary,
+            limit=budget.limit + 1,
+        )
+        truncated = len(refs) > budget.limit
+        selected = refs[: budget.limit]
+        world_id = selected[0].cursor.world_id if selected else ""
+        publication_ref = CivilizationPublicationRef(
+            str(state["publication_id"]),
+            str(state["catalogue_digest"]),
+            _POLICY,
+        )
+        return CivilizationCataloguePage(
+            run_id,
+            world_id,
+            publication_ref,
+            selected,
+            (
+                None
+                if not truncated or not selected
+                else str(selected[-1].cursor.boundary_tick)
+            ),
+            truncated,
+        )
+
+    async def exact_snapshot(
+        self,
+        cursor: CivilizationCursor,
+        *,
+        publication: CivilizationPublicationRef,
+        budget: CivilizationReadBudget,
+    ) -> CivilizationBoundaryRef:
+        _, refs = self._loaded_refs(cursor.run_id, publication, budget)
+        for ref in refs:
+            if (
+                ref.cursor.boundary_tick == cursor.boundary_tick
+                and ref.cursor.world_id == cursor.world_id
+            ):
+                return ref
+        raise CivilizationError("civilization_storage_corrupt")
+
+    async def rows(
+        self,
+        cursor: CivilizationCursor,
+        scope: CivilizationScope,
+        *,
+        publication: CivilizationPublicationRef,
+        after_key: str | None,
+        entity_id: str | None,
+        budget: CivilizationReadBudget,
+    ) -> CivilizationPage:
+        ref = await self.exact_snapshot(cursor, publication=publication, budget=budget)
+        state, _ = self._loaded_refs(cursor.run_id, publication, budget)
+        publication_root = _safe_path(
+            _run_root(self._root, cursor.run_id),
+            "publications",
+            str(state["publication_id"]),
+        )
+        boundary = cursor.boundary_tick or 0
+        boundary_root = _safe_path(publication_root, "boundaries", f"{boundary:08d}")
+        manifest_content = _read_budgeted(
+            _safe_path(boundary_root, "manifest.json"),
+            budget,
+            metadata=True,
+        )
+        if civilization_digest(manifest_content) != ref.manifest_digest:
+            raise CivilizationError("civilization_storage_corrupt")
+        manifest = decode_civilization_value(manifest_content)
+        if type(manifest) is not CivilizationHashManifest:
+            raise CivilizationError("civilization_storage_corrupt")
+        scope_key = _scope_key(scope)
+        rows: list[CivilizationMapRow | CivilizationCapturedRow] = []
+        scanned = 0
+        next_key: str | None = None
+        truncated = False
+        for child in sorted(
+            (
+                child
+                for child in manifest.children
+                if child.key.startswith(f"boundaries/{boundary:08d}/rows/{scope_key}/")
+            ),
+            key=lambda child: child.key,
+        ):
+            content = _read_budgeted(
+                _safe_path(publication_root, *child.key.split("/")),
+                budget,
+            )
+            if civilization_digest(content) != child.digest:
+                raise CivilizationError("civilization_storage_corrupt")
+            for line in content.splitlines(keepends=True):
+                budget.reserve_scan(1)
+                scanned += 1
+                decoded = decode_civilization_value(line)
+                if type(decoded) not in _ROW_TYPES:
+                    raise CivilizationError("civilization_storage_corrupt")
+                value = cast(CivilizationMapRow | CivilizationCapturedRow, decoded)
+                key = value.context.row_id
+                if after_key is not None and key <= after_key:
+                    continue
+                if entity_id is not None and not _matches_entity(value, entity_id):
+                    continue
+                if len(rows) >= budget.limit:
+                    truncated = True
+                    next_key = rows[-1].context.row_id if rows else after_key
+                    break
+                encoded_row = encode_civilization_value(value)
+                try:
+                    budget.reserve_response(len(encoded_row), rows=1)
+                except CivilizationError:
+                    truncated = True
+                    next_key = rows[-1].context.row_id if rows else after_key
+                    break
+                rows.append(value)
+            if truncated:
+                break
+        if not truncated:
+            next_key = None
+        window = (
+            cast(CivilizationCapturedRow, rows[0]).history.window
+            if rows
+            else CivilizationWindow(boundary, boundary)
+        )
+        return CivilizationPage(
+            cursor,
+            cursor,
+            scope,
+            ref.coverage,
+            tuple(rows),
+            next_key,
+            truncated,
+            cursor.revision,
+            publication,
+            window,
+        )
+
+    async def markers(
+        self,
+        cursor: CivilizationCursor,
+        *,
+        publication: CivilizationPublicationRef,
+        budget: CivilizationReadBudget,
+    ) -> tuple[CivilizationMarker, ...]:
+        ref = await self.exact_snapshot(cursor, publication=publication, budget=budget)
+        state, _ = self._loaded_refs(cursor.run_id, publication, budget)
+        publication_root = _safe_path(
+            _run_root(self._root, cursor.run_id),
+            "publications",
+            str(state["publication_id"]),
+        )
+        boundary = cursor.boundary_tick or 0
+        boundary_root = _safe_path(publication_root, "boundaries", f"{boundary:08d}")
+        manifest_content = _read_budgeted(
+            _safe_path(boundary_root, "manifest.json"),
+            budget,
+            metadata=True,
+        )
+        if civilization_digest(manifest_content) != ref.manifest_digest:
+            raise CivilizationError("civilization_storage_corrupt")
+        manifest = decode_civilization_value(manifest_content)
+        if type(manifest) is not CivilizationHashManifest:
+            raise CivilizationError("civilization_storage_corrupt")
+        children = sorted(
+            (
+                item
+                for item in manifest.children
+                if item.key.startswith(f"boundaries/{boundary:08d}/markers/")
+            ),
+            key=lambda item: item.key,
+        )
+        markers: list[CivilizationMarker] = []
+        for item in children:
+            content = _read_budgeted(
+                _safe_path(publication_root, *item.key.split("/")),
+                budget,
+            )
+            if civilization_digest(content) != item.digest:
+                raise CivilizationError("civilization_storage_corrupt")
+            markers.extend(
+                cast(CivilizationMarker, value)
+                for value in _decode_lines(
+                    content,
+                    expected_type=CivilizationMarker,
+                    budget=budget,
+                )
+            )
+        return tuple(markers)
+
+
+def _matches_entity(row: object, entity_id: str) -> bool:
+    for name in (
+        "location_id",
+        "project_id",
+        "repository_id",
+        "record_id",
+        "region_id",
+        "route_id",
+        "candidate_id",
+        "journey_id",
+        "holder_id",
+        "group_id",
+        "institution_id",
+    ):
+        if getattr(row, name, None) == entity_id:
+            return True
+    return False
+
+
+def create_civilization_publisher(root: Path | str) -> FilesystemCivilizationPublisher:
+    return FilesystemCivilizationPublisher(root)
+
+
+def create_civilization_reader(root: Path | str) -> FilesystemCivilizationReader:
+    return FilesystemCivilizationReader(root)

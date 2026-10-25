@@ -5,11 +5,17 @@ Mode: ultra
 Canonical plan name: `v3-41-godot-civilization-overlays`  
 Branch: `main` (existing; no branch/worktree creation)  
 Created: 2026-10-25  
-Status: implementation partially complete; Phase 1 (Tasks 1–3) verified; next: Task 4 (finalized capture)
+Status: implementation in progress; Phase 1 (Tasks 1–3) verified; Task 4 (finalized capture) verified; Task 5 (overlay composition) verified; Task 6 (publication and CLI composition) verified; Task 7 next
 
 Verification (Tasks 1–2): 159 coverage-enabled contract/projection/legacy/architecture tests passed; scoped Ruff and mypy checks passed. API routes, capture/publication, Godot overlays, and browser/release verification remain pending.
 
 Verification (Tasks 1–3): 269 coverage-enabled contract/API/replay/legacy/settings/architecture tests passed; scoped Ruff and mypy checks passed. GET map pages are inspection-authorized, cursor-pinned, byte/row bounded, and independently serialized. Capture/publication, Godot overlays, and browser/release verification remain pending.
+
+Task 4 complete: metadata-only event receipts, exact source-count/order accounting, explicit unavailable event gaps, default-off composition options and shared atomic event/physical-boundary quotas. Runner hooks cover initial, initialized, fully finalized and recovered boundaries. Added bounded owner inventories (cultural features, terminology, narratives, practical knowledge, groups, institution concepts, offices, decay samples) with per-channel coverage, exact tick-local project/repository grounding witnesses, and journal-proven recovery with a 2,000-event/4 MiB bound that never treats a gap as known-empty. Tests cover off/on/failing parity, two-owner finalization, aborts, cadence, restored prefixes, content exclusion, independent cultural/lineage sinks, newborn empty state, forged/testimony/ordinal grounding rejection, and journal-backed recovered events. Task 4 acceptance (65 coverage-enabled tests) and scoped Ruff/mypy/architecture checks pass; Task 5 complete.
+
+Task 5 complete: added pure `analysis.civilization_overlays` calculators for settlements (four-boundary occupancy plus intact infrastructure), completed-exchange-only trade, migration windows, exact culture carriers/denominators (including present-location partitions with null partial proportions), attributable technology diffusion, owner-scoped and residence-only groups, subjectively grounded and analytically deduced institutions, and boundary-pinned markers. `experiments.civilization_publication` composes exact finalized boundaries into `CivilizationBoundaryPublication` without importing analysis into simulation/API/persistence. Tests cover settlement activation/censoring, gifts versus completed exchanges, duplicate carriers, unavailable denominators, technology before-acquisition/attribution, cumulative decay deduplication and real lifecycle state, grounded versus unplaced institutions, and marker boundary pins. Task 5 acceptance (62 coverage-enabled tests) and scoped Ruff/mypy plus a 260-test capture/publication/API/V1/V2/architecture gate pass; Task 6 is next.
+
+Task 6 complete: added `persistence.civilization_filesystem` with child-first shard/manifest/catalogue-index hashing, an atomic `state.json` commit, single-writer locking, cumulative size checks, strict codec decoding, bounded file/scan/response budgets, exact keyset/entity pagination and explicit uncommitted-publication invisibility. Added `research_runner.civilization_composition` with opt-in producer options, install/finalize hooks, committed read-back verification and separate scientific/publication status files. Wired hooks through matrix and generational execution, added CLI flags and durable preflight rejection, `PALIMPSEST_CIVILIZATION_ROOT`, matrix publication-readiness checks at all three skip/adoption exits, standalone completed-generational adoption validation, and optional `compose.civilization.yaml` with a read-only host mount. Tests cover filesystem round trips/tampering/keyset pages, status isolation, CLI option validation, adoption readiness and a real `run_one_assignment` capture-to-publisher round trip. Task 6 acceptance (19 coverage-enabled tests) and a 142-test capture/publication/API/matrix/generational/CLI/V1/V2/architecture gate pass; Task 7 is next.
 
 Refined: 2026-10-25 — eight approved code-backed refinements and one contract-order correction; all18 task IDs and unchecked statuses preserved.
 
@@ -209,9 +215,9 @@ Capture keeps whitelisted event receipts every finalized tick independently of s
 
 ### Phase 2: Captured history
 
-- [ ] Task 4: Capture bounded finalized owner and physical evidence ([details](phase-02-captured-history.md#task-4-capture-bounded-finalized-owner-and-physical-evidence)) (depends on1,2)
-- [ ] Task 5: Compose detached analytical and scoped historical layers ([details](phase-02-captured-history.md#task-5-compose-detached-analytical-and-scoped-historical-layers)) (depends on4)
-- [ ] Task 6: Publish immutable history and expose opt-in CLI composition ([details](phase-02-captured-history.md#task-6-publish-immutable-history-and-expose-opt-in-cli-composition)) (depends on4,5)
+- [x] Task 4: Capture bounded finalized owner and physical evidence ([details](phase-02-captured-history.md#task-4-capture-bounded-finalized-owner-and-physical-evidence)) (depends on1,2)
+- [x] Task 5: Compose detached analytical and scoped historical layers ([details](phase-02-captured-history.md#task-5-compose-detached-analytical-and-scoped-historical-layers)) (depends on4)
+- [x] Task 6: Publish immutable history and expose opt-in CLI composition ([details](phase-02-captured-history.md#task-6-publish-immutable-history-and-expose-opt-in-cli-composition)) (depends on4,5)
 
 ### Phase 3: Query and client
 

@@ -251,6 +251,35 @@ The GET-only `/observer/civilization/map` API uses `api.civilization_service`,
 independent strict schemas and purpose-specific HMAC cursors. It delegates
 historical restoration to `ObserverReadService.resolve_objective_history`,
 requires objective inspection before reads, and never publishes capture data.
+`simulation.civilization_capture` strips committed events to closed metadata
+receipts and projects bounded owner inventories plus exact observed grounding
+witnesses; `simulation.civilization_owner_export` performs the metadata-only
+ledger projection without private labels or raw content.
+`experiments.civilization_capture` provides bounded event-lane retention
+independent of snapshot cadence. `civilization_boundaries` builds physical-only
+detached inputs and isolates callbacks installed through
+`SimulationRunner.set_civilization_boundary_sink`. Initial and fully finalized
+boundaries share one quota with event receipts. Recovered event evidence is
+journal-proven under a fixed event/byte bound; a missing or mismatched commit is
+an explicit gap, never a known-empty tick. Missing owner observations suppress
+grounding witnesses rather than reconstructing them. Capture is not
+automatically installed and cannot affect scientific execution when its sink
+fails.
+
+`persistence.civilization_filesystem` implements separate read/publication ports
+with a single atomic `state.json` commit and child-first shard/manifest/
+catalogue-index hashing. `research_runner.civilization_composition` is the
+opt-in producer bridge; it installs capture before execution and publishes only
+after successful scientific completion, recording publication readiness
+separately from scientific status. The API never imports the producer or
+analysis.
+
+`analysis.civilization_overlays` contains the pure detached calculators for
+settlements, completed-exchange trade, migration, culture, technology, groups,
+institutions and boundary markers. `experiments.civilization_publication` is the
+only composition bridge from retained capture to those calculators; it emits
+exact finalized `CivilizationBoundaryPublication` values and never runs inside
+simulation, API or persistence.
 
 1. Use accepted-set and exact-key-set schema evolution. A new write version must
    preserve legacy decoding; never silently widen an existing schema identifier.

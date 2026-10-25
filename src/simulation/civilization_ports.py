@@ -358,4 +358,6 @@ _Input = TypeVar("_Input", bound=CivilizationFinalizedInput, contravariant=True)
 class CivilizationBoundarySink(Protocol[_Input]):
     """Accept only finalized detached inputs, never a live engine."""
 
-    def capture_boundary(self, boundary: _Input) -> None: ...
+    def capture_boundary(self, boundary: _Input) -> bool:
+        """Acknowledge retention; refusal is not successful publication."""
+        ...

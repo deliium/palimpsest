@@ -89,6 +89,8 @@ class GenerationalExecutionContext:
     cultural_capture: CulturalCaptureOptions | None = None
     lineage_installer: Callable[[SimulationRunner], object] | None = None
     lineage_finalizer: Callable[[object, object], Awaitable[object]] | None = None
+    civilization_installer: Callable[[SimulationRunner], object] | None = None
+    civilization_finalizer: Callable[[object, object], Awaitable[object]] | None = None
 
     def preflight(self, config: SimulationRunnerConfig) -> None:
         _validate_recipe(self.recipe, config)
@@ -156,6 +158,7 @@ async def execute_generational_assignment(
     try:
         recorder = None
         lineage_session: object | None = None
+        civilization_session: object | None = None
         kinship_edges: tuple[tuple[str, str], ...] = ()
         async with await SimulationRunner.from_config(
             config, run_id=assignment.run_id, factories=factories
@@ -174,6 +177,15 @@ async def execute_generational_assignment(
                         "lineage_capture_setup_failed run_id=%s reason_code=%s",
                         assignment.run_id.value,
                         "lineage_capture_setup_failed",
+                    )
+            if context.civilization_installer is not None:
+                try:
+                    civilization_session = context.civilization_installer(runner)
+                except Exception:
+                    _LOG.warning(
+                        "civilization_capture_setup_failed run_id=%s reason_code=%s",
+                        assignment.run_id.value,
+                        "civilization_capture_setup_failed",
                     )
             if context.configurator is not None:
                 context.configurator(runner)
@@ -300,6 +312,19 @@ async def execute_generational_assignment(
                 "lineage_finalization_failed run_id=%s reason_code=%s",
                 assignment.run_id.value,
                 "lineage_finalization_failed",
+            )
+    if (
+        civilization_session is not None
+        and context.civilization_finalizer is not None
+        and not runner_stop_is_failure(result.stop_reason)
+    ):
+        try:
+            await context.civilization_finalizer(arm, civilization_session)
+        except Exception:
+            _LOG.warning(
+                "civilization_finalization_failed run_id=%s reason_code=%s",
+                assignment.run_id.value,
+                "civilization_finalization_failed",
             )
     return arm
 
