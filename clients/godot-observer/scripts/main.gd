@@ -93,7 +93,10 @@ func _ready() -> void:
 	_session.credentials_error.connect(_on_credentials_error)
 	_session.generational_updated.connect(_on_generational_updated)
 	_session.lineage_source_updated.connect(_on_lineage_updated)
-	_session.civilization_layer_changed.connect(_ui.apply_civilization_layer)
+	_session.civilization_layer_changed.connect(_on_civilization_layer_changed)
+	_session.civilization_bundle_ready.connect(_on_civilization_bundle)
+	_session.frame_sought.connect(_on_civilization_frame_sought)
+	_world.civilization_inspect_requested.connect(_ui.show_civilization_inspector)
 	_ui.population_toggled.connect(_on_population_toggled)
 	_ui.civilization_layer_toggled.connect(_on_civilization_layer_toggled)
 	_ui.civilization_layer_mode_selected.connect(_on_civilization_mode)
@@ -569,6 +572,7 @@ func _on_population_toggled(enabled: bool) -> void:
 	ObserverLog.debug("acceptance", "main_population_toggled enabled=%s opened=%s" % [enabled, _session._opened])
 	_ui.set_generational_panel_visible(enabled)
 	_session.set_demographics_enabled(enabled)
+	_session.set_civilization_layer_enabled("locations", enabled)
 	if enabled:
 		_session.set_generation_markers_enabled(_ui.is_generational_overlay_enabled("generation"))
 
@@ -586,6 +590,19 @@ func _on_demographic_load_more() -> void:
 func _on_civilization_layer_toggled(layer_id: String, enabled: bool) -> void:
 	_session.set_civilization_layer_enabled(layer_id, enabled)
 	ObserverLog.debug("acceptance", "civilization_toggle layer=%s enabled=%s" % [layer_id, enabled])
+
+
+func _on_civilization_layer_changed(layer_id: String, state: Dictionary) -> void:
+	_ui.apply_civilization_layer(layer_id, state)
+	_world.apply_civilization_layer(layer_id, state)
+
+
+func _on_civilization_bundle(cursor: Dictionary, states: Dictionary) -> void:
+	_world.apply_civilization_bundle(cursor, states)
+
+
+func _on_civilization_frame_sought(_frame: Variant, _event: Variant, _forward: bool) -> void:
+	_world.clear_civilization_layers()
 
 
 func _on_civilization_mode(layer_id: String, mode: String, owner_id: String) -> void:

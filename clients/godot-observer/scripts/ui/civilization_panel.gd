@@ -301,6 +301,27 @@ func _build() -> void:
 		var button := _make_toggle(row, facility_grid)
 		_toggles[str(row["id"])] = button
 
+	var legend := Label.new()
+	legend.name = "FacilityLegend"
+	legend.text = (
+		"Legend: solid = world neighbor; dashed = configured route; "
+		+ "envelope = region (overlap is not adjacency); "
+		+ "containers = records / repositories (archive evidence)"
+	)
+	legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	legend.set_meta("acceptance_id", "civilization_facility_legend")
+	_column.add_child(legend)
+
+	var flow_legend := Label.new()
+	flow_legend.name = "FlowLegend"
+	flow_legend.text = (
+		"Flows: dashed = intention; solid = outcome; dotted/dash-dot = knowledge modality; "
+		+ "local loop = co-located completed exchange; hatch = analytical culture"
+	)
+	flow_legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	flow_legend.set_meta("acceptance_id", "civilization_flow_legend")
+	_column.add_child(flow_legend)
+
 	var status_title := Label.new()
 	status_title.text = "Layer availability"
 	_column.add_child(status_title)

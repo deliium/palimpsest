@@ -85,6 +85,40 @@ func show_demographics(row: Variant) -> void:
 	]
 
 
+func show_civilization(summary: Dictionary) -> void:
+	visible = true
+	var lines: Array[String] = []
+	lines.append("civilization %s" % str(summary.get("layer", "")))
+	lines.append("row %s" % str(summary.get("row_id", "")))
+	lines.append("evidence %s" % str(summary.get("evidence_class", "")))
+	var values: Dictionary = summary.get("summary", {})
+	var keys: Array = values.keys()
+	keys.sort()
+	for key in keys:
+		var value: Variant = values[key]
+		if value == null:
+			lines.append("%s unknown" % str(key))
+		elif typeof(value) in [TYPE_STRING, TYPE_INT, TYPE_FLOAT, TYPE_BOOL]:
+			lines.append("%s %s" % [str(key), str(value)])
+	for ref in summary.get("source_refs", []):
+		lines.append(
+			"source %s %s tick=%s" % [
+				str(ref.get("source_kind", "")),
+				str(ref.get("source_id", "")),
+				str(ref.get("tick", "")),
+			]
+		)
+	for ref in summary.get("lineage_refs", []):
+		lines.append("lineage source %s tick=%s" % [str(ref.get("source_id", "")), str(ref.get("tick", ""))])
+	_body.text = "\n".join(lines)
+	if _measures != null:
+		_measures.text = ""
+		_measures.visible = false
+	if _demographics != null:
+		_demographics.text = ""
+	ObserverLog.debug("inspector", "civilization_opened layer=%s" % str(summary.get("layer", "")))
+
+
 func clear_agent() -> void:
 	visible = false
 	if _body != null:

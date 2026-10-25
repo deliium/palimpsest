@@ -4,12 +4,17 @@ const ObserverLog := preload("res://scripts/log.gd")
 const Playback := preload("res://scripts/protocol/playback.gd")
 const ReducerScript := preload("res://scripts/protocol/reducer.gd")
 const Router := preload("res://scripts/protocol/event_router.gd")
+const CivilizationPlan := preload("res://scripts/presentation/civilization_plan.gd")
 
 var playback_speed := 1.0
 
 var _world_state: Variant = null
 var _centers := {}
 var _reducer = ReducerScript.new()
+var _civilization_states := {}
+var _civilization_cursor := {}
+var _civilization_warning := ""
+var _civilization_anchor_warning := ""
 
 @onready var _locations: Node2D = $LocationLayer
 @onready var _claims: Node2D = $ClaimOverlay
@@ -30,10 +35,14 @@ var _reducer = ReducerScript.new()
 @onready var _effects: Node2D = $EffectsLayer
 @onready var _camera: Camera2D = $Camera2D
 @onready var _generational: Node2D = get_node_or_null("GenerationalOverlay")
+@onready var _civilization: Node2D = get_node_or_null("CivilizationFacilities")
+@onready var _civilization_flows: Node2D = get_node_or_null("CivilizationFlows")
+@onready var _civilization_beliefs: Node2D = get_node_or_null("CivilizationBeliefs")
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
 signal location_selected(location_id: String)
+signal civilization_inspect_requested(summary: Dictionary)
 
 
 func _ready() -> void:
@@ -42,6 +51,18 @@ func _ready() -> void:
 	if _locations != null and _locations.has_signal("location_selected"):
 		_locations.location_selected.connect(func(location_id: String) -> void:
 			location_selected.emit(location_id)
+		)
+	if _civilization != null and _civilization.has_signal("row_inspect_requested"):
+		_civilization.row_inspect_requested.connect(func(summary: Dictionary) -> void:
+			civilization_inspect_requested.emit(summary)
+		)
+	if _civilization_flows != null and _civilization_flows.has_signal("row_inspect_requested"):
+		_civilization_flows.row_inspect_requested.connect(func(summary: Dictionary) -> void:
+			civilization_inspect_requested.emit(summary)
+		)
+	if _civilization_beliefs != null and _civilization_beliefs.has_signal("row_inspect_requested"):
+		_civilization_beliefs.row_inspect_requested.connect(func(summary: Dictionary) -> void:
+			civilization_inspect_requested.emit(summary)
 		)
 
 
@@ -101,6 +122,7 @@ func show_world(world: Variant) -> void:
 		_narrative.set_agent_points(agent_points)
 	if _generational != null:
 		_generational.set_positions(agent_points)
+	_rebuild_civilization()
 
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
@@ -204,8 +226,115 @@ func clear_world() -> void:
 	_centers = {}
 	_world_state = null
 	_reducer.clear()
+	_civilization_states.clear()
+	_civilization_cursor.clear()
+	if _civilization != null:
+		_civilization.clear_plan()
+	if _civilization_flows != null:
+		_civilization_flows.clear_plan()
+	if _civilization_beliefs != null:
+		_civilization_beliefs.clear_plan()
 	inspect_cleared.emit()
 	ObserverLog.debug("view", "world_cleared")
+
+
+func apply_civilization_bundle(cursor: Dictionary, states: Dictionary) -> void:
+	_civilization_cursor = cursor.duplicate(true)
+	_civilization_states = states.duplicate(true)
+	_rebuild_civilization()
+
+
+func apply_civilization_layer(layer_id: String, state: Dictionary) -> void:
+	var status := str(state.get("status", "off"))
+	if status not in ["available", "partial", "empty"]:
+		_civilization_states.erase(layer_id)
+		_rebuild_civilization()
+		return
+	_civilization_states[layer_id] = state.duplicate(true)
+	var cursor: Variant = state.get("cursor", null)
+	if typeof(cursor) == TYPE_DICTIONARY and not cursor.is_empty():
+		_civilization_cursor = cursor.duplicate(true)
+	_rebuild_civilization()
+
+
+func clear_civilization_layer(layer_id: String) -> void:
+	if _civilization_states.erase(layer_id):
+		_rebuild_civilization()
+
+
+func clear_civilization_layers() -> void:
+	_civilization_states.clear()
+	_civilization_cursor.clear()
+	_civilization_warning = ""
+	_civilization_anchor_warning = ""
+	if _civilization != null:
+		_civilization.clear_plan()
+	if _civilization_flows != null:
+		_civilization_flows.clear_plan()
+	if _civilization_beliefs != null:
+		_civilization_beliefs.clear_plan()
+
+
+func civilization_plan() -> Dictionary:
+	if _civilization == null:
+		return {}
+	return _civilization.semantic_plan()
+
+
+func _rebuild_civilization() -> void:
+	if _civilization == null:
+		return
+	if _world_state == null or _civilization_states.is_empty() or _civilization_cursor.is_empty():
+		_civilization.clear_plan()
+		if _civilization_flows != null:
+			_civilization_flows.clear_plan()
+		if _civilization_beliefs != null:
+			_civilization_beliefs.clear_plan()
+		return
+	var plan: Dictionary = CivilizationPlan.build_semantic(
+		_world_state,
+		_civilization_states,
+		_civilization_cursor,
+		_centers,
+	)
+	if not bool(plan.get("ok", false)):
+		var reason := str(plan.get("reason_code", "invalid_plan"))
+		if reason != _civilization_warning:
+			_civilization_warning = reason
+			ObserverLog.warn("civilization", "render_plan_rejected reason=%s" % reason)
+		_civilization.clear_plan()
+		if _civilization_flows != null:
+			_civilization_flows.clear_plan()
+		if _civilization_beliefs != null:
+			_civilization_beliefs.clear_plan()
+		return
+	_civilization_warning = ""
+	_civilization.apply_plan(plan)
+	if _civilization_flows != null:
+		_civilization_flows.apply_plan(plan)
+	if _civilization_beliefs != null:
+		_civilization_beliefs.apply_plan(plan)
+	if int(plan.get("unresolved_anchor_count", 0)) > 0:
+		var anchor_key := "%s|%s" % [
+			str(_civilization_cursor.get("tick", "")),
+			str(_civilization_cursor.get("revision", "")),
+		]
+		if anchor_key != _civilization_anchor_warning:
+			_civilization_anchor_warning = anchor_key
+			ObserverLog.warn(
+				"civilization",
+				"unresolved_anchor count=%s code=anchor_unavailable" % str(
+					plan.get("unresolved_anchor_count", 0)
+				),
+			)
+	ObserverLog.debug(
+		"civilization",
+		"render_plan layers=%s rows=%s unplaced=%s" % [
+			_civilization_states.size(),
+			plan.get("rows", []).size(),
+			int(plan.get("unresolved_anchor_count", 0)),
+		],
+	)
 
 
 func set_narrative_overlay_enabled(enabled: bool) -> void:

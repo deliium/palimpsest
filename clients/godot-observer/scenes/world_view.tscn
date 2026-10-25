@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://scripts/view/world_view.gd" id="1_view"]
 [ext_resource type="Script" path="res://scripts/view/camera_rig.gd" id="7_camera"]
@@ -15,6 +15,9 @@
 [ext_resource type="PackedScene" path="res://scenes/layers/agent_layer.tscn" id="5_agents"]
 [ext_resource type="PackedScene" path="res://scenes/layers/effects_layer.tscn" id="6_effects"]
 [ext_resource type="Script" path="res://scripts/view/generational_overlay.gd" id="15_generational"]
+[ext_resource type="Script" path="res://scripts/view/civilization_facilities.gd" id="16_civilization"]
+[ext_resource type="Script" path="res://scripts/view/civilization_flows.gd" id="17_flows"]
+[ext_resource type="Script" path="res://scripts/view/civilization_beliefs.gd" id="18_beliefs"]
 
 [node name="WorldView" type="Node2D"]
 script = ExtResource("1_view")
@@ -69,6 +72,15 @@ script = ExtResource("13_narrative")
 [node name="ConnectionLayer" parent="." instance=ExtResource("3_connections")]
 
 [node name="ObjectLayer" parent="." instance=ExtResource("4_objects")]
+
+[node name="CivilizationFacilities" type="Node2D" parent="."]
+script = ExtResource("16_civilization")
+
+[node name="CivilizationFlows" type="Node2D" parent="."]
+script = ExtResource("17_flows")
+
+[node name="CivilizationBeliefs" type="Node2D" parent="."]
+script = ExtResource("18_beliefs")
 
 [node name="AgentLayer" parent="." instance=ExtResource("5_agents")]
 

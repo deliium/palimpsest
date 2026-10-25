@@ -312,6 +312,10 @@ func show_inspector(snapshot: Dictionary) -> void:
 	$Inspector.show_agent(snapshot)
 
 
+func show_civilization_inspector(summary: Dictionary) -> void:
+	$Inspector.show_civilization(summary)
+
+
 func clear_inspector() -> void:
 	$Inspector.clear_agent()
 
