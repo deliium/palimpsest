@@ -9,6 +9,7 @@ from typing import Protocol, cast
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from api.civilization_cursor import CivilizationCursorCodec
 from api.durable_runner import make_durable_runner_factory
 from api.errors import ApiError, api_error_handler
 from api.middleware import RequestIdMiddleware
@@ -24,6 +25,7 @@ from api.presentation_static import mount_presentation
 from api.research_static import mount_research_ui
 from api.routes import (
     branches_router,
+    civilization_router,
     debugger_router,
     health_router,
     inspection_router,
@@ -249,6 +251,12 @@ def create_app(
     )
     app.state.settings = resolved
     _attach_lineage_service(app)
+    app.state.civilization_cursor_codec = CivilizationCursorCodec(
+        None
+        if resolved.civilization_cursor_key is None
+        else resolved.civilization_cursor_key.get_secret_value().encode("utf-8")
+    )
+    _LOGGER.info("civilization_service_attached", service="CivilizationApiService")
     app.state.database_factory = database_factory or create_database_resources
     app.state.attach_default_manager = attach_default_manager
     if simulation_manager is not None:
@@ -266,6 +274,7 @@ def create_app(
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)
+    app.include_router(civilization_router)
     app.include_router(observer_stream_router)
     app.include_router(version_router)
     # Research UI precedes the presentation catch-all at `/`.

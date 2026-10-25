@@ -213,6 +213,7 @@ class Settings(BaseSettings):
     research_matrix_root: Path | None = None
     lineage_root: Path | None = None
     lineage_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    civilization_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -277,6 +278,15 @@ class Settings(BaseSettings):
         raw = value.get_secret_value()
         if len(raw.encode("utf-8")) < 32:
             raise ValueError("lineage cursor key must be at least 32 UTF-8 bytes")
+        return value
+
+    @field_validator("civilization_cursor_key")
+    @classmethod
+    def validate_civilization_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError("civilization cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("revision", mode="before")

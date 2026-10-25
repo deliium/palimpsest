@@ -5,7 +5,14 @@ from __future__ import annotations
 import logging
 from typing import NoReturn, Protocol
 
-from api.errors import bad_request, conflict, internal, not_found, service_unavailable
+from api.errors import (
+    ApiError,
+    bad_request,
+    conflict,
+    internal,
+    not_found,
+    service_unavailable,
+)
 from api.observer_demographic_schemas import (
     DemographicAgentRowOut,
     DemographicCohortRowOut,
@@ -99,6 +106,31 @@ class ObserverReadService:
     @property
     def replay(self) -> ReplayService:
         return self._replay
+
+    async def resolve_objective_history(
+        self, run_id: str, *, tick: int | None, through_sequence: int | None
+    ) -> FoldedObjectiveHistory:
+        """Public detached resolver for independent, cursor-pinned sidecars.
+
+        Preserve trusted replay-context injection and all restoration policy in
+        the existing observer path. No live-manager metadata is joined here.
+        """
+        try:
+            return await self._demographic_history(
+                run_id, tick=tick, through_sequence=through_sequence
+            )
+        except ApiError as exc:
+            if exc.code != "target_unreachable" or tick is None:
+                raise
+            # The legacy replay status conflates an unknown run and an ahead
+            # target. Disambiguate only this failure path using the same trusted
+            # resolver; never use the head as a substitute historical scene.
+            head = await self._history(run_id, target_tick=None)
+            if tick > head.scene.tick:
+                raise conflict(
+                    code="cursor_ahead_of_high_water", run_id=run_id
+                ) from None
+            raise service_unavailable(code="civilization_replay_unavailable") from None
 
     async def _branch_fields(self, run_id: str) -> dict[str, object]:
         if self._lineage is None:

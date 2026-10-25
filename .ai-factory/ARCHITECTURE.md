@@ -241,6 +241,17 @@ those as current pins or silently drop their legacy accepted versions.
 
 ### Requirements for later changes
 
+Civilization presentation contracts live in `simulation.civilization_models`,
+`civilization_rows`, and `civilization_ports`, with strict canonical encoding in
+`civilization_codec` and pure bounded selection in `civilization_paging`. These
+independent sidecars distinguish objective map sections, owner-scoped claims,
+and detached analytical layers. Read and publication ports are separate; no
+contract grants world authority or changes the legacy observer protocol.
+The GET-only `/observer/civilization/map` API uses `api.civilization_service`,
+independent strict schemas and purpose-specific HMAC cursors. It delegates
+historical restoration to `ObserverReadService.resolve_objective_history`,
+requires objective inspection before reads, and never publishes capture data.
+
 1. Use accepted-set and exact-key-set schema evolution. A new write version must
    preserve legacy decoding; never silently widen an existing schema identifier.
 2. Command changes co-land admission, operation rules, event details, replay
