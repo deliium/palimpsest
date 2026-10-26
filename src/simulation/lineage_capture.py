@@ -268,13 +268,27 @@ class LineageCaptureSession(LineageBoundarySink):
                 edges = []
                 seen: set[str] = set()
                 for node in nodes:
-                    neighbor_page = await session.neighbors(
-                        snapshot, node.key, LineageDirection.BOTH, None, 200
-                    )
-                    for row in neighbor_page.rows:
-                        if row.edge.edge_key not in seen:
-                            seen.add(row.edge.edge_key)
-                            edges.append(row.edge)
+                    neighbor_after: str | None = None
+                    while True:
+                        neighbor_page = await session.neighbors(
+                            snapshot,
+                            node.key,
+                            LineageDirection.BOTH,
+                            neighbor_after,
+                            200,
+                        )
+                        for row in neighbor_page.rows:
+                            if row.edge.edge_key not in seen:
+                                seen.add(row.edge.edge_key)
+                                edges.append(row.edge)
+                        if neighbor_page.continuation is None:
+                            break
+                        if (
+                            neighbor_after is not None
+                            and neighbor_page.continuation <= neighbor_after
+                        ):
+                            raise LineageError("lineage_cursor_not_advancing")
+                        neighbor_after = neighbor_page.continuation
                 return LineageSourceProjection(
                     nodes=tuple(nodes),
                     edges=tuple(edges),

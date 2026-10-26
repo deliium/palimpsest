@@ -12,6 +12,7 @@ from persistence.lineage_filesystem import (
     create_lineage_publisher,
     create_lineage_reader,
 )
+from simulation.lineage_codec import decode_lineage_node_page
 from simulation.lineage_identity import (
     LineageEvidenceClass,
     LineageEvidenceRef,
@@ -50,6 +51,19 @@ _COVERAGE = LineageCoverage(
     capture_end_tick=10,
     policy_version="lineage-v1",
 )
+
+
+def _catalog_page_for(root: Path, key: str) -> Path:
+    for path in root.rglob("*"):
+        if not path.is_file() or "objects" not in path.parts:
+            continue
+        try:
+            page = decode_lineage_node_page(path.read_bytes())
+        except Exception:
+            continue
+        if any(node.key == key for node in page.nodes):
+            return path
+    raise AssertionError("catalogue page not found")
 
 
 def _ref(native_id: str, *, owner: str | None = None) -> LineageNodeRef:
@@ -264,11 +278,7 @@ async def test_read_budget_and_corruption_are_rejected(tmp_path: Path) -> None:
         async with reader.open_read(run_id=_RUN, budget=tiny):
             pass
     father_key = _node("father").key
-    node_file = next(
-        path
-        for path in tmp_path.rglob("*.json")  # noqa: ASYNC240
-        if path.parent.name == "nodes" and path.stem == father_key
-    )
+    node_file = _catalog_page_for(tmp_path, father_key)
     node_file.write_bytes(b"{}")
     async with reader.open_read(
         run_id=_RUN, budget=LineageReadBudget.for_query()
@@ -321,11 +331,7 @@ async def test_declared_but_missing_node_is_corruption(tmp_path: Path) -> None:
     await publisher.publish(_publication())
     reader = create_lineage_reader(tmp_path)
     father_key = _node("father").key
-    node_file = next(
-        path
-        for path in tmp_path.rglob("*.json")  # noqa: ASYNC240
-        if path.parent.name == "nodes" and path.stem == father_key
-    )
+    node_file = _catalog_page_for(tmp_path, father_key)
     node_file.unlink()
     async with reader.open_read(
         run_id=_RUN, budget=LineageReadBudget.for_query()
@@ -387,3 +393,130 @@ async def test_catalogue_pagination_reaches_every_node_across_physical_pages(
         beyond = await session.node_page(snapshot, keys[-1], 200)
         assert beyond.rows == ()
         assert beyond.continuation is None
+
+
+@pytest.mark.asyncio
+async def test_high_degree_neighbors_and_capture_read_every_continuation(
+    tmp_path: Path,
+) -> None:
+    from simulation.lineage_capture import LineageCaptureSession
+
+    hub = _node("hub")
+    leaves = tuple(_node(f"leaf-{index:04d}", tick=2) for index in range(259))
+    nodes = (hub, *leaves)
+    edges = tuple(_edge(hub, leaf) for leaf in leaves)
+    await create_lineage_publisher(tmp_path).publish(
+        _publication(nodes=nodes, edges=edges)
+    )
+    session = LineageCaptureSession(
+        reader=create_lineage_reader(tmp_path),
+        publisher=create_lineage_publisher(tmp_path),
+    )
+    projection = await session._read_previous(_SCOPE)
+    assert len(projection.nodes) == len(nodes)
+    assert len(projection.edges) == len(edges)
+    assert {edge.edge_key for edge in projection.edges} == {
+        edge.edge_key for edge in edges
+    }
+
+    async with create_lineage_reader(tmp_path).open_read(
+        run_id=_RUN, budget=LineageReadBudget.for_query()
+    ) as read:
+        snapshot = await read.resolve_snapshot(_SCOPE)
+        collected: list[str] = []
+        after = None
+        while True:
+            page = await read.neighbors(
+                snapshot, hub.key, LineageDirection.DESCENDANTS, after, 100
+            )
+            collected.extend(row.edge.edge_key for row in page.rows)
+            if page.continuation is None:
+                break
+            after = page.continuation
+    assert len(collected) == len(edges)
+    assert len(set(collected)) == len(edges)
+
+
+@pytest.mark.asyncio
+async def test_v2_root_is_bounded_and_physical_objects_are_reused(
+    tmp_path: Path,
+) -> None:
+    nodes = tuple(_node(f"node-{index:04d}", tick=2) for index in range(3_000))
+    publisher = create_lineage_publisher(tmp_path)
+    first = await publisher.publish(_publication(nodes=nodes, edges=()))
+    root_files = list(tmp_path.rglob("store/root.json"))  # noqa: ASYNC240
+    assert len(root_files) == 1
+    assert root_files[0].stat().st_size <= 256 * 1024
+    object_files = [
+        path
+        for path in tmp_path.rglob("*")  # noqa: ASYNC240
+        if path.is_file() and "objects" in path.parts
+    ]
+    assert object_files
+    assert all(path.stat().st_size <= 256 * 1024 for path in object_files)
+    before = {path.relative_to(tmp_path) for path in object_files}
+
+    second = await publisher.publish(
+        _publication(nodes=nodes, edges=(), boundary=3, digest="b" * 64)
+    )
+    assert first.publication_id != second.publication_id
+    after = {
+        path.relative_to(tmp_path)
+        for path in tmp_path.rglob("*")  # noqa: ASYNC240
+        if path.is_file() and "objects" in path.parts
+    }
+    assert after == before
+
+    ordered = sorted(nodes, key=lambda node: node.key)
+    async with create_lineage_reader(tmp_path).open_read(
+        run_id=_RUN, budget=LineageReadBudget.for_query()
+    ) as read:
+        snapshot = await read.resolve_snapshot(_SCOPE, 3)
+        page = await read.node_page(snapshot, ordered[2_500].key, 1000)
+        assert [node.key for node in page.rows] == [
+            node.key for node in ordered[2_501:]
+        ]
+        assert page.continuation is None
+        last = await read.lookup_nodes(
+            snapshot, nodes[-1].ref.native_kind, nodes[-1].ref.native_id, None, 10
+        )
+        assert [node.key for node in last.rows] == [nodes[-1].key]
+
+
+@pytest.mark.asyncio
+async def test_old_v1_layout_and_new_v2_layout_read_identically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import persistence.lineage_filesystem as module
+
+    legacy_encoder = module._encode_snapshot_files
+
+    def _legacy(
+        publication: LineagePublication,
+    ) -> tuple[object, dict[str, bytes], dict[str, bytes]]:
+        files, manifest = legacy_encoder(publication)
+        return manifest, files, {}
+
+    monkeypatch.setattr(module, "_encode_snapshot_files_v2", _legacy)
+    publication = _publication()
+    v1 = await create_lineage_publisher(tmp_path / "v1").publish(publication)
+    monkeypatch.undo()
+    v2 = await create_lineage_publisher(tmp_path / "v2").publish(publication)
+    assert v1.digest == v2.digest
+
+    async def _read(root: Path) -> tuple[list[str], list[str]]:
+        async with create_lineage_reader(root).open_read(
+            run_id=_RUN, budget=LineageReadBudget.for_query()
+        ) as read:
+            snapshot = await read.resolve_snapshot(_SCOPE)
+            page = await read.node_page(snapshot, None, 100)
+            keys = [node.key for node in page.rows]
+            edges: list[str] = []
+            for node in page.rows:
+                neighbor_page = await read.neighbors(
+                    snapshot, node.key, LineageDirection.BOTH, None, 100
+                )
+                edges.extend(row.edge.edge_key for row in neighbor_page.rows)
+            return keys, sorted(edges)
+
+    assert await _read(tmp_path / "v1") == await _read(tmp_path / "v2")

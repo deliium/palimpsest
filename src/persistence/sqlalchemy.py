@@ -641,6 +641,21 @@ class SqlAlchemySnapshotRepository:
                 return None
             return await _load_snapshot_graph(session, row)
 
+    async def list_snapshots(self, run_id: RunId) -> tuple[WorldSnapshot, ...]:
+        """Enumerate immutable checkpoints for offline archive composition."""
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        stmt = (
+            select(WorldSnapshotOrm)
+            .where(WorldSnapshotOrm.run_id == run_id.value)
+            .order_by(WorldSnapshotOrm.next_tick)
+        )
+        async with session_scope(self._session_factory) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return tuple(
+                [await _load_snapshot_graph(session, row) for row in rows]
+            )
+
 
 class SqlAlchemyExperimentRepository:
     """Experiment metadata and run assignment ports."""

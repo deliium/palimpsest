@@ -13,12 +13,14 @@ import json
 import logging
 import os
 import shutil
+from collections.abc import Iterator
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
 from simulation.lineage_codec import (
+    LINEAGE_ADJACENCY_PAGE_MAX_EDGES,
     LINEAGE_MANIFEST_MAX_BYTES,
     LINEAGE_NODE_PAGE_MAX_NODES,
     LINEAGE_RECORD_MAX_BYTES,
@@ -61,6 +63,19 @@ from simulation.lineage_ports import (
     LineageReadPort,
     LineageReadSession,
     LineageSnapshotCataloguePage,
+)
+from simulation.lineage_store_index import (
+    LINEAGE_STORE_ROOT_MAX_BYTES,
+    LINEAGE_STORE_ROOT_PATH,
+    LineageIndexEntry,
+    LineageIndexPage,
+    LineageStoreRootV2,
+    build_index_root,
+    compute_store_publication_id,
+    decode_lineage_index_page,
+    decode_store_root,
+    encode_store_root,
+    lineage_object_path,
 )
 from simulation.models import RunId
 
@@ -155,6 +170,15 @@ class _ScopeHead:
     publication_id: str
     snapshot_digest: str
     snapshot_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class _SnapshotView:
+    coverage: LineageCoverage
+    content_digest: str
+    boundary_tick: int
+    v1: LineageSnapshotManifest | None
+    v2: LineageStoreRootV2 | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,6 +470,277 @@ def _encode_snapshot_files(
     return files, manifest
 
 
+def _encode_snapshot_files_v2(
+    publication: LineagePublication,
+) -> tuple[LineageStoreRootV2, dict[str, bytes], dict[str, bytes]]:
+    frame = publication.frame
+    scope = frame.scope
+    objects: dict[str, bytes] = {}
+    catalog_entries: list[LineageIndexEntry] = []
+    node_objects: dict[str, tuple[str, str]] = {}
+    ordered_nodes = sorted(frame.nodes, key=lambda item: item.key)
+    for node in ordered_nodes:
+        content = encode_lineage_node_descriptor(node)
+        digest = _digest(content)
+        objects[digest] = content
+        node_objects[node.key] = (digest, lineage_object_path(digest))
+    catalog_chunk: list[LineageNode] = []
+    for node in ordered_nodes:
+        if len(catalog_chunk) >= LINEAGE_NODE_PAGE_MAX_NODES:
+            catalog_page = LineageNodePage(nodes=tuple(catalog_chunk))
+            catalog_content = encode_lineage_node_page(catalog_page)
+            catalog_digest = _digest(catalog_content)
+            objects[catalog_digest] = catalog_content
+            catalog_entries.append(
+                LineageIndexEntry(
+                    first_key=catalog_chunk[0].key,
+                    last_key=catalog_chunk[-1].key,
+                    digest=catalog_digest,
+                    path=lineage_object_path(catalog_digest),
+                    row_count=len(catalog_chunk),
+                    byte_count=len(catalog_content),
+                    is_index=False,
+                )
+            )
+            catalog_chunk = []
+        catalog_candidate = (*catalog_chunk, node)
+        catalog_page = LineageNodePage(nodes=tuple(catalog_candidate))
+        catalog_content = encode_lineage_node_page(catalog_page)
+        if catalog_chunk and len(catalog_content) > LINEAGE_RECORD_MAX_BYTES:
+            catalog_page = LineageNodePage(nodes=tuple(catalog_chunk))
+            catalog_content = encode_lineage_node_page(catalog_page)
+            if len(catalog_content) > LINEAGE_RECORD_MAX_BYTES:
+                raise LineageError("lineage_record_oversize")
+            catalog_digest = _digest(catalog_content)
+            objects[catalog_digest] = catalog_content
+            catalog_entries.append(
+                LineageIndexEntry(
+                    first_key=catalog_chunk[0].key,
+                    last_key=catalog_chunk[-1].key,
+                    digest=catalog_digest,
+                    path=lineage_object_path(catalog_digest),
+                    row_count=len(catalog_chunk),
+                    byte_count=len(catalog_content),
+                    is_index=False,
+                )
+            )
+            catalog_chunk = [node]
+        else:
+            if (
+                len(catalog_content) > LINEAGE_RECORD_MAX_BYTES
+                and not catalog_chunk
+            ):
+                raise LineageError("lineage_record_oversize")
+            catalog_chunk = list(catalog_candidate)
+    if catalog_chunk:
+        catalog_page = LineageNodePage(nodes=tuple(catalog_chunk))
+        catalog_content = encode_lineage_node_page(catalog_page)
+        if len(catalog_content) > LINEAGE_RECORD_MAX_BYTES:
+            raise LineageError("lineage_record_oversize")
+        catalog_digest = _digest(catalog_content)
+        objects[catalog_digest] = catalog_content
+        catalog_entries.append(
+            LineageIndexEntry(
+                first_key=catalog_chunk[0].key,
+                last_key=catalog_chunk[-1].key,
+                digest=catalog_digest,
+                path=lineage_object_path(catalog_digest),
+                row_count=len(catalog_chunk),
+                byte_count=len(catalog_content),
+                is_index=False,
+            )
+        )
+
+    outgoing: dict[str, list[LineageEdge]] = {}
+    incoming: dict[str, list[LineageEdge]] = {}
+    for edge in frame.edges:
+        outgoing.setdefault(edge.source_key, []).append(edge)
+        incoming.setdefault(edge.target_key, []).append(edge)
+    adjacency_entries: list[LineageIndexEntry] = []
+    for node_key in sorted(set(outgoing) | set(incoming)):
+        for direction, grouped in (
+            (LineageDirection.DESCENDANTS, outgoing),
+            (LineageDirection.ANCESTORS, incoming),
+        ):
+            edges = sorted(
+                grouped.get(node_key, ()),
+                key=lambda edge: (edge.observed_tick or 0, edge.edge_key),
+            )
+            chunk: list[LineageEdge] = []
+            page_index = 0
+            for edge in edges:
+                if len(chunk) >= LINEAGE_ADJACENCY_PAGE_MAX_EDGES:
+                    page = LineageAdjacencyPage(
+                        direction=direction,
+                        node_key=node_key,
+                        edges=tuple(chunk),
+                    )
+                    content = encode_lineage_adjacency_page(page)
+                    digest = _digest(content)
+                    objects[digest] = content
+                    page_key = _adjacency_page_key(
+                        node_key, direction, page_index
+                    )
+                    adjacency_entries.append(
+                        LineageIndexEntry(
+                            first_key=page_key,
+                            last_key=page_key,
+                            digest=digest,
+                            path=lineage_object_path(digest),
+                            row_count=len(chunk),
+                            byte_count=len(content),
+                            is_index=False,
+                        )
+                    )
+                    page_index += 1
+                    chunk = []
+                candidate = (*chunk, edge)
+                page = LineageAdjacencyPage(
+                    direction=direction,
+                    node_key=node_key,
+                    edges=tuple(candidate),
+                )
+                content = encode_lineage_adjacency_page(page)
+                if chunk and len(content) > LINEAGE_RECORD_MAX_BYTES:
+                    page = LineageAdjacencyPage(
+                        direction=direction,
+                        node_key=node_key,
+                        edges=tuple(chunk),
+                    )
+                    content = encode_lineage_adjacency_page(page)
+                    if len(content) > LINEAGE_RECORD_MAX_BYTES:
+                        raise LineageError("lineage_record_oversize")
+                    digest = _digest(content)
+                    objects[digest] = content
+                    page_key = _adjacency_page_key(
+                        node_key, direction, page_index
+                    )
+                    adjacency_entries.append(
+                        LineageIndexEntry(
+                            first_key=page_key,
+                            last_key=page_key,
+                            digest=digest,
+                            path=lineage_object_path(digest),
+                            row_count=len(chunk),
+                            byte_count=len(content),
+                            is_index=False,
+                        )
+                    )
+                    page_index += 1
+                    chunk = [edge]
+                else:
+                    if len(content) > LINEAGE_RECORD_MAX_BYTES and not chunk:
+                        raise LineageError("lineage_record_oversize")
+                    chunk = list(candidate)
+            if chunk:
+                page = LineageAdjacencyPage(
+                    direction=direction,
+                    node_key=node_key,
+                    edges=tuple(chunk),
+                )
+                content = encode_lineage_adjacency_page(page)
+                if len(content) > LINEAGE_RECORD_MAX_BYTES:
+                    raise LineageError("lineage_record_oversize")
+                digest = _digest(content)
+                objects[digest] = content
+                page_key = _adjacency_page_key(node_key, direction, page_index)
+                adjacency_entries.append(
+                    LineageIndexEntry(
+                        first_key=page_key,
+                        last_key=page_key,
+                        digest=digest,
+                        path=lineage_object_path(digest),
+                        row_count=len(chunk),
+                        byte_count=len(content),
+                        is_index=False,
+                    )
+                )
+
+    identity_groups: dict[str, list[str]] = {}
+    for node in frame.nodes:
+        identity = _identity_hash(node.ref.native_kind, node.ref.native_id)
+        identity_groups.setdefault(identity, []).append(node.key)
+    identity_entries: list[LineageIndexEntry] = []
+    for identity, keys in sorted(identity_groups.items()):
+        content = _canonical(
+            {
+                "entries": [
+                    [key, node_objects[key][0], node_objects[key][1]]
+                    for key in sorted(keys)
+                ],
+                "schema_version": "lineage-identity-v2",
+            }
+        )
+        digest = _digest(content)
+        objects[digest] = content
+        identity_entries.append(
+            LineageIndexEntry(
+                first_key=identity,
+                last_key=identity,
+                digest=digest,
+                path=lineage_object_path(digest),
+                row_count=len(keys),
+                byte_count=len(content),
+                is_index=False,
+            )
+        )
+
+    catalog_root, catalog_objects = build_index_root("catalog", catalog_entries)
+    objects.update(catalog_objects)
+    adjacency_root, adjacency_objects = build_index_root(
+        "adjacency", adjacency_entries
+    )
+    objects.update(adjacency_objects)
+    identity_root, identity_objects = build_index_root("identity", identity_entries)
+    objects.update(identity_objects)
+
+    integrity_entries = [
+        LineageIndexEntry(
+            first_key=digest,
+            last_key=digest,
+            digest=digest,
+            path=lineage_object_path(digest),
+            row_count=1,
+            byte_count=len(content),
+            is_index=False,
+        )
+        for digest, content in sorted(objects.items())
+    ]
+    integrity_root, integrity_objects = build_index_root(
+        "integrity", integrity_entries
+    )
+    objects.update(integrity_objects)
+
+    root = LineageStoreRootV2(
+        run_id=frame.run_id,
+        family=scope.family,
+        evidence_class=scope.evidence_class,
+        owner_id=scope.owner_id,
+        boundary_tick=frame.boundary_tick,
+        publication_id="0" * 64,
+        content_digest=publication.snapshot.digest,
+        source_revision=frame.source_revision,
+        policy_version=frame.coverage.policy_version or "lineage-snapshot-v1",
+        coverage=frame.coverage,
+        node_count=len(frame.nodes),
+        edge_count=len(frame.edges),
+        catalog=catalog_root,
+        adjacency=adjacency_root,
+        identity=identity_root,
+        integrity=integrity_root,
+        object_count=len(objects),
+        object_bytes=sum(len(content) for content in objects.values()),
+    )
+    root = replace(root, publication_id=compute_store_publication_id(root))
+    return root, {LINEAGE_STORE_ROOT_PATH: encode_store_root(root)}, objects
+
+
+def _adjacency_page_key(
+    node_key: str, direction: LineageDirection, page_index: int
+) -> str:
+    return f"{node_key}|{direction.value}|{page_index:04d}"
+
+
 def _snapshot_relative_path(
     scope: LineageScope, boundary: int, publication_id: str
 ) -> str:
@@ -616,6 +911,17 @@ class FilesystemLineagePublisher(LineagePublicationPort):
             raise LineageError("lineage_record_oversize")
         _atomic_write(path, payload)
 
+    def _write_objects(self, run_root: Path, objects: dict[str, bytes]) -> None:
+        for digest, content in sorted(objects.items()):
+            if _digest(content) != digest:
+                raise LineageError("lineage_digest_mismatch")
+            path = _safe_path(run_root, *lineage_object_path(digest).split("/"))
+            if path.exists():
+                if _digest(path.read_bytes()) != digest:
+                    raise LineageError("lineage_snapshot_corrupt")
+                continue
+            _atomic_write(path, content)
+
     def _snapshot_manifest(
         self, run_id: RunId, snapshot_path: str
     ) -> LineageSnapshotManifest:
@@ -635,13 +941,18 @@ class FilesystemLineagePublisher(LineagePublicationPort):
             state = self._load_state(run_id)
             if state.pending is not None:
                 state = self._recover_locked(state)
-            files, manifest = _encode_snapshot_files(publication)
-            total_bytes = sum(len(item) for item in files.values())
+            root, files, objects = _encode_snapshot_files_v2(publication)
+            publication_id = root.publication_id
+            content_digest = root.content_digest
+            boundary_tick = root.boundary_tick
+            total_bytes = sum(len(item) for item in files.values()) + sum(
+                len(item) for item in objects.values()
+            )
             reserved_bytes = total_bytes + _RESERVATION_ALLOWANCE
             snapshot = LineageSnapshotRef(
-                publication_id=manifest.publication_id,
-                digest=manifest.content_digest,
-                boundary_tick=manifest.boundary_tick,
+                publication_id=publication_id,
+                digest=content_digest,
+                boundary_tick=boundary_tick,
             )
             scope = publication.frame.scope
             commit = (
@@ -661,12 +972,12 @@ class FilesystemLineagePublisher(LineagePublicationPort):
                     if head.family is scope.family
                     and head.evidence_class is scope.evidence_class
                     and head.owner_id == scope.owner_id
-                    and head.boundary_tick == manifest.boundary_tick
+                    and head.boundary_tick == boundary_tick
                 ),
                 None,
             )
             if existing is not None:
-                if existing.snapshot_digest == manifest.content_digest:
+                if existing.snapshot_digest == content_digest:
                     return LineageSnapshotRef(
                         publication_id=existing.publication_id,
                         digest=existing.snapshot_digest,
@@ -680,12 +991,12 @@ class FilesystemLineagePublisher(LineagePublicationPort):
             ):
                 raise LineageError("lineage_source_budget")
             pending = _PendingReservation(
-                publication_id=manifest.publication_id,
-                snapshot_digest=manifest.content_digest,
+                publication_id=publication_id,
+                snapshot_digest=content_digest,
                 family=scope.family,
                 evidence_class=scope.evidence_class,
                 owner_id=scope.owner_id,
-                boundary_tick=manifest.boundary_tick,
+                boundary_tick=boundary_tick,
                 planned_bytes=total_bytes,
                 prior_commit_ref=state.committed_ref,
             )
@@ -697,10 +1008,11 @@ class FilesystemLineagePublisher(LineagePublicationPort):
             )
             self._write_state(reserved)
             snapshot_path = _snapshot_relative_path(
-                scope, manifest.boundary_tick, manifest.publication_id
+                scope, boundary_tick, publication_id
             )
             try:
-                staging = _safe_path(run_root, "staging", manifest.publication_id)
+                self._write_objects(run_root, objects)
+                staging = _safe_path(run_root, "staging", publication_id)
                 if staging.exists():
                     shutil.rmtree(staging)
                 for path, content in files.items():
@@ -717,9 +1029,9 @@ class FilesystemLineagePublisher(LineagePublicationPort):
                         family=scope.family,
                         evidence_class=scope.evidence_class,
                         owner_id=scope.owner_id,
-                        boundary_tick=manifest.boundary_tick,
-                        publication_id=manifest.publication_id,
-                        snapshot_digest=manifest.content_digest,
+                        boundary_tick=boundary_tick,
+                        publication_id=publication_id,
+                        snapshot_digest=content_digest,
                         snapshot_path=snapshot_path,
                     ),
                 )
@@ -841,12 +1153,51 @@ class FilesystemLineagePublisher(LineagePublicationPort):
         return recovered
 
     def _verify_snapshot_files(self, run_id: RunId, snapshot_path: str) -> None:
+        run_root = self._run_root(run_id)
+        root = _safe_path(run_root, *snapshot_path.split("/"))
+        store_path = root.joinpath(*LINEAGE_STORE_ROOT_PATH.split("/"))
+        if store_path.is_file():
+            payload = store_path.read_bytes()
+            if len(payload) > LINEAGE_STORE_ROOT_MAX_BYTES:
+                raise LineageError("lineage_record_oversize")
+            store_root = decode_store_root(payload)
+            for index_root in (
+                store_root.catalog,
+                store_root.adjacency,
+                store_root.identity,
+                store_root.integrity,
+            ):
+                self._verify_index_tree(run_root, index_root)
+            return
         manifest = self._snapshot_manifest(run_id, snapshot_path)
-        root = _safe_path(self._run_root(run_id), *snapshot_path.split("/"))
         for path, digest in manifest.page_digests:
             content = root.joinpath(*path.split("/")).read_bytes()
             if _digest(content) != digest:
                 raise LineageError("lineage_snapshot_corrupt")
+
+    def _verify_index_tree(self, run_root: Path, root: object) -> None:
+        from simulation.lineage_store_index import LineageRootRef
+
+        if type(root) is not LineageRootRef:
+            raise LineageError("lineage_snapshot_corrupt")
+        if root.digest is None or root.path is None:
+            return
+        self._verify_index_object(run_root, root.digest, root.path)
+
+    def _verify_index_object(self, run_root: Path, digest: str, path: str) -> None:
+        target = _safe_path(run_root, *path.split("/"))
+        content = target.read_bytes()
+        if _digest(content) != digest:
+            raise LineageError("lineage_snapshot_corrupt")
+        page = decode_lineage_index_page(content)
+        for entry in page.entries:
+            if entry.is_index:
+                self._verify_index_object(run_root, entry.digest, entry.path)
+            else:
+                target = _safe_path(run_root, *entry.path.split("/"))
+                payload = target.read_bytes()
+                if _digest(payload) != entry.digest:
+                    raise LineageError("lineage_snapshot_corrupt")
 
     def recover_pending_publication(self, run_id: RunId) -> LineageSnapshotRef | None:
         run_root = self._run_root(run_id)
@@ -868,7 +1219,14 @@ class FilesystemLineagePublisher(LineagePublicationPort):
 
 
 class _FilesystemReadSession(LineageReadSession):
-    __slots__ = ("_budget", "_cache", "_commit", "_reader", "_run_id")
+    __slots__ = (
+        "_budget",
+        "_cache",
+        "_commit",
+        "_index_cache",
+        "_reader",
+        "_run_id",
+    )
 
     def __init__(
         self,
@@ -883,6 +1241,7 @@ class _FilesystemReadSession(LineageReadSession):
         self._budget = budget
         self._commit = commit
         self._cache: dict[str, bytes] = {}
+        self._index_cache: dict[str, LineageIndexPage] = {}
 
     @property
     def run_commit_ref(self) -> str:
@@ -893,8 +1252,8 @@ class _FilesystemReadSession(LineageReadSession):
         return self._budget
 
     async def coverage(self, snapshot: LineageSnapshotRef) -> LineageCoverage:
-        _head, manifest = self._snapshot(snapshot)
-        return manifest.coverage
+        _head, view = self._snapshot(snapshot)
+        return view.coverage
 
     def _read(self, *parts: str) -> bytes:
         path = _safe_path(self._reader._run_root(self._run_id), *parts)
@@ -914,40 +1273,166 @@ class _FilesystemReadSession(LineageReadSession):
         self._cache[key] = content
         return content
 
+    def _read_run_object(self, digest: str, path: str) -> bytes:
+        target = _safe_path(
+            self._reader._run_root(self._run_id), *path.split("/")
+        )
+        key = str(target)
+        cached = self._cache.get(key)
+        if cached is not None:
+            self._budget.record_cache_hit()
+            if _digest(cached) != digest:
+                raise LineageError("lineage_snapshot_corrupt")
+            return cached
+        try:
+            size = target.stat().st_size
+        except FileNotFoundError:
+            self._budget.reserve(0)
+            raise LineageError("lineage_snapshot_corrupt") from None
+        reservation = self._budget.reserve(size)
+        content = target.read_bytes()
+        reservation.require_actual_bytes(len(content))
+        if _digest(content) != digest:
+            raise LineageError("lineage_snapshot_corrupt")
+        self._cache[key] = content
+        return content
+
     def _read_verified(
         self,
         head: _ScopeHead,
-        manifest: LineageSnapshotManifest,
+        view: _SnapshotView,
         relative: str,
     ) -> bytes:
         try:
             content = self._read(*head.snapshot_path.split("/"), *relative.split("/"))
         except FileNotFoundError:
-            if _declared(manifest, relative):
+            if view.v1 is not None and _declared(view.v1, relative):
                 raise LineageError("lineage_snapshot_corrupt") from None
             raise
-        expected = dict(manifest.page_digests).get(relative)
-        if expected is not None and _digest(content) != expected:
-            raise LineageError("lineage_snapshot_corrupt")
+        if view.v1 is not None:
+            expected = dict(view.v1.page_digests).get(relative)
+            if expected is not None and _digest(content) != expected:
+                raise LineageError("lineage_snapshot_corrupt")
         return content
 
     def _snapshot(
         self, snapshot: LineageSnapshotRef
-    ) -> tuple[_ScopeHead, LineageSnapshotManifest]:
+    ) -> tuple[_ScopeHead, _SnapshotView]:
         scope_heads = self._commit.scope_heads
         for head in scope_heads:
             if head.publication_id == snapshot.publication_id:
+                store_path = (*head.snapshot_path.split("/"), "store", "root.json")
                 try:
-                    payload = self._read(
-                        *head.snapshot_path.split("/"), "manifest.json"
+                    payload = self._read(*store_path)
+                except FileNotFoundError:
+                    payload = None
+                if payload is not None:
+                    store = decode_store_root(payload)
+                    if (
+                        store.content_digest != snapshot.digest
+                        or store.publication_id != snapshot.publication_id
+                        or store.boundary_tick != snapshot.boundary_tick
+                    ):
+                        raise LineageError("lineage_digest_mismatch")
+                    return head, _SnapshotView(
+                        coverage=store.coverage,
+                        content_digest=store.content_digest,
+                        boundary_tick=store.boundary_tick,
+                        v1=None,
+                        v2=store,
+                    )
+                try:
+                    manifest = decode_lineage_manifest(
+                        self._read(
+                            *head.snapshot_path.split("/"), "manifest.json"
+                        )
                     )
                 except FileNotFoundError:
                     raise LineageError("lineage_snapshot_corrupt") from None
-                manifest = decode_lineage_manifest(payload)
                 if manifest.content_digest != snapshot.digest:
                     raise LineageError("lineage_digest_mismatch")
-                return head, manifest
+                return head, _SnapshotView(
+                    coverage=manifest.coverage,
+                    content_digest=manifest.content_digest,
+                    boundary_tick=manifest.boundary_tick,
+                    v1=manifest,
+                    v2=None,
+                )
         raise LineageError("snapshot_unavailable")
+
+    def _index_page(self, digest: str, path: str) -> LineageIndexPage:
+        cached = self._index_cache.get(digest)
+        if cached is not None:
+            self._budget.record_cache_hit()
+            return cached
+        page = decode_lineage_index_page(
+            self._read_run_object(digest, path)
+        )
+        self._index_cache[digest] = page
+        return page
+
+    def _find_entry(
+        self, root: object, key: str
+    ) -> LineageIndexEntry | None:
+        from simulation.lineage_store_index import LineageRootRef
+
+        if type(root) is not LineageRootRef or root.digest is None:
+            return None
+        if root.path is None or root.first_key is None or root.last_key is None:
+            return None
+        if key < root.first_key or key > root.last_key:
+            return None
+        page = self._index_page(root.digest, root.path)
+        return self._find_in_page(page, key)
+
+    def _find_in_page(
+        self, page: LineageIndexPage, key: str
+    ) -> LineageIndexEntry | None:
+        for entry in page.entries:
+            if key < entry.first_key:
+                return None
+            if key > entry.last_key:
+                continue
+            if entry.is_index:
+                child = self._index_page(entry.digest, entry.path)
+                return self._find_in_page(child, key)
+            return entry
+        return None
+
+    def _iter_data_entries(
+        self,
+        root: object,
+        *,
+        lower: str | None = None,
+        upper: str | None = None,
+    ) -> Iterator[LineageIndexEntry]:
+        from simulation.lineage_store_index import LineageRootRef
+
+        if type(root) is not LineageRootRef or root.digest is None:
+            return
+        if root.path is None:
+            return
+        yield from self._walk_page(root.digest, root.path, lower, upper)
+
+    def _walk_page(
+        self,
+        digest: str,
+        path: str,
+        lower: str | None,
+        upper: str | None,
+    ) -> Iterator[LineageIndexEntry]:
+        page = self._index_page(digest, path)
+        for entry in page.entries:
+            if upper is not None and entry.first_key > upper:
+                continue
+            if lower is not None and entry.last_key < lower:
+                continue
+            if entry.is_index:
+                yield from self._walk_page(
+                    entry.digest, entry.path, lower, upper
+                )
+            else:
+                yield entry
 
     async def resolve_snapshot(
         self, scope: LineageScope, boundary_tick: int | None = None
@@ -980,14 +1465,25 @@ class _FilesystemReadSession(LineageReadSession):
     async def get_node(
         self, snapshot: LineageSnapshotRef, key: str
     ) -> LineageNode | None:
-        head, manifest = self._snapshot(snapshot)
+        head, view = self._snapshot(snapshot)
+        if view.v2 is not None:
+            entry = self._find_entry(view.v2.catalog, key)
+            if entry is None:
+                return None
+            page = decode_lineage_node_page(
+                self._read_run_object(entry.digest, entry.path)
+            )
+            for node in page.nodes:
+                if node.key == key:
+                    return node
+            raise LineageError("lineage_snapshot_corrupt")
         relative = f"nodes/{key}.json"
         try:
             return decode_lineage_node_descriptor(
-                self._read_verified(head, manifest, relative)
+                self._read_verified(head, view, relative)
             )
         except FileNotFoundError:
-            if _declared(manifest, relative):
+            if view.v1 is not None and _declared(view.v1, relative):
                 raise LineageError("lineage_snapshot_corrupt") from None
             return None
 
@@ -999,13 +1495,58 @@ class _FilesystemReadSession(LineageReadSession):
         after: str | None,
         limit: int,
     ) -> LineageNeighborPage:
-        head, manifest = self._snapshot(snapshot)
+        head, view = self._snapshot(snapshot)
         directions = (
             (LineageDirection.ANCESTORS, LineageDirection.DESCENDANTS)
             if direction is LineageDirection.BOTH
             else (direction,)
         )
-        rows: list[LineageNeighborRow] = []
+        if view.v2 is not None:
+            candidates: list[tuple[LineageDirection, LineageEdge]] = []
+            declared = 0
+            for item in directions:
+                prefix = f"{key}|{item.value}|"
+                direction_edges: list[LineageEdge] = []
+                for entry in self._iter_data_entries(
+                    view.v2.adjacency,
+                    lower=prefix,
+                    upper=prefix + "\uffff",
+                ):
+                    declared += entry.row_count
+                    page = decode_lineage_adjacency_page(
+                        self._read_run_object(entry.digest, entry.path)
+                    )
+                    if page.node_key != key or page.direction is not item:
+                        raise LineageError("lineage_snapshot_corrupt")
+                    for edge in page.edges:
+                        if after is not None and edge.edge_key <= after:
+                            continue
+                        direction_edges.append(edge)
+                direction_edges.sort(key=lambda edge: edge.edge_key)
+                candidates.extend((item, edge) for edge in direction_edges)
+            selected_edges = candidates[:limit]
+            rows: list[LineageNeighborRow] = []
+            for item, edge in selected_edges:
+                endpoint = (
+                    edge.target_key
+                    if item is LineageDirection.DESCENDANTS
+                    else edge.source_key
+                )
+                node = await self.get_node(snapshot, endpoint)
+                if node is None:
+                    raise LineageError("lineage_snapshot_corrupt")
+                rows.append(LineageNeighborRow(edge=edge, node=node))
+            continuation = (
+                selected_edges[-1][1].edge_key
+                if len(candidates) > limit
+                else None
+            )
+            return LineageNeighborPage(
+                rows=tuple(rows),
+                declared_count=declared,
+                continuation=continuation,
+            )
+        rows = []
         declared = 0
         for item in directions:
             direction_rows: list[LineageNeighborRow] = []
@@ -1013,7 +1554,7 @@ class _FilesystemReadSession(LineageReadSession):
                 page = decode_lineage_adjacency_page(
                     self._read_verified(
                         head,
-                        manifest,
+                        view,
                         f"adjacency/{key}-{item.value}-0000.json",
                     )
                 )
@@ -1045,15 +1586,44 @@ class _FilesystemReadSession(LineageReadSession):
     async def node_page(
         self, snapshot: LineageSnapshotRef, after: str | None, limit: int
     ) -> LineageNodeCataloguePage:
-        head, manifest = self._snapshot(snapshot)
+        head, view = self._snapshot(snapshot)
+        if view.v2 is not None:
+            selected: list[LineageNode] = []
+            declared = 0
+            for entry in self._iter_data_entries(view.v2.catalog):
+                if after is not None and entry.last_key <= after:
+                    continue
+                page = decode_lineage_node_page(
+                    self._read_run_object(entry.digest, entry.path)
+                )
+                for node in page.nodes:
+                    if after is not None and node.key <= after:
+                        continue
+                    declared += 1
+                    if len(selected) < limit:
+                        selected.append(node)
+            continuation = (
+                selected[-1].key
+                if len(selected) == limit and declared > limit
+                else None
+            )
+            return LineageNodeCataloguePage(
+                rows=tuple(selected),
+                declared_count=declared,
+                continuation=continuation,
+                coverage=view.coverage,
+            )
+        assert view.v1 is not None
         pages = [
             path
-            for path, _digest_value in manifest.page_digests
+            for path, _digest_value in view.v1.page_digests
             if path.startswith("catalog/nodes-")
         ]
         eligible: list[LineageNode] = []
         for path in sorted(pages):
-            page = decode_lineage_node_page(self._read_verified(head, manifest, path))
+            page = decode_lineage_node_page(
+                self._read_verified(head, view, path)
+            )
             for node in page.nodes:
                 if after is None or node.key > after:
                     eligible.append(node)
@@ -1063,7 +1633,7 @@ class _FilesystemReadSession(LineageReadSession):
             rows=tuple(selected),
             declared_count=len(eligible),
             continuation=selected[-1].key if len(eligible) > limit else None,
-            coverage=manifest.coverage,
+            coverage=view.coverage,
         )
 
     async def lookup_nodes(
@@ -1074,16 +1644,59 @@ class _FilesystemReadSession(LineageReadSession):
         after: str | None,
         limit: int,
     ) -> LineageNodeCataloguePage:
-        head, manifest = self._snapshot(snapshot)
+        head, view = self._snapshot(snapshot)
         identity = _identity_hash(native_kind, native_id)
+        if view.v2 is not None:
+            entry = self._find_entry(view.v2.identity, identity)
+            if entry is None:
+                return LineageNodeCataloguePage(
+                    rows=(), declared_count=0, coverage=view.coverage
+                )
+            payload = _decode(
+                self._read_run_object(entry.digest, entry.path),
+                max_bytes=LINEAGE_RECORD_MAX_BYTES,
+            )
+            if (
+                not isinstance(payload, dict)
+                or payload.get("schema_version") != "lineage-identity-v2"
+                or not isinstance(payload.get("entries"), list)
+            ):
+                raise LineageError("lineage_snapshot_corrupt")
+            rows = sorted(
+                (
+                    (str(item[0]), str(item[1]), str(item[2]))
+                    for item in payload["entries"]
+                    if isinstance(item, list) and len(item) == 3
+                ),
+                key=lambda item: item[0],
+            )
+            rows = [
+                item for item in rows if after is None or item[0] > after
+            ]
+            selected = []
+            for key, digest, path in rows[:limit]:
+                node = decode_lineage_node_descriptor(
+                    self._read_run_object(digest, path)
+                )
+                if node.key != key:
+                    raise LineageError("lineage_snapshot_corrupt")
+                selected.append(node)
+            return LineageNodeCataloguePage(
+                rows=tuple(selected),
+                declared_count=len(rows),
+                continuation=selected[-1].key if len(rows) > limit else None,
+                coverage=view.coverage,
+            )
         try:
             payload = _decode(
-                self._read_verified(head, manifest, f"lookup/{identity[:2]}.json"),
+                self._read_verified(
+                    head, view, f"lookup/{identity[:2]}.json"
+                ),
                 max_bytes=LINEAGE_RECORD_MAX_BYTES,
             )
         except FileNotFoundError:
             return LineageNodeCataloguePage(
-                rows=(), declared_count=0, coverage=manifest.coverage
+                rows=(), declared_count=0, coverage=view.coverage
             )
         if (
             not isinstance(payload, dict)
@@ -1093,7 +1706,7 @@ class _FilesystemReadSession(LineageReadSession):
         entries = payload.get("entries")
         if not isinstance(entries, list):
             raise LineageError("lineage_snapshot_corrupt")
-        keys: list[str] = []
+        legacy_keys: list[str] = []
         for entry in entries:
             if (
                 isinstance(entry, list)
@@ -1101,19 +1714,23 @@ class _FilesystemReadSession(LineageReadSession):
                 and entry[0] == identity
                 and isinstance(entry[1], list)
             ):
-                keys.extend(str(key) for key in entry[1])
-        keys = sorted(key for key in keys if after is None or key > after)
-        selected: list[LineageNode] = []
-        for key in keys[:limit]:
-            node = await self.get_node(snapshot, key)
-            if node is None:
+                legacy_keys.extend(str(key) for key in entry[1])
+        legacy_keys = sorted(
+            key for key in legacy_keys if after is None or key > after
+        )
+        legacy_selected: list[LineageNode] = []
+        for key in legacy_keys[:limit]:
+            legacy_node = await self.get_node(snapshot, key)
+            if legacy_node is None:
                 raise LineageError("lineage_snapshot_corrupt")
-            selected.append(node)
+            legacy_selected.append(legacy_node)
         return LineageNodeCataloguePage(
-            rows=tuple(selected),
-            declared_count=len(keys),
-            continuation=selected[-1].key if len(keys) > limit else None,
-            coverage=manifest.coverage,
+            rows=tuple(legacy_selected),
+            declared_count=len(legacy_keys),
+            continuation=(
+                legacy_selected[-1].key if len(legacy_keys) > limit else None
+            ),
+            coverage=view.coverage,
         )
 
     async def snapshot_page(

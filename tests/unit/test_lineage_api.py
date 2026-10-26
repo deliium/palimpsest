@@ -263,6 +263,9 @@ async def test_unavailable_boundary_returns_availability_envelope(
 
 
 def _catalogue_pages(root: Path) -> list[Path]:
+    roots = sorted(root.rglob("store/root.json"))
+    if roots:
+        return roots
     return sorted(root.rglob("catalog/nodes-*.json"))
 
 

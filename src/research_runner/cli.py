@@ -735,6 +735,125 @@ def _civilization_options_from_args(args: argparse.Namespace) -> Any:
     )
 
 
+
+def _parse_auxiliary(values: Sequence[str]) -> tuple[Any, ...]:
+    from simulation.history_archive import ArchiveAuxiliarySource
+
+    rows: list[ArchiveAuxiliarySource] = []
+    for raw in values:
+        parts = raw.split(":", 2)
+        if len(parts) != 3 or not all(parts):
+            raise ValueError("auxiliary must be NAME:CAPABILITY:PATH")
+        rows.append(
+            ArchiveAuxiliarySource(
+                name=parts[0],
+                capability_class=parts[1],
+                path=parts[2],
+            )
+        )
+    return tuple(rows)
+
+
+def _cmd_history_export(args: argparse.Namespace) -> int:
+    from infrastructure.database import create_database_resources, dispose_engine
+    from infrastructure.settings import load_settings
+    from persistence import (
+        create_run_repository,
+        create_snapshot_repository,
+        create_tick_journal_repository,
+    )
+    from research_runner.history_archive_composition import export_history_archive
+    from simulation.clock import Tick
+    from simulation.history_archive import ArchiveManifest, HistoryArchiveError
+    from simulation.models import RunId
+
+    try:
+        auxiliary = _parse_auxiliary(tuple(args.auxiliary))
+    except (TypeError, ValueError) as exc:
+        _LOG.error(
+            "cli_history_export_invalid",
+            extra={"experiment": {"reason_code": str(exc)}},
+        )
+        return 2
+    settings = load_settings()
+
+    async def _run_export() -> ArchiveManifest:
+        resources = create_database_resources(settings)
+        try:
+            session_factory = resources.session_factory
+            return await export_history_archive(
+                runs=create_run_repository(session_factory),
+                journal=create_tick_journal_repository(session_factory),
+                snapshots=create_snapshot_repository(session_factory),
+                root=Path(args.output),
+                run_id=RunId(args.run_id),
+                through_tick=(
+                    None if args.through_tick is None else Tick(args.through_tick)
+                ),
+                auxiliary=auxiliary,
+                event_segment_rows=args.event_segment_rows,
+                event_segment_bytes=args.event_segment_bytes,
+                commit_segment_rows=args.commit_segment_rows,
+                commit_segment_bytes=args.commit_segment_bytes,
+                snapshot_segment_rows=args.snapshot_segment_rows,
+                snapshot_segment_bytes=args.snapshot_segment_bytes,
+                index_segment_rows=args.index_segment_rows,
+                index_segment_bytes=args.index_segment_bytes,
+            )
+        finally:
+            await dispose_engine(resources.engine)
+
+    try:
+        manifest = asyncio.run(_run_export())
+    except HistoryArchiveError as exc:
+        _LOG.error(
+            "cli_history_export_failed",
+            extra={"experiment": {"reason_code": exc.code}},
+        )
+        return 2
+    _LOG.info(
+        "cli_history_export_ready",
+        extra={
+            "experiment": {
+                "archive_id": manifest.archive_id,
+                "run_id": manifest.run_id,
+                "event_count": manifest.coverage.event_count,
+                "commit_count": manifest.coverage.commit_count,
+                "snapshot_count": manifest.coverage.snapshot_count,
+            }
+        },
+    )
+    return 0
+
+
+def _cmd_history_verify(args: argparse.Namespace) -> int:
+    from research_runner.history_archive_composition import verify_history_archive
+    from simulation.history_archive import HistoryArchiveError
+    from simulation.models import RunId
+
+    run_id = None if args.run_id is None else RunId(args.run_id)
+    try:
+        results = asyncio.run(
+            verify_history_archive(
+                Path(args.archive),
+                run_id=run_id,
+                full=bool(args.full),
+                sample=args.sample,
+            )
+        )
+    except HistoryArchiveError as exc:
+        _LOG.error(
+            "cli_history_verify_failed",
+            extra={"experiment": {"reason_code": exc.code}},
+        )
+        return 2
+    for result in results:
+        _LOG.info(
+            "cli_history_verify_ok",
+            extra={"experiment": result.payload()},
+        )
+    return 0
+
 def _cmd_generational(args: argparse.Namespace) -> int:
     from dataclasses import replace
 
@@ -1145,6 +1264,39 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--civilization-max-rows", type=int, default=1_000_000)
     gen_p.add_argument("--civilization-max-bytes", type=int, default=268435456)
     gen_p.set_defaults(func=_cmd_generational)
+
+    export_p = sub.add_parser(
+        "history-export",
+        help="Copy one verified durable run into an offline history archive",
+    )
+    export_p.add_argument("--run-id", required=True)
+    export_p.add_argument("--output", required=True, help="Archive root")
+    export_p.add_argument("--through-tick", type=int, default=None)
+    export_p.add_argument(
+        "--auxiliary",
+        action="append",
+        default=[],
+        metavar="NAME:CAPABILITY:PATH",
+    )
+    export_p.add_argument("--event-segment-rows", type=int, default=512)
+    export_p.add_argument("--event-segment-bytes", type=int, default=524288)
+    export_p.add_argument("--commit-segment-rows", type=int, default=1000)
+    export_p.add_argument("--commit-segment-bytes", type=int, default=524288)
+    export_p.add_argument("--snapshot-segment-rows", type=int, default=32)
+    export_p.add_argument("--snapshot-segment-bytes", type=int, default=8388608)
+    export_p.add_argument("--index-segment-rows", type=int, default=1024)
+    export_p.add_argument("--index-segment-bytes", type=int, default=262144)
+    export_p.set_defaults(func=_cmd_history_export)
+
+    verify_p = sub.add_parser(
+        "history-verify",
+        help="Verify archive hashes, coverage and sampled objective replay",
+    )
+    verify_p.add_argument("--archive", required=True)
+    verify_p.add_argument("--run-id", default=None)
+    verify_p.add_argument("--full", action="store_true")
+    verify_p.add_argument("--sample", type=int, default=3)
+    verify_p.set_defaults(func=_cmd_history_verify)
     add_path_dependence_parser(sub)
 
     return parser

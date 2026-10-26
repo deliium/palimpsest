@@ -235,3 +235,162 @@ async def test_uncommitted_interrupted_publication_stays_invisible(tmp_path: Pat
             publication=None,
             budget=CivilizationReadBudget(),
         )
+
+
+@pytest.mark.asyncio
+async def test_v2_deep_row_read_skips_prior_shards_and_root_is_bounded(
+    tmp_path: Path,
+) -> None:
+    traits = tuple(
+        CivilizationOwnerTrait(f"trait-{index:04d}", f"fp-{index:04d}", 0, 4)
+        for index in range(450)
+    )
+    history = _history_with_inventory(_inventory_dense(traits))
+    publication = compose_civilization_boundary(history, 4)
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-deep", publication)
+    sealed = await publisher.seal_catalogue(history.run_id, "pub-deep")
+    reader = create_civilization_reader(tmp_path)
+    cursor = CivilizationCursor(history.run_id, history.world_id, 4, None, 4, 4)
+    scope = CivilizationScope(
+        CivilizationLayer.CULTURE, CivilizationEvidenceClass.ANALYTICAL
+    )
+    page_one = await reader.rows(
+        cursor,
+        scope,
+        publication=sealed,
+        after_key=None,
+        entity_id=None,
+        budget=CivilizationReadBudget(limit=200),
+    )
+    assert page_one.next_cursor is not None
+    page_two = await reader.rows(
+        cursor,
+        scope,
+        publication=sealed,
+        after_key=page_one.next_cursor,
+        entity_id=None,
+        budget=CivilizationReadBudget(limit=200),
+    )
+    assert page_two.next_cursor is not None
+    budget = CivilizationReadBudget(limit=100)
+    tail = await reader.rows(
+        cursor,
+        scope,
+        publication=sealed,
+        after_key=page_two.next_cursor,
+        entity_id=None,
+        budget=budget,
+    )
+    assert len(tail.rows) == 50
+    assert budget.physical_files <= 10
+    assert budget.scanned_rows <= 60
+
+    root = next(tmp_path.rglob("store/root.json"))  # noqa: ASYNC240
+    assert root.stat().st_size <= 65536
+    index_objects = [
+        path
+        for path in tmp_path.rglob("*")  # noqa: ASYNC240
+        if path.is_file() and "objects" in path.parts
+    ]
+    assert index_objects
+    assert all(path.stat().st_size <= 65536 for path in index_objects)
+
+
+def _inventory_dense(traits: tuple[CivilizationOwnerTrait, ...]) -> object:
+    from tests.unit.test_civilization_publication import _inventory
+
+    return _inventory("owner-dense", cultural=traits)
+
+
+@pytest.mark.asyncio
+async def test_new_publication_does_not_reinterpret_old_cursor(tmp_path: Path) -> None:
+    history = _history()
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-1", compose_civilization_boundary(history, 0))
+    first = await publisher.seal_catalogue(history.run_id, "pub-1")
+    await publisher.publish_boundary("pub-2", compose_civilization_boundary(history, 1))
+    second = await publisher.seal_catalogue(history.run_id, "pub-2")
+    assert first.publication_id != second.publication_id
+    reader = create_civilization_reader(tmp_path)
+    with pytest.raises(CivilizationError, match="civilization_publication_gone"):
+        await reader.catalogue(
+            history.run_id,
+            after_boundary=None,
+            publication=first,
+            budget=CivilizationReadBudget(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_v1_fallback_reads_match_v2_layout(tmp_path: Path) -> None:
+    history = _history()
+    publication = compose_civilization_boundary(history, 1)
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-1", publication)
+    sealed = await publisher.seal_catalogue(history.run_id, "pub-1")
+    reader = create_civilization_reader(tmp_path)
+    v2_catalogue = await reader.catalogue(
+        history.run_id,
+        after_boundary=None,
+        publication=sealed,
+        budget=CivilizationReadBudget(limit=100),
+    )
+    cursor = CivilizationCursor(history.run_id, history.world_id, 1, None, 1, 1)
+    scope = publication.rows[0].history.scope
+    v2_rows = await reader.rows(
+        cursor,
+        scope,
+        publication=sealed,
+        after_key=None,
+        entity_id=None,
+        budget=CivilizationReadBudget(limit=100),
+    )
+    root = next(tmp_path.rglob("store/root.json"))  # noqa: ASYNC240
+    root.unlink()
+    v1_catalogue = await reader.catalogue(
+        history.run_id,
+        after_boundary=None,
+        publication=sealed,
+        budget=CivilizationReadBudget(limit=100),
+    )
+    v1_rows = await reader.rows(
+        cursor,
+        scope,
+        publication=sealed,
+        after_key=None,
+        entity_id=None,
+        budget=CivilizationReadBudget(limit=100),
+    )
+    assert [ref.cursor.boundary_tick for ref in v1_catalogue.boundaries] == [
+        ref.cursor.boundary_tick for ref in v2_catalogue.boundaries
+    ]
+    assert [row.context.row_id for row in v1_rows.rows] == [
+        row.context.row_id for row in v2_rows.rows
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tampered_range_index_fails_closed(tmp_path: Path) -> None:
+    history = _history()
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-1", compose_civilization_boundary(history, 0))
+    sealed = await publisher.seal_catalogue(history.run_id, "pub-1")
+    reader = create_civilization_reader(tmp_path)
+    cursor = CivilizationCursor(history.run_id, history.world_id, 0, None, 0, 0)
+    scope = compose_civilization_boundary(history, 0).rows[0].history.scope
+    index_file = next(
+        path
+        for path in tmp_path.rglob("*")  # noqa: ASYNC240
+        if path.is_file() and "objects" in path.parts and path.stat().st_size > 0
+    )
+    index_file.write_bytes(b"{}")
+    with pytest.raises(CivilizationError):
+        await reader.rows(
+            cursor,
+            scope,
+            publication=sealed,
+            after_key=None,
+            entity_id=None,
+            budget=CivilizationReadBudget(),
+        )

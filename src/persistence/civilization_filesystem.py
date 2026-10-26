@@ -67,6 +67,21 @@ from simulation.civilization_rows import (
     CivilizationTechnologyRow,
     CivilizationTradeRow,
 )
+from simulation.civilization_store_index import (
+    CIVILIZATION_INDEX_PAGE_SCHEMA,
+    CIVILIZATION_STORE_ROOT_PATH,
+    CivilizationStoreRootV2,
+    compute_store_digest,
+    decode_civilization_store_root,
+    encode_civilization_store_root,
+)
+from simulation.lineage_store_index import (
+    LineageIndexEntry,
+    LineageIndexPage,
+    build_index_root,
+    decode_lineage_index_page,
+    lineage_object_path,
+)
 
 _ROW_TYPES = (
     CivilizationRegionRow,
@@ -380,6 +395,18 @@ class FilesystemCivilizationPublisher:
                 CivilizationHashManifest,
             )
 
+            bounds_payload: dict[str, object] = {
+                "bounds": {
+                    relative: [first, last]
+                    for relative, (first, last) in sorted(shard_keys.items())
+                },
+                "schema_version": "civilization-row-bounds-v1",
+            }
+            _write_atomic(
+                _safe_path(boundary_root, "row-bounds.json"),
+                _encode_state(bounds_payload),
+            )
+
             manifest = CivilizationHashManifest(
                 "boundary_manifest",
                 run_id,
@@ -493,6 +520,122 @@ class FilesystemCivilizationPublisher:
                 index_bytes,
             )
             digest = civilization_digest(index_bytes)
+
+            catalogue_entries = [
+                LineageIndexEntry(
+                    first_key=child.first_key,
+                    last_key=child.last_key,
+                    digest=child.digest,
+                    path=child.key,
+                    row_count=child.row_count,
+                    byte_count=child.byte_count,
+                    is_index=False,
+                )
+                for child in page_children
+            ]
+            catalogue_root, catalogue_objects = build_index_root(
+                "civilization-catalogue",
+                catalogue_entries,
+                page_schema=CIVILIZATION_INDEX_PAGE_SCHEMA,
+                max_bytes=CIVILIZATION_MAX_METADATA_BYTES,
+            )
+            row_entries: list[LineageIndexEntry] = []
+            for ref in refs:
+                boundary_tick = ref.cursor.boundary_tick
+                if boundary_tick is None:
+                    raise CivilizationError("civilization_storage_corrupt")
+                boundary_root = _safe_path(
+                    publication_root, "boundaries", f"{boundary_tick:08d}"
+                )
+                manifest_path = _safe_path(boundary_root, "manifest.json")
+                manifest_content = manifest_path.read_bytes()
+                if civilization_digest(manifest_content) != ref.manifest_digest:
+                    raise CivilizationError("civilization_storage_corrupt")
+                manifest_value = decode_civilization_value(manifest_content)
+                if type(manifest_value) is not CivilizationHashManifest:
+                    raise CivilizationError("civilization_storage_corrupt")
+                bounds_path = _safe_path(boundary_root, "row-bounds.json")
+                try:
+                    bounds_value = _decode_state(bounds_path.read_bytes())
+                except FileNotFoundError:
+                    bounds_value = {}
+                raw_bounds = bounds_value.get("bounds", {})
+                if type(raw_bounds) is not dict:
+                    raise CivilizationError("civilization_storage_corrupt")
+                for child in manifest_value.children:
+                    if "/rows/" not in child.key:
+                        continue
+                    relative = child.key.split(
+                        f"boundaries/{boundary_tick:08d}/", 1
+                    )[-1]
+                    scope_key = child.key.split("/")[-2]
+                    bounds = raw_bounds.get(relative)
+                    if (
+                        not isinstance(bounds, list)
+                        or len(bounds) != 2
+                        or not all(type(item) is str for item in bounds)
+                    ):
+                        raise CivilizationError("civilization_storage_corrupt")
+                    first_row, last_row = bounds
+                    row_entries.append(
+                        LineageIndexEntry(
+                            first_key=(
+                                f"{scope_key}|{boundary_tick:08d}|{first_row}"
+                            ),
+                            last_key=(
+                                f"{scope_key}|{boundary_tick:08d}|{last_row}"
+                            ),
+                            digest=child.digest,
+                            path=child.key,
+                            row_count=child.row_count,
+                            byte_count=child.byte_count,
+                            is_index=False,
+                        )
+                    )
+            row_entries.sort(key=lambda entry: entry.first_key)
+            rows_root, rows_objects = build_index_root(
+                "civilization-rows",
+                row_entries,
+                page_schema=CIVILIZATION_INDEX_PAGE_SCHEMA,
+                max_bytes=CIVILIZATION_MAX_METADATA_BYTES,
+            )
+            objects = {**catalogue_objects, **rows_objects}
+            for object_digest, content in sorted(objects.items()):
+                target = _safe_path(
+                    publication_root,
+                    *lineage_object_path(object_digest).split("/"),
+                )
+                if target.exists():
+                    if civilization_digest(target.read_bytes()) != object_digest:
+                        raise CivilizationError("civilization_storage_corrupt")
+                else:
+                    _write_atomic(target, content)
+            store = CivilizationStoreRootV2(
+                run_id=run_id,
+                world_id=refs[0].cursor.world_id,
+                publication_id=publication_id,
+                policy_version=_POLICY,
+                catalogue=catalogue_root,
+                rows=rows_root,
+                store_digest="0" * 64,
+            )
+            store = CivilizationStoreRootV2(
+                run_id=store.run_id,
+                world_id=store.world_id,
+                publication_id=store.publication_id,
+                policy_version=store.policy_version,
+                catalogue=store.catalogue,
+                rows=store.rows,
+                store_digest=compute_store_digest(store),
+            )
+            _write_atomic(
+                _safe_path(
+                    publication_root,
+                    *CIVILIZATION_STORE_ROOT_PATH.split("/"),
+                ),
+                encode_civilization_store_root(store),
+            )
+
             state: dict[str, object] = {
                 "run_id": run_id,
                 "publication_id": publication_id,
@@ -611,6 +754,137 @@ class FilesystemCivilizationReader:
             _POLICY,
         )
 
+    def _store_root(
+        self, publication_root: Path, budget: CivilizationReadBudget
+    ) -> CivilizationStoreRootV2 | None:
+        path = _safe_path(publication_root, *CIVILIZATION_STORE_ROOT_PATH.split("/"))
+        if not path.is_file():
+            return None
+        content = _read_budgeted(path, budget, metadata=True)
+        return decode_civilization_store_root(content)
+
+    def _index_page(
+        self,
+        publication_root: Path,
+        digest: str,
+        path: str,
+        budget: CivilizationReadBudget,
+    ) -> LineageIndexPage:
+        content = _read_budgeted(
+            _safe_path(publication_root, *path.split("/")), budget
+        )
+        if civilization_digest(content) != digest:
+            raise CivilizationError("civilization_storage_corrupt")
+        page = decode_lineage_index_page(
+            content, schema=CIVILIZATION_INDEX_PAGE_SCHEMA
+        )
+        previous: str | None = None
+        for entry in page.entries:
+            if entry.last_key < entry.first_key:
+                raise CivilizationError("civilization_storage_corrupt")
+            if previous is not None and entry.first_key <= previous:
+                raise CivilizationError("civilization_storage_corrupt")
+            previous = entry.last_key
+        return page
+
+    def _iter_index_entries(
+        self,
+        publication_root: Path,
+        root: object,
+        budget: CivilizationReadBudget,
+        *,
+        lower: str | None,
+        upper: str | None,
+    ) -> Iterator[LineageIndexEntry]:
+        from simulation.lineage_store_index import LineageRootRef
+
+        if type(root) is not LineageRootRef or root.digest is None:
+            return
+        if root.path is None:
+            return
+        yield from self._walk_index(
+            publication_root,
+            root.digest,
+            root.path,
+            budget,
+            lower=lower,
+            upper=upper,
+        )
+
+    def _walk_index(
+        self,
+        publication_root: Path,
+        digest: str,
+        path: str,
+        budget: CivilizationReadBudget,
+        *,
+        lower: str | None,
+        upper: str | None,
+    ) -> Iterator[LineageIndexEntry]:
+        page = self._index_page(publication_root, digest, path, budget)
+        for entry in page.entries:
+            if upper is not None and entry.first_key > upper:
+                continue
+            if lower is not None and entry.last_key < lower:
+                continue
+            if entry.is_index:
+                yield from self._walk_index(
+                    publication_root,
+                    entry.digest,
+                    entry.path,
+                    budget,
+                    lower=lower,
+                    upper=upper,
+                )
+            else:
+                yield entry
+
+    def _loaded_refs_v2(
+        self,
+        publication_root: Path,
+        store_root: CivilizationStoreRootV2,
+        budget: CivilizationReadBudget,
+        *,
+        after_boundary: int | None,
+        limit: int | None,
+    ) -> tuple[dict[str, object], tuple[CivilizationBoundaryRef, ...], bool]:
+        wanted = None if limit is None else limit + 1
+        lower = None if after_boundary is None else f"{after_boundary + 1:08d}"
+        refs: list[CivilizationBoundaryRef] = []
+        more = False
+        for entry in self._iter_index_entries(
+            publication_root,
+            store_root.catalogue,
+            budget,
+            lower=lower,
+            upper=None,
+        ):
+            content = _read_budgeted(
+                _safe_path(publication_root, *entry.path.split("/")), budget
+            )
+            if civilization_digest(content) != entry.digest:
+                raise CivilizationError("civilization_storage_corrupt")
+            for line in content.splitlines(keepends=True):
+                if not line.endswith(b"\n"):
+                    raise CivilizationError("civilization_storage_corrupt")
+                budget.reserve_scan(1)
+                value = decode_civilization_value(line)
+                if type(value) is not CivilizationBoundaryRef:
+                    raise CivilizationError("civilization_storage_corrupt")
+                tick = value.cursor.boundary_tick
+                if tick is None:
+                    raise CivilizationError("civilization_storage_corrupt")
+                if after_boundary is not None and tick <= after_boundary:
+                    continue
+                refs.append(value)
+                if wanted is not None and len(refs) >= wanted:
+                    more = True
+                    break
+            if more:
+                break
+        selected = refs if limit is None else refs[:limit]
+        return {}, tuple(selected), more
+
     def _loaded_refs(
         self,
         run_id: str,
@@ -632,6 +906,21 @@ class FilesystemCivilizationReader:
             "publications",
             str(state["publication_id"]),
         )
+        store_root = self._store_root(publication_root, budget)
+        if store_root is not None:
+            if (
+                store_root.publication_id != state["publication_id"]
+                or store_root.policy_version != _POLICY
+            ):
+                raise CivilizationError("civilization_storage_corrupt")
+            _, selected_v2, more_v2 = self._loaded_refs_v2(
+                publication_root,
+                store_root,
+                budget,
+                after_boundary=after_boundary,
+                limit=limit,
+            )
+            return state, selected_v2, more_v2
         index_content = _read_budgeted(
             _safe_path(publication_root, "catalogue", "index.json"),
             budget,
@@ -794,33 +1083,58 @@ class FilesystemCivilizationReader:
             "publications",
             str(state["publication_id"]),
         )
-        boundary_root = _safe_path(publication_root, "boundaries", f"{boundary:08d}")
-        manifest_content = _read_budgeted(
-            _safe_path(boundary_root, "manifest.json"),
-            budget,
-            metadata=True,
-        )
-        if civilization_digest(manifest_content) != ref.manifest_digest:
-            raise CivilizationError("civilization_storage_corrupt")
-        manifest = decode_civilization_value(manifest_content)
-        if type(manifest) is not CivilizationHashManifest:
-            raise CivilizationError("civilization_storage_corrupt")
+        store_root = self._store_root(publication_root, budget)
         scope_key = _scope_key(scope)
+        candidates: list[tuple[str, str]] = []
+        if store_root is not None:
+            if store_root.publication_id != state["publication_id"]:
+                raise CivilizationError("civilization_storage_corrupt")
+            lower = f"{scope_key}|{boundary:08d}|"
+            upper = lower + "\uffff"
+            for entry in self._iter_index_entries(
+                publication_root,
+                store_root.rows,
+                budget,
+                lower=lower,
+                upper=upper,
+            ):
+                last_row_key = entry.last_key.rsplit("|", 1)[-1]
+                if after_key is not None and last_row_key <= after_key:
+                    continue
+                candidates.append((entry.path, entry.digest))
+        else:
+            boundary_root = _safe_path(
+                publication_root, "boundaries", f"{boundary:08d}"
+            )
+            manifest_content = _read_budgeted(
+                _safe_path(boundary_root, "manifest.json"),
+                budget,
+                metadata=True,
+            )
+            if civilization_digest(manifest_content) != ref.manifest_digest:
+                raise CivilizationError("civilization_storage_corrupt")
+            manifest = decode_civilization_value(manifest_content)
+            if type(manifest) is not CivilizationHashManifest:
+                raise CivilizationError("civilization_storage_corrupt")
+            for child in sorted(
+                (
+                    child
+                    for child in manifest.children
+                    if child.key.startswith(
+                        f"boundaries/{boundary:08d}/rows/{scope_key}/"
+                    )
+                ),
+                key=lambda child: child.key,
+            ):
+                candidates.append((child.key, child.digest))
         rows: list[CivilizationMapRow | CivilizationCapturedRow] = []
         next_key: str | None = None
         truncated = False
         last_scanned = after_key
-        for child in sorted(
-            (
-                child
-                for child in manifest.children
-                if child.key.startswith(f"boundaries/{boundary:08d}/rows/{scope_key}/")
-            ),
-            key=lambda child: child.key,
-        ):
+        for candidate_path, candidate_digest in candidates:
             try:
                 content = _read_budgeted(
-                    _safe_path(publication_root, *child.key.split("/")),
+                    _safe_path(publication_root, *candidate_path.split("/")),
                     budget,
                 )
             except CivilizationError as exc:
@@ -829,7 +1143,7 @@ class FilesystemCivilizationReader:
                     next_key = last_scanned
                     break
                 raise
-            if civilization_digest(content) != child.digest:
+            if civilization_digest(content) != candidate_digest:
                 raise CivilizationError("civilization_storage_corrupt")
             lines = content.splitlines(keepends=True)
             if not lines:
