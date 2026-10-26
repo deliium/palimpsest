@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from simulation.clock import Tick
 from simulation.engine import EventPrefixError, WorldEngine
-from simulation.journal import PersistenceSerializationError, verify_commit_chain
+from simulation.journal import (
+    PersistenceSerializationError,
+    StreamedTickCommitVerifier,
+    verify_commit_chain,
+)
 from simulation.lifecycle import EngineDiagnosticCode
 from simulation.models import DERIVATION_VERSION, RunId
 from simulation.observer_facts import ObjectiveScene, scene_from_facts
@@ -26,6 +31,7 @@ from simulation.persistence import (
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
     CommitHash,
+    DurableHead,
     ReplayCommitPage,
     ReplayEventPage,
     ReplayFallbackPolicy,
@@ -39,8 +45,10 @@ from simulation.persistence import (
     SnapshotRepository,
     TickCommit,
     TickJournalRepository,
+    VerifiedReplayBatch,
     WorldEvent,
     WorldSnapshot,
+    resolve_durable_head,
     schema_projector_compatible,
 )
 from simulation.service import PersistentSimulationService
@@ -250,20 +258,8 @@ async def scene_through_event(
 
     engine = outcome.engine
     try:
-        journal_events = await service._journal.list_events(
-            run_id,
-            from_tick=tick,
-            to_tick=tick,
-            limit=10_000_000,
-            offset=0,
-        )
-        selected = tuple(
-            sorted(
-                (event for event in journal_events if event.tick == tick.value),
-                key=lambda event: event.sequence,
-            )
-        )
-        if not any(event.sequence == through_sequence for event in selected):
+        commit = await service._journal.get_tick_commit(run_id, tick)
+        if commit is None:
             _LOGGER.error(
                 "%s code=observer_event_not_found run_id=%s tick=%s "
                 "through_sequence=%s",
@@ -273,19 +269,51 @@ async def scene_through_event(
                 through_sequence,
             )
             raise ObserverHistoryError("observer_event_not_found", outcome.result)
-        prefix = tuple(
-            event for event in selected if event.sequence <= through_sequence
-        )
-        last_sequence = max(event.sequence for event in selected)
-        includes_last = through_sequence == last_sequence
+        verifier = StreamedTickCommitVerifier(commit)
+        prefix_events: list[WorldEvent] = []
+        found = False
+        try:
+            async for page in service._iter_tick_event_pages(run_id, tick):
+                for event in page:
+                    verifier.feed(event)
+                    if event.sequence <= through_sequence:
+                        prefix_events.append(event)
+                        if event.sequence == through_sequence:
+                            found = True
+            verifier.finish()
+        except PersistenceSerializationError as exc:
+            _LOGGER.error(
+                "%s code=%s run_id=%s tick=%s through_sequence=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                exc.code,
+                run_id.value,
+                tick.value,
+                through_sequence,
+            )
+            raise ObserverHistoryError(
+                "replay_payload_mismatch", outcome.result
+            ) from exc
+        if not found:
+            _LOGGER.error(
+                "%s code=observer_event_not_found run_id=%s tick=%s "
+                "through_sequence=%s",
+                EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                run_id.value,
+                tick.value,
+                through_sequence,
+            )
+            raise ObserverHistoryError("observer_event_not_found", outcome.result)
+        prefix = tuple(prefix_events)
+        includes_last = through_sequence == commit.event_count - 1
         snapshot_next = outcome.result.snapshot_next_tick
         _LOGGER.debug(
             "observer_event_fold run_id=%s tick=%s through_sequence=%s "
-            "event_count=%s snapshot_next_tick=%s",
+            "event_count=%s tick_event_count=%s snapshot_next_tick=%s",
             run_id.value,
             tick.value,
             through_sequence,
             len(prefix),
+            commit.event_count,
             None if snapshot_next is None else snapshot_next.value,
         )
         try:
@@ -497,6 +525,15 @@ class ReplayService:
                 event_schema_version=manifest.event_schema_version,
                 projector_version=manifest.projector_version,
                 persistence_codec_version=manifest.persistence_codec_version,
+            )
+
+        if self._supports_bounded_replay():
+            return await self._replay_bounded(
+                request,
+                manifest=manifest,
+                snapshot=snapshot,
+                target_tick=target_tick,
+                head_next=head_next,
             )
 
         to_commit_tick: Tick | None
@@ -904,9 +941,28 @@ class ReplayService:
         if to_tick is not None and type(to_tick) is not Tick:
             raise TypeError("to_tick must be Tick or None")
         limit = _clamp_page_limit(limit)
-        commits = await self._journal.list_tick_commits(
-            run_id, from_tick=from_tick, to_tick=to_tick
-        )
+        if hasattr(self._journal, "list_tick_commits_keyset"):
+            page_list: list[TickCommit] = []
+            first = await self._journal.get_tick_commit(run_id, from_tick)
+            if first is not None and (
+                to_tick is None or first.tick.value <= to_tick.value
+            ):
+                page_list.append(first)
+            remaining = limit + 1 - len(page_list)
+            if remaining > 0:
+                page_list.extend(
+                    await self._journal.list_tick_commits_keyset(
+                        run_id,
+                        after_tick=from_tick,
+                        through_tick=to_tick,
+                        limit=min(remaining, _MAX_PAGE_SIZE),
+                    )
+                )
+            commits = tuple(page_list)
+        else:
+            commits = await self._journal.list_tick_commits(
+                run_id, from_tick=from_tick, to_tick=to_tick
+            )
         page = commits[:limit]
         next_from_tick: Tick | None = None
         if len(commits) > limit:
@@ -929,7 +985,296 @@ class ReplayService:
             next_from_tick=next_from_tick,
         )
 
+    async def head(self, run_id: RunId) -> DurableHead:
+        """Resolve one detached durable head without restoring a scene."""
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        return await resolve_durable_head(self._runs, self._journal, run_id)
+
+    async def run_manifest(self, run_id: RunId) -> RunManifest | None:
+        """Read detached run metadata without replaying objective history."""
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        return await self._runs.get_run(run_id)
+
+    async def read_event(
+        self, run_id: RunId, event_id: str, *, through_tick: Tick | None = None
+    ) -> WorldEvent | None:
+        """Return one run-scoped event by ID without scanning the journal."""
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if not isinstance(event_id, str) or not event_id:
+            raise ValueError("event_id must be a non-empty string")
+        get_event_by_id = getattr(self._journal, "get_event_by_id", None)
+        if get_event_by_id is not None:
+            return cast(
+                WorldEvent | None,
+                await get_event_by_id(
+                    run_id, event_id, through_tick=through_tick
+                ),
+            )
+        after_tick = 0
+        after_sequence = -1
+        while True:
+            page = await self.read_event_keyset_page(
+                run_id,
+                after_tick=after_tick,
+                after_sequence=after_sequence,
+                to_tick=through_tick,
+                limit=_DEFAULT_PAGE_SIZE,
+            )
+            for event in page.events:
+                if event.event_id.value == event_id:
+                    return event
+            if len(page.events) < page.limit:
+                return None
+            last = page.events[-1]
+            after_tick = last.tick
+            after_sequence = last.sequence
+
+    def _supports_bounded_replay(self) -> bool:
+        return (
+            hasattr(self._journal, "get_latest_tick_commit")
+            and hasattr(self._journal, "list_tick_commits_keyset")
+            and hasattr(self._journal, "get_tick_commit")
+            and hasattr(self._journal, "list_events_keyset")
+        )
+
+    async def _replay_bounded(
+        self,
+        request: ReplayRequest,
+        *,
+        manifest: RunManifest,
+        snapshot: WorldSnapshot,
+        target_tick: Tick,
+        head_next: Tick,
+    ) -> ReplayOutcome:
+        run_id = request.run_id
+        to_commit_tick = (
+            None if target_tick.value == 0 else Tick(target_tick.value - 1)
+        )
+        started = time.perf_counter()
+        counts = {"events": 0, "commits": 0, "commit_pages": 0}
+        last_commits: list[TickCommit] = []
+        batches = self._iter_verified_batches(
+            run_id,
+            from_tick=snapshot.next_tick,
+            through_tick=to_commit_tick,
+            expected_predecessor=snapshot.predecessor_commit_hash,
+            expected_revision=snapshot.revision,
+            counts=counts,
+            last_commits=last_commits,
+        )
+        try:
+            engine = await WorldEngine.restore_from_verified_batches(
+                snapshot,
+                batches=batches,
+                committed_through_tick=to_commit_tick,
+                skill_policy=request.skill_policy,
+                skill_entity_ids=request.skill_entity_ids,
+                skill_ledger=request.skill_ledger,
+                skill_untargeted_request_ids=request.skill_untargeted_request_ids,
+                teaching_policy=request.teaching_policy,
+                teaching_entity_ids=request.teaching_entity_ids,
+                teaching_offers=request.teaching_offers,
+                production_catalog=request.production_catalog,
+                environmental_dynamics=request.environmental_dynamics,
+                population_lifecycle=request.population_lifecycle,
+                new_agent_initialization=request.new_agent_initialization,
+                kinship_spec=request.kinship_spec,
+            )
+        except Exception as exc:
+            _LOGGER.error(
+                "%s code=bounded_restore_failed error=%s run_id=%s "
+                "target_tick=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                type(exc).__name__,
+                run_id.value,
+                target_tick.value,
+            )
+            return self._failed(
+                run_id,
+                ReplayStatus.STREAM_DISCONTINUITY,
+                target_tick,
+                snapshot_id=snapshot.snapshot_id,
+                snapshot_next_tick=snapshot.next_tick,
+                event_schema_version=manifest.event_schema_version,
+                projector_version=manifest.projector_version,
+                persistence_codec_version=manifest.persistence_codec_version,
+            )
+        mode = (
+            ReplayMode.CONTINUATION if target_tick == head_next else ReplayMode.READONLY
+        )
+        predecessor = (
+            last_commits[-1].commit_hash
+            if last_commits
+            else snapshot.predecessor_commit_hash
+        )
+        result = ReplayResult(
+            run_id=run_id,
+            status=ReplayStatus.OK,
+            mode=mode,
+            snapshot_id=snapshot.snapshot_id,
+            snapshot_next_tick=snapshot.next_tick,
+            target_tick=target_tick,
+            events_applied=counts["events"],
+            event_schema_version=manifest.event_schema_version,
+            projector_version=manifest.projector_version,
+            persistence_codec_version=manifest.persistence_codec_version,
+        )
+        duration_ms = (time.perf_counter() - started) * 1000.0
+        _LOGGER.info(
+            "%s run_id=%s target_tick=%s mode=%s events_applied=%s "
+            "commits=%s commit_pages=%s replay_distance_ticks=%s "
+            "duration_ms=%.3f",
+            EngineDiagnosticCode.CHECKPOINT_RESTORE.value,
+            run_id.value,
+            target_tick.value,
+            mode.value,
+            counts["events"],
+            counts["commits"],
+            counts["commit_pages"],
+            target_tick.value - snapshot.next_tick.value,
+            duration_ms,
+        )
+        return ReplayOutcome(
+            result=result,
+            engine=engine,
+            predecessor_commit_hash=predecessor,
+        )
+
+    async def _iter_verified_batches(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        through_tick: Tick | None,
+        expected_predecessor: CommitHash | None,
+        expected_revision: object,
+        counts: dict[str, int],
+        last_commits: list[TickCommit],
+    ) -> AsyncIterator[VerifiedReplayBatch]:
+        if through_tick is None:
+            return
+        expected_tick = from_tick
+        predecessor = expected_predecessor
+        revision = expected_revision
+        async for commit in self._iter_commit_range(
+            run_id,
+            from_tick=from_tick,
+            through_tick=through_tick,
+            counts=counts,
+        ):
+            if commit.run_id != run_id:
+                raise PersistenceSerializationError("run_id_mismatch", "$.run_id")
+            if commit.tick != expected_tick:
+                raise PersistenceSerializationError("commit_chain_gap", "$.tick")
+            if commit.predecessor_commit_hash != predecessor:
+                raise PersistenceSerializationError(
+                    "predecessor_mismatch", "$.predecessor_commit_hash"
+                )
+            if commit.base_revision != revision:
+                raise PersistenceSerializationError("revision_mismatch", "$.revision")
+            verifier = StreamedTickCommitVerifier(commit)
+            events: list[WorldEvent] = []
+            async for page in self._iter_tick_event_pages(run_id, commit.tick):
+                for event in page:
+                    verifier.feed(event)
+                    events.append(event)
+            verifier.finish()
+            batch = VerifiedReplayBatch(
+                run_id=run_id,
+                tick=commit.tick,
+                commit=commit,
+                events=tuple(events),
+                tick_complete=True,
+            )
+            counts["events"] += len(batch.events)
+            counts["commits"] += 1
+            last_commits.append(commit)
+            predecessor = commit.commit_hash
+            revision = commit.resulting_revision
+            expected_tick = Tick(expected_tick.value + 1)
+            yield batch
+        if expected_tick != Tick(through_tick.value + 1):
+            raise PersistenceSerializationError("commit_chain_gap", "$.tick")
+
+    async def _iter_commit_range(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        through_tick: Tick,
+        counts: dict[str, int],
+    ) -> AsyncIterator[TickCommit]:
+        first = await self._journal.get_tick_commit(run_id, from_tick)
+        if first is not None and first.tick.value <= through_tick.value:
+            yield first
+        cursor = from_tick
+        while cursor.value < through_tick.value:
+            counts["commit_pages"] += 1
+            page = await self._journal.list_tick_commits_keyset(  # type: ignore[attr-defined]
+                run_id,
+                after_tick=cursor,
+                through_tick=through_tick,
+                limit=min(_DEFAULT_PAGE_SIZE, _MAX_PAGE_SIZE),
+            )
+            if not page:
+                return
+            for commit in page:
+                if commit.tick.value <= through_tick.value:
+                    yield commit
+            cursor = page[-1].tick
+
+    async def _iter_tick_event_pages(
+        self, run_id: RunId, tick: Tick
+    ) -> AsyncIterator[tuple[WorldEvent, ...]]:
+        limit = min(_DEFAULT_PAGE_SIZE, _MAX_PAGE_SIZE)
+        keyset = getattr(self._journal, "list_events_keyset", None)
+        if keyset is not None:
+            after_tick = tick.value
+            after_sequence = -1
+            while True:
+                page = await keyset(
+                    run_id,
+                    after_tick=after_tick,
+                    after_sequence=after_sequence,
+                    to_tick=tick,
+                    limit=limit,
+                )
+                selected = tuple(
+                    event for event in page if event.tick == tick.value
+                )
+                if not selected:
+                    return
+                yield selected
+                last = selected[-1]
+                after_tick = last.tick
+                after_sequence = last.sequence
+                if len(selected) < limit:
+                    return
+        offset = 0
+        while True:
+            page = await self._journal.list_events(
+                run_id,
+                from_tick=tick,
+                to_tick=tick,
+                limit=limit,
+                offset=offset,
+            )
+            if not page:
+                return
+            yield page
+            if len(page) < limit:
+                return
+            offset += len(page)
+
     async def _durable_head_next_tick(self, run_id: RunId) -> Tick:
+        if hasattr(self._journal, "get_latest_tick_commit"):
+            latest = await self._journal.get_latest_tick_commit(
+                run_id
+            )
+            return Tick(0) if latest is None else Tick(latest.tick.value + 1)
         commits = await self._journal.list_tick_commits(
             run_id, from_tick=Tick(0), to_tick=None
         )

@@ -119,6 +119,7 @@ def fold_population_metadata(
     run_config: SimulationRunConfig,
     run_id: str,
     world_id: str,
+    pending_reservations: Sequence[object] = (),
 ) -> PopulationMetadataFold:
     """Fold committed population events onto checkpoint metadata.
 
@@ -139,6 +140,10 @@ def fold_population_metadata(
         events, Sequence
     ):
         raise TypeError("events must be an ordered sequence")
+    if isinstance(pending_reservations, (str, bytes, set, frozenset)) or not isinstance(
+        pending_reservations, Sequence
+    ):
+        raise TypeError("pending_reservations must be an ordered sequence")
     if type(run_config) is not SimulationRunConfig:
         raise TypeError("run_config must be SimulationRunConfig")
     if population_lifecycle is not None and (
@@ -179,7 +184,7 @@ def fold_population_metadata(
         event for event in events if type(event.details) in _POPULATION_DETAILS
     )
     if population_lifecycle is None:
-        if ordered_records or population_details:
+        if ordered_records or population_details or pending_reservations:
             _reject("lifecycle_channel_off")
         return PopulationMetadataFold(
             registrations=tuple(ordered_registrations),
@@ -189,6 +194,22 @@ def fold_population_metadata(
     spec = population_lifecycle
     pending: dict[str, PendingPopulationReservation] = {}
     pending_by_agent: dict[str, str] = {}
+    for reservation in pending_reservations:
+        if type(reservation) is not PendingPopulationReservation:
+            raise TypeError(
+                "pending_reservations entries must be "
+                "PendingPopulationReservation"
+            )
+        body_key = reservation.body_id.value
+        if body_key in registrations_by_body or body_key in pending:
+            _reject("population_metadata_duplicate_created")
+        if (
+            reservation.agent_id in registrations_by_agent
+            or reservation.agent_id in pending_by_agent
+        ):
+            _reject("population_metadata_duplicate_agent")
+        pending[body_key] = reservation
+        pending_by_agent[reservation.agent_id] = body_key
     previous_key: tuple[int, int] | None = None
 
     for event in events:

@@ -124,6 +124,7 @@ _EXPECTED_TYPE_MAP: Final[dict[type | str, str]] = {
 
 __all__ = [
     "PersistenceSerializationError",
+    "StreamedTickCommitVerifier",
     "bind_snapshot_commit_hash",
     "compute_commit_hash",
     "consume_pending_assigned_lifespan_synthesis",
@@ -300,6 +301,79 @@ def compute_commit_hash(
     }
     digest = hashlib.sha256(_canonical_dumps(document)).hexdigest()
     return CommitHash(digest)
+
+
+class StreamedTickCommitVerifier:
+    """Incrementally authenticate one tick's ordered event payloads.
+
+    The verifier is private to replay orchestration. It validates event ordering
+    and recomputes the canonical payload and commit digests without trusting
+    stored chain links or event counts.
+    """
+
+    __slots__ = (
+        "_commit",
+        "_event_hashes",
+        "_finished",
+        "_next_sequence",
+    )
+
+    def __init__(self, commit: TickCommit) -> None:
+        if type(commit) is not TickCommit:
+            raise TypeError("commit must be TickCommit")
+        self._commit = commit
+        self._event_hashes: list[PayloadHash] = []
+        self._next_sequence = 0
+        self._finished = False
+
+    @property
+    def event_count(self) -> int:
+        return len(self._event_hashes)
+
+    def feed(self, event: WorldEvent) -> None:
+        if self._finished:
+            raise PersistenceSerializationError("verifier_finished", "$")
+        if type(event) is not WorldEvent:
+            raise PersistenceSerializationError("invalid_type", "$")
+        try:
+            require_replayable_event(event)
+        except (TypeError, ValueError) as exc:
+            raise PersistenceSerializationError("non_replayable_event", "$") from exc
+        if event.run_id != self._commit.run_id.value:
+            raise PersistenceSerializationError("run_id_mismatch", "$.run_id")
+        if event.tick != self._commit.tick.value:
+            raise PersistenceSerializationError("tick_mismatch", "$.tick")
+        if event.sequence != self._next_sequence:
+            raise PersistenceSerializationError("sequence_gap", "$.sequence")
+        self._next_sequence += 1
+        self._event_hashes.append(hash_world_event(event))
+
+    def finish(self) -> None:
+        if self._finished:
+            raise PersistenceSerializationError("verifier_finished", "$")
+        if len(self._event_hashes) != self._commit.event_count:
+            raise PersistenceSerializationError("event_count_mismatch", "$.event_count")
+        payload = payload_hash(
+            _canonical_dumps(
+                {"event_hashes": [item.value for item in self._event_hashes]}
+            )
+        )
+        if payload != self._commit.payload_hash:
+            raise PersistenceSerializationError(
+                "payload_hash_mismatch", "$.payload_hash"
+            )
+        computed = compute_commit_hash(
+            predecessor_commit_hash=self._commit.predecessor_commit_hash,
+            run_id=self._commit.run_id,
+            tick=self._commit.tick,
+            base_revision=self._commit.base_revision,
+            resulting_revision=self._commit.resulting_revision,
+            event_hashes=tuple(self._event_hashes),
+            payload_hash=payload,
+        )
+        if computed != self._commit.commit_hash:
+            raise PersistenceSerializationError("commit_hash_mismatch", "$.commit_hash")
+        self._finished = True
 
 
 def verify_commit_chain(commits: Sequence[TickCommit]) -> None:

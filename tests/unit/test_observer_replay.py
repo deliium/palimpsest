@@ -611,3 +611,40 @@ async def test_event_cursor_tick_boundaries_jump_and_death() -> None:
 def test_scene_from_facts_drops_seed() -> None:
     history_scene = scene_from_facts
     assert "seed" not in history_scene.__code__.co_varnames
+
+
+@pytest.mark.asyncio
+async def test_metadata_and_page_reads_skip_redundant_scene_restores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api import observer_service as observer_service_module
+
+    service, _journal = boundary_replay_service()
+    reader = ObserverReadService(service)
+    calls: list[str] = []
+
+    async def scene_at(*args: object, **kwargs: object) -> object:
+        calls.append("scene_at")
+        return await scene_at_tick(*args, **kwargs)  # type: ignore[arg-type]
+
+    async def scene_through(*args: object, **kwargs: object) -> object:
+        calls.append("scene_through")
+        return await scene_through_event(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(observer_service_module, "scene_at_tick", scene_at)
+    monkeypatch.setattr(
+        observer_service_module, "scene_through_event", scene_through
+    )
+    await reader.events(
+        RUN_ID,
+        after_tick=0,
+        after_sequence=0,
+        limit=10,
+        layout_id="reference-v1",
+    )
+    await reader.run(RUN_ID)
+    assert calls == []
+    await reader.state(
+        RUN_ID, tick=2, through_sequence=0, layout_id="reference-v1"
+    )
+    assert calls == ["scene_through"]

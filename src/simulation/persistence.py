@@ -173,8 +173,10 @@ __all__ = [
     "PENDING_FINALIZATION_CODEC_VERSION",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
+    "BoundedTickJournalRepository",
     "BranchLineageRepository",
     "CommitHash",
+    "DurableHead",
     "ExperimentId",
     "ExperimentMetadata",
     "ExperimentRepository",
@@ -205,12 +207,14 @@ __all__ = [
     "TickAppendRequest",
     "TickCommit",
     "TickJournalRepository",
+    "VerifiedReplayBatch",
     "WorldEvent",
     "WorldRevision",
     "WorldSnapshot",
     "persistence_diagnostic_fields",
     "require_commit_hash",
     "require_payload_hash",
+    "resolve_durable_head",
     "schema_projector_compatible",
 ]
 
@@ -1710,6 +1714,202 @@ class ReplayCommitPage:
         object.__setattr__(self, "commits", commits)
         if self.next_from_tick is not None and type(self.next_from_tick) is not Tick:
             raise TypeError("next_from_tick must be Tick or None")
+
+
+
+
+@dataclass(frozen=True, slots=True)
+class DurableHead:
+    """Detached verified durable run head; no retained engine or cache."""
+
+    run_id: RunId
+    next_tick: Tick
+    revision: WorldRevision
+    last_commit_hash: CommitHash | None
+    latest_event_tick: Tick | None
+    latest_event_sequence: int | None
+    event_schema_version: int
+    projector_version: str
+    persistence_codec_version: str
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("DurableHead.run_id must be RunId")
+        if type(self.next_tick) is not Tick:
+            raise TypeError("DurableHead.next_tick must be Tick")
+        if type(self.revision) is not WorldRevision:
+            raise TypeError("DurableHead.revision must be WorldRevision")
+        if self.last_commit_hash is not None and type(
+            self.last_commit_hash
+        ) is not CommitHash:
+            raise TypeError("DurableHead.last_commit_hash must be CommitHash or None")
+        if self.latest_event_tick is not None and type(
+            self.latest_event_tick
+        ) is not Tick:
+            raise TypeError("DurableHead.latest_event_tick must be Tick or None")
+        if self.latest_event_sequence is not None:
+            object.__setattr__(
+                self,
+                "latest_event_sequence",
+                require_exact_nonneg_int(
+                    "DurableHead.latest_event_sequence", self.latest_event_sequence
+                ),
+            )
+        if (self.latest_event_tick is None) != (self.latest_event_sequence is None):
+            raise ValueError(
+                "DurableHead latest event tick and sequence must both be set or None"
+            )
+        object.__setattr__(
+            self,
+            "event_schema_version",
+            require_exact_nonneg_int(
+                "DurableHead.event_schema_version", self.event_schema_version
+            ),
+        )
+        object.__setattr__(
+            self,
+            "projector_version",
+            _require_version_string(
+                "DurableHead.projector_version", self.projector_version
+            ),
+        )
+        object.__setattr__(
+            self,
+            "persistence_codec_version",
+            _require_version_string(
+                "DurableHead.persistence_codec_version",
+                self.persistence_codec_version,
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedReplayBatch:
+    """One fully authenticated tick batch consumed by engine-owned restore.
+
+    A batch is emitted only after its commit payload, commit hash and chain
+    cursor have been verified. ``tick_complete`` is explicit so a caller can
+    distinguish an eventless tick from an interrupted stream.
+    """
+
+    run_id: RunId
+    tick: Tick
+    commit: TickCommit
+    events: tuple[WorldEvent, ...]
+    tick_complete: bool
+
+    def __post_init__(self) -> None:
+        if type(self.run_id) is not RunId:
+            raise TypeError("VerifiedReplayBatch.run_id must be RunId")
+        if type(self.tick) is not Tick:
+            raise TypeError("VerifiedReplayBatch.tick must be Tick")
+        if type(self.commit) is not TickCommit:
+            raise TypeError("VerifiedReplayBatch.commit must be TickCommit")
+        if self.commit.tick != self.tick:
+            raise ValueError("VerifiedReplayBatch commit tick must match tick")
+        if isinstance(self.events, (set, frozenset)):
+            raise TypeError("events must be ordered")
+        events = tuple(self.events)
+        for item in events:
+            if type(item) is not WorldEvent:
+                raise TypeError("events entries must be WorldEvent")
+            if item.tick != self.tick.value:
+                raise ValueError("events must belong to the batch tick")
+        if len(events) != self.commit.event_count:
+            raise ValueError("events must match commit event_count")
+        object.__setattr__(self, "events", events)
+        if type(self.tick_complete) is not bool:
+            raise TypeError("VerifiedReplayBatch.tick_complete must be bool")
+
+
+class BoundedTickJournalRepository(Protocol):
+    """Extended bounded journal reads; legacy repositories remain valid."""
+
+    async def get_latest_tick_commit(
+        self, run_id: RunId, *, through_tick: Tick | None = None
+    ) -> TickCommit | None: ...
+
+    async def list_tick_commits_keyset(
+        self,
+        run_id: RunId,
+        *,
+        after_tick: Tick,
+        through_tick: Tick | None,
+        limit: int,
+    ) -> tuple[TickCommit, ...]: ...
+
+    async def get_event_by_id(
+        self,
+        run_id: RunId,
+        event_id: str,
+        *,
+        through_tick: Tick | None = None,
+    ) -> WorldEvent | None: ...
+
+    async def get_latest_event(
+        self, run_id: RunId, *, through_tick: Tick | None = None
+    ) -> WorldEvent | None: ...
+
+
+async def resolve_durable_head(
+    runs: SimulationRunRepository,
+    journal: TickJournalRepository,
+    run_id: RunId,
+    *,
+    through_tick: Tick | None = None,
+) -> DurableHead:
+    """Resolve one detached verified head from bounded repository reads."""
+    if type(run_id) is not RunId:
+        raise TypeError("run_id must be RunId")
+    if through_tick is not None and type(through_tick) is not Tick:
+        raise TypeError("through_tick must be Tick or None")
+    manifest = await runs.get_run(run_id)
+    if manifest is None:
+        raise ValueError("durable_head_run_not_found")
+    latest_commit: TickCommit | None
+    latest_event: WorldEvent | None
+    if hasattr(journal, "get_latest_tick_commit"):
+        latest_commit = await journal.get_latest_tick_commit(
+            run_id, through_tick=through_tick
+        )
+    else:
+        commits = await journal.list_tick_commits(
+            run_id, from_tick=Tick(0), to_tick=through_tick
+        )
+        latest_commit = commits[-1] if commits else None
+    if hasattr(journal, "get_latest_event"):
+        latest_event = await journal.get_latest_event(
+            run_id, through_tick=through_tick
+        )
+    else:
+        latest_event = None
+    if latest_commit is None:
+        return DurableHead(
+            run_id=run_id,
+            next_tick=Tick(0),
+            revision=WorldRevision(0),
+            last_commit_hash=None,
+            latest_event_tick=None,
+            latest_event_sequence=None,
+            event_schema_version=manifest.event_schema_version,
+            projector_version=manifest.projector_version,
+            persistence_codec_version=manifest.persistence_codec_version,
+        )
+    return DurableHead(
+        run_id=run_id,
+        next_tick=Tick(latest_commit.tick.value + 1),
+        revision=latest_commit.resulting_revision,
+        last_commit_hash=latest_commit.commit_hash,
+        latest_event_tick=(
+            None if latest_event is None else Tick(latest_event.tick)
+        ),
+        latest_event_sequence=(
+            None if latest_event is None else latest_event.sequence
+        ),
+        event_schema_version=manifest.event_schema_version,
+        projector_version=manifest.projector_version,
+        persistence_codec_version=manifest.persistence_codec_version,
+    )
 
 
 class SnapshotRepository(Protocol):

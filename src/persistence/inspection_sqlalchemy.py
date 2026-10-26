@@ -19,6 +19,7 @@ from experiments.persistence import PersistedReconstructionRow
 from infrastructure.database import session_scope
 from memory.models import AgentId, MemorySourceKind
 from persistence.errors import PersistenceAdapterError, PersistenceNotFoundError
+from persistence.evidence_boundary import resolve_objective_evidence_boundary
 from persistence.memory_orm import MemoryReconstructionOrm, MemoryTraceOrm
 from persistence.orm import SimulationRunOrm, WorldEventOrm
 from persistence.readers import (
@@ -43,7 +44,6 @@ from simulation.inspection import (
     SubjectiveGraphSummaryPage,
     SubjectiveInspectionPage,
     clamp_inspection_page_limit,
-    constrain_events_to_manifest,
 )
 from simulation.models import RunId
 from simulation.persistence import WorldEvent
@@ -109,6 +109,43 @@ class SqlAlchemyObjectiveEvidenceLoader:
         )
         async with session_scope(self._session_factory) as session:
             await _require_run(session, run_id=run_id, operation="load_events_page")
+            through_tick: int | None = None
+            if manifest is not None:
+                boundary = await resolve_objective_evidence_boundary(
+                    session, run_id=run_id, manifest=manifest
+                )
+                if boundary.bootstrap_only:
+                    page_events = ()
+                    has_more = False
+                    next_cursor = None
+                    page = InspectionEventPage(
+                        run_id=run_id,
+                        limit=limit,
+                        events=page_events,
+                        next_cursor=next_cursor,
+                        availability=InspectionAvailability.AVAILABLE,
+                        manifest_hash=manifest.manifest_hash,
+                    )
+                    _LOG.debug(
+                        "objective_events_page_complete",
+                        extra={
+                            "operation": "load_events_page",
+                            "query_type": "objective_events",
+                            "run_id": run_id,
+                            "limit": limit,
+                            "count": 0,
+                            "has_more": False,
+                            "availability": page.availability.value,
+                            "manifest_hash_prefix": manifest_hash_prefix(manifest),
+                            "duration_ms": round(
+                                (time.perf_counter() - started) * 1000, 3
+                            ),
+                            "bootstrap_only": True,
+                        },
+                    )
+                    return page
+                assert boundary.through_tick is not None
+                through_tick = boundary.through_tick.value
             stmt = (
                 select(WorldEventOrm)
                 .where(WorldEventOrm.run_id == run_id)
@@ -124,6 +161,8 @@ class SqlAlchemyObjectiveEvidenceLoader:
                 .order_by(WorldEventOrm.tick, WorldEventOrm.sequence)
                 .limit(limit + 1)
             )
+            if through_tick is not None:
+                stmt = stmt.where(WorldEventOrm.tick <= through_tick)
             rows = list((await session.execute(stmt)).scalars().all())
             decoded: list[WorldEvent] = []
             for row in rows:
@@ -141,38 +180,8 @@ class SqlAlchemyObjectiveEvidenceLoader:
                         "invalid_event", operation="load_events_page"
                     )
                 decoded.append(event)
-            if manifest is not None:
-                # Full ordered history must be clamped before page slicing for
-                # deterministic high-water semantics; page reads after mark.
-                all_rows = list(
-                    (
-                        await session.execute(
-                            select(WorldEventOrm)
-                            .where(WorldEventOrm.run_id == run_id)
-                            .order_by(WorldEventOrm.tick, WorldEventOrm.sequence)
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                all_events = tuple(
-                    cast_event
-                    for cast_event in (event_from_orm(r) for r in all_rows)
-                    if type(cast_event).__name__ == "WorldEvent"
-                )
-                constrained = constrain_events_to_manifest(
-                    all_events, manifest, run_id=run_id
-                )
-                filtered = tuple(
-                    event
-                    for event in constrained
-                    if (event.tick, event.sequence) > (after_tick, after_sequence)
-                )
-                page_events = filtered[:limit]
-                has_more = len(filtered) > limit
-            else:
-                has_more = len(decoded) > limit
-                page_events = tuple(decoded[:limit])
+            has_more = len(decoded) > limit
+            page_events = tuple(decoded[:limit])
 
         next_cursor = next_event_keyset_cursor(page_events) if has_more else None
         page = InspectionEventPage(

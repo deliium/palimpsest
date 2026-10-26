@@ -111,6 +111,51 @@ class HistorySequence[T](Sequence[T]):
             remaining -= 1
         raise IndexError("HistorySequence index out of range")
 
+    def count_with_tick(self, tick: int) -> int:
+        """Count items whose ``tick`` matches without scanning older chunks."""
+        if type(tick) is not int or tick < 0:
+            raise ValueError("tick must be a non-negative integer")
+        total = 0
+        node: HistorySequence[T] | None = self
+        while node is not None:
+            if node._chunk:
+                start, end = node._start_tick, node._end_tick
+                if start is None:
+                    pass
+                elif start == end == tick:
+                    total += len(node._chunk)
+                elif start <= tick <= (end if end is not None else start):
+                    total += sum(
+                        1
+                        for item in node._chunk
+                        if getattr(item, "tick", None) == tick
+                    )
+            node = node._previous
+        return total
+
+    def iter_from_tick(self, tick: int) -> Iterator[T]:
+        """Yield items at or after ``tick`` using chunk range metadata."""
+        if type(tick) is not int or tick < 0:
+            raise ValueError("tick must be a non-negative integer")
+        chunks: list[tuple[T, ...]] = []
+        node: HistorySequence[T] | None = self
+        while node is not None:
+            if node._chunk:
+                start, end = node._start_tick, node._end_tick
+                if start is None or start >= tick or (
+                    end is not None and end >= tick
+                ):
+                    chunks.append(node._chunk)
+            node = node._previous
+        for chunk in reversed(chunks):
+            for item in chunk:
+                item_tick = getattr(item, "tick", None)
+                if item_tick is None or item_tick >= tick:
+                    yield item
+
+    def to_tuple_from_tick(self, tick: int) -> tuple[T, ...]:
+        return tuple(self.iter_from_tick(tick))
+
     def __repr__(self) -> str:
         return f"HistorySequence(length={self._length})"
 

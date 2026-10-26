@@ -10,6 +10,7 @@ from tests.benchmarks.harness import (
     build_scale_config,
     count_snapshots,
     durable_factories,
+    measure_checkpoint_cadence_variants,
     unique_run_id,
 )
 
@@ -129,3 +130,22 @@ def test_runner_checkpoint_policy_rejects_cadence_without_durable() -> None:
             durable=False,
             checkpoint=RunnerCheckpointPolicy(enabled=True, cadence_ticks=100),
         )
+
+
+@pytest.mark.scale
+@pytest.mark.asyncio
+async def test_checkpoint_cadences_measure_identical_histories(
+    database_resources: DatabaseResources,
+) -> None:
+    rows = await measure_checkpoint_cadence_variants(
+        database_resources,
+        max_ticks=600,
+        cadences=(None, 100, 500, 1000),
+    )
+    assert len({row.projection_hash for row in rows}) == 1
+    assert len({row.events for row in rows}) == 1
+    assert len({row.ticks for row in rows}) == 1
+    assert all(row.snapshot_serialization_ms >= 0.0 for row in rows)
+    by_cadence = {row.cadence: row for row in rows}
+    assert by_cadence[None].snapshots == 1
+    assert by_cadence[100].snapshots == 1 + 600 // 100

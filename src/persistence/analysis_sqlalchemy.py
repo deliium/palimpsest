@@ -46,6 +46,7 @@ from memory.models import (
     WorldRevision,
 )
 from persistence.errors import PersistenceAdapterError, PersistenceNotFoundError
+from persistence.evidence_boundary import resolve_objective_evidence_boundary
 from persistence.memory_orm import (
     MemoryConceptOrm,
     MemoryDerivationSourceOrm,
@@ -59,7 +60,6 @@ from persistence.orm import (
     ExperimentAssignmentOrm,
     ExperimentRunOrm,
     SimulationRunOrm,
-    TickCommitOrm,
     WorldEventOrm,
     WorldSnapshotOrm,
 )
@@ -168,40 +168,19 @@ class SqlAlchemyAnalysisEvidenceLoader:
             )
             regional_context = regional_context_from_snapshot(bootstrap)
 
+            boundary = await resolve_objective_evidence_boundary(
+                session, run_id=run_id, manifest=manifest
+            )
+            complete_boundary = boundary.boundary_tick.value
             if manifest is None:
-                latest_commit = (
-                    await session.execute(
-                        select(TickCommitOrm)
-                        .where(TickCommitOrm.run_id == run_id)
-                        .order_by(TickCommitOrm.tick.desc())
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
-                complete_boundary = (
-                    0 if latest_commit is None else latest_commit.resulting_tick
-                )
                 events = await _load_events(session, run_id=run_id)
+            elif boundary.bootstrap_only:
+                events = ()
             else:
-                high_water_commit = (
-                    await session.execute(
-                        select(TickCommitOrm).where(
-                            TickCommitOrm.run_id == run_id,
-                            TickCommitOrm.commit_hash == manifest.objective_commit_hash,
-                        )
-                    )
-                ).scalar_one_or_none()
-                if high_water_commit is not None:
-                    complete_boundary = high_water_commit.resulting_tick
-                    events = await _load_events(
-                        session, run_id=run_id, through_tick=high_water_commit.tick
-                    )
-                elif manifest.objective_commit_hash == bootstrap.integrity_hash.value:
-                    complete_boundary = 0
-                    events = ()
-                else:
-                    raise PersistenceAdapterError(
-                        "manifest_objective_commit_not_found", operation="load"
-                    )
+                assert boundary.through_tick is not None
+                events = await _load_events(
+                    session, run_id=run_id, through_tick=boundary.through_tick
+                )
 
             if experiment_id is not None:
                 membership = await _has_canonical_membership(

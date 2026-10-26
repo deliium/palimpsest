@@ -129,6 +129,7 @@ from simulation.generational_models import (
     StopEvidence,
 )
 from simulation.generational_progress import (
+    PopulationProgressAccumulator,
     build_population_progress,
     evaluate_generational_stops,
 )
@@ -1676,6 +1677,7 @@ class SimulationRunner:
     """Owns configured world engine, agent runtimes, and provider lifecycle."""
 
     __slots__ = (
+        "_active_ordinals",
         "_agents",
         "_attempt_receipts",
         "_bootstrap",
@@ -1714,6 +1716,7 @@ class SimulationRunner:
         "_lineage_capture_last_boundary",
         "_observation_sink",
         "_pending_finalizations",
+        "_population_accumulator",
         "_provider",
         "_published_boundaries",
         "_run_config",
@@ -1758,6 +1761,7 @@ class SimulationRunner:
         self._engine = engine
         self._runtimes = tuple(runtimes)
         self._agents = tuple(agents)
+        self._active_ordinals = self._build_active_ordinals()
         self._provider = provider
         self._diagnostics = diagnostics
         self._durable = durable
@@ -1780,6 +1784,7 @@ class SimulationRunner:
         self._goal_transition_receipts: list[GoalTransitionReceipt] = []
         self._cognition_counters = CognitionCounters()
         self._generational_progress: PopulationProgress | None = None
+        self._population_accumulator: PopulationProgressAccumulator | None = None
         self._stop_evidence: StopEvidence | None = None
         self._terminal_receipt: RunnerAttemptReceipt | None = None
         self._criteria = tuple(criteria)
@@ -1831,6 +1836,54 @@ class SimulationRunner:
     @property
     def runtimes(self) -> tuple[AgentRuntime, ...]:
         return self._runtimes
+
+    @property
+    def active_ordinals(self) -> tuple[int, ...]:
+        """Permanent registration ordinals eligible for cognition."""
+        return tuple(self._active_ordinals)
+
+    @property
+    def active_runtime_count(self) -> int:
+        return len(self._active_ordinals)
+
+    def _build_active_ordinals(self) -> list[int]:
+        active = [
+            ordinal
+            for ordinal, runtime in enumerate(self._runtimes)
+            if runtime.status is not AgentRuntimeStatus.TERMINAL
+        ]
+        if len(active) != len(set(active)):
+            raise RunnerConstructionError(
+                RunnerConstructionErrorCode.INVALID_CONFIG,
+                stage="duplicate_active_ordinal",
+            )
+        return active
+
+    def _rebuild_active_ordinals(self) -> None:
+        self._active_ordinals = self._build_active_ordinals()
+
+    def _retire_terminal_active_ordinals(self) -> None:
+        """Drop terminal owners from the execution index after finalization.
+
+        The complete registration roster and every historical export remain in
+        ``_runtimes``/``_agents``. Ordinals are never compacted or reused.
+        """
+        before = len(self._active_ordinals)
+        self._active_ordinals = [
+            ordinal
+            for ordinal in self._active_ordinals
+            if self._runtimes[ordinal].status is not AgentRuntimeStatus.TERMINAL
+        ]
+        retired = before - len(self._active_ordinals)
+        if retired:
+            _LOG.debug(
+                "runner_active_ordinals_retired run_id=%s retired=%s active=%s "
+                "roster=%s",
+                self._run_id.value,
+                retired,
+                len(self._active_ordinals),
+                len(self._runtimes),
+            )
 
     @classmethod
     async def from_config(
@@ -2729,6 +2782,7 @@ class SimulationRunner:
                     owner_state, parent_scope=owner_state.scope
                 )
                 bundle.runtime.restore_fork_state(checkpoint.runtime_state(owner))
+            runner._rebuild_active_ordinals()
             control = checkpoint.runner_control
             runner._ticks_committed = checkpoint.boundary_tick.value
             runner._finalized_tick_receipts = list(control.finalized_tick_receipts)
@@ -2737,6 +2791,7 @@ class SimulationRunner:
             if control.generational_control_state is not None:
                 gcs = control.generational_control_state
                 runner._generational_progress = gcs.progress
+                runner._population_accumulator = None
                 runner._stop_evidence = gcs.stop_evidence
                 runner._terminal_receipt = gcs.terminal_receipt
                 runner._attempt_receipts = list(gcs.attempt_receipts)
@@ -2840,7 +2895,8 @@ class SimulationRunner:
     def _ensure_started(self) -> None:
         if self._started:
             return
-        for runtime in self._runtimes:
+        for ordinal in self._active_ordinals:
+            runtime = self._runtimes[ordinal]
             if runtime.status is AgentRuntimeStatus.CREATED:
                 runtime.start()
         self._started = True
@@ -2862,7 +2918,8 @@ class SimulationRunner:
             return
         raw = self._engine.learning_rate_by_entity(tick=tick)
         rates = {entity_id.value: float(factor) for entity_id, factor in raw.items()}
-        for runtime in self._runtimes:
+        for ordinal in self._active_ordinals:
+            runtime = self._runtimes[ordinal]
             binder = getattr(runtime, "bind_developmental_entity_learning_rates", None)
             if callable(binder):
                 binder(rates)
@@ -2933,9 +2990,19 @@ class SimulationRunner:
         stage_grounding = civilization is not None and civilization.wants_events()
         if civilization is not None:
             civilization.discard_staging()
+        if stage_grounding and civilization is not None:
+            active = set(self._active_ordinals)
+            for ordinal, runtime in enumerate(self._runtimes):
+                if ordinal in active:
+                    continue
+                observation = self._engine.observation_for(runtime.agent_id)
+                civilization.stage_observation(
+                    runtime.agent_id.value, observation
+                )
 
         try:
-            for ordinal, runtime in enumerate(self._runtimes):
+            for ordinal in tuple(self._active_ordinals):
+                runtime = self._runtimes[ordinal]
                 observation = self._engine.observation_for(runtime.agent_id)
                 if stage_grounding and civilization is not None:
                     civilization.stage_observation(runtime.agent_id.value, observation)
@@ -3008,6 +3075,7 @@ class SimulationRunner:
                 commands=tuple(commands),
                 tick_result=tick_result,
             )
+            self._retire_terminal_active_ordinals()
             if self._config.generational_run is not None:
                 self._generational_boundary_stage = (
                     GenerationalBoundaryStage.PUBLICATION_PENDING
@@ -4410,6 +4478,7 @@ class SimulationRunner:
             self._attempt_receipts = list(control.attempt_receipts)
             self._finished_result = control.finished_result
             self._generational_progress = control.progress
+            self._population_accumulator = None
             self._generational_boundary_stage = control.boundary_stage
             from simulation.generational_control import CriterionDecision
 
@@ -4428,6 +4497,7 @@ class SimulationRunner:
         elif control is not None:
             raise ValueError("legacy checkpoint forbids generational control state")
         self._started = True
+        self._rebuild_active_ordinals()
         _LOG.info(
             "runner_rehydrated run_id=%s ticks_committed=%s runtime_count=%s",
             self._run_id.value,
@@ -5380,11 +5450,29 @@ class SimulationRunner:
     def _refresh_generational_progress(self, tick_result: TickResult) -> None:
         if self._config.generational_run is None:
             return
-        progress = build_population_progress(
-            lifecycle_records=self._engine.lifecycle_records,
-            detached_bodies=self._engine.detached_bodies(),
-            boundary_tick=self._ticks_committed,
-        )
+        records = self._engine.lifecycle_records
+        if self._population_accumulator is None:
+            self._population_accumulator = PopulationProgressAccumulator.bootstrap(
+                lifecycle_records=records,
+                detached_bodies=self._engine.detached_bodies(),
+                boundary_tick=self._ticks_committed,
+            )
+            progress = self._population_accumulator.snapshot(
+                boundary_tick=self._ticks_committed
+            )
+        else:
+            from world.events import Died
+
+            died_body_ids = tuple(
+                record.event.details.body_id.value
+                for record in tick_result.events
+                if type(record.event.details) is Died
+            )
+            progress = self._population_accumulator.apply_boundary(
+                boundary_tick=self._ticks_committed,
+                lifecycle_records=records,
+                died_body_ids=died_body_ids,
+            )
         self._generational_progress = progress
         _LOG.debug(
             "runner_generational_progress run_id=%s boundary_tick=%s "
@@ -5707,8 +5795,8 @@ class SimulationRunner:
         if not self._engine.lifecycle_channel_active:
             return
         translator = self._engine.registration_translator
-        for runtime in self._runtimes:
-            runtime.replace_translator(translator)
+        for ordinal in self._active_ordinals:
+            self._runtimes[ordinal].replace_translator(translator)
         known = {runtime.agent_id for runtime in self._runtimes}
         new_registrations = [
             registration
@@ -5744,6 +5832,7 @@ class SimulationRunner:
         deps = self._factories
         agents = list(self._agents)
         runtimes = list(self._runtimes)
+        previous_count = len(runtimes)
         for registration in new_registrations:
             pack = species_defaults_for(
                 init_spec.species_defaults_id, agent_id=registration.agent_id
@@ -5884,6 +5973,8 @@ class SimulationRunner:
             )
         self._agents = tuple(agents)
         self._runtimes = tuple(runtimes)
+        self._active_ordinals.extend(range(previous_count, len(runtimes)))
+        self._rebuild_active_ordinals()
         # Ordinal semantics: registration order including mid-run appends.
         assert [rt.agent_id for rt in self._runtimes] == [
             reg.agent_id for reg in self._engine.ordered_registrations

@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -27,6 +28,7 @@ from persistence import (
 )
 from persistence.orm import WorldEventOrm, WorldSnapshotOrm
 from simulation.clock import Tick
+from simulation.journal import hash_snapshot
 from simulation.models import RunId, StochasticIdentity
 from simulation.persistence import ReplayRequest
 from simulation.replay import ReplayService, scene_at_tick
@@ -43,6 +45,7 @@ from simulation.runner_models import (
     SimulationRunnerConfig,
     WorldScenarioSpec,
 )
+from simulation.runner_serialization import objective_projection_hash
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
@@ -71,6 +74,7 @@ class ScaleBenchMetrics:
     catchup_ms: float
     seek_ms: float
     snapshot_write_proxy_ms: float
+    snapshot_read_ms: float = 0.0
 
 
 def resolve_tick_targets() -> tuple[int, ...]:
@@ -208,13 +212,14 @@ async def measure_observer_catchup_ms(
 ) -> float:
     """Simulate reconnect catch-up via exclusive keyset event pages."""
     journal = create_tick_journal_repository(session_factory)
+    list_events_keyset = cast(Any, journal).list_events_keyset
     after_tick = 0
     after_sequence = -1
     started = time.perf_counter()
     pages = 0
     events = 0
     while True:
-        batch = await journal.list_events_keyset(
+        batch = await list_events_keyset(
             run_id,
             after_tick=after_tick,
             after_sequence=after_sequence,
@@ -286,6 +291,37 @@ async def measure_seek_ms(
     return elapsed_ms
 
 
+async def measure_snapshot_costs_ms(
+    session_factory: async_sessionmaker[AsyncSession],
+    run_id: RunId,
+    *,
+    target_tick: int,
+) -> tuple[float, float]:
+    """Return measured (read_ms, serialization_ms) for one snapshot.
+
+    ``serialization_ms`` times canonical snapshot hashing on the loaded graph;
+    it replaces the previous cadence-ratio proxy. It is still a CPU-side
+    serialization cost, not a database write duration.
+    """
+    snapshots = create_snapshot_repository(session_factory)
+    started = time.perf_counter()
+    snapshot = await snapshots.get_latest_at_or_before(
+        run_id, Tick(target_tick)
+    )
+    read_ms = (time.perf_counter() - started) * 1000.0
+    if snapshot is None:
+        return read_ms, 0.0
+    serialization_started = time.perf_counter()
+    hash_snapshot(snapshot)
+    serialization_ms = (time.perf_counter() - serialization_started) * 1000.0
+    _LOG.debug(
+        "[scale.bench] phase=snapshot read_ms=%.3f serialization_ms=%.3f",
+        read_ms,
+        serialization_ms,
+    )
+    return read_ms, serialization_ms
+
+
 async def run_durable_scale_scenario(
     database_resources: DatabaseResources,
     *,
@@ -323,13 +359,11 @@ async def run_durable_scale_scenario(
 
     events = await count_events(session_factory, run_id)
     snapshots = await count_snapshots(session_factory, run_id)
-    # Snapshot write cost proxy: fraction of run time attributed to cadence
-    # hits when cadence is set (exact timers land in task 2 instrumentation).
-    snapshot_write_proxy_ms = (
-        (run_elapsed_ms * snapshots / max(max_ticks, 1)) if snapshots else 0.0
+    seek_target = max(max_ticks // 2, 1)
+    snapshot_read_ms, snapshot_write_proxy_ms = await measure_snapshot_costs_ms(
+        session_factory, run_id, target_tick=seek_target
     )
     catchup_ms = await measure_observer_catchup_ms(session_factory, run_id)
-    seek_target = max(max_ticks // 2, 1)
     seek_ms = await measure_seek_ms(session_factory, run_id, target_tick=seek_target)
     total_ms = (time.perf_counter() - started) * 1000.0
     rss_peak = peak_rss_kb()
@@ -345,6 +379,7 @@ async def run_durable_scale_scenario(
         catchup_ms=catchup_ms,
         seek_ms=seek_ms,
         snapshot_write_proxy_ms=snapshot_write_proxy_ms,
+        snapshot_read_ms=snapshot_read_ms,
     )
     _LOG.info(
         "[scale.bench] scenario=%s ticks=%s elapsed_ms=%.3f events=%s snapshots=%s",
@@ -356,14 +391,103 @@ async def run_durable_scale_scenario(
     )
     _LOG.debug(
         "[scale.bench] phase=complete events_per_sec=%.3f catchup_ms=%.3f "
-        "seek_ms=%.3f snapshot_write_proxy_ms=%.3f peak_rss_kb=%s",
+        "seek_ms=%.3f snapshot_read_ms=%.3f snapshot_serialization_ms=%.3f "
+        "peak_rss_kb=%s",
         metrics.events_per_sec,
         metrics.catchup_ms,
         metrics.seek_ms,
+        metrics.snapshot_read_ms,
         metrics.snapshot_write_proxy_ms,
         metrics.peak_rss_kb,
     )
     return metrics
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointCadenceMetrics:
+    """Measured cost for one checkpoint cadence over an identical history."""
+
+    cadence: int | None
+    ticks: int
+    events: int
+    snapshots: int
+    projection_hash: str
+    run_ms: float
+    snapshot_read_ms: float
+    snapshot_serialization_ms: float
+    seek_ms: float
+
+
+async def measure_checkpoint_cadence_variants(
+    database_resources: DatabaseResources,
+    *,
+    max_ticks: int,
+    cadences: tuple[int | None, ...] = (None, 100, 500, 1000),
+) -> tuple[CheckpointCadenceMetrics, ...]:
+    """Run one deterministic scenario per cadence and record actual costs.
+
+    Cadence is persistence-only, so every variant must produce the same event
+    count and objective projection hash. Snapshot serialization is measured by
+    timing canonical snapshot hashing, never by dividing elapsed run time by a
+    snapshot count.
+    """
+    session_factory = database_resources.session_factory
+    seek_target = max(max_ticks - max_ticks // 4, 1)
+    rows: list[CheckpointCadenceMetrics] = []
+    for cadence in cadences:
+        config = build_scale_config(
+            max_ticks=max_ticks, checkpoint_cadence=cadence
+        )
+        run_id = unique_run_id(
+            "ckpt-cad-" + ("off" if cadence is None else str(cadence))
+        )
+        started = time.perf_counter()
+        async with await SimulationRunner.from_config(
+            config,
+            run_id=run_id,
+            factories=durable_factories(session_factory),
+        ) as runner:
+            result = await runner.run()
+            projection_hash = objective_projection_hash(
+                runner.final_objective_projection()
+            )
+        run_ms = (time.perf_counter() - started) * 1000.0
+        events = await count_events(session_factory, run_id)
+        snapshots = await count_snapshots(session_factory, run_id)
+        snapshot_read_ms, snapshot_serialization_ms = (
+            await measure_snapshot_costs_ms(
+                session_factory, run_id, target_tick=seek_target
+            )
+        )
+        seek_ms = await measure_seek_ms(
+            session_factory, run_id, target_tick=seek_target
+        )
+        row = CheckpointCadenceMetrics(
+            cadence=cadence,
+            ticks=result.ticks_committed,
+            events=events,
+            snapshots=snapshots,
+            projection_hash=projection_hash,
+            run_ms=run_ms,
+            snapshot_read_ms=snapshot_read_ms,
+            snapshot_serialization_ms=snapshot_serialization_ms,
+            seek_ms=seek_ms,
+        )
+        rows.append(row)
+        _LOG.info(
+            "[scale.bench] checkpoint_cadence cadence=%s ticks=%s events=%s "
+            "snapshots=%s run_ms=%.3f snapshot_read_ms=%.3f "
+            "snapshot_serialization_ms=%.3f seek_ms=%.3f",
+            cadence,
+            row.ticks,
+            row.events,
+            row.snapshots,
+            row.run_ms,
+            row.snapshot_read_ms,
+            row.snapshot_serialization_ms,
+            row.seek_ms,
+        )
+    return tuple(rows)
 
 
 def metrics_as_artifact_row(metrics: ScaleBenchMetrics) -> Mapping[str, object]:
@@ -378,5 +502,6 @@ def metrics_as_artifact_row(metrics: ScaleBenchMetrics) -> Mapping[str, object]:
         "peak_rss_kb": metrics.peak_rss_kb,
         "catchup_ms": round(metrics.catchup_ms, 3),
         "seek_ms": round(metrics.seek_ms, 3),
+        "snapshot_read_ms": round(metrics.snapshot_read_ms, 3),
         "snapshot_write_proxy_ms": round(metrics.snapshot_write_proxy_ms, 3),
     }

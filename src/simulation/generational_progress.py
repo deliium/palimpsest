@@ -163,6 +163,213 @@ def build_population_progress(
     return progress
 
 
+
+
+class PopulationProgressAccumulator:
+    """Incrementally maintain exact population totals at finalized boundaries.
+
+    Bootstrap performs one full validated fold. Later boundaries process only
+    newly admitted lifecycle records and explicit objective death events.
+    ``build_population_progress`` remains the canonical full-fold oracle.
+    """
+
+    __slots__ = (
+        "_boundary_tick",
+        "_cohort_totals",
+        "_generation_totals",
+        "_living",
+        "_max_generation",
+        "_records",
+        "_total_admitted",
+        "_total_deaths",
+    )
+
+    def __init__(self) -> None:
+        self._boundary_tick = 0
+        self._records: dict[str, AgentLifecycleRecord] = {}
+        self._living: dict[str, bool] = {}
+        self._cohort_totals: dict[tuple[int, int, str], list[int]] = {}
+        self._generation_totals: dict[int, list[int]] = {}
+        self._total_admitted = 0
+        self._total_deaths = 0
+        self._max_generation = 0
+
+    @classmethod
+    def bootstrap(
+        cls,
+        *,
+        lifecycle_records: Sequence[object],
+        detached_bodies: Sequence[object],
+        boundary_tick: int,
+    ) -> PopulationProgressAccumulator:
+        # Reuse full-fold validation before installing derived maps.
+        progress = build_population_progress(
+            lifecycle_records=lifecycle_records,
+            detached_bodies=detached_bodies,
+            boundary_tick=boundary_tick,
+        )
+        accumulator = cls()
+        accumulator._boundary_tick = progress.boundary_tick
+        accumulator._total_admitted = progress.total_admitted
+        accumulator._total_deaths = progress.total_deaths
+        accumulator._max_generation = progress.max_generation_index_seen
+        bodies = {
+            body.entity_id.value: body
+            for body in detached_bodies
+        }
+        for raw in lifecycle_records:
+            if type(raw) is not AgentLifecycleRecord:
+                raise TypeError(
+                    "lifecycle_records entries must be AgentLifecycleRecord"
+                )
+            key = raw.body_id.value
+            body = bodies[key]
+            accumulator._records[key] = raw
+            living = body.life_status is LifeStatus.ALIVE
+            accumulator._living[key] = living
+            cohort_key = (raw.generation_index, raw.entry_tick, raw.cohort_id)
+            cohort = accumulator._cohort_totals.setdefault(
+                cohort_key, [0, 0, 0]
+            )
+            cohort[0] += 1
+            cohort[1 if living else 2] += 1
+            generation = accumulator._generation_totals.setdefault(
+                raw.generation_index, [0, 0, 0]
+            )
+            generation[0] += 1
+            generation[1 if living else 2] += 1
+        _LOGGER.debug(
+            "population_accumulator_bootstrapped boundary_tick=%s "
+            "admitted=%s deaths=%s cohorts=%s",
+            accumulator._boundary_tick,
+            accumulator._total_admitted,
+            accumulator._total_deaths,
+            len(accumulator._cohort_totals),
+        )
+        return accumulator
+
+    def apply_boundary(
+        self,
+        *,
+        boundary_tick: int,
+        lifecycle_records: Sequence[object],
+        died_body_ids: Sequence[str],
+    ) -> PopulationProgress:
+        """Apply one finalized boundary exactly once; reject replay/conflicts."""
+        boundary = require_exact_nonneg_int("boundary_tick", boundary_tick)
+        if boundary < self._boundary_tick:
+            raise ValueError(
+                "population boundary regressed "
+                "(code=population_progress_boundary_conflict)"
+            )
+        if boundary == self._boundary_tick:
+            if len(lifecycle_records) != len(self._records) or died_body_ids:
+                raise ValueError(
+                    "population boundary replay conflicts with derived state "
+                    "(code=population_progress_boundary_conflict)"
+                )
+            return self.snapshot(boundary_tick=boundary)
+        if isinstance(
+            lifecycle_records, (str, bytes, set, frozenset)
+        ) or not isinstance(lifecycle_records, Sequence):
+            raise TypeError("lifecycle_records must be an ordered sequence")
+        if len(lifecycle_records) < len(self._records):
+            raise ValueError(
+                "population lifecycle records regressed "
+                "(code=population_progress_boundary_conflict)"
+            )
+        for raw in lifecycle_records[len(self._records) :]:
+            if type(raw) is not AgentLifecycleRecord:
+                raise TypeError(
+                    "lifecycle_records entries must be AgentLifecycleRecord"
+                )
+            key = raw.body_id.value
+            if key in self._records:
+                raise ValueError(
+                    "duplicate lifecycle binding "
+                    "(code=population_progress_binding_invalid)"
+                )
+            self._records[key] = raw
+            self._living[key] = True
+            self._total_admitted += 1
+            self._max_generation = max(self._max_generation, raw.generation_index)
+            cohort_key = (raw.generation_index, raw.entry_tick, raw.cohort_id)
+            cohort = self._cohort_totals.setdefault(cohort_key, [0, 0, 0])
+            cohort[0] += 1
+            cohort[1] += 1
+            generation = self._generation_totals.setdefault(
+                raw.generation_index, [0, 0, 0]
+            )
+            generation[0] += 1
+            generation[1] += 1
+        seen_deaths: set[str] = set()
+        for body_id in died_body_ids:
+            if type(body_id) is not str or not body_id:
+                raise TypeError("died_body_ids entries must be non-empty strings")
+            if body_id in seen_deaths:
+                raise ValueError(
+                    "duplicate death event "
+                    "(code=population_progress_boundary_conflict)"
+                )
+            seen_deaths.add(body_id)
+            if body_id not in self._records:
+                raise ValueError(
+                    "death without lifecycle binding "
+                    "(code=population_progress_binding_invalid)"
+                )
+            if self._living[body_id] is False:
+                raise ValueError(
+                    "death applied twice "
+                    "(code=population_progress_boundary_conflict)"
+                )
+            self._living[body_id] = False
+            self._total_deaths += 1
+            raw = self._records[body_id]
+            cohort_key = (raw.generation_index, raw.entry_tick, raw.cohort_id)
+            cohort = self._cohort_totals[cohort_key]
+            cohort[1] -= 1
+            cohort[2] += 1
+            generation = self._generation_totals[raw.generation_index]
+            generation[1] -= 1
+            generation[2] += 1
+        self._boundary_tick = boundary
+        return self.snapshot(boundary_tick=boundary)
+
+    def snapshot(self, *, boundary_tick: int) -> PopulationProgress:
+        cohorts = tuple(
+            CohortPopulationRow(
+                generation_index=generation_index,
+                entry_tick=entry_tick,
+                cohort_id=cohort_id,
+                admitted=values[0],
+                living=values[1],
+                dead=values[2],
+            )
+            for (generation_index, entry_tick, cohort_id), values in sorted(
+                self._cohort_totals.items()
+            )
+        )
+        generations = tuple(
+            GenerationPopulationRow(
+                generation_index=generation_index,
+                admitted=values[0],
+                living=values[1],
+                dead=values[2],
+            )
+            for generation_index, values in sorted(self._generation_totals.items())
+        )
+        living = sum(1 for value in self._living.values() if value)
+        return PopulationProgress(
+            boundary_tick=boundary_tick,
+            living_population=living,
+            total_admitted=self._total_admitted,
+            total_deaths=self._total_deaths,
+            max_generation_index_seen=self._max_generation,
+            cohorts=cohorts,
+            generations=generations,
+        )
+
+
 def evaluate_generational_stops(
     spec: GenerationalRunSpec,
     progress: PopulationProgress,
@@ -208,4 +415,8 @@ def evaluate_generational_stops(
     return ordered
 
 
-__all__ = ["build_population_progress", "evaluate_generational_stops"]
+__all__ = [
+    "PopulationProgressAccumulator",
+    "build_population_progress",
+    "evaluate_generational_stops",
+]

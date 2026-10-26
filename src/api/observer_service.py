@@ -64,7 +64,7 @@ from simulation.observer_demographics import (
     project_demographics,
     project_generation_markers,
 )
-from simulation.persistence import BranchLineageRepository, ReplayStatus
+from simulation.persistence import BranchLineageRepository, DurableHead, ReplayStatus
 from simulation.replay import (
     FoldedObjectiveHistory,
     ObserverHistoryError,
@@ -429,8 +429,8 @@ class ObserverReadService:
         """
         _layout(layout_id)
         typed = _run_id(run_id)
-        history = await self._history(run_id, target_tick=None)
-        _reject_ahead(history.scene.tick, after_tick, after_sequence, run_id=run_id)
+        head = await self._head(run_id)
+        _reject_ahead(head.next_tick.value, after_tick, after_sequence, run_id=run_id)
         cursor_tick = 0 if after_tick is None else after_tick
         cursor_sequence = -1 if after_sequence is None else after_sequence
         filter_codes: list[str] = []
@@ -546,45 +546,32 @@ class ObserverReadService:
 
     async def event(self, run_id: str, event_id: str) -> ObserverEventOut:
         typed = _run_id(run_id)
-        after_tick = 0
-        after_sequence = -1
-        for _ in range(100):
-            page = await self._replay.read_event_keyset_page(
-                typed,
-                after_tick=after_tick,
-                after_sequence=after_sequence,
-                limit=100,
-            )
-            if not page.events:
-                break
-            for item in page.events:
-                if item.event_id.value == event_id:
-                    return _event_out(adapt_event(item))
-            last = page.events[-1]
-            after_tick = last.tick
-            after_sequence = last.sequence
-            if page.next_offset is None and len(page.events) < page.limit:
-                break
-        raise not_found(code="observer_event_not_found", run_id=run_id)
+        item = await self._replay.read_event(typed, event_id)
+        if item is None:
+            raise not_found(code="observer_event_not_found", run_id=run_id)
+        return _event_out(adapt_event(item))
 
     async def run(self, run_id: str) -> ObserverRunOut:
-        history = await self._history(run_id, target_tick=None)
-        latest_tick = None
-        latest_sequence = None
-        if history.events:
-            latest_tick = history.events[-1].tick
-            latest_sequence = history.events[-1].sequence
+        typed = _run_id(run_id)
+        manifest = await self._replay.run_manifest(typed)
+        if manifest is None:
+            raise not_found(code="target_unreachable", run_id=run_id)
+        head = await self._head(run_id)
         branch = await self._branch_fields(run_id)
         return ObserverRunOut(
-            run_id=history.scene.run_id,
-            world_id=history.scene.world_id,
+            run_id=manifest.run_id.value,
+            world_id=manifest.world_id.value,
             availability="available",
             protocol_version=OBSERVER_PROTOCOL_VERSION,
-            event_schema_version=history.result.event_schema_version,
-            projector_version=history.result.projector_version,
-            tick=history.scene.tick,
-            latest_tick=latest_tick,
-            latest_sequence=latest_sequence,
+            event_schema_version=head.event_schema_version,
+            projector_version=head.projector_version,
+            tick=head.next_tick.value,
+            latest_tick=(
+                None
+                if head.latest_event_tick is None
+                else head.latest_event_tick.value
+            ),
+            latest_sequence=head.latest_event_sequence,
             parent_run_id=branch["parent_run_id"],  # type: ignore[arg-type]
             fork_tick=branch["fork_tick"],  # type: ignore[arg-type]
             intervention_summary=branch["intervention_summary"],  # type: ignore[arg-type]
@@ -628,6 +615,16 @@ class ObserverReadService:
             items=tuple(_relationship_out(item) for item in summaries),
         )
 
+    async def _head(self, run_id: str) -> DurableHead:
+        typed = _run_id(run_id)
+        try:
+            return await self._replay.head(typed)
+        except ValueError as exc:
+            _LOGGER.error("observer_head_failed run_id=%s", run_id)
+            raise not_found(
+                code="target_unreachable", run_id=run_id
+            ) from exc
+
     async def _history(
         self, run_id: str, *, target_tick: Tick | None
     ) -> FoldedObjectiveHistory:
@@ -655,8 +652,8 @@ class ObserverReadService:
         self, run_id: str, *, tick: int, through_sequence: int
     ) -> FoldedObjectiveHistory:
         typed = _run_id(run_id)
-        live = await self._history(run_id, target_tick=None)
-        if tick >= live.scene.tick:
+        head = await self._head(run_id)
+        if tick >= head.next_tick.value:
             raise conflict(code="cursor_ahead_of_high_water", run_id=run_id)
         context, context_error = await self._resolve_replay_context(run_id)
         try:

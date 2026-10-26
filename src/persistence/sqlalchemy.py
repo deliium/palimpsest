@@ -494,6 +494,115 @@ class SqlAlchemyTickJournalRepository:
             return tuple(tick_commit_from_orm(row) for row in rows)
 
 
+    async def get_latest_tick_commit(
+        self, run_id: RunId, *, through_tick: Tick | None = None
+    ) -> TickCommit | None:
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if through_tick is not None and type(through_tick) is not Tick:
+            raise TypeError("through_tick must be Tick or None")
+        stmt = (
+            select(TickCommitOrm)
+            .where(TickCommitOrm.run_id == run_id.value)
+            .order_by(TickCommitOrm.tick.desc())
+            .limit(1)
+        )
+        if through_tick is not None:
+            stmt = stmt.where(TickCommitOrm.tick <= through_tick.value)
+        async with session_scope(self._session_factory) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row is None:
+                return None
+            return tick_commit_from_orm(row)
+
+    async def list_tick_commits_keyset(
+        self,
+        run_id: RunId,
+        *,
+        after_tick: Tick,
+        through_tick: Tick | None,
+        limit: int,
+    ) -> tuple[TickCommit, ...]:
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(after_tick) is not Tick:
+            raise TypeError("after_tick must be Tick")
+        if through_tick is not None and type(through_tick) is not Tick:
+            raise TypeError("through_tick must be Tick or None")
+        if type(limit) is not int or limit < 1 or limit > 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        stmt = (
+            select(TickCommitOrm)
+            .where(TickCommitOrm.run_id == run_id.value)
+            .where(TickCommitOrm.tick > after_tick.value)
+            .order_by(TickCommitOrm.tick)
+            .limit(limit)
+        )
+        if through_tick is not None:
+            stmt = stmt.where(TickCommitOrm.tick <= through_tick.value)
+        async with session_scope(self._session_factory) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return tuple(tick_commit_from_orm(row) for row in rows)
+
+    async def get_event_by_id(
+        self,
+        run_id: RunId,
+        event_id: str,
+        *,
+        through_tick: Tick | None = None,
+    ) -> WorldEvent | None:
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if type(event_id) is not str or not event_id:
+            raise ValueError("event_id must be a non-empty string")
+        if through_tick is not None and type(through_tick) is not Tick:
+            raise TypeError("through_tick must be Tick or None")
+        stmt = (
+            select(WorldEventOrm)
+            .where(WorldEventOrm.run_id == run_id.value)
+            .where(WorldEventOrm.event_id == event_id)
+            .limit(1)
+        )
+        if through_tick is not None:
+            stmt = stmt.where(WorldEventOrm.tick <= through_tick.value)
+        async with session_scope(self._session_factory) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row is None:
+                return None
+            decoded = event_from_orm(row)
+            if type(decoded) is not WorldEvent:
+                raise PersistenceCorruptionError(
+                    "invalid_event", operation="get_event_by_id"
+                )
+            return decoded
+
+    async def get_latest_event(
+        self, run_id: RunId, *, through_tick: Tick | None = None
+    ) -> WorldEvent | None:
+        if type(run_id) is not RunId:
+            raise TypeError("run_id must be RunId")
+        if through_tick is not None and type(through_tick) is not Tick:
+            raise TypeError("through_tick must be Tick or None")
+        stmt = (
+            select(WorldEventOrm)
+            .where(WorldEventOrm.run_id == run_id.value)
+            .order_by(WorldEventOrm.tick.desc(), WorldEventOrm.sequence.desc())
+            .limit(1)
+        )
+        if through_tick is not None:
+            stmt = stmt.where(WorldEventOrm.tick <= through_tick.value)
+        async with session_scope(self._session_factory) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            if row is None:
+                return None
+            decoded = event_from_orm(row)
+            if type(decoded) is not WorldEvent:
+                raise PersistenceCorruptionError(
+                    "invalid_event", operation="get_latest_event"
+                )
+            return decoded
+
+
 class SqlAlchemySnapshotRepository:
     """Immutable checkpoint lookup."""
 

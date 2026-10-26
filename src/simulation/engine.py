@@ -8,7 +8,7 @@ commits with one reference swap.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import AsyncIterable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final, cast
@@ -67,7 +67,7 @@ from simulation.lifecycle import (
     require_action_submission,
 )
 from simulation.models import RunId, SimulationExport, SimulationRunConfig
-from simulation.persistence import WorldSnapshot
+from simulation.persistence import VerifiedReplayBatch, WorldSnapshot
 from simulation.population_replay import fold_population_metadata
 from simulation.randomness import (
     StreamScope,
@@ -419,6 +419,297 @@ def _bind_subjective_valuation_channel(engine: WorldEngine, config: object) -> N
             True,
             horizon,
             bundle,
+        )
+
+
+class _BatchRestoreBuilder:
+    """Engine-owned incremental restore state for verified replay batches.
+
+    Objective projection, population metadata, skill growth, kinship edges and
+    the event history advance one verified tick at a time. Only the current
+    tick and the teaching-offer window stay buffered; no full-range event tuple
+    is materialized by the builder.
+    """
+
+    __slots__ = (
+        "_engine",
+        "_last_ticks",
+        "_pending",
+        "_recent_events",
+        "_skill_ledger",
+        "_supplied_skill_ledger",
+        "_supplied_teaching_offers",
+        "_teaching_window",
+    )
+
+    def __init__(
+        self,
+        engine: WorldEngine,
+        *,
+        supplied_skill_ledger: object | None,
+        supplied_teaching_offers: object | None,
+    ) -> None:
+        self._engine = engine
+        self._pending: tuple[object, ...] = ()
+        self._recent_events: list[WorldEvent] = []
+        self._last_ticks: list[tuple[int, tuple[WorldEvent, ...]]] = []
+        self._skill_ledger = engine._skill_ledger
+        self._supplied_skill_ledger = supplied_skill_ledger
+        self._supplied_teaching_offers = supplied_teaching_offers
+        self._teaching_window = (
+            0
+            if engine._teaching_policy is None
+            else engine._teaching_policy.offer_window
+        )
+
+    @property
+    def tick(self) -> Tick:
+        return self._engine._snapshot.tick
+
+    def consume_tick(self, tick: Tick, events: Sequence[WorldEvent]) -> None:
+        if type(tick) is not Tick:
+            raise TypeError("tick must be Tick")
+        if tick != self._engine._snapshot.tick:
+            raise ValueError("replay_batch_tick_mismatch")
+        if isinstance(events, (str, bytes, set, frozenset)) or not isinstance(
+            events, Sequence
+        ):
+            raise TypeError("events must be an ordered sequence")
+        ordered = tuple(events)
+        for index, event in enumerate(ordered):
+            if type(event) is not WorldEvent:
+                raise TypeError("events entries must be WorldEvent")
+            if event.tick != tick.value or event.sequence != index:
+                raise ValueError("replay_batch_event_order")
+        engine = self._engine
+        start_state = engine._snapshot.world.state
+        if self._skill_ledger is not None:
+            self._skill_ledger = cast(
+                "ObjectiveSkillLedger",
+                self._fold_skill_tick(start_state, tick, ordered),
+            )
+        projected = project_events(
+            start_state,
+            ordered,
+            expected_run_id=engine.run_id.value,
+            expected_world_id=engine.world_id,
+            production_catalog=engine._production_catalog,
+            environmental_dynamics=engine._environmental_dynamics,
+            public_goods_decay_millis=engine._public_goods_decay_millis,
+        )
+        metadata = fold_population_metadata(
+            registrations=engine._registrations,
+            lifecycle_records=engine._lifecycle_records,
+            events=ordered,
+            population_lifecycle=engine._population_lifecycle,
+            run_config=engine._config,
+            run_id=engine.run_id.value,
+            world_id=engine.world_id.value,
+            pending_reservations=self._pending,
+        )
+        engine._registrations = metadata.registrations
+        engine._lifecycle_records = metadata.lifecycle_records
+        self._pending = metadata.pending_reservations
+        engine._translator = _translator_from_registrations(engine._registrations)
+        self._fold_kinship_edges(ordered)
+        world = _materialize_projected_world(world_id=engine.world_id, state=projected)
+        history = engine._snapshot.event_history.append(ordered)
+        engine._snapshot = _EngineSnapshot(
+            world=world,
+            tick=Tick(tick.value + 1),
+            phase=engine._snapshot.phase,
+            token=None,
+            observation_batch=None,
+            resolution_history=engine._snapshot.resolution_history,
+            event_history=history,
+            prior_event_window=engine._snapshot.prior_event_window,
+        )
+        self._remember(tick, ordered)
+        _LOGGER.debug(
+            "replay_batch_tick_consumed tick=%s event_count=%s "
+            "pending_reservations=%s",
+            tick.value,
+            len(ordered),
+            len(self._pending),
+        )
+
+    def finish(self, *, committed_through_tick: Tick | None) -> WorldEngine:
+        engine = self._engine
+        expected = (
+            engine._snapshot.tick
+            if committed_through_tick is None
+            else Tick(committed_through_tick.value + 1)
+        )
+        if engine._snapshot.tick != expected:
+            raise ValueError("replay_batch_range_incomplete")
+        self._validate_skill_ledger()
+        self._validate_teaching_offers()
+        engine._skill_ledger = self._skill_ledger
+        engine._snapshot = replace(
+            engine._snapshot,
+            prior_event_window=self._prior_event_window(),
+        )
+        _LOGGER.info(
+            "%s run_id=%s restored_tick=%s events_applied=%s "
+            "pending_reservations=%s",
+            EngineDiagnosticCode.CHECKPOINT_RESTORE.value,
+            engine.run_id.value,
+            engine._snapshot.tick.value,
+            len(engine._snapshot.event_history),
+            len(self._pending),
+        )
+        return engine
+
+    def _fold_skill_tick(
+        self,
+        start_state: object,
+        tick: Tick,
+        events: Sequence[WorldEvent],
+    ) -> object:
+        from world._skills import (
+            ObjectiveSkillLedger,
+            SkillGrowthInput,
+            fold_skill_growth,
+        )
+        from world.events import Searched
+
+        engine = self._engine
+        assert type(self._skill_ledger) is ObjectiveSkillLedger
+        assert engine._skill_policy is not None
+        untargeted_ids = frozenset(engine._skill_untargeted_requests)
+        facts: list[SkillGrowthInput] = []
+        for event in events:
+            if type(event.cause) is not ActionCause or event.actor_id is None:
+                continue
+            occurrence = event.occurrence
+            origin = None if occurrence is None else occurrence.origin_location_id
+            untargeted: bool | None = None
+            if type(event.details) is Searched:
+                assert event.request_id is not None
+                request_id = event.request_id.value
+                untargeted = (
+                    True
+                    if request_id in untargeted_ids
+                    else event.details.target_id is None
+                )
+            facts.append(
+                SkillGrowthInput(
+                    actor_id=event.actor_id,
+                    status="applied",
+                    action_kind=getattr(event.details, "kind", "action"),
+                    details=event.details,
+                    origin_location_id=origin,
+                    untargeted_search=untargeted,
+                )
+            )
+        return fold_skill_growth(
+            self._skill_ledger,
+            tuple(facts),
+            engine._skill_policy,
+            world_state=start_state,
+            tick=tick.value,
+            rules=engine._config.physical_rules,
+        )
+
+    def _fold_kinship_edges(self, events: Sequence[WorldEvent]) -> None:
+        engine = self._engine
+        if engine._kinship_spec is None:
+            return
+        from world.identifiers import AgentId
+        from world.kinship import establish_edge
+
+        max_parents = engine._kinship_spec.max_parents_per_child
+        known_ids = {
+            registration.agent_id for registration in engine._registrations
+        }
+        graph = engine._kinship_graph
+        for event in events:
+            details = event.details
+            if type(details) is not KinshipEdgeRecorded:
+                continue
+            parent = AgentId(details.parent_agent_id)
+            child = AgentId(details.child_agent_id)
+            known_ids.add(parent)
+            known_ids.add(child)
+            graph, _ = establish_edge(
+                graph,
+                parent_agent_id=parent,
+                child_agent_id=child,
+                established_tick=details.established_tick,
+                max_parents_per_child=max_parents,
+                known_agent_ids=known_ids,
+            )
+        engine._kinship_graph = graph
+
+    def _remember(self, tick: Tick, events: Sequence[WorldEvent]) -> None:
+        self._last_ticks.append((tick.value, tuple(events)))
+        if len(self._last_ticks) > 2:
+            self._last_ticks.pop(0)
+        if not events:
+            return
+        self._recent_events.extend(events)
+        threshold = tick.value - self._teaching_window
+        if threshold > 0:
+            self._recent_events = [
+                event for event in self._recent_events if event.tick > threshold
+            ]
+
+    def _prior_event_window(self) -> tuple[WorldEvent, ...]:
+        prior_tick = self._engine._snapshot.tick.value - 1
+        if prior_tick < 0:
+            return ()
+        for tick, events in self._last_ticks:
+            if tick != prior_tick:
+                continue
+            return tuple(
+                event for event in events if event.occurrence is not None
+            )
+        return ()
+
+    def _validate_skill_ledger(self) -> None:
+        if self._supplied_skill_ledger is None:
+            return
+        from world._skills import skill_ledger_mismatch
+
+        mismatch = skill_ledger_mismatch(
+            cast("ObjectiveSkillLedger", self._supplied_skill_ledger),
+            cast("ObjectiveSkillLedger", self._skill_ledger),
+        )
+        if mismatch is not None:
+            entity_id, domain = mismatch
+            _LOGGER.error(
+                "skill_ledger_mismatch entity_id=%s domain=%s "
+                "reason_code=skill_ledger_mismatch",
+                entity_id.value,
+                domain.value,
+            )
+            raise ValueError("skill_ledger_mismatch")
+
+    def _validate_teaching_offers(self) -> None:
+        engine = self._engine
+        if engine._teaching_policy is None:
+            from world._teaching import reject_supplied_offers_without_policy
+
+            reject_supplied_offers_without_policy(
+                self._supplied_teaching_offers
+            )
+            return
+        from world._teaching import refold_teaching_offers
+
+        supplied = (
+            None
+            if self._supplied_teaching_offers is None
+            else tuple(cast("Sequence[object]", self._supplied_teaching_offers))
+        )
+        refold_teaching_offers(
+            tuple(self._recent_events),
+            engine._teaching_policy,
+            engine._teaching_entity_ids,
+            tick=engine._snapshot.tick.value,
+            untargeted_request_ids=frozenset(engine._skill_untargeted_requests),
+            project_prefix=None,
+            initial_state=None,
+            supplied=supplied,
         )
 
 
@@ -1450,6 +1741,82 @@ class WorldEngine:
         )
         return engine
 
+    @classmethod
+    async def restore_from_verified_batches(
+        cls,
+        snapshot: WorldSnapshot,
+        *,
+        batches: AsyncIterable[VerifiedReplayBatch],
+        committed_through_tick: Tick | None,
+        skill_policy: object | None = None,
+        skill_entity_ids: Sequence[object] | None = None,
+        skill_ledger: object | None = None,
+        skill_untargeted_request_ids: object | None = None,
+        teaching_policy: object | None = None,
+        teaching_entity_ids: Sequence[object] | None = None,
+        teaching_offers: object | None = None,
+        production_catalog: object | None = None,
+        environmental_dynamics: object | None = None,
+        artifacts_enabled: bool = False,
+        population_lifecycle: object | None = None,
+        new_agent_initialization: object | None = None,
+        kinship_spec: object | None = None,
+    ) -> WorldEngine:
+        """Restore an engine by consuming bounded, pre-verified replay batches.
+
+        Commit payload/chain verification happens before a batch reaches this
+        method. Restore-owned fold state (objective projection, population
+        metadata, skill growth, kinship edges and event history) advances one
+        tick at a time so the caller never materializes the full journal.
+        """
+        if not isinstance(batches, AsyncIterable):
+            raise TypeError("batches must be an AsyncIterable")
+        if committed_through_tick is not None and type(committed_through_tick) is not (
+            Tick
+        ):
+            raise TypeError("committed_through_tick must be Tick or None")
+        engine = cls.restore_from_snapshot(
+            snapshot,
+            events=(),
+            committed_through_tick=None,
+            skill_policy=skill_policy,
+            skill_entity_ids=skill_entity_ids,
+            skill_ledger=None,
+            skill_untargeted_request_ids=skill_untargeted_request_ids,
+            teaching_policy=teaching_policy,
+            teaching_entity_ids=teaching_entity_ids,
+            teaching_offers=None,
+            production_catalog=production_catalog,
+            environmental_dynamics=environmental_dynamics,
+            artifacts_enabled=artifacts_enabled,
+            population_lifecycle=population_lifecycle,
+            new_agent_initialization=new_agent_initialization,
+            kinship_spec=kinship_spec,
+        )
+        builder = _BatchRestoreBuilder(
+            engine,
+            supplied_skill_ledger=skill_ledger,
+            supplied_teaching_offers=teaching_offers,
+        )
+        async for batch in batches:
+            if type(batch) is not VerifiedReplayBatch:
+                raise TypeError("batches entries must be VerifiedReplayBatch")
+            if batch.run_id != snapshot.run_id:
+                raise ValueError("replay_batch_run_mismatch")
+            if batch.tick != builder.tick:
+                raise ValueError("replay_batch_tick_mismatch")
+            if not batch.tick_complete:
+                raise ValueError("replay_batch_incomplete_tick")
+            builder.consume_tick(batch.tick, batch.events)
+        expected = (
+            snapshot.next_tick
+            if committed_through_tick is None
+            else Tick(committed_through_tick.value + 1)
+        )
+        if builder.tick != expected:
+            raise ValueError("replay_batch_range_incomplete")
+        return builder.finish(committed_through_tick=committed_through_tick)
+
     @property
     def world_id(self) -> WorldId:
         return self._bootstrap.world_id
@@ -1655,8 +2022,7 @@ class WorldEngine:
                 cultural_contact_active=self._cultural_contact_active,
             )
             snap = self._snapshot
-            same_tick = [event for event in snap.event_history if event.tick == tick]
-            sequence = len(same_tick)
+            sequence = snap.event_history.count_with_tick(tick)
             origin_location = snap.world.state.bodies[child_body_id].location_id
             cause_id = derive_system_cause_id(
                 self._config,
@@ -1914,8 +2280,7 @@ class WorldEngine:
             entry_tick=entry_tick,
         )
         detail_seq = (*detail_seq, *kinship_details)
-        same_tick = [event for event in snap.event_history if event.tick == entry_tick]
-        sequence_start = len(same_tick)
+        sequence_start = snap.event_history.count_with_tick(entry_tick)
         events_list: list[WorldEvent] = []
         for ordinal, details in enumerate(detail_seq):
             cause_id = derive_system_cause_id(

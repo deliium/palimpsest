@@ -233,6 +233,7 @@ def project_events(
     expected_world_id: WorldId,
     production_catalog: ProductionCatalog | None = None,
     environmental_dynamics: object | None = None,
+    public_goods_decay_millis: int | None = None,
 ) -> WorldState:
     """Fold ordered replay-capable events onto ``state``.
 
@@ -253,15 +254,22 @@ def project_events(
     base_revision = state.revision
     seen_ids: set[EventId] = set()
     previous_tick: int | None = None
-    public_goods_decay_millis = next(
-        (
-            event.details.decay_millis
-            for event in normalized
-            if type(event.details) is ProjectCompleted
-            and event.details.decay_millis is not None
-        ),
-        0,
-    )
+    if public_goods_decay_millis is None:
+        public_goods_decay_millis = next(
+            (
+                event.details.decay_millis
+                for event in normalized
+                if type(event.details) is ProjectCompleted
+                and event.details.decay_millis is not None
+            ),
+            0,
+        )
+    elif (
+        isinstance(public_goods_decay_millis, bool)
+        or not isinstance(public_goods_decay_millis, int)
+        or public_goods_decay_millis < 0
+    ):
+        raise ProjectionError(ProjectionErrorCode.INVALID_SEQUENCE)
 
     for group in _group_by_tick(normalized):
         if previous_tick is not None and group.tick <= previous_tick:
