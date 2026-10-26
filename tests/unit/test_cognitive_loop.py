@@ -504,3 +504,15 @@ async def test_prepare_excludes_memory_update_and_complete_binds_effective() -> 
     assert type(result.command) is Move
     assert result.internal_state.last_command_kind == "move"
     assert hook.commands == ["Move"]
+
+
+def test_fork_state_detaches_translation_application_mappings() -> None:
+    source = _loop()
+    source._symbolic_translation_applications = [{"label": "alpha"}]
+    state = source.export_fork_state()
+    assert state.symbolic_translation_applications == ((("label", "alpha"),),)
+    destination = _loop()
+    destination.restore_fork_state(state)
+    assert destination._symbolic_translation_applications == [{"label": "alpha"}]
+    destination._symbolic_translation_applications[0]["label"] = "mutated"
+    assert source._symbolic_translation_applications == [{"label": "alpha"}]

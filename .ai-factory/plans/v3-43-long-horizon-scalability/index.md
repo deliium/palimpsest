@@ -6,7 +6,7 @@ Branch: main (stay on current branch; `git.create_branches: false`)
 Created: 2026-10-26
 Improved: 2026-10-26 (`$aif-improve`; seven approved refinements, task IDs preserved)
 Plan identifier: `v3-43-long-horizon-scalability`
-Status: Tasks 8–9 complete (Phase 3 done); Task 5 deferred; Task 10 next
+Status: Tasks 4–9 complete (Phases 2–3 done); Task 10 next
 
 ## Original Request
 
@@ -184,7 +184,7 @@ Authority: repository/project instructions constrain all work; the user defines 
 
 ### Phase 2
 - [x] Task 4: Schedule only active runtime ordinals ([details](v3-43-phase-02-active-runtime.md#task-4-schedule-only-active-runtime-ordinals)) (depends on 3)
-- [ ] Task 5: Freeze dead-owner state and release live cognition graphs ([details](v3-43-phase-02-active-runtime.md#task-5-freeze-dead-owner-state-and-release-live-cognition-graphs)) (depends on 4)
+- [x] Task 5: Freeze dead-owner state and release live cognition graphs ([details](v3-43-phase-02-active-runtime.md#task-5-freeze-dead-owner-state-and-release-live-cognition-graphs)) (depends on 4)
 - [x] Task 6: Increment population progress and eliminate same-tick prefix scans ([details](v3-43-phase-02-active-runtime.md#task-6-increment-population-progress-and-eliminate-same-tick-prefix-scans)) (depends on 3, 4)
 
 ### Phase 3
@@ -253,13 +253,15 @@ Approved during `$aif-improve` on 2026-10-26; original request, task IDs and all
 
 - Task 3–4 (2026-10-26): added paired exact-execution/query-oracle helpers and covered all eight lineage families, cursor scope, coverage denominators and high-water checks. `tests/unit/test_v3_scale_equivalence.py` plus V1/V2/checkpoint gates pass (26 tests). `SimulationRunner` now keeps permanent registration ordinals but iterates a derived active-ordinal registry; terminal owners leave scheduling only after finalization, mid-run admissions append permanent ordinals, restore rebuilds the index from runtime status, and capture still stages detached observations for retired owners. `tests/unit/test_runner_active_owners.py` and `test_runner_fork_checkpoint.py` pass (13 tests).
 
-- Task 6 (2026-10-26): added `PopulationProgressAccumulator` with exact full-fold bootstrap, incremental admission/death application, replay/gap rejection and runner integration; replaced same-tick event-prefix scans with chunk-metadata counting and added range/suffix traversal to `HistorySequence`. `tests/unit/test_incremental_population_progress.py`, `test_engine_history_sequence.py` and `test_v3_scale_equivalence.py` pass (14 tests). Task 5 remains pending because complete frozen-owner graph replacement and all export consumers require a larger isolated change; no partial freeze was introduced.
+- Task 6 (2026-10-26): added `PopulationProgressAccumulator` with exact full-fold bootstrap, incremental admission/death application, replay/gap rejection and runner integration; replaced same-tick event-prefix scans with chunk-metadata counting and added range/suffix traversal to `HistorySequence`. `tests/unit/test_incremental_population_progress.py`, `test_engine_history_sequence.py` and `test_v3_scale_equivalence.py` pass (14 tests). Task 5 remained pending at that point because complete frozen-owner graph replacement and all export consumers required a larger isolated change; no partial freeze was introduced then.
 
 - Task 7 (2026-10-26): added the extended `BoundedTickJournalRepository`, detached `DurableHead`, legacy-compatible head resolution, SQL keyset commit/event-ID/latest-event reads, shared `resolve_objective_evidence_boundary`, and SQL-level manifest-bounded inspection pages. Unit (`5 passed`) and guarded-PostgreSQL integration (`1 passed`) bounded-read tests pass; analysis and inspection share the same whole-commit/bootstrap resolver. No schema or migration change.
 
 - Task 8 (2026-10-26): completed bounded verified replay. Added frozen `VerifiedReplayBatch`, engine-owned `WorldEngine.restore_from_verified_batches` with an incremental tick builder (objective projection, population pending reservations, skill growth, kinship edges, chunked event history and window-bounded teaching offers), and `_replay_bounded` commit/event keyset streaming with per-tick payload/commit verification and predecessor/revision continuity. `scene_through_event` now authenticates the complete tick while retaining only the requested prefix. Added tests for legacy/bounded parity across targets, empty-tick chains, split pages, tampered payloads, predecessor corruption and reordered events; `tests/unit/test_replay_bounded_reads.py` passes (18 tests), the focused checkpoint/observer/equivalence/architecture suites pass, and the default suite passes (6365 passed, 121 deselected). The guarded-PostgreSQL integration test remains skipped without `PALIMPSEST_TEST_DATABASE_URL`; no durable-page bound is claimed from that skip. `src/persistence/evidence_boundary.py` now validates run IDs locally so persistence retains no `world` import.
 
 - Task 9 (2026-10-26): observer `events()` now validates its cursor against a detached `DurableHead` and `run()` returns manifest/head metadata without a scene restore; `_history_through_event` resolves the head once and performs one prefix replay. Added `ReplayService.head`, `run_manifest` and indexed `read_event`; `event()` no longer performs the fixed 100×100 scan. Added an instrumented unit test proving event/run reads make zero scene restores and prefix state makes exactly one; a guarded-PostgreSQL cadence profiler measures checkpoint-off/100/500/1000 with identical projection/event identities and records actual snapshot read/hash timings, and the bounded-read integration test records `EXPLAIN` plans for keyset and event-ID lookups. Default suite passes (6367 passed, 122 deselected); DB/scale gates remain opt-in and were skipped without `PALIMPSEST_TEST_DATABASE_URL`.
+
+- Task 5 (2026-10-27): added composition-only `RuntimeRetentionPolicy` (default off) propagated through both factory clones, frozen `RetiredOwnerRecord`, read-only owner adapters, and `AgentRuntime.freeze_terminal`. At each finalized boundary, confirmed-terminal owners export runtime/subjective fork state and audit inventory once, then release loop/readers/writers/services/retriever references and replace the bundle with read-only memory/belief/relationship/commit views. Fork capture merges frozen records in registration order; regional destination traces, final research/cultural/civilization exports and audit harvesters remain exact. Added detached `TickBudgetForkState` and clock-free ledger restore plus immutable translation-application pairs. Unsupported/non-fork-capable bundles stay live and increment `retirement_unsupported_count`; metadata-only recovery cannot fabricate a retired record. `tests/unit/test_retired_owners.py` passes (6 tests, including fork restore and unsupported fallback), budget/translation isolation tests pass, and the default suite passes (6374 passed, 122 deselected).
 
 ## Definition of Done
 

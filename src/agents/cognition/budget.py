@@ -26,6 +26,7 @@ __all__ = [
     "BudgetGuardedProvider",
     "CognitiveBudgetAudit",
     "CognitiveBudgetPolicy",
+    "TickBudgetForkState",
     "TickBudgetLedger",
     "default_cognitive_budget_policy",
     "high_cost_budget_limits",
@@ -318,6 +319,68 @@ class CognitiveBudgetAudit:
                 raise _fail("first_exhausted_dimension", "invalid_dimension")
 
 
+@dataclass(frozen=True, slots=True)
+class TickBudgetForkState:
+    """Immutable process-local continuation state for one tick budget ledger."""
+
+    owner_id: AgentId
+    tick: int
+    policy_identity: tuple[object, ...]
+    used: tuple[tuple[BudgetDimension, int], ...]
+    exhausted: tuple[BudgetExhaustedReason, ...]
+    warned: tuple[BudgetDimension, ...]
+    started_at: float | None
+    reflection_ran: bool
+    planning_depth_reached: int
+    first_exhausted: BudgetDimension | None
+
+    def __post_init__(self) -> None:
+        if type(self.owner_id) is not AgentId:
+            raise _fail("owner_id", "invalid_type")
+        object.__setattr__(
+            self, "tick", require_exact_nonneg_int("tick", self.tick)
+        )
+        for dimension, value in self.used:
+            if type(dimension) is not BudgetDimension:
+                raise _fail("used", "invalid_type")
+            require_exact_nonneg_int(f"used.{dimension.value}", value)
+        for reason in self.exhausted:
+            if type(reason) is not BudgetExhaustedReason:
+                raise _fail("exhausted", "invalid_type")
+        for dimension in self.warned:
+            if type(dimension) is not BudgetDimension:
+                raise _fail("warned", "invalid_type")
+        if self.started_at is not None and (
+            isinstance(self.started_at, bool)
+            or not isinstance(self.started_at, (int, float))
+        ):
+            raise _fail("started_at", "invalid_type")
+        if type(self.reflection_ran) is not bool:
+            raise _fail("reflection_ran", "invalid_type")
+        require_exact_nonneg_int(
+            "planning_depth_reached", self.planning_depth_reached
+        )
+        if (
+            self.first_exhausted is not None
+            and type(self.first_exhausted) is not BudgetDimension
+        ):
+            raise _fail("first_exhausted", "invalid_type")
+
+
+def _policy_identity(policy: CognitiveBudgetPolicy) -> tuple[object, ...]:
+    return (
+        policy.version,
+        policy.max_llm_calls_per_tick,
+        policy.max_tokens_per_tick,
+        policy.max_imagination_branches,
+        policy.max_planning_depth,
+        policy.max_recalled_memories,
+        policy.max_tom_targets,
+        policy.reflection_interval_ticks,
+        policy.timeout_seconds,
+    )
+
+
 @dataclass(slots=True)
 class TickBudgetLedger:
     """Mutable per-prepare account. Not frozen; one instance per prepare."""
@@ -569,6 +632,52 @@ class TickBudgetLedger:
                 self.limit_for(dimension),
                 reason.value,
             )
+
+    def export_fork_state(self) -> TickBudgetForkState:
+        """Capture ledger counters without calling the policy clock."""
+        return TickBudgetForkState(
+            owner_id=self.owner_id,
+            tick=self.tick,
+            policy_identity=_policy_identity(self.policy),
+            used=tuple(
+                (dimension, self._used.get(dimension, 0))
+                for dimension in BudgetDimension
+            ),
+            exhausted=tuple(self._exhausted),
+            warned=tuple(sorted(self._warned, key=lambda item: item.value)),
+            started_at=self._started_at,
+            reflection_ran=self._reflection_ran,
+            planning_depth_reached=self._planning_depth_reached,
+            first_exhausted=self._first_exhausted,
+        )
+
+    @classmethod
+    def from_fork_state(
+        cls,
+        state: TickBudgetForkState,
+        *,
+        policy: CognitiveBudgetPolicy,
+    ) -> TickBudgetLedger:
+        """Reconstruct a fresh ledger using the destination policy.
+
+        The injected policy clock is deliberately not called during restore.
+        """
+        if type(state) is not TickBudgetForkState:
+            raise _fail("state", "invalid_type")
+        if _policy_identity(policy) != state.policy_identity:
+            raise _fail("policy_identity", "mismatch")
+        ledger = cls.__new__(cls)
+        ledger.owner_id = state.owner_id
+        ledger.tick = state.tick
+        ledger.policy = policy
+        ledger._used = dict(state.used)
+        ledger._exhausted = list(state.exhausted)
+        ledger._warned = set(state.warned)
+        ledger._started_at = state.started_at
+        ledger._reflection_ran = state.reflection_ran
+        ledger._planning_depth_reached = state.planning_depth_reached
+        ledger._first_exhausted = state.first_exhausted
+        return ledger
 
     def snapshot(self) -> CognitiveBudgetAudit:
         """Frozen end-of-prepare audit."""

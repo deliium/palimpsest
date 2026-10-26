@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from agents.cognition.counterfactual import CounterfactualState
+
+if TYPE_CHECKING:
+    from agents.cognition.budget import TickBudgetForkState
 
 COGNITIVE_LOOP_FORK_STATE_VERSION: Final[str] = "cognitive-loop-fork-state-v1"
 
@@ -48,7 +51,7 @@ class CognitiveLoopForkState:
     last_cultural_feature_audits: tuple[object, ...]
     last_practical_knowledge_audits: tuple[object, ...]
     last_cognitive_budget_audit: object | None
-    tick_budget_ledger: object | None
+    tick_budget_ledger: TickBudgetForkState | None
     prepared_institutional_decay: object | None
     symbolic_translation_applications: tuple[object, ...]
     developmental_entity_learning_rates: tuple[tuple[str, float], ...]
@@ -65,6 +68,13 @@ class CognitiveLoopForkState:
             raise CognitiveLoopForkStateError(
                 "fork_state_invalid", "invalid counterfactual state"
             )
+        if self.tick_budget_ledger is not None:
+            from agents.cognition.budget import TickBudgetForkState
+
+            if type(self.tick_budget_ledger) is not TickBudgetForkState:
+                raise CognitiveLoopForkStateError(
+                    "fork_state_invalid", "invalid tick budget fork state"
+                )
         for name in (
             "last_counterfactual_scenarios",
             "deferred_dissonance",

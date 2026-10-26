@@ -160,6 +160,11 @@ from simulation.persistence import (
     WorldSnapshot,
     checkpoint_schema_for_production,
 )
+from simulation.retired_owners import (
+    RetiredOwnerBundle,
+    RetiredOwnerRecord,
+    RuntimeRetentionPolicy,
+)
 from simulation.run_control import (
     CachedCriterionDecision,
     FinalizationCommand,
@@ -433,6 +438,7 @@ class RunnerDependencyFactories:
         "_recording_store",
         "_recording_usage_sink",
         "_relationship_factory",
+        "_retention_policy",
         "_run_repository",
         "_scientific_evidence",
         "_sleep",
@@ -465,6 +471,7 @@ class RunnerDependencyFactories:
         boundary_observer: object | None = None,
         recording_usage_sink: object | None = None,
         llm_max_concurrency: int = 1,
+        retention_policy: RuntimeRetentionPolicy | None = None,
     ) -> None:
         if (
             isinstance(llm_max_concurrency, bool)
@@ -490,6 +497,11 @@ class RunnerDependencyFactories:
         self._boundary_observer = boundary_observer
         self._recording_usage_sink = recording_usage_sink
         self._llm_max_concurrency = llm_max_concurrency
+        if retention_policy is None:
+            retention_policy = RuntimeRetentionPolicy()
+        if type(retention_policy) is not RuntimeRetentionPolicy:
+            raise TypeError("retention_policy must be RuntimeRetentionPolicy")
+        self._retention_policy = retention_policy
 
     @property
     def run_repository(self) -> SimulationRunRepository | None:
@@ -522,6 +534,10 @@ class RunnerDependencyFactories:
     @property
     def recording_usage_sink(self) -> object | None:
         return self._recording_usage_sink
+
+    @property
+    def retention_policy(self) -> RuntimeRetentionPolicy:
+        return self._retention_policy
 
     def _recording_usage_callback(
         self,
@@ -598,6 +614,7 @@ class RunnerDependencyFactories:
             boundary_observer=boundary_observer,
             recording_usage_sink=recording_usage_sink,
             llm_max_concurrency=self._llm_max_concurrency,
+            retention_policy=self._retention_policy,
         )
 
     def with_criterion_factory(
@@ -623,6 +640,7 @@ class RunnerDependencyFactories:
             boundary_observer=self._boundary_observer,
             recording_usage_sink=self._recording_usage_sink,
             llm_max_concurrency=self._llm_max_concurrency,
+            retention_policy=self._retention_policy,
         )
 
     def resolve_credentials(
@@ -1719,6 +1737,8 @@ class SimulationRunner:
         "_population_accumulator",
         "_provider",
         "_published_boundaries",
+        "_retired_owner_count",
+        "_retirement_unsupported_count",
         "_run_config",
         "_run_id",
         "_runtimes",
@@ -1762,6 +1782,8 @@ class SimulationRunner:
         self._runtimes = tuple(runtimes)
         self._agents = tuple(agents)
         self._active_ordinals = self._build_active_ordinals()
+        self._retired_owner_count = 0
+        self._retirement_unsupported_count = 0
         self._provider = provider
         self._diagnostics = diagnostics
         self._durable = durable
@@ -1846,6 +1868,14 @@ class SimulationRunner:
     def active_runtime_count(self) -> int:
         return len(self._active_ordinals)
 
+    @property
+    def retired_owner_count(self) -> int:
+        return self._retired_owner_count
+
+    @property
+    def retirement_unsupported_count(self) -> int:
+        return self._retirement_unsupported_count
+
     def _build_active_ordinals(self) -> list[int]:
         active = [
             ordinal
@@ -1862,13 +1892,19 @@ class SimulationRunner:
     def _rebuild_active_ordinals(self) -> None:
         self._active_ordinals = self._build_active_ordinals()
 
-    def _retire_terminal_active_ordinals(self) -> None:
-        """Drop terminal owners from the execution index after finalization.
+    async def _retire_terminal_active_ordinals(self) -> None:
+        """Drop terminal owners and optionally freeze their live graphs.
 
         The complete registration roster and every historical export remain in
         ``_runtimes``/``_agents``. Ordinals are never compacted or reused.
         """
         before = len(self._active_ordinals)
+        for ordinal in tuple(self._active_ordinals):
+            runtime = self._runtimes[ordinal]
+            if runtime.status is not AgentRuntimeStatus.TERMINAL:
+                continue
+            if self._factories.retention_policy.retire_dead_owners:
+                await self._freeze_retired_owner(ordinal)
         self._active_ordinals = [
             ordinal
             for ordinal in self._active_ordinals
@@ -1878,12 +1914,87 @@ class SimulationRunner:
         if retired:
             _LOG.debug(
                 "runner_active_ordinals_retired run_id=%s retired=%s active=%s "
-                "roster=%s",
+                "frozen=%s unsupported=%s roster=%s",
                 self._run_id.value,
                 retired,
                 len(self._active_ordinals),
+                self._retired_owner_count,
+                self._retirement_unsupported_count,
                 len(self._runtimes),
             )
+
+    async def _freeze_retired_owner(self, ordinal: int) -> None:
+        runtime = self._runtimes[ordinal]
+        if runtime.retired_record is not None:
+            return
+        bundle = self._agents[ordinal]
+        if not isinstance(bundle.bundle, ForkCapableSubjectiveOwnerBundle):
+            self._retirement_unsupported_count += 1
+            _LOG.warning(
+                "runner_retirement_unsupported run_id=%s agent_id=%s "
+                "reason_code=owner_bundle_not_fork_capable",
+                self._run_id.value,
+                runtime.agent_id.value,
+            )
+            return
+        # TERMINAL is entered only from a dead-self observation in this runtime;
+        # it is not an error-terminal status.
+        try:
+            runtime_state = runtime.export_fork_state()
+            subjective_state = await bundle.bundle.export_fork_state()
+            record = RetiredOwnerRecord(
+                run_id=self._run_id,
+                agent_id=runtime.agent_id,
+                entity_id=self._engine.ordered_registrations[ordinal].entity_id,
+                ordinal=ordinal,
+                boundary_tick=Tick(self._ticks_committed),
+                death_tick=Tick(
+                    max(
+                        0,
+                        self._ticks_committed - 1
+                        if runtime.terminal_tick is None
+                        else runtime.terminal_tick,
+                    )
+                ),
+                runtime_checkpoint=runtime.export_runtime_checkpoint(),  # type: ignore[arg-type]
+                runtime_fork_state=runtime_state,
+                subjective_state=subjective_state,
+                audits=runtime_state.audits,
+                cultural_channels=runtime.retirement_cultural_channels(),
+                civilization_enabled=runtime.retirement_civilization_flags(),
+            )
+            retired_bundle = RetiredOwnerBundle(record)
+            runtime.freeze_terminal(record)
+            replacement = _AgentBundle(
+                runtime=runtime,
+                bundle=retired_bundle,
+                memory_service=retired_bundle.memory,
+                belief_service=retired_bundle.belief,
+                relationship_service=retired_bundle.relationship,
+                subjective_state=retired_bundle.commit_service,
+                memory_retriever=None,
+            )
+            agents = list(self._agents)
+            agents[ordinal] = replacement
+            self._agents = tuple(agents)
+            self._retired_owner_count += 1
+            _LOG.info(
+                "runner_owner_retired run_id=%s agent_id=%s ordinal=%s "
+                "boundary_tick=%s",
+                self._run_id.value,
+                runtime.agent_id.value,
+                ordinal,
+                self._ticks_committed,
+            )
+        except Exception as exc:
+            _LOG.warning(
+                "runner_retirement_failed run_id=%s agent_id=%s "
+                "reason_code=%s",
+                self._run_id.value,
+                runtime.agent_id.value,
+                type(exc).__name__,
+            )
+            self._retirement_unsupported_count += 1
 
     @classmethod
     async def from_config(
@@ -3075,7 +3186,7 @@ class SimulationRunner:
                 commands=tuple(commands),
                 tick_result=tick_result,
             )
-            self._retire_terminal_active_ordinals()
+            await self._retire_terminal_active_ordinals()
             if self._config.generational_run is not None:
                 self._generational_boundary_stage = (
                     GenerationalBoundaryStage.PUBLICATION_PENDING
@@ -4073,6 +4184,11 @@ class SimulationRunner:
         )
         owner_states = []
         for bundle in self._agents:
+            record = bundle.runtime.retired_record
+            if record is not None:
+                assert type(record) is RetiredOwnerRecord
+                owner_states.append(record.subjective_state)
+                continue
             if not isinstance(bundle.bundle, ForkCapableSubjectiveOwnerBundle):
                 raise ForkCheckpointError(
                     "fork_state_unsupported", "owner bundle is not fork capable"

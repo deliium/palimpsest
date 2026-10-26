@@ -32,6 +32,7 @@ from simulation.journal import hash_snapshot
 from simulation.models import RunId, StochasticIdentity
 from simulation.persistence import ReplayRequest
 from simulation.replay import ReplayService, scene_at_tick
+from simulation.retired_owners import RuntimeRetentionPolicy
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import (
     AgentCognitionSpec,
@@ -173,10 +174,15 @@ def build_scale_config(
 
 def durable_factories(
     session_factory: async_sessionmaker[AsyncSession],
+    *,
+    retire_dead_owners: bool = False,
 ) -> RunnerDependencyFactories:
     return RunnerDependencyFactories(
         run_repository=create_run_repository(session_factory),
         journal=create_tick_journal_repository(session_factory),
+        retention_policy=RuntimeRetentionPolicy(
+            retire_dead_owners=retire_dead_owners
+        ),
     )
 
 

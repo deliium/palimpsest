@@ -10,7 +10,7 @@ import hashlib
 import logging
 import re
 from asyncio import CancelledError
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from inspect import Parameter, signature
 from typing import TYPE_CHECKING, Any, Final, Never, Protocol, TypeVar, cast
@@ -1339,6 +1339,13 @@ class CognitiveLoop:
 
     def export_fork_state(self) -> CognitiveLoopForkState:
         """Export mutable loop state that is not static configuration."""
+        from agents.cognition.budget import TickBudgetLedger
+
+        tick_budget_state = (
+            self._tick_budget_ledger.export_fork_state()
+            if type(self._tick_budget_ledger) is TickBudgetLedger
+            else None
+        )
         return CognitiveLoopForkState(
             counterfactual_state=self._counterfactual_state,
             last_counterfactual_scenarios=self._last_counterfactual_scenarios,
@@ -1348,10 +1355,11 @@ class CognitiveLoop:
             last_cultural_feature_audits=self._last_cultural_feature_audits,
             last_practical_knowledge_audits=self._last_practical_knowledge_audits,
             last_cognitive_budget_audit=self._last_cognitive_budget_audit,
-            tick_budget_ledger=self._tick_budget_ledger,
+            tick_budget_ledger=tick_budget_state,
             prepared_institutional_decay=self._prepared_institutional_decay,
             symbolic_translation_applications=tuple(
-                dict(item) for item in self._symbolic_translation_applications
+                tuple(sorted(item.items()))
+                for item in self._symbolic_translation_applications
             ),
             developmental_entity_learning_rates=tuple(
                 sorted(self._developmental_entity_learning_rates.items())
@@ -1382,10 +1390,22 @@ class CognitiveLoop:
             state.last_practical_knowledge_audits
         )
         self._last_cognitive_budget_audit = state.last_cognitive_budget_audit
-        self._tick_budget_ledger = state.tick_budget_ledger
+        if state.tick_budget_ledger is None:
+            self._tick_budget_ledger = None
+        else:
+            from agents.cognition.budget import TickBudgetLedger
+
+            policy = self._cognitive_budget_policy
+            if policy is None:
+                raise CognitiveLoopForkStateError(
+                    "fork_state_unsupported", "budget ledger without policy"
+                )
+            self._tick_budget_ledger = TickBudgetLedger.from_fork_state(
+                state.tick_budget_ledger, policy=policy
+            )
         self._prepared_institutional_decay = state.prepared_institutional_decay
         self._symbolic_translation_applications = [
-            dict(cast("Mapping[str, object]", item))
+            dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
         ]
         self._developmental_entity_learning_rates = dict(

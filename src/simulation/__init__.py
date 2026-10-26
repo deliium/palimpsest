@@ -611,6 +611,10 @@ from simulation.randomness import (
     sample_stream,
 )
 from simulation.replay import ReplayOutcome, ReplayService
+from simulation.retired_owners import (
+    RetiredOwnerRecord,
+    RuntimeRetentionPolicy,
+)
 from simulation.run_control import (
     ALLOWED_LIFECYCLE_TRANSITIONS,
     FINALIZATION_COMMAND_CODEC_VERSION,
@@ -1244,6 +1248,7 @@ __all__ = [
     "ResearchInterventionKind",
     "ResearcherChainStage",
     "ResumeMode",
+    "RetiredOwnerRecord",
     "RunConfigurationPort",
     "RunControlRecord",
     "RunControlRepository",
@@ -1269,6 +1274,7 @@ __all__ = [
     "RunnerSerializationError",
     "RunnerStopPolicy",
     "RunnerStopReasonCode",
+    "RuntimeRetentionPolicy",
     "SeedStreamPolicy",
     "SemanticNamingMode",
     "SequentialInvocationIds",

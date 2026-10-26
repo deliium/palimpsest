@@ -477,6 +477,7 @@ class AgentRuntime:
         "_relationship_reader",
         "_remembered_decisions",
         "_reputation",
+        "_retired",
         "_run_id",
         "_scarcity_beliefs",
         "_scientific_evidence",
@@ -489,6 +490,7 @@ class AgentRuntime:
         "_subjective_state",
         "_subjective_valuations",
         "_symbolic_language",
+        "_terminal_tick",
         "_territorial_claims",
         "_theory_of_mind",
         "_translation",
@@ -544,6 +546,8 @@ class AgentRuntime:
         self._agent = agent
         self._translator = translator
         self._loop = cognitive_loop
+        self._retired: object | None = None
+        self._terminal_tick: int | None = None
         self._memory_reader = memory_reader
         self._memory_writer = memory_writer
         self._belief_reader = belief_reader
@@ -1985,6 +1989,7 @@ class AgentRuntime:
             )
 
     def start(self) -> None:
+        self._reject_if_retired("start")
         """Transition CREATED → ACTIVE. Rejects repeats."""
         if self._status is AgentRuntimeStatus.ACTIVE:
             _LOG.warning(
@@ -2029,6 +2034,7 @@ class AgentRuntime:
 
     def replace_translator(self, translator: RegistrationTranslator) -> None:
         """Replace the registration translator after mid-run population admit."""
+        self._reject_if_retired("replace_translator")
         if type(translator) is not RegistrationTranslator:
             raise TypeError("translator must be RegistrationTranslator")
         self._translator = translator
@@ -2214,6 +2220,7 @@ class AgentRuntime:
 
         if _is_dead_self(observation):
             self._status = AgentRuntimeStatus.TERMINAL
+            self._terminal_tick = tick
             self._last_observation_key = obs_key
             _LOG.info(
                 "runtime_terminal",
@@ -2329,6 +2336,7 @@ class AgentRuntime:
         effective_command: AgentCommand | None = None,
     ) -> PendingRuntimeFinalization:
         """Bind the effective command into a detached pending finalization."""
+        self._reject_if_retired("bind_effective_command")
         if type(prepared) is not PreparedObservation:
             raise TypeError("prepared must be PreparedObservation")
         if self._pending is not None:
@@ -2529,6 +2537,7 @@ class AgentRuntime:
         self, pending: PendingRuntimeFinalization
     ) -> AgentStepResult:
         """Apply a previously bound transition after objective commit."""
+        self._reject_if_retired("finalize_pending")
         if type(pending) is not PendingRuntimeFinalization:
             raise TypeError("pending must be PendingRuntimeFinalization")
         agent_id = self._agent.agent_id
@@ -3261,8 +3270,12 @@ class AgentRuntime:
 
     def export_runtime_checkpoint(self) -> object:
         """Export detached runtime state for rehydration."""
+        from simulation.retired_owners import RetiredOwnerRecord
         from simulation.run_control import AgentRuntimeCheckpoint
 
+        if self._retired is not None:
+            assert type(self._retired) is RetiredOwnerRecord
+            return self._retired.runtime_checkpoint
         return AgentRuntimeCheckpoint(
             agent_id=self._agent.agent_id,
             status=self._status,
@@ -3308,6 +3321,82 @@ class AgentRuntime:
             acceptance_memories=self._acceptance_memories,
         )
 
+    @property
+    def retired_record(self) -> object | None:
+        """Frozen retirement record, or ``None`` while the owner is live."""
+        return self._retired
+
+    @property
+    def terminal_tick(self) -> int | None:
+        return self._terminal_tick
+
+    def retirement_cultural_channels(self) -> frozenset[str]:
+        return frozenset(self._enabled_cultural_channels())
+
+    def retirement_civilization_flags(self) -> tuple[tuple[str, bool], ...]:
+        keys = (
+            "_group_formation_mode",
+            "_institution_concept_mode",
+            "_office_succession_mode",
+            "_institutional_decay_mode",
+        )
+        return tuple(
+            (
+                key,
+                getattr(getattr(self._loop, key, None), "value", None)
+                == "deterministic",
+            )
+            for key in keys
+        )
+
+    def _reject_if_retired(self, operation: str) -> None:
+        if self._retired is not None:
+            from simulation.retired_owners import RetiredOwnerError
+
+            raise RetiredOwnerError(operation)
+
+    def freeze_terminal(self, record: object) -> None:
+        """Install frozen owner state and release live cognition graphs."""
+        from simulation.retired_owners import RetiredOwnerError, RetiredOwnerRecord
+
+        if self._retired is not None:
+            if self._retired is record:
+                return
+            raise RetiredOwnerError("already_retired")
+        if type(record) is not RetiredOwnerRecord:
+            raise TypeError("record must be RetiredOwnerRecord")
+        if self._status is not AgentRuntimeStatus.TERMINAL:
+            raise ValueError("retirement requires terminal runtime status")
+        if record.agent_id != self._agent.agent_id:
+            raise ValueError("retirement record owner mismatch")
+        if self._pending is not None or self._reflection_capture is not None:
+            raise ValueError("retirement requires no pending finalization")
+        self._retired = record
+        self._loop = cast("CognitiveLoop", None)
+        self._memory_reader = cast("MemoryReader", None)
+        self._memory_writer = cast("MemoryWriter", None)
+        self._belief_reader = cast("BeliefReader", None)
+        self._belief_writer = cast("BeliefWriter", None)
+        self._semantic_belief_reader = cast("SemanticBeliefReader", None)
+        self._relationship_reader = cast("RelationshipReader", None)
+        self._subjective_state = cast("SubjectiveStateService", None)
+        self._memory_service = cast("MemoryService", None)
+        self._inbox = cast("InboxSource", None)
+        self._invocation_ids = cast("InvocationIdSource", None)
+        self._cognition_trace_repository = cast(
+            "CognitionTraceRepository", None
+        )
+        self._scientific_evidence = cast("ScientificEvidenceRepository", None)
+        _LOG.info(
+            "runtime_retired",
+            extra={
+                "runtime": {
+                    "agent_id": self._agent.agent_id.value,
+                    "terminal_tick": self._terminal_tick,
+                }
+            },
+        )
+
     def export_fork_state(self) -> AgentRuntimeForkState:
         """Export every process-local runtime field needed for continuation."""
         from simulation.fork_checkpoint import (
@@ -3316,6 +3405,11 @@ class AgentRuntime:
             ForkCheckpointError,
         )
 
+        if self._retired is not None:
+            from simulation.retired_owners import RetiredOwnerRecord
+
+            assert type(self._retired) is RetiredOwnerRecord
+            return self._retired.runtime_fork_state
         if self._pending is not None or self._reflection_capture is not None:
             raise ForkCheckpointError(
                 "fork_boundary_not_finalized", "runtime has a pending finalization"
@@ -3394,6 +3488,10 @@ class AgentRuntime:
 
         if type(state) is not AgentRuntimeForkState:
             raise ForkCheckpointError("fork_state_unsupported", "invalid state")
+        if self._retired is not None:
+            from simulation.retired_owners import RetiredOwnerError
+
+            raise RetiredOwnerError("restore_fork_state")
         if state.checkpoint.agent_id != self._agent.agent_id:
             raise ForkCheckpointError("fork_roster_mismatch", "runtime owner mismatch")
         if self._pending is not None:
@@ -4054,6 +4152,11 @@ class AgentRuntime:
             CULTURAL_EVIDENCE_CHANNEL_TERMINOLOGY,
         )
 
+        if self._retired is not None:
+            from simulation.retired_owners import RetiredOwnerRecord
+
+            assert type(self._retired) is RetiredOwnerRecord
+            return channel in self._retired.cultural_channels
         if channel == CULTURAL_EVIDENCE_CHANNEL_CULTURAL_FEATURES:
             return getattr(self._loop, "_cultural_features_spec", None) is not None
         if channel == CULTURAL_EVIDENCE_CHANNEL_TERMINOLOGY:
@@ -4167,6 +4270,11 @@ class AgentRuntime:
         )
 
         def enabled(name: str) -> bool:
+            if self._retired is not None:
+                from simulation.retired_owners import RetiredOwnerRecord
+
+                assert type(self._retired) is RetiredOwnerRecord
+                return dict(self._retired.civilization_enabled).get(name, False)
             return getattr(getattr(self._loop, name, None), "value", None) == (
                 "deterministic"
             )
