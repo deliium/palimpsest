@@ -12,6 +12,7 @@ const StreamClient := preload("res://scripts/net/stream_client.gd")
 const GenerationalSourceScript := preload("res://scripts/net/generational_source.gd")
 const LineageSourceScript := preload("res://scripts/net/lineage_source.gd")
 const CivilizationSourceScript := preload("res://scripts/net/civilization_source.gd")
+const ResearchFocusScript := preload("res://scripts/net/research_focus.gd")
 
 const PAGE_LIMIT := 100
 const EVENT_WINDOW := 100
@@ -48,6 +49,7 @@ signal civilization_layer_changed(layer_id: String, state: Dictionary)
 signal civilization_bundle_ready(cursor: Dictionary, layer_states: Dictionary)
 signal civilization_catalogue_changed(state: Dictionary)
 signal civilization_markers_changed(state: Dictionary)
+signal research_focus_changed
 signal playback_bundle_ready(frame: Variant, cursor: Dictionary, states: Dictionary)
 signal playback_target_changed(target_tick: int, accepted_tick: int, skipped: int)
 
@@ -111,6 +113,8 @@ var request_log: Array = []
 var _playing := false
 var _play_timer: Timer
 var _pending_deeplink := {}
+var _pending_focus := {}
+var research_focus = null
 var _pending_switch_seek := {}
 var _switching := false
 var _nav_stack: Array = []
@@ -163,6 +167,9 @@ func _ready() -> void:
 		civilization_markers_changed.emit(state)
 		civilization_source_updated.emit()
 	)
+	research_focus = ResearchFocusScript.new()
+	research_focus.set_request_sink(Callable(self, "_request_path"))
+	research_focus.changed.connect(func() -> void: research_focus_changed.emit())
 	_stream = StreamClient.new()
 	_stream.name = "StreamClient"
 	add_child(_stream)
@@ -228,6 +235,13 @@ func apply_web_query(search: String) -> bool:
 		"agent_id": str(state.get("agent_id", "")),
 		"open_debugger": bool(state.get("open_debugger", false)),
 	}
+	_pending_focus = {}
+	for key in ["agent_id", "location_id", "institution_id", "narrative_id", "technology_id"]:
+		if str(state.get(key, "")) != "":
+			_pending_focus = state.duplicate(true)
+			break
+	if research_focus != null:
+		research_focus.set_context(run_id, _http_epoch, _credential_generation)
 	ObserverLog.info("session", "web_run_id_applied run_id=%s" % run_id)
 	ObserverLog.debug(
 		"session",
@@ -1150,6 +1164,8 @@ func configure_credentials(inspection_token: String, debug_token: String) -> boo
 		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
 	if civilization != null:
 		civilization.set_context(run_id, _http_epoch, _credential_generation)
+	if research_focus != null:
+		research_focus.set_context(run_id, _http_epoch, _credential_generation)
 		civilization.on_credentials_changed(not _inspection_token.is_empty(), not _debug_token.is_empty(), _credential_generation)
 	credentials_changed.emit(not _inspection_token.is_empty(), not _debug_token.is_empty())
 	ObserverLog.info(
@@ -1183,6 +1199,8 @@ func forget_credentials() -> void:
 		private_lineage.clear()
 	if civilization != null:
 		civilization.clear("credentials_forgotten")
+	if research_focus != null:
+		research_focus.clear("credentials_forgotten")
 	credentials_changed.emit(false, false)
 	ObserverLog.info("session", "credentials_forgotten generation=%s" % _credential_generation)
 	if _opened:
@@ -1227,6 +1245,9 @@ func _teardown_source() -> void:
 	_gap_events = 0
 	_reconnect_pending = false
 	_pending_deeplink = {}
+	_pending_focus = {}
+	if research_focus != null:
+		research_focus.clear("switch_run")
 	_opened = false
 	_failed = false
 	world = null
@@ -1287,6 +1308,8 @@ func _start() -> void:
 		private_lineage.set_context(run_id, _http_epoch, _credential_generation)
 	if civilization != null:
 		civilization.set_context(run_id, _http_epoch, _credential_generation)
+	if research_focus != null:
+		research_focus.set_context(run_id, _http_epoch, _credential_generation)
 	if Origin.is_missing(origin):
 		_fail("observer_origin_missing")
 		return
@@ -1578,8 +1601,32 @@ func _apply_pending_deeplink() -> void:
 			"deeplink_seek tick=%s sequence=%s" % [int(tick), int(sequence)],
 		)
 		seek_event(int(tick), int(sequence), null)
+	elif tick != null:
+		ObserverLog.info("session", "deeplink_seek_tick tick=%s" % int(tick))
+		seek_tick(int(tick))
+	else:
+		_apply_pending_focus()
 	if bool(pending.get("open_debugger", false)):
 		request_causal_trace(event_id, tick, sequence)
+
+
+func _apply_pending_focus() -> void:
+	if _pending_focus.is_empty():
+		return
+	if _last_frame == null:
+		return
+	if _pending_focus.get("tick", null) != null and int(_last_frame.world.tick) != int(_pending_focus["tick"]):
+		return
+	var focus: Dictionary = _pending_focus.duplicate(true)
+	_pending_focus = {}
+	var agent := str(focus.get("agent_id", ""))
+	var location := str(focus.get("location_id", ""))
+	if not agent.is_empty():
+		set_agent_focus(agent)
+	if not location.is_empty():
+		set_location_focus(location)
+	if research_focus != null:
+		research_focus.resolve_selection(focus)
 
 
 func _decode_metric_document(body: Dictionary) -> Variant:
@@ -1624,6 +1671,8 @@ func _request_path(
 		)
 		if str(meta.get("source", "")) == "civilization" and civilization != null:
 			civilization.handle_response(meta, null, reason, 0)
+		if str(meta.get("source", "")) == "research_focus" and research_focus != null:
+			research_focus.handle_response(meta, null, reason, 0)
 		elif kind == "metric_catalog" or kind == "metric_document":
 			_emit_overlay_unavailable(str(meta.get("overlay_kind", kind)), reason)
 		elif kind == "causal_debugger" or kind == "causal_debugger_lineage":
@@ -1759,6 +1808,10 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		return
 	if str(meta.get("source", "")) == "civilization":
 		civilization.handle_response(meta, body, reason_code, status)
+		return
+	if str(meta.get("source", "")) == "research_focus":
+		if research_focus != null:
+			research_focus.handle_response(meta, body, reason_code, status)
 		return
 	if (
 		kind == "territorial_claims"
@@ -2157,6 +2210,7 @@ func _apply_sought_frame(frame: Variant, seek_id: int) -> void:
 		"%s tick %s" % [transport.mode, transport.tick],
 	)
 	frame_sought.emit(frame, meta.get("event", null), bool(meta.get("forward", false)))
+	_apply_pending_focus()
 	_generational_frame(frame)
 	if _playing:
 		_schedule_step()

@@ -9,13 +9,13 @@
     type ExperimentalStateOut,
     type ObserverRunOut,
   } from '../api/client'
+  import { buildGodotObserverUrl, type ResearchUiDeepLink } from '../deeplink'
   import {
-    buildGodotObserverUrl,
-    type ResearchUiDeepLink,
+    godotFocusOptions,
+    type ResearchSelection,
     type ResearchUiView,
-  } from '../deeplink'
+  } from '../research/selection'
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
-  import { pushRunRoute } from '../router'
   import GodotEmbed from '../embed/GodotEmbed.svelte'
   import AgentPanel from './AgentPanel.svelte'
   import AnalyticsPanel from './AnalyticsPanel.svelte'
@@ -26,25 +26,94 @@
   import SocietiesPanel from './SocietiesPanel.svelte'
   import InstitutionsPanel from './InstitutionsPanel.svelte'
   import ContactPanel from './ContactPanel.svelte'
+  import PopulationPanel from './PopulationPanel.svelte'
+  import CohortsPanel from './CohortsPanel.svelte'
+  import LineagePanel from './LineagePanel.svelte'
+  import TeachingPanel from './TeachingPanel.svelte'
+  import TechnologyPanel from './TechnologyPanel.svelte'
+  import CulturePanel from './CulturePanel.svelte'
+  import LanguagePanel from './LanguagePanel.svelte'
+  import NarrativePanel from './NarrativePanel.svelte'
+  import MigrationPanel from './MigrationPanel.svelte'
+  import EconomyPanel from './EconomyPanel.svelte'
+  import ProjectsPanel from './ProjectsPanel.svelte'
 
   interface Props {
     runId: string
     view: ResearchUiView
     deepLink: ResearchUiDeepLink
+    selection: ResearchSelection
+    onSelectionChange: (
+      patch: Partial<ResearchSelection>,
+      historyMode?: 'push' | 'replace',
+    ) => void
   }
 
-  let { runId, view, deepLink }: Props = $props()
+  let { runId, view, deepLink, selection, onSelectionChange }: Props = $props()
 
-  const tabs: { id: ResearchUiView; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'graphs', label: 'Graphs' },
-    { id: 'agent', label: 'Agent' },
-    { id: 'analytics', label: 'Analytics' },
-    { id: 'societies', label: 'Societies' },
-    { id: 'contact', label: 'Contact' },
-    { id: 'traces', label: 'Traces' },
-    { id: 'compare', label: 'Compare' },
-  ]
+  const tabGroups: { label: string; tabs: { id: ResearchUiView; label: string }[] }[] =
+    [
+      {
+        label: 'Overview',
+        tabs: [
+          { id: 'overview', label: 'Overview' },
+          { id: 'graphs', label: 'Graphs' },
+          { id: 'agent', label: 'Agent' },
+          { id: 'analytics', label: 'Analytics' },
+        ],
+      },
+      {
+        label: 'Population',
+        tabs: [
+          { id: 'population', label: 'Population' },
+          { id: 'cohorts', label: 'Cohorts' },
+        ],
+      },
+      {
+        label: 'Lineage',
+        tabs: [
+          { id: 'lineage', label: 'Lineage' },
+          { id: 'teaching', label: 'Teaching' },
+          { id: 'technology', label: 'Technology' },
+        ],
+      },
+      {
+        label: 'Culture',
+        tabs: [
+          { id: 'culture', label: 'Culture' },
+          { id: 'language', label: 'Language' },
+          { id: 'narratives', label: 'Narratives' },
+        ],
+      },
+      {
+        label: 'Space',
+        tabs: [{ id: 'migration', label: 'Migration' }],
+      },
+      {
+        label: 'Institutions',
+        tabs: [
+          { id: 'institutions', label: 'Institutions' },
+          { id: 'societies', label: 'Societies' },
+          { id: 'contact', label: 'Contact' },
+        ],
+      },
+      {
+        label: 'Economy',
+        tabs: [
+          { id: 'economy', label: 'Economy' },
+          { id: 'projects', label: 'Projects' },
+        ],
+      },
+      {
+        label: 'Debug',
+        tabs: [
+          { id: 'traces', label: 'Traces' },
+          { id: 'compare', label: 'Compare' },
+        ],
+      },
+    ]
+
+  const allTabs = tabGroups.flatMap((group) => group.tabs)
 
   let run = $state<ObserverRunOut | null>(null)
   let experimental = $state<ExperimentalStateOut | null>(null)
@@ -88,17 +157,18 @@
   })
 
   function selectTab(next: ResearchUiView): void {
-    pushRunRoute(runId, next, deepLink)
+    onSelectionChange({ view: next })
   }
 
   function openObserver(withDebugger: boolean): void {
     const href = buildGodotObserverUrl({
       runId,
-      tick: deepLink.tick ?? run?.tick ?? null,
-      eventId: deepLink.eventId,
-      sequence: deepLink.sequence,
+      tick: selection.tick ?? run?.tick ?? null,
+      eventId: selection.eventId,
+      sequence: selection.sequence,
       agentId: deepLink.agentId,
       debugger: withDebugger,
+      options: godotFocusOptions(selection),
     })
     window.open(href, '_blank', 'noopener,noreferrer')
   }
@@ -113,21 +183,41 @@
     </div>
     <div class="actions">
       <EpistemicBadge epistemic="objective_world" />
-      <button type="button" onclick={() => openObserver(false)}>Open in World Observer</button>
+      <button
+        type="button"
+        onclick={() => openObserver(false)}
+        disabled={selection.generationIndex !== null && selection.tick === null}
+        title={selection.generationIndex !== null && selection.tick === null
+          ? 'Resolve the generation marker before opening Godot.'
+          : undefined}
+      >
+        Open in World Observer
+      </button>
       <button type="button" class="ghost" onclick={() => openObserver(true)}>Open Why?</button>
     </div>
   </header>
 
   <nav class="tabs" aria-label="Run views">
-    {#each tabs as tab (tab.id)}
-      <button
-        type="button"
-        class:active={view === tab.id}
-        onclick={() => selectTab(tab.id)}
-      >
-        {tab.label}
-      </button>
+    {#each tabGroups as group (group.label)}
+      <div class="tab-group">
+        <span class="tab-group-label">{group.label}</span>
+        <div class="tab-row">
+          {#each group.tabs as tab (tab.id)}
+            <button
+              type="button"
+              class:active={view === tab.id}
+              aria-current={view === tab.id ? 'page' : undefined}
+              onclick={() => selectTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          {/each}
+        </div>
+      </div>
     {/each}
+    {#if !allTabs.some((tab) => tab.id === view)}
+      <p class="status error" role="alert">Unknown view: {view}</p>
+    {/if}
   </nav>
 
   {#if loading}
@@ -178,15 +268,43 @@
       </div>
     </dl>
   {:else if view === 'agent'}
-    <AgentPanel {runId} agentId={deepLink.agentId} />
+    <AgentPanel
+      {runId}
+      agentId={selection.focus?.kind === 'agent' &&
+      selection.focus.source === 'objective'
+        ? selection.focus.agentId
+        : deepLink.agentId}
+    />
+  {:else if view === 'population'}
+    <PopulationPanel {runId} {selection} {onSelectionChange} />
+  {:else if view === 'cohorts'}
+    <CohortsPanel {runId} {selection} {onSelectionChange} />
+  {:else if view === 'lineage'}
+    <LineagePanel {runId} {selection} {onSelectionChange} />
+  {:else if view === 'teaching'}
+    <TeachingPanel {runId} {selection} {onSelectionChange} />
+  {:else if view === 'technology'}
+    <TechnologyPanel {runId} {selection} {onSelectionChange} />
+  {:else if view === 'culture'}
+    <CulturePanel {runId} {selection} />
+  {:else if view === 'language'}
+    <LanguagePanel {runId} {selection} />
+  {:else if view === 'narratives'}
+    <NarrativePanel {runId} {selection} {onSelectionChange} />
+  {:else if view === 'migration'}
+    <MigrationPanel {runId} {selection} />
+  {:else if view === 'economy'}
+    <EconomyPanel {runId} {selection} />
+  {:else if view === 'projects'}
+    <ProjectsPanel {runId} {selection} />
   {:else if view === 'graphs'}
     <GraphsPanel {runId} agentId={deepLink.agentId} eventId={deepLink.eventId} />
   {:else if view === 'analytics'}
     <AnalyticsPanel {runId} agentId={deepLink.agentId} />
   {:else if view === 'societies'}
-    <SocietiesPanel {runId} />
+    <SocietiesPanel {runId} {selection} />
   {:else if view === 'institutions'}
-    <InstitutionsPanel {runId} />
+    <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}
     <ContactPanel {runId} />
   {:else if view === 'traces'}
@@ -194,6 +312,11 @@
   {:else if view === 'compare'}
     <ObjSubjComparePanel {runId} {deepLink} />
     <ForkComparePanel {runId} {deepLink} />
+  {:else if allTabs.some((tab) => tab.id === view)}
+    <p class="status empty">
+      {view} research evidence is reachable; its populated panel arrives in a later
+      implementation task.
+    </p>
   {:else}
     <p class="status empty">Unknown view.</p>
   {/if}
@@ -259,9 +382,27 @@
   .tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 0.5rem 1rem;
     border-bottom: 1px solid rgba(28, 36, 40, 0.12);
     padding-bottom: 0.35rem;
+  }
+
+  .tab-group {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .tab-group-label {
+    color: #5a6a72;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .tab-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
   }
 
   .tabs button.active {

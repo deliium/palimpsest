@@ -4,12 +4,28 @@
   import MatrixPanel from '../views/MatrixPanel.svelte'
   import RunList from '../views/RunList.svelte'
   import RunOverview from '../views/RunOverview.svelte'
-  import { resolveRoute, type Route } from '../router'
+  import { pushRunRoute, resolveRoute, type Route } from '../router'
+  import type { ResearchSelection } from '../research/selection'
 
   let route = $state<Route>(resolveRoute())
 
   function refresh(): void {
     route = resolveRoute()
+  }
+
+  function onSelectionChange(
+    patch: Partial<ResearchSelection>,
+    historyMode: 'push' | 'replace' = 'push',
+  ): void {
+    if (route.kind !== 'run') {
+      return
+    }
+    pushRunRoute(
+      route.runId,
+      patch.view ?? route.view,
+      { ...route.selection, ...patch },
+      historyMode,
+    )
   }
 
   onMount(() => {
@@ -32,11 +48,25 @@
     {#if route.kind === 'run_list'}
       <RunList />
     {:else if route.kind === 'run'}
-      <RunOverview runId={route.runId} view={route.view} deepLink={route.deepLink} />
+      <RunOverview
+        runId={route.runId}
+        view={route.view}
+        deepLink={route.deepLink}
+        selection={route.selection}
+        {onSelectionChange}
+      />
     {:else if route.kind === 'matrix_list'}
       <MatrixPanel />
     {:else if route.kind === 'matrix_detail'}
       <MatrixPanel matrixId={route.matrixId} />
+    {:else if route.kind === 'route_error'}
+      <section>
+        <h1>Invalid research link</h1>
+        <p class="lede" role="alert">
+          The selection was rejected (<code>{route.code}</code>).
+        </p>
+        <p class="lede"><a href="/research/">Return to runs</a></p>
+      </section>
     {:else}
       <section>
         <h1>Not found</h1>

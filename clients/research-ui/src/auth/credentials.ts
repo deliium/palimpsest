@@ -57,6 +57,7 @@ export function saveCredentials(next: CredentialStore): void {
   } catch {
     // sessionStorage may be unavailable; keep in-memory only
   }
+  bumpCredentialGeneration()
 }
 
 export function credentialFor(capability: CapabilitySlot): string | null {
@@ -93,4 +94,26 @@ export const CAPABILITY_LABELS: Record<CapabilitySlot, string> = {
   objective_inspection: 'Inspection',
   agent_visible: 'Agent-visible',
   subjective_debug: 'Debug',
+}
+
+let generation = 0
+const listeners = new Set<(next: number) => void>()
+
+export function credentialGeneration(): number {
+  return generation
+}
+
+export function subscribeCredentialChanges(
+  listener: (next: number) => void,
+): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export function bumpCredentialGeneration(): number {
+  generation += 1
+  for (const listener of listeners) {
+    listener(generation)
+  }
+  return generation
 }

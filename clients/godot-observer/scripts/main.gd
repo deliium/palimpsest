@@ -3,6 +3,7 @@ extends Node
 const ObserverLog := preload("res://scripts/log.gd")
 const FixturePlayer := preload("res://scripts/net/fixture_player.gd")
 const Bookmarks := preload("res://scripts/protocol/bookmarks.gd")
+const ResearchUiLink := preload("res://scripts/protocol/research_ui_link.gd")
 
 @onready var _world: Node2D = $WorldView
 @onready var _ui: CanvasLayer = $UILayer
@@ -99,6 +100,14 @@ func _ready() -> void:
 	_session.credentials_error.connect(_on_credentials_error)
 	_session.generational_updated.connect(_on_generational_updated)
 	_session.lineage_source_updated.connect(_on_lineage_updated)
+	_session.research_focus_changed.connect(func() -> void:
+		_ui.set_research_focus(_session.research_focus.state())
+	)
+	_ui.research_focus_open_requested.connect(_on_research_focus_open)
+	_ui.research_focus_share_requested.connect(_on_research_focus_open)
+	_ui.research_focus_back_requested.connect(func() -> void:
+		_session.research_focus.clear("panel_closed")
+	)
 	_session.civilization_layer_changed.connect(_on_civilization_layer_changed)
 	_session.civilization_bundle_ready.connect(_on_civilization_bundle)
 	_session.civilization_markers_changed.connect(_on_civilization_markers)
@@ -922,3 +931,52 @@ func _apply_lineage_links() -> void:
 				if not teacher.is_empty() and not learner.is_empty():
 					links.append({"from": teacher, "to": learner})
 	_world.apply_generational_links(links)
+
+
+func _on_research_focus_open() -> void:
+	var state: Dictionary = _session.research_focus.state()
+	if not bool(state.get("active", false)):
+		return
+	var kind := str(state.get("kind", ""))
+	var view := "overview"
+	if kind == "agent":
+		view = "agent"
+	elif kind == "location":
+		view = "migration"
+	elif kind == "institution":
+		view = "institutions"
+	elif kind == "technology":
+		view = "technology"
+	elif kind == "narrative":
+		view = "narratives"
+	var options := {
+		"native_kind": state.get("native_kind", ""),
+		"lineage_family": state.get("family", ""),
+		"evidence_class": state.get("evidence_class", ""),
+		"identity_owner": state.get("identity_owner", ""),
+		"entity_source": state.get("source", ""),
+		"lineage_node_key": state.get("node_key", ""),
+		"lineage_publication_id": state.get("publication_id", "") if str(state.get("source", "")) == "lineage" else "",
+		"civilization_publication_id": state.get("publication_id", "") if str(state.get("source", "")) == "civilization" else "",
+		"civilization_row_id": state.get("civilization_row_id", ""),
+	}
+	if str(state.get("owner_id", "")) != "":
+		options["owner_id"] = state.get("owner_id")
+	if kind == "institution":
+		options["institution_id"] = state.get("native_id", "")
+	elif kind == "narrative":
+		options["narrative_id"] = state.get("native_id", "")
+	elif kind == "technology":
+		options["technology_id"] = state.get("native_id", "")
+	elif kind == "location":
+		options["location_id"] = state.get("native_id", "")
+	var agent_id := str(state.get("native_id", "")) if kind == "agent" else ""
+	ResearchUiLink.open(
+		_session.run_id,
+		state.get("captured_tick", state.get("requested_tick", null)),
+		"",
+		null,
+		agent_id,
+		view,
+		options,
+	)

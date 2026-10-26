@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Protocol, cast
@@ -22,6 +23,7 @@ from api.persistence_services import (
     PersistenceReplayApiService,
 )
 from api.presentation_static import mount_presentation
+from api.research_cultural_cursor import CulturalCursorCodec
 from api.research_static import mount_research_ui
 from api.routes import (
     branches_router,
@@ -260,6 +262,19 @@ def _attach_lineage_service(app: FastAPI) -> None:
         app.state.lineage_service = None
 
 
+def _attach_research_cultural_service(app: FastAPI) -> None:
+    settings: Settings = app.state.settings
+    if settings.research_matrix_root is None:
+        return
+    if getattr(app.state, "research_cultural_service", None) is not None:
+        return
+    from api.research_cultural_service import ResearchCulturalService
+
+    app.state.research_cultural_service = ResearchCulturalService(
+        settings.research_matrix_root
+    )
+
+
 def create_app(
     settings: Settings | None = None,
     database_factory: DatabaseFactory | None = None,
@@ -280,6 +295,11 @@ def create_app(
     )
     app.state.settings = resolved
     _attach_lineage_service(app)
+    _attach_research_cultural_service(app)
+    if getattr(app.state, "research_cultural_cursor_codec", None) is None:
+        app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
+            secrets.token_bytes(32)
+        )
     app.state.civilization_cursor_codec = CivilizationCursorCodec(
         None
         if resolved.civilization_cursor_key is None

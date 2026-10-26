@@ -108,3 +108,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         media_type="application/problem+json",
         headers={API_ERROR_HEADER: exc.code},
     )
+
+
+def too_large(*, code: str = "payload_too_large") -> ApiError:
+    return ApiError(code=code, status=413, title="Payload Too Large")

@@ -126,3 +126,75 @@ endpoints. Both families map through `ANALYTICAL_OVERLAYS` to
 `research_inference` chrome. No backend API, observer protocol, Godot semantic
 type, or subjective endpoint changes. Candidates and persistence
 classifications are never presented as agent-visible facts.
+
+## Generational research surfaces (V3-42)
+
+The run shell now groups Population, Lineage, Culture, Space, Institutions and
+Economy without removing legacy tabs/routes. Every requested surface is
+reachable with a populated or explicitly unavailable state.
+
+| Surface | UI home | Source / evidence |
+| --- | --- | --- |
+| Population timeline | Population | Objective demographics at sampled finalized boundaries |
+| Demographic charts | Population | Exact whole-population totals; stage/generation rows |
+| Genealogy | Lineage (genealogy) | Objective lineage snapshots/traverse |
+| Cohort comparison | Cohorts | Objective census; composite `(run, generation, entry tick, cohort id)` |
+| Teacher/student networks | Teaching | Mentorship subjective/analytical participants + returned edges |
+| Knowledge genealogy | Lineage (knowledge) | Owner-scoped/analytical knowledge lineage |
+| Technology lineage | Technology · Lineage | Technology/knowledge lineage |
+| Technology diffusion | Technology · Diffusion | Civilization technology overlays + objective anchors |
+| Cultural trait timelines | Culture | Paged cultural evidence traits |
+| Vocabulary evolution | Language · Vocabulary | Captured `vocabulary` inventory |
+| Semantic drift | Language · Semantics | Retained owner checkpoint sense history |
+| Migration flows | Migration | Civilization migration overlays + objective map rows |
+| Society comparison | Societies | Candidate community lanes and stored society metrics |
+| Narrative lineage | Narratives | Narrative metadata + narrative lineage family |
+| Institution timeline | Institutions · Timeline | Concept/office/episode lanes |
+| Office succession | Institutions · Office succession | Subjective `office_succession` lineage |
+| Institution lineage | Institutions · Lineage | Analytical `institution` lineage |
+| Economic exchange networks | Economy | Completed trade overlay hubs (no prices/balances) |
+| Collective project history | Projects | Objective project state + retained receipts |
+| Generation and tick navigation | Shared navigator | Markers discovered at high-water H; view tick T |
+| Seven Godot focus dimensions | Share/open links | Run, tick, agent, location, institution, narrative, technology |
+| Objective/subjective/analytical distinctions | Every series/node/edge/row | Per-item badges, owner and window text |
+
+### Marker discovery H versus view tick T
+
+Generation markers are discovered at the finalized high-water `H` from
+`GET /observer/run`; viewing boundary `T` never lowers `H`. Selecting a marker
+keeps `H` and seeks its server-provided `seek_tick`. Only an explicit Refresh
+may advance `H`. A generation-only URL is resolved through actual admission
+markers; an explicit tick takes precedence and a conflicting generation shows
+`generation_tick_mismatch` rather than rewriting time.
+
+### Cohorts, sampling and provenance
+
+- Cohort identity always includes generation, entry tick and cohort ID. A reused
+  ID across entries/generations is not merged; ID-only legacy selection resolves
+  only when exactly one loaded row matches.
+- Census `living / admitted` is descriptive; it is not Kaplan–Meier survival or a
+  causal effect. Zero denominators show `—`.
+- Full-history population sampling is explicit, bounded to 32 boundaries per
+  load, and discloses omitted boundaries. Gaps are unknown, never zero, and
+  sparse samples do not imply birth/death rates.
+- Graphs use server budgets unless smaller local caps apply (500 nodes / 1500
+  edges). Charts always include an accessible data table and keyboard-selectable
+  points.
+- Culture/vocabulary require an explicit matrix and cell; the app never scans all
+  matrices to guess a run association. `runtime_bound` and `legacy_unverified`
+  artifact binding remain visible and are independent of PRESENT/PARTIAL rows.
+- Retained semantic history is as-of a checkpoint with `retained_only=true` and
+  an unknown prefix. Current labels/symbolic/translation cards are current
+  checkpoint metadata, not restored history.
+- Capture-off, lifecycle-disabled, debug-denied, missing checkpoint and complete
+  empty evidence have distinct notices. No client action starts capture, writes
+  artifacts, or mutates the world.
+
+### Deep links and embeds
+
+Credential-free selection keys include the original run/tick/event/agent/view
+keys plus `generation_index`, composite cohort keys, scope/identity owner,
+evidence class, entity source, native kind, lineage family/node/publication,
+civilization row/publication, and location/institution/narrative/technology IDs.
+Credentials never enter URLs. The Godot embed is same-origin and isolated; its
+explicit new-tab anchor is the fallback when bootstrap fails.

@@ -22,3 +22,13 @@ describe('societies view', () => {
     expect(source).toContain('never enter')
   })
 })
+
+describe('societies candidate lanes', () => {
+  it('renders analytical group basis, missing lanes and policy without a society registry', () => {
+    expect(source).toContain('getCivilizationOverlays')
+    expect(source).toContain("layer: 'social_groups'")
+    expect(source).toContain('missingLanes')
+    expect(source).toContain('policyVersion')
+    expect(source).toContain('no polity or society registry')
+  })
+})

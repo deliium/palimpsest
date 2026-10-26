@@ -2,13 +2,29 @@
   import {
     ApiClientError,
     getMatrixAggregate,
+    getMatrixCell,
+    getMatrixCellMetrics,
     getMatrixManifest,
     getMatrixMetricSummary,
     listMatrices,
     listMatrixCells,
     type MatrixListItem,
   } from '../api/client'
+  import {
+    readCulturalCellMetrics,
+    readCulturalComparison,
+  } from '../api/research'
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
+  import ResearchTable from '../components/research/ResearchTable.svelte'
+  import {
+    culturalComparisonFacets,
+    facetLabel,
+    incompatibleSelectors,
+    intervalUsable,
+    scalarMetricFacets,
+    type MetricFacet,
+  } from '../research/matrixMetrics'
+  import { pushRunRoute } from '../router'
 
   interface Props {
     matrixId?: string | null
@@ -25,6 +41,11 @@
   let manifestMeta = $state<string>('')
   let error = $state<string | null>(null)
   let loading = $state(true)
+  let metricFacets = $state<MetricFacet[]>([])
+  let metricBindings = $state<string[]>([])
+  let selectorConflicts = $state<Array<[string, string]>>([])
+  let metricError = $state<string | null>(null)
+  let cellRuns = $state<Record<string, string>>({})
 
   async function loadList(): Promise<void> {
     loading = true
@@ -50,6 +71,11 @@
     aggregateKeys = []
     summaryKeys = []
     manifestMeta = ''
+    metricFacets = []
+    metricBindings = []
+    selectorConflicts = []
+    metricError = null
+    cellRuns = {}
     try {
       const [manifest, cells] = await Promise.all([
         getMatrixManifest(id),
@@ -73,9 +99,68 @@
       } catch {
         summaryKeys = []
       }
+      await loadMetrics(id, cellIds)
     } catch (err) {
       error = err instanceof ApiClientError ? err.code : 'fetch_failed'
     }
+  }
+
+  async function loadMetrics(id: string, cells: string[]): Promise<void> {
+    const facets: MetricFacet[] = []
+    const bindings = new Set<string>()
+    const runMap: Record<string, string> = {}
+    try {
+      const comparison = await readCulturalComparison(id)
+      bindings.add(comparison.binding)
+      facets.push(...culturalComparisonFacets(null, comparison.data))
+    } catch {
+      // Cultural comparison is optional for any one matrix.
+    }
+    for (const cellId of cells.slice(0, 6)) {
+      try {
+        const state = await getMatrixCell(id, cellId)
+        const runId = typeof state.run_id === 'string' ? state.run_id : null
+        if (runId !== null) {
+          runMap[cellId] = runId
+        }
+      } catch {
+        // Cell state is optional metadata.
+      }
+      try {
+        const metrics = await getMatrixCellMetrics(id, cellId)
+        facets.push(...scalarMetricFacets(cellId, metrics))
+      } catch {
+        // A cell without metric sidecars remains visible in the cell list.
+      }
+      try {
+        const cultural = await readCulturalCellMetrics(id, cellId)
+        bindings.add(cultural.binding)
+        facets.push(...scalarMetricFacets(cellId, cultural.data))
+      } catch {
+        // Cultural metrics are optional per cell.
+      }
+    }
+    metricFacets = facets
+    metricBindings = [...bindings]
+    selectorConflicts = incompatibleSelectors(facets)
+    cellRuns = runMap
+    if (facets.length === 0) {
+      metricError = 'no_metric_rows'
+    }
+  }
+
+  function metricValue(facet: MetricFacet): string {
+    if (facet.meanDifference !== null) {
+      return facet.meanDifference.toFixed(6)
+    }
+    return facet.value === null ? '—' : facet.value.toFixed(6)
+  }
+
+  function intervalLabel(facet: MetricFacet): string {
+    if (!intervalUsable(facet)) {
+      return facet.inferenceStatus ?? 'not_comparable'
+    }
+    return `${facet.ciLow?.toFixed(6)} … ${facet.ciHigh?.toFixed(6)} (df ${facet.df ?? '—'})`
   }
 
   $effect(() => {
@@ -108,7 +193,7 @@
       Matrix root unavailable. Set <code>PALIMPSEST_RESEARCH_MATRIX_ROOT</code>.
     </p>
   {:else if items.length === 0}
-    <p class="empty">No experiment-matrix-v1 manifests found under the configured root.</p>
+    <p class="empty">No supported matrix manifests found under the configured root.</p>
   {:else}
     <ul class="list">
       {#each items as item (item.matrix_id)}
@@ -136,9 +221,63 @@
       {:else}
         <ul class="cells">
           {#each cellIds as cellId (cellId)}
-            <li>{cellId}</li>
+            <li>
+              {cellId}
+              {#if cellRuns[cellId]}
+                <button
+                  type="button"
+                  onclick={() => pushRunRoute(cellRuns[cellId] ?? '', 'overview')}
+                >
+                  Open run {cellRuns[cellId]}
+                </button>
+              {:else}
+                <span class="meta">run ID unavailable</span>
+              {/if}
+            </li>
           {/each}
         </ul>
+      {/if}
+
+      <h3>Stored metric rows</h3>
+      <p class="meta">
+        Artifact binding: {metricBindings.length === 0 ? 'none' : metricBindings.join(', ')}
+      </p>
+      {#if metricError !== null}
+        <p class="empty">
+          {metricError === 'no_metric_rows'
+            ? 'No PRESENT/PARTIAL metric rows in the stored sidecars.'
+            : metricError}
+        </p>
+      {:else}
+        {#if selectorConflicts.length > 0}
+          <p class="error" role="status">
+            not_comparable: {selectorConflicts.length} measurement selector(s)
+            disagree. They remain separate facets.
+          </p>
+        {/if}
+        <ResearchTable
+          caption="Stored generational and cultural metric facets"
+          columns={[
+            { key: 'cell', label: 'Cell' },
+            { key: 'facet', label: 'Family · measurement' },
+            { key: 'value', label: 'Value / mean difference', numeric: true },
+            { key: 'n', label: 'n', numeric: true },
+            { key: 'interval', label: 'Interval / status' },
+            { key: 'method', label: 'Method' },
+            { key: 'binding', label: 'Binding' },
+          ]}
+          rows={metricFacets.map((facet) => ({
+            cell: facet.cellId ?? 'matrix',
+            facet: facetLabel(facet),
+            value: metricValue(facet),
+            n: facet.n,
+            interval: intervalLabel(facet),
+            method: facet.method,
+            binding: metricBindings.join(', ') || 'none',
+          }))}
+          rowKey={(row) =>
+            `${row.cell}:${row.facet}:${row.value}:${row.interval}`}
+        />
       {/if}
       <h3>Aggregate keys</h3>
       <p class="meta">

@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/research_focus_panel.gd" id="1_focus"]
+
+[node name="ResearchFocusPanel" type="PanelContainer"]
+visible = false
+script = ExtResource("1_focus")

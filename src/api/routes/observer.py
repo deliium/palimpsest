@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import time
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
 from api.dependencies import get_observer_service, get_settings
-from api.errors import bad_request, not_found
+from api.errors import bad_request, not_found, service_unavailable
 from api.observer_demographic_schemas import (
     ObserverDemographicsOut,
     ObserverGenerationMarkersOut,
@@ -33,7 +33,14 @@ from api.observer_schemas import (
     StrategyAuditOverlayOut,
 )
 from api.observer_service import ObserverReadService
+from api.research_cultural_cursor import CulturalCursorCodec
 from api.security import ApiCapability, require_http_capability
+from api.semantic_history_schemas import (
+    SemanticHistoryOut,
+    SemanticHistoryRowOut,
+    SemanticHistoryTermOut,
+)
+from api.semantic_history_service import SemanticHistoryService
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
 from observer.labels import (
@@ -730,4 +737,97 @@ async def get_observer_translation(
             )
             for item in overlay.mappings
         ),
+    )
+
+
+@router.get(
+    "/{run_id}/observer/agents/{agent_id}/semantic-history",
+    response_model=SemanticHistoryOut,
+)
+async def get_observer_semantic_history(
+    run_id: str,
+    agent_id: str,
+    request: Request,
+    _: None = Depends(_debug),
+    source: str = Query(...),
+    tick: int | None = Query(default=None, ge=0),
+    from_tick: int | None = Query(default=None, ge=0),
+    to_tick: int | None = Query(default=None, ge=0),
+    after: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> SemanticHistoryOut:
+    started = time.perf_counter()
+    _reject_unknown_query(
+        request,
+        {"source", "tick", "from_tick", "to_tick", "after", "limit"},
+    )
+    codec = getattr(request.app.state, "research_cultural_cursor_codec", None)
+    if not isinstance(codec, CulturalCursorCodec):
+        raise service_unavailable(code="semantic_history_unavailable")
+    manager = getattr(request.app.state, "simulation_manager", None)
+
+    def _lookup(target_run: str, owner_id: str) -> object | None:
+        if manager is None or not hasattr(manager, "owner_runtime_checkpoint"):
+            return None
+        return cast(
+            object | None, manager.owner_runtime_checkpoint(target_run, owner_id)
+        )
+
+    service = SemanticHistoryService(checkpoint_lookup=_lookup, cursor_codec=codec)
+    result = service.read(
+        run_id=run_id,
+        agent_id=agent_id,
+        source=source,
+        tick=tick,
+        from_tick=from_tick,
+        to_tick=to_tick,
+        after=after,
+        limit=limit,
+    )
+    _LOGGER.info(
+        "route_observer_semantic_history",
+        run_id=run_id,
+        source=source,
+        availability=result.availability,
+        count=result.count,
+        duration_ms=round((time.perf_counter() - started) * 1000, 3),
+    )
+    return SemanticHistoryOut(
+        run_id=result.run_id,
+        agent_id=result.agent_id,
+        source=result.source,
+        requested_tick=result.requested_tick,
+        checkpoint_tick=result.checkpoint_tick,
+        history_first_tick=result.history_first_tick,
+        history_last_tick=result.history_last_tick,
+        retained_only=result.retained_only,
+        prefix_complete=result.prefix_complete,
+        availability=result.availability,
+        reason=result.reason,
+        terms=tuple(
+            SemanticHistoryTermOut(
+                term_source=item.term_source,
+                term_digest=item.term_digest,
+                first_ordinal=item.first_ordinal,
+                current_sense_revision=item.current_sense_revision,
+            )
+            for item in result.terms
+        ),
+        rows=tuple(
+            SemanticHistoryRowOut(
+                ordinal=item.ordinal,
+                tick=item.tick,
+                trigger=item.trigger,
+                term_source=item.term_source,
+                term_digest=item.term_digest,
+                local_id=item.local_id,
+                referent_kind=item.referent_kind,
+                referent_digest=item.referent_digest,
+                associated_digests=item.associated_digests,
+                confidence=item.confidence,
+            )
+            for item in result.rows
+        ),
+        next_cursor=result.next_cursor,
+        count=result.count,
     )

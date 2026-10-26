@@ -62,7 +62,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Cultural evolution metrics](docs/cultural-evolution-metrics.md) | Opt-in owner-level capture, six cultural families, repeated-seed intervals, paired contrasts, provenance limits |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |
-| [Research UI](docs/research-ui.md) | Researcher SPA at `/research/`, epistemic chrome, graphs/metrics/matrix, Godot deep links |
+| [Research UI](docs/research-ui.md) | Researcher SPA at `/research/`, epistemic chrome, graphs/metrics/matrix, generational research surfaces, Godot deep links |
 | [Read-only observer](docs/observer.md) | Observer protocol, frames, and the read-only HTTP and WebSocket routes |
 | [Godot observer](docs/godot-observer.md) | Prebuilt Web client served by the API, version strip, deep-link `?run_id=` / debugger params, default-off population/lineage overlays and memory-only inspection/debug credentials |
 | [Godot civilization overlays](docs/godot-civilization-overlays.md) | Optional read-only region/settlement/migration/trade/project/public-good/repository/culture/technology/group/institution overlays, evidence classes, captured history, cursors and deployment |

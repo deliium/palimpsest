@@ -174,7 +174,7 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V3-37
+### Current baseline through V3-42
 
 | Surface | Current contract |
 | --- | --- |
@@ -475,3 +475,14 @@ quotas. `experiments.lineage_publication` is the trusted analytical composer;
 lineage artifacts and never import analysis. This feature adds no command, event,
 observer semantic, metric family, runner/result version, SQL migration, capability
 ownership or `/v2` route; Alembic stays `0017` and default writes stay v4/v2.
+
+### V3-40 through V3-42 presentation seams
+
+Godot generational observation, Godot civilization overlays, and the generational
+Research UI are read-only presentation work over already-published evidence. They
+add no command, event, observer semantic, metric family, runner/result schema,
+replay/codec marker, SQL migration, capability ownership, or `/v2` route. Python
+modules still never import either client; the API only serves their prebuilt
+trees, and `/research/` mounts before the Godot root. Presentation selection,
+layout, overlays, focus, and deep links never mutate world state or obtain capture
+or subjective authority beyond their existing inspection/debug credentials.

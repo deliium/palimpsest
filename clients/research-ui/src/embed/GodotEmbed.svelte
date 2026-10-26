@@ -47,6 +47,7 @@
     <div class="actions">
       <button type="button" onclick={toggle}>{show ? 'Hide embed' : 'Show embed'}</button>
       <button type="button" onclick={openTab}>Open in new tab</button>
+      <a href={src} target="_blank" rel="noopener noreferrer">Open in new tab (fallback)</a>
     </div>
   </header>
   {#if show}

@@ -57,6 +57,9 @@ signal civilization_marker_load_more_requested(from_tick: int, to_tick: int, evi
 signal civilization_catalogue_requested(evidence_class: String, owner_id: String)
 signal civilization_catalogue_load_more_requested(evidence_class: String, owner_id: String)
 signal civilization_recorded_mode_changed(enabled: bool)
+signal research_focus_open_requested
+signal research_focus_back_requested
+signal research_focus_share_requested
 
 var _live_tick := 0
 var _selected_id := ""
@@ -71,6 +74,11 @@ func _ready() -> void:
 	$PerspectiveControl.perspective_requested.connect(func(agent_id: String) -> void:
 		perspective_requested.emit(agent_id)
 	)
+	var focus_panel = get_node_or_null("ResearchFocusPanel")
+	if focus_panel != null:
+		focus_panel.open_research_requested.connect(func() -> void: research_focus_open_requested.emit())
+		focus_panel.back_requested.connect(func() -> void: research_focus_back_requested.emit())
+		focus_panel.share_requested.connect(func() -> void: research_focus_share_requested.emit())
 	$PerspectiveControl.labels_cleared.connect(func() -> void:
 		labels_cleared.emit()
 	)
@@ -622,3 +630,16 @@ func focus_credentials() -> void:
 	var debug = credentials.get_node_or_null("Column/Debug")
 	if debug != null and debug.has_method("grab_focus"):
 		debug.grab_focus()
+
+
+func set_research_focus(state: Dictionary) -> void:
+	var panel = get_node_or_null("ResearchFocusPanel")
+	if panel != null and panel.has_method("set_research_focus"):
+		panel.set_research_focus(state)
+
+
+func research_focus_state() -> Dictionary:
+	var panel = get_node_or_null("ResearchFocusPanel")
+	if panel != null and panel.has_method("focus_state"):
+		return panel.focus_state()
+	return {}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildResearchUiQuery, parseResearchUiQuery } from './deeplink'
+import {
+  buildGodotObserverUrl,
+  buildResearchUiQuery,
+  parseResearchUiQuery,
+} from './deeplink'
 
 describe('research ui deeplink', () => {
   it('rejects credential-like query keys', () => {
@@ -48,5 +52,39 @@ describe('research ui deeplink', () => {
     expect(q).toContain('run_id=run-1')
     expect(q).toContain('view=traces')
     expect(q).not.toContain('token')
+  })
+})
+
+
+describe('godot focus links', () => {
+  it('preserves source-specific publication and qualified focus fields', () => {
+    const url = buildGodotObserverUrl({
+      runId: 'run-1',
+      tick: 4,
+      eventId: null,
+      sequence: null,
+      agentId: null,
+      debugger: false,
+      options: {
+        institution_id: 'concept-1',
+        entity_source: 'civilization',
+        native_kind: 'concept',
+        evidence_class: 'subjective',
+        identity_owner: 'agent-a',
+        owner_id: 'agent-a',
+        civilization_row_id: 'row-1',
+        civilization_publication_id: 'pub-1',
+        lineage_publication_id: undefined,
+        cohort_generation_index: 2,
+        cohort_entry_tick: 10,
+        cohort_id: 'cohort-a',
+      },
+    })
+    expect(url).toContain('institution_id=concept-1')
+    expect(url).toContain('civilization_publication_id=pub-1')
+    expect(url).not.toContain('lineage_publication_id')
+    expect(url).toContain('cohort_entry_tick=10')
+    expect(url).not.toContain('token=')
+    expect(url).not.toContain('secret')
   })
 })

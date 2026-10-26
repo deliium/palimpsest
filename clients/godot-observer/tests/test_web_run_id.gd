@@ -10,6 +10,7 @@ func run() -> Array:
 	_expect(failures, _parser(), "query parser")
 	_expect(failures, _debugger_state(), "debugger state")
 	_expect(failures, _session_cases(), "session query")
+	_expect(failures, _research_selectors(), "research selectors")
 	return failures
 
 
@@ -115,3 +116,40 @@ func _restore(previous: Variant, session: Node) -> void:
 func _expect(failures: Array, message: String, label: String) -> void:
 	if message != "":
 		failures.append("%s: %s" % [label, message])
+
+
+func _research_selectors() -> String:
+	var state := Origin.web_debugger_state(
+		"?run_id=run-1&tick=4&cohort_generation_index=2&cohort_entry_tick=10&cohort_id=c&technology_id=tech-1&entity_source=civilization&native_kind=technology&civilization_row_id=row-1&identity_owner=agent-a&evidence_class=ANALYTICAL"
+	)
+	if str(state.get("reason_code", "")) != "":
+		return "valid selectors rejected: %s" % str(state.get("reason_code", ""))
+	if int(state.get("tick", -1)) != 4:
+		return "tick missing"
+	if int(state.get("cohort_generation_index", -1)) != 2:
+		return "cohort generation missing"
+	if str(state.get("technology_id", "")) != "tech-1":
+		return "technology focus missing"
+	if str(state.get("entity_source", "")) != "civilization":
+		return "entity source missing"
+	if str(state.get("evidence_class", "")) != "analytical":
+		return "evidence class not normalized"
+	var stale := Origin.web_debugger_state("?run_id=r&tick=0&sequence=1")
+	if str(stale.get("reason_code", "")) != "incomplete_event_cursor":
+		return "sequence without tick not rejected"
+	var ambiguous := Origin.web_debugger_state("?run_id=r&agent_id=a&location_id=l")
+	if str(ambiguous.get("reason_code", "")) != "ambiguous_entity_focus":
+		return "ambiguous focus not rejected"
+	var cohort := Origin.web_debugger_state("?run_id=r&cohort_id=c")
+	if str(cohort.get("reason_code", "")) != "incomplete_cohort_selection":
+		return "incomplete cohort not rejected"
+	var secret := Origin.web_debugger_state("?run_id=r&Token=x")
+	if str(secret.get("reason_code", "")) != "query_string_secret":
+		return "case-insensitive secret rejection missing"
+	var duplicate := Origin.web_debugger_state("?run_id=a&run_id=b")
+	if str(duplicate.get("reason_code", "")) != "duplicate_query_key":
+		return "duplicate key not rejected"
+	var overflow := Origin.web_debugger_state("?run_id=r&tick=9007199254740992")
+	if str(overflow.get("reason_code", "")) != "invalid_tick":
+		return "unsafe integer not rejected"
+	return ""

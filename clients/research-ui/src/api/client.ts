@@ -23,9 +23,10 @@ export class ApiClientError extends Error {
 
 export type FetchOptions = {
   capability: CapabilitySlot
-  query?: Record<string, string | number | undefined | null>
+  query?: Record<string, string | number | undefined | null> | undefined
   method?: 'GET' | 'POST'
-  body?: unknown
+  body?: unknown | undefined
+  signal?: AbortSignal | undefined
 }
 
 function buildUrl(path: string, query?: FetchOptions['query']): string {
@@ -41,10 +42,10 @@ function buildUrl(path: string, query?: FetchOptions['query']): string {
   return url.pathname + url.search
 }
 
-export async function apiFetch<T>(
+export async function apiFetchResponse(
   path: string,
   options: FetchOptions,
-): Promise<T> {
+): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
   }
@@ -66,6 +67,9 @@ export async function apiFetch<T>(
   if (options.body !== undefined) {
     init.body = JSON.stringify(options.body)
   }
+  if (options.signal !== undefined) {
+    init.signal = options.signal
+  }
   const response = await fetch(url, init)
 
   if (import.meta.env.DEV) {
@@ -86,7 +90,14 @@ export async function apiFetch<T>(
     }
     throw new ApiClientError(response.status, code)
   }
+  return response
+}
 
+export async function apiFetch<T>(
+  path: string,
+  options: FetchOptions,
+): Promise<T> {
+  const response = await apiFetchResponse(path, options)
   return (await response.json()) as T
 }
 
@@ -615,4 +626,24 @@ export function compareBranches(body: {
       include_event_kind_counts: body.include_event_kind_counts ?? true,
     },
   })
+}
+
+export function getMatrixCell(
+  matrixId: string,
+  cellId: string,
+): Promise<Record<string, unknown>> {
+  return apiFetch<Record<string, unknown>>(
+    `/v1/research/matrices/${encodeURIComponent(matrixId)}/cells/${encodeURIComponent(cellId)}`,
+    { capability: 'objective_inspection' },
+  )
+}
+
+export function getMatrixCellMetrics(
+  matrixId: string,
+  cellId: string,
+): Promise<unknown> {
+  return apiFetch<unknown>(
+    `/v1/research/matrices/${encodeURIComponent(matrixId)}/cells/${encodeURIComponent(cellId)}/metrics`,
+    { capability: 'objective_inspection' },
+  )
 }

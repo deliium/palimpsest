@@ -1,8 +1,12 @@
 import {
-  type ResearchUiDeepLink,
+  RESEARCH_UI_VIEWS,
+  buildResearchSelectionPath,
+  emptyResearchSelection,
+  parseResearchSelection,
+  type ResearchSelection,
   type ResearchUiView,
-  parseResearchUiQuery,
-} from './deeplink'
+} from './research/selection'
+import type { ResearchUiDeepLink } from './deeplink'
 import { stripSecretQueryKeys } from './auth/credentials'
 
 export type Route =
@@ -13,21 +17,19 @@ export type Route =
       kind: 'run'
       runId: string
       view: ResearchUiView
+      selection: ResearchSelection
       deepLink: ResearchUiDeepLink
     }
+  | { kind: 'route_error'; code: string }
   | { kind: 'not_found' }
 
-const RUN_VIEWS = new Set<ResearchUiView>([
-  'overview',
-  'graphs',
-  'agent',
-  'analytics',
-  'societies',
-  'institutions',
-  'contact',
-  'traces',
-  'compare',
-])
+const RUN_VIEWS = new Set<ResearchUiView>(
+  RESEARCH_UI_VIEWS.filter((view) => view !== 'matrix'),
+)
+
+function isRunView(value: string): value is ResearchUiView {
+  return RUN_VIEWS.has(value as ResearchUiView)
+}
 
 export function parsePathname(pathname: string): {
   kind: Route['kind']
@@ -49,20 +51,61 @@ export function parsePathname(pathname: string): {
   if (path === '/matrix' || path === '/matrix/') {
     return { kind: 'matrix_list' }
   }
-  const matrixMatch = /^\/matrix\/([^/]+)\/?$/.exec(path)
-  if (matrixMatch !== null) {
-    return { kind: 'matrix_detail', matrixId: decodeURIComponent(matrixMatch[1] ?? '') }
-  }
-  const runMatch = /^\/runs\/([^/]+)(?:\/([^/]+))?\/?$/.exec(path)
-  if (runMatch !== null) {
-    const runId = decodeURIComponent(runMatch[1] ?? '')
-    const tab = (runMatch[2] ?? 'overview').toLowerCase()
-    const viewHint = RUN_VIEWS.has(tab as ResearchUiView)
-      ? (tab as ResearchUiView)
-      : 'overview'
-    return { kind: 'run', runId, viewHint }
+  try {
+    const matrixMatch = /^\/matrix\/([^/]+)\/?$/.exec(path)
+    if (matrixMatch !== null) {
+      return {
+        kind: 'matrix_detail',
+        matrixId: decodeURIComponent(matrixMatch[1] ?? ''),
+      }
+    }
+    const runMatch = /^\/runs\/([^/]+)(?:\/([^/]+))?\/?$/.exec(path)
+    if (runMatch !== null) {
+      const runId = decodeURIComponent(runMatch[1] ?? '')
+      const tab = (runMatch[2] ?? 'overview').toLowerCase()
+      const viewHint = isRunView(tab) ? (tab as ResearchUiView) : 'overview'
+      return { kind: 'run', runId, viewHint }
+    }
+  } catch {
+    return { kind: 'not_found' }
   }
   return { kind: 'not_found' }
+}
+
+export function selectionToDeepLink(
+  selection: ResearchSelection,
+): ResearchUiDeepLink {
+  return {
+    runId: selection.runId,
+    tick: selection.tick,
+    eventId: selection.eventId,
+    sequence: selection.sequence,
+    agentId:
+      selection.focus?.kind === 'agent' && selection.focus.source === 'objective'
+        ? selection.focus.agentId
+        : null,
+    view: selection.view,
+  }
+}
+
+function runRoute(
+  runId: string,
+  view: ResearchUiView,
+  selection: ResearchSelection,
+): Route {
+  const resolved: ResearchSelection = { ...selection, runId, view }
+  return {
+    kind: 'run',
+    runId,
+    view,
+    selection: resolved,
+    deepLink: selectionToDeepLink(resolved),
+  }
+}
+
+function explicitRunView(search: string): ResearchUiView | null {
+  const raw = (new URLSearchParams(search).get('view') ?? '').trim().toLowerCase()
+  return raw !== '' && isRunView(raw) ? (raw as ResearchUiView) : null
 }
 
 export function resolveRoute(
@@ -75,22 +118,7 @@ export function resolveRoute(
   }
 
   const parsed = parsePathname(pathname)
-  const deep = parseResearchUiQuery(cleaned)
-
-  if (parsed.kind === 'run_list') {
-    if (deep.ok && deep.state.runId !== null) {
-      return {
-        kind: 'run',
-        runId: deep.state.runId,
-        view: deep.state.view === 'matrix' ? 'overview' : deep.state.view,
-        deepLink: deep.state,
-      }
-    }
-    if (deep.ok && deep.state.view === 'matrix') {
-      return { kind: 'matrix_list' }
-    }
-    return { kind: 'run_list' }
-  }
+  const deep = parseResearchSelection(cleaned)
 
   if (parsed.kind === 'matrix_list') {
     return { kind: 'matrix_list' }
@@ -99,70 +127,75 @@ export function resolveRoute(
     return { kind: 'matrix_detail', matrixId: parsed.matrixId }
   }
 
+  if (parsed.kind === 'run_list') {
+    if (!deep.ok) {
+      return { kind: 'route_error', code: deep.reasonCode }
+    }
+    if (deep.selection.view === 'matrix') {
+      return { kind: 'matrix_list' }
+    }
+    if (deep.selection.runId !== null) {
+      const view = explicitRunView(cleaned) ?? 'overview'
+      return runRoute(deep.selection.runId, view, deep.selection)
+    }
+    return { kind: 'run_list' }
+  }
+
   if (parsed.kind === 'run' && parsed.runId !== undefined) {
-    const view =
-      deep.ok && deep.state.view !== 'matrix'
-        ? deep.state.view
-        : (parsed.viewHint ?? 'overview')
-    const deepLink: ResearchUiDeepLink = deep.ok
-      ? {
-          ...deep.state,
-          runId: parsed.runId,
-          view: view === 'matrix' ? 'overview' : view,
-        }
-      : {
-          runId: parsed.runId,
-          tick: null,
-          eventId: null,
-          sequence: null,
-          agentId: null,
-          view: view === 'matrix' ? 'overview' : view,
-        }
-    if (import.meta.env.DEV) {
-      console.debug(
-        `research_ui_deeplink_applied run_id=${deepLink.runId ?? ''} view=${deepLink.view}`,
-      )
+    if (!deep.ok) {
+      return { kind: 'route_error', code: deep.reasonCode }
     }
-    return {
-      kind: 'run',
-      runId: parsed.runId,
-      view: deepLink.view,
-      deepLink,
+    if (deep.selection.runId !== null && deep.selection.runId !== parsed.runId) {
+      return { kind: 'route_error', code: 'conflicting_run_id' }
     }
+    const view = explicitRunView(cleaned) ?? parsed.viewHint ?? 'overview'
+    return runRoute(parsed.runId, view, deep.selection)
   }
 
   return { kind: 'not_found' }
 }
 
-export function runPath(runId: string, view: ResearchUiView = 'overview'): string {
+export function runPath(
+  runId: string,
+  view: ResearchUiView = 'overview',
+): string {
   const tab = view === 'overview' ? '' : `/${view}`
   return `/research/runs/${encodeURIComponent(runId)}${tab}`
+}
+
+export function selectionPath(selection: ResearchSelection): string {
+  return buildResearchSelectionPath(selection)
+}
+
+export function navigateToSelection(
+  selection: ResearchSelection,
+  mode: 'push' | 'replace' = 'push',
+): void {
+  const url = buildResearchSelectionPath(selection)
+  if (typeof history === 'undefined') {
+    return
+  }
+  if (mode === 'replace') {
+    history.replaceState(null, '', url)
+  } else {
+    history.pushState(null, '', url)
+  }
+  window.dispatchEvent(new PopStateEvent('popstate'))
 }
 
 export function pushRunRoute(
   runId: string,
   view: ResearchUiView,
-  deepLink?: Partial<ResearchUiDeepLink>,
+  selection: Partial<ResearchSelection> = {},
+  mode: 'push' | 'replace' = 'push',
 ): void {
-  const params = new URLSearchParams()
-  params.set('run_id', runId)
-  if (view !== 'overview') {
-    params.set('view', view)
-  }
-  if (deepLink?.tick != null) {
-    params.set('tick', String(deepLink.tick))
-  }
-  if (deepLink?.eventId) {
-    params.set('event_id', deepLink.eventId)
-  }
-  if (deepLink?.sequence != null) {
-    params.set('sequence', String(deepLink.sequence))
-  }
-  if (deepLink?.agentId) {
-    params.set('agent_id', deepLink.agentId)
-  }
-  const q = params.toString()
-  const url = `${runPath(runId, view)}${q === '' ? '' : `?${q}`}`
-  history.pushState(null, '', url)
-  window.dispatchEvent(new PopStateEvent('popstate'))
+  navigateToSelection(
+    {
+      ...emptyResearchSelection(),
+      ...selection,
+      runId,
+      view,
+    },
+    mode,
+  )
 }

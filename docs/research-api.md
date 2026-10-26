@@ -144,3 +144,60 @@ carrier count, hop count, first/last tick, and opaque root/source IDs.
 The existing `/cultural-narratives` route is unchanged. The overlay reads only
 the owner checkpoint, never another owner's ledger, record text, mark bodies,
 or story tokens. No observer semantic type, protocol, or Godot layout changes.
+
+## Generational research reads (V3-42)
+
+These are read-only, additive `/v1` routes. They do not start runs, repair
+artifacts, enable capture, or run analysis inside HTTP.
+
+### Cultural artifact endpoints
+
+- `GET /v1/research/matrices/{matrix_id}/cultural-comparison`
+- `GET /v1/research/matrices/{matrix_id}/cells/{cell_id}/cultural-metrics`
+- `GET /v1/research/matrices/{matrix_id}/cells/{cell_id}/cultural-evidence?section=boundaries|traits|transmission|groups|archives&…`
+
+The first two return stored document bodies unchanged with
+`X-Palimpsest-Artifact-Binding: runtime_bound|legacy_unverified` and
+`Cache-Control: no-store`. Comparison reads bind `matrix_fingerprint` to a real
+runtime manifest or are visibly legacy-unverified; no self-digest is invented.
+Cell metrics require a completed runtime state and matching
+`cells/{cell_id}.completion.json`; completed state alone is `409
+research_cell_incomplete`. Structural read validation is not trusted scientific
+re-verification.
+
+The evidence page requires `subjective_debug` and returns
+`research-cultural-evidence-page-v1`. Page inputs: `section`, inclusive
+`from_tick`, exclusive `to_tick`, `owner_id`, `dimension` (boundaries/traits
+only), `limit` (default 100, max 200), and a signed `cursor`. Pages are bounded
+to 2 MiB; oversized pages shrink before encoding and a single oversized row is
+`413 research_artifact_too_large`. Changed pair bytes return `409
+research_snapshot_changed`; expired/tampered/filter-mismatched cursors return
+`400 invalid_research_cursor`.
+
+Outer JSON is bounded to 64 MiB/depth 32 and nested `values.rows_json` to
+16 MiB/depth 32, with duplicate-key and non-finite rejection. Over-size is `413
+research_artifact_too_large`; missing root is `503`; missing artifact is `404
+matrix_file_missing`; corrupt/unsupported content uses a safe `400` code.
+
+### Retained semantic history
+
+`GET /v1/simulations/{run_id}/observer/agents/{agent_id}/semantic-history`
+requires `subjective_debug`.
+
+Query: `source=label|composition`, optional checkpoint `tick`, inclusive
+`from_tick`, exclusive `to_tick`, signed `after`, `limit` (max 200). The
+`observer-semantic-history-v1` envelope names the requested tick, checkpoint
+tick, retained first/last tick, `retained_only=true`, conservative
+`prefix_complete=false`, per-term retained first ordinal/current revision, and
+rows. Different checkpoint ticks return an explicit unavailable state; a changed
+checkpoint or credential scope returns `409 semantic_checkpoint_changed` or
+`400 invalid_research_cursor`. No arbitrary historical subjective restart is
+claimed, and no label tokens, composition parts or raw referent IDs are exposed.
+
+### Manifest compatibility
+
+Matrix listing/cell discovery accepts both exported `experiment-matrix-v1`
+manifests and real producer `matrix-manifest-v1` documents with
+`matrix_schema_version=experiment-matrix-v1`. Runtime listings use only declared
+cell IDs; legacy exports exclude `.completion.json`, `.metrics.json`,
+`.cultural-evidence.json`, `.cultural-metrics.json` and other known sidecars.

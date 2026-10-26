@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  epistemicFromCivilizationClass,
   epistemicFromDebuggerArtifact,
   epistemicFromEvidenceClass,
+  epistemicFromLineageClass,
   epistemicFromOverlayKind,
+  evidenceAttribution,
 } from './epistemic'
 
 describe('epistemic mapping', () => {
@@ -94,6 +97,27 @@ describe('epistemic mapping', () => {
     expect(epistemicFromOverlayKind('society_divergence')).toBe('research_inference')
     expect(epistemicFromOverlayKind('society_isolation')).toBe('research_inference')
     expect(epistemicFromEvidenceClass('ANALYTICAL_INFERRED')).toBe('research_inference')
+  })
+
+  it('maps lowercase lineage and uppercase civilization classes without adding classes', () => {
+    expect(epistemicFromLineageClass('objective')).toBe('objective_world')
+    expect(epistemicFromLineageClass('subjective')).toBe('agent_belief')
+    expect(epistemicFromLineageClass('analytical')).toBe('research_inference')
+    expect(epistemicFromCivilizationClass('OBJECTIVE')).toBe('objective_world')
+    expect(epistemicFromCivilizationClass('SUBJECTIVE')).toBe('agent_belief')
+    expect(epistemicFromCivilizationClass('ANALYTICAL')).toBe('research_inference')
+    expect(
+      evidenceAttribution('subjective', 'lineage', 'agent-alice'),
+    ).toEqual({
+      epistemic: 'agent_belief',
+      ownerId: 'agent-alice',
+      source: 'lineage',
+    })
+    expect(evidenceAttribution('ANALYTICAL', 'civilization')).toEqual({
+      epistemic: 'research_inference',
+      ownerId: null,
+      source: 'civilization',
+    })
   })
 
   it('maps debugger artifact kinds', () => {

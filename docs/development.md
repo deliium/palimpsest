@@ -461,3 +461,48 @@ separation. Missing Docker, image, Playwright, or the pinned editor is an
 unexecuted gate, not a pass. See
 [Godot civilization overlays](godot-civilization-overlays.md#verification-handoff)
 for the measured handoff and real-versus-constructed provenance.
+
+## Generational Research UI verification (V3-42)
+
+Run from the repository root:
+
+```bash
+pnpm --dir clients/research-ui check
+pnpm --dir clients/research-ui test
+pnpm --dir clients/research-ui build
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term \
+  tests/architecture \
+  tests/unit/test_v1_regression_gate.py \
+  tests/unit/test_v2_scientific_invariants.py \
+  tests/unit/test_research_ui_state.py \
+  tests/unit/test_research_matrix_fs.py \
+  tests/unit/test_research_cultural_api.py \
+  tests/unit/test_semantic_history_api.py \
+  tests/unit/test_semantic_history_projection.py \
+  tests/unit/test_observer_population_replay.py \
+  tests/unit/test_observer_demographic_api.py \
+  tests/unit/test_lineage_api.py \
+  tests/unit/test_civilization_overlay_api.py \
+  tests/unit/test_benchmark_research_ui_artifacts.py -q
+```
+
+Optional pinned gates:
+
+```bash
+"${GODOT_BIN}" --headless --editor --path clients/godot-observer --quit
+"${GODOT_BIN}" --headless --path clients/godot-observer --script res://tests/run_protocol.gd
+uv run --frozen --python 3.12.14 pytest -m compose \
+  tests/compose/test_generational_research_ui_browser.py -q
+```
+
+The browser file skips unless `PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL` and
+`PALIMPSEST_COMPOSE_RESEARCH_RUN_ID` point at a running prebuilt SPA. Godot
+commands require the pinned 4.7.2 binary. Report unavailable prerequisites as
+UNEXECUTED; do not treat them as passing.
+
+Cultural browser proofs should use the trusted helpers for
+`tests/fixtures/matrices/v3-cultural-metrics.json` and
+`tests/fixtures/cultural_metrics/known-lineage-v1.json`. Constructed lineage,
+civilization, teaching or institution presentation fixtures prove rendering
+only, not emergent learning or institutions. Unit/mounted tests never write to
+artifact roots; API reads keep filesystem bytes unchanged.

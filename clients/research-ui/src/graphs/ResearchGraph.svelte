@@ -9,6 +9,9 @@
     epistemic: EpistemicClass
     elements: ElementDefinition[]
     emptyMessage?: string
+    layout?: 'cose' | 'breadthfirst'
+    onNodeSelect?: (key: string) => void
+    onEdgeSelect?: (key: string) => void
   }
 
   let {
@@ -16,6 +19,9 @@
     epistemic,
     elements,
     emptyMessage = 'No graph nodes in the current window.',
+    layout = 'cose',
+    onNodeSelect,
+    onEdgeSelect,
   }: Props = $props()
 
   let host: HTMLDivElement | undefined = $state()
@@ -44,6 +50,36 @@
           },
         },
         {
+          selector: 'node.matched',
+          style: {
+            'border-width': 2,
+            'border-color': '#1c2428',
+          },
+        },
+        {
+          selector: 'node.context_only',
+          style: {
+            'border-width': 2,
+            'border-style': 'dashed',
+            'border-color': '#5a6a72',
+            color: '#5a6a72',
+          },
+        },
+        {
+          selector: 'node.research_inference',
+          style: {
+            'background-color': '#6a5420',
+            shape: 'diamond',
+          },
+        },
+        {
+          selector: 'node.agent_belief',
+          style: {
+            'background-color': '#6a3050',
+            shape: 'round-rectangle',
+          },
+        },
+        {
           selector: 'edge',
           style: {
             width: 1.5,
@@ -54,7 +90,13 @@
           },
         },
       ],
-      layout: { name: 'cose', animate: false },
+      layout: { name: layout, animate: false, directed: true },
+    })
+    cy.on('tap', 'node', (event) => {
+      onNodeSelect?.(String(event.target.id()))
+    })
+    cy.on('tap', 'edge', (event) => {
+      onEdgeSelect?.(String(event.target.id()))
     })
     if (import.meta.env.DEV) {
       console.debug(
@@ -86,6 +128,21 @@
     <p class="empty">{emptyMessage}</p>
   {:else}
     <div class="canvas" bind:this={host}></div>
+    <ul class="accessible-nodes" aria-label="Graph nodes">
+      {#each elements.filter((element) => element.group === 'nodes') as element (element.data?.id)}
+        <li>
+          <button
+            type="button"
+            onclick={() => onNodeSelect?.(String(element.data?.id))}
+          >
+            {element.data?.label ?? element.data?.id}
+            {#if typeof element.data?.epistemic === 'string'}
+              <span class="muted">({element.data.epistemic})</span>
+            {/if}
+          </button>
+        </li>
+      {/each}
+    </ul>
   {/if}
 </article>
 
@@ -116,5 +173,25 @@
     margin: 0;
     color: #5a6a72;
     font-style: italic;
+  }
+
+  .accessible-nodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+  }
+
+  .accessible-nodes button {
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .muted {
+    color: #5a6a72;
+    font-size: 0.7rem;
   }
 </style>

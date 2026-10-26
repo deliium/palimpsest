@@ -1,0 +1,450 @@
+{
+  "version": 1,
+  "description": "Language-neutral canonical Research UI link corpus shared by TypeScript, Python and (later) Godot tests.",
+  "valid": [
+    {
+      "name": "legacy run tick event agent",
+      "query": "?run_id=run-1&tick=12&event_id=evt-1&sequence=3&agent_id=agent-alice&view=graphs",
+      "state": {
+        "run_id": "run-1",
+        "view": "graphs",
+        "tick": 12,
+        "event_id": "evt-1",
+        "sequence": 3,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "objective",
+        "focus": {
+          "kind": "agent",
+          "source": "objective",
+          "native_id": "agent-alice",
+          "family": null,
+          "native_kind": null,
+          "identity_owner": null,
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=graphs&tick=12&event_id=evt-1&sequence=3&agent_id=agent-alice&evidence_class=objective"
+    },
+    {
+      "name": "legacy aliases agree",
+      "query": "?run_id=run-1&agent=agent-alice&event=evt-9&tick=2&sequence=0&view=agent",
+      "state": {
+        "run_id": "run-1",
+        "view": "agent",
+        "tick": 2,
+        "event_id": "evt-9",
+        "sequence": 0,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "objective",
+        "focus": {
+          "kind": "agent",
+          "source": "objective",
+          "native_id": "agent-alice",
+          "family": null,
+          "native_kind": null,
+          "identity_owner": null,
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=agent&tick=2&event_id=evt-9&sequence=0&agent_id=agent-alice&evidence_class=objective"
+    },
+    {
+      "name": "matrix without run",
+      "query": "?view=matrix",
+      "state": {
+        "run_id": null,
+        "view": "matrix",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": null,
+        "focus": null
+      },
+      "canonical_query": "?view=matrix"
+    },
+    {
+      "name": "population generation navigation",
+      "query": "?run_id=run-1&view=population&generation_index=3&tick=40",
+      "state": {
+        "run_id": "run-1",
+        "view": "population",
+        "tick": 40,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": 3,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": null,
+        "focus": null
+      },
+      "canonical_query": "?run_id=run-1&view=population&tick=40&generation_index=3"
+    },
+    {
+      "name": "cohort full identity first entry",
+      "query": "?run_id=run-1&view=cohorts&tick=10&cohort_generation_index=2&cohort_entry_tick=10&cohort_id=cohort-a&generation_index=2",
+      "state": {
+        "run_id": "run-1",
+        "view": "cohorts",
+        "tick": 10,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": 2,
+        "cohort": {
+          "cohort_generation_index": 2,
+          "cohort_entry_tick": 10,
+          "cohort_id": "cohort-a"
+        },
+        "owner_id": null,
+        "evidence_class": null,
+        "focus": null
+      },
+      "canonical_query": "?run_id=run-1&view=cohorts&tick=10&generation_index=2&cohort_generation_index=2&cohort_entry_tick=10&cohort_id=cohort-a"
+    },
+    {
+      "name": "reused cohort id at another entry",
+      "query": "?run_id=run-1&view=cohorts&tick=50&cohort_generation_index=3&cohort_entry_tick=50&cohort_id=cohort-a&generation_index=2",
+      "state": {
+        "run_id": "run-1",
+        "view": "cohorts",
+        "tick": 50,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": 2,
+        "cohort": {
+          "cohort_generation_index": 3,
+          "cohort_entry_tick": 50,
+          "cohort_id": "cohort-a"
+        },
+        "owner_id": null,
+        "evidence_class": null,
+        "focus": null
+      },
+      "canonical_query": "?run_id=run-1&view=cohorts&tick=50&generation_index=2&cohort_generation_index=3&cohort_entry_tick=50&cohort_id=cohort-a"
+    },
+    {
+      "name": "objective genealogy lineage focus",
+      "query": "?run_id=run-1&view=lineage&tick=5&agent_id=agent-alice&entity_source=lineage&native_kind=agent&lineage_family=genealogy&lineage_node_key=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&lineage_publication_id=pub-1&evidence_class=objective",
+      "state": {
+        "run_id": "run-1",
+        "view": "lineage",
+        "tick": 5,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "objective",
+        "focus": {
+          "kind": "agent",
+          "source": "lineage",
+          "native_id": "agent-alice",
+          "family": "genealogy",
+          "native_kind": "agent",
+          "identity_owner": null,
+          "node_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "row_id": null,
+          "publication_id": "pub-1"
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=lineage&tick=5&agent_id=agent-alice&entity_source=lineage&native_kind=agent&lineage_family=genealogy&lineage_node_key=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&lineage_publication_id=pub-1&evidence_class=objective"
+    },
+    {
+      "name": "subjective knowledge lineage focus",
+      "query": "?run_id=run-1&view=lineage&technology_id=knowledge-entry-1&entity_source=lineage&native_kind=knowledge_entry&lineage_family=knowledge&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective",
+      "state": {
+        "run_id": "run-1",
+        "view": "lineage",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": "agent-alice",
+        "evidence_class": "subjective",
+        "focus": {
+          "kind": "technology",
+          "source": "lineage",
+          "native_id": "knowledge-entry-1",
+          "family": "knowledge",
+          "native_kind": "knowledge_entry",
+          "identity_owner": "agent-alice",
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=lineage&technology_id=knowledge-entry-1&entity_source=lineage&native_kind=knowledge_entry&lineage_family=knowledge&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective"
+    },
+    {
+      "name": "analytical technology lineage focus",
+      "query": "?run_id=run-1&view=technology&technology_id=technique-1&entity_source=lineage&native_kind=technique&lineage_family=technology&identity_owner=agent-bob&evidence_class=analytical",
+      "state": {
+        "run_id": "run-1",
+        "view": "technology",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "analytical",
+        "focus": {
+          "kind": "technology",
+          "source": "lineage",
+          "native_id": "technique-1",
+          "family": "technology",
+          "native_kind": "technique",
+          "identity_owner": "agent-bob",
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=technology&technology_id=technique-1&entity_source=lineage&native_kind=technique&lineage_family=technology&identity_owner=agent-bob&evidence_class=analytical"
+    },
+    {
+      "name": "analytical institution lineage focus",
+      "query": "?run_id=run-1&view=institutions&institution_id=episode-1&entity_source=lineage&native_kind=institution_episode&lineage_family=institution&identity_owner=agent-carol&evidence_class=analytical",
+      "state": {
+        "run_id": "run-1",
+        "view": "institutions",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "analytical",
+        "focus": {
+          "kind": "institution",
+          "source": "lineage",
+          "native_id": "episode-1",
+          "family": "institution",
+          "native_kind": "institution_episode",
+          "identity_owner": "agent-carol",
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=institutions&institution_id=episode-1&entity_source=lineage&native_kind=institution_episode&lineage_family=institution&identity_owner=agent-carol&evidence_class=analytical"
+    },
+    {
+      "name": "subjective office succession focus",
+      "query": "?run_id=run-1&view=institutions&institution_id=office-1&entity_source=lineage&native_kind=office&lineage_family=office_succession&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective",
+      "state": {
+        "run_id": "run-1",
+        "view": "institutions",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": "agent-alice",
+        "evidence_class": "subjective",
+        "focus": {
+          "kind": "institution",
+          "source": "lineage",
+          "native_id": "office-1",
+          "family": "office_succession",
+          "native_kind": "office",
+          "identity_owner": "agent-alice",
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=institutions&institution_id=office-1&entity_source=lineage&native_kind=office&lineage_family=office_succession&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective"
+    },
+    {
+      "name": "subjective institution concept civilization focus",
+      "query": "?run_id=run-1&view=institutions&institution_id=concept-1&entity_source=civilization&native_kind=concept&civilization_row_id=row-1&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective",
+      "state": {
+        "run_id": "run-1",
+        "view": "institutions",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": "agent-alice",
+        "evidence_class": "subjective",
+        "focus": {
+          "kind": "institution",
+          "source": "civilization",
+          "native_id": "concept-1",
+          "family": null,
+          "native_kind": "concept",
+          "identity_owner": "agent-alice",
+          "node_key": null,
+          "row_id": "row-1",
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=institutions&institution_id=concept-1&entity_source=civilization&native_kind=concept&civilization_row_id=row-1&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective"
+    },
+    {
+      "name": "analytical technology civilization publication",
+      "query": "?run_id=run-1&view=technology&technology_id=tech-1&entity_source=civilization&native_kind=technology&civilization_publication_id=cpub-1&civilization_row_id=row-2&identity_owner=agent-bob&evidence_class=analytical",
+      "state": {
+        "run_id": "run-1",
+        "view": "technology",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "analytical",
+        "focus": {
+          "kind": "technology",
+          "source": "civilization",
+          "native_id": "tech-1",
+          "family": null,
+          "native_kind": "technology",
+          "identity_owner": "agent-bob",
+          "node_key": null,
+          "row_id": "row-2",
+          "publication_id": "cpub-1"
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=technology&technology_id=tech-1&entity_source=civilization&native_kind=technology&civilization_publication_id=cpub-1&civilization_row_id=row-2&identity_owner=agent-bob&evidence_class=analytical"
+    },
+    {
+      "name": "escaped ids",
+      "query": "?run_id=run+one&view=population&agent_id=agent+one",
+      "state": {
+        "run_id": "run one",
+        "view": "population",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "objective",
+        "focus": {
+          "kind": "agent",
+          "source": "objective",
+          "native_id": "agent one",
+          "family": null,
+          "native_kind": null,
+          "identity_owner": null,
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run+one&view=population&agent_id=agent+one&evidence_class=objective"
+    },
+    {
+      "name": "subjective culture owner filter",
+      "query": "?run_id=run-1&view=culture&owner_id=agent-alice&evidence_class=subjective",
+      "state": {
+        "run_id": "run-1",
+        "view": "culture",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": "agent-alice",
+        "evidence_class": "subjective",
+        "focus": null
+      },
+      "canonical_query": "?run_id=run-1&view=culture&owner_id=agent-alice&evidence_class=subjective"
+    },
+    {
+      "name": "objective location focus",
+      "query": "?run_id=run-1&view=migration&location_id=loc-1",
+      "state": {
+        "run_id": "run-1",
+        "view": "migration",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": null,
+        "evidence_class": "objective",
+        "focus": {
+          "kind": "location",
+          "source": "objective",
+          "native_id": "loc-1",
+          "family": null,
+          "native_kind": null,
+          "identity_owner": null,
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=migration&location_id=loc-1&evidence_class=objective"
+    },
+    {
+      "name": "subjective narrative lineage focus",
+      "query": "?run_id=run-1&view=language&narrative_id=variant-1&entity_source=lineage&native_kind=narrative_variant&lineage_family=narrative&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective",
+      "state": {
+        "run_id": "run-1",
+        "view": "language",
+        "tick": null,
+        "event_id": null,
+        "sequence": null,
+        "generation_index": null,
+        "cohort": null,
+        "owner_id": "agent-alice",
+        "evidence_class": "subjective",
+        "focus": {
+          "kind": "narrative",
+          "source": "lineage",
+          "native_id": "variant-1",
+          "family": "narrative",
+          "native_kind": "narrative_variant",
+          "identity_owner": "agent-alice",
+          "node_key": null,
+          "row_id": null,
+          "publication_id": null
+        }
+      },
+      "canonical_query": "?run_id=run-1&view=language&narrative_id=variant-1&entity_source=lineage&native_kind=narrative_variant&lineage_family=narrative&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective"
+    }
+  ],
+  "invalid": [
+    { "name": "credential key", "query": "?run_id=run-1&token=secret", "reason_code": "query_string_secret" },
+    { "name": "duplicate known key", "query": "?run_id=run-1&run_id=run-2", "reason_code": "duplicate_query_key" },
+    { "name": "ambiguous focus", "query": "?run_id=run-1&view=graphs&agent_id=a&location_id=l", "reason_code": "ambiguous_entity_focus" },
+    { "name": "missing lineage fields", "query": "?run_id=run-1&view=lineage&technology_id=t&entity_source=lineage", "reason_code": "missing_lineage_focus_fields" },
+    { "name": "subjective without owner", "query": "?run_id=run-1&view=lineage&technology_id=k&entity_source=lineage&native_kind=knowledge_entry&lineage_family=knowledge&evidence_class=subjective", "reason_code": "invalid_scope_owner" },
+    { "name": "subjective owner mismatch", "query": "?run_id=run-1&view=lineage&technology_id=k&entity_source=lineage&native_kind=knowledge_entry&lineage_family=knowledge&owner_id=alice&identity_owner=bob&evidence_class=subjective", "reason_code": "invalid_scope_owner" },
+    { "name": "analytical with scope owner", "query": "?run_id=run-1&view=lineage&technology_id=k&entity_source=lineage&native_kind=knowledge_entry&lineage_family=knowledge&owner_id=alice&identity_owner=alice&evidence_class=analytical", "reason_code": "invalid_scope_owner" },
+    { "name": "objective identity owner", "query": "?run_id=run-1&view=lineage&agent_id=a&entity_source=lineage&native_kind=agent&lineage_family=genealogy&identity_owner=alice&evidence_class=objective", "reason_code": "invalid_scope_owner" },
+    { "name": "family kind mismatch", "query": "?run_id=run-1&view=institutions&institution_id=e&entity_source=lineage&native_kind=institution_episode&lineage_family=office_succession&owner_id=alice&identity_owner=alice&evidence_class=subjective", "reason_code": "unsupported_family_kind" },
+    { "name": "narrative civilization", "query": "?run_id=run-1&view=language&narrative_id=n&entity_source=civilization&native_kind=narrative_variant&civilization_row_id=r&owner_id=alice&identity_owner=alice&evidence_class=subjective", "reason_code": "unsupported_family_kind" },
+    { "name": "civilization technology kind mismatch", "query": "?run_id=run-1&view=technology&technology_id=t&entity_source=civilization&native_kind=technique&civilization_row_id=r&identity_owner=alice&evidence_class=analytical", "reason_code": "unsupported_family_kind" },
+    { "name": "bad node key", "query": "?run_id=run-1&view=lineage&agent_id=a&entity_source=lineage&native_kind=agent&lineage_family=genealogy&lineage_node_key=abc&evidence_class=objective", "reason_code": "invalid_lineage_node_key" },
+    { "name": "incomplete cohort", "query": "?run_id=run-1&view=cohorts&cohort_id=c", "reason_code": "incomplete_cohort_selection" },
+    { "name": "sequence without tick", "query": "?run_id=run-1&view=graphs&sequence=3", "reason_code": "incomplete_event_cursor" },
+    { "name": "fractional tick", "query": "?run_id=run-1&tick=1.5", "reason_code": "invalid_tick" },
+    { "name": "negative tick", "query": "?run_id=run-1&tick=-1", "reason_code": "invalid_tick" },
+    { "name": "unsafe tick", "query": "?run_id=run-1&tick=9007199254740992", "reason_code": "invalid_tick" },
+    { "name": "conflicting aliases", "query": "?run_id=run-1&agent_id=a&agent=b", "reason_code": "conflicting_query_alias" },
+    { "name": "qualifier without focus", "query": "?run_id=run-1&identity_owner=alice", "reason_code": "focus_qualifier_without_focus" },
+    { "name": "ambiguous publication source", "query": "?run_id=run-1&view=lineage&agent_id=a&entity_source=lineage&native_kind=agent&lineage_family=genealogy&lineage_publication_id=p&civilization_publication_id=c&evidence_class=objective", "reason_code": "ambiguous_publication_source" },
+    { "name": "missing entity source", "query": "?run_id=run-1&view=institutions&institution_id=i&native_kind=episode&civilization_row_id=r&identity_owner=a&evidence_class=analytical", "reason_code": "missing_entity_source" },
+    { "name": "missing civilization row", "query": "?run_id=run-1&view=institutions&institution_id=i&entity_source=civilization&native_kind=episode&identity_owner=a&evidence_class=analytical", "reason_code": "missing_civilization_focus_fields" },
+    { "name": "subjective without focus owner", "query": "?run_id=run-1&view=culture&evidence_class=subjective", "reason_code": "missing_scope_owner" },
+    { "name": "objective with owner", "query": "?run_id=run-1&view=culture&owner_id=alice&evidence_class=objective", "reason_code": "invalid_scope_owner" },
+    { "name": "run scoped without run", "query": "?view=population", "reason_code": "run_id_missing" }
+  ]
+}

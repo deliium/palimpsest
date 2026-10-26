@@ -10,6 +10,7 @@
     type LedgerProjection,
     type MetricCatalogItem,
   } from '../api/client'
+  import { decodeMetricPayloadBase64 } from '../api/research'
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
 
   interface Props {
@@ -239,7 +240,7 @@
       let supportBands: string[] = []
       let scalars: Array<{ key: string; value: string }> = []
       try {
-        const json = JSON.parse(atob(doc.payload_b64)) as unknown
+        const json = decodeMetricPayloadBase64(doc.payload_b64)
         supportBands = extractSupportBands(json)
         scalars = extractScalars(json)
       } catch {
@@ -340,7 +341,6 @@
                 other.metric_set_id === item.metric_set_id,
             ) === index,
         )
-        .slice(0, 24)
       cards = await Promise.all(selected.map((item) => loadMetricCard(item)))
 
       if (agentId) {

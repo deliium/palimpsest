@@ -165,3 +165,43 @@ export function epistemicFromOverlayKind(kind: string): EpistemicClass {
 export function isEpistemicClass(value: string): value is EpistemicClass {
   return (EPISTEMIC_CLASSES as readonly string[]).includes(value)
 }
+
+export type EvidenceSource = 'lineage' | 'civilization' | 'observer'
+
+export type EvidenceAttribution = Readonly<{
+  epistemic: EpistemicClass
+  ownerId: string | null
+  source: EvidenceSource
+}>
+
+/** Lowercase lineage evidence classes map to the closed presentation classes. */
+export function epistemicFromLineageClass(value: string): EpistemicClass {
+  return epistemicFromEvidenceClass(value)
+}
+
+/** Uppercase civilization evidence classes map to the closed classes. */
+export function epistemicFromCivilizationClass(value: string): EpistemicClass {
+  return epistemicFromEvidenceClass(value)
+}
+
+/**
+ * Attribute one rendered series/node/edge, not just a panel heading.
+ * Owner is retained whenever the evidence class is owner-scoped.
+ */
+export function evidenceAttribution(
+  evidenceClass: string,
+  source: EvidenceSource,
+  ownerId: string | null = null,
+): EvidenceAttribution {
+  const epistemic =
+    source === 'lineage'
+      ? epistemicFromLineageClass(evidenceClass)
+      : source === 'civilization'
+        ? epistemicFromCivilizationClass(evidenceClass)
+        : epistemicFromEvidenceClass(evidenceClass)
+  return {
+    epistemic,
+    ownerId: epistemic === 'agent_belief' ? ownerId : null,
+    source,
+  }
+}

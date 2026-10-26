@@ -360,3 +360,51 @@ Coordinates are not logged at INFO. Relationship scores are not shown or logged.
 - [Read-only observer](observer.md) — frames, routes, and privacy
 - [Godot civilization overlays](godot-civilization-overlays.md) — optional V3 overlays and capture/history
 - [Research API](research-api.md) — capabilities, WebSocket cursors, and debug
+
+## Qualified research focus links (V3-42)
+
+Credential-free links may carry the canonical research selection. Godot accepts
+run/tick, an event prefix (`tick` + `sequence`), and exactly one focus among
+agent, location, institution, narrative or technology. Agent/location focus is
+objective frame selection. Research entities additionally carry:
+
+- `entity_source=lineage|civilization`
+- `evidence_class=objective|subjective|analytical`
+- `native_kind`, lineage `lineage_family`, `lineage_node_key`,
+  `lineage_publication_id`
+- `civilization_row_id`, `civilization_publication_id`
+- `identity_owner` (native identity namespace) and, for subjective scope,
+  `owner_id` (API scope owner)
+
+Examples:
+
+```text
+/?run_id=run-1&tick=40&institution_id=office-1&entity_source=lineage&lineage_family=office_succession&native_kind=office&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective
+/?run_id=run-1&tick=40&institution_id=concept-1&entity_source=civilization&native_kind=concept&civilization_row_id=row-1&owner_id=agent-alice&identity_owner=agent-alice&evidence_class=subjective
+/?run_id=run-1&tick=40&technology_id=knowledge-1&entity_source=civilization&native_kind=technology&civilization_row_id=row-2&identity_owner=agent-bob&evidence_class=analytical
+```
+
+Rules:
+
+- Tick-only links seek the exact boundary; tick+sequence seeks the committed
+  prefix. Focus waits for the requested run bootstrap and matching seek.
+- Analytical lineage queries omit API `owner_id` but keep the returned node's
+  `identity_owner`. No `publication_id`/`identity_owner` is sent as an
+  unsupported lineage query key; publication selection resolves through
+  snapshot discovery and exact returned identity checks.
+- Subjective institution concepts use civilization overlays, never an invalid
+  subjective `institution` lineage query. Office succession uses
+  `office_succession` subjective lineage; analytical episodes use `institution`
+  lineage without a scope owner.
+- Technology content keys are not native knowledge-entry IDs. Diffusion rows keep
+  the row ID/content key/source refs; anchors are evidence-at-tick grounding, not
+  proof of current residence.
+- A missing/ambiguous entity, absent capture or denied credential leaves a
+  visible reason in the ResearchFocusPanel. There is no label matching, latest-
+  location substitution or global current occupant.
+- Prefix-only selection can resolve agent/location, but captured lineage and
+  civilization focus shows `finalized_boundary_required` and offers explicit
+  full-boundary navigation.
+- Outbound Research links preserve source, class, native/identity/scope owners,
+  family/row and distinct publication namespaces. Credentials are entered
+  independently in each application.
