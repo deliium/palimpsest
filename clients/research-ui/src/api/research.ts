@@ -221,6 +221,78 @@ export function getLineageSnapshots(
   )
 }
 
+export type LineageSnapshotScan = {
+  snapshot: LineageSnapshot | null
+  items: LineageSnapshot[]
+  nextCursor: string | null
+  exhausted: boolean
+  pages: number
+}
+
+/**
+ * Bounded exact-boundary publication discovery. Never substitutes the first
+ * snapshot for a requested boundary; callers must surface scan_limited.
+ */
+export async function scanLineageSnapshots(
+  runId: string,
+  scope: LineageScopeInput,
+  query: {
+    boundaryTick: number
+    after?: string | null
+    limit?: number
+    maxPages?: number
+  },
+  signal?: AbortSignal,
+): Promise<LineageSnapshotScan> {
+  const limit = query.limit ?? 200
+  const maxPages = query.maxPages ?? 5
+  if (!Number.isSafeInteger(maxPages) || maxPages < 1) {
+    throw new ResearchResolutionError('invalid_snapshot_scan_budget')
+  }
+  const items: LineageSnapshot[] = []
+  let after = query.after ?? null
+  let pages = 0
+  while (pages < maxPages) {
+    const page = await getLineageSnapshots(
+      runId,
+      scope,
+      { after, limit },
+      signal,
+    )
+    pages += 1
+    items.push(...page.items)
+    const found = page.items.find(
+      (item) => item.boundary_tick === query.boundaryTick,
+    )
+    if (found !== undefined) {
+      return {
+        snapshot: found,
+        items,
+        nextCursor: null,
+        exhausted: true,
+        pages,
+      }
+    }
+    if (page.next_cursor === null) {
+      return {
+        snapshot: null,
+        items,
+        nextCursor: null,
+        exhausted: true,
+        pages,
+      }
+    }
+    after = page.next_cursor
+  }
+  return {
+    snapshot: null,
+    items,
+    nextCursor: after,
+    exhausted: false,
+    pages,
+  }
+}
+
 export type LineageNodeQuery = LineagePageQuery & {
   nativeKind?: string | null
   nativeId?: string | null

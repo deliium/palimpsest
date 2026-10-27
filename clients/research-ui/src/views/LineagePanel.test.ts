@@ -126,6 +126,268 @@ describe('lineage panel', () => {
     mounted.cleanup()
   })
 
+  it('resolves an exact boundary beyond the first 200 publications without fallback', async () => {
+    const snapshotCalls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/observer/run')) {
+          return json({
+            run_id: 'run-generational-23',
+            world_id: 'world-1',
+            tick: 16,
+            latest_tick: 16,
+            latest_sequence: 1,
+            parent_run_id: null,
+            fork_tick: null,
+            intervention_summary: null,
+            branch_id: null,
+            protocol_version: 'observer-protocol-v1',
+          })
+        }
+        if (url.includes('/lineage/families')) {
+          return json(fixture('lineage_families'))
+        }
+        if (url.includes('/snapshots')) {
+          snapshotCalls.push(url)
+          const parsed = new URL(url, 'http://localhost')
+          const after = parsed.searchParams.get('after')
+          if (after === null) {
+            const items = Array.from({ length: 200 }, (_, index) => ({
+              publication_id: `publication-old-${index}`,
+              digest: 'b'.repeat(64),
+              boundary_tick: 1000 + index,
+              schema_version: 'lineage-snapshot-v1',
+            }))
+            return json({
+              schema_version: 'lineage-snapshot-list-v1',
+              items,
+              declared_count: items.length,
+              next_cursor: 'page-2',
+              coverage: null,
+            })
+          }
+          return json(fixture('lineage_snapshots'))
+        }
+        if (url.includes('/nodes')) {
+          return json(fixture('lineage_nodes'))
+        }
+        if (url.includes('/traverse')) {
+          return json(graphFixture())
+        }
+        return json({}, 404)
+      }),
+    )
+    const mounted = render(LineagePanel as never, {
+      runId: 'run-generational-23',
+      selection: emptyResearchSelection({
+        runId: 'run-generational-23',
+        view: 'lineage',
+        tick: 16,
+      }),
+      onSelectionChange: vi.fn(),
+    })
+    await settle()
+    await settle()
+    expect(snapshotCalls.length).toBe(2)
+    expect(mounted.target.textContent).toContain('agent-founder')
+    expect(mounted.target.textContent).not.toContain('Showing explicit published boundary')
+    mounted.cleanup()
+  })
+
+  it('reports scan_limited instead of substituting another publication', async () => {
+    let snapshotCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/observer/run')) {
+          return json({
+            run_id: 'run-generational-23',
+            world_id: 'world-1',
+            tick: 16,
+            latest_tick: 16,
+            latest_sequence: 1,
+            parent_run_id: null,
+            fork_tick: null,
+            intervention_summary: null,
+            branch_id: null,
+            protocol_version: 'observer-protocol-v1',
+          })
+        }
+        if (url.includes('/lineage/families')) {
+          return json(fixture('lineage_families'))
+        }
+        if (url.includes('/snapshots')) {
+          snapshotCalls += 1
+          return json({
+            schema_version: 'lineage-snapshot-list-v1',
+            items: [
+              {
+                publication_id: `publication-${snapshotCalls}`,
+                digest: 'c'.repeat(64),
+                boundary_tick: 1000 + snapshotCalls,
+                schema_version: 'lineage-snapshot-v1',
+              },
+            ],
+            declared_count: 1,
+            next_cursor: `cursor-${snapshotCalls}`,
+            coverage: null,
+          })
+        }
+        if (url.includes('/nodes')) {
+          return json(fixture('lineage_nodes'))
+        }
+        return json({}, 404)
+      }),
+    )
+    const mounted = render(LineagePanel as never, {
+      runId: 'run-generational-23',
+      selection: emptyResearchSelection({
+        runId: 'run-generational-23',
+        view: 'lineage',
+        tick: 16,
+      }),
+      onSelectionChange: vi.fn(),
+    })
+    await settle()
+    expect(snapshotCalls).toBe(5)
+    expect(mounted.target.textContent).toContain('scan_limited')
+    expect(mounted.target.textContent).toContain('Continue publication scan')
+    expect(mounted.target.textContent).not.toContain('agent-founder')
+    const more = [...mounted.target.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Continue publication scan'),
+    )
+    more?.click()
+    await settle()
+    expect(snapshotCalls).toBe(10)
+    expect(mounted.target.textContent).toContain('scan_limited')
+    mounted.cleanup()
+  })
+
+  it('reports an exhausted scan without claiming a false first snapshot', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/observer/run')) {
+          return json({
+            run_id: 'run-generational-23',
+            world_id: 'world-1',
+            tick: 16,
+            latest_tick: 16,
+            latest_sequence: 1,
+            parent_run_id: null,
+            fork_tick: null,
+            intervention_summary: null,
+            branch_id: null,
+            protocol_version: 'observer-protocol-v1',
+          })
+        }
+        if (url.includes('/lineage/families')) {
+          return json(fixture('lineage_families'))
+        }
+        if (url.includes('/snapshots')) {
+          const parsed = new URL(url, 'http://localhost')
+          const after = parsed.searchParams.get('after')
+          if (after === null) {
+            return json({
+              schema_version: 'lineage-snapshot-list-v1',
+              items: [
+                {
+                  publication_id: 'publication-old',
+                  digest: 'd'.repeat(64),
+                  boundary_tick: 1000,
+                  schema_version: 'lineage-snapshot-v1',
+                },
+              ],
+              declared_count: 1,
+              next_cursor: 'page-2',
+              coverage: null,
+            })
+          }
+          return json({
+            schema_version: 'lineage-snapshot-list-v1',
+            items: [],
+            declared_count: 0,
+            next_cursor: null,
+            coverage: null,
+          })
+        }
+        if (url.includes('/nodes')) {
+          return json(fixture('lineage_nodes'))
+        }
+        return json({}, 404)
+      }),
+    )
+    const mounted = render(LineagePanel as never, {
+      runId: 'run-generational-23',
+      selection: emptyResearchSelection({
+        runId: 'run-generational-23',
+        view: 'lineage',
+        tick: 16,
+      }),
+      onSelectionChange: vi.fn(),
+    })
+    await settle()
+    expect(mounted.target.textContent).toContain('snapshot_not_found')
+    expect(mounted.target.textContent).not.toContain('agent-founder')
+    expect(mounted.target.textContent).not.toContain('Continue publication scan')
+    mounted.cleanup()
+  })
+
+  it('surfaces unavailable subjective debug without falling back to objective evidence', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        if (url.includes('/observer/run')) {
+          return json({
+            run_id: 'run-generational-23',
+            world_id: 'world-1',
+            tick: 16,
+            latest_tick: 16,
+            latest_sequence: 1,
+            parent_run_id: null,
+            fork_tick: null,
+            intervention_summary: null,
+            branch_id: null,
+            protocol_version: 'observer-protocol-v1',
+          })
+        }
+        if (url.includes('/lineage/families')) {
+          if (url.includes('include_restricted=true')) {
+            return json({ code: 'forbidden' }, 403)
+          }
+          return json(fixture('lineage_families'))
+        }
+        if (url.includes('/snapshots')) {
+          return json({ code: 'forbidden' }, 403)
+        }
+        return json({}, 404)
+      }),
+    )
+    const mounted = render(LineagePanel as never, {
+      runId: 'run-generational-23',
+      selection: emptyResearchSelection({
+        runId: 'run-generational-23',
+        view: 'lineage',
+        tick: 16,
+      }),
+      onSelectionChange: vi.fn(),
+      initialFamily: 'mentorship',
+    })
+    await settle()
+    expect(mounted.target.textContent).toContain('forbidden')
+    expect(mounted.target.textContent).not.toContain('agent-founder')
+    mounted.cleanup()
+  })
+
   it('rejects prefix-only selection without silently seeking', async () => {
     installFetch()
     const mounted = render(LineagePanel as never, {

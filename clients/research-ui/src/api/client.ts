@@ -153,9 +153,13 @@ export function listInspectRuns(after?: string | null): Promise<RunListOut> {
   })
 }
 
-export function getObserverRun(runId: string): Promise<ObserverRunOut> {
+export function getObserverRun(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ObserverRunOut> {
   return apiFetch<ObserverRunOut>(`/v1/simulations/${runId}/observer/run`, {
     capability: 'objective_inspection',
+    signal,
   })
 }
 

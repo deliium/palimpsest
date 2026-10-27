@@ -14,6 +14,7 @@ import {
   readCulturalCellMetrics,
   readCulturalComparison,
   resolveLineageNode,
+  scanLineageSnapshots,
 } from './research'
 import { ResearchSchemaError } from './researchSchemas'
 
@@ -246,6 +247,67 @@ describe('typed research reads', () => {
     expect(resolved.node.key).toBe(digest)
     expect(resolved.graph?.schema_version).toBe('lineage-graph-page-v1')
     expect(calls.some((call) => call.url.includes('/traverse'))).toBe(true)
+  })
+
+  it('scans exact publication boundaries within a bounded budget', async () => {
+    let page = 0
+    stub(() => {
+      page += 1
+      if (page === 1) {
+        return respond({
+          schema_version: 'lineage-snapshot-list-v1',
+          items: [{ ...snapshot(), publication_id: 'pub-old', boundary_tick: 9 }],
+          declared_count: 1,
+          next_cursor: 'p2',
+          coverage: null,
+        })
+      }
+      return respond({
+        schema_version: 'lineage-snapshot-list-v1',
+        items: [snapshot()],
+        declared_count: 1,
+        next_cursor: null,
+        coverage: null,
+      })
+    })
+    const scan = await scanLineageSnapshots(
+      'run-1',
+      { family: 'genealogy', evidenceClass: 'objective' },
+      { boundaryTick: 10, maxPages: 2, limit: 1 },
+    )
+    expect(scan.snapshot?.boundary_tick).toBe(10)
+    expect(scan.pages).toBe(2)
+    expect(scan.exhausted).toBe(true)
+    expect(scan.nextCursor).toBeNull()
+  })
+
+  it('reports scan_limited rather than substituting an earlier publication', async () => {
+    let page = 0
+    stub(() => {
+      page += 1
+      return respond({
+        schema_version: 'lineage-snapshot-list-v1',
+        items: [
+          {
+            ...snapshot(),
+            publication_id: `pub-${page}`,
+            boundary_tick: 100 + page,
+          },
+        ],
+        declared_count: 1,
+        next_cursor: `p${page + 1}`,
+        coverage: null,
+      })
+    })
+    const scan = await scanLineageSnapshots(
+      'run-1',
+      { family: 'genealogy', evidenceClass: 'objective' },
+      { boundaryTick: 55, maxPages: 2, limit: 200 },
+    )
+    expect(scan.snapshot).toBeNull()
+    expect(scan.exhausted).toBe(false)
+    expect(scan.nextCursor).toBe('p3')
+    expect(scan.pages).toBe(2)
   })
 
   it('rejects a mismatched returned snapshot', async () => {

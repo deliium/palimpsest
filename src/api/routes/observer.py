@@ -85,6 +85,7 @@ def _reject_unknown_query(request: Request, allowed: set[str]) -> None:
 async def get_observer_manifest(
     run_id: str,
     request: Request,
+    response: Response,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
     layout_id: str = Query(default=DEFAULT_LAYOUT_ID),
@@ -99,6 +100,7 @@ async def get_observer_manifest(
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
         count=1,
     )
+    response.headers["Cache-Control"] = "no-store"
     del request
     return result
 
@@ -107,6 +109,7 @@ async def get_observer_manifest(
 async def get_observer_state(
     run_id: str,
     request: Request,
+    response: Response,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
     settings: Settings = Depends(get_settings),
@@ -115,6 +118,7 @@ async def get_observer_state(
     layout_id: str = Query(default=DEFAULT_LAYOUT_ID),
 ) -> ObserverFrameOut:
     del settings
+    response.headers["Cache-Control"] = "no-store"
     if through_sequence is not None and tick is None:
         raise bad_request(code="incomplete_event_cursor")
     _LOGGER.debug(
@@ -260,6 +264,7 @@ async def get_observer_generation_markers(
 async def list_observer_events(
     run_id: str,
     request: Request,
+    response: Response,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
     settings: Settings = Depends(get_settings),
@@ -304,6 +309,7 @@ async def list_observer_events(
         after_tick=after_tick,
         after_sequence=after_sequence,
     )
+    response.headers["Cache-Control"] = "no-store"
     del request
     return result
 
@@ -312,6 +318,7 @@ async def list_observer_events(
 async def list_observer_ticks(
     run_id: str,
     request: Request,
+    response: Response,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
     settings: Settings = Depends(get_settings),
@@ -338,6 +345,7 @@ async def list_observer_ticks(
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
         count=result.count,
     )
+    response.headers["Cache-Control"] = "no-store"
     del request
     return result
 
@@ -350,6 +358,7 @@ async def get_observer_event(
     run_id: str,
     event_id: str,
     request: Request,
+    response: Response,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
 ) -> ObserverEventOut:
@@ -363,6 +372,7 @@ async def get_observer_event(
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
         count=1,
     )
+    response.headers["Cache-Control"] = "no-store"
     del request
     return result
 
@@ -371,6 +381,7 @@ async def get_observer_event(
 async def get_observer_run(
     run_id: str,
     request: Request,
+    response: Response,
     _: None = Depends(_inspect),
     service: ObserverReadService = Depends(get_observer_service),
 ) -> ObserverRunOut:
@@ -384,6 +395,7 @@ async def get_observer_run(
         duration_ms=round((time.perf_counter() - started) * 1000, 3),
         tick=result.tick,
     )
+    response.headers["Cache-Control"] = "no-store"
     del request
     return result
 

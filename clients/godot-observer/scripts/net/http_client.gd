@@ -40,11 +40,17 @@ const SAFE_ERROR_CODES := [
 	"tick_range_exceeds_maximum",
 ]
 
+const MAX_QUEUED_REQUESTS := 32
+
 signal get_completed(route: String, status: int, body: Variant, reason_code: String)
 
 var _http: HTTPRequest
 var _queue: Array = []
 var _active: Dictionary = {}
+var _request_count := 0
+var _response_count := 0
+var _response_bytes := 0
+var _response_peak_bytes := 0
 
 
 func _ready() -> void:
@@ -57,12 +63,20 @@ func _ready() -> void:
 func get_json(url: String, route: String, token: String, expected_root: String = "object") -> void:
 	if expected_root not in ["object", "array"]:
 		expected_root = "object"
+	if _queue.size() >= MAX_QUEUED_REQUESTS:
+		var dropped: Dictionary = _queue.pop_front()
+		ObserverLog.warn(
+			"http",
+			"queue_saturated dropped=1 limit=%s" % MAX_QUEUED_REQUESTS,
+		)
+		get_completed.emit(str(dropped.get("route", "")), 0, null, "queue_saturated")
 	_queue.append({
 		"url": url,
 		"route": route,
 		"token": token,
 		"expected_root": expected_root,
 	})
+	_request_count += 1
 	ObserverLog.debug("http", "queued route=%s depth=%s" % [route, _queue.size()])
 	_pump()
 
@@ -95,6 +109,9 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
 	var route := str(_active.get("route", ""))
 	var expected_root := str(_active.get("expected_root", "object"))
 	_active = {}
+	_response_count += 1
+	_response_bytes += body.size()
+	_response_peak_bytes = maxi(_response_peak_bytes, body.size())
 	ObserverLog.debug("http", "get_finished route=%s status=%s" % [route, response_code])
 	var reason := ""
 	var parsed: Variant = null
@@ -108,6 +125,19 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
 		reason = str(parsed_result["reason_code"])
 	get_completed.emit(route, response_code, parsed, reason)
 	_pump()
+
+
+func resource_snapshot() -> Dictionary:
+	## Bounded diagnostics only: counts and response bytes, never payload bodies.
+	return {
+		"active": 0 if _active.is_empty() else 1,
+		"queued": _queue.size(),
+		"queued_limit": MAX_QUEUED_REQUESTS,
+		"requests": _request_count,
+		"responses": _response_count,
+		"response_bytes": _response_bytes,
+		"response_peak_bytes": _response_peak_bytes,
+	}
 
 
 static func build_headers(token: String) -> PackedStringArray:

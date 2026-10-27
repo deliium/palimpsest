@@ -93,6 +93,55 @@ describe('research request scope', () => {
     ).toBe(controller.key)
   })
 
+  it('cancels queued work without starting it when the scope changes', async () => {
+    const pool = new BoundedRequestPool(1, 4)
+    const activeBox: { release: (() => void) | null } = { release: null }
+    let queuedStarted = 0
+    const active = pool.run(
+      () =>
+        new Promise<number>((resolve) => {
+          activeBox.release = () => resolve(1)
+        }),
+    )
+    const queued = pool.run(async () => {
+      queuedStarted += 1
+      return 2
+    })
+    await Promise.resolve()
+    expect(pool.queued).toBe(1)
+    pool.setScope(1)
+    await expect(queued).rejects.toBeInstanceOf(StaleResearchResponse)
+    expect(queuedStarted).toBe(0)
+    expect(pool.queued).toBe(0)
+    activeBox.release?.()
+    await expect(active).rejects.toBeInstanceOf(StaleResearchResponse)
+    const replacement = await pool.run(async () => 3, 1)
+    expect(replacement).toBe(3)
+  })
+
+  it('saturates the queue with a typed limit instead of an unbounded promise chain', async () => {
+    const pool = new BoundedRequestPool(1, 1)
+    const activeBox: { release: (() => void) | null } = { release: null }
+    const active = pool.run(
+      () =>
+        new Promise<number>((resolve) => {
+          activeBox.release = () => resolve(1)
+        }),
+    )
+    const queued = pool.run(async () => 2)
+    await Promise.resolve()
+    expect(pool.queued).toBe(1)
+    await expect(pool.run(async () => 3)).rejects.toMatchObject({
+      code: 'queue_saturated',
+    })
+    pool.setScope(1)
+    await expect(queued).rejects.toBeInstanceOf(StaleResearchResponse)
+    expect(pool.queued).toBe(0)
+    activeBox.release?.()
+    await expect(active).rejects.toBeInstanceOf(StaleResearchResponse)
+    expect(pool.inFlight).toBe(0)
+  })
+
   it('bounds concurrent loads to four', async () => {
     const pool = new BoundedRequestPool(4)
     let active = 0

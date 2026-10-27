@@ -76,6 +76,12 @@ func run() -> Array:
 	_expect(failures, _pause_invalidates_staging(), "pause invalidation")
 	_expect(failures, _cursor_and_horizon(), "cursor and horizon")
 	_expect(failures, _semantic_digest_ignores_lod(), "semantic digest")
+	_expect(failures, _fifty_alternating_seeks_bounded(), "bounded alternating seeks")
+	_expect(failures, _stale_bundle_cannot_replace_newer_cursor(), "stale bundle rejection")
+	_expect(failures, _failing_overlay_is_explicit(), "failing overlay")
+	_expect(failures, _credential_change_invalidates_staging(), "credential invalidation")
+	_expect(failures, _capture_off_playback_stays_objective(), "capture-off playback")
+	_expect(failures, _request_log_is_bounded(), "request log bound")
 	return failures
 
 
@@ -214,6 +220,26 @@ func _staged_bundle_acceptance() -> String:
 	if int(session.civilization._cursor.get("tick", -1)) != 4:
 		session.free()
 		return "accepted boundary not adopted by the source"
+	var resources: Dictionary = session.resource_snapshot()
+	if int(resources.get("staged_frames", -1)) != 0:
+		session.free()
+		return "accepted frame left staged presentation work"
+	if int(resources.get("retained_frames", -1)) > int(resources.get("retained_frame_limit", 0)):
+		session.free()
+		return "accepted frame retained more than the bounded frame slots"
+	var civ_resources: Dictionary = resources.get("civilization", {})
+	if int(civ_resources.get("inflight", 1)) > int(civ_resources.get("inflight_limit", 0)):
+		session.free()
+		return "accepted frame exceeded civilization request bounds"
+	if int(civ_resources.get("cache_boundaries", 1)) > int(civ_resources.get("cache_boundary_limit", 0)):
+		session.free()
+		return "accepted frame exceeded the civilization boundary cache bound"
+	if int(civ_resources.get("cache_bytes", 1)) > int(civ_resources.get("cache_byte_limit", 0)):
+		session.free()
+		return "accepted frame exceeded the civilization byte cache bound"
+	if int(civ_resources.get("marker_windows", 1)) > int(civ_resources.get("marker_window_limit", 0)):
+		session.free()
+		return "accepted frame exceeded the marker window bound"
 	session.free()
 	return ""
 
@@ -455,10 +481,11 @@ func _semantic_digest_ignores_lod() -> String:
 	if int(snapshot.get("counts", {}).get("rows", 0)) <= 0:
 		view.free()
 		return "semantic row identity counts missing"
-	view.set_presentation_detail("aggregate")
-	if view.semantic_digest() != digest:
-		view.free()
-		return "LOD changed the scientific semantic digest"
+	for detail in ["reduced", "snap", "aggregate"]:
+		view.set_presentation_detail(detail)
+		if view.semantic_digest() != digest:
+			view.free()
+			return "%s LOD changed the scientific semantic digest" % detail
 	var facilities = view.get_node_or_null("CivilizationFacilities")
 	if facilities == null or str(facilities.lod()) != "aggregate":
 		view.free()
@@ -480,6 +507,215 @@ func _semantic_digest_ignores_lod() -> String:
 		view.free()
 		return "return to full detail changed semantic state"
 	view.free()
+	return ""
+
+
+func _fifty_alternating_seeks_bounded() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	for index in 50:
+		if index % 2 == 0:
+			var tick := 1 + index * 7
+			session.seek_tick(tick)
+			var tick_request: Dictionary = session.last_request
+			if str(tick_request.get("kind", "")) != "state_tick":
+				session.free()
+				return "eventless seek did not request an exact tick"
+			if int(tick_request.get("query", {}).get("tick", -1)) != tick:
+				session.free()
+				return "eventless seek requested the wrong boundary"
+		else:
+			var event_tick := 1000 + index * 11
+			session.seek_event(event_tick, 7)
+			var event_request: Dictionary = session.last_request
+			if str(event_request.get("kind", "")) != "state_cursor":
+				session.free()
+				return "event seek did not request an exclusive cursor"
+			var event_query: Dictionary = event_request.get("query", {})
+			if int(event_query.get("tick", -1)) != event_tick:
+				session.free()
+				return "event seek requested the wrong tick"
+			if int(event_query.get("through_sequence", -1)) != 7:
+				session.free()
+				return "event seek lost its exact sequence"
+		var resources: Dictionary = session.resource_snapshot()
+		if int(resources.get("seek_meta", 0)) > int(resources.get("seek_meta_limit", 0)):
+			session.free()
+			return "repeated seeks retained stale seek metadata"
+		if int(resources.get("staged_frames", 0)) != 0:
+			session.free()
+			return "seek retained staged playback work"
+		if int(resources.get("request_log", 0)) > int(resources.get("request_log_limit", 0)):
+			session.free()
+			return "request diagnostics grew past the configured bound"
+		if session._pending.size() > 2:
+			session.free()
+			return "seek retained more than the page and state requests"
+		var civ_resources: Dictionary = resources.get("civilization", {})
+		if int(civ_resources.get("inflight", 0)) > int(civ_resources.get("inflight_limit", 0)):
+			session.free()
+			return "seek exceeded civilization request bounds"
+	var world_before: Variant = session.world
+	session._pending["stale-seek"] = {
+		"kind": "state_cursor",
+		"seek_id": session._seek_serial - 1,
+	}
+	session._on_http("stale-seek", 200, {}, "")
+	if session.world != world_before:
+		session.free()
+		return "a stale seek response replaced the current view"
+	session._cancel_http("done")
+	var drained: Dictionary = session.resource_snapshot()
+	if int(drained.get("pending_requests", 1)) != 0:
+		session.free()
+		return "cancelled seeks retained HTTP metadata"
+	if int(drained.get("staged_frames", 1)) != 0:
+		session.free()
+		return "cancelled seeks retained a staged frame"
+	if int(drained.get("request_log", 0)) > int(drained.get("request_log_limit", 0)):
+		session.free()
+		return "drained request diagnostics exceeded the configured bound"
+	var civ_drained: Dictionary = drained.get("civilization", {})
+	if int(civ_drained.get("inflight", 1)) != 0 or int(civ_drained.get("queued", 1)) != 0:
+		session.free()
+		return "cancelled seeks retained civilization work"
+	session.free()
+	return ""
+
+
+func _stale_bundle_cannot_replace_newer_cursor() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	session._playing = true
+	session._stage_playback_frame(_frame(4))
+	var stale_cursor: Dictionary = session._playback_cursor_for(_frame(4))
+	session._stage_playback_frame(_frame(5))
+	var world_before: Variant = session.world
+	session._accept_playback_bundle(stale_cursor, {})
+	if session.world != world_before:
+		session.free()
+		return "a stale overlay bundle replaced the newer cursor view"
+	if session._playback_pending_frame == null:
+		session.free()
+		return "stale bundle acceptance consumed the newer staged frame"
+	if int(session.playback_snapshot().get("accepted", -1)) != 0:
+		session.free()
+		return "stale bundle was counted as accepted"
+	session.free()
+	return ""
+
+
+func _failing_overlay_is_explicit() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	var signals: Array = pair[2]
+	session.civilization.set_layer_enabled("culture", true)
+	session._playing = true
+	session._playback_last_accepted_tick = 5
+	session._stage_playback_frame(_frame(6))
+	_release_at(session, "settlements", 6)
+	var failed := false
+	for request_id in session._pending.keys():
+		var meta: Dictionary = session._pending[request_id]
+		if str(meta.get("source", "")) != "civilization":
+			continue
+		if str(meta.get("layer", "")) != "culture":
+			continue
+		session._on_http(str(request_id), 503, null, "http_503")
+		failed = true
+		break
+	if not failed:
+		session.free()
+		return "failing overlay never issued a request"
+	if signals.is_empty():
+		session.free()
+		return "a failing overlay blocked the accepted frame"
+	var state: Dictionary = session.civilization.states.get("culture", {})
+	if str(state.get("status", "")) != "unavailable":
+		session.free()
+		return "failing overlay did not become explicitly unavailable"
+	if str(state.get("reason_code", "")) != "http_503":
+		session.free()
+		return "failing overlay lost its safe reason code"
+	if session.world == null or int(session.world.tick) != 6:
+		session.free()
+		return "failing overlay did not preserve the objective boundary"
+	session.free()
+	return ""
+
+
+func _credential_change_invalidates_staging() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	session._playing = true
+	session._opened = false
+	session._stage_playback_frame(_frame(6))
+	if not bool(session.playback_snapshot().get("pending_frame", false)):
+		session.free()
+		return "staging did not retain the frame before the credential change"
+	var epoch_before := int(session.playback_snapshot().get("epoch", 0))
+	if not session.configure_credentials("inspection-2", "debug-2"):
+		session.free()
+		return "credential update was rejected"
+	var snapshot: Dictionary = session.playback_snapshot()
+	if bool(snapshot.get("pending_frame", true)):
+		session.free()
+		return "credential change retained staged presentation work"
+	if int(snapshot.get("epoch", -1)) <= epoch_before:
+		session.free()
+		return "credential change did not advance the playback epoch"
+	var resources: Dictionary = session.resource_snapshot()
+	if int(resources.get("staged_frames", -1)) != 0:
+		session.free()
+		return "credential change left a staged frame"
+	if not session.civilization._active_bundle.is_empty():
+		session.free()
+		return "credential change left an active civilization bundle"
+	session._stage_playback_frame(_frame(7), epoch_before)
+	if bool(session.playback_snapshot().get("pending_frame", false)):
+		session.free()
+		return "a stale-epoch frame was staged after the credential change"
+	session.free()
+	return ""
+
+
+func _capture_off_playback_stays_objective() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	var signals: Array = pair[2]
+	session.civilization.set_layer_enabled("settlements", false)
+	session._playing = true
+	session._playback_last_accepted_tick = 3
+	session._stage_playback_frame(_frame(4))
+	if signals.size() != 1 or int(signals[0]["tick"]) != 4:
+		session.free()
+		return "capture-off playback did not accept the objective frame"
+	var resources: Dictionary = session.resource_snapshot()
+	var civ_resources: Dictionary = resources.get("civilization", {})
+	if int(resources.get("staged_frames", -1)) != 0:
+		session.free()
+		return "capture-off playback retained a staged frame"
+	if int(civ_resources.get("inflight", 1)) != 0:
+		session.free()
+		return "capture-off playback issued civilization requests"
+	session.free()
+	return ""
+
+
+func _request_log_is_bounded() -> String:
+	var pair: Array = _session()
+	var session: Node = pair[0]
+	for index in 200:
+		session._append_request_log({"kind": "synthetic", "index": index})
+	var resources: Dictionary = session.resource_snapshot()
+	var limit := int(resources.get("request_log_limit", 0))
+	if limit <= 0 or int(resources.get("request_log", 0)) != limit:
+		session.free()
+		return "request diagnostics did not stop at the configured bound"
+	if int(session.request_log[-1].get("index", -1)) != 199:
+		session.free()
+		return "request diagnostics lost the newest entry"
+	session.free()
 	return ""
 
 

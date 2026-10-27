@@ -58,6 +58,8 @@ const BRANCH_PAGE_LIMIT := 50
 const MARKER_TYPE_BUDGET := 3
 const FOCUS_PROBE_LIMIT := 32
 const PLAYBACK_PRESENTATION_DEADLINE_MS := 2000
+const REQUEST_LOG_LIMIT := 128
+const SEEK_META_LIMIT := 1
 
 var run_id := ""
 var _layout_id := ""
@@ -813,6 +815,40 @@ func playback_snapshot() -> Dictionary:
 	}
 
 
+func resource_snapshot() -> Dictionary:
+	## Bounded development diagnostics. Counts/bytes only, never page payloads.
+	var http_resources: Dictionary = {}
+	if _http != null and _http.has_method("resource_snapshot"):
+		http_resources = _http.resource_snapshot()
+	var civilization_resources: Dictionary = {}
+	if civilization != null and civilization.has_method("resource_snapshot"):
+		civilization_resources = civilization.resource_snapshot()
+	var retained_frames := 0
+	if _last_frame != null:
+		retained_frames += 1
+	if _playback_pending_frame != null:
+		retained_frames += 1
+	return {
+		"pending_requests": _pending.size(),
+		"http": http_resources,
+		"request_log": request_log.size(),
+		"request_log_limit": REQUEST_LOG_LIMIT,
+		"seek_meta": _seek_meta.size(),
+		"seek_meta_limit": SEEK_META_LIMIT,
+		"live_buffer": _live_buffer.size(),
+		"live_buffer_limit": BUFFER_LIMIT,
+		"event_window": _event_window.size(),
+		"event_window_limit": EVENT_WINDOW,
+		"marker_events": _marker_events.size(),
+		"marker_event_limit": MARKER_TYPE_BUDGET * EVENT_WINDOW,
+		"staged_frames": 0 if _playback_pending_frame == null else 1,
+		"staged_frame_limit": 1,
+		"retained_frames": retained_frames,
+		"retained_frame_limit": 2,
+		"civilization": civilization_resources,
+	}
+
+
 func request_playback_state(target_tick: int = -1) -> void:
 	_request_playback_state(target_tick)
 
@@ -1010,6 +1046,20 @@ func _accept_playback_bundle(cursor: Dictionary, states: Dictionary) -> void:
 		"session",
 		"playback_accepted tick=%s layers=%s ready=1" % [tick, states.size()],
 	)
+	if civilization != null:
+		var bound_state: Dictionary = civilization.resource_snapshot()
+		ObserverLog.debug(
+			"session",
+			"playback_bounds pending=%s staged=%s civ_inflight=%s civ_cache=%s/%s civ_bytes=%s/%s" % [
+				_pending.size(),
+				0 if _playback_pending_frame == null else 1,
+				int(bound_state.get("inflight", 0)),
+				int(bound_state.get("cache_boundaries", 0)),
+				int(bound_state.get("cache_boundary_limit", 0)),
+				int(bound_state.get("cache_bytes", 0)),
+				int(bound_state.get("cache_byte_limit", 0)),
+			],
+		)
 	if _playing and not transport.paused:
 		if _playback_desired_tick > tick:
 			_request_playback_state(_playback_desired_tick)
@@ -1375,6 +1425,7 @@ func _begin_seek(event_tick: int, event_sequence: int, event: Variant) -> void:
 		civilization.on_seek()
 	_cancel_http("seek")
 	_seek_serial += 1
+	_seek_meta.clear()
 	_seek_meta[_seek_serial] = {
 		"event": event,
 		"forward": forward,
@@ -1645,6 +1696,12 @@ func _decode_metric_document(body: Dictionary) -> Variant:
 	return parsed
 
 
+func _append_request_log(entry: Dictionary) -> void:
+	request_log.append(entry)
+	if request_log.size() > REQUEST_LOG_LIMIT:
+		request_log = request_log.slice(request_log.size() - REQUEST_LOG_LIMIT)
+
+
 func _request_path(
 	kind: String,
 	path: String,
@@ -1654,7 +1711,7 @@ func _request_path(
 	## Shared GET helper. Capability tokens stay in the HTTP header — never query.
 	var request_query := query.duplicate()
 	last_request = {"kind": kind, "path": path, "query": request_query.duplicate()}
-	request_log.append(last_request)
+	_append_request_log(last_request)
 	var query_keys: Array = request_query.keys()
 	ObserverLog.debug(
 		"session",
@@ -1737,7 +1794,7 @@ func _request(
 		request_query = request_query.duplicate()
 		request_query["layout_id"] = _layout_id
 	last_request = {"kind": kind, "query": request_query.duplicate()}
-	request_log.append(last_request)
+	_append_request_log(last_request)
 	if _http == null:
 		return ""
 	var built: Dictionary = Urls.build_get(origin, path, request_query)
@@ -2102,12 +2159,27 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		if not caught.ok:
 			ObserverLog.error("session", "seek_failed reason_code=%s" % caught.reason_code)
 			return
+		var before_tick: Variant = cursor_after_tick
+		var before_sequence: Variant = cursor_after_sequence
 		var catch_count := 0
 		for event in caught.value.events:
 			_apply_live_event(event)
 			catch_count += 1
+		var advanced: bool = (
+			cursor_after_tick != before_tick
+			or cursor_after_sequence != before_sequence
+		)
+		if int(caught.value.limit) > 0 and catch_count >= int(caught.value.limit) and advanced:
+			# A full page is a continuation, not EOF. Never skip durable events by
+			# refreshing state before the exclusive cursor reaches the head.
+			ObserverLog.info(
+				"stream",
+				"reconnect_catchup_page events=%s" % catch_count,
+			)
+			_request("catch_up", _catch_up_query(), -1)
+			return
 		ObserverLog.info(
-			"session",
+			"stream",
 			"reconnect_catchup events=%s" % catch_count,
 		)
 		transport.buffer_dropped = false
@@ -2327,11 +2399,15 @@ func _buffer_live_event(event: Variant) -> void:
 
 func _catch_up_live() -> void:
 	_live_buffer.clear()
+	_request("catch_up", _catch_up_query(), -1)
+
+
+func _catch_up_query() -> Dictionary:
 	var query := {"limit": PAGE_LIMIT, "catch_up": true}
 	if Urls.resume_allowed(cursor_after_tick, cursor_after_sequence):
 		query["after_tick"] = cursor_after_tick
 		query["after_sequence"] = cursor_after_sequence
-	_request("catch_up", query, -1)
+	return query
 
 
 func _apply_live_event(event: Variant) -> void:

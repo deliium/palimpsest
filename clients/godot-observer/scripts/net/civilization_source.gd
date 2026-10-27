@@ -145,6 +145,34 @@ func acceptance_snapshot() -> Dictionary:
 	}
 
 
+func resource_snapshot() -> Dictionary:
+	## Bounded diagnostics: cache sizes and bytes only, never rows or payloads.
+	var boundary_bytes := 0
+	for value in _boundary_bytes.values():
+		boundary_bytes += int(value)
+	var marker_bytes := 0
+	for value in _marker_window_bytes.values():
+		marker_bytes += int(value)
+	return {
+		"inflight": _inflight.size(),
+		"inflight_limit": MAX_INFLIGHT,
+		"queued": _queued_layers.size(),
+		"states": states.size(),
+		"enabled": enabled_layers.size(),
+		"cache_boundaries": _boundary_order.size(),
+		"cache_boundary_limit": MAX_CACHE_BOUNDARIES,
+		"cache_bytes": boundary_bytes,
+		"cache_byte_limit": MAX_CACHE_BYTES,
+		"marker_windows": _marker_window_order.size(),
+		"marker_window_limit": MAX_MARKER_WINDOWS,
+		"marker_bytes": marker_bytes,
+		"marker_byte_limit": MAX_MARKER_CACHE_BYTES,
+		"active_bundle": 0 if _active_bundle.is_empty() else 1,
+		"queued_bundle": 0 if _queued_bundle.is_empty() else 1,
+		"partial_prefix": _partial_prefix,
+	}
+
+
 func enabled_ids() -> Array:
 	var result: Array = enabled_layers.keys()
 	result.sort()

@@ -51,9 +51,7 @@ def _click(page: Any, console: list[str], control_id: str) -> None:
     rect = _controls(console).get(control_id)
     if rect is None:
         pytest.fail(f"control missing id={control_id}")
-    page.mouse.click(
-        min(rect[0] + rect[2] / 2.0, 1270.0), rect[1] + rect[3] / 2.0
-    )
+    page.mouse.click(min(rect[0] + rect[2] / 2.0, 1270.0), rect[1] + rect[3] / 2.0)
 
 
 def _authenticate(
@@ -75,6 +73,15 @@ def _authenticate(
     _click(page, console, "credentials_apply")
 
 
+def _heap_used(page: Any) -> int | None:
+    """Chromium JS heap sample; ``None`` when the runtime does not expose it."""
+    value = page.evaluate(
+        "() => (performance && performance.memory)"
+        " ? performance.memory.usedJSHeapSize : null"
+    )
+    return None if value is None else int(value)
+
+
 def _wait_for(
     console: list[str],
     page: Any,
@@ -88,7 +95,6 @@ def _wait_for(
             return
         page.wait_for_timeout(100)
     pytest.fail(redact_secrets("\n".join(console[-100:])))
-
 
 
 def _rendered_values(console: list[str]) -> dict[str, str]:
@@ -135,6 +141,7 @@ def _wait_for_render(
             return values
         page.wait_for_timeout(100)
     pytest.fail(redact_secrets("\n".join(console[-100:])))
+
 
 def _expect_asset(url: str, media_type: str, *, minimum: int = 1) -> None:
     response = httpx.get(url, timeout=30.0)
@@ -253,9 +260,7 @@ def test_civilization_browser_history_and_assets(
                 )
 
             page.on("request", _request)
-            page.goto(
-                f"{url}&civilization_detail=full", wait_until="domcontentloaded"
-            )
+            page.goto(f"{url}&civilization_detail=full", wait_until="domcontentloaded")
             _authenticate(page, console, stack)
             _wait_for(console, page, lambda text: "map_built" in text)
             try:
@@ -284,6 +289,7 @@ def test_civilization_browser_history_and_assets(
                 path=str(stack.civilization_root.parent / "civilization.png")
             )
             full_digest = rendered["digest"]
+
             # Warmed local control-to-visible busy/cleared feedback budget.
             def _feedback_count() -> int:
                 return sum(
@@ -311,6 +317,13 @@ def test_civilization_browser_history_and_assets(
                 timings.append((time.monotonic() - started) * 1000.0)
             p95 = sorted(timings)[18]
             assert p95 <= 250.0, f"p95_ms={p95:.1f} timings={timings}"
+            _LOGGER.info(
+                "[observer.browser] civilization_control_to_visible "
+                "samples=%s p95_ms=%.1f max_ms=%.1f warm=warm",
+                len(timings),
+                p95,
+                max(timings),
+            )
             console.clear()
             page.goto(
                 f"{url}&civilization_detail=aggregate",
@@ -336,6 +349,7 @@ def test_civilization_browser_history_and_assets(
                 f"full={rendered} aggregate={aggregate}"
             )
             console.clear()
+            heap_before = _heap_used(page)
             page.goto(
                 f"{base}/?run_id={run_id}&layout_id=regional-migration-ay-v1"
                 "&civilization_detail=full&civilization_seek_cycles=50",
@@ -354,6 +368,25 @@ def test_civilization_browser_history_and_assets(
             assert int(seeks["inflight"]) <= 2
             assert int(seeks["queued"]) <= 14
             assert int(seeks["states"]) <= 14
+            heap_after = _heap_used(page)
+            heap_delta = (
+                None
+                if heap_before is None or heap_after is None
+                else heap_after - heap_before
+            )
+            _LOGGER.info(
+                "[observer.browser] civilization_seek_playback "
+                "count=%s elapsed_ms=%s inflight=%s queued=%s states=%s "
+                "heap_before=%s heap_after=%s heap_delta=%s warm=warm",
+                seeks["count"],
+                seeks["elapsed_ms"],
+                seeks["inflight"],
+                seeks["queued"],
+                seeks["states"],
+                heap_before,
+                heap_after,
+                heap_delta,
+            )
             browser.close()
     except BaseException:
         pytest.fail(

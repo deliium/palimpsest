@@ -52,6 +52,76 @@ describe('explicit pager', () => {
     expect(state.truncated).toBe(true)
   })
 
+  it('drains a buffered page suffix before requesting the next page', async () => {
+    const cursors: Array<string | null> = []
+    const pager = new ExplicitPager<Row>(
+      async (cursor) => {
+        cursors.push(cursor)
+        if (cursor === null) {
+          return {
+            items: [
+              { id: 'a', value: 1 },
+              { id: 'b', value: 2 },
+              { id: 'c', value: 3 },
+            ],
+            nextCursor: 'p2',
+          }
+        }
+        return { items: [{ id: 'd', value: 4 }], nextCursor: null }
+      },
+      { maxItems: 2, keyOf: (row) => row.id },
+    )
+    const first = await pager.loadMore()
+    expect(first.items.map((row) => row.id)).toEqual(['a', 'b'])
+    expect(first.stopReason).toBe('local_cap')
+    expect(first.limited).toBe(true)
+    expect(cursors).toEqual([null])
+    const second = await pager.loadMore()
+    expect(second.items.map((row) => row.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(cursors).toEqual([null, 'p2'])
+    expect(second.stopReason).toBe('exhausted')
+    expect(new Set(second.items.map((row) => row.id)).size).toBe(4)
+  })
+
+  it('does not restart the first page after an exact page-boundary cap', async () => {
+    const cursors: Array<string | null> = []
+    const pager = new ExplicitPager<Row>(
+      async (cursor) => {
+        cursors.push(cursor)
+        return cursor === null
+          ? { items: [{ id: 'a', value: 1 }], nextCursor: 'p2' }
+          : { items: [{ id: 'b', value: 2 }], nextCursor: null }
+      },
+      { maxItems: 1, keyOf: (row) => row.id },
+    )
+    const first = await pager.loadMore()
+    expect(first.stopReason).toBeNull()
+    expect(first.truncated).toBe(true)
+    const second = await pager.loadMore()
+    expect(cursors).toEqual([null, 'p2'])
+    expect(second.items.map((row) => row.id)).toEqual(['a', 'b'])
+  })
+
+  it('ignores an in-flight page after reset', async () => {
+    const pendingPage: {
+      resolve: ((value: { items: Row[]; nextCursor: string | null }) => void) | null
+    } = { resolve: null }
+    const pager = new ExplicitPager<Row>(
+      () =>
+        new Promise((resolve) => {
+          pendingPage.resolve = resolve
+        }),
+    )
+    const pending = pager.loadMore()
+    pager.reset()
+    pendingPage.resolve?.({
+      items: [{ id: 'late', value: 9 }],
+      nextCursor: null,
+    })
+    const state = await pending
+    expect(state.items).toEqual([])
+  })
+
   it('restarts when the publication changes', async () => {
     let call = 0
     const pager = new ExplicitPager<Row>(async () => {

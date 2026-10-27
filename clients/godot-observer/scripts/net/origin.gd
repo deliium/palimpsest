@@ -155,8 +155,7 @@ static func web_debugger_state(search: String) -> Dictionary:
 				out["civilization_detail"] = value
 			"civilization_seek_cycles":
 				out["civilization_seek_cycles"] = value
-			"tick", "sequence", "generation_index",
-			"cohort_generation_index", "cohort_entry_tick":
+			"tick", "sequence", "generation_index", "cohort_generation_index", "cohort_entry_tick":
 				var parsed: Variant = _canonical_nonneg_int(value)
 				if parsed == null and not value.is_empty():
 					out["reason_code"] = "invalid_%s" % key
@@ -170,13 +169,9 @@ static func web_debugger_state(search: String) -> Dictionary:
 					out["agent_id"] = value
 			"debugger":
 				out["open_debugger"] = value.to_lower() in ["1", "true", "causal", "yes"]
-			"location_id", "institution_id", "narrative_id", "technology_id",
-			"cohort_id", "owner_id", "identity_owner", "evidence_class",
-			"entity_source", "native_kind", "lineage_family",
-			"lineage_node_key", "lineage_publication_id",
-			"civilization_row_id", "civilization_publication_id":
+			"location_id", "institution_id", "narrative_id", "technology_id", "cohort_id", "owner_id", "identity_owner", "evidence_class", "entity_source", "native_kind", "lineage_family", "lineage_node_key", "lineage_publication_id", "civilization_row_id", "civilization_publication_id":
 				out[key] = value
-	if out["tick"] == null and out["sequence"] != null:
+	if out["sequence"] != null and (out["tick"] == null or int(out["tick"]) <= 0):
 		out["reason_code"] = "incomplete_event_cursor"
 		return out
 	var focus_keys: Array = []

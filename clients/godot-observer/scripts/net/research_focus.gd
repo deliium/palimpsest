@@ -166,6 +166,7 @@ func _send(kind: String, path: String, query: Dictionary, source: String) -> voi
 		kind,
 		path,
 		{
+			"kind": kind,
 			"source": "research_focus",
 			"expected_root": "object",
 			"focus_epoch": _focus_epoch,

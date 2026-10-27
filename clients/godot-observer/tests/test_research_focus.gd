@@ -60,9 +60,9 @@ func _lineage_resolution() -> String:
 
 func _identity_mismatch() -> String:
 	var controller = FocusScript.new()
-	var meta := {}
+	var captured := {"meta": {}}
 	controller.set_request_sink(func(_kind: String, _path: String, request_meta: Dictionary, _query: Dictionary) -> void:
-		meta = request_meta.duplicate(true)
+		captured["meta"] = request_meta.duplicate(true)
 	)
 	controller.set_context("run-1", 1, 0)
 	controller.resolve_selection({
@@ -73,7 +73,7 @@ func _identity_mismatch() -> String:
 		"evidence_class": "analytical",
 		"identity_owner": "agent-a",
 	})
-	controller.handle_response(meta, {
+	controller.handle_response(captured["meta"], {
 		"snapshot": {"publication_id": "pub-1", "digest": "d", "boundary_tick": 4},
 		"items": [
 			{"ref": {"family": "technology", "evidence_class": "analytical", "native_kind": "technique", "native_id": "tech-1", "identity_owner": "agent-b", "key": "k"}},
@@ -89,11 +89,10 @@ func _identity_mismatch() -> String:
 
 func _civ_resolution() -> String:
 	var controller = FocusScript.new()
-	var meta := {}
-	var query := {}
+	var captured := {"meta": {}, "query": {}}
 	controller.set_request_sink(func(_kind: String, _path: String, request_meta: Dictionary, request_query: Dictionary) -> void:
-		meta = request_meta.duplicate(true)
-		query = request_query.duplicate(true)
+		captured["meta"] = request_meta.duplicate(true)
+		captured["query"] = request_query.duplicate(true)
 	)
 	controller.set_context("run-1", 1, 0)
 	controller.resolve_selection({
@@ -105,11 +104,11 @@ func _civ_resolution() -> String:
 		"civilization_row_id": "row-1",
 		"tick": 4,
 	})
-	if str(query.get("layer", "")) != "institutions":
+	if str(captured["query"].get("layer", "")) != "institutions":
 		return "institutions layer missing"
-	if str(query.get("owner_id", "")) != "agent-a":
+	if str(captured["query"].get("owner_id", "")) != "agent-a":
 		return "subjective civilization scope owner missing"
-	controller.handle_response(meta, {
+	controller.handle_response(captured["meta"], {
 		"publication": {"publication_id": "pub-1"},
 		"resolved_cursor": {"boundary_tick": 4},
 		"coverage": {},

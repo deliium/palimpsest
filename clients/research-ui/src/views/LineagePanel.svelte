@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import { ApiClientError, getObserverRun } from '../api/client'
   import {
     getLineageFamilies,
     getLineageNodes,
-    getLineageSnapshots,
     getLineageTraverse,
+    scanLineageSnapshots,
   } from '../api/research'
+  import { subscribeCredentialChanges } from '../auth/credentials'
   import AvailabilityNotice from '../components/research/AvailabilityNotice.svelte'
   import ResearchTable from '../components/research/ResearchTable.svelte'
   import LineageGraphView from '../graphs/LineageGraph.svelte'
@@ -27,7 +28,6 @@
     mergeGraphPages,
     refLabel,
     sameSnapshot,
-    snapshotsForFamily,
     type LineageEvidenceClass,
     type LineageFamily,
   } from '../research/lineage'
@@ -63,12 +63,42 @@
   let error = $state<string | null>(null)
   let selectedRoot = $state<string | null>(null)
   let continuation = $state<string | null>(null)
+  let scanCursor = $state<string | null>(null)
+  let scanLimited = $state(false)
+  let scanExhausted = $state(false)
+  let scanning = $state(false)
   let loadEpoch = 0
+  let abort: AbortController | null = null
+  let unsubscribeCredentials: (() => void) | null = null
+
+  const SNAPSHOT_SCAN_PAGE_LIMIT = 200
+  const SNAPSHOT_SCAN_PAGES = 5
+  const MAX_SNAPSHOT_ROWS = 4000
 
   const descriptor = $derived(capabilityFor(families, family, evidence))
 
   onMount(() => {
+    unsubscribeCredentials = subscribeCredentialChanges(() => {
+      abort?.abort()
+      snapshots = []
+      snapshot = null
+      page = null
+      roots = []
+      graph = null
+      continuation = null
+      scanCursor = null
+      scanLimited = false
+      scanExhausted = false
+      void loadAll()
+    })
     void loadAll()
+  })
+
+  onDestroy(() => {
+    unsubscribeCredentials?.()
+    unsubscribeCredentials = null
+    abort?.abort()
+    abort = null
   })
 
   $effect(() => {
@@ -93,6 +123,10 @@
 
   async function loadAll(): Promise<void> {
     const epoch = ++loadEpoch
+    abort?.abort()
+    abort = new AbortController()
+    const signal = abort.signal
+    scanning = false
     if (selection.sequence !== null) {
       status = 'unavailable'
       reason = 'prefix_cursor_requires_full_boundary'
@@ -101,13 +135,22 @@
     status = 'loading'
     reason = null
     error = null
+    snapshots = []
+    snapshot = null
+    page = null
+    roots = []
+    graph = null
+    continuation = null
+    scanCursor = null
+    scanLimited = false
+    scanExhausted = false
     try {
       if (families.length === 0) {
         try {
-          families = await getLineageFamilies(runId, true)
+          families = await getLineageFamilies(runId, true, signal)
         } catch (err) {
           if (err instanceof ApiClientError && err.status === 403) {
-            families = await getLineageFamilies(runId, false)
+            families = await getLineageFamilies(runId, false, signal)
           } else {
             throw err
           }
@@ -119,47 +162,37 @@
         reason = 'unsupported_family_class'
         return
       }
-      const run = await getObserverRun(runId)
+      const run = await getObserverRun(runId, signal)
       requestedTick = selection.tick ?? run.latest_tick ?? run.tick
-      const snapPage = await getLineageSnapshots(
+      const scan = await scanLineageSnapshots(
         runId,
         { family, evidenceClass: evidence, ownerId },
-        { limit: 200 },
+        {
+          boundaryTick: requestedTick,
+          limit: SNAPSHOT_SCAN_PAGE_LIMIT,
+          maxPages: SNAPSHOT_SCAN_PAGES,
+        },
+        signal,
       )
       if (epoch !== loadEpoch) {
         return
       }
-      snapshots = snapshotsForFamily(snapPage)
-      const exact = snapshots.find(
-        (item) => item.boundary_tick === requestedTick,
-      )
-      snapshot = exact ?? snapshots[0] ?? null
-      if (snapshot === null) {
+      mergeSnapshots(scan.items)
+      scanCursor = scan.nextCursor
+      scanExhausted = scan.exhausted
+      scanLimited = scan.nextCursor !== null
+      if (scan.snapshot === null) {
         status = 'unavailable'
-        reason = 'snapshot_unavailable'
+        reason = scanLimited ? 'scan_limited' : 'snapshot_not_found'
         return
       }
-      const nodes = await getLineageNodes(
-        runId,
-        { family, evidenceClass: evidence, ownerId },
-        { boundaryTick: snapshot.boundary_tick, limit: 200 },
-      )
-      if (epoch !== loadEpoch) {
-        return
-      }
-      if (!sameSnapshot(snapshot, nodes.snapshot)) {
-        status = 'error'
-        reason = 'research_snapshot_changed'
-        return
-      }
-      page = nodes
-      roots = nodes.items
-      status = roots.length === 0 ? 'empty' : 'available'
-      graph = null
-      selectedRoot = null
-      continuation = null
+      snapshot = scan.snapshot
+      await loadNodesFor(scan.snapshot, epoch, signal)
     } catch (err) {
       if (epoch !== loadEpoch) {
+        return
+      }
+      if (err instanceof DOMException) {
         return
       }
       if (err instanceof ApiClientError) {
@@ -170,6 +203,98 @@
         reason = err instanceof Error ? err.message : 'fetch_failed'
       }
     }
+  }
+
+  function mergeSnapshots(items: LineageSnapshot[]): void {
+    const known = new Map(snapshots.map((item) => [item.publication_id, item]))
+    let limited = false
+    for (const item of items) {
+      if (known.size >= MAX_SNAPSHOT_ROWS && !known.has(item.publication_id)) {
+        limited = true
+        break
+      }
+      known.set(item.publication_id, item)
+    }
+    snapshots = [...known.values()].sort(
+      (left, right) => right.boundary_tick - left.boundary_tick,
+    )
+    if (limited) {
+      scanLimited = true
+    }
+  }
+
+  async function continueSnapshotScan(): Promise<void> {
+    if (scanCursor === null || requestedTick === null || scanning) {
+      return
+    }
+    scanning = true
+    const epoch = loadEpoch
+    const signal = abort?.signal
+    try {
+      const scan = await scanLineageSnapshots(
+        runId,
+        { family, evidenceClass: evidence, ownerId },
+        {
+          boundaryTick: requestedTick,
+          after: scanCursor,
+          limit: SNAPSHOT_SCAN_PAGE_LIMIT,
+          maxPages: SNAPSHOT_SCAN_PAGES,
+        },
+        signal,
+      )
+      if (epoch !== loadEpoch) {
+        return
+      }
+      mergeSnapshots(scan.items)
+      scanCursor = scan.nextCursor
+      scanExhausted = scan.exhausted
+      scanLimited = scan.nextCursor !== null
+      if (scan.snapshot !== null) {
+        snapshot = scan.snapshot
+        await loadNodesFor(scan.snapshot, epoch, signal)
+        return
+      }
+      status = 'unavailable'
+      reason = scanLimited ? 'scan_limited' : 'snapshot_not_found'
+    } catch (err) {
+      if (epoch !== loadEpoch) {
+        return
+      }
+      if (err instanceof DOMException) {
+        return
+      }
+      status = 'error'
+      reason = err instanceof Error ? err.message : 'fetch_failed'
+    } finally {
+      scanning = false
+    }
+  }
+
+  async function loadNodesFor(
+    target: LineageSnapshot,
+    epoch: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const nodes = await getLineageNodes(
+      runId,
+      { family, evidenceClass: evidence, ownerId },
+      { boundaryTick: target.boundary_tick, limit: 200 },
+      signal,
+    )
+    if (epoch !== loadEpoch) {
+      return
+    }
+    if (!sameSnapshot(target, nodes.snapshot)) {
+      status = 'error'
+      reason = 'research_snapshot_changed'
+      return
+    }
+    page = nodes
+    roots = nodes.items
+    status = roots.length === 0 ? 'empty' : 'available'
+    graph = null
+    selectedRoot = null
+    continuation = null
   }
 
   async function chooseSnapshot(value: string): Promise<void> {
@@ -185,25 +310,23 @@
     if (snapshot === null) {
       return
     }
+    const epoch = ++loadEpoch
+    abort?.abort()
+    abort = new AbortController()
     status = 'loading'
     try {
-      const nodes = await getLineageNodes(
-        runId,
-        { family, evidenceClass: evidence, ownerId },
-        { boundaryTick: snapshot.boundary_tick, limit: 200 },
-      )
-      if (!sameSnapshot(snapshot, nodes.snapshot)) {
-        status = 'error'
-        reason = 'research_snapshot_changed'
+      await loadNodesFor(snapshot, epoch, abort.signal)
+    } catch (err) {
+      if (epoch !== loadEpoch) {
         return
       }
-      page = nodes
-      roots = nodes.items
-      graph = null
-      status = roots.length === 0 ? 'empty' : 'available'
-    } catch (err) {
       status = 'error'
-      reason = err instanceof ApiClientError ? err.code : 'fetch_failed'
+      reason =
+        err instanceof ApiClientError
+          ? err.code
+          : err instanceof Error
+            ? err.message
+            : 'fetch_failed'
     }
   }
 
@@ -211,6 +334,11 @@
     if (snapshot === null) {
       return
     }
+    const epoch = ++loadEpoch
+    abort?.abort()
+    abort = new AbortController()
+    const signal = abort.signal
+    const target = snapshot
     selectedRoot = rootKey
     status = 'loading'
     try {
@@ -219,22 +347,29 @@
         { family, evidenceClass: evidence, ownerId },
         {
           rootKey,
-          boundaryTick: snapshot.boundary_tick,
+          boundaryTick: target.boundary_tick,
           direction: 'both',
           maxDepth: 2,
           maxNodes: 500,
           maxEdges: 1500,
-          livingOnly: family === 'genealogy' && false,
+          livingOnly: false,
           limit: 200,
         },
+        signal,
       )
-      if (!sameSnapshot(snapshot, next.snapshot)) {
+      if (epoch !== loadEpoch) {
+        return
+      }
+      if (!sameSnapshot(target, next.snapshot)) {
         throw new Error('research_snapshot_changed')
       }
       graph = next
       continuation = next.next_cursor
       status = 'available'
     } catch (err) {
+      if (epoch !== loadEpoch || err instanceof DOMException) {
+        return
+      }
       status = 'error'
       reason = err instanceof Error ? err.message : 'fetch_failed'
     }
@@ -244,6 +379,7 @@
     if (graph === null || snapshot === null || continuation === null) {
       return
     }
+    const epoch = loadEpoch
     try {
       const next = await getLineageTraverse(
         runId,
@@ -254,10 +390,17 @@
           after: continuation,
           limit: 200,
         },
+        abort?.signal,
       )
+      if (epoch !== loadEpoch) {
+        return
+      }
       graph = mergeGraphPages(graph, next)
       continuation = next.next_cursor
     } catch (err) {
+      if (epoch !== loadEpoch || err instanceof DOMException) {
+        return
+      }
       reason = err instanceof Error ? err.message : 'fetch_failed'
       status = 'error'
     }
@@ -367,10 +510,22 @@
     <button type="button" onclick={() => void loadAll()}>Reload lineage</button>
   </div>
 
+  {#if scanLimited}
+    <div class="actions" role="status">
+      <span class="muted">
+        Publication discovery scanned {snapshots.length} publication(s) and is
+        scan-limited; the requested boundary is not proven absent.
+      </span>
+      <button type="button" onclick={() => void continueSnapshotScan()} disabled={scanning}>
+        Continue publication scan
+      </button>
+    </div>
+  {/if}
+
   {#if requestedTick !== null && snapshot !== null && snapshot.boundary_tick !== requestedTick}
     <p class="notice" role="status">
-      Requested tick {requestedTick} is not captured. Showing explicit earlier
-      boundary {snapshot.boundary_tick}; this is not relabelled as current.
+      Showing explicit published boundary {snapshot.boundary_tick} for requested
+      tick {requestedTick}; it is not relabelled as current.
     </p>
   {/if}
 

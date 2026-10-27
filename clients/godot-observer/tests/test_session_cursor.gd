@@ -84,6 +84,8 @@ func run() -> Array:
 	if int(gap_query.get("after_tick", -1)) != 1 or int(gap_query.get("after_sequence", -1)) != 0:
 		failures.append("the live gap should resume from the last applied cursor")
 	_assert_steps(session, failures)
+	_assert_seek_queries(failures)
+	_assert_catch_up_continuation(failures)
 	_assert_environment_frame(session, failures)
 	_assert_territorial_overlays(failures)
 	_assert_metric_catalog(failures)
@@ -169,6 +171,99 @@ func _assert_steps(session: SessionScript, failures: Array) -> void:
 		failures.append("a backward step should replace state from the frame")
 	if session.transport.tick != 4 or int(session.transport.sequence) != 0:
 		failures.append("the replaced frame should view the sought event")
+
+
+func _assert_seek_queries(failures: Array) -> void:
+	var session := SessionScript.new()
+	session.run_id = "run-1"
+	session.origin = ORIGIN
+	session.transport.set_mode(session.transport.MODE_REPLAY)
+	session.request_log.clear()
+	session.seek_event(100000, 7)
+	if session.request_log.size() < 2:
+		failures.append("late event seek should issue an event window and an exact state read")
+	else:
+		var window_request: Dictionary = session.request_log[0]
+		if str(window_request.get("kind", "")) != "events_window":
+			failures.append("late event seek should start with the event window")
+		var window_query: Dictionary = window_request.get("query", {})
+		if int(window_query.get("after_tick", -1)) != 100000:
+			failures.append("late event window should resume from the target tick")
+		if int(window_query.get("after_sequence", -1)) != 6:
+			failures.append("late event window should exclude the target sequence")
+	var state_request: Dictionary = session.last_request
+	if str(state_request.get("kind", "")) != "state_cursor":
+		failures.append("late event seek should read the exact event cursor")
+	else:
+		var state_query: Dictionary = state_request.get("query", {})
+		if int(state_query.get("tick", -1)) != 100000:
+			failures.append("late event seek lost the target tick")
+		if int(state_query.get("through_sequence", -1)) != 7:
+			failures.append("late event seek lost the target sequence")
+	session.request_log.clear()
+	session.seek_tick(500)
+	var tick_request: Dictionary = session.last_request
+	if str(tick_request.get("kind", "")) != "state_tick":
+		failures.append("eventless seek should read an exact tick boundary")
+	elif int(tick_request.get("query", {}).get("tick", -1)) != 500:
+		failures.append("eventless seek requested the wrong tick")
+	elif tick_request.get("query", {}).has("through_sequence"):
+		failures.append("eventless seek should not include a sequence")
+	session.free()
+
+
+func _assert_catch_up_continuation(failures: Array) -> void:
+	var session := SessionScript.new()
+	session.run_id = "run-1"
+	session.origin = ORIGIN
+	session.world = Mark.new()
+	session.world.tick = 4
+	session.transport.set_cursor(session.transport.MODE_LIVE, 3, 0, 1.0, false)
+	session.cursor_after_tick = 3
+	session.cursor_after_sequence = 0
+	var full_page: Array = []
+	for index in 100:
+		full_page.append(_raw_note(4, index))
+	session.request_log.clear()
+	session._pending["catch-1"] = {"kind": "catch_up", "seek_id": -1}
+	session._on_http("catch-1", 200, {"count": 100, "limit": 100, "events": full_page}, "")
+	if str(session.last_request.get("kind", "")) != "catch_up":
+		failures.append("a full catch-up page should request the next page")
+	else:
+		var query: Dictionary = session.last_request.get("query", {})
+		if int(query.get("after_tick", -1)) != 4 or int(query.get("after_sequence", -1)) != 99:
+			failures.append("catch-up continuation should use the exclusive event cursor")
+	session.request_log.clear()
+	session._pending["catch-2"] = {"kind": "catch_up", "seek_id": -1}
+	session._on_http("catch-2", 200, {"count": 1, "limit": 100, "events": [_raw_note(5, 0)]}, "")
+	if str(session.last_request.get("kind", "")) != "state_refresh":
+		failures.append("an exhausted catch-up page should refresh state once")
+	var empty := SessionScript.new()
+	empty.run_id = "run-1"
+	empty.origin = ORIGIN
+	empty.world = Mark.new()
+	empty.world.tick = 4
+	empty.transport.set_cursor(empty.transport.MODE_LIVE, 3, 0, 1.0, false)
+	empty.cursor_after_tick = 3
+	empty.cursor_after_sequence = 0
+	empty.request_log.clear()
+	empty._pending["catch-empty"] = {"kind": "catch_up", "seek_id": -1}
+	empty._on_http("catch-empty", 200, {"count": 0, "limit": 100, "events": []}, "")
+	if str(empty.last_request.get("kind", "")) != "state_refresh":
+		failures.append("an empty catch-up page should stop without looping")
+	empty._pending["catch-duplicate"] = {"kind": "catch_up", "seek_id": -1}
+	empty.cursor_after_tick = 4
+	empty.cursor_after_sequence = 99
+	empty.request_log.clear()
+	empty._on_http("catch-duplicate", 200, {"count": 100, "limit": 100, "events": full_page}, "")
+	if str(empty.last_request.get("kind", "")) != "state_refresh":
+		failures.append("a non-advancing full page should stop rather than loop")
+	session.free()
+	empty.free()
+
+
+func _raw_note(tick: int, sequence: int) -> Dictionary:
+	return {"type": "NOTE", "tick": tick, "sequence": sequence}
 
 
 func _assert_environment_frame(session: SessionScript, failures: Array) -> void:

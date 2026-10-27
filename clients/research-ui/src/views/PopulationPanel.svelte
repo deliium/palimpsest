@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import {
     ApiClientError,
     getObserverRun,
@@ -16,6 +16,7 @@
   import ResearchTable from '../components/research/ResearchTable.svelte'
   import SeriesChart from '../components/research/SeriesChart.svelte'
   import type { DemographicsEnvelope } from '../api/researchSchemas'
+  import { credentialGeneration } from '../auth/credentials'
   import type { GenerationMarker } from '../research/generationTypes'
   import type { ResearchSelection } from '../research/selection'
   import {
@@ -25,7 +26,11 @@
     stageBars,
     type BoundarySample,
   } from '../research/population'
-  import { BoundedRequestPool } from '../research/requests'
+  import { ExplicitPager, type PagerState } from '../research/paging'
+  import {
+    BoundedRequestPool,
+    ResearchScopeController,
+  } from '../research/requests'
   import {
     MarkerHighWater,
     pinHighWater,
@@ -43,6 +48,13 @@
 
   let { runId, selection, onSelectionChange }: Props = $props()
 
+  type AgentRow = DemographicsEnvelope['agents'][number]
+  type CohortRow = DemographicsEnvelope['cohorts'][number]
+
+  const MAX_MARKER_ROWS = 5000
+  const MAX_AGENT_ROWS = 2000
+  const MAX_COHORT_ROWS = 2000
+
   let run = $state<ObserverRunOut | null>(null)
   let highWaterState = new MarkerHighWater()
   let highWater = $state<number | null>(null)
@@ -51,6 +63,10 @@
     'loading',
   )
   let markerReason = $state<string | null>(null)
+  let markerHasMore = $state(false)
+  let markerLimited = $state(false)
+  let markerRevision = 0
+  let markerPager: ExplicitPager<GenerationMarker> | null = null
   let summary = $state<DemographicsEnvelope | null>(null)
   let summaryReason = $state<string | null>(null)
   let samples = $state<BoundarySample[]>([])
@@ -59,15 +75,25 @@
   let omitted = $state(0)
   let loading = $state(true)
   let error = $state<string | null>(null)
-  let agentEnvelope = $state<DemographicsEnvelope | null>(null)
-  let cohortEnvelope = $state<DemographicsEnvelope | null>(null)
-  let agentsCursor = $state<string | null>(null)
-  let cohortsCursor = $state<string | null>(null)
+  let agentRows = $state<AgentRow[]>([])
+  let cohortRows = $state<CohortRow[]>([])
+  let agentHasMore = $state(false)
+  let agentLimited = $state(false)
+  let cohortHasMore = $state(false)
+  let cohortLimited = $state(false)
+  let agentPager = $state<ExplicitPager<AgentRow> | null>(null)
+  let cohortPager = $state<ExplicitPager<CohortRow> | null>(null)
   let agentLoading = $state(false)
   let cohortLoading = $state(false)
-  let requestEpoch = 0
-  let controller: AbortController | null = null
-  const pool = new BoundedRequestPool(4)
+  let boundaryEpoch = 0
+  let agentEpoch = 0
+  let cohortEpoch = 0
+  let markerEpoch = 0
+  let boundaryAbort: AbortController | null = null
+  let scopeEpoch = 0
+  let scopeTick: number | null = null
+  let scopeController: ResearchScopeController | null = null
+  const pool = new BoundedRequestPool(4, 16)
 
   const effectiveTick = $derived(selection.tick ?? run?.tick ?? 0)
 
@@ -78,15 +104,98 @@
 
   const chartSeries = $derived(populationSeries(samples))
 
+  class PagerUnavailable extends Error {
+    readonly reason: string
+
+    constructor(reason: string) {
+      super(reason)
+      this.name = 'PagerUnavailable'
+      this.reason = reason
+    }
+  }
+
   onMount(() => {
     void loadRun()
   })
 
+  onDestroy(() => {
+    scopeController?.dispose()
+    scopeController = null
+    boundaryAbort?.abort()
+    boundaryAbort = null
+  })
+
   $effect(() => {
     if (runId !== '' && run !== null) {
-      void loadBoundary(effectiveTick, rangeMode)
+      syncScope(effectiveTick)
     }
   })
+
+  function scopeFor(tick: number) {
+    return {
+      runId,
+      view: 'population',
+      tick,
+      evidenceClass: 'objective',
+      ownerId: null,
+      publicationId: null,
+    }
+  }
+
+  function syncScope(tick: number): void {
+    if (scopeController === null) {
+      scopeController = new ResearchScopeController(scopeFor(tick))
+      scopeController.onReset(handleScopeReset)
+      scopeTick = tick
+      pool.setScope(scopeEpoch)
+      return
+    }
+    if (scopeTick === tick) {
+      return
+    }
+    scopeTick = tick
+    scopeController.setScope(scopeFor(tick))
+  }
+
+  function handleScopeReset(): void {
+    scopeEpoch += 1
+    pool.setScope(scopeEpoch)
+    boundaryEpoch += 1
+    boundaryAbort?.abort()
+    boundaryAbort = null
+    summary = null
+    summaryReason = null
+    samples = []
+    sampled = false
+    omitted = 0
+    resetAgentRows()
+    resetCohortRows()
+    markerEpoch += 1
+    markerPager = null
+    markers = []
+    markerHasMore = false
+    markerLimited = false
+    if (run !== null) {
+      void loadMarkers(false)
+      void loadBoundary(effectiveTick, untrack(() => rangeMode))
+    }
+  }
+
+  function resetAgentRows(): void {
+    agentEpoch += 1
+    agentPager = null
+    agentRows = []
+    agentHasMore = false
+    agentLimited = false
+  }
+
+  function resetCohortRows(): void {
+    cohortEpoch += 1
+    cohortPager = null
+    cohortRows = []
+    cohortHasMore = false
+    cohortLimited = false
+  }
 
   async function loadRun(): Promise<void> {
     loading = true
@@ -94,15 +203,10 @@
     try {
       const loaded = await getObserverRun(runId)
       run = loaded
-      const observed = highWaterState.observe(
-        runId,
-        loaded,
-        0,
-        0,
-      )
-      highWater = observed.highWater
+      highWater = pinHighWater(loaded)
+      syncScope(untrack(() => effectiveTick))
       await loadMarkers(false)
-      await loadBoundary(effectiveTick, rangeMode)
+      await loadBoundary(effectiveTick, untrack(() => rangeMode))
     } catch (err) {
       error = err instanceof ApiClientError ? err.code : 'fetch_failed'
     } finally {
@@ -114,91 +218,260 @@
     if (run === null) {
       return
     }
-    const next = highWaterState.refresh(runId, run, 0, 0)
-    highWater = next.highWater
-    await loadMarkers(true)
-  }
-
-  async function loadMarkers(changed: boolean): Promise<void> {
-    const target = highWater
-    if (target === null) {
-      markerStatus = 'unavailable'
-      markerReason = 'high_water_unavailable'
-      return
-    }
-    markerStatus = 'loading'
-    markerReason = null
-    const collected: GenerationMarker[] = []
-    let after: number | null = null
-    let revision: number | null = null
-    let pages = 0
     try {
-      while (pages < 25) {
-        pages += 1
-        const page = await getGenerationMarkers(runId, {
-          tick: target,
-          afterGenerationIndex: after,
-          limit: 200,
-        })
-        if (!changed && revision !== null && page.revision !== revision) {
-          markers = []
-          markerStatus = 'loading'
-          markerReason = 'revision_changed'
-          return
-        }
-        revision = page.revision
-        if (page.availability === 'unavailable') {
-          markerStatus = 'unavailable'
-          markerReason = page.reason_code
-          markers = []
-          return
-        }
-        collected.push(...page.markers)
-        if (page.next_after_generation_index === null) {
-          break
-        }
-        if (!highWaterState.acceptsContinuation(target)) {
-          markerStatus = 'error'
-          markerReason = 'mixed_high_water'
-          return
-        }
-        after = page.next_after_generation_index
-      }
-      markers = collected
-      markerStatus = 'available'
+      const loaded = await getObserverRun(runId)
+      run = loaded
+      highWater = pinHighWater(loaded)
+      await loadMarkers(true)
     } catch (err) {
       markerStatus = 'error'
       markerReason = err instanceof ApiClientError ? err.code : 'marker_fetch_failed'
     }
   }
 
+  function createMarkerPager(target: number): ExplicitPager<GenerationMarker> {
+    return new ExplicitPager<GenerationMarker>(
+      async (cursor) => {
+        const token = scopeController!.currentToken()
+        const page = await pool.run(
+          () =>
+            getGenerationMarkers(
+              runId,
+              {
+                tick: target,
+                afterGenerationIndex: cursor === null ? null : Number(cursor),
+                limit: 200,
+              },
+              token.signal,
+            ),
+          scopeEpoch,
+        )
+        const accepted = scopeController!.accept(token, page)
+        markerRevision = accepted.revision
+        if (accepted.availability === 'unavailable') {
+          throw new PagerUnavailable(
+            accepted.reason_code ?? 'generation_markers_unavailable',
+          )
+        }
+        return {
+          items: accepted.markers,
+          nextCursor:
+            accepted.next_after_generation_index === null
+              ? null
+              : String(accepted.next_after_generation_index),
+          publicationId: String(accepted.revision),
+        }
+      },
+      {
+        keyOf: (marker) => String(marker.generation_index),
+        maxItems: MAX_MARKER_ROWS,
+      },
+    )
+  }
+
+  function applyMarkerState(
+    pager: ExplicitPager<GenerationMarker>,
+    state: PagerState<GenerationMarker>,
+  ): void {
+    markerPager = pager
+    markers = [...state.items]
+    markerHasMore = state.nextCursor !== null || state.limited
+    markerLimited = state.limited
+    if (state.stopReason === 'publication_changed') {
+      markers = []
+      markerStatus = 'error'
+      markerReason = 'revision_changed'
+      return
+    }
+    if (state.stopReason === 'fetch_error') {
+      markerStatus = 'error'
+      markerReason = 'marker_fetch_failed'
+      return
+    }
+    markerStatus = 'available'
+  }
+
+  async function loadMarkers(changed: boolean): Promise<void> {
+    if (run === null) {
+      return
+    }
+    const epoch = ++markerEpoch
+    markerStatus = 'loading'
+    markerReason = null
+    try {
+      let target = changed
+        ? pinHighWater(run)
+        : (highWater ?? pinHighWater(run))
+      let pager = createMarkerPager(target)
+      let state = await pager.loadMore()
+      if (epoch !== markerEpoch) {
+        return
+      }
+      const observed = changed
+        ? highWaterState.refresh(
+            runId,
+            run,
+            markerRevision,
+            credentialGeneration(),
+          )
+        : highWaterState.observe(
+            runId,
+            run,
+            markerRevision,
+            credentialGeneration(),
+          )
+      if (observed.highWater !== target) {
+        target = observed.highWater
+        pager = createMarkerPager(target)
+        state = await pager.loadMore()
+        if (epoch !== markerEpoch) {
+          return
+        }
+      }
+      highWater = observed.highWater
+      applyMarkerState(pager, state)
+    } catch (err) {
+      if (epoch !== markerEpoch) {
+        return
+      }
+      markerStatus = 'error'
+      markerReason =
+        err instanceof PagerUnavailable
+          ? err.reason
+          : err instanceof ApiClientError
+            ? err.code
+            : 'marker_fetch_failed'
+    }
+  }
+
+  async function continueMarkers(): Promise<void> {
+    if (markerPager === null) {
+      return
+    }
+    const epoch = ++markerEpoch
+    markerStatus = 'loading'
+    markerReason = null
+    try {
+      const state = await markerPager.loadMore()
+      if (epoch !== markerEpoch) {
+        return
+      }
+      applyMarkerState(markerPager, state)
+    } catch (err) {
+      if (epoch !== markerEpoch) {
+        return
+      }
+      markerStatus = 'error'
+      markerReason = err instanceof ApiClientError ? err.code : 'marker_fetch_failed'
+    }
+  }
+
+  function createAgentPager(tick: number): ExplicitPager<AgentRow> {
+    return new ExplicitPager<AgentRow>(
+      async (cursor) => {
+        const token = scopeController!.currentToken()
+        const page = await pool.run(
+          () =>
+            getDemographics(
+              runId,
+              {
+                tick,
+                section: 'agents',
+                afterAgentId: cursor,
+                limit: 100,
+              },
+              token.signal,
+            ),
+          scopeEpoch,
+        )
+        const accepted = scopeController!.accept(token, page)
+        if (accepted.availability === 'unavailable') {
+          throw new PagerUnavailable(
+            accepted.reason_code ?? 'demographics_unavailable',
+          )
+        }
+        return {
+          items: accepted.agents,
+          nextCursor: accepted.next_after_agent_id,
+          publicationId: `${accepted.resolved_tick}:${accepted.revision}`,
+        }
+      },
+      {
+        keyOf: (row) => row.agent_id,
+        fingerprintOf: (row) => `${row.life_status}:${row.age_ticks ?? 'null'}`,
+        maxItems: MAX_AGENT_ROWS,
+      },
+    )
+  }
+
+  function createCohortPager(tick: number): ExplicitPager<CohortRow> {
+    return new ExplicitPager<CohortRow>(
+      async (cursor) => {
+        const token = scopeController!.currentToken()
+        const page = await pool.run(
+          () =>
+            getDemographics(
+              runId,
+              {
+                tick,
+                section: 'cohorts',
+                afterGroupKey: cursor,
+                limit: 100,
+              },
+              token.signal,
+            ),
+          scopeEpoch,
+        )
+        const accepted = scopeController!.accept(token, page)
+        if (accepted.availability === 'unavailable') {
+          throw new PagerUnavailable(
+            accepted.reason_code ?? 'demographics_unavailable',
+          )
+        }
+        return {
+          items: accepted.cohorts,
+          nextCursor: accepted.next_after_group_key,
+          publicationId: `${accepted.resolved_tick}:${accepted.revision}`,
+        }
+      },
+      {
+        keyOf: (row) =>
+          `${row.generation_index}:${row.entry_tick}:${row.cohort_id}`,
+        maxItems: MAX_COHORT_ROWS,
+      },
+    )
+  }
+
   async function loadBoundary(
     tick: number,
     mode: 'selected' | 'full',
   ): Promise<void> {
-    if (run === null) {
+    if (run === null || scopeController === null) {
       return
     }
-    const epoch = ++requestEpoch
-    controller?.abort()
-    controller = new AbortController()
+    const epoch = ++boundaryEpoch
+    boundaryAbort?.abort()
+    boundaryAbort = new AbortController()
+    const token = scopeController.currentToken()
+    const signal = boundaryAbort.signal
     loading = true
     error = null
     try {
       const summaryPage = await getDemographics(
         runId,
         { tick, section: 'generations', limit: 200 },
-        controller.signal,
+        signal,
       )
-      if (epoch !== requestEpoch) {
+      if (
+        epoch !== boundaryEpoch ||
+        !scopeController.isCurrent(token)
+      ) {
         return
       }
       summary = summaryPage
       summaryReason = summaryPage.reason_code
-      cohortEnvelope = null
-      cohortsCursor = null
-      agentEnvelope = null
-      agentsCursor = null
+      resetAgentRows()
+      resetCohortRows()
 
       if (mode === 'selected') {
         samples = [{ tick, envelope: summaryPage }]
@@ -223,24 +496,27 @@
                 const envelope = await getDemographics(
                   runId,
                   { tick: sampleTick, section: 'generations', limit: 1 },
-                  controller?.signal,
+                  signal,
                 )
-                if (epoch !== requestEpoch) {
+                if (
+                  epoch !== boundaryEpoch ||
+                  !scopeController!.isCurrent(token)
+                ) {
                   return { tick: sampleTick, envelope: null }
                 }
                 return { tick: sampleTick, envelope }
               } catch {
                 return { tick: sampleTick, envelope: null }
               }
-            }),
+            }, scopeEpoch),
           ),
         )
-        if (epoch === requestEpoch) {
+        if (epoch === boundaryEpoch) {
           samples = loaded
         }
       }
     } catch (err) {
-      if (epoch !== requestEpoch) {
+      if (epoch !== boundaryEpoch) {
         return
       }
       error =
@@ -250,57 +526,91 @@
             ? err.code
             : 'fetch_failed'
     } finally {
-      if (epoch === requestEpoch) {
+      if (epoch === boundaryEpoch) {
         loading = false
       }
     }
   }
 
   async function loadAgents(more = false): Promise<void> {
+    if (scopeController === null) {
+      return
+    }
+    const epoch = ++agentEpoch
     agentLoading = true
+    agentHasMore = false
     try {
-      const page = await getDemographics(runId, {
-        tick: effectiveTick,
-        section: 'agents',
-        afterAgentId: more ? agentsCursor : null,
-        limit: 100,
-      })
-      agentEnvelope =
-        more && agentEnvelope !== null
-          ? {
-              ...page,
-              agents: [...agentEnvelope.agents, ...page.agents],
-            }
-          : page
-      agentsCursor = page.next_after_agent_id
+      if (!more || agentPager === null) {
+        agentRows = []
+        agentPager = createAgentPager(effectiveTick)
+      }
+      const state = await agentPager.loadMore()
+      if (epoch !== agentEpoch) {
+        return
+      }
+      agentRows = [...state.items]
+      agentHasMore = state.nextCursor !== null || state.limited
+      agentLimited = state.limited
+      if (state.stopReason === 'publication_changed') {
+        error = 'boundary_changed'
+      } else if (state.stopReason === 'fetch_error') {
+        error = 'fetch_failed'
+      }
     } catch (err) {
-      error = err instanceof ApiClientError ? err.code : 'fetch_failed'
+      if (epoch !== agentEpoch) {
+        return
+      }
+      error =
+        err instanceof PagerUnavailable
+          ? err.reason
+          : err instanceof ApiClientError
+            ? err.code
+            : 'fetch_failed'
     } finally {
-      agentLoading = false
+      if (epoch === agentEpoch) {
+        agentLoading = false
+      }
     }
   }
 
   async function loadCohorts(more = false): Promise<void> {
+    if (scopeController === null) {
+      return
+    }
+    const epoch = ++cohortEpoch
     cohortLoading = true
+    cohortHasMore = false
     try {
-      const page = await getDemographics(runId, {
-        tick: effectiveTick,
-        section: 'cohorts',
-        afterGroupKey: more ? cohortsCursor : null,
-        limit: 100,
-      })
-      cohortEnvelope =
-        more && cohortEnvelope !== null
-          ? {
-              ...page,
-              cohorts: [...cohortEnvelope.cohorts, ...page.cohorts],
-            }
-          : page
-      cohortsCursor = page.next_after_group_key
+      if (!more || cohortPager === null) {
+        cohortRows = []
+        cohortPager = createCohortPager(effectiveTick)
+      }
+      const state = await cohortPager.loadMore()
+      if (epoch !== cohortEpoch) {
+        return
+      }
+      cohortRows = [...state.items]
+      cohortHasMore = state.nextCursor !== null || state.limited
+      cohortLimited = state.limited
+      if (state.stopReason === 'publication_changed') {
+        error = 'boundary_changed'
+      } else if (state.stopReason === 'fetch_error') {
+        error = 'fetch_failed'
+      }
     } catch (err) {
-      error = err instanceof ApiClientError ? err.code : 'fetch_failed'
+      if (epoch !== cohortEpoch) {
+        return
+      }
+      error =
+        err instanceof PagerUnavailable
+          ? err.reason
+          : err instanceof ApiClientError
+            ? err.code
+            : 'fetch_failed'
     } finally {
-      cohortLoading = false
+      if (epoch === cohortEpoch) {
+        cohortLoading = false
+      }
     }
   }
 
@@ -343,6 +653,19 @@
     {onSelectionChange}
     onRefreshMarkers={() => void refreshHighWater()}
   />
+
+  {#if markerHasMore || markerLimited}
+    <div class="actions" role="status">
+      <span class="muted">
+        Generation discovery is bounded: {markers.length} markers retained
+        {markerLimited ? 'at the local cap' : 'with a server continuation'}.
+        Discovery is incomplete until the continuation is drained.
+      </span>
+      <button type="button" onclick={() => void continueMarkers()}>
+        Load more generations
+      </button>
+    </div>
+  {/if}
 
   <div class="actions">
     <button type="button" onclick={toggleRange}>
@@ -459,7 +782,7 @@
 
   <section>
     <h2>Agents at tick {effectiveTick}</h2>
-    {#if agentEnvelope === null}
+    {#if agentPager === null}
       <button type="button" onclick={() => void loadAgents(false)}>
         Load agent page
       </button>
@@ -475,7 +798,7 @@
           { key: 'lifeStatus', label: 'Life status' },
           { key: 'ageTicks', label: 'Age (ticks)', numeric: true },
         ]}
-        rows={agentEnvelope.agents.map((agent) => ({
+        rows={agentRows.map((agent) => ({
           agentId: agent.agent_id,
           generationIndex: agent.generation_index,
           entryTick: agent.entry_tick,
@@ -487,10 +810,16 @@
         rowKey={(row) => String(row.agentId)}
         onRowSelect={(row) => selectAgent(String(row.agentId))}
       />
-      {#if agentEnvelope.agents.some((agent) => agent.life_status === 'dead' && agent.age_ticks === null)}
+      {#if agentRows.some((agent) => agent.life_status === 'dead' && agent.age_ticks === null)}
         <p class="muted">Dead age is unknown when the server does not project it.</p>
       {/if}
-      {#if agentsCursor !== null}
+      {#if agentLimited}
+        <p class="status partial" role="status">
+          Local row cap reached for this window. Load more to drain the buffered
+          suffix before any later server page is requested.
+        </p>
+      {/if}
+      {#if agentHasMore}
         <button type="button" onclick={() => void loadAgents(true)} disabled={agentLoading}>
           Load more agents
         </button>
@@ -500,7 +829,7 @@
 
   <section>
     <h2>Cohorts at tick {effectiveTick}</h2>
-    {#if cohortEnvelope === null}
+    {#if cohortPager === null}
       <button type="button" onclick={() => void loadCohorts(false)}>
         Load cohort page
       </button>
@@ -515,7 +844,7 @@
           { key: 'living', label: 'Living', numeric: true },
           { key: 'dead', label: 'Dead', numeric: true },
         ]}
-        rows={cohortEnvelope.cohorts.map((cohort) => ({
+        rows={cohortRows.map((cohort) => ({
           generationIndex: cohort.generation_index,
           entryTick: cohort.entry_tick,
           cohortId: cohort.cohort_id,
@@ -526,7 +855,13 @@
         rowKey={(row) =>
           `${row.generationIndex}:${row.entryTick}:${row.cohortId}`}
       />
-      {#if cohortsCursor !== null}
+      {#if cohortLimited}
+        <p class="status partial" role="status">
+          Local row cap reached for this window. Load more to drain the buffered
+          suffix before any later server page is requested.
+        </p>
+      {/if}
+      {#if cohortHasMore}
         <button type="button" onclick={() => void loadCohorts(true)} disabled={cohortLoading}>
           Load more cohorts
         </button>

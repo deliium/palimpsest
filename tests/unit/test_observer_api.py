@@ -494,6 +494,8 @@ async def test_observer_reads_and_rejects_bad_cursors(
             )
     assert manifest.status_code == 200
     assert manifest.json()["layout_id"] == "reference-v1"
+    for response in (manifest, live, earlier, events, ticks, detail, run):
+        assert response.headers["cache-control"] == "no-store"
     assert live.status_code == 200
     agents = {item["entity_id"]: item for item in live.json()["world"]["agents"]}
     assert agents[BODY_ID]["location_id"] == LOC_SPRING

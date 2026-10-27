@@ -18,6 +18,7 @@ export type PagerState<T> = {
   items: readonly T[]
   nextCursor: string | null
   truncated: boolean
+  limited: boolean
   stopReason: PagerStopReason | null
   publicationChanged: boolean
   pages: number
@@ -32,6 +33,8 @@ export type PagerOptions<T> = {
 
 export class ExplicitPager<T> {
   private items: T[] = []
+  private buffered: T[] = []
+  private bufferedNextCursor: string | null = null
   private nextCursor: string | null = null
   private seenCursors = new Set<string>()
   private seenItems = new Map<string, string>()
@@ -39,6 +42,8 @@ export class ExplicitPager<T> {
   private stopReason: PagerStopReason | null = null
   private publicationId: string | null = null
   private publicationChanged = false
+  private epoch = 0
+  private activeLoad: Promise<PagerState<T>> | null = null
 
   constructor(
     private readonly fetchPage: (
@@ -48,10 +53,12 @@ export class ExplicitPager<T> {
   ) {}
 
   get state(): PagerState<T> {
+    const limited = this.stopReason === 'local_cap'
     return {
       items: [...this.items],
       nextCursor: this.nextCursor,
-      truncated: this.nextCursor !== null,
+      truncated: limited || this.nextCursor !== null,
+      limited,
       stopReason: this.stopReason,
       publicationChanged: this.publicationChanged,
       pages: this.pages,
@@ -59,7 +66,10 @@ export class ExplicitPager<T> {
   }
 
   reset(): void {
+    this.epoch += 1
     this.items = []
+    this.buffered = []
+    this.bufferedNextCursor = null
     this.nextCursor = null
     this.seenCursors.clear()
     this.seenItems.clear()
@@ -70,17 +80,48 @@ export class ExplicitPager<T> {
   }
 
   async loadMore(): Promise<PagerState<T>> {
-    if (
-      this.stopReason !== null &&
-      this.stopReason !== 'local_cap'
-    ) {
+    if (this.activeLoad !== null) {
+      return this.activeLoad
+    }
+    this.activeLoad = this.loadPages().finally(() => {
+      this.activeLoad = null
+    })
+    return this.activeLoad
+  }
+
+  private async loadPages(): Promise<PagerState<T>> {
+    if (this.stopReason !== null && this.stopReason !== 'local_cap') {
       return this.state
     }
+    const epoch = this.epoch
     this.stopReason = null
     const maxItems = this.options.maxItems ?? 500
     const maxEmptyPages = this.options.maxEmptyPages ?? 8
+    const budget = { delivered: 0 }
     let emptyPages = 0
     while (true) {
+      if (this.buffered.length === 0 && this.bufferedNextCursor !== null) {
+        this.nextCursor = this.bufferedNextCursor
+        this.bufferedNextCursor = null
+      }
+      if (this.buffered.length > 0) {
+        const outcome = this.deliverBuffered(maxItems, budget)
+        if (outcome === 'cap') {
+          if (this.buffered.length === 0 && this.bufferedNextCursor === null) {
+            this.stopReason = 'exhausted'
+            return this.state
+          }
+          this.stopReason = 'local_cap'
+          return this.state
+        }
+        this.nextCursor = this.bufferedNextCursor
+        this.bufferedNextCursor = null
+        if (this.nextCursor === null) {
+          this.stopReason = 'exhausted'
+          return this.state
+        }
+        continue
+      }
       const cursor = this.nextCursor
       if (cursor !== null) {
         if (this.seenCursors.has(cursor)) {
@@ -93,7 +134,13 @@ export class ExplicitPager<T> {
       try {
         page = await this.fetchPage(cursor)
       } catch {
+        if (epoch !== this.epoch) {
+          return this.state
+        }
         this.stopReason = 'fetch_error'
+        return this.state
+      }
+      if (epoch !== this.epoch) {
         return this.state
       }
       this.pages += 1
@@ -104,6 +151,8 @@ export class ExplicitPager<T> {
         page.publicationId !== this.publicationId
       ) {
         this.items = []
+        this.buffered = []
+        this.bufferedNextCursor = null
         this.nextCursor = page.nextCursor
         this.publicationChanged = true
         this.stopReason = 'publication_changed'
@@ -112,24 +161,25 @@ export class ExplicitPager<T> {
       if (page.publicationId !== undefined && page.publicationId !== null) {
         this.publicationId = page.publicationId
       }
-      for (const item of page.items) {
-        if (this.items.length >= maxItems) {
-          this.stopReason = 'local_cap'
-          this.nextCursor = page.nextCursor
+      const pageItems = [...page.items]
+      const outcome = this.deliver(pageItems, maxItems, budget)
+      if (outcome === 'cap' || outcome === 'inconsistent') {
+        if (outcome === 'inconsistent') {
+          this.stopReason = 'duplicate_inconsistent_ref'
           return this.state
         }
-        const key = this.options.keyOf?.(item) ?? String(this.items.length)
-        const fingerprint = this.options.fingerprintOf?.(item) ?? ''
-        const previous = this.seenItems.get(key)
-        if (previous !== undefined) {
-          if (previous !== fingerprint) {
-            this.stopReason = 'duplicate_inconsistent_ref'
+        if (this.buffered.length === 0) {
+          if (page.nextCursor === null) {
+            this.stopReason = 'exhausted'
             return this.state
           }
-          continue
+          this.nextCursor = page.nextCursor
+        } else {
+          this.bufferedNextCursor = page.nextCursor
+          this.nextCursor = null
         }
-        this.seenItems.set(key, fingerprint)
-        this.items.push(item)
+        this.stopReason = 'local_cap'
+        return this.state
       }
       this.nextCursor = page.nextCursor
       if (page.items.length === 0 && page.nextCursor !== null) {
@@ -143,6 +193,47 @@ export class ExplicitPager<T> {
       }
       return this.state
     }
+  }
+
+  private deliverBuffered(
+    maxItems: number,
+    budget: { delivered: number },
+  ): 'ok' | 'cap' | 'inconsistent' {
+    const pending = this.buffered
+    this.buffered = []
+    const result = this.deliver(pending, maxItems, budget)
+    if (result === 'cap') {
+      // deliver() retained the undelivered suffix in this.buffered.
+      return 'cap'
+    }
+    return result
+  }
+
+  private deliver(
+    pageItems: T[],
+    maxItems: number,
+    budget: { delivered: number },
+  ): 'ok' | 'cap' | 'inconsistent' {
+    for (let index = 0; index < pageItems.length; index += 1) {
+      if (budget.delivered >= maxItems) {
+        this.buffered = pageItems.slice(index)
+        return 'cap'
+      }
+      const item = pageItems[index] as T
+      const key = this.options.keyOf?.(item) ?? String(this.items.length)
+      const fingerprint = this.options.fingerprintOf?.(item) ?? ''
+      const previous = this.seenItems.get(key)
+      if (previous !== undefined) {
+        if (previous !== fingerprint) {
+          return 'inconsistent'
+        }
+        continue
+      }
+      this.seenItems.set(key, fingerprint)
+      this.items.push(item)
+      budget.delivered += 1
+    }
+    return 'ok'
   }
 }
 

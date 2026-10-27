@@ -90,6 +90,14 @@ export class ResearchScopeController {
     }
   }
 
+  currentToken(): RequestToken {
+    return {
+      epoch: this.epoch,
+      key: this.currentKey,
+      signal: this.currentController().signal,
+    }
+  }
+
   isCurrent(token: RequestToken): boolean {
     return (
       token.epoch === this.epoch &&
@@ -145,11 +153,22 @@ export class ResearchScopeController {
 
 export class BoundedRequestPool {
   private active = 0
-  private readonly queue: Array<() => void> = []
+  private readonly queue: Array<{
+    scope: number
+    start: () => void
+    cancel: () => void
+  }> = []
+  private scopeEpoch = 0
 
-  constructor(private readonly maxConcurrent = 4) {
+  constructor(
+    private readonly maxConcurrent = 4,
+    private readonly maxQueued = 32,
+  ) {
     if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1) {
       throw new Error('invalid_concurrency')
+    }
+    if (!Number.isSafeInteger(maxQueued) || maxQueued < 1) {
+      throw new Error('invalid_queue_limit')
     }
   }
 
@@ -157,19 +176,71 @@ export class BoundedRequestPool {
     return this.active
   }
 
-  async run<T>(loader: () => Promise<T>): Promise<T> {
+  get queued(): number {
+    return this.queue.length
+  }
+
+  get scope(): number {
+    return this.scopeEpoch
+  }
+
+  setScope(epoch: number): number {
+    if (epoch === this.scopeEpoch) {
+      return this.scopeEpoch
+    }
+    this.scopeEpoch = epoch
+    const cancelled = this.queue.splice(0)
+    for (const entry of cancelled) {
+      entry.cancel()
+    }
+    return this.scopeEpoch
+  }
+
+  resetScope(): number {
+    return this.setScope(this.scopeEpoch + 1)
+  }
+
+  async run<T>(loader: () => Promise<T>, scope = this.scopeEpoch): Promise<T> {
+    if (scope !== this.scopeEpoch) {
+      throw new StaleResearchResponse()
+    }
     if (this.active >= this.maxConcurrent) {
-      await new Promise<void>((resolve) => this.queue.push(resolve))
+      if (this.queue.length >= this.maxQueued) {
+        throw new ResearchRequestLimitError()
+      }
+      await new Promise<void>((resolve, reject) => {
+        this.queue.push({
+          scope,
+          start: resolve,
+          cancel: () => reject(new StaleResearchResponse()),
+        })
+      })
+    }
+    if (scope !== this.scopeEpoch) {
+      throw new StaleResearchResponse()
     }
     this.active += 1
     try {
-      return await loader()
+      const result = await loader()
+      if (scope !== this.scopeEpoch) {
+        throw new StaleResearchResponse()
+      }
+      return result
     } finally {
       this.active -= 1
       const next = this.queue.shift()
       if (next !== undefined) {
-        next()
+        next.start()
       }
     }
+  }
+}
+
+export class ResearchRequestLimitError extends Error {
+  readonly code = 'queue_saturated'
+
+  constructor() {
+    super('queue_saturated')
+    this.name = 'ResearchRequestLimitError'
   }
 }
