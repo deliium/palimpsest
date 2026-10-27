@@ -6,7 +6,9 @@ persistence never import it, and publication never feeds live cognition.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import cast
 
 from analysis.civilization_overlays import (
     compose_culture_rows,
@@ -18,6 +20,7 @@ from analysis.civilization_overlays import (
     compose_technology_rows,
     compose_trade_rows,
 )
+from experiments.evidence_sources import CivilizationHistorySource
 from simulation.civilization_boundaries import CivilizationBoundaryInput
 from simulation.civilization_capture import CivilizationEventBatch
 from simulation.civilization_models import (
@@ -32,6 +35,7 @@ __all__ = [
     "CivilizationCapturedHistory",
     "CivilizationPublicationError",
     "compose_civilization_boundary",
+    "compose_civilization_boundary_from_source",
     "compose_civilization_history",
 ]
 
@@ -160,6 +164,105 @@ def compose_civilization_boundary(
     cursor: CivilizationCursor = boundary.cursor
     return CivilizationBoundaryPublication(
         cursor,
+        tuple(
+            sorted(
+                scopes,
+                key=lambda scope: (
+                    scope.layer.value,
+                    scope.evidence_class.value,
+                    scope.owner_id or "",
+                ),
+            )
+        ),
+        tuple(
+            sorted(
+                rows,
+                key=lambda row: (row.history.scope.layer.value, row.context.row_id),
+            )
+        ),
+        markers,
+    )
+
+
+class _BoundaryPrefix:
+    """Re-iterable prefix view that never materializes all captured frames."""
+
+    __slots__ = ("_source", "_through")
+
+    def __init__(self, source: CivilizationHistorySource, through: int) -> None:
+        self._source = source
+        self._through = through
+
+    def __iter__(self) -> Iterator[CivilizationBoundaryInput]:
+        for frame in self._source.iter_boundaries():
+            if frame.cursor.tick <= self._through:
+                yield frame
+
+
+class _EventThrough:
+    __slots__ = ("_source", "_through")
+
+    def __init__(self, source: CivilizationHistorySource, through: int) -> None:
+        self._source = source
+        self._through = through
+
+    def __iter__(self) -> Iterator[CivilizationEventBatch]:
+        yield from self._source.iter_event_batches(through_tick=self._through)
+
+
+def compose_civilization_boundary_from_source(
+    source: CivilizationHistorySource, boundary_tick: int
+) -> CivilizationBoundaryPublication:
+    """Compose one exact boundary from ordered source iteration."""
+    boundary = source.read_boundary(boundary_tick)
+    if boundary is None:
+        raise CivilizationPublicationError("boundary_missing")
+    if (
+        boundary.cursor.run_id != source.run_id
+        or boundary.cursor.world_id != source.world_id
+        or boundary.cursor.boundary_tick != boundary_tick
+    ):
+        raise CivilizationPublicationError("identity_mismatch")
+    prefix = cast(
+        tuple[CivilizationBoundaryInput, ...], _BoundaryPrefix(source, boundary_tick)
+    )
+    batches = cast(
+        tuple[CivilizationEventBatch, ...], _EventThrough(source, boundary_tick)
+    )
+    try:
+        settlements = compose_settlement_rows(prefix, boundary_tick=boundary_tick)
+        migration = compose_migration_rows(batches, boundary_tick=boundary_tick)
+        trade = compose_trade_rows(batches, boundary_tick=boundary_tick)
+        culture = compose_culture_rows(boundary)
+        technology = compose_technology_rows(boundary)
+        groups = compose_group_rows(boundary)
+        institutions = compose_institution_rows(boundary)
+        markers = compose_markers(prefix, batches, boundary_tick=boundary_tick)
+    except CivilizationError:
+        raise
+    except ValueError as exc:
+        code = str(exc)
+        raise CivilizationPublicationError(
+            "source_conflict" if code == "source_conflict" else "publication_failed"
+        ) from None
+    rows: tuple[CivilizationCapturedRow, ...] = (
+        *settlements,
+        *migration,
+        *trade,
+        *culture,
+        *technology,
+        *groups,
+        *institutions,
+    )
+    scopes: dict[CivilizationScope, None] = {}
+    for row in rows:
+        scopes[row.history.scope] = None
+    for marker in markers:
+        scopes[
+            CivilizationScope(marker.layer, marker.evidence_class, marker.owner_id)
+        ] = None
+    return CivilizationBoundaryPublication(
+        boundary.cursor,
         tuple(
             sorted(
                 scopes,

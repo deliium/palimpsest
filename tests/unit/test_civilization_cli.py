@@ -129,6 +129,42 @@ def test_cli_civilization_flags_require_root_and_respect_bounds():
         _civilization_options_from_args(invalid)
 
 
+def test_cli_civilization_spool_option_is_explicit_and_lazy(tmp_path: Path):
+    from research_runner.cli import _civilization_options_from_args, build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "run",
+            "--matrix",
+            "matrix.json",
+            "--manifest-root",
+            "manifest",
+            "--civilization-overlays-root",
+            "/tmp/civilization",
+            "--civilization-spool-root",
+            str(tmp_path / "spool"),
+        ]
+    )
+    options = _civilization_options_from_args(args)
+    assert options is not None
+    assert options.spool is not None
+    assert not (tmp_path / "spool").exists() or (tmp_path / "spool").is_dir()
+    missing_root = parser.parse_args(
+        [
+            "run",
+            "--matrix",
+            "matrix.json",
+            "--manifest-root",
+            "manifest",
+            "--civilization-spool-root",
+            str(tmp_path / "spool-2"),
+        ]
+    )
+    with pytest.raises(ValueError, match="overlays-root"):
+        _civilization_options_from_args(missing_root)
+
+
 def test_matrix_adoption_requires_a_committed_publication():
     from experiments.matrix_runner import (
         MatrixBatchDependencies,

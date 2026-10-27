@@ -533,3 +533,76 @@ class ExperimentMembershipRepository(Protocol):
     async def get_membership_for_run(
         self, *, run_id: str
     ) -> ExperimentMembership | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceSpoolStatus:
+    """Metadata-only append/seal status for one optional evidence spool."""
+
+    active: bool
+    failed: bool
+    sealed: bool
+    truncated: bool
+    failure_code: str | None
+    record_count: int
+    byte_count: int
+    first_boundary: int | None
+    last_boundary: int | None
+
+    def __post_init__(self) -> None:
+        for name in ("active", "failed", "sealed", "truncated"):
+            if type(getattr(self, name)) is not bool:
+                raise ValueError(f"{name} must be bool")
+        for name in ("record_count", "byte_count"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{name} must be non-negative int")
+        for name in ("first_boundary", "last_boundary"):
+            value = getattr(self, name)
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(f"{name} must be non-negative int or None")
+        if (self.first_boundary is None) != (self.last_boundary is None):
+            raise ValueError("first/last boundary must both be set or None")
+        if self.failure_code is not None:
+            require_stable_id("failure_code", self.failure_code)
+        if self.failed and self.failure_code is None:
+            raise ValueError("failed spool requires a failure_code")
+
+
+class EvidenceSpool(Protocol):
+    """Byte-oriented append-only evidence storage behind a neutral port.
+
+    Payload DTO encoding/validation belongs to the experiment or simulation
+    owner. The spool stores verified bytes plus lane/boundary/identity metadata
+    and never imports analysis.
+    """
+
+    def append(
+        self,
+        *,
+        lane: str,
+        boundary_tick: int,
+        identity: str,
+        payload: bytes,
+    ) -> bool:
+        """Append one record; return True when newly stored, False if identical."""
+
+    def get(self, *, lane: str, identity: str) -> bytes | None: ...
+
+    def read_boundary(
+        self, *, lane: str, boundary_tick: int
+    ) -> tuple[bytes, ...]: ...
+
+    def iter_lane(
+        self,
+        *,
+        lane: str,
+        after_boundary: int | None,
+        limit: int,
+    ) -> tuple[bytes, ...]: ...
+
+    def seal(self) -> EvidenceSpoolStatus: ...
+
+    def status(self) -> EvidenceSpoolStatus: ...
+
+    def lane_status(self, lane: str) -> EvidenceSpoolStatus: ...

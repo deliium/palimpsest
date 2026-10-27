@@ -88,6 +88,7 @@ def _build_capture_options(
         "max_rows": getattr(args, "cultural_max_rows", None),
         "baseline": getattr(args, "cultural_baseline_boundary", None),
         "end": getattr(args, "cultural_end_boundary", None),
+        "spool": getattr(args, "cultural_spool_root", None),
     }
     if not capture:
         if any(value is not None for value in supplied.values()):
@@ -108,6 +109,12 @@ def _build_capture_options(
         raise ValueError("cultural_baseline_exceeds_horizon")
     if end is not None and (end <= baseline or end > horizon):
         raise ValueError("cultural_end_boundary_invalid")
+    spool_root = getattr(args, "cultural_spool_root", None)
+    spool = None
+    if spool_root is not None:
+        from persistence.evidence_spool_filesystem import create_evidence_spool
+
+        spool = create_evidence_spool(Path(spool_root))
     return CulturalCaptureOptions(
         enabled=True,
         max_frames=max_frames,
@@ -116,6 +123,7 @@ def _build_capture_options(
             baseline_boundary=baseline,
             end_boundary=end,
         ),
+        spool=spool,
     )
 
 
@@ -661,6 +669,7 @@ def _civilization_producer_options(
     max_rows: int,
     max_bytes: int,
     status_root: Path | None,
+    spool: object | None = None,
 ) -> Any:
     from research_runner.civilization_composition import (
         CivilizationProducerOptions,
@@ -677,6 +686,7 @@ def _civilization_producer_options(
             max_bytes=max_bytes,
         ),
         status_root=status_root,
+        spool=spool,
     )
 
 
@@ -704,6 +714,7 @@ def _civilization_finalizer(options: Any) -> Callable[[Any, Any], Any]:
 
 def _civilization_options_from_args(args: argparse.Namespace) -> Any:
     root = getattr(args, "civilization_overlays_root", None)
+    spool_root = getattr(args, "civilization_spool_root", None)
     cadence = getattr(args, "civilization_cadence", 1)
     max_boundaries = getattr(args, "civilization_max_boundaries", 10_000)
     max_rows = getattr(args, "civilization_max_rows", 1_000_000)
@@ -724,7 +735,16 @@ def _civilization_options_from_args(args: argparse.Namespace) -> Any:
     if not 1 <= max_bytes <= 268_435_456:
         raise ValueError("civilization byte cap is outside the supported range")
     if root is None:
+        if spool_root is not None:
+            raise ValueError(
+                "civilization spool requires --civilization-overlays-root"
+            )
         return None
+    spool = None
+    if spool_root is not None:
+        from persistence.evidence_spool_filesystem import create_evidence_spool
+
+        spool = create_evidence_spool(Path(spool_root))
     return _civilization_producer_options(
         Path(root),
         cadence,
@@ -732,6 +752,7 @@ def _civilization_options_from_args(args: argparse.Namespace) -> Any:
         max_rows,
         max_bytes,
         Path(root),
+        spool,
     )
 
 
@@ -1143,6 +1164,8 @@ def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--civilization-max-boundaries", type=int, default=10_000)
     parser.add_argument("--civilization-max-rows", type=int, default=1_000_000)
     parser.add_argument("--civilization-max-bytes", type=int, default=268_435_456)
+    parser.add_argument("--civilization-spool-root", default=None)
+    parser.add_argument("--cultural-spool-root", default=None)
     parser.add_argument("--cultural-max-frames", type=int, default=None)
     parser.add_argument("--cultural-max-rows", type=int, default=None)
     parser.add_argument("--cultural-baseline-boundary", type=int, default=None)

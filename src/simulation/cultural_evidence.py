@@ -96,6 +96,7 @@ __all__ = [
     "CulturalCaptureStatus",
     "CulturalChannelExport",
     "CulturalOwnerExport",
+    "cultural_ledger_type",
 ]
 
 
@@ -124,6 +125,11 @@ def _require_basis(basis: object) -> str:
     if not isinstance(basis, str) or basis not in CULTURAL_EVIDENCE_BASES:
         raise _fail("basis", "unknown_basis")
     return basis
+
+
+def cultural_ledger_type(channel: str) -> type[object]:
+    """Return the closed ledger type owned by one cultural evidence channel."""
+    return _LEDGER_TYPE_BY_CHANNEL[_require_channel(channel)]
 
 
 @dataclass(frozen=True, slots=True)

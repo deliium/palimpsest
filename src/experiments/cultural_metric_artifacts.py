@@ -73,6 +73,7 @@ class CulturalCaptureOptions:
     analysis_window: CulturalAnalysisWindow = field(
         default_factory=CulturalAnalysisWindow
     )
+    spool: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.enabled) is not bool:

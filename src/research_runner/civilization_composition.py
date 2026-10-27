@@ -15,7 +15,7 @@ from experiments.civilization_capture import (
 )
 from experiments.civilization_publication import (
     CivilizationCapturedHistory,
-    compose_civilization_boundary,
+    compose_civilization_boundary_from_source,
 )
 from persistence.civilization_filesystem import (
     create_civilization_publisher,
@@ -43,6 +43,7 @@ class CivilizationProducerOptions:
     root: Path
     capture: CivilizationCaptureOptions
     status_root: Path | None = None
+    spool: object | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.root, Path):
@@ -56,7 +57,10 @@ class CivilizationProducerOptions:
 def install_civilization_capture(
     runner: _RunnerSink, options: CivilizationProducerOptions
 ) -> CivilizationEvidenceRecorder:
-    recorder = CivilizationEvidenceRecorder(options.capture)
+    recorder = CivilizationEvidenceRecorder(
+        options.capture,
+        spool=options.spool,  # type: ignore[arg-type]
+    )
     runner.set_civilization_boundary_sink(recorder)
     _LOG.debug("civilization_capture_installed active=%s", options.capture.enabled)
     return recorder
@@ -65,14 +69,18 @@ def install_civilization_capture(
 def _history(
     recorder: CivilizationEvidenceRecorder, run_id: str
 ) -> CivilizationCapturedHistory | None:
-    boundaries = recorder.boundaries
-    if not boundaries:
+    source = recorder.source()
+    ticks = source.boundary_ticks()
+    if not ticks:
+        return None
+    first = source.read_boundary(ticks[0])
+    if first is None:
         return None
     return CivilizationCapturedHistory(
         run_id,
-        boundaries[0].cursor.world_id,
-        boundaries,
-        recorder.event_batches,
+        first.cursor.world_id,
+        tuple(source.iter_boundaries()),
+        tuple(source.iter_event_batches()),
     )
 
 
@@ -85,10 +93,9 @@ async def finalize_civilization_capture(
     run_id = getattr(runner_result, "run_id", None)
     if run_id is None:
         raise TypeError("arm.runner_result.run_id is required")
-    history = _history(
-        recorder, run_id.value if hasattr(run_id, "value") else str(run_id)
-    )
-    if history is None:
+    source = recorder.source()
+    ticks = source.boundary_ticks()
+    if not ticks:
         status = CivilizationPublicationReceipt(
             str(run_id),
             0,
@@ -105,22 +112,22 @@ async def finalize_civilization_capture(
     published = 0
     try:
         publisher = create_civilization_publisher(options.root)
-        for tick in history.boundary_ticks:
-            boundary = compose_civilization_boundary(history, tick)
+        for tick in ticks:
+            boundary = compose_civilization_boundary_from_source(source, tick)
             await publisher.publish_boundary(publication_id, boundary)
             published += 1
-        publication = await publisher.seal_catalogue(history.run_id, publication_id)
+        publication = await publisher.seal_catalogue(source.run_id, publication_id)
         # Read back the committed reference through the read-only capability.
         reader = create_civilization_reader(options.root)
         await reader.catalogue(
-            history.run_id,
+            source.run_id,
             after_boundary=None,
             publication=publication,
             budget=CivilizationReadBudget(),
         )
         status = CivilizationPublicationReceipt(
-            history.run_id,
-            history.boundary_ticks[-1],
+            source.run_id,
+            ticks[-1],
             publication,
             published,
             None,
@@ -128,12 +135,12 @@ async def finalize_civilization_capture(
     except Exception:
         _LOG.warning(
             "civilization_publication_failed run_id=%s reason_code=%s",
-            history.run_id,
+            source.run_id,
             "civilization_publication_failed",
         )
         status = CivilizationPublicationReceipt(
-            history.run_id,
-            history.boundary_ticks[-1],
+            source.run_id,
+            ticks[-1],
             None,
             published,
             "civilization_publication_failed",

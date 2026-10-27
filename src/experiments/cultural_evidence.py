@@ -17,6 +17,15 @@ from experiments.cultural_metric_artifacts import (
     CulturalCaptureOptions,
     cultural_capture_policy,
 )
+from experiments.evidence_codecs import encode_cultural_boundary
+from experiments.evidence_sources import (
+    CULTURAL_SPOOL_LANE,
+    CulturalCaptureSource,
+    MemoryCulturalCaptureSource,
+    SpooledCulturalCaptureSource,
+    boundary_identity,
+)
+from experiments.persistence import EvidenceSpool
 from simulation.cultural_evidence import (
     CulturalBoundaryExport,
     CulturalCaptureStatus,
@@ -34,6 +43,8 @@ __all__ = [
     "CulturalEvidenceCapture",
     "CulturalEvidenceRecorder",
     "build_cultural_arm_fields",
+    "build_cultural_arm_fields_from_source",
+    "cultural_evidence_source",
     "cultural_evolution_inputs_from_capture",
     "install_cultural_recorder",
     "kinship_parent_child_edges",
@@ -116,6 +127,36 @@ def cultural_evolution_inputs_from_capture(
     )
 
 
+def cultural_evidence_source(
+    recorder: CulturalEvidenceRecorder,
+) -> CulturalCaptureSource:
+    """Return a pinned read source without materializing all frames."""
+    return recorder.source()
+
+
+def cultural_evolution_inputs_from_source(
+    source: CulturalCaptureSource,
+    *,
+    run_id: str,
+    source_revision: str,
+    window: CulturalAnalysisWindow,
+    parent_child_edges: tuple[tuple[str, str], ...] = (),
+    group_memberships: tuple[GroupMembership, ...] = (),
+    archive_states: tuple[ArchiveKnowledgeState, ...] = (),
+) -> CulturalEvolutionInputs:
+    """Normalize source-backed frames by ordered iteration, never ``result()``."""
+    return normalize_cultural_frames(
+        tuple(source.iter_boundaries()),
+        run_id=run_id,
+        source_revision=source_revision,
+        window=window,
+        parent_child_edges=parent_child_edges,
+        group_memberships=group_memberships,
+        archive_states=archive_states,
+        gaps=source.gaps,
+    )
+
+
 def install_cultural_recorder(
     runner: SimulationRunner,
     options: CulturalCaptureOptions | None,
@@ -126,6 +167,7 @@ def install_cultural_recorder(
     recorder = CulturalEvidenceRecorder(
         max_frames=options.max_frames,
         max_rows=options.max_rows,
+        spool=options.spool,  # type: ignore[arg-type]
     )
     runner.set_cultural_boundary_sink(recorder)
     _LOG.debug(
@@ -147,24 +189,44 @@ def build_cultural_arm_fields(
     parent_child_edges: tuple[tuple[str, str], ...] = (),
 ) -> dict[str, object]:
     """Normalize captured frames and bind six documents to the evidence digest."""
+    return build_cultural_arm_fields_from_source(
+        cultural_evidence_source(recorder),
+        run_id=run_id,
+        config_fingerprint=config_fingerprint,
+        options=options,
+        source_revision=source_revision,
+        parent_child_edges=parent_child_edges,
+    )
+
+
+def build_cultural_arm_fields_from_source(
+    source: CulturalCaptureSource,
+    *,
+    run_id: str,
+    config_fingerprint: str,
+    options: CulturalCaptureOptions,
+    source_revision: str,
+    parent_child_edges: tuple[tuple[str, str], ...] = (),
+) -> dict[str, object]:
+    """Normalize a source-backed capture and bind exact evidence documents."""
     from analysis.cultural_evolution_metrics import (
         assemble_cultural_evolution_documents,
     )
     from experiments.cultural_evidence_serialization import evidence_digest
 
-    capture = recorder.result()
-    inputs = cultural_evolution_inputs_from_capture(
-        capture,
+    inputs = cultural_evolution_inputs_from_source(
+        source,
         run_id=run_id,
         source_revision=source_revision,
         window=options.analysis_window,
         parent_child_edges=parent_child_edges,
     )
+    capture_status = source.capture_status
     digest = evidence_digest(
         inputs,
         config_fingerprint=config_fingerprint,
         capture_options=cultural_capture_policy(options),
-        capture_status=capture.capture_status,
+        capture_status=capture_status,
     )
     documents = assemble_cultural_evolution_documents(
         inputs,
@@ -174,12 +236,17 @@ def build_cultural_arm_fields(
         "cultural_evolution_evidence": inputs,
         "cultural_evolution_evidence_digest": digest,
         "cultural_evolution_documents": documents,
-        "cultural_evolution_capture_status": capture.capture_status,
+        "cultural_evolution_capture_status": capture_status,
     }
 
 
 class CulturalEvidenceRecorder:
-    """Store immutable frames without eviction or endpoint fabrication."""
+    """Store immutable frames without eviction or endpoint fabrication.
+
+    The default strategy keeps frames in memory. An explicit composition-only
+    ``spool`` stores verified bytes instead and exposes a pinned source; logical
+    quotas still count every logical row even when physical storage deduplicates.
+    """
 
     __slots__ = (
         "_baseline_boundary",
@@ -188,6 +255,9 @@ class CulturalEvidenceRecorder:
         "_max_frames",
         "_max_rows",
         "_rows",
+        "_run_id",
+        "_source_revision",
+        "_spool",
         "_status",
         "_truncated",
     )
@@ -197,6 +267,8 @@ class CulturalEvidenceRecorder:
         *,
         max_frames: int = DEFAULT_MAX_CULTURAL_FRAMES,
         max_rows: int = DEFAULT_MAX_CULTURAL_ROWS,
+        spool: EvidenceSpool | None = None,
+        source_revision: str = "cultural-evidence-v1",
     ) -> None:
         for name, value in (("max_frames", max_frames), ("max_rows", max_rows)):
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -207,16 +279,26 @@ class CulturalEvidenceRecorder:
         self._frames: list[CulturalBoundaryExport] = []
         self._gaps: list[str] = []
         self._rows = 0
+        self._run_id: str | None = None
         self._truncated = False
+        self._source_revision = source_revision
         self._status = CulturalCaptureStatus(active=True, failed=False)
+        self._spool = spool
         _LOG.debug(
-            "cultural_recorder_created max_frames=%s max_rows=%s",
+            "cultural_recorder_created max_frames=%s max_rows=%s spooled=%s",
             max_frames,
             max_rows,
+            spool is not None,
         )
 
     @property
+    def source_revision(self) -> str:
+        return self._source_revision
+
+    @property
     def frame_count(self) -> int:
+        if self._spool is not None:
+            return self._spool.lane_status(CULTURAL_SPOOL_LANE).record_count
         return len(self._frames)
 
     @property
@@ -229,7 +311,7 @@ class CulturalEvidenceRecorder:
             raise TypeError("boundary_tick must be an int")
         if boundary_tick < 0:
             raise ValueError("boundary_tick must be non-negative")
-        if self._frames:
+        if self.frame_count:
             raise ValueError("cultural_evidence_baseline_after_capture")
         if self._baseline_boundary is not None:
             raise ValueError("cultural_evidence_baseline_already_set")
@@ -250,6 +332,9 @@ class CulturalEvidenceRecorder:
             and frame.boundary_tick < self._baseline_boundary
         ):
             raise ValueError("cultural_evidence_before_baseline")
+        if self._spool is not None:
+            self._capture_spooled(frame)
+            return
         for existing in self._frames:
             if existing.boundary_tick != frame.boundary_tick:
                 continue
@@ -263,14 +348,7 @@ class CulturalEvidenceRecorder:
             len(self._frames) >= self._max_frames
             or self._rows + incoming_rows > self._max_rows
         ):
-            self._truncated = True
-            self._gaps.append("capture_truncated")
-            _LOG.warning(
-                "cultural_capture_truncated frame_count=%s row_count=%s reason_code=%s",
-                len(self._frames),
-                self._rows,
-                "capture_truncated",
-            )
+            self._truncate(frame.boundary_tick)
             return
         self._frames.append(frame)
         self._rows += incoming_rows
@@ -279,6 +357,64 @@ class CulturalEvidenceRecorder:
             frame.boundary_tick,
             len(frame.owners),
             self._rows,
+        )
+
+    def _capture_spooled(self, frame: CulturalBoundaryExport) -> None:
+        if self._run_id is not None and frame.run_id != self._run_id:
+            raise ValueError("cultural_evidence_conflict")
+        incoming_rows = _ledger_entry_count(frame)
+        if (
+            self.frame_count >= self._max_frames
+            or self._rows + incoming_rows > self._max_rows
+        ):
+            self._truncate(frame.boundary_tick)
+            return
+        try:
+            self._spool.append(  # type: ignore[union-attr]
+                lane=CULTURAL_SPOOL_LANE,
+                boundary_tick=frame.boundary_tick,
+                identity=boundary_identity(frame.boundary_tick),
+                payload=encode_cultural_boundary(frame),
+            )
+        except ValueError as exc:
+            code = getattr(exc, "code", None)
+            if code == "evidence_spool_full":
+                self._truncate(frame.boundary_tick)
+                return
+            if code == "evidence_spool_conflict":
+                raise ValueError("cultural_evidence_conflict") from None
+            self._status = CulturalCaptureStatus(
+                active=True,
+                failed=True,
+                failure_boundary=frame.boundary_tick,
+                failure_code="cultural_capture_spool_failed",
+            )
+            _LOG.warning(
+                "cultural_capture_spool_failed boundary_tick=%s reason_code=%s",
+                frame.boundary_tick,
+                "cultural_capture_spool_failed",
+            )
+            return
+        self._run_id = frame.run_id
+        self._rows += incoming_rows
+        _LOG.debug(
+            "cultural_frame_spooled boundary_tick=%s owner_count=%s row_count=%s",
+            frame.boundary_tick,
+            len(frame.owners),
+            self._rows,
+        )
+
+    def _truncate(self, boundary_tick: int) -> None:
+        self._truncated = True
+        if "capture_truncated" not in self._gaps:
+            self._gaps.append("capture_truncated")
+        _LOG.warning(
+            "cultural_capture_truncated boundary_tick=%s frame_count=%s "
+            "row_count=%s reason_code=%s",
+            boundary_tick,
+            self.frame_count,
+            self._rows,
+            "capture_truncated",
         )
 
     def merge_capture_status(self, status: CulturalCaptureStatus) -> None:
@@ -304,8 +440,37 @@ class CulturalEvidenceRecorder:
                 status.failure_code,
             )
 
+    def source(self) -> CulturalCaptureSource:
+        gaps = tuple(sorted(set(self._gaps)))
+        if self._spool is not None:
+            return SpooledCulturalCaptureSource(
+                self._spool,
+                run_id=self._run_id or "",
+                source_revision=self._source_revision,
+                capture_status=self._status,
+                gaps=gaps,
+            )
+        run_id = self._frames[0].run_id if self._frames else ""
+        return MemoryCulturalCaptureSource(
+            run_id,
+            self._source_revision,
+            tuple(self._frames),
+            gaps,
+            self._status,
+        )
+
     def result(self) -> CulturalEvidenceCapture:
-        """Return detached frames, gaps, and status."""
+        """Return detached frames, gaps, and status.
+
+        Legacy explicit callers only. Scalable consumers use :meth:`source`.
+        """
+        if self._spool is not None:
+            frames = tuple(self.source().iter_boundaries())
+            return CulturalEvidenceCapture(
+                frames=frames,
+                gaps=tuple(sorted(set(self._gaps))),
+                capture_status=self._status,
+            )
         return CulturalEvidenceCapture(
             frames=tuple(self._frames),
             gaps=tuple(sorted(set(self._gaps))),
@@ -314,7 +479,7 @@ class CulturalEvidenceRecorder:
 
     def __repr__(self) -> str:
         return (
-            f"CulturalEvidenceRecorder(frame_count={len(self._frames)}, "
+            f"CulturalEvidenceRecorder(frame_count={self.frame_count}, "
             f"row_count={self._rows}, truncated={self._truncated}, "
-            f"failed={self._status.failed})"
+            f"spooled={self._spool is not None}, failed={self._status.failed})"
         )
