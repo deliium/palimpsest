@@ -6,6 +6,7 @@ import base64
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import re
 from collections.abc import Iterator, Mapping
@@ -18,9 +19,12 @@ from experiments.persistence import EvidenceSpoolStatus
 
 _SPOOL_STATE_SCHEMA: Final[str] = "evidence-spool-state-v1"
 _SPOOL_ENTRY_SCHEMA: Final[str] = "evidence-spool-entry-v1"
+_SPOOL_PENDING_SCHEMA: Final[str] = "evidence-spool-append-v1"
 _LANE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _STATE_MAX_BYTES: Final[int] = 1024 * 1024
 _INDEX_MAX_BYTES: Final[int] = 8 * 1024 * 1024
+_JOURNAL_MAX_BYTES: Final[int] = 2 * _INDEX_MAX_BYTES + 2 * _STATE_MAX_BYTES
+_LOG = logging.getLogger(__name__)
 
 
 class EvidenceSpoolError(ValueError):
@@ -123,16 +127,29 @@ def _atomic_write(path: Path, payload: bytes) -> None:
         0o600,
     )
     try:
-        os.write(descriptor, payload)
+        _write_all(descriptor, payload)
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
     os.replace(temporary, path)
-    directory = os.open(path.parent, os.O_RDONLY)
+    _sync_directory(path.parent)
+
+
+def _sync_directory(path: Path) -> None:
+    directory = os.open(path, os.O_RDONLY)
     try:
         os.fsync(directory)
     finally:
         os.close(directory)
+
+
+def _write_all(descriptor: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        written = os.write(descriptor, remaining)
+        if written <= 0:
+            raise OSError("evidence_spool_short_write")
+        remaining = remaining[written:]
 
 
 @contextmanager
@@ -202,12 +219,17 @@ class _LaneState:
                 if value["last_boundary"] is None
                 else _boundary("last_boundary", value["last_boundary"])
             ),
-            sealed=bool(value["sealed"]),
+            sealed=_bool(value["sealed"]),
         )
 
 
 class FilesystemEvidenceSpool:
-    """Append-only segment spool; one atomic state reference per mutation."""
+    """Append-only payloads with state-last publication and recoverable indexes.
+
+    A bounded undo journal makes pre-commit index changes invisible to readers.
+    Recovery restores derived indexes only; abandoned segment bytes are retained.
+    All accesses take the same process-safe lock before recovering or reading.
+    """
 
     __slots__ = (
         "_max_bytes",
@@ -255,7 +277,7 @@ class FilesystemEvidenceSpool:
         payload = bytes(payload)
         if len(payload) > self._max_payload_bytes:
             raise EvidenceSpoolFull()
-        with _locked(self._root):
+        with self._access():
             lanes, sealed = self._load_state()
             if sealed or lanes.get(lane, _LaneState()).sealed:
                 raise EvidenceSpoolSealed()
@@ -264,7 +286,10 @@ class FilesystemEvidenceSpool:
             identities = self._load_index(identity_path)
             existing = identities.get(identity)
             if existing is not None:
-                if self._read_existing(lane, existing) == payload:
+                if (
+                    existing["boundary_tick"] == boundary_tick
+                    and self._read_existing(lane, existing) == payload
+                ):
                     return False
                 raise EvidenceSpoolConflict()
             if (
@@ -278,26 +303,19 @@ class FilesystemEvidenceSpool:
                 "payload": base64.b64encode(payload).decode("ascii"),
             }
             line = _canonical(record)
+            segment_path = self._segment_path(lane, state.segment_index)
+            physical_bytes = segment_path.stat().st_size if segment_path.exists() else 0
             if state.segment_rows and (
                 state.segment_rows >= self._segment_rows
-                or state.segment_bytes + len(line) > self._segment_bytes
+                or physical_bytes + len(line) > self._segment_bytes
             ):
                 state.segment_index += 1
                 state.segment_rows = 0
                 state.segment_bytes = 0
             segment_path = self._segment_path(lane, state.segment_index)
             segment_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            offset = state.segment_bytes
-            descriptor = os.open(
-                segment_path,
-                os.O_CREAT | os.O_APPEND | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-            )
-            try:
-                os.write(descriptor, line)
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+            # Failed appends leave immutable orphan bytes, never overwrite them.
+            offset = segment_path.stat().st_size if segment_path.exists() else 0
             entry = {
                 "boundary_tick": boundary_tick,
                 "digest": _digest(payload),
@@ -306,48 +324,88 @@ class FilesystemEvidenceSpool:
                 "offset": offset,
                 "segment": state.segment_index,
             }
-            identities[identity] = entry
-            self._write_index(identity_path, identities)
             boundary_path = self._boundary_path(lane, boundary_tick)
             boundary_entries = self._load_index(boundary_path)
-            boundary_entries[identity] = entry
-            self._write_index(boundary_path, boundary_entries)
             state.segment_rows += 1
-            state.segment_bytes += len(line)
+            state.segment_bytes = offset + len(line)
             state.record_count += 1
             state.byte_count += len(payload)
-            if state.first_boundary is None:
-                state.first_boundary = boundary_tick
-            else:
-                state.first_boundary = min(state.first_boundary, boundary_tick)
+            state.first_boundary = (
+                boundary_tick
+                if state.first_boundary is None
+                else min(state.first_boundary, boundary_tick)
+            )
             state.last_boundary = (
                 boundary_tick
                 if state.last_boundary is None
                 else max(state.last_boundary, boundary_tick)
             )
+            self._prepare_append(
+                lane,
+                boundary_tick,
+                identity,
+                identities,
+                boundary_entries,
+                self._state_bytes(lanes, sealed=False),
+            )
+            descriptor = os.open(
+                segment_path,
+                os.O_CREAT | os.O_APPEND | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+            try:
+                _write_all(descriptor, line)
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            _sync_directory(segment_path.parent)
+            identities[identity] = entry
+            self._write_index(identity_path, identities)
+            boundary_entries[identity] = entry
+            self._write_index(boundary_path, boundary_entries)
             self._write_state(lanes, sealed=False)
+            self._clear_pending()
+            _LOG.debug(
+                "evidence_spool_append_committed boundary_tick=%s "
+                "record_count=%s byte_count=%s",
+                boundary_tick,
+                state.record_count,
+                state.byte_count,
+            )
             return True
 
     def get(self, *, lane: str, identity: str) -> bytes | None:
         lane = _lane(lane)
         identity = _identity(identity)
-        entry = self._load_index(self._identity_path(lane, identity)).get(identity)
-        if entry is None:
-            return None
-        return self._read_existing(lane, entry)
+        with self._access():
+            entry = self._load_index(self._identity_path(lane, identity)).get(identity)
+            if entry is None:
+                return None
+            return self._read_existing(lane, entry)
 
-    def read_boundary(
-        self, *, lane: str, boundary_tick: int
-    ) -> tuple[bytes, ...]:
+    def read_boundary(self, *, lane: str, boundary_tick: int) -> tuple[bytes, ...]:
         lane = _lane(lane)
         boundary_tick = _boundary("boundary_tick", boundary_tick)
-        entries = self._load_index(self._boundary_path(lane, boundary_tick))
-        return tuple(
-            self._read_existing(lane, entry)
-            for _identity, entry in sorted(entries.items())
-        )
+        with self._access():
+            entries = self._load_index(self._boundary_path(lane, boundary_tick))
+            return tuple(
+                self._read_existing(lane, entry)
+                for _identity, entry in sorted(entries.items())
+            )
 
     def iter_lane(
+        self,
+        *,
+        lane: str,
+        after_boundary: int | None,
+        limit: int,
+    ) -> tuple[bytes, ...]:
+        with self._access():
+            return self._iter_lane(
+                lane=lane, after_boundary=after_boundary, limit=limit
+            )
+
+    def _iter_lane(
         self,
         *,
         lane: str,
@@ -377,14 +435,24 @@ class FilesystemEvidenceSpool:
         return tuple(payloads)
 
     def seal(self) -> EvidenceSpoolStatus:
-        with _locked(self._root):
+        with self._access():
             lanes, _sealed = self._load_state()
             for state in lanes.values():
                 state.sealed = True
             self._write_state(lanes, sealed=True)
-        return self.status()
+            result = self._status()
+            _LOG.info(
+                "evidence_spool_sealed record_count=%s byte_count=%s",
+                result.record_count,
+                result.byte_count,
+            )
+            return result
 
     def status(self) -> EvidenceSpoolStatus:
+        with self._access():
+            return self._status()
+
+    def _status(self) -> EvidenceSpoolStatus:
         lanes, sealed = self._load_state()
         records = self._total_records(lanes)
         byte_count = self._total_bytes(lanes)
@@ -417,6 +485,10 @@ class FilesystemEvidenceSpool:
         )
 
     def lane_status(self, lane: str) -> EvidenceSpoolStatus:
+        with self._access():
+            return self._lane_status(lane)
+
+    def _lane_status(self, lane: str) -> EvidenceSpoolStatus:
         lane = _lane(lane)
         lanes, sealed = self._load_state()
         state = lanes.get(lane)
@@ -435,7 +507,8 @@ class FilesystemEvidenceSpool:
     def _load_state(self) -> tuple[dict[str, _LaneState], bool]:
         path = _safe_path(self._root, "state.json")
         try:
-            payload = path.read_bytes()
+            with path.open("rb") as handle:
+                payload = handle.read(_STATE_MAX_BYTES + 1)
         except FileNotFoundError:
             return {}, False
         value = _decode(payload, max_bytes=_STATE_MAX_BYTES)
@@ -451,12 +524,11 @@ class FilesystemEvidenceSpool:
         if type(raw_lanes) is not dict:
             raise EvidenceSpoolError("evidence_spool_corrupt")
         lanes = {
-            str(name): _LaneState.from_payload(item)
-            for name, item in raw_lanes.items()
+            str(name): _LaneState.from_payload(item) for name, item in raw_lanes.items()
         }
-        return lanes, bool(value["sealed"])
+        return lanes, _bool(value["sealed"])
 
-    def _write_state(self, lanes: Mapping[str, _LaneState], *, sealed: bool) -> None:
+    def _state_bytes(self, lanes: Mapping[str, _LaneState], *, sealed: bool) -> bytes:
         payload = _canonical(
             {
                 "lanes": {name: state.payload() for name, state in lanes.items()},
@@ -466,7 +538,108 @@ class FilesystemEvidenceSpool:
         )
         if len(payload) > _STATE_MAX_BYTES:
             raise EvidenceSpoolError("evidence_spool_corrupt")
+        return payload
+
+    def _write_state(self, lanes: Mapping[str, _LaneState], *, sealed: bool) -> None:
+        payload = self._state_bytes(lanes, sealed=sealed)
         _atomic_write(_safe_path(self._root, "state.json"), payload)
+
+    @contextmanager
+    def _access(self) -> Iterator[None]:
+        # Readers participate in recovery, so no reader sees a half-published index.
+        with _locked(self._root):
+            self._recover_pending()
+            yield
+
+    def _read_state_bytes(self) -> bytes | None:
+        try:
+            with _safe_path(self._root, "state.json").open("rb") as handle:
+                data = handle.read(_STATE_MAX_BYTES + 1)
+        except FileNotFoundError:
+            return None
+        if len(data) > _STATE_MAX_BYTES:
+            raise EvidenceSpoolError("evidence_spool_corrupt")
+        return data
+
+    def _prepare_append(
+        self,
+        lane: str,
+        boundary_tick: int,
+        identity: str,
+        identities: Mapping[str, Mapping[str, object]],
+        boundaries: Mapping[str, Mapping[str, object]],
+        after_state: bytes,
+    ) -> None:
+        before = self._read_state_bytes()
+        journal = _canonical(
+            {
+                "schema_version": _SPOOL_PENDING_SCHEMA,
+                "lane": lane,
+                "boundary_tick": boundary_tick,
+                "identity": identity,
+                "identities": identities,
+                "boundaries": boundaries,
+                "before_state": (
+                    None if before is None else base64.b64encode(before).decode("ascii")
+                ),
+                "after_state_digest": _digest(after_state),
+            }
+        )
+        if len(journal) > _JOURNAL_MAX_BYTES:
+            raise EvidenceSpoolFull()
+        _atomic_write(_safe_path(self._root, "pending.json"), journal)
+
+    def _clear_pending(self) -> None:
+        # Keep an empty marker instead of deleting any historical data.
+        _atomic_write(_safe_path(self._root, "pending.json"), b"null\n")
+
+    def _recover_pending(self) -> None:
+        path = _safe_path(self._root, "pending.json")
+        try:
+            with path.open("rb") as handle:
+                data = handle.read(_JOURNAL_MAX_BYTES + 1)
+        except FileNotFoundError:
+            return
+        journal = _decode(data, max_bytes=_JOURNAL_MAX_BYTES)
+        if journal is None:
+            return
+        if type(journal) is not dict or set(journal) != {
+            "schema_version",
+            "lane",
+            "boundary_tick",
+            "identity",
+            "identities",
+            "boundaries",
+            "before_state",
+            "after_state_digest",
+        }:
+            raise EvidenceSpoolError("evidence_spool_corrupt")
+        if journal["schema_version"] != _SPOOL_PENDING_SCHEMA:
+            raise EvidenceSpoolError("evidence_spool_corrupt")
+        current = self._read_state_bytes()
+        if current is not None and _digest(current) == journal["after_state_digest"]:
+            self._clear_pending()
+            return
+        try:
+            before = journal["before_state"]
+            expected = (
+                None if before is None else base64.b64decode(before, validate=True)
+            )
+            if current != expected:
+                raise EvidenceSpoolError("evidence_spool_corrupt")
+            lane = _lane(journal["lane"])
+            tick = _boundary("boundary_tick", journal["boundary_tick"])
+            identity = _identity(journal["identity"])
+            identities = journal["identities"]
+            boundaries = journal["boundaries"]
+            if type(identities) is not dict or type(boundaries) is not dict:
+                raise EvidenceSpoolError("evidence_spool_corrupt")
+            self._write_index(self._identity_path(lane, identity), identities)
+            self._write_index(self._boundary_path(lane, tick), boundaries)
+        except (TypeError, ValueError) as exc:
+            raise EvidenceSpoolError("evidence_spool_corrupt") from exc
+        self._clear_pending()
+        _LOG.info("evidence_spool_append_recovered boundary_tick=%s", tick)
 
     def _identity_path(self, lane: str, identity: str) -> Path:
         shard = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:2]
@@ -484,7 +657,8 @@ class FilesystemEvidenceSpool:
 
     def _load_index(self, path: Path) -> dict[str, dict[str, object]]:
         try:
-            payload = path.read_bytes()
+            with path.open("rb") as handle:
+                payload = handle.read(_INDEX_MAX_BYTES + 1)
         except FileNotFoundError:
             return {}
         value = _decode(payload, max_bytes=_INDEX_MAX_BYTES)
@@ -530,6 +704,8 @@ class FilesystemEvidenceSpool:
             segment = _entry_int(entry, "segment")
             offset = _entry_int(entry, "offset")
             length = _entry_int(entry, "length")
+            if length > self._max_payload_bytes * 2 + 4096:
+                raise EvidenceSpoolError("evidence_spool_corrupt")
             digest = str(entry["digest"])
         except (KeyError, TypeError, ValueError) as exc:
             raise EvidenceSpoolError("evidence_spool_corrupt") from exc
@@ -544,6 +720,12 @@ class FilesystemEvidenceSpool:
             raise EvidenceSpoolError("evidence_spool_corrupt")
         value = _decode(content, max_bytes=self._max_payload_bytes * 2 + 4096)
         if type(value) is not dict:
+            raise EvidenceSpoolError("evidence_spool_corrupt")
+        if (
+            set(value) != {"identity", "boundary_tick", "payload"}
+            or value["identity"] != entry["identity"]
+            or value["boundary_tick"] != entry["boundary_tick"]
+        ):
             raise EvidenceSpoolError("evidence_spool_corrupt")
         encoded_payload = value.get("payload")
         if type(encoded_payload) is not str:
@@ -569,6 +751,12 @@ def _entry_int(entry: Mapping[str, object], key: str) -> int:
     value = entry[key]
     if type(value) is not int or value < 0:
         raise ValueError("entry value must be a non-negative int")
+    return value
+
+
+def _bool(value: object) -> bool:
+    if type(value) is not bool:
+        raise EvidenceSpoolError("evidence_spool_corrupt")
     return value
 
 

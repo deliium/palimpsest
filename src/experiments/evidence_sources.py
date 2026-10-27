@@ -188,6 +188,7 @@ class SpooledCulturalCaptureSource:
         "_run_id",
         "_source_revision",
         "_spool",
+        "_status",
     )
 
     def __init__(
@@ -206,6 +207,7 @@ class SpooledCulturalCaptureSource:
         self._capture_status = capture_status
         self._gaps = tuple(sorted(set(gaps)))
         self._lane = lane
+        self._status = spool.lane_status(lane)
 
     @property
     def run_id(self) -> str:
@@ -225,7 +227,7 @@ class SpooledCulturalCaptureSource:
 
     @property
     def status(self) -> EvidenceSpoolStatus:
-        lane = self._spool.lane_status(self._lane)
+        lane = self._status
         return EvidenceSpoolStatus(
             active=self._capture_status.active and lane.active,
             failed=self._capture_status.failed,
@@ -245,6 +247,9 @@ class SpooledCulturalCaptureSource:
         self, *, after_boundary: int | None = None
     ) -> Iterator[CulturalBoundaryExport]:
         cursor = after_boundary
+        through = self._status.last_boundary
+        if through is None:
+            return
         while True:
             payloads = self._spool.iter_lane(
                 lane=self._lane,
@@ -255,19 +260,21 @@ class SpooledCulturalCaptureSource:
                 return
             for payload in payloads:
                 frame = decode_cultural_boundary(payload)
+                if frame.boundary_tick > through:
+                    return
                 if frame.run_id != self._run_id:
                     raise ValueError("cultural_source_run_mismatch")
                 if cursor is not None and frame.boundary_tick <= cursor:
-                    continue
+                    raise ValueError("cultural_source_nonadvancing_boundary")
                 cursor = frame.boundary_tick
                 yield frame
             if len(payloads) < _DEFAULT_PAGE:
                 return
 
     def read_boundary(self, tick: int) -> CulturalBoundaryExport | None:
-        payload = self._spool.get(
-            lane=self._lane, identity=boundary_identity(tick)
-        )
+        if self._status.last_boundary is None or tick > self._status.last_boundary:
+            return None
+        payload = self._spool.get(lane=self._lane, identity=boundary_identity(tick))
         if payload is None:
             return None
         frame = decode_cultural_boundary(payload)
@@ -366,9 +373,12 @@ class SpooledCivilizationHistorySource:
 
     __slots__ = (
         "_boundary_lane",
+        "_boundary_status",
         "_event_lane",
+        "_event_status",
         "_run_id",
         "_spool",
+        "_status",
         "_world_id",
     )
 
@@ -386,6 +396,9 @@ class SpooledCivilizationHistorySource:
         self._world_id = world_id
         self._boundary_lane = boundary_lane
         self._event_lane = event_lane
+        self._boundary_status = spool.lane_status(boundary_lane)
+        self._event_status = spool.lane_status(event_lane)
+        self._status = spool.status()
 
     @property
     def run_id(self) -> str:
@@ -397,7 +410,7 @@ class SpooledCivilizationHistorySource:
 
     @property
     def status(self) -> EvidenceSpoolStatus:
-        return self._spool.status()
+        return self._status
 
     def boundary_ticks(self) -> tuple[int, ...]:
         ticks: list[int] = []
@@ -415,6 +428,9 @@ class SpooledCivilizationHistorySource:
         self, *, after_boundary: int | None = None
     ) -> Iterator[CivilizationBoundaryInput]:
         cursor = after_boundary
+        through = self._boundary_status.last_boundary
+        if through is None:
+            return
         while True:
             payloads = self._spool.iter_lane(
                 lane=self._boundary_lane,
@@ -426,6 +442,8 @@ class SpooledCivilizationHistorySource:
             for payload in payloads:
                 frame = decode_civilization_boundary(payload)
                 tick = frame.cursor.boundary_tick
+                if tick is not None and tick > through:
+                    return
                 if (
                     frame.cursor.run_id != self._run_id
                     or frame.cursor.world_id != self._world_id
@@ -433,13 +451,16 @@ class SpooledCivilizationHistorySource:
                 ):
                     raise ValueError("civilization_source_identity_mismatch")
                 if cursor is not None and tick <= cursor:
-                    continue
+                    raise ValueError("civilization_source_nonadvancing_boundary")
                 cursor = tick
                 yield frame
             if len(payloads) < _DEFAULT_PAGE:
                 return
 
     def read_boundary(self, tick: int) -> CivilizationBoundaryInput | None:
+        through = self._boundary_status.last_boundary
+        if through is None or tick > through:
+            return None
         payload = self._spool.get(
             lane=self._boundary_lane, identity=boundary_identity(tick)
         )
@@ -461,6 +482,14 @@ class SpooledCivilizationHistorySource:
         through_tick: int | None = None,
     ) -> Iterator[CivilizationEventBatch]:
         cursor = after_tick
+        pinned_through = self._event_status.last_boundary
+        if pinned_through is None:
+            return
+        through_tick = (
+            pinned_through
+            if through_tick is None
+            else min(pinned_through, through_tick)
+        )
         while True:
             payloads = self._spool.iter_lane(
                 lane=self._event_lane,
@@ -474,7 +503,7 @@ class SpooledCivilizationHistorySource:
                 if batch.run_id != self._run_id:
                     raise ValueError("civilization_source_identity_mismatch")
                 if cursor is not None and batch.tick <= cursor:
-                    continue
+                    raise ValueError("civilization_source_nonadvancing_boundary")
                 if through_tick is not None and batch.tick > through_tick:
                     return
                 cursor = batch.tick
@@ -483,9 +512,10 @@ class SpooledCivilizationHistorySource:
                 return
 
     def read_event_batch(self, tick: int) -> CivilizationEventBatch | None:
-        payload = self._spool.get(
-            lane=self._event_lane, identity=event_identity(tick)
-        )
+        through = self._event_status.last_boundary
+        if through is None or tick > through:
+            return None
+        payload = self._spool.get(lane=self._event_lane, identity=event_identity(tick))
         if payload is None:
             return None
         batch = decode_civilization_event_batch(payload)

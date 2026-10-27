@@ -134,9 +134,7 @@ class CivilizationEvidenceRecorder:
     def status(self) -> CivilizationCaptureStatus:
         if self._spool is not None:
             events = self._spool.lane_status(CIVILIZATION_EVENT_SPOOL_LANE)
-            boundaries = self._spool.lane_status(
-                CIVILIZATION_BOUNDARY_SPOOL_LANE
-            )
+            boundaries = self._spool.lane_status(CIVILIZATION_BOUNDARY_SPOOL_LANE)
             return CivilizationCaptureStatus(
                 self._options.enabled and self._failure_code is None,
                 self._failure_code is not None,
@@ -204,16 +202,13 @@ class CivilizationEvidenceRecorder:
             run_id_value=self._run_id or "",
             world_id_value=self._world_id or "",
             boundaries=tuple(self._boundaries[tick] for tick in ticks),
-            event_batches=tuple(
-                self._batches[tick] for tick in sorted(self._batches)
-            ),
+            event_batches=tuple(self._batches[tick] for tick in sorted(self._batches)),
             status=EvidenceSpoolStatus(
                 active=self._options.enabled and self._failure_code is None,
                 failed=self._failure_code is not None,
                 sealed=False,
                 truncated=False,
                 failure_code=self._failure_code,
-
                 record_count=len(self._batches) + len(self._boundaries),
                 byte_count=self._retained_bytes,
                 first_boundary=(
@@ -281,7 +276,9 @@ class CivilizationEvidenceRecorder:
             return False
         if type(batch) is not CivilizationEventBatch:
             self._fail(
-                (self._last_event_tick or -1) + 2, "capture_build_failed"
+                (self._last_event_tick if self._last_event_tick is not None else -1)
+                + 2,
+                "capture_build_failed",
             )
             return False
         boundary = batch.tick + 1
@@ -334,10 +331,17 @@ class CivilizationEvidenceRecorder:
             if self._run_id is not None and batch.run_id != self._run_id:
                 self._fail(boundary, "capture_conflict")
                 return False
-            if (
-                self._last_event_tick is not None
-                and batch.tick < self._last_event_tick
-            ):
+            payload = encode_civilization_event_batch(batch)
+            previous = self._spool.get(
+                lane=CIVILIZATION_EVENT_SPOOL_LANE,
+                identity=event_identity(batch.tick),
+            )
+            if previous is not None:
+                if previous != payload:
+                    self._fail(boundary, "capture_conflict")
+                    return False
+                return True
+            if self._last_event_tick is not None and batch.tick < self._last_event_tick:
                 self._fail(boundary, "capture_conflict")
                 return False
             encoded = civilization_event_bytes(batch)
@@ -352,13 +356,10 @@ class CivilizationEvidenceRecorder:
                 lane=CIVILIZATION_EVENT_SPOOL_LANE,
                 boundary_tick=batch.tick,
                 identity=event_identity(batch.tick),
-                payload=encode_civilization_event_batch(batch),
+                payload=payload,
             )
             self._run_id = batch.run_id
-            if (
-                self._last_event_tick is None
-                or batch.tick > self._last_event_tick
-            ):
+            if self._last_event_tick is None or batch.tick > self._last_event_tick:
                 self._last_event_tick = batch.tick
                 self._retained_rows += rows
                 self._retained_bytes += len(encoded)
@@ -387,7 +388,13 @@ class CivilizationEvidenceRecorder:
             return False
         if type(frame) is not CivilizationBoundaryInput:
             self._fail(
-                (self._last_boundary_tick or -1) + 1, "capture_build_failed"
+                (
+                    self._last_boundary_tick
+                    if self._last_boundary_tick is not None
+                    else -1
+                )
+                + 1,
+                "capture_build_failed",
             )
             return False
         boundary = frame.cursor.tick
@@ -445,12 +452,19 @@ class CivilizationEvidenceRecorder:
             if self._run_id is not None and frame.cursor.run_id != self._run_id:
                 self._fail(boundary, "capture_conflict")
                 return False
-            if (
-                self._world_id is not None
-                and frame.cursor.world_id != self._world_id
-            ):
+            if self._world_id is not None and frame.cursor.world_id != self._world_id:
                 self._fail(boundary, "capture_conflict")
                 return False
+            payload = encode_civilization_boundary(frame)
+            previous = self._spool.get(
+                lane=CIVILIZATION_BOUNDARY_SPOOL_LANE,
+                identity=boundary_identity(boundary),
+            )
+            if previous is not None:
+                if previous != payload:
+                    self._fail(boundary, "capture_conflict")
+                    return False
+                return True
             if (
                 self._last_boundary_tick is not None
                 and boundary < self._last_boundary_tick
@@ -458,9 +472,7 @@ class CivilizationEvidenceRecorder:
                 self._fail(boundary, "capture_conflict")
                 return False
             if (
-                self._spool.lane_status(
-                    CIVILIZATION_BOUNDARY_SPOOL_LANE
-                ).record_count
+                self._spool.lane_status(CIVILIZATION_BOUNDARY_SPOOL_LANE).record_count
                 >= self._options.max_boundaries
             ):
                 self._fail(boundary, "capture_boundary_limit")
@@ -477,14 +489,11 @@ class CivilizationEvidenceRecorder:
                 lane=CIVILIZATION_BOUNDARY_SPOOL_LANE,
                 boundary_tick=boundary,
                 identity=boundary_identity(boundary),
-                payload=encode_civilization_boundary(frame),
+                payload=payload,
             )
             self._run_id = frame.cursor.run_id
             self._world_id = frame.cursor.world_id
-            if (
-                self._last_boundary_tick is None
-                or boundary > self._last_boundary_tick
-            ):
+            if self._last_boundary_tick is None or boundary > self._last_boundary_tick:
                 self._last_boundary_tick = boundary
                 self._retained_rows += rows
                 self._retained_bytes += len(encoded)

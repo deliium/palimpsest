@@ -360,48 +360,73 @@ class CulturalEvidenceRecorder:
         )
 
     def _capture_spooled(self, frame: CulturalBoundaryExport) -> None:
+        assert self._spool is not None
         if self._run_id is not None and frame.run_id != self._run_id:
             raise ValueError("cultural_evidence_conflict")
         incoming_rows = _ledger_entry_count(frame)
-        if (
-            self.frame_count >= self._max_frames
-            or self._rows + incoming_rows > self._max_rows
-        ):
-            self._truncate(frame.boundary_tick)
-            return
         try:
-            self._spool.append(  # type: ignore[union-attr]
+            payload = encode_cultural_boundary(frame)
+            existing = self._spool.get(
+                lane=CULTURAL_SPOOL_LANE,
+                identity=boundary_identity(frame.boundary_tick),
+            )
+            if existing is not None:
+                if existing == payload:
+                    return
+                raise ValueError("cultural_evidence_conflict")
+            last = self._spool.lane_status(CULTURAL_SPOOL_LANE).last_boundary
+            if last is not None and frame.boundary_tick < last:
+                raise ValueError("cultural_evidence_conflict")
+            if self._truncated:
+                return
+            if (
+                self.frame_count >= self._max_frames
+                or self._rows + incoming_rows > self._max_rows
+            ):
+                self._truncate(frame.boundary_tick)
+                return
+            added = self._spool.append(
                 lane=CULTURAL_SPOOL_LANE,
                 boundary_tick=frame.boundary_tick,
                 identity=boundary_identity(frame.boundary_tick),
-                payload=encode_cultural_boundary(frame),
+                payload=payload,
             )
         except ValueError as exc:
+            if str(exc) == "cultural_evidence_conflict":
+                raise
             code = getattr(exc, "code", None)
             if code == "evidence_spool_full":
                 self._truncate(frame.boundary_tick)
                 return
             if code == "evidence_spool_conflict":
                 raise ValueError("cultural_evidence_conflict") from None
-            self._status = CulturalCaptureStatus(
-                active=True,
-                failed=True,
-                failure_boundary=frame.boundary_tick,
-                failure_code="cultural_capture_spool_failed",
-            )
-            _LOG.warning(
-                "cultural_capture_spool_failed boundary_tick=%s reason_code=%s",
-                frame.boundary_tick,
-                "cultural_capture_spool_failed",
-            )
+            self._fail_spool(frame.boundary_tick)
+            return
+        except OSError:
+            self._fail_spool(frame.boundary_tick)
             return
         self._run_id = frame.run_id
-        self._rows += incoming_rows
+        if added:
+            self._rows += incoming_rows
         _LOG.debug(
             "cultural_frame_spooled boundary_tick=%s owner_count=%s row_count=%s",
             frame.boundary_tick,
             len(frame.owners),
             self._rows,
+        )
+
+    def _fail_spool(self, boundary_tick: int) -> None:
+        self._status = CulturalCaptureStatus(
+            active=True,
+            failed=True,
+            failure_boundary=boundary_tick,
+            failure_code="cultural_capture_spool_failed",
+            missing_prefix_through=self._status.missing_prefix_through,
+        )
+        _LOG.warning(
+            "cultural_capture_spool_failed boundary_tick=%s reason_code=%s",
+            boundary_tick,
+            "cultural_capture_spool_failed",
         )
 
     def _truncate(self, boundary_tick: int) -> None:
@@ -428,9 +453,17 @@ class CulturalEvidenceRecorder:
             missing = status.missing_prefix_through
         self._status = CulturalCaptureStatus(
             active=status.active,
-            failed=status.failed,
-            failure_boundary=status.failure_boundary,
-            failure_code=status.failure_code,
+            failed=self._status.failed or status.failed,
+            failure_boundary=(
+                self._status.failure_boundary
+                if self._status.failed
+                else status.failure_boundary
+            ),
+            failure_code=(
+                self._status.failure_code
+                if self._status.failed
+                else status.failure_code
+            ),
             missing_prefix_through=missing,
         )
         if status.failed:
