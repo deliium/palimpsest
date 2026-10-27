@@ -115,7 +115,7 @@ class SqlAlchemyObjectiveEvidenceLoader:
                     session, run_id=run_id, manifest=manifest
                 )
                 if boundary.bootstrap_only:
-                    page_events = ()
+                    page_events: tuple[WorldEvent, ...] = ()
                     has_more = False
                     next_cursor = None
                     page = InspectionEventPage(

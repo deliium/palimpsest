@@ -243,6 +243,22 @@ Optional full-history channels may dominate cost. The implementation avoids
 per-tick prefix copying or prefix scans, but it does not claim constant memory,
 bounded disk, or linear runtime for every channel.
 
+## Retirement, scale and cold history
+
+`RuntimeRetentionPolicy` is composition-only and default off. When enabled it
+retires only objectively dead, terminal, fully finalized and fork-capable
+owners: active scheduling stops, live cognition/service references are released,
+and a complete frozen owner record, exports and fork roster remain. Unsupported
+bundles stay live with an explicit count. Historical inspection never becomes a
+durable subjective restart.
+
+Checkpoints accelerate seek/fold; they do not delete source history. Offline
+`history-export` copies events, commits and snapshots into verified read-only
+segments behind a separate adapter. Exports never mutate SQL rows and are not
+an automatic API failover tier. See
+[Long-horizon scalability](long-horizon-scalability.md) for measured horizons
+and [Persistence](persistence.md#copy-only-cold-history) for archive semantics.
+
 ## Verification
 
 The opt-in long-horizon proof requires a disposable `palimpsest_test` database:

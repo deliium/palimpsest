@@ -286,6 +286,23 @@ Logs report safe cell IDs, counts, availability, and reason codes only. They
 never include labels, messages, memories, prompts, fingerprints used as payload
 surrogates, or evidence payloads.
 
+## Incremental execution subset
+
+Only two exact paths are incremental in V3-43:
+
+- generational population/cohort comparison;
+- `cultural_trait_dynamics`, using sealed-window two-pass trait union so a trait
+  first observed later still yields earlier zero rows rather than a truncated
+  history.
+
+`INCREMENTAL_CULTURAL_FAMILIES` and `BATCH_CULTURAL_FAMILIES` are logged by
+generational execution. The other five cultural families remain exact
+batch/global calculators with separate resource limits. Rebuildable
+`v3-analytical-view-v1` checkpoints are disposable sidecars keyed by source,
+window, config, manifest, high-water and pass identity; they never replace source
+evidence or feed cognition. See
+[Long-horizon scalability](long-horizon-scalability.md).
+
 ## See also
 
 - [Experiments](experiments.md) — matrix CLI, sidecars, generational comparison

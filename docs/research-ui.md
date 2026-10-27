@@ -82,6 +82,21 @@ Keep `/research/` mount and `/v1` data origin. Prefer additive inspect views, op
 
 Historical memory metric families (`historical_memory_layers`, `historical_memory_transitions`, `historical_memory_queries`) map through `ANALYTICAL_OVERLAYS` to `research_inference` only. AnalyticsPanel may surface layer histograms and query answers from the metric catalog; GraphsPanel provenance chrome for Assmann layers remains deferred. Never add Assmann layer labels to subjective ledger endpoints (`cultural_narratives`, norms, conventions, group formation).
 
+## Historical paging controls
+
+Research UI history views keep one buffered page suffix and drain it before
+advancing a server cursor. Local item caps return an explicit `limited` state
+with a continuation action; queue saturation is typed and bounded. Marker
+discovery is explicit: the first boundary page is followed by a visible
+"Load more generations" continuation, and incomplete discovery is labelled.
+Refreshing markers re-fetches the run head before advancing high water. Lineage
+snapshot discovery resolves the exact requested boundary within a bounded scan;
+when the budget ends it shows `scan_limited` plus "Continue publication scan"
+rather than substituting the first snapshot. Scope/credential changes abort
+in-flight work, reject stale responses, and clear private cached rows. There is
+no localStorage/IndexedDB historical cache. See
+[Long-horizon scalability](long-horizon-scalability.md).
+
 ## See also
 
 - [Research API](research-api.md)

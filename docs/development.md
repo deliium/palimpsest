@@ -1,6 +1,6 @@
 # Development
 
-[← Previous Page](configuration.md) · [Back to README](../README.md) · [Next → Persistence](persistence.md)
+[← Previous Page](configuration.md) · [Back to README](../README.md) · [Next → Long-horizon scalability](long-horizon-scalability.md)
 
 ## Locked environment
 
@@ -237,7 +237,28 @@ Full Ruff, mypy, import-linter, architecture, V1/V2 compatibility, and pytest
 gates are still required before declaring the feature verified. Run status and
 unresolved failures belong to the active implementation plan.
 
+## Long-horizon scale gates
+
+Long-horizon runs are opt-in and budgeted; see
+[Long-horizon scalability](long-horizon-scalability.md) for the verified envelope
+and exact artifacts.
+
+```bash
+PALIMPSEST_SCALE_BENCH_TICKS=10000 \
+PALIMPSEST_SCALE_BENCH_LANES='v1-control,generational,evidence-rich,historical-query' \
+PALIMPSEST_SCALE_BENCH_TIMEOUT_SECONDS=300 \
+uv run pytest -m 'integration and scale' tests/benchmarks/test_v3_long_horizon.py
+uv run pytest -m 'integration and scale' tests/benchmarks/test_v3_historical_queries.py
+uv run pytest -m integration tests/integration/test_v3_historical_query_safety.py
+uv run pytest tests/unit/test_v3_scale_support.py
+```
+
+A `timed_out` or `failed` worker is a recorded result, not a pass. Dense 100k
+completion is not claimed.
+
 ## See also
+
+- [Long-horizon scalability](long-horizon-scalability.md)
 
 - [Architecture](architecture.md)
 - [V2 benchmark suite](v2-benchmark-suite.md)

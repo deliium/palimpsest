@@ -1,6 +1,6 @@
 # Persistence and Deterministic Replay
 
-[← Development](development.md) · [Back to README](../README.md)
+[← Long-horizon scalability](long-horizon-scalability.md) · [Back to README](../README.md)
 
 ## Boundaries
 
@@ -149,6 +149,31 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 - **`0017_memory_embedding_hnsw`:** documents hybrid retrieve readiness. HNSW/IVFFlat are **not** created yet because `memory_traces.embedding` is untyped `vector` (fixed `vector(N)` required for ANN indexes). Runtime still shortlists via SQL cosine distance + `LIMIT` when `query_embedding` is set, then `rank_traces`. `PALIMPSEST_MEMORY_RETRIEVE_MAX_CANDIDATES` (default 4096) caps SQL materialization before ranking.
 
 Migration head is `0017`. V2/V3 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). V3 scaffolding does **not** add `0018`; do not invent indexed V3 flag columns without a later justified plan. Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
+
+## Copy-only cold history
+
+`persistence` cold export is an explicit copy, not a tier that rewrites source
+history:
+
+- Objective events, commits and snapshots are exported into content-addressed
+  segments with pinned verified durable heads, exact split-tick coverage and
+  sorted event/snapshot indexes.
+- Publication uses one atomic run-state reference; verification checks object
+  hashes, coverage and sampled replay. Tampered, missing or conflicting objects
+  fail closed.
+- The read-only archive adapter implements bounded runs/journal/snapshot ports.
+  Append attempts fail closed and archives are never used as automatic SQL
+  failover or durable subjective restart.
+- Export/verify do not mutate source tables. Append-only triggers remain in
+  force for authoritative events, commits, snapshots, scientific evidence,
+  outbox and cognition traces.
+
+```bash
+uv run palimpsest-matrix history-export --run-id <run_id> --output <dir>
+uv run palimpsest-matrix history-verify --archive <dir> --full
+```
+
+See [Long-horizon scalability](long-horizon-scalability.md).
 
 ## Logging
 

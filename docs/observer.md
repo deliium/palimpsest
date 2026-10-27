@@ -179,6 +179,21 @@ Ordinary manifest, state, event, tick, run, and stream payloads have no relation
 
 Causal explanation of a selected event uses the separate research debugger surface (`subjective_debug`); see [Research causal debugger](research-causal-debugger.md) and [Godot observer](godot-observer.md#causal-debugger).
 
+## Bounded playback and catch-up
+
+Godot keeps one in-flight request plus one desired playback target, one staged
+frame and bounded civilization request/cache/byte counters. A new seek cancels
+older work by epoch/serial; stale overlays cannot replace a newer cursor, and
+timed-out or missing layers become typed `unavailable` states.
+
+Reconnect catch-up continues by exclusive `(tick, sequence)` pages. A full page
+is a continuation, not EOF; state refresh happens only after a short, empty or
+non-advancing page. Stalled consumers fall behind without blocking simulation
+commit. LOD/coalescing changes presentation only: the committed semantic digest
+and event cursor path stay identical across full, reduced, snap and aggregate
+modes. Observer history GETs are `no-store`. See
+[Long-horizon scalability](long-horizon-scalability.md).
+
 ## See also
 
 - [Physical simulation](physical-simulation.md#discrete-regional-journeys)

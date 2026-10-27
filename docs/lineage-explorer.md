@@ -208,6 +208,18 @@ subjective restart and retroactive recovery of uncaptured ledgers. Lineage
 artifacts are researcher read models, not world registries or institutional
 authority.
 
+## Physical paging and compression
+
+New publications use `lineage-store-index-v2`: a bounded `store/root.json`
+authenticates paged directories for the node catalogue, adjacency, identity
+lookup and object integrity. Catalogue pages, adjacency pages and identity
+objects are content-addressed and reused across publications; quota charging
+remains logical. Readers dispatch v1 manifest/object layouts and v2 root/index
+layouts, select pages before filtering, and read only the indexed adjacency for
+the requested node/direction. Deep cursors and lossless continuation preserve
+every edge and witness; v1 publications remain readable. See
+[Long-horizon scalability](long-horizon-scalability.md).
+
 ## Compatibility
 
 This feature adds no command, event, observer semantic type, metric family,

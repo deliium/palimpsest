@@ -78,6 +78,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations (head `0017`), local and Docker workflows, exact commands |
+| [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 
 ## Invariants (summary)

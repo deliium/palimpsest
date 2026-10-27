@@ -22,7 +22,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Final, TypeVar
+from typing import Final
 
 import pytest
 
@@ -45,7 +45,6 @@ _LOG: Final[logging.Logger] = logging.getLogger("scale.bench.publication")
 _FRAMES_ENV: Final[str] = "PALIMPSEST_V3_PUBLICATION_SCALE_FRAMES"
 _MIN_FRAMES: Final[int] = 1_000
 _SAMPLE_INTERVAL_SECONDS: Final[float] = 0.002
-_T = TypeVar("_T")
 
 
 def _frames(count: int) -> tuple[CulturalBoundaryExport, ...]:
@@ -55,9 +54,9 @@ def _frames(count: int) -> tuple[CulturalBoundaryExport, ...]:
     )
 
 
-def _measure_peak_rss(
-    action: Callable[[], _T],
-) -> tuple[_T, int, float, bool]:
+def _measure_peak_rss[T](
+    action: Callable[[], T],
+) -> tuple[T, int, float, bool]:
     """Run ``action`` while sampling process RSS; return result, delta, seconds."""
     sampler = RssSampler(capacity=4096)
     baseline = sampler.sample()

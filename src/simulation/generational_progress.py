@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Final
+from typing import Final, cast
 
 from simulation.generational_models import (
     CohortPopulationRow,
@@ -21,9 +21,7 @@ from world.identifiers import require_exact_nonneg_int
 from world.lifecycle import AgentLifecycleRecord
 from world.models import AgentBody, LifeStatus
 
-_LOGGER: Final[logging.Logger] = logging.getLogger(
-    "simulation.generational_progress"
-)
+_LOGGER: Final[logging.Logger] = logging.getLogger("simulation.generational_progress")
 
 
 def build_population_progress(
@@ -80,8 +78,7 @@ def build_population_progress(
                 key,
             )
             raise ValueError(
-                "duplicate lifecycle binding "
-                "(code=population_progress_binding_invalid)"
+                "duplicate lifecycle binding (code=population_progress_binding_invalid)"
             )
         seen_bodies.add(key)
         body = bodies.get(key)
@@ -163,8 +160,6 @@ def build_population_progress(
     return progress
 
 
-
-
 class PopulationProgressAccumulator:
     """Incrementally maintain exact population totals at finalized boundaries.
 
@@ -214,7 +209,7 @@ class PopulationProgressAccumulator:
         accumulator._total_deaths = progress.total_deaths
         accumulator._max_generation = progress.max_generation_index_seen
         bodies = {
-            body.entity_id.value: body
+            cast(AgentBody, body).entity_id.value: cast(AgentBody, body)
             for body in detached_bodies
         }
         for raw in lifecycle_records:
@@ -228,9 +223,7 @@ class PopulationProgressAccumulator:
             living = body.life_status is LifeStatus.ALIVE
             accumulator._living[key] = living
             cohort_key = (raw.generation_index, raw.entry_tick, raw.cohort_id)
-            cohort = accumulator._cohort_totals.setdefault(
-                cohort_key, [0, 0, 0]
-            )
+            cohort = accumulator._cohort_totals.setdefault(cohort_key, [0, 0, 0])
             cohort[0] += 1
             cohort[1 if living else 2] += 1
             generation = accumulator._generation_totals.setdefault(
@@ -308,8 +301,7 @@ class PopulationProgressAccumulator:
                 raise TypeError("died_body_ids entries must be non-empty strings")
             if body_id in seen_deaths:
                 raise ValueError(
-                    "duplicate death event "
-                    "(code=population_progress_boundary_conflict)"
+                    "duplicate death event (code=population_progress_boundary_conflict)"
                 )
             seen_deaths.add(body_id)
             if body_id not in self._records:
@@ -319,8 +311,7 @@ class PopulationProgressAccumulator:
                 )
             if self._living[body_id] is False:
                 raise ValueError(
-                    "death applied twice "
-                    "(code=population_progress_boundary_conflict)"
+                    "death applied twice (code=population_progress_boundary_conflict)"
                 )
             self._living[body_id] = False
             self._total_deaths += 1
