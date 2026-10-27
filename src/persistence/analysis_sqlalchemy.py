@@ -15,13 +15,17 @@ import time
 from collections.abc import Sequence
 from typing import Final, cast
 
-from sqlalchemy import select
+from sqlalchemy import Subquery, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from experiments.persistence import (
+    SUBJECTIVE_EVIDENCE_LANES,
+    ObjectiveEventPage,
     PersistedAnalysisSnapshot,
     PersistedDerivationEdge,
     PersistedReconstructionRow,
+    PersistedRegionalContext,
+    SubjectiveEvidencePage,
     regional_context_from_snapshot,
 )
 from infrastructure.database import session_scope
@@ -66,6 +70,7 @@ from persistence.orm import (
 from persistence.readers import event_from_orm, snapshot_from_canonical_payload
 from persistence.transmission_mapping import transmission_from_row
 from simulation.evidence import (
+    EvidenceHighWaterMarks,
     EvidenceManifest,
     clamp_sequence_to_high_water,
     manifest_hash_prefix,
@@ -179,7 +184,7 @@ class SqlAlchemyAnalysisEvidenceLoader:
             else:
                 assert boundary.through_tick is not None
                 events = await _load_events(
-                    session, run_id=run_id, through_tick=boundary.through_tick
+                    session, run_id=run_id, through_tick=boundary.through_tick.value
                 )
 
             if experiment_id is not None:
@@ -255,6 +260,302 @@ class SqlAlchemyAnalysisEvidenceLoader:
             },
         )
         return snapshot
+
+    async def load_objective_event_page(
+        self,
+        *,
+        run_id: str,
+        manifest: EvidenceManifest | None = None,
+        after_tick: int | None = None,
+        after_sequence: int | None = None,
+        limit: int = 1_000,
+    ) -> ObjectiveEventPage:
+        """Return one manifest-pinned keyset page of committed events."""
+        run_id = RunId(run_id).value
+        if manifest is not None and manifest.run_id != run_id:
+            raise PersistenceAdapterError(
+                "manifest_run_scope_mismatch", operation="load_event_page"
+            )
+        page_limit = _page_limit(limit)
+        cursor_tick, cursor_sequence = _page_cursor(after_tick, after_sequence)
+        async with session_scope(self._session_factory) as session:
+            boundary = await resolve_objective_evidence_boundary(
+                session, run_id=run_id, manifest=manifest
+            )
+            manifest_hash = None if manifest is None else manifest.manifest_hash
+            if manifest is not None and boundary.bootstrap_only:
+                _LOG.debug(
+                    "analysis_event_page_complete",
+                    extra={
+                        "operation": "load_event_page",
+                        "run_id": run_id,
+                        "event_count": 0,
+                        "exhausted": True,
+                        "bootstrap_only": True,
+                    },
+                )
+                return ObjectiveEventPage(
+                    run_id=run_id,
+                    events=(),
+                    complete_through_boundary=boundary.boundary_tick.value,
+                    next_tick=None,
+                    next_sequence=None,
+                    manifest_hash=manifest_hash,
+                )
+            statement = select(WorldEventOrm).where(WorldEventOrm.run_id == run_id)
+            if boundary.through_tick is not None:
+                statement = statement.where(
+                    WorldEventOrm.tick <= boundary.through_tick.value
+                )
+            if cursor_tick is not None and cursor_sequence is not None:
+                statement = statement.where(
+                    or_(
+                        WorldEventOrm.tick > cursor_tick,
+                        and_(
+                            WorldEventOrm.tick == cursor_tick,
+                            WorldEventOrm.sequence > cursor_sequence,
+                        ),
+                    )
+                )
+            rows = list(
+                (
+                    await session.execute(
+                        statement.order_by(
+                            WorldEventOrm.tick, WorldEventOrm.sequence
+                        ).limit(page_limit + 1)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        more = len(rows) > page_limit
+        page_rows = rows[:page_limit]
+        next_tick = None
+        next_sequence = None
+        if more and page_rows:
+            next_tick = int(page_rows[-1].tick)
+            next_sequence = int(page_rows[-1].sequence)
+        _LOG.debug(
+            "analysis_event_page_complete",
+            extra={
+                "operation": "load_event_page",
+                "run_id": run_id,
+                "event_count": len(page_rows),
+                "exhausted": next_tick is None,
+                "manifest_hash_prefix": (
+                    None if manifest is None else manifest_hash_prefix(manifest)
+                ),
+            },
+        )
+        return ObjectiveEventPage(
+            run_id=run_id,
+            events=tuple(event_from_orm(row) for row in page_rows),
+            complete_through_boundary=boundary.boundary_tick.value,
+            next_tick=next_tick,
+            next_sequence=next_sequence,
+            manifest_hash=manifest_hash,
+        )
+
+    async def load_regional_context(
+        self, *, run_id: str
+    ) -> PersistedRegionalContext | None:
+        """Return detached bootstrap regional context without loading evidence."""
+        run_id = RunId(run_id).value
+        async with session_scope(self._session_factory) as session:
+            run_row = await session.get(SimulationRunOrm, run_id)
+            if run_row is None:
+                raise PersistenceNotFoundError(
+                    "run_not_found", operation="load_regional_context"
+                )
+            bootstrap_row = await session.get(
+                WorldSnapshotOrm, run_row.bootstrap_snapshot_id
+            )
+            if bootstrap_row is None:
+                raise PersistenceNotFoundError(
+                    "bootstrap_snapshot_not_found", operation="load_regional_context"
+                )
+            bootstrap = snapshot_from_canonical_payload(
+                bootstrap_row.canonical_payload,
+                expected_integrity_hash=bootstrap_row.integrity_hash,
+            )
+            context = regional_context_from_snapshot(bootstrap)
+        _LOG.debug(
+            "analysis_regional_context_loaded",
+            extra={
+                "operation": "load_regional_context",
+                "run_id": run_id,
+                "regions_enabled": context is not None,
+                "owner_count": 0 if context is None else len(context.owner_ids),
+            },
+        )
+        return context
+
+    async def load_subjective_evidence_page(
+        self,
+        *,
+        run_id: str,
+        owner_id: str,
+        manifest: EvidenceManifest | None = None,
+        lane: str = "direct_traces",
+        after_tick: int | None = None,
+        after_id: str | None = None,
+        after_ordinal: int | None = None,
+        limit: int = 1_000,
+    ) -> SubjectiveEvidencePage:
+        """Return one manifest-clamped keyset page of a subjective lane."""
+        run_id = RunId(run_id).value
+        owner_id = AgentId(owner_id).value
+        if lane not in SUBJECTIVE_EVIDENCE_LANES:
+            raise PersistenceAdapterError(
+                "invalid_subjective_lane", operation="load_subjective_page"
+            )
+        if manifest is not None:
+            if type(manifest) is not EvidenceManifest:
+                raise TypeError("manifest must be EvidenceManifest")
+            if manifest.run_id != run_id:
+                _LOG.error(
+                    "analysis_subjective_page_scope_mismatch",
+                    extra={
+                        "operation": "load_subjective_page",
+                        "run_id": run_id,
+                        "reason_code": "manifest_run_scope_mismatch",
+                    },
+                )
+                raise PersistenceAdapterError(
+                    "manifest_run_scope_mismatch", operation="load_subjective_page"
+                )
+        page_limit = _page_limit(limit)
+        _subjective_cursor(lane, after_tick, after_id, after_ordinal)
+        manifest_hash = None if manifest is None else manifest.manifest_hash
+        high_water = None if manifest is None else manifest.high_water
+        started = time.perf_counter()
+        async with session_scope(self._session_factory) as session:
+            if lane in ("direct_traces", "communicated_traces"):
+                kind = (
+                    MemorySourceKind.DIRECT_OBSERVATION
+                    if lane == "direct_traces"
+                    else MemorySourceKind.COMMUNICATED
+                )
+                clamp = (
+                    None
+                    if high_water is None
+                    else (
+                        high_water.direct_memories
+                        if lane == "direct_traces"
+                        else high_water.communicated_memories
+                    )
+                )
+                trace_rows, more = await _page_trace_rows(
+                    session,
+                    run_id=run_id,
+                    owner_id=owner_id,
+                    kind=kind,
+                    high_water=clamp,
+                    after_tick=after_tick,
+                    after_id=after_id,
+                    limit=page_limit,
+                )
+                traces = await _assemble_traces(
+                    session, trace_rows, run_id=run_id, owner_id=owner_id
+                )
+                next_tick = None
+                next_id = None
+                next_ordinal = None
+                if more and trace_rows:
+                    next_tick = int(trace_rows[-1].created_tick)
+                    next_id = trace_rows[-1].memory_id
+                page = SubjectiveEvidencePage(
+                    run_id=run_id,
+                    owner_id=owner_id,
+                    lane=lane,
+                    traces=traces,
+                    next_tick=next_tick,
+                    next_id=next_id,
+                    next_ordinal=next_ordinal,
+                    manifest_hash=manifest_hash,
+                )
+            elif lane == "reconstructions":
+                clamp = None if high_water is None else high_water.reconstructions
+                recon_rows, more = await _page_reconstruction_rows(
+                    session,
+                    run_id=run_id,
+                    owner_id=owner_id,
+                    high_water=clamp,
+                    after_tick=after_tick,
+                    after_id=after_id,
+                    limit=page_limit,
+                )
+                reconstructions = await _assemble_reconstructions(
+                    session, recon_rows, run_id=run_id, owner_id=owner_id
+                )
+                next_tick = None
+                next_id = None
+                next_ordinal = None
+                if more and recon_rows:
+                    next_tick = int(recon_rows[-1].created_tick)
+                    next_id = recon_rows[-1].reconstruction_id
+                page = SubjectiveEvidencePage(
+                    run_id=run_id,
+                    owner_id=owner_id,
+                    lane=lane,
+                    reconstructions=reconstructions,
+                    next_tick=next_tick,
+                    next_id=next_id,
+                    next_ordinal=next_ordinal,
+                    manifest_hash=manifest_hash,
+                )
+            else:
+                edge_rows, more = await _page_derivation_rows(
+                    session,
+                    run_id=run_id,
+                    owner_id=owner_id,
+                    high_water=high_water,
+                    after_id=after_id,
+                    after_ordinal=after_ordinal,
+                    limit=page_limit,
+                )
+                edges = tuple(
+                    PersistedDerivationEdge(
+                        derived_memory_id=row.derived_memory_id,
+                        source_memory_id=row.source_memory_id,
+                        ordinal=int(row.ordinal),
+                        reconstruction_id=row.reconstruction_id,
+                    )
+                    for row in edge_rows
+                )
+                next_id = None
+                next_ordinal = None
+                if more and edge_rows:
+                    next_id = edge_rows[-1].derived_memory_id
+                    next_ordinal = int(edge_rows[-1].ordinal)
+                page = SubjectiveEvidencePage(
+                    run_id=run_id,
+                    owner_id=owner_id,
+                    lane=lane,
+                    derivation_edges=edges,
+                    next_id=next_id,
+                    next_ordinal=next_ordinal,
+                    manifest_hash=manifest_hash,
+                )
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        _LOG.debug(
+            "analysis_subjective_page_complete",
+            extra={
+                "operation": "load_subjective_page",
+                "run_id": run_id,
+                "owner_id": owner_id,
+                "lane": lane,
+                "trace_count": len(page.traces),
+                "reconstruction_count": len(page.reconstructions),
+                "edge_count": len(page.derivation_edges),
+                "exhausted": page.exhausted,
+                "manifest_hash_prefix": (
+                    None if manifest is None else manifest_hash_prefix(manifest)
+                ),
+                "duration_ms": duration_ms,
+            },
+        )
+        return page
 
 
 def _clamp_to_manifest(
@@ -424,6 +725,18 @@ async def _load_reconstructions(
         .scalars()
         .all()
     )
+    return await _assemble_reconstructions(
+        session, rows, run_id=run_id, owner_id=owner_id
+    )
+
+
+async def _assemble_reconstructions(
+    session: AsyncSession,
+    rows: Sequence[MemoryReconstructionOrm],
+    *,
+    run_id: str,
+    owner_id: str,
+) -> tuple[PersistedReconstructionRow, ...]:
     if not rows:
         return ()
     reconstruction_ids = [row.reconstruction_id for row in rows]
@@ -679,3 +992,255 @@ async def _assemble_traces(
             )
         )
     return tuple(assembled)
+
+
+MAX_ANALYSIS_PAGE_ROWS: Final[int] = 10_000
+
+
+def _subjective_cursor(
+    lane: str,
+    after_tick: int | None,
+    after_id: str | None,
+    after_ordinal: int | None,
+) -> None:
+    def invalid() -> PersistenceAdapterError:
+        return PersistenceAdapterError(
+            "invalid_page_cursor", operation="load_subjective_page"
+        )
+
+    if lane == "derivation_edges":
+        if after_tick is not None:
+            raise invalid()
+        if (after_id is None) != (after_ordinal is None):
+            raise invalid()
+        if after_ordinal is not None and (
+            type(after_ordinal) is not int or after_ordinal < 0
+        ):
+            raise invalid()
+    else:
+        if after_ordinal is not None:
+            raise invalid()
+        if (after_tick is None) != (after_id is None):
+            raise invalid()
+        if after_tick is not None and (type(after_tick) is not int or after_tick < 0):
+            raise invalid()
+    if after_id is not None and (not isinstance(after_id, str) or not after_id):
+        raise invalid()
+
+
+def _clamped_memory_ids(
+    *, run_id: str, owner_id: str, kind: MemorySourceKind, high_water: int
+) -> Subquery:
+    return (
+        select(MemoryTraceOrm.memory_id.label("memory_id"))
+        .where(
+            MemoryTraceOrm.run_id == run_id,
+            MemoryTraceOrm.owner_id == owner_id,
+            MemoryTraceOrm.source_kind == kind.value,
+        )
+        .order_by(MemoryTraceOrm.created_tick, MemoryTraceOrm.memory_id)
+        .limit(high_water)
+        .subquery()
+    )
+
+
+def _clamped_reconstruction_ids(
+    *, run_id: str, owner_id: str, high_water: int
+) -> Subquery:
+    return (
+        select(MemoryReconstructionOrm.reconstruction_id.label("reconstruction_id"))
+        .where(
+            MemoryReconstructionOrm.run_id == run_id,
+            MemoryReconstructionOrm.owner_id == owner_id,
+        )
+        .order_by(
+            MemoryReconstructionOrm.created_tick,
+            MemoryReconstructionOrm.reconstruction_id,
+        )
+        .limit(high_water)
+        .subquery()
+    )
+
+
+async def _page_trace_rows(
+    session: AsyncSession,
+    *,
+    run_id: str,
+    owner_id: str,
+    kind: MemorySourceKind,
+    high_water: int | None,
+    after_tick: int | None,
+    after_id: str | None,
+    limit: int,
+) -> tuple[list[MemoryTraceOrm], bool]:
+    statement = select(MemoryTraceOrm).where(
+        MemoryTraceOrm.run_id == run_id,
+        MemoryTraceOrm.owner_id == owner_id,
+        MemoryTraceOrm.source_kind == kind.value,
+    )
+    if high_water is not None:
+        clamped = _clamped_memory_ids(
+            run_id=run_id, owner_id=owner_id, kind=kind, high_water=high_water
+        )
+        statement = statement.join(
+            clamped, clamped.c.memory_id == MemoryTraceOrm.memory_id
+        )
+    if after_tick is not None and after_id is not None:
+        statement = statement.where(
+            or_(
+                MemoryTraceOrm.created_tick > after_tick,
+                and_(
+                    MemoryTraceOrm.created_tick == after_tick,
+                    MemoryTraceOrm.memory_id > after_id,
+                ),
+            )
+        )
+    rows = list(
+        (
+            await session.execute(
+                statement.order_by(
+                    MemoryTraceOrm.created_tick, MemoryTraceOrm.memory_id
+                ).limit(limit + 1)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return rows[:limit], len(rows) > limit
+
+
+async def _page_reconstruction_rows(
+    session: AsyncSession,
+    *,
+    run_id: str,
+    owner_id: str,
+    high_water: int | None,
+    after_tick: int | None,
+    after_id: str | None,
+    limit: int,
+) -> tuple[list[MemoryReconstructionOrm], bool]:
+    statement = select(MemoryReconstructionOrm).where(
+        MemoryReconstructionOrm.run_id == run_id,
+        MemoryReconstructionOrm.owner_id == owner_id,
+    )
+    if high_water is not None:
+        clamped = _clamped_reconstruction_ids(
+            run_id=run_id, owner_id=owner_id, high_water=high_water
+        )
+        statement = statement.join(
+            clamped,
+            clamped.c.reconstruction_id == MemoryReconstructionOrm.reconstruction_id,
+        )
+    if after_tick is not None and after_id is not None:
+        statement = statement.where(
+            or_(
+                MemoryReconstructionOrm.created_tick > after_tick,
+                and_(
+                    MemoryReconstructionOrm.created_tick == after_tick,
+                    MemoryReconstructionOrm.reconstruction_id > after_id,
+                ),
+            )
+        )
+    rows = list(
+        (
+            await session.execute(
+                statement.order_by(
+                    MemoryReconstructionOrm.created_tick,
+                    MemoryReconstructionOrm.reconstruction_id,
+                ).limit(limit + 1)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return rows[:limit], len(rows) > limit
+
+
+async def _page_derivation_rows(
+    session: AsyncSession,
+    *,
+    run_id: str,
+    owner_id: str,
+    high_water: EvidenceHighWaterMarks | None,
+    after_id: str | None,
+    after_ordinal: int | None,
+    limit: int,
+) -> tuple[list[MemoryDerivationSourceOrm], bool]:
+    statement = select(MemoryDerivationSourceOrm).where(
+        MemoryDerivationSourceOrm.run_id == run_id,
+        MemoryDerivationSourceOrm.owner_id == owner_id,
+    )
+    if high_water is not None:
+        direct = _clamped_memory_ids(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=MemorySourceKind.DIRECT_OBSERVATION,
+            high_water=high_water.direct_memories,
+        )
+        communicated = _clamped_memory_ids(
+            run_id=run_id,
+            owner_id=owner_id,
+            kind=MemorySourceKind.COMMUNICATED,
+            high_water=high_water.communicated_memories,
+        )
+        reconstructions = _clamped_reconstruction_ids(
+            run_id=run_id,
+            owner_id=owner_id,
+            high_water=high_water.reconstructions,
+        )
+        statement = statement.where(
+            or_(
+                MemoryDerivationSourceOrm.derived_memory_id.in_(
+                    select(direct.c.memory_id)
+                ),
+                MemoryDerivationSourceOrm.derived_memory_id.in_(
+                    select(communicated.c.memory_id)
+                ),
+                and_(
+                    MemoryDerivationSourceOrm.reconstruction_id.is_not(None),
+                    MemoryDerivationSourceOrm.reconstruction_id.in_(
+                        select(reconstructions.c.reconstruction_id)
+                    ),
+                ),
+            )
+        )
+    if after_id is not None and after_ordinal is not None:
+        statement = statement.where(
+            or_(
+                MemoryDerivationSourceOrm.derived_memory_id > after_id,
+                and_(
+                    MemoryDerivationSourceOrm.derived_memory_id == after_id,
+                    MemoryDerivationSourceOrm.ordinal > after_ordinal,
+                ),
+            )
+        )
+    rows = list(
+        (
+            await session.execute(
+                statement.order_by(
+                    MemoryDerivationSourceOrm.derived_memory_id,
+                    MemoryDerivationSourceOrm.ordinal,
+                ).limit(limit + 1)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return rows[:limit], len(rows) > limit
+
+
+def _page_limit(limit: int) -> int:
+    if type(limit) is not int or limit < 1 or limit > MAX_ANALYSIS_PAGE_ROWS:
+        raise PersistenceAdapterError("invalid_page_limit", operation="page")
+    return limit
+
+
+def _page_cursor(
+    after_tick: int | None, after_sequence: int | None
+) -> tuple[int | None, int | None]:
+    if (after_tick is None) != (after_sequence is None):
+        raise PersistenceAdapterError("invalid_page_cursor", operation="page")
+    for value in (after_tick, after_sequence):
+        if value is not None and (type(value) is not int or value < 0):
+            raise PersistenceAdapterError("invalid_page_cursor", operation="page")
+    return after_tick, after_sequence

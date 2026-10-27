@@ -28,6 +28,9 @@ from analysis.cultural_vocabulary_differentiation import (
     compute_cultural_vocabulary_differentiation,
 )
 from analysis.evidence import EvidenceStage
+from analysis.incremental_cultural_traits import (
+    compute_cultural_trait_dynamics_incremental,
+)
 from analysis.models import (
     MetricAvailability,
     MetricCoverage,
@@ -189,12 +192,20 @@ _COMPUTE: Final[
 }
 
 __all__ = [
+    "BATCH_CULTURAL_FAMILIES",
     "CULTURAL_EVOLUTION_FAMILIES",
+    "INCREMENTAL_CULTURAL_FAMILIES",
     "assemble_cultural_evolution_documents",
 ]
 
 CULTURAL_EVOLUTION_FAMILIES: Final[tuple[MetricFamilyId, ...]] = tuple(
     _MEASUREMENT_REGISTRY
+)
+INCREMENTAL_CULTURAL_FAMILIES: Final[frozenset[MetricFamilyId]] = frozenset(
+    {MetricFamilyId.CULTURAL_TRAIT_DYNAMICS}
+)
+BATCH_CULTURAL_FAMILIES: Final[frozenset[MetricFamilyId]] = (
+    frozenset(CULTURAL_EVOLUTION_FAMILIES) - INCREMENTAL_CULTURAL_FAMILIES
 )
 
 
@@ -288,8 +299,19 @@ def assemble_cultural_evolution_documents(
         else max((boundary.boundary_tick for boundary in inputs.boundaries), default=0)
     )
     documents: list[MetricDocument] = []
+    _LOG.debug(
+        "cultural_family_paths incremental=%s batch=%s",
+        tuple(family.value for family in INCREMENTAL_CULTURAL_FAMILIES),
+        tuple(family.value for family in BATCH_CULTURAL_FAMILIES),
+    )
     for family in CULTURAL_EVOLUTION_FAMILIES:
-        rows = _COMPUTE[family](inputs) if inputs.boundaries else ()
+        rows: tuple[CulturalMeasurement, ...]
+        if not inputs.boundaries:
+            rows = ()
+        elif family in INCREMENTAL_CULTURAL_FAMILIES:
+            rows = compute_cultural_trait_dynamics_incremental(inputs)
+        else:
+            rows = _COMPUTE[family](inputs)
         payloads = _validated_rows(family, rows)
         rows_json = json.dumps(
             payloads,

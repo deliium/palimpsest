@@ -279,8 +279,19 @@ async def execute_generational_assignment(
     fingerprint = runner_config_fingerprint(config)
     cultural_fields: dict[str, object] = {}
     if recorder is not None and context.cultural_capture is not None:
+        from analysis.cultural_evolution_metrics import (
+            BATCH_CULTURAL_FAMILIES,
+            INCREMENTAL_CULTURAL_FAMILIES,
+        )
         from experiments.cultural_evidence import build_cultural_arm_fields
 
+        _LOG.info(
+            "generational_cultural_family_paths run_id=%s incremental=%s "
+            "batch_count=%s",
+            assignment.run_id.value,
+            tuple(family.value for family in INCREMENTAL_CULTURAL_FAMILIES),
+            len(BATCH_CULTURAL_FAMILIES),
+        )
         cultural_fields = build_cultural_arm_fields(
             recorder,
             run_id=assignment.run_id.value,

@@ -10,6 +10,7 @@ sources without importing persistence.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -341,6 +342,193 @@ class AnalysisEvidenceSnapshotReader(Protocol):
     ) -> PersistedAnalysisSnapshot: ...
 
 
+@dataclass(frozen=True, slots=True)
+class ObjectiveEventPage:
+    """Manifest-pinned keyset page of committed objective events."""
+
+    run_id: str
+    events: tuple[object, ...]
+    complete_through_boundary: int
+    next_tick: int | None = None
+    next_sequence: int | None = None
+    manifest_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "run_id", require_stable_id("run_id", self.run_id))
+        object.__setattr__(
+            self,
+            "complete_through_boundary",
+            require_exact_nonneg_int(
+                "complete_through_boundary", self.complete_through_boundary
+            ),
+        )
+        if type(self.events) is not tuple:
+            raise TypeError("events must be a tuple")
+        for name in ("next_tick", "next_sequence"):
+            value = getattr(self, name)
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(f"{name} must be a non-negative int or None")
+        if (self.next_tick is None) != (self.next_sequence is None):
+            raise ValueError("next_tick and next_sequence must both be set or None")
+        if self.manifest_hash is not None:
+            object.__setattr__(
+                self,
+                "manifest_hash",
+                require_stable_id("manifest_hash", self.manifest_hash),
+            )
+
+    @property
+    def exhausted(self) -> bool:
+        return self.next_tick is None
+
+    def __repr__(self) -> str:
+        return (
+            f"ObjectiveEventPage(run_id={self.run_id!r}, "
+            f"event_count={len(self.events)}, "
+            f"boundary={self.complete_through_boundary}, "
+            f"exhausted={self.exhausted})"
+        )
+
+
+SUBJECTIVE_EVIDENCE_LANES = (
+    "direct_traces",
+    "communicated_traces",
+    "reconstructions",
+    "derivation_edges",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectiveEvidencePage:
+    """Owner-scoped, manifest-clamped keyset page of one subjective lane.
+
+    A page carries rows from exactly one ordered lane so callers can stream
+    traces, reconstructions and derivation edges without materializing a whole
+    owner. ``next_tick``/``next_id`` are exclusive trace or reconstruction
+    cursors; derivation edges use ``next_id``/``next_ordinal`` instead.
+    """
+
+    run_id: str
+    owner_id: str
+    lane: str
+    traces: tuple[MemoryTrace, ...] = ()
+    reconstructions: tuple[PersistedReconstructionRow, ...] = ()
+    derivation_edges: tuple[PersistedDerivationEdge, ...] = ()
+    next_tick: int | None = None
+    next_id: str | None = None
+    next_ordinal: int | None = None
+    manifest_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "run_id", require_stable_id("run_id", self.run_id))
+        object.__setattr__(
+            self, "owner_id", require_stable_id("owner_id", self.owner_id)
+        )
+        if self.lane not in SUBJECTIVE_EVIDENCE_LANES:
+            raise ValueError("invalid_subjective_lane")
+        for name in ("traces", "reconstructions", "derivation_edges"):
+            if type(getattr(self, name)) is not tuple:
+                raise TypeError(f"{name} must be a tuple")
+        populated = sum(
+            bool(item)
+            for item in (self.traces, self.reconstructions, self.derivation_edges)
+        )
+        if populated > 1:
+            raise ValueError("subjective_page_mixed_lanes")
+        if self.traces and self.lane not in ("direct_traces", "communicated_traces"):
+            raise ValueError("subjective_page_lane_mismatch")
+        if self.reconstructions and self.lane != "reconstructions":
+            raise ValueError("subjective_page_lane_mismatch")
+        if self.derivation_edges and self.lane != "derivation_edges":
+            raise ValueError("subjective_page_lane_mismatch")
+        if populated == 0 and self.next_id is not None:
+            raise ValueError("subjective_page_empty_with_cursor")
+        if self.next_id is None:
+            if self.next_tick is not None or self.next_ordinal is not None:
+                raise ValueError("subjective_page_cursor_incomplete")
+        else:
+            object.__setattr__(
+                self, "next_id", require_stable_id("next_id", self.next_id)
+            )
+            if self.lane == "derivation_edges":
+                if self.next_tick is not None:
+                    raise ValueError("subjective_page_cursor_shape")
+                if type(self.next_ordinal) is not int or self.next_ordinal < 0:
+                    raise ValueError("subjective_page_cursor_shape")
+            else:
+                if self.next_tick is None:
+                    raise ValueError("subjective_page_cursor_shape")
+                object.__setattr__(
+                    self,
+                    "next_tick",
+                    require_exact_nonneg_int("next_tick", self.next_tick),
+                )
+                if self.next_ordinal is not None:
+                    raise ValueError("subjective_page_cursor_shape")
+        if self.manifest_hash is not None:
+            object.__setattr__(
+                self,
+                "manifest_hash",
+                require_stable_id("manifest_hash", self.manifest_hash),
+            )
+
+    @property
+    def exhausted(self) -> bool:
+        return self.next_id is None
+
+    def __repr__(self) -> str:
+        return (
+            f"SubjectiveEvidencePage(run_id={self.run_id!r}, "
+            f"owner_id={self.owner_id!r}, lane={self.lane!r}, "
+            f"trace_count={len(self.traces)}, "
+            f"reconstruction_count={len(self.reconstructions)}, "
+            f"edge_count={len(self.derivation_edges)}, "
+            f"exhausted={self.exhausted})"
+        )
+
+
+class PagedObjectiveEvidenceReader(Protocol):
+    """Bounded objective-event pages under one verified boundary."""
+
+    async def load_objective_event_page(
+        self,
+        *,
+        run_id: str,
+        manifest: EvidenceManifest | None = None,
+        after_tick: int | None = None,
+        after_sequence: int | None = None,
+        limit: int = 1_000,
+    ) -> ObjectiveEventPage: ...
+
+
+class PagedSubjectiveEvidenceReader(Protocol):
+    """Bounded owner-scoped subjective lane pages with manifest clamping."""
+
+    async def load_subjective_evidence_page(
+        self,
+        *,
+        run_id: str,
+        owner_id: str,
+        manifest: EvidenceManifest | None = None,
+        lane: str = "direct_traces",
+        after_tick: int | None = None,
+        after_id: str | None = None,
+        after_ordinal: int | None = None,
+        limit: int = 1_000,
+    ) -> SubjectiveEvidencePage: ...
+
+
+class PagedAnalysisEvidenceReader(
+    PagedObjectiveEvidenceReader, PagedSubjectiveEvidenceReader, Protocol
+):
+    """Optional paged reader over the same verified evidence as ``load``.
+
+    Implementations must apply the same manifest high-water clamp and run/owner
+    scope as the full loader. ``next_*`` cursors are exclusive and stable under
+    concurrent appends beyond the pinned boundary.
+    """
+
+
 class EvidenceManifestRepository(Protocol):
     """Port for durable evidence manifests (implemented by persistence)."""
 
@@ -589,9 +777,7 @@ class EvidenceSpool(Protocol):
 
     def get(self, *, lane: str, identity: str) -> bytes | None: ...
 
-    def read_boundary(
-        self, *, lane: str, boundary_tick: int
-    ) -> tuple[bytes, ...]: ...
+    def read_boundary(self, *, lane: str, boundary_tick: int) -> tuple[bytes, ...]: ...
 
     def iter_lane(
         self,
@@ -606,3 +792,127 @@ class EvidenceSpool(Protocol):
     def status(self) -> EvidenceSpoolStatus: ...
 
     def lane_status(self, lane: str) -> EvidenceSpoolStatus: ...
+
+
+async def iter_objective_event_pages(
+    reader: PagedObjectiveEvidenceReader,
+    *,
+    run_id: str,
+    manifest: EvidenceManifest | None = None,
+    limit: int = 1_000,
+) -> AsyncIterator[object]:
+    """Iterate verified objective events with a pinned boundary and cursor guard."""
+    async for page in iter_objective_event_page_batches(
+        reader, run_id=run_id, manifest=manifest, limit=limit
+    ):
+        for event in page.events:
+            yield event
+
+
+async def iter_objective_event_page_batches(
+    reader: PagedObjectiveEvidenceReader,
+    *,
+    run_id: str,
+    manifest: EvidenceManifest | None = None,
+    limit: int = 1_000,
+) -> AsyncIterator[ObjectiveEventPage]:
+    """Iterate verified objective pages, pinning boundary and manifest scope."""
+    if type(limit) is not int or limit < 1:
+        raise ValueError("limit must be a positive int")
+    pinned_manifest = None if manifest is None else manifest.manifest_hash
+    after_tick: int | None = None
+    after_sequence: int | None = None
+    pinned_boundary: int | None = None
+    while True:
+        page = await reader.load_objective_event_page(
+            run_id=run_id,
+            manifest=manifest,
+            after_tick=after_tick,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+        if page.run_id != run_id:
+            raise ValueError("page_run_mismatch")
+        if (
+            pinned_manifest is not None
+            and page.manifest_hash is not None
+            and page.manifest_hash != pinned_manifest
+        ):
+            raise ValueError("page_manifest_changed")
+        if pinned_boundary is None:
+            pinned_boundary = page.complete_through_boundary
+        elif page.complete_through_boundary != pinned_boundary:
+            raise ValueError("page_boundary_changed")
+        yield page
+        if page.exhausted:
+            return
+        next_tick = page.next_tick
+        next_sequence = page.next_sequence
+        if next_tick is None or next_sequence is None:
+            raise ValueError("page_cursor_missing")
+        if after_tick is not None and after_sequence is not None:
+            if (next_tick, next_sequence) <= (after_tick, after_sequence):
+                raise ValueError("page_cursor_nonadvancing")
+        after_tick, after_sequence = next_tick, next_sequence
+
+
+async def iter_subjective_evidence_pages(
+    reader: PagedSubjectiveEvidenceReader,
+    *,
+    run_id: str,
+    owner_id: str,
+    manifest: EvidenceManifest | None = None,
+    limit: int = 1_000,
+) -> AsyncIterator[SubjectiveEvidencePage]:
+    """Iterate all subjective lanes in fixed order with manifest pinning.
+
+    Lanes are emitted as ``direct_traces``, ``communicated_traces``,
+    ``reconstructions`` and ``derivation_edges``. Each lane streams keyset pages
+    until exhausted; run/owner/lane scope and the pinned manifest hash are
+    verified on every page.
+    """
+    if type(limit) is not int or limit < 1:
+        raise ValueError("limit must be a positive int")
+    pinned_manifest = None if manifest is None else manifest.manifest_hash
+    for lane in SUBJECTIVE_EVIDENCE_LANES:
+        after_tick: int | None = None
+        after_id: str | None = None
+        after_ordinal: int | None = None
+        while True:
+            page = await reader.load_subjective_evidence_page(
+                run_id=run_id,
+                owner_id=owner_id,
+                manifest=manifest,
+                lane=lane,
+                after_tick=after_tick,
+                after_id=after_id,
+                after_ordinal=after_ordinal,
+                limit=limit,
+            )
+            if page.run_id != run_id or page.owner_id != owner_id:
+                raise ValueError("page_scope_mismatch")
+            if page.lane != lane:
+                raise ValueError("page_lane_mismatch")
+            if pinned_manifest is not None and page.manifest_hash != pinned_manifest:
+                raise ValueError("page_manifest_changed")
+            yield page
+            if page.exhausted:
+                break
+            next_tick = page.next_tick
+            next_id = page.next_id
+            next_ordinal = page.next_ordinal
+            if next_id is None:
+                raise ValueError("page_cursor_missing")
+            if lane == "derivation_edges":
+                if next_ordinal is None or next_tick is not None:
+                    raise ValueError("page_cursor_missing")
+                if after_id is not None and after_ordinal is not None:
+                    if (next_id, next_ordinal) <= (after_id, after_ordinal):
+                        raise ValueError("page_cursor_nonadvancing")
+            else:
+                if next_tick is None or next_ordinal is not None:
+                    raise ValueError("page_cursor_missing")
+                if after_tick is not None and after_id is not None:
+                    if (next_tick, next_id) <= (after_tick, after_id):
+                        raise ValueError("page_cursor_nonadvancing")
+            after_tick, after_id, after_ordinal = next_tick, next_id, next_ordinal

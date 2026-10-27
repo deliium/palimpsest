@@ -815,6 +815,20 @@ def _cmd_history_export(args: argparse.Namespace) -> int:
         resources = create_database_resources(settings)
         try:
             session_factory = resources.session_factory
+            resolved_auxiliary = list(auxiliary)
+            if args.export_cognition_traces is not None:
+                from persistence import create_cognition_trace_repository
+                from research_runner.history_archive_composition import (
+                    export_cognition_trace_auxiliary,
+                )
+
+                resolved_auxiliary.append(
+                    await export_cognition_trace_auxiliary(
+                        traces=create_cognition_trace_repository(session_factory),
+                        run_id=RunId(args.run_id),
+                        path=Path(args.export_cognition_traces),
+                    )
+                )
             return await export_history_archive(
                 runs=create_run_repository(session_factory),
                 journal=create_tick_journal_repository(session_factory),
@@ -824,7 +838,7 @@ def _cmd_history_export(args: argparse.Namespace) -> int:
                 through_tick=(
                     None if args.through_tick is None else Tick(args.through_tick)
                 ),
-                auxiliary=auxiliary,
+                auxiliary=tuple(resolved_auxiliary),
                 event_segment_rows=args.event_segment_rows,
                 event_segment_bytes=args.event_segment_bytes,
                 commit_segment_rows=args.commit_segment_rows,
@@ -1308,6 +1322,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_p.add_argument("--run-id", required=True)
     export_p.add_argument("--output", required=True, help="Archive root")
+    export_p.add_argument(
+        "--export-cognition-traces",
+        default=None,
+        help=(
+            "Write a canonical read-only cognition-trace auxiliary JSONL file; "
+            "traces stay outside scientific history and are not deleted"
+        ),
+    )
     export_p.add_argument("--through-tick", type=int, default=None)
     export_p.add_argument(
         "--auxiliary",

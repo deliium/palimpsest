@@ -74,6 +74,20 @@ _OMISSIONS: Final[tuple[ArchiveOmission, ...]] = (
 )
 
 
+def _omissions(
+    auxiliary: Sequence[ArchiveAuxiliarySource],
+) -> tuple[ArchiveOmission, ...]:
+    capabilities = {item.capability_class for item in auxiliary}
+    return tuple(
+        (
+            ArchiveOmission("cognition_trace", True, "auxiliary_copy")
+            if omission.kind == "cognition_trace" and "cognition_trace" in capabilities
+            else omission
+        )
+        for omission in _OMISSIONS
+    )
+
+
 def _canonical(value: object) -> bytes:
     return canonical_archive_bytes(value)
 
@@ -292,8 +306,7 @@ class FilesystemHistoryArchiveWriter:
                         return existing
                 prior = self._load_manifest(run_id, state.manifest_digest)
                 if (
-                    prior.source_manifest_digest
-                    == manifest.source_manifest_digest
+                    prior.source_manifest_digest == manifest.source_manifest_digest
                     and prior.pinned_head == manifest.pinned_head
                 ):
                     raise HistoryArchiveError("history_archive_publication_conflict")
@@ -367,15 +380,21 @@ class FilesystemHistoryArchiveWriter:
         _require_record_size("run_manifest", run_manifest_bytes)
         run_manifest_path, run_manifest_digest = self._write_object(run_manifest_bytes)
 
-        commit_segments, _first, _last, commit_count = (
-            await self._commit_lane(commits, run_id)
+        commit_segments, _first, _last, commit_count = await self._commit_lane(
+            commits, run_id
         )
-        event_segments, event_index_segments, event_count, event_first, event_last = (
-            await self._event_lane(events, run_id)
-        )
-        snapshot_segments, snapshot_index_segments, snapshot_count = (
-            await self._snapshot_lane(snapshots, run_id)
-        )
+        (
+            event_segments,
+            event_index_segments,
+            event_count,
+            event_first,
+            event_last,
+        ) = await self._event_lane(events, run_id)
+        (
+            snapshot_segments,
+            snapshot_index_segments,
+            snapshot_count,
+        ) = await self._snapshot_lane(snapshots, run_id)
         auxiliary_rows = self._copy_auxiliary(auxiliary)
 
         first_covered = commit_first = _first_tick(commit_segments)
@@ -388,9 +407,7 @@ class FilesystemHistoryArchiveWriter:
             )
         if event_last is not None:
             last_covered = (
-                event_last
-                if last_covered is None
-                else max(last_covered, event_last)
+                event_last if last_covered is None else max(last_covered, event_last)
             )
         if commit_count:
             first_covered = commit_first if first_covered is None else first_covered
@@ -420,7 +437,7 @@ class FilesystemHistoryArchiveWriter:
             event_index_segments=event_index_segments,
             snapshot_index_segments=snapshot_index_segments,
             auxiliary=auxiliary_rows,
-            omitted=_OMISSIONS,
+            omitted=_omissions(auxiliary),
             coverage=coverage,
         )
         payload = draft.payload()
@@ -474,13 +491,9 @@ class FilesystemHistoryArchiveWriter:
             ):
                 flush()
             first = (
-                commit.tick.value
-                if first is None
-                else min(first, commit.tick.value)
+                commit.tick.value if first is None else min(first, commit.tick.value)
             )
-            last = (
-                commit.tick.value if last is None else max(last, commit.tick.value)
-            )
+            last = commit.tick.value if last is None else max(last, commit.tick.value)
             buffer.append(commit)
             encoded.append(item)
             size += len(item) + 1
@@ -570,9 +583,7 @@ class FilesystemHistoryArchiveWriter:
 
     async def _snapshot_lane(
         self, snapshots: AsyncIterator[WorldSnapshot], run_id: RunId
-    ) -> tuple[
-        tuple[ArchiveSegment, ...], tuple[ArchiveIndexSegment, ...], int
-    ]:
+    ) -> tuple[tuple[ArchiveSegment, ...], tuple[ArchiveIndexSegment, ...], int]:
         segments: list[ArchiveSegment] = []
         buffer: list[WorldSnapshot] = []
         encoded: list[bytes] = []
@@ -671,8 +682,7 @@ class FilesystemHistoryArchiveWriter:
             item = _canonical(dict(row))
             _require_record_size("index", item)
             if buffer and (
-                len(buffer) >= self._index_rows
-                or size + len(item) > self._index_bytes
+                len(buffer) >= self._index_rows or size + len(item) > self._index_bytes
             ):
                 flush()
             buffer.append(dict(row))
@@ -955,7 +965,6 @@ class FilesystemHistoryArchiveReader:
 
     def _manifest(self, run_id: RunId) -> ArchiveManifest | None:
         return self.get_manifest(run_id)
-
 
     def verify_storage(self, run_id: RunId) -> tuple[int, int, int, int]:
         """Read and validate every referenced lane, index and auxiliary object."""
@@ -1290,9 +1299,7 @@ class FilesystemHistoryArchiveReader:
         tick = int(cast(int, row["tick"]))
         if through_tick is not None and tick > through_tick.value:
             return None
-        segment = self._segment_for_digest(
-            manifest.event_segments, str(row["digest"])
-        )
+        segment = self._segment_for_digest(manifest.event_segments, str(row["digest"]))
         payload = self._descriptor_path(segment.path, segment.digest)
         offset = int(cast(int, row["offset"]))
         if offset < 0 or offset >= len(payload):
@@ -1405,9 +1412,7 @@ class FilesystemHistoryArchiveReader:
                 payload = state_path.read_bytes()
             except FileNotFoundError:
                 continue
-            state = _parse_state(
-                _decode_document(payload, max_bytes=_STATE_MAX_BYTES)
-            )
+            state = _parse_state(_decode_document(payload, max_bytes=_STATE_MAX_BYTES))
             manifest = self._load_manifest(state.run_id, state.manifest_digest)
             if manifest.archive_id != state.committed_archive_id:
                 raise HistoryArchiveError("history_archive_corrupt")

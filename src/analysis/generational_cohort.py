@@ -34,29 +34,25 @@ def _share(numerator: int, denominator: int) -> float:
     return quantize_float(numerator / denominator)
 
 
-def compute_generational_cohort_comparison(
+def build_generational_cohort_document(
     progress: PopulationProgress,
     *,
     run_id: str,
     input_revision: str,
     window_end: int,
 ) -> MetricDocument:
-    """Compute the analysis-only family from finalized population progress."""
+    """Build the family document from one finalized progress snapshot."""
     if type(progress) is not PopulationProgress:
         raise TypeError("progress must be PopulationProgress")
     run_id = require_stable_id("run_id", run_id)
     input_revision = require_stable_id("input_revision", input_revision)
     window_end = require_exact_nonneg_int("window_end", window_end)
 
-    spec = metric_specification(
-        MetricFamilyId.GENERATIONAL_COHORT_COMPARISON
-    )
+    spec = metric_specification(MetricFamilyId.GENERATIONAL_COHORT_COMPARISON)
     if spec.version_identifier != GENERATIONAL_COHORT_COMPARISON_METRIC_VERSION:
         raise ValueError("unsupported_metric_version")
 
-    generation_map = {
-        row.generation_index: row for row in progress.generations
-    }
+    generation_map = {row.generation_index: row for row in progress.generations}
     cohort_totals: dict[int, list[int]] = {}
     for cohort in progress.cohorts:
         totals = cohort_totals.setdefault(cohort.generation_index, [0, 0, 0])
@@ -80,9 +76,7 @@ def compute_generational_cohort_comparison(
         generation_span = max(entry_ticks) - min(entry_ticks)
 
     post_founder_admitted = sum(
-        row.admitted
-        for row in progress.generations
-        if row.generation_index > 0
+        row.admitted for row in progress.generations if row.generation_index > 0
     )
     founder_living = generation_map.get(0)
     founder_living_count = 0 if founder_living is None else founder_living.living
@@ -120,24 +114,9 @@ def compute_generational_cohort_comparison(
         values[f"{prefix}:admitted"] = cohort.admitted
         values[f"{prefix}:living"] = cohort.living
         values[f"{prefix}:dead"] = cohort.dead
-        values[f"{prefix}:survival_rate"] = _share(
-            cohort.living, cohort.admitted
-        )
+        values[f"{prefix}:survival_rate"] = _share(cohort.living, cohort.admitted)
 
     observed = len(progress.cohorts) + len(progress.generations)
-    _LOG.debug(
-        "generational_cohort_comparison_complete run_id=%s generation_count=%s "
-        "cohort_count=%s boundary_tick=%s",
-        run_id,
-        len(progress.generations),
-        len(progress.cohorts),
-        progress.boundary_tick,
-    )
-    _LOG.debug(
-        "generational_cohort_comparison_window run_id=%s window_end=%s",
-        run_id,
-        window_end,
-    )
     return MetricDocument(
         schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
         metric_family=spec.family_id.value,
@@ -163,7 +142,38 @@ def compute_generational_cohort_comparison(
     )
 
 
+def compute_generational_cohort_comparison(
+    progress: PopulationProgress,
+    *,
+    run_id: str,
+    input_revision: str,
+    window_end: int,
+) -> MetricDocument:
+    """Compute the analysis-only family from finalized population progress."""
+    document = build_generational_cohort_document(
+        progress,
+        run_id=run_id,
+        input_revision=input_revision,
+        window_end=window_end,
+    )
+    _LOG.debug(
+        "generational_cohort_comparison_complete run_id=%s generation_count=%s "
+        "cohort_count=%s boundary_tick=%s",
+        run_id,
+        len(progress.generations),
+        len(progress.cohorts),
+        progress.boundary_tick,
+    )
+    _LOG.debug(
+        "generational_cohort_comparison_window run_id=%s window_end=%s",
+        run_id,
+        window_end,
+    )
+    return document
+
+
 __all__ = [
     "GENERATIONAL_COHORT_COMPARISON_METRIC_VERSION",
+    "build_generational_cohort_document",
     "compute_generational_cohort_comparison",
 ]

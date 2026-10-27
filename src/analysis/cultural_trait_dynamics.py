@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import heapq
 import logging
 import math
 from collections import defaultdict
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 from analysis.cultural_evolution_evidence import (
     CULTURAL_EVOLUTION_POLICY_VERSION,
     CULTURAL_FEATURE_DIMENSIONS,
+    CulturalAnalysisWindow,
     CulturalEvolutionInputs,
     CulturalMeasurement,
-    EvidencePointer,
     InventoryBoundary,
 )
 from analysis.models import MetricAvailability
@@ -37,10 +40,18 @@ _ALL_DIMENSIONS: Final[tuple[str, ...]] = (
 )
 
 __all__ = [
+    "ALL_CULTURAL_DIMENSIONS",
     "CULTURAL_TRAIT_DYNAMICS_ALGORITHM_VERSION",
     "CULTURAL_TRAIT_DYNAMICS_FAMILY",
+    "BoundaryTraitState",
+    "TraitEvidenceIndex",
     "compute_cultural_trait_dynamics",
+    "compute_cultural_trait_dynamics_from_states",
+    "iter_cultural_trait_dynamics_from_states",
+    "trait_sort_key",
 ]
+
+ALL_CULTURAL_DIMENSIONS: Final[tuple[str, ...]] = _ALL_DIMENSIONS
 
 
 def _measurement(
@@ -117,164 +128,207 @@ def _measurement(
     )
 
 
-def _coverage_index(
-    boundary: InventoryBoundary,
-) -> dict[tuple[str, str], str]:
-    return {
-        (owner, dimension): coverage
-        for owner, dimension, coverage in boundary.owner_dimension_coverage
-    }
+@dataclass(frozen=True, slots=True)
+class TraitEvidenceIndex:
+    """Qualified trait/roster evidence pointers for one normalized capture."""
+
+    entry_ids: Mapping[tuple[str, int, str], str]
+    roster_ids: Mapping[int, str]
+
+    @classmethod
+    def from_inputs(cls, inputs: CulturalEvolutionInputs) -> TraitEvidenceIndex:
+        entry_ids = {
+            (pointer.owner_id or "", pointer.boundary_tick, pointer.local_id or ""): (
+                pointer.pointer_id
+            )
+            for pointer in inputs.evidence_pointers
+            if pointer.source_kind.startswith("trait:")
+        }
+        roster_ids = {
+            pointer.boundary_tick: pointer.pointer_id
+            for pointer in inputs.evidence_pointers
+            if pointer.source_kind == "roster"
+            and pointer.local_id == f"roster:{pointer.boundary_tick}"
+        }
+        return cls(entry_ids=entry_ids, roster_ids=roster_ids)
 
 
-def _dimension_population(
-    boundary: InventoryBoundary, dimension: str
-) -> tuple[tuple[str, ...], int, int, bool]:
-    """Return eligible living owners, observed, expected, complete."""
-    coverage = _coverage_index(boundary)
-    eligible: list[str] = []
-    observed = 0
-    missing = 0
-    for owner in boundary.living_owner_ids:
-        code = coverage.get((owner, dimension))
-        if code == "disabled":
-            continue
-        eligible.append(owner)
-        if code == "complete":
-            observed += 1
-        else:
-            missing += 1
-    return tuple(eligible), observed, len(eligible), missing == 0
+@dataclass(frozen=True, slots=True)
+class BoundaryTraitState:
+    """Sparse per-boundary primitives required by every trait formula.
+
+    Carriers, coverage and qualified evidence are derived once per boundary, so
+    repeated analysis and checkpoints do not rescan entries or pointers.
+    """
+
+    boundary_tick: int
+    living_owner_ids: tuple[str, ...]
+    owner_dimension_coverage: tuple[tuple[str, str, str], ...]
+    carriers: Mapping[str, Mapping[str, tuple[str, ...]]]
+    evidence: Mapping[tuple[str, str], tuple[str, ...]]
+
+    @classmethod
+    def from_boundary(
+        cls,
+        boundary: InventoryBoundary,
+        index: TraitEvidenceIndex,
+    ) -> BoundaryTraitState:
+        if type(boundary) is not InventoryBoundary:
+            raise TypeError("boundary must be InventoryBoundary")
+        tick = boundary.boundary_tick
+        living = boundary.living_owner_ids
+        living_set = set(living)
+        roster = index.roster_ids.get(tick)
+        carriers: dict[str, Mapping[str, tuple[str, ...]]] = {}
+        evidence: dict[tuple[str, str], tuple[str, ...]] = {}
+        for dimension in _ALL_DIMENSIONS:
+            owners_by_trait: dict[str, set[str]] = defaultdict(set)
+            pointer_ids: dict[str, set[str]] = defaultdict(set)
+            for entry in boundary.entries:
+                if entry.dimension != dimension:
+                    continue
+                pointer = index.entry_ids.get(
+                    (entry.owner_id, tick, entry.local_entry_id)
+                )
+                if pointer is not None:
+                    pointer_ids[entry.content_digest].add(pointer)
+                if entry.owner_id not in living_set:
+                    continue
+                if entry.status not in (None, "active"):
+                    continue
+                owners_by_trait[entry.content_digest].add(entry.owner_id)
+            carriers[dimension] = {
+                trait: tuple(sorted(owners))
+                for trait, owners in owners_by_trait.items()
+            }
+            roster_ids = () if roster is None else (roster,)
+            evidence[(dimension, "")] = roster_ids
+            for trait, pointers in pointer_ids.items():
+                evidence[(dimension, trait)] = tuple(sorted(pointers | set(roster_ids)))
+        return cls(
+            boundary_tick=tick,
+            living_owner_ids=living,
+            owner_dimension_coverage=boundary.owner_dimension_coverage,
+            carriers=carriers,
+            evidence=evidence,
+        )
+
+    @property
+    def coverage(self) -> dict[tuple[str, str], str]:
+        return {
+            (owner, dimension): code
+            for owner, dimension, code in self.owner_dimension_coverage
+        }
+
+    def carrier_map(self, dimension: str) -> dict[str, set[str]]:
+        return {
+            trait: set(owners)
+            for trait, owners in self.carriers.get(dimension, {}).items()
+        }
+
+    def dimension_population(self, dimension: str) -> tuple[int, int, bool]:
+        """Return observed, expected, and completeness for one dimension."""
+        coverage = self.coverage
+        observed = 0
+        missing = 0
+        expected = 0
+        for owner in self.living_owner_ids:
+            code = coverage.get((owner, dimension))
+            if code == "disabled":
+                continue
+            expected += 1
+            if code == "complete":
+                observed += 1
+            else:
+                missing += 1
+        return observed, expected, missing == 0
 
 
-def _unavailable_reason(boundary: InventoryBoundary, expected: int) -> str:
-    if not boundary.living_owner_ids:
+def _unavailable_reason(state: BoundaryTraitState, expected: int) -> str:
+    if not state.living_owner_ids:
         return "population_empty"
     if expected == 0:
         return "channel_disabled"
     return "population_unavailable"
 
 
-def _carriers(boundary: InventoryBoundary, dimension: str) -> dict[str, set[str]]:
-    carriers: dict[str, set[str]] = defaultdict(set)
-    living = set(boundary.living_owner_ids)
-    for entry in boundary.entries:
-        if entry.dimension != dimension:
-            continue
-        if entry.owner_id not in living:
-            continue
-        if entry.status not in (None, "active"):
-            continue
-        carriers[entry.content_digest].add(entry.owner_id)
-    return dict(carriers)
-
-
-def _entry_pointers(
-    inputs: CulturalEvolutionInputs,
-) -> dict[tuple[str, int, str], EvidencePointer]:
-    return {
-        (pointer.owner_id or "", pointer.boundary_tick, pointer.local_id or ""): pointer
-        for pointer in inputs.evidence_pointers
-        if pointer.source_kind.startswith("trait:")
-    }
-
-
-def _roster_pointer(
-    inputs: CulturalEvolutionInputs, boundary_tick: int
-) -> EvidencePointer | None:
-    for pointer in inputs.evidence_pointers:
-        if (
-            pointer.source_kind == "roster"
-            and pointer.boundary_tick == boundary_tick
-            and pointer.local_id == f"roster:{boundary_tick}"
-        ):
-            return pointer
-    return None
-
-
 def _trait_evidence(
-    inputs: CulturalEvolutionInputs,
-    boundary: InventoryBoundary,
+    state: BoundaryTraitState,
     dimension: str,
     trait_id: str | None,
 ) -> tuple[str, ...]:
-    pointer_index = _entry_pointers(inputs)
-    ids: set[str] = set()
-    roster = _roster_pointer(inputs, boundary.boundary_tick)
-    if roster is not None:
-        ids.add(roster.pointer_id)
-    if trait_id is not None:
-        for entry in boundary.entries:
-            if entry.dimension != dimension:
-                continue
-            if entry.content_digest != trait_id:
-                continue
-            pointer = pointer_index.get(
-                (entry.owner_id, boundary.boundary_tick, entry.local_entry_id)
-            )
-            if pointer is not None:
-                ids.add(pointer.pointer_id)
-    return tuple(sorted(ids))
+    return state.evidence.get((dimension, trait_id or ""), ())
 
 
-def _frequency_rows(
-    inputs: CulturalEvolutionInputs,
-    boundaries: tuple[InventoryBoundary, ...],
-    trait_union: dict[str, set[str]],
-) -> list[CulturalMeasurement]:
-    rows: list[CulturalMeasurement] = []
-    for boundary in boundaries:
-        for dimension in _ALL_DIMENSIONS:
-            _, observed, expected, complete = _dimension_population(boundary, dimension)
-            carriers = _carriers(boundary, dimension)
-            for trait_id in sorted(trait_union[dimension]):
-                carrier_count = len(carriers.get(trait_id, set()))
-                evidence = _trait_evidence(inputs, boundary, dimension, trait_id)
-                if expected == 0:
-                    availability = MetricAvailability.UNKNOWN
-                    value = None
-                    reason = _unavailable_reason(boundary, expected)
-                elif complete:
-                    availability = MetricAvailability.PRESENT
-                    value = carrier_count / expected
-                    reason = None
-                else:
-                    availability = MetricAvailability.PARTIAL
-                    value = None
-                    reason = "partial_owner_coverage"
-                rows.append(
-                    _measurement(
-                        measurement_id="trait_frequency",
-                        dimension=dimension,
-                        units="proportion",
-                        value=value,
-                        numerator=float(carrier_count),
-                        denominator=float(expected),
-                        availability=availability,
-                        reason_code=reason,
-                        coverage_observed=observed,
-                        coverage_expected=expected,
-                        baseline_tick=boundary.boundary_tick,
-                        end_tick=boundary.boundary_tick,
-                        trait_id=trait_id,
-                        evidence_ids=evidence,
-                    )
+def _frequency_measurement(
+    state: BoundaryTraitState,
+    dimension: str,
+    trait_id: str,
+    carriers: Mapping[str, set[str]],
+) -> CulturalMeasurement:
+    observed, expected, complete = state.dimension_population(dimension)
+    carrier_count = len(carriers.get(trait_id, set()))
+    evidence = _trait_evidence(state, dimension, trait_id)
+    if expected == 0:
+        availability = MetricAvailability.UNKNOWN
+        value = None
+        reason = _unavailable_reason(state, expected)
+    elif complete:
+        availability = MetricAvailability.PRESENT
+        value = carrier_count / expected
+        reason = None
+    else:
+        availability = MetricAvailability.PARTIAL
+        value = None
+        reason = "partial_owner_coverage"
+    return _measurement(
+        measurement_id="trait_frequency",
+        dimension=dimension,
+        units="proportion",
+        value=value,
+        numerator=float(carrier_count),
+        denominator=float(expected),
+        availability=availability,
+        reason_code=reason,
+        coverage_observed=observed,
+        coverage_expected=expected,
+        baseline_tick=state.boundary_tick,
+        end_tick=state.boundary_tick,
+        trait_id=trait_id,
+        evidence_ids=evidence,
+    )
+
+
+def _iter_frequency_rows(
+    states: tuple[BoundaryTraitState, ...],
+    trait_union: Mapping[str, set[str]],
+) -> Iterator[CulturalMeasurement]:
+    """Yield frequency rows already in canonical per-dimension/trait order."""
+    for dimension in sorted(_ALL_DIMENSIONS):
+        carriers_by_state = [(state, state.carrier_map(dimension)) for state in states]
+        for trait_id in sorted(trait_union[dimension]):
+            for state, carriers in carriers_by_state:
+                yield _frequency_measurement(
+                    state,
+                    dimension,
+                    trait_id,
+                    carriers,
                 )
-    return rows
 
 
 def _diversity_rows(
-    boundaries: tuple[InventoryBoundary, ...],
+    states: tuple[BoundaryTraitState, ...],
 ) -> list[CulturalMeasurement]:
     rows: list[CulturalMeasurement] = []
-    for boundary in boundaries:
+    for state in states:
         for dimension in _ALL_DIMENSIONS:
-            _, observed, expected, complete = _dimension_population(boundary, dimension)
-            carriers = _carriers(boundary, dimension)
+            observed, expected, complete = state.dimension_population(dimension)
+            carriers = state.carrier_map(dimension)
             incidences = sum(len(owners) for owners in carriers.values())
             evidence: tuple[str, ...] = ()
             if expected == 0:
                 availability = MetricAvailability.UNKNOWN
-                reason = _unavailable_reason(boundary, expected)
+                reason = _unavailable_reason(state, expected)
             elif not complete:
                 availability = MetricAvailability.PARTIAL
                 reason = "partial_owner_coverage"
@@ -300,8 +354,8 @@ def _diversity_rows(
                             reason_code=reason,
                             coverage_observed=observed,
                             coverage_expected=expected,
-                            baseline_tick=boundary.boundary_tick,
-                            end_tick=boundary.boundary_tick,
+                            baseline_tick=state.boundary_tick,
+                            end_tick=state.boundary_tick,
                             evidence_ids=evidence,
                         )
                     )
@@ -337,26 +391,24 @@ def _diversity_rows(
                         reason_code=None,
                         coverage_observed=observed,
                         coverage_expected=expected,
-                        baseline_tick=boundary.boundary_tick,
-                        end_tick=boundary.boundary_tick,
+                        baseline_tick=state.boundary_tick,
+                        end_tick=state.boundary_tick,
                         evidence_ids=evidence,
                     )
                 )
     return rows
 
 
-def _baseline_cohort(boundary: InventoryBoundary, dimension: str) -> set[str]:
-    return set(_carriers(boundary, dimension))
-
-
 def _persistence_rows(
-    inputs: CulturalEvolutionInputs,
-    boundary_by_tick: dict[int, InventoryBoundary],
+    states: tuple[BoundaryTraitState, ...],
+    state_by_tick: dict[int, BoundaryTraitState],
+    window: CulturalAnalysisWindow,
+    gaps: tuple[str, ...],
     resolved_end: int | None,
 ) -> list[CulturalMeasurement]:
     rows: list[CulturalMeasurement] = []
-    baseline_tick = inputs.window.baseline_boundary
-    baseline = boundary_by_tick.get(baseline_tick)
+    baseline_tick = window.baseline_boundary
+    baseline = state_by_tick.get(baseline_tick)
     for dimension in _ALL_DIMENSIONS:
         if baseline is None:
             rows.append(
@@ -398,10 +450,8 @@ def _persistence_rows(
                 )
             )
             continue
-        _, observed, expected, baseline_complete = _dimension_population(
-            baseline, dimension
-        )
-        baseline_traits = _baseline_cohort(baseline, dimension)
+        observed, expected, baseline_complete = baseline.dimension_population(dimension)
+        baseline_traits = set(baseline.carrier_map(dimension))
         if expected == 0:
             reason = _unavailable_reason(baseline, expected)
             availability = MetricAvailability.UNKNOWN
@@ -454,7 +504,7 @@ def _persistence_rows(
                 )
             )
             continue
-        endpoint = boundary_by_tick.get(resolved_end)
+        endpoint = state_by_tick.get(resolved_end)
         if endpoint is None:
             for measurement_id in (
                 "endpoint_persistence",
@@ -478,8 +528,8 @@ def _persistence_rows(
                     )
                 )
             continue
-        _, endpoint_observed, endpoint_expected, endpoint_complete = (
-            _dimension_population(endpoint, dimension)
+        endpoint_observed, endpoint_expected, endpoint_complete = (
+            endpoint.dimension_population(dimension)
         )
         if availability is MetricAvailability.PRESENT and not baseline_traits:
             for measurement_id in (
@@ -525,10 +575,10 @@ def _persistence_rows(
                     )
                 )
             continue
-        endpoint_carriers = _baseline_cohort(endpoint, dimension)
+        endpoint_carriers = set(endpoint.carrier_map(dimension))
         retained_endpoint = baseline_traits & endpoint_carriers
         endpoint_value = len(retained_endpoint) / len(baseline_traits)
-        endpoint_evidence = _trait_evidence(inputs, endpoint, dimension, None)
+        endpoint_evidence = _trait_evidence(endpoint, dimension, None)
         rows.append(
             _measurement(
                 measurement_id="endpoint_persistence",
@@ -555,22 +605,19 @@ def _persistence_rows(
             )
         )
         intermediate = [
-            boundary
-            for boundary in inputs.boundaries
-            if baseline_tick <= boundary.boundary_tick <= resolved_end
+            state
+            for state in states
+            if baseline_tick <= state.boundary_tick <= resolved_end
         ]
         continuous_complete = True
-        for boundary in intermediate:
-            _, _, _, complete = _dimension_population(boundary, dimension)
+        for state in intermediate:
+            _, _, complete = state.dimension_population(dimension)
             if not complete:
                 continuous_complete = False
                 break
-            if boundary.boundary_tick < resolved_end:
-                if not (baseline_traits & _baseline_cohort(boundary, dimension)):
-                    pass
         censored = (
             not continuous_complete
-            or bool(inputs.gaps)
+            or bool(gaps)
             or (resolved_end - baseline_tick) + 1 != len(intermediate)
         )
         continuous_retained: set[str] = set()
@@ -578,10 +625,7 @@ def _persistence_rows(
             continuous_retained = {
                 trait
                 for trait in baseline_traits
-                if all(
-                    trait in _baseline_cohort(boundary, dimension)
-                    for boundary in intermediate
-                )
+                if all(trait in state.carrier_map(dimension) for state in intermediate)
             }
         rows.append(
             _measurement(
@@ -605,7 +649,7 @@ def _persistence_rows(
                 coverage_expected=expected,
                 baseline_tick=baseline_tick,
                 end_tick=resolved_end,
-                left_censored=bool(inputs.gaps),
+                left_censored=bool(gaps),
                 right_censored=not continuous_complete,
             )
         )
@@ -613,36 +657,38 @@ def _persistence_rows(
 
 
 def _extinction_rows(
-    inputs: CulturalEvolutionInputs,
-    boundary_by_tick: dict[int, InventoryBoundary],
+    states: tuple[BoundaryTraitState, ...],
+    state_by_tick: dict[int, BoundaryTraitState],
 ) -> list[CulturalMeasurement]:
     rows: list[CulturalMeasurement] = []
-    ticks = sorted(boundary_by_tick)
-    for dimension in _ALL_DIMENSIONS:
-        carriers_by_tick = {
-            tick: _carriers(boundary_by_tick[tick], dimension) for tick in ticks
+    ticks = sorted(state_by_tick)
+    carriers_by_tick = {
+        tick: {
+            dimension: state_by_tick[tick].carrier_map(dimension)
+            for dimension in _ALL_DIMENSIONS
         }
+        for tick in ticks
+    }
+    for dimension in _ALL_DIMENSIONS:
         for index, tick in enumerate(ticks[:-1]):
             next_tick = ticks[index + 1]
             if next_tick != tick + 1:
                 continue
-            boundary = boundary_by_tick[tick]
-            next_boundary = boundary_by_tick[next_tick]
-            _, _, expected, complete = _dimension_population(boundary, dimension)
-            _, next_observed, next_expected, next_complete = _dimension_population(
-                next_boundary, dimension
+            state = state_by_tick[tick]
+            next_state = state_by_tick[next_tick]
+            _, expected, complete = state.dimension_population(dimension)
+            next_observed, next_expected, next_complete = (
+                next_state.dimension_population(dimension)
             )
             if not complete or not next_complete:
                 continue
             if expected == 0 or next_expected == 0:
                 continue
-            previous = carriers_by_tick[tick]
-            following = carriers_by_tick[next_tick]
+            previous = carriers_by_tick[tick][dimension]
+            following = carriers_by_tick[next_tick][dimension]
             for trait_id in sorted(set(previous)):
                 if previous.get(trait_id) and not following.get(trait_id):
-                    evidence = _trait_evidence(
-                        inputs, next_boundary, dimension, trait_id
-                    )
+                    evidence = _trait_evidence(next_state, dimension, trait_id)
                     rows.append(
                         _measurement(
                             measurement_id="extinction_transition",
@@ -664,7 +710,7 @@ def _extinction_rows(
     return rows
 
 
-def _sort_key(measurement: CulturalMeasurement) -> tuple[object, ...]:
+def trait_sort_key(measurement: CulturalMeasurement) -> tuple[object, ...]:
     return (
         measurement.measurement_id,
         measurement.dimension,
@@ -672,6 +718,85 @@ def _sort_key(measurement: CulturalMeasurement) -> tuple[object, ...]:
         measurement.baseline_tick,
         measurement.end_tick,
     )
+
+
+def _resolved_end(
+    states: tuple[BoundaryTraitState, ...], window: CulturalAnalysisWindow
+) -> int | None:
+    if window.end_boundary is not None:
+        return window.end_boundary
+    return max((state.boundary_tick for state in states), default=None)
+
+
+def iter_cultural_trait_dynamics_from_states(
+    states: tuple[BoundaryTraitState, ...],
+    *,
+    window: CulturalAnalysisWindow,
+    gaps: tuple[str, ...] = (),
+) -> Iterator[CulturalMeasurement]:
+    """Yield exact rows in canonical order, streaming the large frequency group."""
+    if not states:
+        _LOG.debug("cultural_trait_dynamics_skipped reason_code=%s", "no_boundaries")
+        return
+    ordered = tuple(sorted(states, key=lambda state: state.boundary_tick))
+    if len({state.boundary_tick for state in ordered}) != len(ordered):
+        raise ValueError("duplicate_boundary_tick")
+    state_by_tick = {state.boundary_tick: state for state in ordered}
+    resolved_end = _resolved_end(ordered, window)
+    trait_union: dict[str, set[str]] = {
+        dimension: set() for dimension in _ALL_DIMENSIONS
+    }
+    for state in ordered:
+        for dimension in _ALL_DIMENSIONS:
+            trait_union[dimension].update(state.carrier_map(dimension))
+    persistence = sorted(
+        _persistence_rows(
+            ordered,
+            state_by_tick,
+            window,
+            tuple(gaps),
+            resolved_end,
+        ),
+        key=trait_sort_key,
+    )
+    diversity = sorted(_diversity_rows(ordered), key=trait_sort_key)
+    extinction = sorted(_extinction_rows(ordered, state_by_tick), key=trait_sort_key)
+    yield from heapq.merge(
+        persistence,
+        diversity,
+        extinction,
+        _iter_frequency_rows(ordered, trait_union),
+        key=trait_sort_key,
+    )
+
+
+def compute_cultural_trait_dynamics_from_states(
+    states: tuple[BoundaryTraitState, ...],
+    *,
+    window: CulturalAnalysisWindow,
+    gaps: tuple[str, ...] = (),
+) -> tuple[CulturalMeasurement, ...]:
+    """Compute exact trait dynamics from sparse boundary primitives.
+
+    This is the second pass of the sealed-window reducer: the trait union is
+    complete before any final row is emitted, so traits first appearing at the
+    final boundary still produce earlier zero-frequency rows.
+    """
+    rows = tuple(
+        iter_cultural_trait_dynamics_from_states(
+            states,
+            window=window,
+            gaps=gaps,
+        )
+    )
+    _LOG.debug(
+        "cultural_trait_dynamics_computed boundary_count=%s row_count=%s "
+        "dimension_count=%s",
+        len(states),
+        len(rows),
+        len(_ALL_DIMENSIONS),
+    )
+    return rows
 
 
 def compute_cultural_trait_dynamics(
@@ -684,29 +809,12 @@ def compute_cultural_trait_dynamics(
     if not boundaries:
         _LOG.debug("cultural_trait_dynamics_skipped reason_code=%s", "no_boundaries")
         return ()
-    boundary_by_tick = {boundary.boundary_tick: boundary for boundary in boundaries}
-    resolved_end = (
-        inputs.window.end_boundary
-        if inputs.window.end_boundary is not None
-        else max(boundary_by_tick)
+    index = TraitEvidenceIndex.from_inputs(inputs)
+    states = tuple(
+        BoundaryTraitState.from_boundary(boundary, index) for boundary in boundaries
     )
-    trait_union: dict[str, set[str]] = {
-        dimension: set() for dimension in _ALL_DIMENSIONS
-    }
-    for boundary in boundaries:
-        for dimension in _ALL_DIMENSIONS:
-            trait_union[dimension].update(_carriers(boundary, dimension))
-    rows: list[CulturalMeasurement] = []
-    rows.extend(_frequency_rows(inputs, boundaries, trait_union))
-    rows.extend(_diversity_rows(boundaries))
-    rows.extend(_persistence_rows(inputs, boundary_by_tick, resolved_end))
-    rows.extend(_extinction_rows(inputs, boundary_by_tick))
-    rows.sort(key=_sort_key)
-    _LOG.debug(
-        "cultural_trait_dynamics_computed boundary_count=%s row_count=%s "
-        "dimension_count=%s",
-        len(boundaries),
-        len(rows),
-        len(_ALL_DIMENSIONS),
+    return compute_cultural_trait_dynamics_from_states(
+        states,
+        window=inputs.window,
+        gaps=inputs.gaps,
     )
-    return tuple(rows)

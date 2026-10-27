@@ -10,7 +10,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 if TYPE_CHECKING:
     from analysis.offline_consolidation_metrics import OfflineConsolidationReport
@@ -141,6 +141,7 @@ __all__ = [
     "historical_memory_harvest_from_run",
     "knowledge_genealogy_harvest_from_run",
     "knowledge_repository_harvest_from_run",
+    "load_paged_analysis_snapshot",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
     "map_snapshot_to_analysis_sources",
@@ -299,6 +300,116 @@ class EvidenceCompositionService:
             sum(len(snapshot.traces) for snapshot in snapshots),
         )
         return result
+
+
+async def load_paged_analysis_snapshot(
+    reader: object,
+    *,
+    run_id: str,
+    owner_id: str,
+    manifest: EvidenceManifest | None = None,
+    page_limit: int = 1_000,
+    include_subjective: bool = True,
+) -> PersistedAnalysisSnapshot:
+    """Assemble a detached snapshot from bounded, manifest-pinned pages.
+
+    Uses the paged evidence ports when the reader implements them; otherwise
+    falls back to the legacy full ``load()`` entrypoint. Objective pages pin one
+    complete boundary and are streamed page by page. Subjective evidence is
+    optional so boundary samplers can skip unrelated traces and reconstructions.
+    """
+    if type(page_limit) is not int or page_limit < 1:
+        raise ValueError("page_limit must be a positive int")
+    loader = getattr(reader, "load", None)
+    paged = all(
+        callable(getattr(reader, name, None))
+        for name in (
+            "load_objective_event_page",
+            "load_regional_context",
+        )
+    )
+    if include_subjective:
+        paged = paged and callable(
+            getattr(reader, "load_subjective_evidence_page", None)
+        )
+    if not paged:
+        if not callable(loader):
+            raise EvidenceCompositionError("analysis_evidence_reader_required")
+        _LOG.debug(
+            "evidence_composition_paged_unavailable",
+            extra={
+                "operation": "load_paged_analysis_snapshot",
+                "run_id": run_id,
+                "owner_id": owner_id,
+                "include_subjective": include_subjective,
+                "reason_code": "paged_reader_unavailable",
+            },
+        )
+        load_kwargs: dict[str, object] = {"run_id": run_id, "owner_id": owner_id}
+        if manifest is not None:
+            load_kwargs["manifest"] = manifest
+        return cast(PersistedAnalysisSnapshot, await loader(**load_kwargs))
+    from experiments.persistence import (
+        iter_objective_event_page_batches,
+        iter_subjective_evidence_pages,
+    )
+
+    context = await reader.load_regional_context(run_id=run_id)  # type: ignore[attr-defined]
+    events: list[object] = []
+    boundary: int | None = None
+    async for event_page in iter_objective_event_page_batches(
+        reader,  # type: ignore[arg-type]
+        run_id=run_id,
+        manifest=manifest,
+        limit=page_limit,
+    ):
+        if boundary is None:
+            boundary = event_page.complete_through_boundary
+        events.extend(event_page.events)
+    if boundary is None:
+        raise EvidenceCompositionError("objective_boundary_unavailable")
+    traces: list[object] = []
+    reconstructions: list[object] = []
+    edges: list[object] = []
+    if include_subjective:
+        async for evidence_page in iter_subjective_evidence_pages(
+            reader,  # type: ignore[arg-type]
+            run_id=run_id,
+            owner_id=owner_id,
+            manifest=manifest,
+            limit=page_limit,
+        ):
+            traces.extend(evidence_page.traces)
+            reconstructions.extend(evidence_page.reconstructions)
+            edges.extend(evidence_page.derivation_edges)
+    snapshot = PersistedAnalysisSnapshot(
+        experiment_id="",
+        run_id=run_id,
+        owner_id=owner_id,
+        traces=tuple(traces),  # type: ignore[arg-type]
+        reconstructions=tuple(reconstructions),  # type: ignore[arg-type]
+        derivation_edges=tuple(edges),  # type: ignore[arg-type]
+        events=tuple(events),
+        regional_context=context,
+        objective_complete_through_boundary=boundary,
+    )
+    _LOG.debug(
+        "evidence_composition_paged_snapshot",
+        extra={
+            "operation": "load_paged_analysis_snapshot",
+            "run_id": run_id,
+            "owner_id": owner_id,
+            "event_count": len(events),
+            "trace_count": len(traces),
+            "reconstruction_count": len(reconstructions),
+            "edge_count": len(edges),
+            "complete_boundary": boundary,
+            "manifest_hash_prefix": (
+                None if manifest is None else manifest_hash_prefix(manifest)
+            ),
+        },
+    )
+    return snapshot
 
 
 def constrain_snapshot_to_manifest(
@@ -4063,9 +4174,7 @@ def institution_decay_context_from_events(
     ):
         raise TypeError("institution_decay_context_from_events: invalid_events")
     contexts: list[InstitutionContextEvidenceRow] = []
-    temporal = tuple(
-        row for row in rows if type(row) is InstitutionTemporalRow
-    )
+    temporal = tuple(row for row in rows if type(row) is InstitutionTemporalRow)
     for event in events:
         details = _event_details(event)
         tick = getattr(event, "tick", getattr(details, "tick", None))
@@ -4084,9 +4193,12 @@ def institution_decay_context_from_events(
         )
         if location is None:
             continue
-        native_ref = _id_text_or_none(
-            getattr(event, "event_id", None) or getattr(details, "event_id", None)
-        ) or f"context-{kind}-{tick}"
+        native_ref = (
+            _id_text_or_none(
+                getattr(event, "event_id", None) or getattr(details, "event_id", None)
+            )
+            or f"context-{kind}-{tick}"
+        )
         for row in temporal:
             if row.context_key != location:
                 continue

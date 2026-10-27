@@ -223,9 +223,7 @@ async def test_round_trip_split_ticks_and_deep_event_lookup(tmp_path: Path) -> N
     assert manifest.coverage.commit_count == 4
     assert len(manifest.event_segments) >= 4
 
-    commits = await reader.list_tick_commits(
-        run_id, from_tick=Tick(0), to_tick=None
-    )
+    commits = await reader.list_tick_commits(run_id, from_tick=Tick(0), to_tick=None)
     assert len(commits) == 4
     assert await reader.get_tick_commit(run_id, Tick(2)) == commits[2]
     assert await reader.get_latest_tick_commit(run_id) == commits[-1]
@@ -248,12 +246,7 @@ async def test_round_trip_split_ticks_and_deep_event_lookup(tmp_path: Path) -> N
     ]
     last = await reader.get_event_by_id(run_id, "evt-3-1")
     assert last is not None and last.tick == 3
-    assert (
-        await reader.get_event_by_id(
-            run_id, "evt-3-1", through_tick=Tick(2)
-        )
-        is None
-    )
+    assert await reader.get_event_by_id(run_id, "evt-3-1", through_tick=Tick(2)) is None
     latest = await reader.get_latest_event(run_id, through_tick=Tick(2))
     assert latest is not None and latest.sequence == 2
 
@@ -290,10 +283,7 @@ async def test_wrong_run_missing_segment_and_append_are_rejected(
     manifest = await _publish(tmp_path / "archive")
     reader = create_history_archive_reader(tmp_path / "archive")
     assert await reader.get_run(RunId("other-run")) is None
-    assert (
-        await reader.get_event_by_id(RunId("other-run"), "evt-0-0")
-        is None
-    )
+    assert await reader.get_event_by_id(RunId("other-run"), "evt-0-0") is None
     with pytest.raises(HistoryArchiveError):
         await reader.append_tick(object())
 
@@ -313,8 +303,7 @@ async def test_conflicting_publication_same_head_is_rejected(tmp_path: Path) -> 
     manifest = _run_manifest()
     commits = _commits("run-archive")
     other_events = tuple(
-        _event(run_id="run-archive", tick=0, sequence=sequence)
-        for sequence in range(2)
+        _event(run_id="run-archive", tick=0, sequence=sequence) for sequence in range(2)
     )
     writer = create_history_archive_writer(tmp_path / "archive")
     with pytest.raises(HistoryArchiveError) as error:
@@ -455,9 +444,7 @@ class _FakeJournal:
         ]
         return rows[-1] if rows else None
 
-    async def get_tick_commit(
-        self, run_id: RunId, tick: Tick
-    ) -> TickCommit | None:
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         for item in self._commits:
             if item.run_id == run_id and item.tick == tick:
                 return item
@@ -563,3 +550,27 @@ async def test_export_composition_and_pinned_through_tick(tmp_path: Path) -> Non
     results = await verify_history_archive(root, full=True)
     assert results[0].verified_through_tick == 1
     assert results[0].replay_boundaries == (0, 2)
+
+
+def test_trace_auxiliary_marks_omission_available() -> None:
+    import persistence.history_archive_filesystem as module
+    from simulation.history_archive import ArchiveAuxiliarySource
+
+    without = {row.kind: row for row in module._omissions(())}
+    assert without["cognition_trace"].available is False
+    assert without["cognition_trace"].reason == "not_copied"
+    with_trace = {
+        row.kind: row
+        for row in module._omissions(
+            (
+                ArchiveAuxiliarySource(
+                    name="cognition-traces",
+                    capability_class="cognition_trace",
+                    path="/tmp/traces.jsonl",
+                ),
+            )
+        )
+    }
+    assert with_trace["cognition_trace"].available is True
+    assert with_trace["cognition_trace"].reason == "auxiliary_copy"
+    assert with_trace["subjective_state"].available is False

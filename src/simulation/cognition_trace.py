@@ -8,7 +8,7 @@ perception, or live cognition inputs. Trace data is **not** part of
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -605,6 +605,62 @@ def wrap_cognition_trace_soft_caps(
     )
 
 
+async def iter_cognition_trace_invocations(
+    repository: CognitionTraceRepository,
+    *,
+    run_id: RunId,
+    agent_id: AgentId | None = None,
+    page_size: int = 100,
+    max_invocations: int | None = None,
+) -> AsyncIterator[CognitionTraceInvocation]:
+    """Read-only keyset iteration for cold-copy export without deletion.
+
+    Trace rows stay outside scientific history and remain governed by the
+    existing opt-in soft caps. A non-advancing or exhausted cursor fails closed
+    instead of looping or silently truncating.
+    """
+    if type(page_size) is not int or not 1 <= page_size <= 1_000:
+        raise ValueError("page_size must be between 1 and 1000")
+    if max_invocations is not None and (
+        type(max_invocations) is not int or max_invocations < 0
+    ):
+        raise ValueError("max_invocations must be a non-negative int or None")
+    cursor: str | None = None
+    emitted = 0
+    pages = 0
+    while pages < 10_000:
+        if max_invocations is not None:
+            remaining = max_invocations - emitted
+            if remaining <= 0:
+                return
+            take = min(page_size, remaining)
+        else:
+            take = page_size
+        page = await repository.list_invocations(
+            run_id=run_id,
+            agent_id=agent_id,
+            after_cursor=cursor,
+            limit=take,
+        )
+        pages += 1
+        if not page.items:
+            return
+        for invocation in page.items:
+            yield invocation
+            emitted += 1
+            if max_invocations is not None and emitted >= max_invocations:
+                return
+        next_cursor = page.next_cursor
+        if next_cursor is None:
+            return
+        if cursor is not None and next_cursor <= cursor:
+            raise ValueError("cognition_trace_cursor_nonadvancing")
+        if cursor is None and next_cursor == "":
+            raise ValueError("cognition_trace_cursor_nonadvancing")
+        cursor = next_cursor
+    raise ValueError("cognition_trace_page_limit")
+
+
 async def export_cognition_trace_invocations(
     repository: CognitionTraceRepository,
     *,
@@ -613,28 +669,21 @@ async def export_cognition_trace_invocations(
     limit: int = 1000,
 ) -> tuple[CognitionTraceInvocation, ...]:
     """Read-only export copy for offline archival. Does not delete live rows."""
-    collected: list[CognitionTraceInvocation] = []
-    after_cursor: str | None = None
-    pages = 0
-    while len(collected) < limit and pages < 10_000:
-        page = await repository.list_invocations(
+    if type(limit) is not int or limit < 0:
+        raise ValueError("limit must be a non-negative int")
+    collected = [
+        invocation
+        async for invocation in iter_cognition_trace_invocations(
+            repository,
             run_id=run_id,
             agent_id=agent_id,
-            after_cursor=after_cursor,
-            limit=min(100, limit - len(collected)),
+            max_invocations=limit,
         )
-        pages += 1
-        if not page.items:
-            break
-        collected.extend(page.items)
-        after_cursor = page.next_cursor
-        if after_cursor is None:
-            break
+    ]
     _LOG.debug(
-        "[cognition_trace] export_copy run_id=%s count=%s pages=%s",
+        "[cognition_trace] export_copy run_id=%s count=%s",
         run_id.value,
         len(collected),
-        pages,
     )
     return tuple(collected)
 

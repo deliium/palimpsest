@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
@@ -64,6 +65,7 @@ class _ExportJournal(BoundedTickJournalRepository, Protocol):
         limit: int,
     ) -> tuple[WorldEvent, ...]: ...
 
+
 _PAGE_SIZE: Final[int] = 500
 
 
@@ -98,9 +100,7 @@ async def export_history_archive(
     ):
         raise HistoryArchiveError("history_archive_bounded_journal_required")
     bounded = cast(_ExportJournal, journal)
-    head = await resolve_durable_head(
-        runs, journal, run_id, through_tick=through_tick
-    )
+    head = await resolve_durable_head(runs, journal, run_id, through_tick=through_tick)
     pinned = ArchivePinnedHead(
         next_tick=head.next_tick.value,
         revision=head.revision.value,
@@ -134,9 +134,7 @@ async def export_history_archive(
         pinned_head=pinned,
         commits=_iter_commits(bounded, run_id, head.next_tick),
         events=_iter_events(bounded, run_id, head.next_tick),
-        snapshots=_iter_snapshots(
-            snapshots, run_id, manifest, pinned.next_tick
-        ),
+        snapshots=_iter_snapshots(snapshots, run_id, manifest, pinned.next_tick),
         auxiliary=auxiliary,
     )
     _LOG.info(
@@ -234,8 +232,7 @@ async def _iter_snapshots(
         if (
             snapshot.event_schema_version != manifest.event_schema_version
             or snapshot.projector_version != manifest.projector_version
-            or snapshot.persistence_codec_version
-            != manifest.persistence_codec_version
+            or snapshot.persistence_codec_version != manifest.persistence_codec_version
             or snapshot.derivation_version != manifest.derivation_version
         ):
             continue
@@ -260,9 +257,7 @@ async def verify_history_archive(
     reader = create_history_archive_reader(root)
     manifests = reader.committed_manifests()
     if run_id is not None:
-        manifests = tuple(
-            item for item in manifests if item.run_id == run_id.value
-        )
+        manifests = tuple(item for item in manifests if item.run_id == run_id.value)
     if not manifests:
         raise HistoryArchiveError("history_archive_missing")
     results: list[ArchiveVerification] = []
@@ -291,8 +286,8 @@ async def _verify_manifest(
         raise HistoryArchiveError("history_archive_corrupt")
     _verify_identity(manifest, run_manifest)
     _verify_layout(manifest)
-    segment_count, commits_count, events_count, snapshots_count = (
-        reader.verify_storage(run_id)
+    segment_count, commits_count, events_count, snapshots_count = reader.verify_storage(
+        run_id
     )
     if (
         commits_count != manifest.coverage.commit_count
@@ -300,9 +295,7 @@ async def _verify_manifest(
         or snapshots_count != manifest.coverage.snapshot_count
     ):
         raise HistoryArchiveError("history_archive_coverage_mismatch")
-    commits = await reader.list_tick_commits(
-        run_id, from_tick=Tick(0), to_tick=None
-    )
+    commits = await reader.list_tick_commits(run_id, from_tick=Tick(0), to_tick=None)
     events = await reader.list_events(
         run_id, from_tick=Tick(0), to_tick=None, limit=1 << 31, offset=0
     )
@@ -336,9 +329,7 @@ async def _verify_manifest(
     )
 
 
-def _verify_identity(
-    manifest: ArchiveManifest, run_manifest: RunManifest
-) -> None:
+def _verify_identity(manifest: ArchiveManifest, run_manifest: RunManifest) -> None:
     if (
         manifest.run_id != run_manifest.run_id.value
         or manifest.world_id != run_manifest.world_id.value
@@ -346,16 +337,14 @@ def _verify_identity(
         or manifest.derivation_version != run_manifest.derivation_version
         or manifest.event_schema_version != run_manifest.event_schema_version
         or manifest.projector_version != run_manifest.projector_version
-        or manifest.persistence_codec_version
-        != run_manifest.persistence_codec_version
+        or manifest.persistence_codec_version != run_manifest.persistence_codec_version
     ):
         raise HistoryArchiveError("history_archive_identity_mismatch")
 
 
 def _verify_layout(manifest: ArchiveManifest) -> None:
     commit_ranges = [
-        (segment.first_tick, segment.last_tick)
-        for segment in manifest.commit_segments
+        (segment.first_tick, segment.last_tick) for segment in manifest.commit_segments
     ]
     _require_nonoverlapping(commit_ranges, "commit")
     event_ranges = [
@@ -387,9 +376,7 @@ def _verify_layout(manifest: ArchiveManifest) -> None:
     )
 
 
-def _require_nonoverlapping(
-    ranges: Sequence[tuple[Any, Any]], name: str
-) -> None:
+def _require_nonoverlapping(ranges: Sequence[tuple[Any, Any]], name: str) -> None:
     previous: Any = None
     for first, last in ranges:
         if previous is not None and first <= previous:
@@ -399,9 +386,7 @@ def _require_nonoverlapping(
         previous = last
 
 
-def _verify_commits(
-    manifest: ArchiveManifest, commits: Sequence[TickCommit]
-) -> None:
+def _verify_commits(manifest: ArchiveManifest, commits: Sequence[TickCommit]) -> None:
     for commit in commits:
         if commit.run_id.value != manifest.run_id:
             raise HistoryArchiveError("history_archive_run_mismatch")
@@ -482,8 +467,7 @@ def _verify_snapshots(
         if (
             snapshot.event_schema_version != manifest.event_schema_version
             or snapshot.projector_version != manifest.projector_version
-            or snapshot.persistence_codec_version
-            != manifest.persistence_codec_version
+            or snapshot.persistence_codec_version != manifest.persistence_codec_version
             or snapshot.derivation_version != manifest.derivation_version
         ):
             raise HistoryArchiveError("history_archive_identity_mismatch")
@@ -583,3 +567,70 @@ async def _verify_replay(
 
 
 __all__ = ["export_history_archive", "verify_history_archive"]
+
+
+async def export_cognition_trace_auxiliary(
+    *,
+    traces: object,
+    run_id: RunId,
+    path: Path,
+    max_invocations: int | None = None,
+) -> ArchiveAuxiliarySource:
+    """Write a read-only canonical trace artifact for cold-copy archiving.
+
+    Trace rows remain outside scientific history and are never deleted. The
+    resulting auxiliary is copied unchanged by the archive writer and declared
+    as an available cognition-trace artifact rather than a silent omission.
+    """
+    from simulation.cognition_trace import (
+        CognitionTraceRepository,
+        iter_cognition_trace_invocations,
+    )
+    from simulation.cognition_trace_serialization import (
+        encode_cognition_trace_invocation,
+    )
+
+    if not isinstance(path, Path):
+        raise TypeError("path must be pathlib.Path")
+    if max_invocations is not None and max_invocations < 0:
+        raise ValueError("max_invocations must be non-negative or None")
+    repository = traces
+    if not hasattr(repository, "list_invocations"):
+        raise TypeError("traces must implement CognitionTraceRepository")
+    typed = cast(CognitionTraceRepository, repository)
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.tmp-{os.getpid()}")
+    count = 0
+    byte_count = 0
+    try:
+        with temporary.open("wb") as handle:
+            async for invocation in iter_cognition_trace_invocations(
+                typed,
+                run_id=run_id,
+                page_size=250,
+                max_invocations=max_invocations,
+            ):
+                line = encode_cognition_trace_invocation(invocation)
+                handle.write(line)
+                handle.write(b"\n")
+                count += 1
+                byte_count += len(line) + 1
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    _LOG.info(
+        "cognition_trace_auxiliary_exported run_id=%s invocation_count=%s "
+        "byte_count=%s",
+        run_id.value,
+        count,
+        byte_count,
+    )
+    return ArchiveAuxiliarySource(
+        name="cognition-traces",
+        capability_class="cognition_trace",
+        path=str(target),
+    )
