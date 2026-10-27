@@ -181,7 +181,9 @@ async def test_synthetic_large_journal_late_event_lookup(
         )
         pages += 1
         assert len(analysis_page.events) <= _PAGE_LIMIT
-        collected.extend(event.event_id.value for event in analysis_page.events)
+        collected.extend(
+            cast(WorldEvent, event).event_id.value for event in analysis_page.events
+        )
         if analysis_page.next_tick is None or analysis_page.next_sequence is None:
             break
         cursor = (analysis_page.next_tick, analysis_page.next_sequence)

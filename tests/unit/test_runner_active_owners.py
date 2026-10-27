@@ -6,22 +6,27 @@ from dataclasses import replace
 
 import pytest
 
-from simulation.agent_runtime import AgentRuntime, AgentRuntimeStatus
+from simulation.agent_runtime import (
+    AgentRuntime,
+    AgentRuntimeStatus,
+    AgentStepResult,
+    PreparedObservation,
+)
+from simulation.lifecycle import TickToken
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
-    LifecycleStageId,
-    LifecycleStageThreshold,
     RunnerPersistenceSpec,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
 )
-from tests.benchmarks.v3_workloads import V3ScaleLane, build_workload
+from tests.benchmarks.v3_workloads import V3ScaleLane, V3ScaleWorkload, build_workload
+from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
+from world.observations import Observation
 
 
-def _active_config(*, ticks: int):
+def _active_config(*, ticks: int) -> tuple[V3ScaleWorkload, SimulationRunnerConfig]:
     workload = build_workload(V3ScaleLane.GENERATIONAL, ticks=ticks)
-    config = replace(
-        workload.config, persistence=RunnerPersistenceSpec(durable=False)
-    )
+    config = replace(workload.config, persistence=RunnerPersistenceSpec(durable=False))
     lifecycle = config.population_lifecycle
     assert lifecycle is not None
     params = dict(lifecycle.demographic_policy_params)
@@ -58,14 +63,14 @@ def _active_config(*, ticks: int):
 
 
 @pytest.mark.asyncio
-async def test_terminal_owners_leave_active_scheduling_without_leaving_roster() -> (
-    None
-):
+async def test_terminal_owners_leave_active_scheduling_without_leaving_roster() -> None:
     workload, config = _active_config(ticks=14)
     calls: dict[str, int] = {}
     original = AgentRuntime.prepare_observation
 
-    async def counting(self, observation, *, token):
+    async def counting(
+        self: AgentRuntime, observation: Observation, *, token: TickToken
+    ) -> PreparedObservation | AgentStepResult:
         calls[self.agent_id.value] = calls.get(self.agent_id.value, 0) + 1
         return await original(self, observation, token=token)
 
@@ -111,9 +116,7 @@ async def test_restore_rebuilds_active_ordinals_from_runtime_status() -> None:
     finally:
         await runner.aclose()
 
-    restored = await SimulationRunner.from_config(
-        config, run_id=workload.run_id
-    )
+    restored = await SimulationRunner.from_config(config, run_id=workload.run_id)
     try:
         restored.apply_runtime_checkpoint(checkpoint)
         assert restored.active_ordinals == expected_active
@@ -133,8 +136,6 @@ async def test_restore_rebuilds_active_ordinals_from_runtime_status() -> None:
         )
     finally:
         await restored.aclose()
-
-
 
 
 __all__: tuple[str, ...] = ()

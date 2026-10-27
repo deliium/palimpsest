@@ -40,6 +40,7 @@ from tests.benchmarks.harness import (
     resolve_tick_targets,
 )
 from tests.benchmarks.v3_measurement import (
+    V3ScaleMeasurement,
     V3ScaleStatus,
     completed_measurement,
     incomplete_measurement,
@@ -52,6 +53,7 @@ from tests.benchmarks.v3_profiling import (
     StageTimers,
     collect_postgres_cost_ledger,
 )
+from tests.benchmarks.v3_retirement import retirement_snapshot
 from tests.benchmarks.v3_supervisor import (
     HEARTBEAT_PATH_ENV,
     OUTPUT_DIR_ENV,
@@ -72,6 +74,7 @@ from tests.benchmarks.v3_workloads import (
 pytestmark = [pytest.mark.integration, pytest.mark.scale]
 
 _LOG: Final[logging.Logger] = logging.getLogger("scale.v3.driver")
+_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 
 _LANE_ENV: Final[str] = "PALIMPSEST_SCALE_BENCH_LANE"
 _SEED_ENV: Final[str] = "PALIMPSEST_SCALE_BENCH_SEED"
@@ -150,6 +153,69 @@ def _worker_database() -> DatabaseResources:
     return create_database_resources(settings)
 
 
+async def _postgres_version(resources: DatabaseResources) -> str:
+    """Record the database version without failing the measurement if absent."""
+    from sqlalchemy import text
+
+    try:
+        async with resources.session_factory() as session:
+            value = (await session.execute(text("SHOW server_version"))).scalar_one()
+    except Exception:
+        return "unavailable"
+    return str(value)
+
+
+def _repetition_database_name(base_url: str, *, label: str) -> str:
+    """Return a unique guarded database name derived from the test database."""
+    from secrets import token_hex
+
+    from sqlalchemy.engine import make_url
+
+    url = make_url(base_url)
+    database = url.database or ""
+    if "palimpsest_test" not in database:
+        raise RuntimeError("scale repetitions require a palimpsest_test database")
+    safe_label = "".join(char if char.isalnum() else "_" for char in label)
+    return f"{database}_v3_{safe_label}_{token_hex(4)}"
+
+
+async def _create_repetition_database(base_url: str, *, label: str) -> str:
+    """Create and migrate an isolated database for one fresh worker."""
+    import asyncpg
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy.engine import make_url
+
+    database = _repetition_database_name(base_url, label=label)
+    url = make_url(base_url)
+    admin_dsn = (
+        url.set(database="postgres")
+        .render_as_string(hide_password=False)
+        .replace("+asyncpg", "")
+    )
+    connection = await asyncpg.connect(admin_dsn)
+    try:
+        await connection.execute(f'CREATE DATABASE "{database}"')
+    finally:
+        await connection.close()
+    repetition_url = url.set(database=database).render_as_string(hide_password=False)
+    config = Config(str(_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(_ROOT / "alembic"))
+    config.set_main_option("sqlalchemy.url", repetition_url)
+    try:
+        await asyncio.to_thread(command.upgrade, config, "head")
+    except Exception:
+        connection = await asyncpg.connect(admin_dsn)
+        try:
+            await connection.execute(
+                f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)'
+            )
+        finally:
+            await connection.close()
+        raise
+    return repetition_url
+
+
 async def _run_worker() -> int:
     lane = V3ScaleLane(os.environ[_LANE_ENV])
     ticks = _positive_int(
@@ -162,8 +228,9 @@ async def _run_worker() -> int:
     workload = build_workload(lane, ticks=ticks, seed=seed, run_id=run_id)
     result_path = Path(os.environ[RESULT_PATH_ENV])
     heartbeat_path = Path(os.environ[HEARTBEAT_PATH_ENV])
-    environment = _environment_manifest(output=Path(os.environ[OUTPUT_DIR_ENV]))
     resources = _worker_database()
+    environment = _environment_manifest(output=Path(os.environ[OUTPUT_DIR_ENV]))
+    environment["postgresql"] = await _postgres_version(resources)
     started = time.perf_counter()
     try:
         measurement = await _execute_workload(
@@ -208,9 +275,12 @@ async def _execute_workload(
     *,
     heartbeat_path: Path,
     environment: dict[str, str],
-) -> object:
+) -> V3ScaleMeasurement:
     session_factory = resources.session_factory
-    factories: RunnerDependencyFactories = durable_factories(session_factory)
+    factories: RunnerDependencyFactories = durable_factories(
+        session_factory,
+        retire_dead_owners=workload.retire_dead_owners,
+    )
     stages = StageTimers()
     rss = RssSampler()
     started = time.perf_counter()
@@ -245,6 +315,7 @@ async def _execute_workload(
             assert stop_reason is not None
             with stages.measure("finalize"):
                 result = await runner.finish_run(stop_reason)
+            retirement = retirement_snapshot(runner)
     elapsed = time.perf_counter() - started
     with stages.measure("counts"):
         events = await count_events(session_factory, workload.run_id)
@@ -291,6 +362,8 @@ async def _execute_workload(
         sql_rows=sql.rows,
         sql_bytes_read=sql.bytes_read,
         cost_ledger=ledger.manifest(),
+        retire_dead_owners=workload.retire_dead_owners,
+        **retirement,
     )
     validate_lane_requirements(workload, measurement)
     return measurement
@@ -335,6 +408,7 @@ def _environment_manifest(*, output: Path) -> dict[str, str]:
         "disk_free_bytes": str(disk.free),
         "storage": str(disk.total),
         "database": "guarded-palimpsest-test",
+        "source_revision": os.environ.get("PALIMPSEST_SOURCE_REVISION", "unknown"),
         "godot_version": os.environ.get("PALIMPSEST_GODOT_VERSION", "absent"),
         "browser_version": os.environ.get("PALIMPSEST_BROWSER_VERSION", "absent"),
         "concurrency": "1",
@@ -358,17 +432,13 @@ async def test_v3_long_horizon_lanes(
             V3ScaleLane.HISTORICAL_QUERY,
         )
     )
-    repetitions = _positive_int(
-        _REPETITIONS_ENV, os.environ.get(_REPETITIONS_ENV), 1
-    )
+    repetitions = _positive_int(_REPETITIONS_ENV, os.environ.get(_REPETITIONS_ENV), 1)
     seeds = _parse_seeds(int(os.environ.get(_SEED_ENV, "23")))
     timeout_seconds = _positive_float(
         _TIMEOUT_ENV, os.environ.get(_TIMEOUT_ENV), _DEFAULT_TIMEOUT_SECONDS
     )
     max_rss_bytes = (
-        _positive_int(
-            _MAX_RSS_ENV, os.environ.get(_MAX_RSS_ENV), _DEFAULT_MAX_RSS_MB
-        )
+        _positive_int(_MAX_RSS_ENV, os.environ.get(_MAX_RSS_ENV), _DEFAULT_MAX_RSS_MB)
         * 1024
         * 1024
     )
@@ -398,6 +468,10 @@ async def test_v3_long_horizon_lanes(
                     run_id=workload.run_id,
                 )
                 for repetition in range(repetitions):
+                    repetition_url = await _create_repetition_database(
+                        os.environ["PALIMPSEST_TEST_DATABASE_URL"],
+                        label=f"{paired.lane.value}_{ticks}_{seed}_{repetition}",
+                    )
                     spec = V3WorkerSpec(
                         workload=paired,
                         command=command,
@@ -408,6 +482,10 @@ async def test_v3_long_horizon_lanes(
                             "PALIMPSEST_SCALE_BENCH_TICKS": str(ticks),
                             _SEED_ENV: str(seed),
                             _RUN_ID_ENV: paired.run_id.value,
+                            "PALIMPSEST_TEST_DATABASE_URL": repetition_url,
+                            "PALIMPSEST_SOURCE_REVISION": os.environ.get(
+                                "PALIMPSEST_SOURCE_REVISION", "unknown"
+                            ),
                         },
                     )
                     measurement = run_scale_worker(
@@ -439,12 +517,10 @@ async def test_v3_long_horizon_lanes(
     infrastructure_failures = [
         item
         for item in measurements
-        if item.exception_reason
-        and item.exception_reason.startswith("worker_error_")
+        if item.exception_reason and item.exception_reason.startswith("worker_error_")
     ]
     assert not infrastructure_failures, [
-        (item.workload_id, item.exception_reason)
-        for item in infrastructure_failures
+        (item.workload_id, item.exception_reason) for item in infrastructure_failures
     ]
     completed_lanes = {item.lane for item in measurements if item.complete}
     _LOG.info(

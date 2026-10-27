@@ -13,7 +13,7 @@ import pytest
 
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
-from simulation.runner_models import RunnerPersistenceSpec
+from simulation.runner_models import RunnerPersistenceSpec, SimulationRunnerConfig
 from simulation.runner_serialization import (
     build_runner_result_document,
     objective_projection_hash,
@@ -60,8 +60,8 @@ class QueryOracleRecord:
 
 
 def assert_paired_identity(
-    first_config: object,
-    second_config: object,
+    first_config: SimulationRunnerConfig,
+    second_config: SimulationRunnerConfig,
     first_run_id: RunId,
     second_run_id: RunId,
 ) -> None:
@@ -72,14 +72,14 @@ def assert_paired_identity(
 
 
 async def run_paired_execution(
-    config: object,
+    config: SimulationRunnerConfig,
     *,
     run_id: RunId,
     observations: bool = True,
 ) -> tuple[PairedExecution, PairedExecution]:
     """Run the same scientific configuration twice with identical domain IDs."""
     del observations
-    assert not config.persistence.durable  # type: ignore[attr-defined]
+    assert not config.persistence.durable
     outcomes: list[PairedExecution] = []
     for _ in range(2):
         runner = await SimulationRunner.from_config(config, run_id=run_id)
@@ -201,9 +201,7 @@ def _oracle_records() -> tuple[QueryOracleRecord, ...]:
 @pytest.mark.asyncio
 async def test_paired_generational_execution_is_exactly_equivalent() -> None:
     workload = build_workload(V3ScaleLane.GENERATIONAL, ticks=SMOKE_TICKS)
-    config = replace(
-        workload.config, persistence=RunnerPersistenceSpec(durable=False)
-    )
+    config = replace(workload.config, persistence=RunnerPersistenceSpec(durable=False))
     first, second = await run_paired_execution(config, run_id=workload.run_id)
     assert_paired_equivalence(first, second)
     assert first.ticks == SMOKE_TICKS
@@ -221,9 +219,7 @@ def test_paired_identity_mismatch_is_rejected_before_comparison() -> None:
         )
     other = replace(workload.config, seed=workload.config.seed + 1)
     with pytest.raises(AssertionError, match="configuration"):
-        assert_paired_identity(
-            workload.config, other, workload.run_id, workload.run_id
-        )
+        assert_paired_identity(workload.config, other, workload.run_id, workload.run_id)
 
 
 def test_historical_seek_targets_cover_every_boundary() -> None:
@@ -278,9 +274,7 @@ def test_query_oracle_rejects_scope_high_water_and_coverage_tampering() -> None:
             )
         )
     with pytest.raises(AssertionError, match="missing_root"):
-        assert_query_oracle(
-            (replace(record, root_id=""), *_oracle_records()[1:])
-        )
+        assert_query_oracle((replace(record, root_id=""), *_oracle_records()[1:]))
 
 
 __all__: tuple[str, ...] = ()

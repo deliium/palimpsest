@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -14,6 +16,7 @@ from persistence.evidence_spool_filesystem import (
     EvidenceSpoolSealed,
     create_evidence_spool,
 )
+from simulation.cultural_evidence import CulturalBoundaryExport
 
 pytestmark = pytest.mark.unit
 
@@ -97,7 +100,7 @@ def test_corrupt_segment_and_bad_lane_fail_closed(tmp_path: Path) -> None:
         spool.append(lane="../escape", boundary_tick=1, identity="x", payload=b"x")
 
 
-def _cultural_frame(tick: int):
+def _cultural_frame(tick: int) -> CulturalBoundaryExport:
     from agents.cognition.cultural_features import CulturalFeatureLedger
     from agents.cognition.cultural_narratives import NarrativeLedger
     from agents.cognition.practical_knowledge import PracticalKnowledgeLedger
@@ -285,24 +288,26 @@ def test_source_backed_publication_matches_legacy_without_history_tuple() -> Non
         world_id = inner.world_id
         status = inner.status
 
-        def boundary_ticks(self):
+        def boundary_ticks(self) -> Any:
             return inner.boundary_ticks()
 
-        def event_ticks(self):
+        def event_ticks(self) -> Any:
             return inner.event_ticks()
 
-        def iter_boundaries(self, *, after_boundary=None):
+        def iter_boundaries(self, *, after_boundary: int | None = None) -> Any:
             return inner.iter_boundaries(after_boundary=after_boundary)
 
-        def read_boundary(self, tick):
+        def read_boundary(self, tick: int) -> Any:
             return inner.read_boundary(tick)
 
-        def iter_event_batches(self, *, after_tick=None, through_tick=None):
+        def iter_event_batches(
+            self, *, after_tick: int | None = None, through_tick: int | None = None
+        ) -> Any:
             return inner.iter_event_batches(
                 after_tick=after_tick, through_tick=through_tick
             )
 
-        def read_event_batch(self, tick):
+        def read_event_batch(self, tick: int) -> Any:
             return inner.read_event_batch(tick)
 
     source = SourceWithoutHistoryAccessor()
@@ -314,7 +319,7 @@ def test_capture_off_never_touches_spool() -> None:
     from simulation.civilization_capture import CivilizationCaptureOptions
 
     class ExplodingSpool:
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             raise AssertionError(f"spool must not be touched: {name}")
 
     recorder = CivilizationEvidenceRecorder(
@@ -369,14 +374,18 @@ def test_interrupted_append_is_hidden_and_retry_keeps_old_records(
     assert restarted.status().record_count == 2
 
 
-def test_duplicate_identity_at_different_boundary_is_a_conflict(tmp_path: Path):
+def test_duplicate_identity_at_different_boundary_is_a_conflict(
+    tmp_path: Path,
+) -> None:
     spool = create_evidence_spool(tmp_path)
     spool.append(lane="cultural", boundary_tick=1, identity="one", payload=b"same")
     with pytest.raises(EvidenceSpoolConflict):
         spool.append(lane="cultural", boundary_tick=2, identity="one", payload=b"same")
 
 
-def test_spooled_cultural_duplicate_does_not_consume_logical_quota(tmp_path: Path):
+def test_spooled_cultural_duplicate_does_not_consume_logical_quota(
+    tmp_path: Path,
+) -> None:
     from experiments.cultural_evidence import CulturalEvidenceRecorder
 
     recorder = CulturalEvidenceRecorder(
@@ -389,14 +398,16 @@ def test_spooled_cultural_duplicate_does_not_consume_logical_quota(tmp_path: Pat
     assert recorder.frame_count == 1
 
 
-def test_spooled_cultural_io_failure_is_latched(tmp_path: Path, monkeypatch):
+def test_spooled_cultural_io_failure_is_latched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from experiments.cultural_evidence import CulturalEvidenceRecorder
     from persistence.evidence_spool_filesystem import FilesystemEvidenceSpool
 
     spool = create_evidence_spool(tmp_path)
     recorder = CulturalEvidenceRecorder(spool=spool)
 
-    def fail(*args, **kwargs):
+    def fail(*args: object, **kwargs: object) -> None:
         raise OSError("private disk details")
 
     monkeypatch.setattr(FilesystemEvidenceSpool, "append", fail)
@@ -413,7 +424,9 @@ def test_spooled_cultural_io_failure_is_latched(tmp_path: Path, monkeypatch):
     assert recorder.frame_count == 0
 
 
-def test_spooled_cultural_source_is_pinned_against_later_appends(tmp_path: Path):
+def test_spooled_cultural_source_is_pinned_against_later_appends(
+    tmp_path: Path,
+) -> None:
     from experiments.cultural_evidence import CulturalEvidenceRecorder
 
     recorder = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path))
@@ -429,7 +442,9 @@ def test_spooled_cultural_source_is_pinned_against_later_appends(tmp_path: Path)
     assert recorder.source().boundary_ticks() == (0, 1)
 
 
-def test_spooled_cultural_source_rejects_backdated_new_frames(tmp_path: Path):
+def test_spooled_cultural_source_rejects_backdated_new_frames(
+    tmp_path: Path,
+) -> None:
     from experiments.cultural_evidence import CulturalEvidenceRecorder
 
     recorder = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path))
@@ -442,7 +457,7 @@ def test_spooled_cultural_source_rejects_backdated_new_frames(tmp_path: Path):
 
 def test_spooled_civilization_source_is_pinned_and_duplicates_ignore_quota(
     tmp_path: Path,
-):
+) -> None:
     from experiments.civilization_capture import CivilizationEvidenceRecorder
     from simulation.civilization_capture import (
         CivilizationCaptureOptions,
@@ -480,14 +495,14 @@ def test_spooled_civilization_source_is_pinned_and_duplicates_ignore_quota(
 def test_short_writes_preserve_complete_atomic_files_and_payloads(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import persistence.evidence_spool_filesystem as module
+    import os
 
-    write = module.os.write
+    write = os.write
 
-    def short_write(descriptor, payload):
+    def short_write(descriptor: int, payload: bytes) -> int:
         return write(descriptor, payload[:7])
 
-    monkeypatch.setattr(module.os, "write", short_write)
+    monkeypatch.setattr(os, "write", short_write)
     spool = create_evidence_spool(tmp_path)
     payload = b"test payload" * 50
     spool.append(lane="cultural", boundary_tick=1, identity="one", payload=payload)
@@ -526,7 +541,9 @@ def test_interruption_after_state_commit_keeps_committed_record(
     )
 
 
-def test_oversized_index_read_length_fails_before_allocating_payload(tmp_path: Path):
+def test_oversized_index_read_length_fails_before_allocating_payload(
+    tmp_path: Path,
+) -> None:
     import json
 
     spool = create_evidence_spool(tmp_path)
@@ -540,7 +557,7 @@ def test_oversized_index_read_length_fails_before_allocating_payload(tmp_path: P
         spool.get(lane="cultural", identity="one")
 
 
-def _evidence_fixture_inputs():
+def _evidence_fixture_inputs() -> Any:
     from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
     from experiments.cultural_evidence import cultural_evolution_inputs_from_capture
     from tests.unit.test_cultural_evolution_normalization import _frames
@@ -613,7 +630,9 @@ def test_source_normalization_reopens_source_without_all_frames() -> None:
         source_revision = "rev-normalize"
         gaps: tuple[str, ...] = ()
 
-        def iter_boundaries(self, *, after_boundary=None):
+        def iter_boundaries(
+            self, *, after_boundary: int | None = None
+        ) -> Iterator[CulturalBoundaryExport]:
             probe["calls"] += 1
             for frame in frames:
                 if after_boundary is not None and frame.boundary_tick <= after_boundary:
@@ -627,13 +646,13 @@ def test_source_normalization_reopens_source_without_all_frames() -> None:
                     probe["live"] -= 1
 
     inputs = cultural_evolution_inputs_from_source(
-        CountingSource(),
+        cast(Any, CountingSource()),
         run_id="run-normalize",
         source_revision="rev-normalize",
         window=CulturalAnalysisWindow(end_boundary=1),
         parent_child_edges=(("teacher", "learner"),),
     )
-    assert inputs == _inputs()
+    assert inputs == _inputs()  # type: ignore[no-untyped-call]
     assert probe["calls"] >= 2
     assert probe["max_live"] == 1
 
@@ -702,7 +721,7 @@ def test_source_backed_arm_fields_publish_identical_artifact_bytes(
 
     root = tmp_path / "artifacts"
 
-    def _writer(handle):
+    def _writer(handle: Any) -> str:
         return write_cultural_evolution_evidence(
             handle,
             inputs,
@@ -717,7 +736,9 @@ def test_source_backed_arm_fields_publish_identical_artifact_bytes(
         cell_metrics_bytes=b"metrics",
         evidence_writer=_writer,
     )
-    written, metrics = read_cultural_pair(root, "cell-a")
+    pair = read_cultural_pair(root, "cell-a")
+    assert pair is not None
+    written, metrics = pair
     assert written == legacy
     assert metrics == b"metrics"
 
@@ -743,14 +764,14 @@ def test_materialize_cultural_evidence_enforces_explicit_batch_budget(
         options=CulturalCaptureOptions(enabled=True),
         source_revision="rev-spool",
     )
-    evidence = fields["cultural_evolution_evidence"]
+    evidence = cast(Any, fields["cultural_evolution_evidence"])
     with pytest.raises(
         CulturalEvidenceBatchError, match="cultural_batch_budget_exceeded"
     ):
         materialize_cultural_evidence(evidence, max_boundaries=1)
 
 
-def _frames_for_budget():
+def _frames_for_budget() -> tuple[CulturalBoundaryExport, ...]:
     from simulation.cultural_evidence import CulturalBoundaryExport
 
     return (
@@ -785,7 +806,7 @@ def test_recorder_resume_reconstructs_logical_accounting_and_quota(
     assert tight.accounting.logical_frames == 3
 
 
-def _frames_for_resume():
+def _frames_for_resume() -> tuple[CulturalBoundaryExport, ...]:
     from tests.unit.test_cultural_evolution_normalization import _frames
 
     return _frames()
@@ -802,7 +823,7 @@ def test_run_scoped_spool_factory_isolates_runs_and_capture_off_skips_it(
     root = tmp_path / "spool-root"
     calls: list[str] = []
 
-    def factory(run_id: str):
+    def factory(run_id: str) -> Any:
         calls.append(run_id)
         return create_evidence_spool(root / run_id)
 
@@ -815,7 +836,7 @@ def test_run_scoped_spool_factory_isolates_runs_and_capture_off_skips_it(
     assert (root / "run-b").is_dir()
     assert (root / "run-a").resolve() != (root / "run-b").resolve()
 
-    def _explode(_run_id: str):
+    def _explode(_run_id: str) -> Any:
         raise AssertionError("capture-off must not resolve a spool")
 
     off = CulturalEvidenceRecorder(spool=_explode)
@@ -879,7 +900,7 @@ def test_civilization_recorder_resume_accounts_logical_rows(
 
     root = tmp_path / "civilization-spool"
 
-    def factory(run_id: str):
+    def factory(run_id: str) -> Any:
         return create_evidence_spool(root / run_id)
 
     first = CivilizationEvidenceRecorder(
@@ -987,12 +1008,12 @@ def test_streamed_artifact_limit_fails_without_publishing(
         options=options,
         source_revision="rev-normalize",
     )
-    evidence = fields["cultural_evolution_evidence"]
+    evidence = cast(Any, fields["cultural_evolution_evidence"])
     inputs = materialize_cultural_evidence(evidence)
     policy = cultural_capture_policy(options)
     monkeypatch.setattr(module, "MAX_CULTURAL_ARTIFACT_BYTES", 32)
 
-    def _writer(handle):
+    def _writer(handle: Any) -> str:
         return write_cultural_evolution_evidence(
             handle,
             inputs,

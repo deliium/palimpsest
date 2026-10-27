@@ -19,7 +19,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Final
+from typing import IO, Final
 
 from tests.benchmarks.v3_measurement import (
     V3ScaleMeasurement,
@@ -70,9 +70,7 @@ class V3WorkerSpec:
             raise ValueError("attempt must be a non-empty string")
         if "/" in self.attempt or "\\" in self.attempt:
             raise ValueError("attempt must be a single path segment")
-        if self.environment is not None and not isinstance(
-            self.environment, Mapping
-        ):
+        if self.environment is not None and not isinstance(self.environment, Mapping):
             raise TypeError("environment must be a mapping or None")
 
 
@@ -172,8 +170,8 @@ def run_scale_worker(
     paths.root.mkdir(parents=True, exist_ok=False)
     environment = worker_environment(spec)
     rss_supported = _rss_supported()
-    enforcement = "enforced" if max_rss_bytes is not None and rss_supported else (
-        "unenforced"
+    enforcement = (
+        "enforced" if max_rss_bytes is not None and rss_supported else ("unenforced")
     )
     started = time.monotonic()
     _LOG.info(
@@ -316,14 +314,13 @@ def run_scale_worker(
     return measurement
 
 
-def _drain_bounded(stream: object, chunks: list[bytes]) -> None:
+def _drain_bounded(stream: IO[bytes] | None, chunks: list[bytes]) -> None:
     if stream is None:
         return
     total = 0
-    reader = stream  # type: ignore[assignment]
     try:
         while True:
-            chunk = reader.read(4096)  # type: ignore[union-attr]
+            chunk = stream.read(4096)
             if not chunk:
                 break
             if total < _STREAM_CAPTURE_BYTES:

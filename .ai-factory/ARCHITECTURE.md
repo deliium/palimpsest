@@ -174,7 +174,7 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V3-42
+### Current baseline through V3-43
 
 | Surface | Current contract |
 | --- | --- |
@@ -486,3 +486,23 @@ modules still never import either client; the API only serves their prebuilt
 trees, and `/research/` mounts before the Godot root. Presentation selection,
 layout, overlays, focus, and deep links never mutate world state or obtain capture
 or subjective authority beyond their existing inspection/debug credentials.
+
+### V3-43 long-horizon scalability seam
+
+Benchmark-only helpers under `tests/benchmarks` own workload definitions,
+measurement/supervision artifacts, the `v3-scale-envelope-v1` report and
+composition trials. They never participate in runner configuration, capability
+negotiation or scientific schema validation. Optional `RuntimeRetentionPolicy`
+is composition-only and default off: terminal, objectively dead and fully
+finalized fork-capable owners may release live cognition/service graphs into a
+complete frozen process-local record. Historical objective/captured evidence
+remains queryable; durable subjective restart is still not claimed.
+
+Optional cold history archives, append-only evidence spools and physical
+`lineage-store-index-v2` / `civilization-store-index-v2` layouts are separate
+versioned siblings. Old publications remain readable, source rows stay
+append-only, and derived analytical views never feed cognition. No command,
+event, observer semantic, metric family, runner/result schema, replay/codec
+marker, SQL migration, capability ownership or `/v2` route is added. The
+verified scale envelope stops at 10k for measured lanes; 100k attempts remain
+incomplete and real-browser playback is unverified.

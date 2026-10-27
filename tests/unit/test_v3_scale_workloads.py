@@ -32,6 +32,11 @@ from tests.benchmarks.v3_profiling import (
     StageTimers,
     monotonic_ms,
 )
+from tests.benchmarks.v3_retirement import (
+    RetirementEvidenceError,
+    estimate_retained_bytes,
+    retirement_snapshot,
+)
 from tests.benchmarks.v3_supervisor import (
     V3WorkerSpec,
     attempt_paths,
@@ -68,8 +73,7 @@ def _fake_script(tmp_path: Path, name: str, body: str) -> tuple[str, ...]:
         "        requested_ticks=10, completed_ticks=10,\n"
         "        status=V3ScaleStatus.COMPLETED, last_verified_boundary=9,\n"
         "        elapsed_seconds=0.01, completed_cohorts=2,\n"
-        "    )\n"
-        + body
+        "    )\n" + body
     )
     return (sys.executable, "-c", code)
 
@@ -145,9 +149,7 @@ def test_invalid_horizons_and_lanes_are_rejected() -> None:
 @pytest.mark.asyncio
 async def test_smoke_generational_lane_completes_multiple_cohorts() -> None:
     workload = build_workload(V3ScaleLane.GENERATIONAL, ticks=SMOKE_TICKS)
-    config = replace(
-        workload.config, persistence=RunnerPersistenceSpec(durable=False)
-    )
+    config = replace(workload.config, persistence=RunnerPersistenceSpec(durable=False))
     runner = await SimulationRunner.from_config(config, run_id=workload.run_id)
     try:
         result = await runner.run()
@@ -259,9 +261,7 @@ def test_fake_worker_success_and_separate_attempt_namespaces(
 def test_fake_worker_timeout_is_truthful(tmp_path: Path) -> None:
     command = _fake_script(tmp_path, "timeout", "time.sleep(5)\n")
     spec = _spec(tmp_path, command=command)
-    measurement = run_scale_worker(
-        spec, timeout_seconds=0.2, max_rss_bytes=None
-    )
+    measurement = run_scale_worker(spec, timeout_seconds=0.2, max_rss_bytes=None)
     assert measurement.status is V3ScaleStatus.TIMED_OUT
     assert measurement.completed_ticks == 0
     assert measurement.exception_reason == "deadline_exceeded"
@@ -274,9 +274,7 @@ def test_heartbeat_only_cannot_pass_as_completion(tmp_path: Path) -> None:
         "write_heartbeat(heartbeat, last_verified_boundary=3)\n",
     )
     spec = _spec(tmp_path, command=command)
-    measurement = run_scale_worker(
-        spec, timeout_seconds=10.0, max_rss_bytes=None
-    )
+    measurement = run_scale_worker(spec, timeout_seconds=10.0, max_rss_bytes=None)
     assert measurement.status is V3ScaleStatus.FAILED
     assert measurement.exception_reason == "missing_terminal_result"
     assert measurement.last_verified_boundary == 3
@@ -285,9 +283,7 @@ def test_heartbeat_only_cannot_pass_as_completion(tmp_path: Path) -> None:
 def test_fake_worker_nonzero_exit_is_failure(tmp_path: Path) -> None:
     command = _fake_script(tmp_path, "nonzero", "sys.exit(3)\n")
     spec = _spec(tmp_path, command=command)
-    measurement = run_scale_worker(
-        spec, timeout_seconds=10.0, max_rss_bytes=None
-    )
+    measurement = run_scale_worker(spec, timeout_seconds=10.0, max_rss_bytes=None)
     assert measurement.status is V3ScaleStatus.FAILED
     assert measurement.exception_reason == "worker_exit_3"
 
@@ -298,8 +294,7 @@ def test_fake_worker_rss_breach_is_resource_exhaustion(tmp_path: Path) -> None:
     command = _fake_script(
         tmp_path,
         "rss",
-        "chunk = bytearray(64 * 1024 * 1024)\n"
-        "time.sleep(5)\n",
+        "chunk = bytearray(64 * 1024 * 1024)\ntime.sleep(5)\n",
     )
     spec = _spec(tmp_path, command=command)
     measurement = run_scale_worker(
@@ -318,9 +313,7 @@ def test_unavailable_rss_accounting_is_labelled_unenforced(
         tmp_path, "success_unenforced", "write_measurement(result, success())\n"
     )
     spec = _spec(tmp_path, command=command)
-    measurement = run_scale_worker(
-        spec, timeout_seconds=10.0, max_rss_bytes=1024
-    )
+    measurement = run_scale_worker(spec, timeout_seconds=10.0, max_rss_bytes=1024)
     assert measurement.complete
     assert measurement.rss_enforcement == "unenforced"
 
@@ -406,6 +399,76 @@ def test_cost_ledger_requires_every_option_disposition() -> None:
     with pytest.raises(V3ScaleMeasurementError, match="missing_option"):
         CostLedger(dispositions={"snapshot_strategy": "retain_existing"})
 
+
+def test_retired_lane_is_composition_only_and_shares_base_config() -> None:
+    base = build_workload(V3ScaleLane.GENERATIONAL, ticks=SMOKE_TICKS)
+    retired = build_workload(V3ScaleLane.GENERATIONAL_RETIRED, ticks=SMOKE_TICKS)
+    assert retired.retire_dead_owners is True
+    assert base.retire_dead_owners is False
+    assert retired.config_fingerprint == base.config_fingerprint
+    assert retired.scenario_fingerprint == base.scenario_fingerprint
+    assert retired.lane is V3ScaleLane.GENERATIONAL_RETIRED
+    assert retired.manifest()["retire_dead_owners"] is True
+    assert all(
+        item.lane is not V3ScaleLane.GENERATIONAL_RETIRED
+        for item in build_workloads(ticks=SMOKE_TICKS)
+    )
+
+
+def test_retirement_metrics_round_trip_and_old_artifacts_stay_readable() -> None:
+    workload = build_workload(V3ScaleLane.GENERATIONAL_RETIRED, ticks=SMOKE_TICKS)
+    measurement = completed_measurement(
+        workload,
+        completed_ticks=SMOKE_TICKS,
+        elapsed_seconds=1.0,
+        retired_owner_count=2,
+        scheduled_owner_count=1,
+        resident_owner_count=1,
+        retirement_unsupported_count=0,
+        frozen_owner_bytes_estimate=4_096,
+        retire_dead_owners=True,
+    )
+    decoded = measurement_from_mapping(measurement.manifest())
+    assert decoded.retired_owner_count == 2
+    assert decoded.scheduled_owner_count == 1
+    assert decoded.resident_owner_count == 1
+    assert decoded.frozen_owner_bytes_estimate == 4_096
+    assert decoded.retire_dead_owners is True
+
+    legacy = dict(measurement.manifest())
+    for key in (
+        "scheduled_owner_count",
+        "resident_owner_count",
+        "retired_owner_count",
+        "retirement_unsupported_count",
+        "frozen_owner_bytes_estimate",
+        "retire_dead_owners",
+    ):
+        legacy.pop(key)
+    restored = measurement_from_mapping(legacy)
+    assert restored.retired_owner_count == 0
+    assert restored.retire_dead_owners is False
+
+
+def test_frozen_byte_estimate_is_bounded_and_cycle_safe() -> None:
+    cyclic: list[object] = []
+    cyclic.append(cyclic)
+    assert estimate_retained_bytes([cyclic]) > 0
+
+
+def test_retirement_snapshot_rejects_a_retained_live_loop() -> None:
+    class _Runtime:
+        retired_record = object()
+        _loop = object()
+        _memory_service = None
+
+    class _Runner:
+        runtimes = (_Runtime(),)
+        retirement_unsupported_count = 0
+
+    with pytest.raises(RetirementEvidenceError) as exc:
+        retirement_snapshot(_Runner())
+    assert exc.value.code == "retired_runtime_retains_loop"
 
 
 __all__: tuple[str, ...] = ()

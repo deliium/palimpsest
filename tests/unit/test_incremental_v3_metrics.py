@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 from hypothesis import given, settings
@@ -67,8 +68,8 @@ _MANIFEST = "manifest-incremental"
 def _boundary(
     tick: int,
     *,
-    teacher_entries: tuple[object, ...] = (),
-    learner_entries: tuple[object, ...] = (),
+    teacher_entries: tuple[Any, ...] = (),
+    learner_entries: tuple[Any, ...] = (),
     learner_living: bool = True,
     learner_practical_missing: bool = False,
 ) -> CulturalBoundaryExport:
@@ -166,7 +167,7 @@ def _inputs(
     frames: tuple[CulturalBoundaryExport, ...],
     *,
     gaps: tuple[str, ...] = (),
-):
+) -> Any:
     return normalize_cultural_frames(
         frames,
         run_id=_RUN,
@@ -266,7 +267,7 @@ def test_trait_incremental_hypothesis_matches_batch(
         existing = unique.get(key)
         if existing is None or acquired_tick < existing[0]:
             unique[key] = (acquired_tick, transmitted)
-    entries: dict[int, list[object]] = {0: [], 1: []}
+    entries: dict[int, list[Any]] = {0: [], 1: []}
     for ordinal, (
         (owner_index, content_key),
         (acquired_tick, transmitted),
@@ -522,7 +523,7 @@ def test_trait_checkpoint_prefix_rejects_changed_algorithm() -> None:
 def test_trait_checkpoint_interrupted_write_keeps_previous_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import analysis.incremental_cultural_traits as module
+    import os
 
     inputs = _inputs(_late_trait_frames())
     first = TraitDynamicsAccumulator.from_inputs(inputs)
@@ -538,7 +539,7 @@ def test_trait_checkpoint_interrupted_write_keeps_previous_file(
     def _interrupt(source: object, target: object) -> None:
         raise OSError("interrupted")
 
-    monkeypatch.setattr(module.os, "replace", _interrupt)
+    monkeypatch.setattr(os, "replace", _interrupt)
     with pytest.raises(OSError, match="interrupted"):
         write_checkpoint(path, checkpoint)
     assert path.read_bytes() == previous

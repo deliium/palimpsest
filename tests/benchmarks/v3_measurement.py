@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from tests.benchmarks.v3_workloads import V3ScaleLane, V3ScaleWorkload
 
@@ -118,6 +118,12 @@ class V3ScaleMeasurement:
     cognitive_traces: int = 0
     capture_publications: int = 0
     cognitive_invocations_after_death: int = 0
+    scheduled_owner_count: int = 0
+    resident_owner_count: int = 0
+    retired_owner_count: int = 0
+    retirement_unsupported_count: int = 0
+    frozen_owner_bytes_estimate: int = 0
+    retire_dead_owners: bool = False
     exception_reason: str | None = None
     peak_rss_bytes: int | None = None
     budget_rss_bytes: int | None = None
@@ -168,10 +174,17 @@ class V3ScaleMeasurement:
             "cognitive_traces",
             "capture_publications",
             "cognitive_invocations_after_death",
+            "scheduled_owner_count",
+            "resident_owner_count",
+            "retired_owner_count",
+            "retirement_unsupported_count",
+            "frozen_owner_bytes_estimate",
         ):
             value = getattr(self, name)
             if type(value) is not int or value < 0:
                 raise V3ScaleMeasurementError(f"invalid_{name}")
+        if type(self.retire_dead_owners) is not bool:
+            raise V3ScaleMeasurementError("invalid_retire_dead_owners")
         if self.completed_ticks > self.requested_ticks:
             raise V3ScaleMeasurementError("completed_exceeds_requested")
         if self.last_verified_boundary > self.completed_ticks:
@@ -262,6 +275,12 @@ class V3ScaleMeasurement:
             "cognitive_invocations_after_death": (
                 self.cognitive_invocations_after_death
             ),
+            "scheduled_owner_count": self.scheduled_owner_count,
+            "resident_owner_count": self.resident_owner_count,
+            "retired_owner_count": self.retired_owner_count,
+            "retirement_unsupported_count": self.retirement_unsupported_count,
+            "frozen_owner_bytes_estimate": self.frozen_owner_bytes_estimate,
+            "retire_dead_owners": self.retire_dead_owners,
             "exception_reason": self.exception_reason,
             "peak_rss_bytes": self.peak_rss_bytes,
             "budget_rss_bytes": self.budget_rss_bytes,
@@ -271,9 +290,7 @@ class V3ScaleMeasurement:
             "coverage_file": self.coverage_file,
             "profiler_state": self.profiler_state,
             "environment": dict(sorted((self.environment or {}).items())),
-            "stage_durations_ms": dict(
-                sorted((self.stage_durations_ms or {}).items())
-            ),
+            "stage_durations_ms": dict(sorted((self.stage_durations_ms or {}).items())),
             "rss_samples_kb": list(self.rss_samples_kb),
             "sql_calls": self.sql_calls,
             "sql_rows": self.sql_rows,
@@ -451,8 +468,18 @@ def measurement_from_mapping(document: object) -> V3ScaleMeasurement:
         "cost_ledger",
         "profile_summary",
     }
+    # Retention counters were added after the first measurement artifacts were
+    # published. Older v1 artifacts remain readable with neutral defaults.
+    optional = {
+        "scheduled_owner_count",
+        "resident_owner_count",
+        "retired_owner_count",
+        "retirement_unsupported_count",
+        "frozen_owner_bytes_estimate",
+        "retire_dead_owners",
+    }
     keys = set(document)
-    if keys != expected:
+    if not expected <= keys or not keys <= expected | optional:
         raise V3ScaleMeasurementError("unknown_or_missing_measurement_key")
     try:
         lane = V3ScaleLane(document["lane"])
@@ -475,55 +502,59 @@ def measurement_from_mapping(document: object) -> V3ScaleMeasurement:
     if not isinstance(profile_summary, list):
         raise V3ScaleMeasurementError("invalid_profile_summary")
     return V3ScaleMeasurement(
-        schema=document["schema"],  # type: ignore[arg-type]
-        workload_id=document["workload_id"],  # type: ignore[arg-type]
+        schema=document["schema"],
+        workload_id=document["workload_id"],
         lane=lane,
-        run_id=document["run_id"],  # type: ignore[arg-type]
-        requested_ticks=document["requested_ticks"],  # type: ignore[arg-type]
-        completed_ticks=document["completed_ticks"],  # type: ignore[arg-type]
+        run_id=document["run_id"],
+        requested_ticks=document["requested_ticks"],
+        completed_ticks=document["completed_ticks"],
         status=status,
-        last_verified_boundary=document["last_verified_boundary"],  # type: ignore[arg-type]
-        elapsed_seconds=document["elapsed_seconds"],  # type: ignore[arg-type]
-        completed_cohorts=document["completed_cohorts"],  # type: ignore[arg-type]
-        min_completed_cohorts=document["min_completed_cohorts"],  # type: ignore[arg-type]
-        events=document["events"],  # type: ignore[arg-type]
-        event_bytes=document["event_bytes"],  # type: ignore[arg-type]
-        snapshots=document["snapshots"],  # type: ignore[arg-type]
-        snapshot_bytes=document["snapshot_bytes"],  # type: ignore[arg-type]
-        births=document["births"],  # type: ignore[arg-type]
-        deaths=document["deaths"],  # type: ignore[arg-type]
-        living_population=document["living_population"],  # type: ignore[arg-type]
-        total_population=document["total_population"],  # type: ignore[arg-type]
-        memory_traces=document["memory_traces"],  # type: ignore[arg-type]
-        provenance_records=document["provenance_records"],  # type: ignore[arg-type]
-        records=document["records"],  # type: ignore[arg-type]
-        lineage_edges=document["lineage_edges"],  # type: ignore[arg-type]
-        cognitive_traces=document["cognitive_traces"],  # type: ignore[arg-type]
-        capture_publications=document["capture_publications"],  # type: ignore[arg-type]
-        cognitive_invocations_after_death=document[
-            "cognitive_invocations_after_death"
-        ],  # type: ignore[arg-type]
-        exception_reason=document["exception_reason"],  # type: ignore[arg-type]
-        peak_rss_bytes=document["peak_rss_bytes"],  # type: ignore[arg-type]
-        budget_rss_bytes=document["budget_rss_bytes"],  # type: ignore[arg-type]
-        timeout_seconds=document["timeout_seconds"],  # type: ignore[arg-type]
-        rss_enforcement=document["rss_enforcement"],  # type: ignore[arg-type]
-        command_identity=document["command_identity"],  # type: ignore[arg-type]
-        coverage_file=document["coverage_file"],  # type: ignore[arg-type]
-        profiler_state=document["profiler_state"],  # type: ignore[arg-type]
-        environment=dict(environment),  # type: ignore[arg-type]
-        stage_durations_ms=dict(stage_durations),  # type: ignore[arg-type]
-        rss_samples_kb=tuple(rss_samples),  # type: ignore[arg-type]
-        sql_calls=document["sql_calls"],  # type: ignore[arg-type]
-        sql_rows=document["sql_rows"],  # type: ignore[arg-type]
-        sql_bytes_read=document["sql_bytes_read"],  # type: ignore[arg-type]
-        cost_ledger=(None if cost_ledger is None else dict(cost_ledger)),  # type: ignore[arg-type]
-        profile_summary=tuple(profile_summary),  # type: ignore[arg-type]
+        last_verified_boundary=document["last_verified_boundary"],
+        elapsed_seconds=document["elapsed_seconds"],
+        completed_cohorts=document["completed_cohorts"],
+        min_completed_cohorts=document["min_completed_cohorts"],
+        events=document["events"],
+        event_bytes=document["event_bytes"],
+        snapshots=document["snapshots"],
+        snapshot_bytes=document["snapshot_bytes"],
+        births=document["births"],
+        deaths=document["deaths"],
+        living_population=document["living_population"],
+        total_population=document["total_population"],
+        memory_traces=document["memory_traces"],
+        provenance_records=document["provenance_records"],
+        records=document["records"],
+        lineage_edges=document["lineage_edges"],
+        cognitive_traces=document["cognitive_traces"],
+        capture_publications=document["capture_publications"],
+        cognitive_invocations_after_death=document["cognitive_invocations_after_death"],
+        scheduled_owner_count=document.get("scheduled_owner_count", 0),
+        resident_owner_count=document.get("resident_owner_count", 0),
+        retired_owner_count=document.get("retired_owner_count", 0),
+        retirement_unsupported_count=document.get("retirement_unsupported_count", 0),
+        frozen_owner_bytes_estimate=document.get("frozen_owner_bytes_estimate", 0),
+        retire_dead_owners=document.get("retire_dead_owners", False),
+        exception_reason=document["exception_reason"],
+        peak_rss_bytes=document["peak_rss_bytes"],
+        budget_rss_bytes=document["budget_rss_bytes"],
+        timeout_seconds=document["timeout_seconds"],
+        rss_enforcement=document["rss_enforcement"],
+        command_identity=document["command_identity"],
+        coverage_file=document["coverage_file"],
+        profiler_state=document["profiler_state"],
+        environment=dict(environment),
+        stage_durations_ms=dict(stage_durations),
+        rss_samples_kb=tuple(rss_samples),
+        sql_calls=document["sql_calls"],
+        sql_rows=document["sql_rows"],
+        sql_bytes_read=document["sql_bytes_read"],
+        cost_ledger=(None if cost_ledger is None else dict(cost_ledger)),
+        profile_summary=tuple(profile_summary),
     )
 
 
 def _validate_document(document: Mapping[str, object]) -> None:
-    _validate_environment(document.get("environment"))
+    _validate_environment(cast("Mapping[str, str] | None", document.get("environment")))
     for key in document:
         lowered = key.lower()
         if any(marker in lowered for marker in _SECRET_KEY_MARKERS):

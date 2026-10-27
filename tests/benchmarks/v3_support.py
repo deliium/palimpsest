@@ -16,12 +16,13 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 ENVELOPE_SCHEMA = "v3-scale-envelope-v1"
+COMPOSITION_SCHEMA = "v3-composition-trials-v1"
 MEASUREMENT_SCHEMA = "v3-scale-measurement-v1"
 MIN_VERIFIED_REPETITIONS = 3
 MIN_WARM_QUERY_SAMPLES = 30
@@ -49,6 +50,41 @@ class SupportStatus(StrEnum):
     UNVERIFIED = "unverified"
 
 
+class CompositionStatus(StrEnum):
+    TESTED = "tested"
+    UNVERIFIED = "unverified"
+
+
+_COMPOSITION_NAMES = frozenset({"retirement", "capture-spool", "physical-paging"})
+_COMPOSITION_VARIANTS = frozenset({"off", "on"})
+
+
+@dataclass(frozen=True, slots=True)
+class CompositionTrial:
+    """One explicit off/on composition check, separate from capacity rows."""
+
+    name: str
+    variant: str
+    status: CompositionStatus
+    scope: str
+    evidence: tuple[str, ...]
+    metrics: Mapping[str, int | float | str] = field(default_factory=dict)
+    notes: tuple[str, ...] = ()
+    capacity_claim: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "variant": self.variant,
+            "status": self.status.value,
+            "scope": self.scope,
+            "evidence": list(self.evidence),
+            "metrics": dict(sorted(self.metrics.items())),
+            "notes": list(self.notes),
+            "capacity_claim": self.capacity_claim,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class SupportRow:
     """One qualified claim backed by exact measurement evidence."""
@@ -73,6 +109,10 @@ class SupportRow:
     browser_verified: bool
     reason: str | None
     limitations: tuple[str, ...] = ()
+    attempted_repetitions: int = 0
+    failed_attempts: int = 0
+    failure_reasons: tuple[str, ...] = ()
+    attempt_paths: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +122,10 @@ class SupportRow:
             "completed_horizon": self.completed_horizon,
             "last_verified_boundary": self.last_verified_boundary,
             "repetitions": self.repetitions,
+            "attempted_repetitions": self.attempted_repetitions,
+            "failed_attempts": self.failed_attempts,
+            "failure_reasons": list(self.failure_reasons),
+            "attempt_paths": list(self.attempt_paths),
             "run_ids": list(self.run_ids),
             "artifact_paths": list(self.artifact_paths),
             "source_revision": self.source_revision,
@@ -101,6 +145,14 @@ class SupportRow:
 
 def validate_row(row: SupportRow) -> None:
     """Reject claims that exceed or misstate their evidence."""
+    if row.failed_attempts < 0 or row.attempted_repetitions < 0:
+        raise EnvelopeError("invalid_attempt_counts")
+    if row.failed_attempts and not row.failure_reasons:
+        raise EnvelopeError("failed_attempts_without_reason")
+    if row.attempted_repetitions and row.attempted_repetitions < (
+        row.repetitions + row.failed_attempts
+    ):
+        raise EnvelopeError("attempt_count_mismatch")
     if row.status is not SupportStatus.VERIFIED:
         return
     if row.repetitions < MIN_VERIFIED_REPETITIONS:
@@ -140,21 +192,72 @@ def validate_row(row: SupportRow) -> None:
         raise EnvelopeError("truncated_capture_cannot_be_verified")
 
 
+def validate_composition(trials: Iterable[CompositionTrial]) -> None:
+    """Require honest, paired off/on composition evidence.
+
+    Composition trials never certify capacity. Tested variants must reference
+    concrete evidence paths or test node identifiers.
+    """
+    grouped: dict[str, dict[str, CompositionTrial]] = {}
+    for trial in trials:
+        if trial.name not in _COMPOSITION_NAMES:
+            raise EnvelopeError("unknown_composition_name")
+        if trial.variant not in _COMPOSITION_VARIANTS:
+            raise EnvelopeError("invalid_composition_variant")
+        if trial.status not in (
+            CompositionStatus.TESTED,
+            CompositionStatus.UNVERIFIED,
+        ):
+            raise EnvelopeError("invalid_composition_status")
+        if not trial.scope.strip():
+            raise EnvelopeError("missing_composition_scope")
+        if trial.capacity_claim:
+            raise EnvelopeError("composition_cannot_claim_capacity")
+        if trial.status is CompositionStatus.TESTED and not trial.evidence:
+            raise EnvelopeError("tested_composition_requires_evidence")
+        if _FORBIDDEN_UNIVERSAL_KEYS.intersection(trial.metrics):
+            raise EnvelopeError("universal_maximum_forbidden")
+        for key, value in trial.metrics.items():
+            if type(key) is not str or not key:
+                raise EnvelopeError("invalid_composition_metric")
+            if not isinstance(value, (int, float, str)):
+                raise EnvelopeError("invalid_composition_metric")
+            if isinstance(value, str) and len(value) > 256:
+                raise EnvelopeError("composition_metric_too_large")
+        variants = grouped.setdefault(trial.name, {})
+        if trial.variant in variants:
+            raise EnvelopeError("duplicate_composition_variant")
+        variants[trial.variant] = trial
+    for name, variants in grouped.items():
+        if set(variants) != _COMPOSITION_VARIANTS:
+            raise EnvelopeError(f"composition_pair_incomplete:{name}")
+        if any(
+            variant.status is CompositionStatus.TESTED for variant in variants.values()
+        ) and not all(
+            variant.status is CompositionStatus.TESTED for variant in variants.values()
+        ):
+            raise EnvelopeError("composition_pair_status_mismatch")
+
+
 def build_envelope(
     rows: Iterable[SupportRow],
     *,
     source_revision: str,
     environment: Mapping[str, Any],
     limitations: Iterable[str] = (),
+    composition: Iterable[CompositionTrial] = (),
 ) -> dict[str, Any]:
     validated = list(rows)
     for row in validated:
         validate_row(row)
+    trials = list(composition)
+    validate_composition(trials)
     envelope = {
         "schema_version": ENVELOPE_SCHEMA,
         "source_revision": source_revision,
         "environment": dict(environment),
         "rows": [row.as_dict() for row in validated],
+        "composition": [trial.as_dict() for trial in trials],
         "limitations": list(limitations),
         "measured_through_horizon": max(
             (
@@ -194,12 +297,67 @@ def validate_envelope(envelope: Mapping[str, Any]) -> None:
         artifacts = raw.get("artifact_paths")
         if not isinstance(artifacts, list) or not artifacts:
             raise EnvelopeError("missing_measurement_artifact")
+    composition = envelope.get("composition")
+    if composition is not None:
+        if not isinstance(composition, list):
+            raise EnvelopeError("invalid_composition")
+        trials = [_composition_from_mapping(raw) for raw in composition]
+        validate_composition(trials)
     if any(key in envelope for key in ("maximum", "capacity", "universal")):
         raise EnvelopeError("universal_maximum_forbidden")
 
 
+def _composition_from_mapping(raw: object) -> CompositionTrial:
+    if not isinstance(raw, Mapping):
+        raise EnvelopeError("invalid_composition")
+    try:
+        return CompositionTrial(
+            name=str(raw["name"]),
+            variant=str(raw["variant"]),
+            status=CompositionStatus(str(raw["status"])),
+            scope=str(raw["scope"]),
+            evidence=tuple(str(item) for item in raw.get("evidence", ())),
+            metrics=dict(raw.get("metrics", {})),
+            notes=tuple(str(item) for item in raw.get("notes", ())),
+            capacity_claim=bool(raw.get("capacity_claim", False)),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise EnvelopeError("invalid_composition") from exc
+
+
+def load_composition(path: Path) -> tuple[CompositionTrial, ...]:
+    """Read an optional composition-trial document."""
+    if not isinstance(path, Path):
+        raise TypeError("path must be pathlib.Path")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise EnvelopeError("invalid_composition_document")
+    if payload.get("schema") != COMPOSITION_SCHEMA:
+        raise EnvelopeError("unsupported_composition_schema")
+    raw_trials = payload.get("trials")
+    if not isinstance(raw_trials, list):
+        raise EnvelopeError("invalid_composition")
+    return tuple(_composition_from_mapping(raw) for raw in raw_trials)
+
+
+def write_composition(path: Path, trials: Iterable[CompositionTrial]) -> None:
+    """Write a validated composition-trial document."""
+    resolved = list(trials)
+    validate_composition(resolved)
+    document = {
+        "schema": COMPOSITION_SCHEMA,
+        "trials": [trial.as_dict() for trial in resolved],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
 def load_measurement(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise EnvelopeError("invalid_measurement")
     if payload.get("schema") not in {None, MEASUREMENT_SCHEMA}:
         raise EnvelopeError("unsupported_measurement_schema")
     return payload
@@ -214,6 +372,7 @@ def write_envelope(path: Path, envelope: Mapping[str, Any]) -> None:
 
 _LANE_DENSITY = {
     "generational": "sustained",
+    "generational-retired": "sustained",
     "evidence-rich": "sustained",
     "v1-control": "sparse",
 }
@@ -224,10 +383,15 @@ def generate_from_directory(
     *,
     source_revision: str,
     environment: Mapping[str, Any] | None = None,
+    composition_path: Path | None = None,
+    composition: Iterable[CompositionTrial] = (),
 ) -> dict[str, Any]:
     """Build an envelope from supervised measurement artifacts only."""
     grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
     for path in sorted(root.rglob("measurement.json")):
+        relative = path.relative_to(root)
+        if "composition" in relative.parts:
+            continue
         payload = load_measurement(path)
         lane = str(payload.get("lane", ""))
         ticks = int(payload.get("requested_ticks", 0))
@@ -239,8 +403,19 @@ def generate_from_directory(
 
     rows: list[SupportRow] = []
     merged_environment: dict[str, Any] = dict(environment or {})
+    failed_attempt_notes: list[str] = []
     for (lane, ticks), attempts in sorted(grouped.items()):
         completed = [item for item in attempts if item.get("status") == "completed"]
+        failed = [item for item in attempts if item.get("status") != "completed"]
+        failure_reasons = tuple(
+            sorted(
+                {
+                    str(item.get("exception_reason") or item.get("status") or "unknown")
+                    for item in failed
+                }
+            )
+        )
+        attempt_paths = tuple(str(item["_artifact_path"]) for item in attempts)
         run_ids = tuple(sorted({str(item.get("run_id", "")) for item in completed}))
         artifact_paths = tuple(
             str(item["_artifact_path"]) for item in (completed or attempts)
@@ -260,10 +435,53 @@ def generate_from_directory(
             (int(item.get("completed_cohorts") or 0) for item in completed),
             default=0,
         )
-        if merged_environment == {} and completed:
-            raw_environment = completed[0].get("environment")
+        row_limitations: list[str] = []
+        if failed:
+            reason_summary = ", ".join(failure_reasons)
+            row_limitations.append(
+                f"{len(failed)} of {len(attempts)} attempts did not complete "
+                f"({reason_summary})"
+            )
+            failed_attempt_notes.append(
+                f"{lane}@{ticks}: {len(failed)}/{len(attempts)} attempts did not "
+                f"complete ({reason_summary})"
+            )
+        artifact_revisions: set[str] = set()
+        for item in completed:
+            raw_revision = (item.get("environment") or {}).get("source_revision")
+            if isinstance(raw_revision, str):
+                revision = raw_revision.strip()
+                if revision and revision != "unknown":
+                    artifact_revisions.add(revision)
+        if completed and not artifact_revisions:
+            row_limitations.append(
+                "measurement artifacts did not record source_revision; "
+                f"row uses envelope source_revision {source_revision}"
+            )
+        elif len(artifact_revisions) > 1:
+            row_limitations.append(
+                "measurement artifacts disagree on source_revision; "
+                f"row uses envelope source_revision {source_revision}"
+            )
+        row_revision = (
+            next(iter(artifact_revisions))
+            if len(artifact_revisions) == 1
+            else source_revision
+        )
+        if merged_environment == {}:
+            raw_environment = (completed or attempts)[0].get("environment")
             if isinstance(raw_environment, Mapping):
                 merged_environment = dict(raw_environment)
+        if "postgresql" not in merged_environment:
+            for item in attempts:
+                raw_environment = item.get("environment")
+                if isinstance(raw_environment, Mapping):
+                    raw_version = raw_environment.get("postgresql")
+                    if isinstance(raw_version, str):
+                        version = raw_version.strip()
+                        if version and version != "unknown":
+                            merged_environment["postgresql"] = version
+                            break
         if not completed:
             rows.append(
                 SupportRow(
@@ -275,7 +493,7 @@ def generate_from_directory(
                     repetitions=0,
                     run_ids=(),
                     artifact_paths=artifact_paths,
-                    source_revision=source_revision,
+                    source_revision=row_revision,
                     scientific=True,
                     density=_LANE_DENSITY.get(lane, "sparse"),
                     generations=None,
@@ -286,6 +504,11 @@ def generate_from_directory(
                     capture_publications=0,
                     browser_verified=False,
                     reason=str(attempts[0].get("exception_reason") or "incomplete"),
+                    limitations=tuple(row_limitations),
+                    attempted_repetitions=len(attempts),
+                    failed_attempts=len(failed),
+                    failure_reasons=failure_reasons,
+                    attempt_paths=attempt_paths,
                 )
             )
             continue
@@ -306,7 +529,7 @@ def generate_from_directory(
                 repetitions=len(completed),
                 run_ids=run_ids,
                 artifact_paths=artifact_paths,
-                source_revision=source_revision,
+                source_revision=row_revision,
                 scientific=True,
                 density=_LANE_DENSITY.get(lane, "sparse"),
                 generations=generations or None,
@@ -321,6 +544,11 @@ def generate_from_directory(
                     if status is SupportStatus.VERIFIED
                     else "insufficient_repetitions"
                 ),
+                limitations=tuple(row_limitations),
+                attempted_repetitions=len(attempts),
+                failed_attempts=len(failed),
+                failure_reasons=failure_reasons,
+                attempt_paths=attempt_paths,
             )
         )
 
@@ -400,7 +628,21 @@ def generate_from_directory(
             "process RSS accounting is unenforced in this environment",
             "historical and lineage query rows are single measurements",
             "real-browser observer playback was not executed",
+            *(
+                ()
+                if "postgresql" in merged_environment
+                else ("measurement artifacts did not record the PostgreSQL version",)
+            ),
+            *failed_attempt_notes,
         ],
+        composition=(
+            *composition,
+            *(
+                load_composition(composition_path)
+                if composition_path is not None and composition_path.is_file()
+                else ()
+            ),
+        ),
     )
 
 
@@ -415,7 +657,16 @@ def main() -> int:
         )
     )
     revision = os.environ.get("PALIMPSEST_SOURCE_REVISION", "unknown")
-    envelope = generate_from_directory(root, source_revision=revision)
+    composition_raw = os.environ.get("PALIMPSEST_SCALE_COMPOSITION_PATH", "").strip()
+    composition_path = Path(composition_raw) if composition_raw else None
+    from tests.benchmarks.v3_composition import builtin_composition_trials
+
+    envelope = generate_from_directory(
+        root,
+        source_revision=revision,
+        composition_path=composition_path,
+        composition=builtin_composition_trials(),
+    )
     write_envelope(output, envelope)
     return 0
 

@@ -338,6 +338,70 @@ Approved during `$aif-improve` on 2026-10-26; original request, task IDs and all
 - Task 21 version/client gates: compatibility-matrix and metric-specification tests pass (25 tests); default runner write remains v4, result v2, latest feature runner v55, 43 commands, 73 observer semantics, 136 metric families, replay-v22/codec-v20 when selected, Alembic `0017`, `/v1` and `observer-protocol-v1`. Pinned Godot 4.7.2 editor pass exits 0 and all 46 protocol suites report `failed=0`; Research UI `check` is clean and `test` passes 44 files / 217 tests. The real-browser acceptance gate remains unexecuted because no current client/API image was rebuilt; no browser FPS/heap claim is made.
 - Task 21 documentation: created `docs/long-horizon-scalability.md` with the verified envelope, reproduction commands, workload distinctions, archive verification, no-deletion/retirement semantics, historical availability, incremental-metric subset, client paging/playback controls, investigation disposition, safe operation and explicit limitations. Added the README documentation link and navigation links; updated `docs/development.md`, `docs/generational-runner.md`, `docs/persistence.md`, `docs/lineage-explorer.md`, `docs/cultural-evolution-metrics.md`, `docs/observer.md`, `docs/research-ui.md` and the `AGENTS.md` documentation table. No roadmap milestone was created or closed.
 
+### Post-verification remediation (2026-10-28)
+
+Addressed the verification evidence findings without changing task IDs or
+historical statuses:
+
+- Added `tests/benchmarks/v3_retirement.py` and
+  `tests/benchmarks/test_retirement_composition.py`. A 10,000-tick paired trial
+  with identical seed/config/scenario fingerprints produced `5,241` events,
+  `9` births and `9` deaths in both variants. Retention off: `9` resident
+  owners, `0` retired, `0` frozen bytes. Retention on: `0` resident, `9`
+  retired, `7,367,840 B` capped reachable-state estimate, `0` unsupported.
+- Extended `v3-scale-measurement-v1` with optional, backward-compatible
+  retirement counters and `scheduled/resident/retired` owner counts; added the
+  explicit `generational-retired` composition lane.
+- Extended `v3-scale-envelope-v1` with a validated `composition` section:
+  retirement off/on (10k paired artifact), capture spool off/on and physical
+  paging v1/v2 (test-level evidence, explicitly not capacity rows).
+- Measured checkpoint cadence at 600 ticks with identical projection hashes:
+  cadence `100` gave `70.0 ms` seek versus `717.0/468.1/873.1 ms` for
+  off/500/1000, with `12.46 s` run time. The cadence-100 recommendation is
+  advisory; deterministic defaults are unchanged.
+- Refreshed `.ai-factory/ARCHITECTURE.md` (baseline through V3-43),
+  `.ai-factory/ROADMAP.md` and `.ai-factory/DESCRIPTION.md`.
+- Remediation verification: `6484 passed, 2 skipped, 129 deselected` in
+  351.8 s; Ruff check/format, `mypy src` (538 files) and `lint-imports`
+  (25 contracts) are clean. The 10k retirement pair completed in 225.8 s and
+  the 600-tick cadence sweep in 54.0 s against a guarded disposable database.
+- The real-browser playback gate remains unexecuted and dense 100k remains
+  incomplete; no claim is upgraded.
+
+### Follow-up verification remediation (2026-10-28)
+
+Addressed the second verification pass without changing task IDs or historical
+statuses:
+
+- `v3-scale-envelope-v1` rows now expose `attempted_repetitions`,
+  `failed_attempts`, `failure_reasons` and `attempt_paths`; failed 10k
+  construction attempts appear in row and envelope limitations instead of being
+  silently omitted. The retained envelope was regenerated from existing
+  artifacts.
+- Supervised workers record `PALIMPSEST_SOURCE_REVISION` and the PostgreSQL
+  server version in the measurement environment. Envelope rows prefer the
+  artifact revision when all completed artifacts agree and otherwise disclose
+  the fallback. Retained 10k artifacts predate this capture and are labelled.
+- Added regressions for failed-attempt visibility, artifact-revision
+  preference, missing-revision disclosure and missing-PostgreSQL disclosure.
+- Fixed the repetition harness root cause: the supervised driver now creates
+  and migrates a uniquely named guarded database per repetition, so identical
+  scientific run IDs repeat in separate storage instead of conflicting. A
+  64-tick two-repetition run completed both repetitions and recorded source
+  revision plus PostgreSQL version.
+- Cleared type-checking errors introduced by V3-43 benchmark and unit files
+  (`mypy` on those files is clean); the repository-wide pre-existing test-suite
+  typing backlog is unchanged and `mypy src` remains clean.
+- Verified a 64-tick supervised worker against a disposable PostgreSQL 17
+  instance: it recorded `source_revision=worktree-verify` and
+  `postgresql=17.11 (Debian 17.11-1.pgdg12+2)`. The 10k retirement pair was
+  re-measured at `1c5c18c` with identical counters (`5,241` events, `9` births,
+  `9` deaths, `7,367,840 B` frozen estimate) and now records both metadata
+  fields. Focused tests pass (`108 passed`); the full default suite passes
+  (`6486 passed, 2 skipped, 129 deselected`); Ruff and `mypy src` remain clean.
+  Compose static checks pass (`5 passed, 10 skipped`); the stack/browser gate
+  remains unexecuted.
+
 ## Definition of Done
 
 - All 21 tasks meet their linked acceptance criteria; only this index carries task progress.

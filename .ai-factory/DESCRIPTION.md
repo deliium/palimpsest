@@ -149,3 +149,16 @@ ownership or API version is added; default writes remain runner v4/result v2,
 Alembic head stays `0017`, commands 43, observer semantic types 73, metric
 families 136, replay-v22/codec v20 when selected, `/v1` and
 `observer-protocol-v1`.
+
+Long-horizon scalability (V3-43) adds benchmark-only measurement, supervision
+and envelope tooling under `tests/benchmarks`, optional composition-only runtime
+retirement for fully finalized dead owners, verified offline history archives,
+append-only evidence spools, and versioned physical lineage/civilization index
+layouts. Original events, commits, snapshots, provenance and published history
+remain immutable and queryable; derived analytical views and spools never feed
+cognition. The verified envelope covers 10k generational and evidence-rich lanes;
+dense 100k attempts remain incomplete and real-browser playback is unverified.
+No command, event, observer semantic, metric family, runner/result schema,
+capability ownership, SQL migration or API version is added; current pins remain
+runner v4/result v2, latest feature runner v55, 43 commands, 73 observer semantic
+types, 136 metric families, Alembic `0017`, `/v1` and `observer-protocol-v1`.

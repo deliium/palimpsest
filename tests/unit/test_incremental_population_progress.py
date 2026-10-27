@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -17,10 +19,10 @@ from tests.unit.test_runner_active_owners import _active_config
 
 @given(st.lists(st.integers(min_value=0, max_value=8), max_size=24))
 def test_history_tick_count_matches_linear_scan(ticks: list[int]) -> None:
-    sequence: HistorySequence[object] = HistorySequence()
-    chunks: list[object] = []
+    sequence: HistorySequence[SimpleNamespace] = HistorySequence()
+    chunks: list[SimpleNamespace] = []
     for tick in ticks:
-        item = type("Item", (), {"tick": tick})()
+        item = SimpleNamespace(tick=tick)
         chunks.append(item)
         sequence = sequence.append((item,))
     for tick in range(9):
@@ -33,10 +35,10 @@ def test_history_tick_count_matches_linear_scan(ticks: list[int]) -> None:
 
 
 def test_history_suffix_preserves_empty_and_complete_cases() -> None:
-    sequence: HistorySequence[object] = HistorySequence()
+    sequence: HistorySequence[SimpleNamespace] = HistorySequence()
     assert sequence.to_tuple_from_tick(0) == ()
     for tick, value in ((0, "a"), (1, "b"), (1, "c"), (3, "d")):
-        sequence = sequence.append((type("Item", (), {"tick": tick, "v": value})(),))
+        sequence = sequence.append((SimpleNamespace(tick=tick, v=value),))
     assert [item.v for item in sequence.iter_from_tick(1)] == ["b", "c", "d"]
     assert [item.v for item in sequence.iter_from_tick(4)] == []
 

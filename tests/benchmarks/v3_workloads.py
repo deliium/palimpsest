@@ -50,6 +50,7 @@ class V3ScaleLane(StrEnum):
     GENERATIONAL = "generational"
     EVIDENCE = "evidence-rich"
     HISTORICAL_QUERY = "historical-query"
+    GENERATIONAL_RETIRED = "generational-retired"
 
 
 _LANE_ORDER: Final[tuple[V3ScaleLane, ...]] = (
@@ -81,6 +82,7 @@ class V3ScaleWorkload:
     checkpoint_cadence: int | None
     capture_modes: tuple[str, ...]
     tracing_enabled: bool
+    retire_dead_owners: bool
     min_completed_cohorts: int
     executes: bool
     source_lane: V3ScaleLane | None
@@ -115,6 +117,8 @@ class V3ScaleWorkload:
                 raise ValueError("capture_modes entries must be non-empty strings")
         if type(self.tracing_enabled) is not bool:
             raise TypeError("tracing_enabled must be bool")
+        if type(self.retire_dead_owners) is not bool:
+            raise TypeError("retire_dead_owners must be bool")
         if type(self.min_completed_cohorts) is not int:
             raise TypeError("min_completed_cohorts must be int")
         if self.min_completed_cohorts < 0:
@@ -146,6 +150,7 @@ class V3ScaleWorkload:
             "checkpoint_cadence": self.checkpoint_cadence,
             "capture_modes": list(self.capture_modes),
             "tracing_enabled": self.tracing_enabled,
+            "retire_dead_owners": self.retire_dead_owners,
             "min_completed_cohorts": self.min_completed_cohorts,
             "executes": self.executes,
             "source_lane": None if self.source_lane is None else self.source_lane.value,
@@ -222,6 +227,21 @@ def build_workload(
             source=None,
             executes=True,
         )
+    if resolved is V3ScaleLane.GENERATIONAL_RETIRED:
+        config = _generational_config(seed=seed, ticks=ticks)
+        return _workload(
+            lane=resolved,
+            ticks=ticks,
+            seed=seed,
+            run_id=active_run_id,
+            config=config,
+            architecture="v55-generational-retired",
+            cohorts=2,
+            capture=("population-lifecycle", "generational-progress"),
+            source=None,
+            executes=True,
+            retire_dead_owners=True,
+        )
     if resolved is V3ScaleLane.EVIDENCE:
         config = _evidence_config(seed=seed, ticks=ticks)
         return _workload(
@@ -272,9 +292,7 @@ def build_workloads(
     for lane in resolved:
         if lane is V3ScaleLane.HISTORICAL_QUERY:
             if source_run is None:
-                source = build_workload(
-                    V3ScaleLane.EVIDENCE, ticks=ticks, seed=seed
-                )
+                source = build_workload(V3ScaleLane.EVIDENCE, ticks=ticks, seed=seed)
                 source_run = source.run_id
             workloads.append(
                 build_workload(lane, ticks=ticks, seed=seed, run_id=source_run)
@@ -306,6 +324,7 @@ def _workload(
     capture: tuple[str, ...],
     source: V3ScaleLane | None,
     executes: bool,
+    retire_dead_owners: bool = False,
 ) -> V3ScaleWorkload:
     checkpoint = config.persistence.checkpoint
     cadence = checkpoint.cadence_ticks if checkpoint.enabled else None
@@ -323,6 +342,7 @@ def _workload(
         checkpoint_cadence=cadence,
         capture_modes=capture,
         tracing_enabled=tracing,
+        retire_dead_owners=retire_dead_owners,
         min_completed_cohorts=cohorts,
         executes=executes,
         source_lane=source,
@@ -408,9 +428,7 @@ def _tune_generational(
         generational_run=generational,
         persistence=RunnerPersistenceSpec(
             durable=True,
-            checkpoint=RunnerCheckpointPolicy(
-                enabled=True, cadence_ticks=cadence
-            ),
+            checkpoint=RunnerCheckpointPolicy(enabled=True, cadence_ticks=cadence),
         ),
     )
 
@@ -420,9 +438,7 @@ def _checkpoint_cadence(ticks: int) -> int:
 
 
 def _default_run_id(lane: V3ScaleLane, *, seed: int, ticks: int) -> RunId:
-    return RunId(
-        f"v3-43-{lane.value.replace('_', '-')}-ticks-{ticks}-seed-{seed}"
-    )
+    return RunId(f"v3-43-{lane.value.replace('_', '-')}-ticks-{ticks}-seed-{seed}")
 
 
 def _require_lane(value: V3ScaleLane | str) -> V3ScaleLane:

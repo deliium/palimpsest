@@ -392,7 +392,7 @@ def bounded_cprofile[T](function: Callable[[], T]) -> tuple[T, dict[str, object]
     return result, {
         "profiler": "cProfile",
         "top": tuple(lines),
-        "stat_count": stats.total_calls,
+        "stat_count": int(getattr(stats, "total_calls", 0)),
     }
 
 

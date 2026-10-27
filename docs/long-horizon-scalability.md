@@ -4,9 +4,10 @@
 
 Measured scale behavior for multi-generation V3 runs, bounded historical
 queries and read-only clients. The plan is `v3-43-long-horizon-scalability`;
-production source revision for the measurements below is `3930540` (2026-10-27).
-Benchmark-only generator and test changes made after that commit are identified
-in the reproduction section.
+production source revision for the measurements below is `3930540` (2026-10-27),
+with benchmark instrumentation and composition evidence added after it. The
+2026-10-28 remediation note in the plan index records the retirement and cadence
+measurements produced against base revision `1c5c18c`.
 
 > **No universal maximum is claimed.** The verified envelope stops at the
 > workloads and horizons that actually completed with exact correctness. The
@@ -31,9 +32,61 @@ events, 71,838 SQL calls, 40,204 SQL rows and **0 cognitive invocations after
 death**. Every 100k lane reached its 300 s budget; no dense-100k support,
 throughput promise or population capacity follows from these runs.
 
+Two additional repetitions per 10k lane failed before execution with
+`worker_error_RunnerConstructionError` (four failed artifacts total). They are
+retained under `task19-10k-rep3` and surfaced in the envelope as
+`failed_attempts`/`failure_reasons`; they are setup failures, not scientific
+results, and do not invalidate the four completed repetitions.
+
 `measured_through_horizon=10000` is verified-through coverage, not a hard
 maximum. Process RSS enforcement was `unenforced`; SQL byte counters and the
 workload's event/snapshot byte fields were unavailable.
+
+### Provenance
+
+The envelope row revision is derived from each measurement artifact's
+`environment.source_revision` when the artifacts agree. The retained 10k
+artifacts predate this capture, so their rows use the envelope revision
+`3930540` and carry an explicit limitation. New supervised runs record
+`PALIMPSEST_SOURCE_REVISION` and the PostgreSQL server version; the worker
+reports `unavailable` rather than failing if the version query cannot run.
+The remediation composition and cadence evidence were produced at `1c5c18c`.
+
+## Composition Trials
+
+The envelope carries explicit off/on composition rows separate from capacity
+rows. They do not certify a horizon or throughput.
+
+| Name | Off | On | Scope |
+| --- | --- | --- | --- |
+| Retirement | 9 resident owners retained, 0 retired, 0 frozen bytes | 0 resident owners, 9 retired, 7,367,840 B reachable frozen-state estimate | 10,000 ticks, single paired trial |
+| Capture spool | default in-memory capture; capture-off performs no spool I/O | append-only filesystem spool, streamed canonical publication | test-level |
+| Physical paging | sealed v1 lineage/civilization publications | v2 authenticated directories, bounded roots and deep pages | test-level |
+
+The retirement pair reused the same seed, configuration and scenario
+fingerprints; events, births, deaths and cohort counters were identical
+(`5,241` events, `9` births, `9` deaths). Frozen bytes are a capped
+reachable-object lower bound, not an RSS measurement. Spool and paging rows cite
+focused test node identifiers and are labelled `test-level`; they are not
+benchmark measurements.
+
+## Checkpoint Cadence
+
+`tests/integration/test_long_run_checkpoints.py` writes
+`task9-cadence/checkpoint-cadence.json` for a 600-tick deterministic history.
+All variants produced identical projection hashes and `1,855` events.
+
+| Cadence | Snapshots | Run ms | Snapshot read ms | Seek ms |
+| ---: | ---: | ---: | ---: | ---: |
+| off | 1 | 12,856 | 2.46 | 717.0 |
+| 100 | 7 | 12,457 | 3.88 | **70.0** |
+| 500 | 2 | 11,976 | 1.26 | 468.1 |
+| 1000 | 1 | 11,760 | 1.27 | 873.1 |
+
+Cadence `100` is recommended for seek-heavy research workloads in this
+scenario: it reduced seek latency by an order of magnitude with comparable run
+time. The deterministic default policy is unchanged; this is one measured
+scenario, not a universal tuning rule.
 
 ## Historical Query Measurements
 
@@ -54,6 +107,10 @@ Prerequisites:
 
 - A disposable PostgreSQL/pgvector database whose name contains
   `palimpsest_test`, exposed as `PALIMPSEST_TEST_DATABASE_URL`.
+  The supervised driver creates a uniquely named `palimpsest_test_*` database
+  per repetition and migrates it, so repeated runs keep identical scientific
+  run IDs in separate storage; the configured role needs `CREATE DATABASE` and
+  pgvector extension privileges.
 - Explicit wall-time, RAM and disk budgets. Use separate databases or output
   namespaces for repetitions and baseline/candidate comparison.
 - Pinned Godot 4.7.2 from `clients/godot-observer/export/pins.env` for client
@@ -67,6 +124,7 @@ PALIMPSEST_SCALE_BENCH_TICKS=10000 \
 PALIMPSEST_SCALE_BENCH_LANES='v1-control,generational,evidence-rich,historical-query' \
 PALIMPSEST_SCALE_BENCH_TIMEOUT_SECONDS=300 \
 PALIMPSEST_SCALE_BENCH_OUTPUT=/tmp/opencode/v3-43-scale/task19-10k \
+PALIMPSEST_SOURCE_REVISION="$(git rev-parse --short HEAD)" \
 uv run pytest -m 'integration and scale' \
   tests/benchmarks/test_v3_long_horizon.py -q --cov-report=
 
@@ -85,10 +143,28 @@ uv run pytest -m 'integration and scale' \
 uv run pytest -m integration tests/integration/test_v3_historical_query_safety.py \
   --cov=api --cov=simulation --cov=persistence --cov-report=term
 
+# Retirement composition pair (active/resident vs frozen owners).
+PALIMPSEST_TEST_DATABASE_URL="$PALIMPSEST_TEST_DATABASE_URL" \
+PALIMPSEST_RETIREMENT_TICKS=10000 \
+PALIMPSEST_RETIREMENT_OUTPUT=/tmp/opencode/v3-43-scale/task5-retirement \
+uv run pytest -m 'integration and scale' \
+  tests/benchmarks/test_retirement_composition.py -q --cov-report=
+
+# Checkpoint cadence sweep (writes task9-cadence/checkpoint-cadence.json).
+PALIMPSEST_SCALE_BENCH_OUTPUT=/tmp/opencode/v3-43-scale \
+uv run pytest -m 'integration and scale' \
+  tests/integration/test_long_run_checkpoints.py::test_checkpoint_cadences_measure_identical_histories -q
+
 # Envelope validation and generation.
 uv run pytest tests/unit/test_v3_scale_support.py --cov-report=term
 PALIMPSEST_SCALE_ENVELOPE_ROOT=/tmp/opencode/v3-43-scale \
 PALIMPSEST_SOURCE_REVISION=3930540 \
+uv run python -m tests.benchmarks.v3_support
+
+# Include the real retirement pair written by the composition benchmark.
+PALIMPSEST_SCALE_ENVELOPE_ROOT=/tmp/opencode/v3-43-scale \
+PALIMPSEST_SOURCE_REVISION=1c5c18c \
+PALIMPSEST_SCALE_COMPOSITION_PATH=/tmp/opencode/v3-43-scale/task5-retirement/composition/composition.json \
 uv run python -m tests.benchmarks.v3_support
 
 # Clients.
@@ -179,7 +255,7 @@ trait appearance produces earlier zero rows rather than a truncated history.
 
 | Option | Disposition |
 | --- | --- |
-| Snapshot strategy | Deterministic policy retained; no new default and no cadence sweep in the Task 19 session. |
+| Snapshot strategy | Measured off/100/500/1000 at 600 ticks; cadence 100 recommended for seek-heavy workloads in that scenario; default unchanged. |
 | Cold historical storage | Verified copy-only segmented export and read-only adapter. |
 | Partitioning | Deferred; no destructive tiering or partition detach. |
 | Indexes | Existing SQL indexes plus versioned physical lineage/civilization range indexes. |
@@ -212,10 +288,20 @@ trait appearance produces earlier zero rows rather than a truncated history.
 ## Known Limitations
 
 - No dense 100k completion; verified-through is 10k for the measured lanes.
+- The retained 10k lanes include two failed construction attempts per lane
+  (`worker_error_RunnerConstructionError`). They are recorded in the envelope,
+  not counted as completed repetitions.
+- The retained 10k artifacts did not capture `source_revision` or the
+  PostgreSQL server version; rows use the envelope revision and say so. New runs
+  record both.
 - Process RSS enforcement is unenforced in this environment.
 - SQL byte counters and some workload byte fields are unavailable.
 - Historical and lineage query rows are single measurements, not repeatable
   claims.
+- Composition trials are one 10k retirement pair and test-level spool/paging
+  checks; they do not certify capacity.
+- The checkpoint cadence comparison is one 600-tick scenario; the recommended
+  cadence is advisory and does not change defaults.
 - Real-browser observer playback is unverified for the current client builds.
 - Living population is zero at the end of the measured generational lanes; this
   is a completed history with extinction, not a steady-state population

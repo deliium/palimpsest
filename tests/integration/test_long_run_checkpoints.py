@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from tests.benchmarks.harness import (
+    CheckpointCadenceMetrics,
     build_scale_config,
     count_snapshots,
     durable_factories,
@@ -149,3 +153,45 @@ async def test_checkpoint_cadences_measure_identical_histories(
     by_cadence = {row.cadence: row for row in rows}
     assert by_cadence[None].snapshots == 1
     assert by_cadence[100].snapshots == 1 + 600 // 100
+    _write_cadence_artifact(rows, max_ticks=600)
+
+
+def _write_cadence_artifact(
+    rows: tuple[CheckpointCadenceMetrics, ...], *, max_ticks: int
+) -> None:
+    """Write a metadata-only checkpoint-cadence measurement artifact."""
+    root = Path(
+        os.environ.get("PALIMPSEST_SCALE_BENCH_OUTPUT", "/tmp/opencode/v3-43-scale")
+    )
+    target = root / "task9-cadence" / "checkpoint-cadence.json"
+    candidates = [row for row in rows if row.cadence is not None]
+    recommended = min(candidates, key=lambda row: row.seek_ms)
+    document = {
+        "schema": "v3-checkpoint-cadence-v1",
+        "max_ticks": max_ticks,
+        "projection_hash_count": len({row.projection_hash for row in rows}),
+        "rows": [
+            {
+                "cadence": row.cadence,
+                "ticks": row.ticks,
+                "events": row.events,
+                "snapshots": row.snapshots,
+                "run_ms": round(row.run_ms, 3),
+                "snapshot_read_ms": round(row.snapshot_read_ms, 3),
+                "snapshot_serialization_ms": round(row.snapshot_serialization_ms, 3),
+                "seek_ms": round(row.seek_ms, 3),
+            }
+            for row in rows
+        ],
+        "recommendation": {
+            "cadence_ticks": recommended.cadence,
+            "metric": "lowest measured seek_ms among tested candidates",
+            "default_changed": False,
+        },
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.tmp-{os.getpid()}")
+    temporary.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    os.replace(temporary, target)

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from tests.benchmarks.v3_support import (
+    CompositionStatus,
+    CompositionTrial,
     EnvelopeError,
     SupportRow,
     SupportStatus,
@@ -168,6 +172,147 @@ def test_all_unverified_envelope_is_valid() -> None:
     assert envelope["rows"][0]["status"] == "unverified"
 
 
+def _trial(
+    name: str = "retirement", variant: str = "off", **overrides: object
+) -> CompositionTrial:
+    values: dict[str, object] = {
+        "name": name,
+        "variant": variant,
+        "status": CompositionStatus.TESTED,
+        "scope": "192-tick-single-pair",
+        "evidence": (f"/tmp/{name}-{variant}.json",),
+        "metrics": {"retired_owner_count": 0},
+        "notes": (),
+        "capacity_claim": False,
+    }
+    values.update(overrides)
+    return CompositionTrial(**values)  # type: ignore[arg-type]
+
+
+def test_composition_requires_off_on_pairs() -> None:
+    with pytest.raises(EnvelopeError) as exc:
+        build_envelope(
+            [_browser_row()],
+            source_revision="3930540",
+            environment={"platform": "linux"},
+            composition=[_trial("retirement", "off")],
+        )
+    assert exc.value.code == "composition_pair_incomplete:retirement"
+
+
+def test_composition_pair_with_evidence_is_valid() -> None:
+    envelope = build_envelope(
+        [_browser_row()],
+        source_revision="3930540",
+        environment={"platform": "linux"},
+        composition=[_trial("retirement", "off"), _trial("retirement", "on")],
+    )
+    composition = envelope["composition"]
+    assert [item["variant"] for item in composition] == ["off", "on"]
+    assert all(item["capacity_claim"] is False for item in composition)
+    validate_envelope(envelope)
+
+
+def test_tested_composition_requires_evidence() -> None:
+    with pytest.raises(EnvelopeError) as exc:
+        build_envelope(
+            [_browser_row()],
+            source_revision="3930540",
+            environment={"platform": "linux"},
+            composition=[
+                _trial("retirement", "off", evidence=()),
+                _trial("retirement", "on"),
+            ],
+        )
+    assert exc.value.code == "tested_composition_requires_evidence"
+
+
+def test_composition_cannot_claim_capacity() -> None:
+    with pytest.raises(EnvelopeError) as exc:
+        build_envelope(
+            [_browser_row()],
+            source_revision="3930540",
+            environment={"platform": "linux"},
+            composition=[
+                _trial("retirement", "off", capacity_claim=True),
+                _trial("retirement", "on"),
+            ],
+        )
+    assert exc.value.code == "composition_cannot_claim_capacity"
+
+
+def test_generator_skips_composition_measurements_and_loads_trials(
+    tmp_path: Path,
+) -> None:
+    import json
+
+    path = tmp_path / "gen" / "measurement.json"
+    path.parent.mkdir()
+    path.write_text(
+        json.dumps(
+            _measurement(
+                lane="generational",
+                ticks=10_000,
+                run_id="v3-43-generational-ticks-10000-seed-23",
+                status="completed",
+                completed=10_000,
+                boundary=9_999,
+            )
+        ),
+        encoding="utf-8",
+    )
+    composition_measurement = (
+        tmp_path / "composition" / "retirement" / "off" / "measurement.json"
+    )
+    composition_measurement.parent.mkdir(parents=True)
+    composition_measurement.write_text(
+        json.dumps(
+            _measurement(
+                lane="generational-retired",
+                ticks=192,
+                run_id="retirement-off",
+                status="completed",
+                completed=192,
+                boundary=191,
+            )
+        ),
+        encoding="utf-8",
+    )
+    from tests.benchmarks.v3_support import write_composition
+
+    composition_path = tmp_path / "composition" / "composition.json"
+    write_composition(
+        composition_path,
+        [_trial("retirement", "off"), _trial("retirement", "on")],
+    )
+    envelope = generate_from_directory(
+        tmp_path,
+        source_revision="3930540",
+        composition_path=composition_path,
+    )
+    assert all(row["category"] != "generational-retired" for row in envelope["rows"])
+    assert len(envelope["composition"]) == 2
+
+
+def test_builtin_composition_covers_spool_and_paging_pairs() -> None:
+    from tests.benchmarks.v3_composition import builtin_composition_trials
+
+    trials = builtin_composition_trials()
+    names = {(trial.name, trial.variant) for trial in trials}
+    assert ("capture-spool", "off") in names
+    assert ("capture-spool", "on") in names
+    assert ("physical-paging", "off") in names
+    assert ("physical-paging", "on") in names
+    envelope = build_envelope(
+        [_browser_row()],
+        source_revision="3930540",
+        environment={"platform": "linux"},
+        composition=trials,
+    )
+    assert len(envelope["composition"]) == 4
+    assert all(item["capacity_claim"] is False for item in envelope["composition"])
+
+
 def _validated(row: SupportRow) -> None:
     build_envelope(
         [row, _browser_row()],
@@ -184,6 +329,8 @@ def _measurement(
     status: str,
     completed: int,
     boundary: int,
+    environment: dict[str, str] | None = None,
+    exception_reason: str | None = None,
 ) -> dict[str, object]:
     return {
         "schema": "v3-scale-measurement-v1",
@@ -195,11 +342,106 @@ def _measurement(
         "last_verified_boundary": boundary,
         "completed_cohorts": 5 if status == "completed" else 0,
         "events": 5_241 if status == "completed" else 0,
-        "environment": {"platform": "linux", "database": "guarded"},
+        "exception_reason": exception_reason,
+        "environment": (
+            {"platform": "linux", "database": "guarded"}
+            if environment is None
+            else environment
+        ),
     }
 
 
-def test_generator_uses_only_traceable_repeated_artifacts(tmp_path) -> None:
+def test_generator_surfaces_failed_attempts_and_artifact_revision(
+    tmp_path: Path,
+) -> None:
+    import json
+
+    environment = {
+        "platform": "linux",
+        "database": "guarded",
+        "source_revision": "3930540",
+        "postgresql": "17.5",
+    }
+    for repetition in range(3):
+        path = tmp_path / f"gen-{repetition}" / "measurement.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps(
+                _measurement(
+                    lane="generational",
+                    ticks=10_000,
+                    run_id="v3-43-generational-ticks-10000-seed-23",
+                    status="completed",
+                    completed=10_000,
+                    boundary=9_999,
+                    environment=environment,
+                )
+            ),
+            encoding="utf-8",
+        )
+    failed = tmp_path / "gen-failed" / "measurement.json"
+    failed.parent.mkdir()
+    failed.write_text(
+        json.dumps(
+            _measurement(
+                lane="generational",
+                ticks=10_000,
+                run_id="v3-43-generational-ticks-10000-seed-23",
+                status="failed",
+                completed=0,
+                boundary=0,
+                environment=environment,
+                exception_reason="worker_error_RunnerConstructionError",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    envelope = generate_from_directory(tmp_path, source_revision="1c5c18c")
+    row = envelope["rows"][0]
+    assert row["status"] == "verified"
+    assert row["repetitions"] == 3
+    assert row["attempted_repetitions"] == 4
+    assert row["failed_attempts"] == 1
+    assert row["failure_reasons"] == ["worker_error_RunnerConstructionError"]
+    assert len(row["attempt_paths"]) == 4
+    assert row["source_revision"] == "3930540"
+    assert envelope["environment"]["postgresql"] == "17.5"
+    assert any("1 of 4 attempts" in item for item in row["limitations"])
+    assert any("1/4 attempts" in item for item in envelope["limitations"])
+
+
+def test_generator_discloses_missing_artifact_revision(tmp_path: Path) -> None:
+    import json
+
+    for repetition in range(3):
+        path = tmp_path / f"gen-{repetition}" / "measurement.json"
+        path.parent.mkdir()
+        path.write_text(
+            json.dumps(
+                _measurement(
+                    lane="generational",
+                    ticks=10_000,
+                    run_id="v3-43-generational-ticks-10000-seed-23",
+                    status="completed",
+                    completed=10_000,
+                    boundary=9_999,
+                )
+            ),
+            encoding="utf-8",
+        )
+
+    envelope = generate_from_directory(tmp_path, source_revision="1c5c18c")
+    row = envelope["rows"][0]
+    assert row["source_revision"] == "1c5c18c"
+    assert any("did not record source_revision" in item for item in row["limitations"])
+    assert any(
+        "did not record the PostgreSQL version" in item
+        for item in envelope["limitations"]
+    )
+
+
+def test_generator_uses_only_traceable_repeated_artifacts(tmp_path: Path) -> None:
     import json
 
     for repetition in range(3):
@@ -252,7 +494,7 @@ def test_generator_uses_only_traceable_repeated_artifacts(tmp_path) -> None:
     )
 
 
-def test_generator_does_not_promote_mismatched_identities(tmp_path) -> None:
+def test_generator_does_not_promote_mismatched_identities(tmp_path: Path) -> None:
     import json
 
     for repetition, run_id in enumerate(("run-a", "run-b", "run-c")):
