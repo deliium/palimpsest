@@ -14,7 +14,6 @@ from experiments.civilization_capture import (
     CivilizationPublicationReceipt,
 )
 from experiments.civilization_publication import (
-    CivilizationCapturedHistory,
     compose_civilization_boundary_from_source,
 )
 from persistence.civilization_filesystem import (
@@ -64,24 +63,6 @@ def install_civilization_capture(
     runner.set_civilization_boundary_sink(recorder)
     _LOG.debug("civilization_capture_installed active=%s", options.capture.enabled)
     return recorder
-
-
-def _history(
-    recorder: CivilizationEvidenceRecorder, run_id: str
-) -> CivilizationCapturedHistory | None:
-    source = recorder.source()
-    ticks = source.boundary_ticks()
-    if not ticks:
-        return None
-    first = source.read_boundary(ticks[0])
-    if first is None:
-        return None
-    return CivilizationCapturedHistory(
-        run_id,
-        first.cursor.world_id,
-        tuple(source.iter_boundaries()),
-        tuple(source.iter_event_batches()),
-    )
 
 
 async def finalize_civilization_capture(

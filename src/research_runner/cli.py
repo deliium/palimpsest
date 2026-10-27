@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
@@ -78,6 +79,25 @@ def _matrix_max_ticks(spec: ExperimentMatrixSpec) -> int:
     return 0 if max_ticks is None else int(max_ticks)
 
 
+_SPOOL_RUN_SEGMENT: Final[re.Pattern[str]] = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+)
+
+
+def _run_scoped_spool_factory(root: Path) -> Callable[[str], object]:
+    """Give every run/cell its own spool so batches cannot share a lane."""
+    from persistence.evidence_spool_filesystem import create_evidence_spool
+
+    resolved = Path(root)
+
+    def _factory(run_id: str) -> object:
+        if _SPOOL_RUN_SEGMENT.fullmatch(run_id or "") is None:
+            raise ValueError("evidence_spool_run_id_invalid")
+        return create_evidence_spool(resolved / run_id)
+
+    return _factory
+
+
 def _build_capture_options(
     args: argparse.Namespace,
     spec: ExperimentMatrixSpec,
@@ -112,9 +132,7 @@ def _build_capture_options(
     spool_root = getattr(args, "cultural_spool_root", None)
     spool = None
     if spool_root is not None:
-        from persistence.evidence_spool_filesystem import create_evidence_spool
-
-        spool = create_evidence_spool(Path(spool_root))
+        spool = _run_scoped_spool_factory(Path(spool_root))
     return CulturalCaptureOptions(
         enabled=True,
         max_frames=max_frames,
@@ -736,15 +754,11 @@ def _civilization_options_from_args(args: argparse.Namespace) -> Any:
         raise ValueError("civilization byte cap is outside the supported range")
     if root is None:
         if spool_root is not None:
-            raise ValueError(
-                "civilization spool requires --civilization-overlays-root"
-            )
+            raise ValueError("civilization spool requires --civilization-overlays-root")
         return None
     spool = None
     if spool_root is not None:
-        from persistence.evidence_spool_filesystem import create_evidence_spool
-
-        spool = create_evidence_spool(Path(spool_root))
+        spool = _run_scoped_spool_factory(Path(spool_root))
     return _civilization_producer_options(
         Path(root),
         cadence,
@@ -754,7 +768,6 @@ def _civilization_options_from_args(args: argparse.Namespace) -> Any:
         Path(root),
         spool,
     )
-
 
 
 def _parse_auxiliary(values: Sequence[str]) -> tuple[Any, ...]:
@@ -874,6 +887,7 @@ def _cmd_history_verify(args: argparse.Namespace) -> int:
             extra={"experiment": result.payload()},
         )
     return 0
+
 
 def _cmd_generational(args: argparse.Namespace) -> int:
     from dataclasses import replace

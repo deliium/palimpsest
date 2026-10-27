@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
@@ -14,6 +15,7 @@ from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
 from analysis.models import MetricDocument
 from analysis.serialization import decode_metric_document, encode_metric_document
 from experiments.cultural_evidence_serialization import (
+    BinarySink,
     CulturalEvidenceSerializationError,
     CulturalEvolutionEvidence,
     decode_cultural_evolution_evidence,
@@ -355,6 +357,64 @@ def _atomic_write(path: Path, data: bytes) -> None:
             os.unlink(tmp)
 
 
+class _BoundedStream:
+    """File sink that fails before crossing the artifact byte ceiling."""
+
+    __slots__ = ("_handle", "_total")
+
+    def __init__(self, handle: BinarySink) -> None:
+        self._handle = handle
+        self._total = 0
+
+    @property
+    def total(self) -> int:
+        return self._total
+
+    def write(self, data: bytes) -> object:
+        self._total += len(data)
+        if self._total > MAX_CULTURAL_ARTIFACT_BYTES:
+            raise CulturalEvidenceSerializationError("too_large")
+        return self._handle.write(data)
+
+
+def _file_digest(path: Path) -> str:
+    import hashlib
+
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _atomic_write_streamed(path: Path, writer: Callable[[BinarySink], object]) -> None:
+    """Write evidence section-by-section without retaining artifact bytes."""
+    if path.is_symlink():
+        raise CulturalArtifactError("symlink_target")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink():
+        raise CulturalArtifactError("symlink_target")
+    try:
+        path.resolve().relative_to(path.parent.resolve())
+    except ValueError as exc:
+        raise CulturalArtifactError("path_escape") from exc
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            writer(_BoundedStream(handle))
+            handle.flush()
+            os.fsync(handle.fileno())
+        if path.exists():
+            if _file_digest(path) == _file_digest(Path(tmp)):
+                os.unlink(tmp)
+                return
+            raise CulturalArtifactError("artifact_conflict")
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def _evidence_path(root: Path, cell_id: str) -> Path:
     return root / "cells" / f"{cell_id}.cultural-evidence.json"
 
@@ -367,16 +427,23 @@ def write_cultural_pair(
     root: Path,
     cell_id: str,
     *,
-    evidence_bytes: bytes,
     cell_metrics_bytes: bytes,
+    evidence_bytes: bytes | None = None,
+    evidence_writer: Callable[[BinarySink], object] | None = None,
 ) -> None:
-    """Write evidence first, then metrics; identical content is idempotent."""
+    """Write evidence first, then metrics; identical content is idempotent.
+
+    Exactly one of ``evidence_bytes`` (legacy explicit callers) or
+    ``evidence_writer`` (streamed source-backed publication) is accepted. The
+    streamed form never holds the complete evidence artifact in memory.
+    """
     root = _safe_root(root)
     cell_id = _safe_segment(cell_id)
-    if (
-        len(evidence_bytes) > MAX_CULTURAL_ARTIFACT_BYTES
-        or len(cell_metrics_bytes) > MAX_CULTURAL_ARTIFACT_BYTES
-    ):
+    if (evidence_bytes is None) == (evidence_writer is None):
+        raise CulturalArtifactError("invalid_evidence_source")
+    if len(cell_metrics_bytes) > MAX_CULTURAL_ARTIFACT_BYTES:
+        raise CulturalArtifactError("too_large")
+    if evidence_bytes is not None and len(evidence_bytes) > MAX_CULTURAL_ARTIFACT_BYTES:
         raise CulturalArtifactError("too_large")
     evidence_path = _evidence_path(root, cell_id)
     metrics_path = _metrics_path(root, cell_id)
@@ -384,7 +451,11 @@ def write_cultural_pair(
     for target in (evidence_path, metrics_path):
         if target.parent.resolve() != cells_root:
             raise CulturalArtifactError("path_escape")
-    _atomic_write(evidence_path, evidence_bytes)
+    if evidence_writer is not None:
+        _atomic_write_streamed(evidence_path, evidence_writer)
+    else:
+        assert evidence_bytes is not None
+        _atomic_write(evidence_path, evidence_bytes)
     _atomic_write(metrics_path, cell_metrics_bytes)
 
 

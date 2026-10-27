@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Protocol
 
 from analysis.cultural_evolution_evidence import (
     ArchiveKnowledgeState,
@@ -140,12 +140,22 @@ _ENVELOPE_KEYS: Final[frozenset[str]] = frozenset(
 
 __all__ = [
     "CULTURAL_EVOLUTION_EVIDENCE_SCHEMA_VERSION",
+    "BinarySink",
     "CulturalEvidenceSerializationError",
     "CulturalEvolutionEvidence",
     "decode_cultural_evolution_evidence",
     "encode_cultural_evolution_evidence",
+    "encode_cultural_evolution_evidence_streamed",
     "evidence_digest",
+    "evidence_digest_from_inputs",
+    "write_cultural_evolution_evidence",
 ]
+
+
+class BinarySink(Protocol):
+    """Minimal writable byte sink for streamed canonical sections."""
+
+    def write(self, data: bytes) -> object: ...
 
 
 class CulturalEvidenceSerializationError(ValueError):
@@ -430,15 +440,249 @@ def evidence_digest(
     capture_status: CulturalCaptureStatus,
 ) -> str:
     """Return the canonical evidence digest without retaining encoded bytes."""
-    import json as _json
-
-    body = encode_cultural_evolution_evidence(
+    return evidence_digest_from_inputs(
         inputs,
         config_fingerprint=config_fingerprint,
         capture_options=capture_options,
         capture_status=capture_status,
     )
-    return str(_json.loads(body.decode("utf-8"))["digest"])
+
+
+class _SectionRows:
+    """Canonical array section produced lazily for each writer pass."""
+
+    __slots__ = ("rows",)
+
+    def __init__(self, rows: Iterable[Mapping[str, object]]) -> None:
+        self.rows = rows
+
+
+class _CountingWriter:
+    """Enforce the existing evidence byte ceiling while streaming."""
+
+    __slots__ = ("_stream", "_total")
+
+    def __init__(self, stream: BinarySink) -> None:
+        self._stream = stream
+        self._total = 0
+
+    @property
+    def total(self) -> int:
+        return self._total
+
+    def write(self, data: bytes) -> None:
+        self._total += len(data)
+        if self._total > MAX_EVIDENCE_BYTES:
+            raise _codec_fail("too_large")
+        self._stream.write(data)
+
+
+class _DigestWriter:
+    """Compute the canonical body digest without retaining artifact bytes."""
+
+    __slots__ = ("_hasher", "_total")
+
+    def __init__(self) -> None:
+        self._hasher = hashlib.sha256()
+        self._total = 0
+
+    def write(self, data: bytes) -> None:
+        self._total += len(data)
+        if self._total > MAX_EVIDENCE_BYTES:
+            raise _codec_fail("too_large")
+        self._hasher.update(data)
+
+    def hexdigest(self) -> str:
+        return self._hasher.hexdigest()
+
+
+def _evidence_sections(
+    inputs: CulturalEvolutionInputs,
+    fingerprint: str,
+    options: Mapping[str, object],
+    capture_status: CulturalCaptureStatus,
+) -> tuple[tuple[str, object], ...]:
+    """Sorted canonical sections; ``digest`` is a placeholder for pass order."""
+    return (
+        (
+            "analysis_window",
+            {
+                "baseline_boundary": inputs.window.baseline_boundary,
+                "end_boundary": inputs.window.end_boundary,
+            },
+        ),
+        (
+            "archive_states",
+            _SectionRows(_encode_archive(value) for value in inputs.archive_states),
+        ),
+        (
+            "boundaries",
+            _SectionRows(_encode_boundary(value) for value in inputs.boundaries),
+        ),
+        ("capture_options", dict(options)),
+        ("capture_status", _encode_status(capture_status)),
+        ("config_fingerprint", fingerprint),
+        ("digest", None),
+        (
+            "evidence_pointers",
+            _SectionRows(_encode_pointer(value) for value in inputs.evidence_pointers),
+        ),
+        ("gaps", list(inputs.gaps)),
+        (
+            "group_memberships",
+            _SectionRows(_encode_group(value) for value in inputs.group_memberships),
+        ),
+        ("policy_version", inputs.policy_version),
+        ("run_id", inputs.run_id),
+        ("schema_version", CULTURAL_EVOLUTION_EVIDENCE_SCHEMA_VERSION),
+        ("source_revision", inputs.source_revision),
+        (
+            "trait_rows",
+            _SectionRows(
+                _encode_trait(boundary.boundary_tick, row)
+                for boundary in inputs.boundaries
+                for row in boundary.entries
+            ),
+        ),
+        (
+            "transmission_edges",
+            _SectionRows(_encode_edge(value) for value in inputs.transmission_edges),
+        ),
+    )
+
+
+def _emit_sections(
+    write: Callable[[bytes], None],
+    sections: Sequence[tuple[str, object]],
+    *,
+    digest: str | None,
+) -> None:
+    write(b"{")
+    first = True
+    for key, value in sections:
+        if key == "digest":
+            if digest is None:
+                continue
+            if not first:
+                write(b",")
+            first = False
+            write(_canonical_json(key))
+            write(b":")
+            write(_canonical_json(digest))
+            continue
+        if not first:
+            write(b",")
+        first = False
+        write(_canonical_json(key))
+        write(b":")
+        if isinstance(value, _SectionRows):
+            write(b"[")
+            inner = True
+            for row in value.rows:
+                if not inner:
+                    write(b",")
+                inner = False
+                write(_canonical_json(row))
+            write(b"]")
+        else:
+            write(_canonical_json(value))
+    write(b"}")
+
+
+def _prepare_evidence(
+    inputs: CulturalEvolutionInputs,
+    config_fingerprint: str,
+    capture_options: Mapping[str, object],
+) -> tuple[str, dict[str, object]]:
+    if type(inputs) is not CulturalEvolutionInputs:
+        raise TypeError("inputs must be CulturalEvolutionInputs")
+    fingerprint = require_stable_id("config_fingerprint", config_fingerprint)
+    options = dict(capture_options)
+    _canonical_json(options)
+    return fingerprint, options
+
+
+def evidence_digest_from_inputs(
+    inputs: CulturalEvolutionInputs,
+    *,
+    config_fingerprint: str,
+    capture_options: Mapping[str, object],
+    capture_status: CulturalCaptureStatus,
+) -> str:
+    """Digest the canonical body through the same streamed section order."""
+    fingerprint, options = _prepare_evidence(
+        inputs, config_fingerprint, capture_options
+    )
+    sink = _DigestWriter()
+    _emit_sections(
+        sink.write,
+        _evidence_sections(inputs, fingerprint, options, capture_status),
+        digest=None,
+    )
+    return sink.hexdigest()
+
+
+def write_cultural_evolution_evidence(
+    stream: BinarySink,
+    inputs: CulturalEvolutionInputs,
+    *,
+    config_fingerprint: str,
+    capture_options: Mapping[str, object],
+    capture_status: CulturalCaptureStatus,
+) -> str:
+    """Stream exact canonical evidence bytes and return the verified digest.
+
+    The body digest is computed in a first bounded pass, then the same sections
+    are emitted once into ``stream`` with the digest in its canonical position.
+    Section rows are encoded lazily; the complete artifact bytes are never held
+    by this writer.
+    """
+    fingerprint, options = _prepare_evidence(
+        inputs, config_fingerprint, capture_options
+    )
+    digest = evidence_digest_from_inputs(
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=options,
+        capture_status=capture_status,
+    )
+    limited = _CountingWriter(stream)
+    _emit_sections(
+        limited.write,
+        _evidence_sections(inputs, fingerprint, options, capture_status),
+        digest=digest,
+    )
+    _LOG.debug(
+        "cultural_evidence_streamed run_id=%s boundary_count=%s edge_count=%s "
+        "trait_row_count=%s byte_count=%s",
+        inputs.run_id,
+        len(inputs.boundaries),
+        len(inputs.transmission_edges),
+        sum(len(boundary.entries) for boundary in inputs.boundaries),
+        limited.total,
+    )
+    return digest
+
+
+def encode_cultural_evolution_evidence_streamed(
+    inputs: CulturalEvolutionInputs,
+    *,
+    config_fingerprint: str,
+    capture_options: Mapping[str, object],
+    capture_status: CulturalCaptureStatus,
+) -> bytes:
+    """Bytes form of the streamed writer, used for parity checks."""
+    import io
+
+    buffer = io.BytesIO()
+    write_cultural_evolution_evidence(
+        buffer,
+        inputs,
+        config_fingerprint=config_fingerprint,
+        capture_options=capture_options,
+        capture_status=capture_status,
+    )
+    return buffer.getvalue()
 
 
 def _duplicate_aware_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:

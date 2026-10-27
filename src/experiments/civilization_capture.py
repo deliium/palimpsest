@@ -8,9 +8,12 @@ their dedicated metadata-only exports are installed.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from experiments.evidence_codecs import (
+    decode_civilization_boundary,
+    decode_civilization_event_batch,
     encode_civilization_boundary,
     encode_civilization_event_batch,
 )
@@ -43,9 +46,12 @@ from simulation.civilization_models import (
 
 __all__ = [
     "CivilizationCaptureStatus",
+    "CivilizationEvidenceAccounting",
     "CivilizationEvidenceRecorder",
     "CivilizationPublicationReceipt",
 ]
+
+_RESUME_PAGE = 256
 
 _LOG = logging.getLogger(__name__)
 
@@ -88,6 +94,19 @@ class CivilizationCaptureStatus:
     last_boundary: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class CivilizationEvidenceAccounting:
+    """Logical quota accounting separated from physical spool storage."""
+
+    logical_rows: int
+    logical_bytes: int
+    physical_records: int
+    physical_bytes: int
+    event_records: int
+    boundary_records: int
+    spooled: bool
+
+
 class CivilizationEvidenceRecorder:
     """Atomic, idempotent, append-only retention; failures latch, never evict.
 
@@ -103,10 +122,12 @@ class CivilizationEvidenceRecorder:
         "_last_boundary_tick",
         "_last_event_tick",
         "_options",
+        "_resumed",
         "_retained_bytes",
         "_retained_rows",
         "_run_id",
         "_spool",
+        "_spool_factory",
         "_world_id",
     )
 
@@ -114,7 +135,7 @@ class CivilizationEvidenceRecorder:
         self,
         options: CivilizationCaptureOptions | None = None,
         *,
-        spool: EvidenceSpool | None = None,
+        spool: EvidenceSpool | Callable[[str], EvidenceSpool] | None = None,
     ) -> None:
         if options is not None and type(options) is not CivilizationCaptureOptions:
             raise CivilizationError()
@@ -126,7 +147,13 @@ class CivilizationEvidenceRecorder:
         self._retained_bytes = self._retained_rows = 0
         self._run_id: str | None = None
         self._world_id: str | None = None
-        self._spool = spool
+        if spool is not None and callable(spool):
+            self._spool_factory: Callable[[str], EvidenceSpool] | None = spool
+            self._spool: EvidenceSpool | None = None
+        else:
+            self._spool_factory = None
+            self._spool = spool
+        self._resumed = False
         self._last_event_tick: int | None = None
         self._last_boundary_tick: int | None = None
 
@@ -158,6 +185,121 @@ class CivilizationEvidenceRecorder:
             max(self._batches, default=None),
             min(self._boundaries, default=None),
             max(self._boundaries, default=None),
+        )
+
+    @property
+    def accounting(self) -> CivilizationEvidenceAccounting:
+        """Report logical quota counts separately from physical spool bytes."""
+        if self._spool is None:
+            return CivilizationEvidenceAccounting(
+                logical_rows=self._retained_rows,
+                logical_bytes=self._retained_bytes,
+                physical_records=len(self._batches) + len(self._boundaries),
+                physical_bytes=0,
+                event_records=len(self._batches),
+                boundary_records=len(self._boundaries),
+                spooled=False,
+            )
+        events = self._spool.lane_status(CIVILIZATION_EVENT_SPOOL_LANE)
+        boundaries = self._spool.lane_status(CIVILIZATION_BOUNDARY_SPOOL_LANE)
+        return CivilizationEvidenceAccounting(
+            logical_rows=self._retained_rows,
+            logical_bytes=self._retained_bytes,
+            physical_records=events.record_count + boundaries.record_count,
+            physical_bytes=events.byte_count + boundaries.byte_count,
+            event_records=events.record_count,
+            boundary_records=boundaries.record_count,
+            spooled=True,
+        )
+
+    def _resolve_spool(self, run_id: str, boundary: int) -> bool:
+        """Resolve a composition-provided per-run spool factory once."""
+        if self._spool is not None:
+            return True
+        if self._spool_factory is None:
+            return False
+        try:
+            self._spool = self._spool_factory(run_id)
+        except Exception:
+            self._fail(boundary, "capture_build_failed")
+            return False
+        return True
+
+    def _resume_spooled(self) -> None:
+        """Rebuild exact logical accounting from a committed spool prefix."""
+        if self._resumed:
+            return
+        self._resumed = True
+        assert self._spool is not None
+        run_id: str | None = None
+        world_id: str | None = None
+        rows = 0
+        logical_bytes = 0
+        last_event: int | None = None
+        last_boundary: int | None = None
+        cursor: int | None = None
+        while True:
+            payloads = self._spool.iter_lane(
+                lane=CIVILIZATION_EVENT_SPOOL_LANE,
+                after_boundary=cursor,
+                limit=_RESUME_PAGE,
+            )
+            if not payloads:
+                break
+            for payload in payloads:
+                batch = decode_civilization_event_batch(payload)
+                if run_id is not None and batch.run_id != run_id:
+                    raise ValueError("capture_conflict")
+                run_id = batch.run_id
+                if last_event is not None and batch.tick <= last_event:
+                    raise ValueError("capture_conflict")
+                last_event = batch.tick
+                cursor = last_event
+                rows += 1 + sum(1 + len(receipt.items) for receipt in batch.receipts)
+                logical_bytes += len(civilization_event_bytes(batch))
+            if len(payloads) < _RESUME_PAGE:
+                break
+        cursor = None
+        while True:
+            payloads = self._spool.iter_lane(
+                lane=CIVILIZATION_BOUNDARY_SPOOL_LANE,
+                after_boundary=cursor,
+                limit=_RESUME_PAGE,
+            )
+            if not payloads:
+                break
+            for payload in payloads:
+                frame = decode_civilization_boundary(payload)
+                tick = frame.cursor.boundary_tick
+                if tick is None:
+                    raise ValueError("capture_conflict")
+                if run_id is not None and frame.cursor.run_id != run_id:
+                    raise ValueError("capture_conflict")
+                if world_id is not None and frame.cursor.world_id != world_id:
+                    raise ValueError("capture_conflict")
+                if last_boundary is not None and tick <= last_boundary:
+                    raise ValueError("capture_conflict")
+                run_id = frame.cursor.run_id
+                world_id = frame.cursor.world_id
+                last_boundary = tick
+                cursor = tick
+                rows += civilization_boundary_rows(frame)
+                logical_bytes += len(civilization_boundary_bytes(frame))
+            if len(payloads) < _RESUME_PAGE:
+                break
+        self._run_id = run_id
+        self._world_id = world_id
+        self._last_event_tick = last_event
+        self._last_boundary_tick = last_boundary
+        self._retained_rows = rows
+        self._retained_bytes = logical_bytes
+        _LOG.info(
+            "civilization_evidence_resumed rows=%s logical_bytes=%s "
+            "last_event_tick=%s last_boundary=%s",
+            rows,
+            logical_bytes,
+            last_event,
+            last_boundary,
         )
 
     @property
@@ -282,7 +424,9 @@ class CivilizationEvidenceRecorder:
             )
             return False
         boundary = batch.tick + 1
-        if self._spool is not None:
+        if self._spool is not None or self._spool_factory is not None:
+            if not self._resolve_spool(batch.run_id, boundary):
+                return False
             return self._capture_events_spooled(batch, boundary)
         try:
             if self._run_id is not None and batch.run_id != self._run_id:
@@ -327,6 +471,11 @@ class CivilizationEvidenceRecorder:
         self, batch: CivilizationEventBatch, boundary: int
     ) -> bool:
         assert self._spool is not None
+        try:
+            self._resume_spooled()
+        except ValueError:
+            self._fail(boundary, "capture_conflict")
+            return False
         try:
             if self._run_id is not None and batch.run_id != self._run_id:
                 self._fail(boundary, "capture_conflict")
@@ -400,7 +549,9 @@ class CivilizationEvidenceRecorder:
         boundary = frame.cursor.tick
         if not self.wants_boundary(boundary):
             return False
-        if self._spool is not None:
+        if self._spool is not None or self._spool_factory is not None:
+            if not self._resolve_spool(frame.cursor.run_id, boundary):
+                return False
             return self._capture_boundary_spooled(frame, boundary)
         try:
             if self._run_id is not None and frame.cursor.run_id != self._run_id:
@@ -448,6 +599,11 @@ class CivilizationEvidenceRecorder:
         self, frame: CivilizationBoundaryInput, boundary: int
     ) -> bool:
         assert self._spool is not None
+        try:
+            self._resume_spooled()
+        except ValueError:
+            self._fail(boundary, "capture_conflict")
+            return False
         try:
             if self._run_id is not None and frame.cursor.run_id != self._run_id:
                 self._fail(boundary, "capture_conflict")

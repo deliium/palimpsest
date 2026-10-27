@@ -538,3 +538,526 @@ def test_oversized_index_read_length_fails_before_allocating_payload(tmp_path: P
     index.write_text(json.dumps(document))
     with pytest.raises(EvidenceSpoolError, match="evidence_spool_corrupt"):
         spool.get(lane="cultural", identity="one")
+
+
+def _evidence_fixture_inputs():
+    from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
+    from experiments.cultural_evidence import cultural_evolution_inputs_from_capture
+    from tests.unit.test_cultural_evolution_normalization import _frames
+
+    return cultural_evolution_inputs_from_capture(
+        _frames(),
+        run_id="run-normalize",
+        source_revision="rev-normalize",
+        window=CulturalAnalysisWindow(end_boundary=1),
+        parent_child_edges=(("teacher", "learner"),),
+    )
+
+
+def test_streamed_canonical_evidence_matches_legacy_bytes_and_digest() -> None:
+    from experiments.cultural_evidence_serialization import (
+        decode_cultural_evolution_evidence,
+        encode_cultural_evolution_evidence,
+        encode_cultural_evolution_evidence_streamed,
+        evidence_digest,
+        evidence_digest_from_inputs,
+    )
+    from simulation.cultural_evidence import CulturalCaptureStatus
+
+    inputs = _evidence_fixture_inputs()
+    status = CulturalCaptureStatus(active=True, failed=False)
+    options = {"enabled": True, "max_frames": 10, "max_rows": 1000}
+    fingerprint = "a" * 64
+    legacy = encode_cultural_evolution_evidence(
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=options,
+        capture_status=status,
+    )
+    streamed = encode_cultural_evolution_evidence_streamed(
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=options,
+        capture_status=status,
+    )
+    assert streamed == legacy
+    digest = evidence_digest(
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=options,
+        capture_status=status,
+    )
+    assert (
+        evidence_digest_from_inputs(
+            inputs,
+            config_fingerprint=fingerprint,
+            capture_options=options,
+            capture_status=status,
+        )
+        == digest
+    )
+    assert decode_cultural_evolution_evidence(streamed).digest == digest
+
+
+def test_source_normalization_reopens_source_without_all_frames() -> None:
+    from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
+    from experiments.cultural_evidence import cultural_evolution_inputs_from_source
+    from simulation.cultural_evidence import CulturalBoundaryExport
+    from tests.unit.test_cultural_evolution_normalization import _frames, _inputs
+
+    frames = _frames()
+    probe = {"calls": 0, "live": 0, "max_live": 0}
+
+    class CountingSource:
+        run_id = "run-normalize"
+        source_revision = "rev-normalize"
+        gaps: tuple[str, ...] = ()
+
+        def iter_boundaries(self, *, after_boundary=None):
+            probe["calls"] += 1
+            for frame in frames:
+                if after_boundary is not None and frame.boundary_tick <= after_boundary:
+                    continue
+                probe["live"] += 1
+                probe["max_live"] = max(probe["max_live"], probe["live"])
+                try:
+                    assert type(frame) is CulturalBoundaryExport
+                    yield frame
+                finally:
+                    probe["live"] -= 1
+
+    inputs = cultural_evolution_inputs_from_source(
+        CountingSource(),
+        run_id="run-normalize",
+        source_revision="rev-normalize",
+        window=CulturalAnalysisWindow(end_boundary=1),
+        parent_child_edges=(("teacher", "learner"),),
+    )
+    assert inputs == _inputs()
+    assert probe["calls"] >= 2
+    assert probe["max_live"] == 1
+
+
+def test_source_backed_arm_fields_publish_identical_artifact_bytes(
+    tmp_path: Path,
+) -> None:
+    from experiments.cultural_evidence import (
+        CulturalEvidenceRecorder,
+        SourceBackedCulturalEvidence,
+        build_cultural_arm_fields,
+        materialize_cultural_evidence,
+    )
+    from experiments.cultural_evidence_serialization import (
+        encode_cultural_evolution_evidence,
+        write_cultural_evolution_evidence,
+    )
+    from experiments.cultural_metric_artifacts import (
+        CulturalCaptureOptions,
+        cultural_capture_policy,
+        read_cultural_pair,
+        write_cultural_pair,
+    )
+    from tests.unit.test_cultural_evolution_normalization import _frames
+
+    recorder = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path / "spool"))
+    for frame in _frames():
+        recorder.capture(frame)
+    options = CulturalCaptureOptions(enabled=True)
+    fingerprint = "a" * 64
+    fields = build_cultural_arm_fields(
+        recorder,
+        run_id="run-normalize",
+        config_fingerprint=fingerprint,
+        options=options,
+        source_revision="rev-normalize",
+        parent_child_edges=(("teacher", "learner"),),
+    )
+    evidence = fields["cultural_evolution_evidence"]
+    assert type(evidence) is SourceBackedCulturalEvidence
+    inputs = materialize_cultural_evidence(evidence)
+    policy = cultural_capture_policy(options)
+    legacy = encode_cultural_evolution_evidence(
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=policy,
+        capture_status=evidence.capture_status,
+    )
+
+    chunks: list[int] = []
+
+    class RecordingSink:
+        def write(self, data: bytes) -> int:
+            chunks.append(len(data))
+            return len(data)
+
+    digest = write_cultural_evolution_evidence(
+        RecordingSink(),
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=policy,
+        capture_status=evidence.capture_status,
+    )
+    assert digest == evidence.digest
+    assert chunks and max(chunks) < len(legacy)
+
+    root = tmp_path / "artifacts"
+
+    def _writer(handle):
+        return write_cultural_evolution_evidence(
+            handle,
+            inputs,
+            config_fingerprint=fingerprint,
+            capture_options=policy,
+            capture_status=evidence.capture_status,
+        )
+
+    write_cultural_pair(
+        root,
+        "cell-a",
+        cell_metrics_bytes=b"metrics",
+        evidence_writer=_writer,
+    )
+    written, metrics = read_cultural_pair(root, "cell-a")
+    assert written == legacy
+    assert metrics == b"metrics"
+
+
+def test_materialize_cultural_evidence_enforces_explicit_batch_budget(
+    tmp_path: Path,
+) -> None:
+    from experiments.cultural_evidence import (
+        CulturalEvidenceBatchError,
+        CulturalEvidenceRecorder,
+        build_cultural_arm_fields,
+        materialize_cultural_evidence,
+    )
+    from experiments.cultural_metric_artifacts import CulturalCaptureOptions
+
+    recorder = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path / "spool"))
+    for frame in _frames_for_budget():
+        recorder.capture(frame)
+    fields = build_cultural_arm_fields(
+        recorder,
+        run_id="run-spool",
+        config_fingerprint="b" * 64,
+        options=CulturalCaptureOptions(enabled=True),
+        source_revision="rev-spool",
+    )
+    evidence = fields["cultural_evolution_evidence"]
+    with pytest.raises(
+        CulturalEvidenceBatchError, match="cultural_batch_budget_exceeded"
+    ):
+        materialize_cultural_evidence(evidence, max_boundaries=1)
+
+
+def _frames_for_budget():
+    from simulation.cultural_evidence import CulturalBoundaryExport
+
+    return (
+        CulturalBoundaryExport("run-spool", 0, ()),
+        CulturalBoundaryExport("run-spool", 1, ()),
+    )
+
+
+def test_recorder_resume_reconstructs_logical_accounting_and_quota(
+    tmp_path: Path,
+) -> None:
+    from experiments.cultural_evidence import CulturalEvidenceRecorder
+    from simulation.cultural_evidence import CulturalBoundaryExport
+
+    frames = _frames_for_resume()
+    first = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path))
+    for frame in frames:
+        first.capture(frame)
+    assert first.accounting.logical_frames == 2
+    assert first.accounting.logical_rows == 3
+
+    default_resume = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path))
+    default_resume.capture(frames[1])
+    assert default_resume.accounting.logical_frames == 2
+    assert default_resume.accounting.logical_rows == 3
+    default_resume.capture(CulturalBoundaryExport("run-normalize", 2, ()))
+    assert default_resume.accounting.logical_frames == 3
+
+    tight = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path), max_rows=2)
+    tight.capture(CulturalBoundaryExport("run-normalize", 3, ()))
+    assert tight.truncated is True
+    assert tight.accounting.logical_frames == 3
+
+
+def _frames_for_resume():
+    from tests.unit.test_cultural_evolution_normalization import _frames
+
+    return _frames()
+
+
+def test_run_scoped_spool_factory_isolates_runs_and_capture_off_skips_it(
+    tmp_path: Path,
+) -> None:
+    from experiments.civilization_capture import CivilizationEvidenceRecorder
+    from experiments.cultural_evidence import CulturalEvidenceRecorder
+    from simulation.civilization_capture import CivilizationCaptureOptions
+    from simulation.cultural_evidence import CulturalBoundaryExport
+
+    root = tmp_path / "spool-root"
+    calls: list[str] = []
+
+    def factory(run_id: str):
+        calls.append(run_id)
+        return create_evidence_spool(root / run_id)
+
+    first = CulturalEvidenceRecorder(spool=factory)
+    first.capture(CulturalBoundaryExport("run-a", 0, ()))
+    second = CulturalEvidenceRecorder(spool=factory)
+    second.capture(CulturalBoundaryExport("run-b", 0, ()))
+    assert calls == ["run-a", "run-b"]
+    assert (root / "run-a").is_dir()
+    assert (root / "run-b").is_dir()
+    assert (root / "run-a").resolve() != (root / "run-b").resolve()
+
+    def _explode(_run_id: str):
+        raise AssertionError("capture-off must not resolve a spool")
+
+    off = CulturalEvidenceRecorder(spool=_explode)
+    assert off.frame_count == 0
+    assert off.source().boundary_ticks() == ()
+
+    civilization = CivilizationEvidenceRecorder(
+        CivilizationCaptureOptions(enabled=False), spool=_explode
+    )
+    assert civilization.capture_events(object()) is False  # type: ignore[arg-type]
+    assert civilization.source().boundary_ticks() == ()
+
+
+def test_recorder_seal_keeps_evidence_readable_and_latches_append(
+    tmp_path: Path,
+) -> None:
+    from experiments.cultural_evidence import CulturalEvidenceRecorder
+    from simulation.cultural_evidence import CulturalBoundaryExport
+
+    spool = create_evidence_spool(tmp_path)
+    recorder = CulturalEvidenceRecorder(spool=spool)
+    frame = CulturalBoundaryExport("run-spool", 0, ())
+    recorder.capture(frame)
+    recorder.seal()
+    assert spool.status().sealed is True
+    assert recorder.source().read_boundary(0) == frame
+    recorder.capture(CulturalBoundaryExport("run-spool", 1, ()))
+    assert recorder.result().capture_status.failed is True
+    assert recorder.accounting.logical_frames == 1
+
+
+def test_spool_lane_tick_cache_is_reused_and_invalidated(tmp_path: Path) -> None:
+    spool = create_evidence_spool(tmp_path)
+    for tick in (2, 0, 1):
+        spool.append(
+            lane="cultural",
+            boundary_tick=tick,
+            identity=f"b{tick}",
+            payload=str(tick).encode(),
+        )
+    assert spool.iter_lane(lane="cultural", after_boundary=None, limit=2) == (
+        b"0",
+        b"1",
+    )
+    assert spool._tick_cache["cultural"] == (0, 1, 2)
+    assert spool.iter_lane(lane="cultural", after_boundary=1, limit=2) == (b"2",)
+    spool.append(lane="cultural", boundary_tick=3, identity="b3", payload=b"3")
+    assert "cultural" not in spool._tick_cache
+    assert len(spool.iter_lane(lane="cultural", after_boundary=None, limit=10)) == 4
+
+
+def test_civilization_recorder_resume_accounts_logical_rows(
+    tmp_path: Path,
+) -> None:
+    from experiments.civilization_capture import CivilizationEvidenceRecorder
+    from simulation.civilization_capture import (
+        CivilizationCaptureOptions,
+        project_civilization_events,
+    )
+    from tests.unit.test_civilization_publication import _frame, _inventory
+
+    root = tmp_path / "civilization-spool"
+
+    def factory(run_id: str):
+        return create_evidence_spool(root / run_id)
+
+    first = CivilizationEvidenceRecorder(
+        CivilizationCaptureOptions(enabled=True, cadence=1), spool=factory
+    )
+    batch = project_civilization_events(
+        "run-capture", 0, (), expected_count=0, source="committed_result"
+    )
+    frame = _frame(0, inventories=(_inventory("agent-a"),))
+    assert first.capture_events(batch)
+    assert first.capture_boundary(frame)
+    first_rows = first.accounting.logical_rows
+    first_bytes = first.accounting.logical_bytes
+
+    resumed = CivilizationEvidenceRecorder(
+        CivilizationCaptureOptions(enabled=True, cadence=1), spool=factory
+    )
+    assert resumed.capture_events(batch)
+    assert resumed.capture_boundary(frame)
+    assert resumed.accounting.logical_rows == first_rows
+    assert resumed.accounting.logical_bytes == first_bytes
+    assert resumed.accounting.physical_records == 2
+    assert resumed.accounting.spooled is True
+
+
+def test_streamed_publication_peak_allocation_below_artifact_bytes() -> None:
+    import tracemalloc
+
+    from analysis.cultural_evolution_evidence import CulturalAnalysisWindow
+    from experiments.cultural_evidence import cultural_evolution_inputs_from_capture
+    from experiments.cultural_evidence_serialization import (
+        encode_cultural_evolution_evidence,
+        write_cultural_evolution_evidence,
+    )
+    from simulation.cultural_evidence import CulturalCaptureStatus
+
+    frames = tuple(_cultural_frame(tick) for tick in range(150))
+    inputs = cultural_evolution_inputs_from_capture(
+        frames,
+        run_id="run-spool",
+        source_revision="rev-spool",
+        window=CulturalAnalysisWindow(end_boundary=149),
+    )
+    status = CulturalCaptureStatus(active=True, failed=False)
+    options = {"enabled": True, "max_frames": 1000, "max_rows": 100000}
+    fingerprint = "c" * 64
+    legacy = encode_cultural_evolution_evidence(
+        inputs,
+        config_fingerprint=fingerprint,
+        capture_options=options,
+        capture_status=status,
+    )
+    assert len(legacy) > 4096
+    written = 0
+
+    class CountingSink:
+        def write(self, data: bytes) -> int:
+            nonlocal written
+            written += len(data)
+            return len(data)
+
+    tracemalloc.start()
+    try:
+        write_cultural_evolution_evidence(
+            CountingSink(),
+            inputs,
+            config_fingerprint=fingerprint,
+            capture_options=options,
+            capture_status=status,
+        )
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert written == len(legacy)
+    assert peak < len(legacy)
+
+
+def test_streamed_artifact_limit_fails_without_publishing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import experiments.cultural_metric_artifacts as module
+    from experiments.cultural_evidence import (
+        CulturalEvidenceRecorder,
+        build_cultural_arm_fields,
+        materialize_cultural_evidence,
+    )
+    from experiments.cultural_evidence_serialization import (
+        CulturalEvidenceSerializationError,
+        write_cultural_evolution_evidence,
+    )
+    from experiments.cultural_metric_artifacts import (
+        CulturalCaptureOptions,
+        cultural_capture_policy,
+        write_cultural_pair,
+    )
+
+    recorder = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path / "spool"))
+    for frame in _frames_for_resume():
+        recorder.capture(frame)
+    options = CulturalCaptureOptions(enabled=True)
+    fields = build_cultural_arm_fields(
+        recorder,
+        run_id="run-normalize",
+        config_fingerprint="d" * 64,
+        options=options,
+        source_revision="rev-normalize",
+    )
+    evidence = fields["cultural_evolution_evidence"]
+    inputs = materialize_cultural_evidence(evidence)
+    policy = cultural_capture_policy(options)
+    monkeypatch.setattr(module, "MAX_CULTURAL_ARTIFACT_BYTES", 32)
+
+    def _writer(handle):
+        return write_cultural_evolution_evidence(
+            handle,
+            inputs,
+            config_fingerprint="d" * 64,
+            capture_options=policy,
+            capture_status=evidence.capture_status,
+        )
+
+    root = tmp_path / "limited"
+    with pytest.raises(CulturalEvidenceSerializationError, match="too_large"):
+        write_cultural_pair(
+            root,
+            "cell-a",
+            cell_metrics_bytes=b"metrics",
+            evidence_writer=_writer,
+        )
+    assert not (root / "cells" / "cell-a.cultural-evidence.json").exists()
+    assert not (root / "cells" / "cell-a.cultural-metrics.json").exists()
+
+
+def test_write_cultural_pair_rejects_ambiguous_evidence_source(
+    tmp_path: Path,
+) -> None:
+    from experiments.cultural_metric_artifacts import (
+        CulturalArtifactError,
+        write_cultural_pair,
+    )
+
+    with pytest.raises(CulturalArtifactError, match="invalid_evidence_source"):
+        write_cultural_pair(tmp_path, "cell-a", cell_metrics_bytes=b"m")
+    with pytest.raises(CulturalArtifactError, match="invalid_evidence_source"):
+        write_cultural_pair(
+            tmp_path,
+            "cell-a",
+            cell_metrics_bytes=b"m",
+            evidence_bytes=b"e",
+            evidence_writer=lambda _handle: None,
+        )
+
+
+def test_interrupted_seal_leaves_committed_spool_readable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import persistence.evidence_spool_filesystem as module
+    from experiments.cultural_evidence import CulturalEvidenceRecorder
+
+    recorder = CulturalEvidenceRecorder(spool=create_evidence_spool(tmp_path))
+    recorder.capture(_cultural_frame(0))
+    write = module._atomic_write
+
+    class Interrupted(BaseException):
+        pass
+
+    def interrupt(path: Path, payload: bytes) -> None:
+        if path.name == "state.json":
+            raise Interrupted()
+        write(path, payload)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "_atomic_write", interrupt)
+        with pytest.raises(Interrupted):
+            recorder.seal()
+
+    restarted = create_evidence_spool(tmp_path)
+    assert restarted.status().sealed is False
+    resumed = CulturalEvidenceRecorder(spool=restarted)
+    assert resumed.source().boundary_ticks() == (0,)
+    assert resumed.source().read_boundary(0) == _cultural_frame(0)

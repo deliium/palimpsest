@@ -6,11 +6,12 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol, cast
 
+from experiments.cultural_evidence_serialization import BinarySink
 from experiments.matrix_models import (
     DEFAULT_SUCCESS_STOP_REASONS,
     EXPERIMENT_MATRIX_SCHEMA_VERSION,
@@ -140,8 +141,9 @@ class MatrixManifestStore(Protocol):
         self,
         cell_id: str,
         *,
-        evidence_bytes: bytes,
         cell_metrics_bytes: bytes,
+        evidence_bytes: bytes | None = None,
+        evidence_writer: Callable[[BinarySink], object] | None = None,
     ) -> None: ...
 
     def read_cultural_artifacts(self, cell_id: str) -> tuple[bytes, bytes] | None: ...
@@ -551,16 +553,18 @@ class FilesystemMatrixManifestStore:
         self,
         cell_id: str,
         *,
-        evidence_bytes: bytes,
         cell_metrics_bytes: bytes,
+        evidence_bytes: bytes | None = None,
+        evidence_writer: Callable[[BinarySink], object] | None = None,
     ) -> None:
         from experiments.cultural_metric_artifacts import write_cultural_pair
 
         write_cultural_pair(
             self._root,
             str(cell_id),
-            evidence_bytes=evidence_bytes,
             cell_metrics_bytes=cell_metrics_bytes,
+            evidence_bytes=evidence_bytes,
+            evidence_writer=evidence_writer,
         )
 
     def read_cultural_artifacts(self, cell_id: str) -> tuple[bytes, bytes] | None:

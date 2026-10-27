@@ -238,6 +238,7 @@ class FilesystemEvidenceSpool:
         "_root",
         "_segment_bytes",
         "_segment_rows",
+        "_tick_cache",
     )
 
     def __init__(
@@ -260,6 +261,7 @@ class FilesystemEvidenceSpool:
         self._segment_rows = _positive("segment_rows", segment_rows)
         self._segment_bytes = _positive("segment_bytes", segment_bytes)
         self._max_payload_bytes = _positive("max_payload_bytes", max_payload_bytes)
+        self._tick_cache: dict[str, tuple[int, ...]] = {}
 
     def append(
         self,
@@ -365,6 +367,7 @@ class FilesystemEvidenceSpool:
             self._write_index(boundary_path, boundary_entries)
             self._write_state(lanes, sealed=False)
             self._clear_pending()
+            self._tick_cache.pop(lane, None)
             _LOG.debug(
                 "evidence_spool_append_committed boundary_tick=%s "
                 "record_count=%s byte_count=%s",
@@ -423,16 +426,29 @@ class FilesystemEvidenceSpool:
         if not boundary_root.is_dir():
             return ()
         payloads: list[bytes] = []
-        for path in sorted(boundary_root.glob("*.json")):
-            tick = int(path.stem)
+        for tick in self._lane_ticks(lane, boundary_root):
             if after_boundary is not None and tick <= after_boundary:
                 continue
-            entries = self._load_index(path)
+            entries = self._load_index(self._boundary_path(lane, tick))
             for _identity, entry in sorted(entries.items()):
                 payloads.append(self._read_existing(lane, entry))
                 if len(payloads) >= limit:
                     return tuple(payloads)
         return tuple(payloads)
+
+    def _lane_ticks(self, lane: str, boundary_root: Path) -> tuple[int, ...]:
+        """Return ordered committed boundary ticks from a per-lane cache.
+
+        The directory is enumerated once per process/lane and refreshed by the
+        next append. Paged iteration therefore reads only the boundary indexes
+        it needs instead of re-sorting the whole directory for every page.
+        """
+        cached = self._tick_cache.get(lane)
+        if cached is not None:
+            return cached
+        ticks = tuple(sorted(int(path.stem) for path in boundary_root.glob("*.json")))
+        self._tick_cache[lane] = ticks
+        return ticks
 
     def seal(self) -> EvidenceSpoolStatus:
         with self._access():
@@ -636,6 +652,7 @@ class FilesystemEvidenceSpool:
                 raise EvidenceSpoolError("evidence_spool_corrupt")
             self._write_index(self._identity_path(lane, identity), identities)
             self._write_index(self._boundary_path(lane, tick), boundaries)
+            self._tick_cache.pop(lane, None)
         except (TypeError, ValueError) as exc:
             raise EvidenceSpoolError("evidence_spool_corrupt") from exc
         self._clear_pending()

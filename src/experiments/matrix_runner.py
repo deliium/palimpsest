@@ -286,30 +286,36 @@ def _write_cultural_artifacts(
     matrix_fingerprint: str,
     options: CulturalCaptureOptions,
 ) -> None:
-    """Write the bound evidence/metric pair before objective completion."""
+    """Write the bound evidence/metric pair before objective completion.
+
+    Source-backed captures stream canonical sections; legacy concrete inputs
+    keep the explicit byte encoder. Both paths publish identical bytes for the
+    same normalized evidence.
+    """
+    from analysis.cultural_evolution_evidence import CulturalEvolutionInputs
+    from experiments.cultural_evidence import (
+        CulturalEvidenceBatchError,
+        SourceBackedCulturalEvidence,
+        materialize_cultural_evidence,
+    )
     from experiments.cultural_evidence_serialization import (
         encode_cultural_evolution_evidence,
+        write_cultural_evolution_evidence,
     )
     from experiments.cultural_metric_artifacts import (
+        CulturalArtifactError,
         CulturalCellMetrics,
         cultural_capture_policy,
         encode_cultural_cell_metrics,
     )
 
-    evidence_inputs = arm.cultural_evolution_evidence
+    evidence = arm.cultural_evolution_evidence
     capture_status = arm.cultural_evolution_capture_status
-    if evidence_inputs is None or capture_status is None:
-        from experiments.cultural_metric_artifacts import CulturalArtifactError
-
+    if evidence is None or capture_status is None:
         raise CulturalArtifactError("cultural_capture_missing")
     policy = cultural_capture_policy(options)
     config_fingerprint = runner_config_fingerprint(assignment.runner_config)
-    evidence_bytes = encode_cultural_evolution_evidence(
-        evidence_inputs,  # type: ignore[arg-type]
-        config_fingerprint=config_fingerprint,
-        capture_options=policy,
-        capture_status=capture_status,  # type: ignore[arg-type]
-    )
+    expected_digest = arm.cultural_evolution_evidence_digest or ""
     cell_metrics = CulturalCellMetrics(
         cell_id=cell.cell_id,
         matrix_fingerprint=matrix_fingerprint,
@@ -318,14 +324,51 @@ def _write_cultural_artifacts(
         run_id=assignment.run_id.value,
         capture_policy=policy,
         analysis_window=options.analysis_window,
-        evidence_digest=arm.cultural_evolution_evidence_digest or "",
+        evidence_digest=expected_digest,
         documents=tuple(arm.cultural_evolution_documents),  # type: ignore[arg-type]
         digest="",
     )
+    cell_metrics_bytes = encode_cultural_cell_metrics(cell_metrics)
+
+    if type(evidence) is SourceBackedCulturalEvidence:
+        try:
+            inputs = materialize_cultural_evidence(evidence, stage="artifact")
+        except CulturalEvidenceBatchError as exc:
+            raise CulturalArtifactError(exc.code) from exc
+        if (
+            expected_digest != evidence.digest
+            or inputs.run_id != assignment.run_id.value
+        ):
+            raise CulturalArtifactError("digest_mismatch")
+
+        def _writer(handle: object) -> object:
+            return write_cultural_evolution_evidence(
+                handle,  # type: ignore[arg-type]
+                inputs,
+                config_fingerprint=config_fingerprint,
+                capture_options=policy,
+                capture_status=capture_status,  # type: ignore[arg-type]
+            )
+
+        store.write_cultural_artifacts(
+            cell.cell_id,
+            cell_metrics_bytes=cell_metrics_bytes,
+            evidence_writer=_writer,
+        )
+        return
+
+    if type(evidence) is not CulturalEvolutionInputs:
+        raise CulturalArtifactError("cultural_capture_missing")
+    evidence_bytes = encode_cultural_evolution_evidence(
+        evidence,
+        config_fingerprint=config_fingerprint,
+        capture_options=policy,
+        capture_status=capture_status,  # type: ignore[arg-type]
+    )
     store.write_cultural_artifacts(
         cell.cell_id,
+        cell_metrics_bytes=cell_metrics_bytes,
         evidence_bytes=evidence_bytes,
-        cell_metrics_bytes=encode_cultural_cell_metrics(cell_metrics),
     )
 
 
@@ -810,7 +853,14 @@ class MatrixBatchRunner:
                                 reason = "cultural_artifact_conflict"
                             elif raw_code == "cultural_capture_missing":
                                 reason = "cultural_capture_missing"
-                            elif raw_code in {"too_large", "excessive_depth"}:
+                            elif raw_code in {
+                                "too_large",
+                                "excessive_depth",
+                                "invalid_evidence_source",
+                                "digest_mismatch",
+                                "cultural_batch_budget_exceeded",
+                                "cultural_evidence_digest_mismatch",
+                            }:
                                 reason = "cultural_artifact_invalid"
                             else:
                                 reason = "cultural_artifact_write_failed"

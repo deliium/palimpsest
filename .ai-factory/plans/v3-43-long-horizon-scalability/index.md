@@ -6,7 +6,7 @@ Branch: main (stay on current branch; `git.create_branches: false`)
 Created: 2026-10-26
 Improved: 2026-10-26 (`$aif-improve`; seven approved refinements, task IDs preserved)
 Plan identifier: `v3-43-long-horizon-scalability`
-Status: Tasks 1–12 complete; Task 13 reopened in progress after checkpoint reconciliation
+Status: Tasks 1–12 complete; Task 13 implementation complete except benchmark-scale publication RSS/envelope measurement, still in progress
 
 ## Original Request
 
@@ -280,6 +280,15 @@ Approved during `$aif-improve` on 2026-10-26; original request, task IDs and all
 - Remaining Task 13 work: implement the tagged `SourceBackedCulturalEvidence` and real streamed canonical cultural artifact dispatch through coordinator/generational/matrix consumers; replace `tuple(source.iter_boundaries())` with repeatable bounded normalization and disk-backed historical joins; explicitly budget the remaining exact global batch stage and artifact limits; prove multi-boundary production-composition parity and measure publication RSS. Physical directory enumeration/page/cache bounds, interrupted seal/explicit supported recorder resume, per-run spool isolation in multi-cell composition, physical-versus-logical accounting and full failure/quota acceptance also require completion before marking Task 13 done. Current spooled sources retain legacy full-materialization paths and must not be advertised as bounded end-to-end.
 
 - Full default-suite attempt (`uv run pytest -q --cov-report= --tb=short`) reached approximately 20% without reported failures before the shell's 120-second timeout. It did not complete and is not a full-suite pass; rerun with a longer explicit timeout.
+
+### Task 13 progress (2026-10-27)
+
+- Implemented the reconciliation remainder. Internal `SourceBackedCulturalEvidence` tags now carry the pinned source, run/window/config identity, capture policy and status, canonical digest, gaps and kinship edges through coordinator, generational and matrix arms; it is never a runner/result/API field. Metric collection materializes that tag only through the explicit `materialize_cultural_evidence` batch stage, which applies capture-derived boundary/row budgets and re-verifies the digest before analysis.
+- `cultural_evolution_inputs_from_source` reopens the pinned source in two ordered passes (`normalize_cultural_frame_source`); raw frames are no longer accumulated through `tuple(source.iter_boundaries())`. Transmission attribution joins use `analysis.cultural_join_index.QualifiedSourceIndex`, which spills to bounded scratch SQLite beyond a key threshold. The result equals the legacy tuple normalization exactly.
+- Canonical evidence publication is streamed: `write_cultural_evolution_evidence` hashes the canonical body in one section pass and emits it in a second, and `write_cultural_pair`/`MatrixManifestStore.write_cultural_artifacts` accept an atomic evidence writer under the existing 64 MiB cap. The matrix writer dispatches tagged evidence to the streamed writer and keeps the legacy byte encoder for concrete `CulturalEvolutionInputs`. Oversize, digest-mismatch, ambiguous-source and batch-budget failures fail with explicit safe codes.
+- Spool bounds/resume: per-lane committed boundary ticks are cached once per process and invalidated on append/recovery; both recorders rebuild logical rows/bytes from a committed prefix through bounded pages, latch interrupted seal/resume failures, and accept a per-run spool factory. CLI composition now uses `<spool-root>/<run_id>`, so multi-cell batches cannot share a lane. Physical spool bytes are reported separately from logical accounting (`CulturalEvidenceAccounting`, `CivilizationEvidenceAccounting`).
+- Verification: `tests/unit/test_evidence_spool.py` (36 tests) covers streamed/legacy byte and digest parity, sectioned writes with peak traced allocation below artifact bytes, two-pass source normalization with one live decoded frame, tagged arm publication parity, batch-budget failure, resume/quota accounting, interrupted seal, run-isolated factories, capture-off and tick-cache invalidation. The plan acceptance command plus focused suites pass (115 tests with coverage). Full default suite passes: `6423 passed, 123 deselected` in 348.97 s with coverage enabled. Ruff and mypy are clean on the changed modules; architecture gates pass (280).
+- Remaining before Task 13 completion: true benchmark-scale publication RSS/throughput measurement (the traced-allocation bound is not an RSS claim) and its inclusion in the Task 19/20 envelope. No PostgreSQL, browser, Godot or long-horizon scale gate was run in this session.
 
 ## Definition of Done
 

@@ -348,6 +348,16 @@ def assemble_arm_metric_bundle(
     generational_progress = getattr(arm.runner_result, "generational_progress", None)
     cultural_evolution = getattr(arm, "cultural_evolution_evidence", None)
     cultural_evolution_digest = getattr(arm, "cultural_evolution_evidence_digest", None)
+    if cultural_evolution is not None:
+        from experiments.cultural_evidence import (
+            SourceBackedCulturalEvidence,
+            materialize_cultural_evidence,
+        )
+
+        if type(cultural_evolution) is SourceBackedCulturalEvidence:
+            cultural_evolution = materialize_cultural_evidence(
+                cultural_evolution, stage="metric"
+            )
 
     inputs = inputs_with_opt_in_metric_rows(
         inputs,

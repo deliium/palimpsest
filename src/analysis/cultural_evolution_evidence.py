@@ -12,11 +12,15 @@ import json
 import logging
 import math
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final
 
+from analysis.cultural_join_index import (
+    DEFAULT_MEMORY_KEYS,
+    QualifiedSourceIndex,
+)
 from analysis.models import MetricAvailability
 from simulation.cultural_evidence import (
     CULTURAL_EVIDENCE_CHANNEL_CULTURAL_FEATURES,
@@ -1477,71 +1481,62 @@ def _presences_for_channel(
     return []
 
 
-def _normalize_boundaries(
-    frames: Sequence[CulturalBoundaryExport],
-) -> tuple[tuple[InventoryBoundary, ...], tuple[EvidencePointer, ...]]:
-    boundaries: list[InventoryBoundary] = []
-    pointers: list[EvidencePointer] = []
-    for frame in frames:
-        living = tuple(owner.owner_id.value for owner in frame.owners if owner.living)
-        generations = {
-            owner.owner_id.value: owner.generation_index
-            for owner in frame.owners
-            if owner.living
-        }
-        coverage: list[tuple[str, str, str]] = []
-        entries: list[TraitPresence] = []
-        for owner in frame.owners:
-            if not owner.living:
+def _normalize_boundary_frame(
+    frame: CulturalBoundaryExport,
+) -> tuple[InventoryBoundary, tuple[EvidencePointer, ...]]:
+    living = tuple(owner.owner_id.value for owner in frame.owners if owner.living)
+    generations = {
+        owner.owner_id.value: owner.generation_index
+        for owner in frame.owners
+        if owner.living
+    }
+    coverage: list[tuple[str, str, str]] = []
+    entries: list[TraitPresence] = []
+    for owner in frame.owners:
+        if not owner.living:
+            continue
+        coverage.extend(_owner_coverage(owner))
+        for channel in owner.channels:
+            entries.extend(_presences_for_channel(owner, channel))
+    boundary = InventoryBoundary(
+        boundary_tick=frame.boundary_tick,
+        living_owner_ids=living,
+        generation_by_owner=generations,
+        owner_dimension_coverage=tuple(coverage),
+        entries=tuple(entries),
+    )
+    return boundary, _boundary_pointers(frame, tuple(boundary.entries))
+
+
+def _collect_practical_source_rows(
+    index: QualifiedSourceIndex,
+    frame: CulturalBoundaryExport,
+) -> None:
+    for owner in frame.owners:
+        for channel in owner.channels:
+            if channel.channel != CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE:
                 continue
-            coverage.extend(_owner_coverage(owner))
-            for channel in owner.channels:
-                entries.extend(_presences_for_channel(owner, channel))
-        boundary = InventoryBoundary(
-            boundary_tick=frame.boundary_tick,
-            living_owner_ids=living,
-            generation_by_owner=generations,
-            owner_dimension_coverage=tuple(coverage),
-            entries=tuple(entries),
-        )
-        boundaries.append(boundary)
-        pointers.extend(_boundary_pointers(frame, tuple(boundary.entries)))
-    return tuple(boundaries), tuple(pointers)
-
-
-def _practical_source_rows(
-    boundaries: Sequence[InventoryBoundary],
-    frames: Sequence[CulturalBoundaryExport],
-) -> dict[tuple[str, str], list[tuple[int, str, str]]]:
-    rows: dict[tuple[str, str], list[tuple[int, str, str]]] = {}
-    for frame in frames:
-        for owner in frame.owners:
-            for channel in owner.channels:
-                if channel.channel != CULTURAL_EVIDENCE_CHANNEL_PRACTICAL_KNOWLEDGE:
+            if channel.ledger is None or not _coverage_is_observed(channel):
+                continue
+            for entry in getattr(channel.ledger, "entries", ()):
+                if not bool(getattr(entry, "active", False)):
                     continue
-                if channel.ledger is None or not _coverage_is_observed(channel):
-                    continue
-                for entry in getattr(channel.ledger, "entries", ()):
-                    if not bool(getattr(entry, "active", False)):
-                        continue
-                    digest = _technology_digest(entry)
-                    rows.setdefault(
-                        (owner.owner_id.value, entry.content_key), []
-                    ).append((frame.boundary_tick, entry.entry_id, digest))
-    return rows
+                index.add(
+                    owner_id=owner.owner_id.value,
+                    content_key=entry.content_key,
+                    boundary_tick=frame.boundary_tick,
+                    local_id=entry.entry_id,
+                    content_digest=_technology_digest(entry),
+                )
 
 
-def _normalize_transmission_edges(
-    boundaries: Sequence[InventoryBoundary],
-    frames: Sequence[CulturalBoundaryExport],
+def _transmission_edges(
+    frames: Iterable[CulturalBoundaryExport],
     *,
+    index: QualifiedSourceIndex,
+    generations: Mapping[str, int],
     parent_child_edges: frozenset[tuple[str, str]],
 ) -> tuple[TransmissionEdge, ...]:
-    source_rows = _practical_source_rows(boundaries, frames)
-    generations: dict[str, int] = {}
-    for boundary in boundaries:
-        for owner_token, generation in boundary.generation_by_owner.items():
-            generations.setdefault(owner_token, generation)
     edges: list[TransmissionEdge] = []
     for frame in frames:
         for owner in frame.owners:
@@ -1562,19 +1557,19 @@ def _normalize_transmission_edges(
                     if not isinstance(source_token, str):
                         continue
                     target_digest = _technology_digest(entry)
-                    candidates = [
-                        row
-                        for row in source_rows.get(
-                            (source_token, entry.content_key), ()
-                        )
-                        if row[0] <= entry.acquired_tick
-                    ]
-                    candidate_ids = sorted({row[1] for row in candidates})
+                    candidates = index.candidates(
+                        owner_id=source_token,
+                        content_key=entry.content_key,
+                        through_tick=entry.acquired_tick,
+                    )
+                    candidate_ids = sorted({row.local_id for row in candidates})
                     if len(candidate_ids) == 1:
                         status = "resolved"
                         source_local_id: str | None = candidate_ids[0]
                         source_digest: str | None = next(
-                            row[2] for row in candidates if row[1] == source_local_id
+                            row.content_digest
+                            for row in candidates
+                            if row.local_id == source_local_id
                         )
                     elif len(candidate_ids) > 1:
                         status = "ambiguous_source"
@@ -1663,28 +1658,93 @@ def normalize_cultural_frames(
 ) -> CulturalEvolutionInputs:
     """Conservatively normalize detached frames into analysis inputs."""
     raw = tuple(frames)
-    for frame in raw:
+    return normalize_cultural_frame_source(
+        lambda: iter(raw),
+        run_id=run_id,
+        source_revision=source_revision,
+        window=window,
+        parent_child_edges=parent_child_edges,
+        group_memberships=group_memberships,
+        archive_states=archive_states,
+        gaps=gaps,
+    )
+
+
+def normalize_cultural_frame_source(
+    reopen_frames: Callable[[], Iterator[CulturalBoundaryExport]],
+    *,
+    run_id: str,
+    source_revision: str,
+    window: CulturalAnalysisWindow,
+    parent_child_edges: Sequence[tuple[str, str]] = (),
+    group_memberships: Sequence[GroupMembership] = (),
+    archive_states: Sequence[ArchiveKnowledgeState] = (),
+    gaps: Sequence[str] = (),
+    join_memory_keys: int | None = None,
+    scratch_directory: str | None = None,
+) -> CulturalEvolutionInputs:
+    """Normalize an ordered, re-iterable frame source in two passes.
+
+    Pass one derives inventory boundaries, evidence pointers, living generations
+    and qualified earlier acquisitions. Pass two re-reads the same source to
+    attribute transmission edges. Raw frames are never accumulated, so peak
+    resident state follows the normalized evidence rather than the full capture.
+    """
+    boundaries: list[InventoryBoundary] = []
+    pointers: list[EvidencePointer] = []
+    generations: dict[str, int] = {}
+    index = QualifiedSourceIndex(
+        memory_keys=(
+            DEFAULT_MEMORY_KEYS if join_memory_keys is None else join_memory_keys
+        ),
+        scratch_directory=scratch_directory,
+    )
+    try:
+        for frame in _validated_frames(reopen_frames(), run_id):
+            boundary, boundary_pointers = _normalize_boundary_frame(frame)
+            boundaries.append(boundary)
+            pointers.extend(boundary_pointers)
+            for owner_token, generation in boundary.generation_by_owner.items():
+                generations.setdefault(owner_token, generation)
+            _collect_practical_source_rows(index, frame)
+        edges = _transmission_edges(
+            _validated_frames(reopen_frames(), run_id),
+            index=index,
+            generations=generations,
+            parent_child_edges=frozenset(parent_child_edges),
+        )
+        _LOG.debug(
+            "cultural_frame_source_normalized boundary_count=%s edge_count=%s "
+            "pointer_count=%s join_spilled=%s",
+            len(boundaries),
+            len(edges),
+            len(pointers),
+            index.spilled,
+        )
+        return CulturalEvolutionInputs(
+            run_id=run_id,
+            source_revision=source_revision,
+            window=window,
+            boundaries=tuple(boundaries),
+            transmission_edges=edges,
+            group_memberships=tuple(group_memberships),
+            archive_states=tuple(archive_states),
+            evidence_pointers=tuple(pointers),
+            gaps=tuple(gaps),
+        )
+    finally:
+        index.close()
+
+
+def _validated_frames(
+    frames: Iterator[CulturalBoundaryExport], run_id: str
+) -> Iterator[CulturalBoundaryExport]:
+    for frame in frames:
         if type(frame) is not CulturalBoundaryExport:
             raise _fail("frames", "invalid_item")
         if frame.run_id != run_id:
             raise _fail("frames", "run_mismatch")
-    boundaries, pointers = _normalize_boundaries(raw)
-    edges = _normalize_transmission_edges(
-        boundaries,
-        raw,
-        parent_child_edges=frozenset(parent_child_edges),
-    )
-    return CulturalEvolutionInputs(
-        run_id=run_id,
-        source_revision=source_revision,
-        window=window,
-        boundaries=boundaries,
-        transmission_edges=edges,
-        group_memberships=tuple(group_memberships),
-        archive_states=tuple(archive_states),
-        evidence_pointers=pointers,
-        gaps=tuple(gaps),
-    )
+        yield frame
 
 
 _LOG.debug(
