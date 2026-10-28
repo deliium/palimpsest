@@ -26,6 +26,7 @@ V3_BENCHMARK_SUITE_VERSION: Final[int] = 1
 V3_BENCHMARK_SCENARIO_COUNT: Final[int] = 30
 
 V3_BENCHMARK_ID_PREFIX: Final[str] = "v3-bench-"
+V3_VISUAL_BENCHMARK_ID: Final[str] = "v3-visual-integration-v1"
 
 
 class V3BenchmarkError(ValueError):
@@ -466,7 +467,10 @@ class V3BenchmarkSpec:
             )
         object.__setattr__(self, "request_number", request_number)
         scenario_id = require_stable_id("scenario_id", self.scenario_id)
-        if not scenario_id.startswith(V3_BENCHMARK_ID_PREFIX):
+        if (
+            not scenario_id.startswith(V3_BENCHMARK_ID_PREFIX)
+            and scenario_id != V3_VISUAL_BENCHMARK_ID
+        ):
             raise V3BenchmarkError(
                 "invalid_scenario_id", "scenario_id must use the v3-bench- prefix"
             )
@@ -707,7 +711,10 @@ class V3BenchmarkRunResult:
 
     def __post_init__(self) -> None:
         scenario_id = require_stable_id("scenario_id", self.scenario_id)
-        if not scenario_id.startswith(V3_BENCHMARK_ID_PREFIX):
+        if (
+            not scenario_id.startswith(V3_BENCHMARK_ID_PREFIX)
+            and scenario_id != V3_VISUAL_BENCHMARK_ID
+        ):
             raise V3BenchmarkError(
                 "invalid_scenario_id", "scenario_id must use the v3-bench- prefix"
             )
@@ -827,6 +834,7 @@ __all__ = [
     "V3_BENCHMARK_SCENARIO_COUNT",
     "V3_BENCHMARK_SUITE_ID",
     "V3_BENCHMARK_SUITE_VERSION",
+    "V3_VISUAL_BENCHMARK_ID",
     "V3BenchmarkCheck",
     "V3BenchmarkCheckStatus",
     "V3BenchmarkContrastKind",

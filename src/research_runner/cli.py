@@ -44,6 +44,9 @@ from experiments.matrix_metric_summary import (
 from experiments.matrix_models import ExperimentMatrixSpec, matrix_spec_fingerprint
 from experiments.matrix_runner import MatrixBatchRunner
 from experiments.matrix_serialization import decode_matrix_spec
+from research_runner.civilization_benchmark_cli import (
+    add_civilization_benchmark_parser,
+)
 from research_runner.composition import (
     build_batch_dependencies,
     build_manifest_store,
@@ -1357,6 +1360,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_p.add_argument("--sample", type=int, default=3)
     verify_p.set_defaults(func=_cmd_history_verify)
     add_path_dependence_parser(sub)
+    add_civilization_benchmark_parser(sub)
 
     return parser
 

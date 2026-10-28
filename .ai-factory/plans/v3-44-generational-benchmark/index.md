@@ -425,7 +425,7 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 
 ### Phase 2
 - [x] Task 4: Execute independent lanes with real owner and admission probes ([details](v3-44-phase-02-execution.md#task-4-execute-independent-lanes-with-real-owner-and-admission-probes)) (depends on 1, 2, 3)
-- [ ] Task 5: Publish reproducible sibling reports and a bounded CLI ([details](v3-44-phase-02-execution.md#task-5-publish-reproducible-sibling-reports-and-a-bounded-cli)) (depends on 4)
+- [x] Task 5: Publish reproducible sibling reports and a bounded CLI ([details](v3-44-phase-02-execution.md#task-5-publish-reproducible-sibling-reports-and-a-bounded-cli)) (depends on 4)
 
 ### Phase 3
 - [ ] Task 6: Exercise blank entry, care, teaching and cultural mutation ([details](v3-44-phase-03-population-and-memory.md#task-6-exercise-blank-entry-care-teaching-and-cultural-mutation)) (depends on 1, 2, 3, 4, 5)
