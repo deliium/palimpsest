@@ -224,3 +224,90 @@ def test_durable_record_disabled_is_unexecuted() -> None:
     )
     assert check.status is V3BenchmarkCheckStatus.UNEXECUTED
     assert check.reason_code == "durable_records_disabled"
+
+
+@pytest.mark.asyncio
+async def test_interpretation_disabled_control_preserves_record_only(tmp_path) -> None:
+    from simulation.new_agent_initialization import (
+        default_new_agent_initialization_spec,
+    )
+
+    build = build_memory_benchmark(V3_BENCH_06_RECORD_AFTER_WITNESSES)
+    config = _short_config(build.arms[0].config, max_ticks=3)
+    config = replace(
+        config,
+        new_agent_initialization=default_new_agent_initialization_spec(),
+    )
+    arbiter = memory_benchmark_arbiter(
+        V3_BENCH_06_RECORD_AFTER_WITNESSES, config
+    )
+    assert arbiter is not None
+    probe = BenchmarkBoundaryProbe()
+    result = await _dispatch(
+        tmp_path,
+        V3_BENCH_06_RECORD_AFTER_WITNESSES,
+        config,
+        probe,
+        arbiter=arbiter,
+    )
+    statuses = {check.selector_id: check for check in result.checks}
+    assert statuses["durable_record_evidence"].status is V3BenchmarkCheckStatus.PASS
+    interpretations = sum(
+        owner.artifact_interpretations
+        for observation in probe.observations
+        for owner in observation.owners
+    )
+    assert interpretations == 0
+
+
+@pytest.mark.asyncio
+async def test_legal_destruction_removes_physical_record(tmp_path) -> None:
+    from experiments.interventions import (
+        MilestoneInterventionArbiter,
+        MilestoneOverride,
+    )
+    from simulation.runner import SimulationRunner
+    from world.actions import DamageRecord
+    from world.events import ArtifactCreated, ArtifactDestroyed
+
+    build = build_memory_benchmark(V3_BENCH_06_RECORD_AFTER_WITNESSES)
+    config = _short_config(build.arms[0].config, max_ticks=3)
+    inscribe = memory_benchmark_arbiter(
+        V3_BENCH_06_RECORD_AFTER_WITNESSES, config
+    )
+    assert inscribe is not None
+    founder = config.agents[0].agent_id
+    async with await SimulationRunner.from_config(config) as runner:
+        runner.set_intervention_arbiter(inscribe)
+        await runner.initialize_finalized_boundary()
+        await runner.run_tick()
+        created = [
+            event.details
+            for event in runner.engine.export_events().events
+            if type(event.details) is ArtifactCreated
+        ]
+        assert len(created) == 1
+        artifact_id = created[0].artifact_id
+        destroyer = MilestoneInterventionArbiter(
+            (
+                MilestoneOverride(
+                    milestone_id="v3-bench-destroy-record",
+                    tick=1,
+                    agent_id=founder,
+                    build_command=lambda: DamageRecord(
+                        artifact_id=artifact_id, mode="destroy"
+                    ),
+                ),
+            ),
+            override_budget=1,
+        )
+        runner.set_intervention_arbiter(destroyer)
+        await runner.run_tick()
+        events = runner.engine.export_events().events
+        destroyed = [
+            event.details
+            for event in events
+            if type(event.details) is ArtifactDestroyed
+        ]
+        assert destroyed
+        assert destroyed[0].artifact_id == artifact_id
