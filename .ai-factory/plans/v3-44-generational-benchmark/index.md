@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–16 complete. Task 17 is in progress: the source-pinned eight-marker manifest and Python tests are implemented, but the real visual fixture schedule, Godot suite registration/execution and browser acceptance remain. `GODOT_BIN` is not installed; the Task 15 DB integration gate also awaits `PALIMPSEST_TEST_DATABASE_URL`.
+Status: implementation in progress; Tasks 1–16 complete, including the Task 15 PostgreSQL integration gate (disposable pgvector container, 1 passed). Godot 4.7.2 is now installed and the pinned protocol suite passes (46 suites, 0 failures). Task 17 remains blocked by a real cognition failure: enabling `cultural_narrative_mode` on the regional visual world aborts `agent-origin` planning at tick 14, so the visual fixture cannot yet produce all eight markers without either diagnosing that policy interaction or a separately scoped behavior decision.
 
 ## Original Request
 
