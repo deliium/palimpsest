@@ -40,38 +40,24 @@ V3_BENCH_03_INTERGENERATIONAL_TEACHING: Final[str] = (
 )
 V3_BENCH_04_CULTURAL_MUTATION: Final[str] = "v3-bench-04-cultural-mutation"
 V3_BENCH_05_MEMORY_LAYERS: Final[str] = "v3-bench-05-memory-layers"
-V3_BENCH_06_RECORD_AFTER_WITNESSES: Final[str] = (
-    "v3-bench-06-record-after-witnesses"
-)
+V3_BENCH_06_RECORD_AFTER_WITNESSES: Final[str] = "v3-bench-06-record-after-witnesses"
 V3_BENCH_07_FALSE_RECORD: Final[str] = "v3-bench-07-false-record"
 V3_BENCH_08_TECHNOLOGY_DISCOVERY: Final[str] = "v3-bench-08-technology-discovery"
 V3_BENCH_09_TECHNOLOGY_DIFFUSION: Final[str] = "v3-bench-09-technology-diffusion"
 V3_BENCH_10_TECHNOLOGY_LOSS: Final[str] = "v3-bench-10-technology-loss"
-V3_BENCH_11_TECHNOLOGY_REDISCOVERY: Final[str] = (
-    "v3-bench-11-technology-rediscovery"
-)
-V3_BENCH_12_INHERITANCE_PRACTICES: Final[str] = (
-    "v3-bench-12-inheritance-practices"
-)
-V3_BENCH_13_LONG_TERM_COMMITMENTS: Final[str] = (
-    "v3-bench-13-long-term-commitments"
-)
+V3_BENCH_11_TECHNOLOGY_REDISCOVERY: Final[str] = "v3-bench-11-technology-rediscovery"
+V3_BENCH_12_INHERITANCE_PRACTICES: Final[str] = "v3-bench-12-inheritance-practices"
+V3_BENCH_13_LONG_TERM_COMMITMENTS: Final[str] = "v3-bench-13-long-term-commitments"
 V3_BENCH_14_SUBJECTIVE_BARTER: Final[str] = "v3-bench-14-subjective-barter"
 V3_BENCH_15_CANDIDATE_EXCHANGE_MEDIUM: Final[str] = (
     "v3-bench-15-candidate-exchange-medium"
 )
 V3_BENCH_16_COLLECTIVE_PROJECT: Final[str] = "v3-bench-16-collective-project"
-V3_BENCH_17_PUBLIC_GOOD_PATTERNS: Final[str] = (
-    "v3-bench-17-public-good-patterns"
-)
+V3_BENCH_17_PUBLIC_GOOD_PATTERNS: Final[str] = "v3-bench-17-public-good-patterns"
 V3_BENCH_18_REGIONAL_MIGRATION: Final[str] = "v3-bench-18-regional-migration"
-V3_BENCH_19_ISOLATED_DIVERGENCE: Final[str] = (
-    "v3-bench-19-isolated-divergence"
-)
+V3_BENCH_19_ISOLATED_DIVERGENCE: Final[str] = "v3-bench-19-isolated-divergence"
 V3_BENCH_20_RECONTACT_EXCHANGE: Final[str] = "v3-bench-20-recontact-exchange"
-V3_BENCH_21_VOCABULARY_DIVERGENCE: Final[str] = (
-    "v3-bench-21-vocabulary-divergence"
-)
+V3_BENCH_21_VOCABULARY_DIVERGENCE: Final[str] = "v3-bench-21-vocabulary-divergence"
 V3_BENCH_22_GENERATIONAL_SEMANTIC_DRIFT: Final[str] = (
     "v3-bench-22-generational-semantic-drift"
 )
@@ -87,12 +73,8 @@ V3_BENCH_27_INSTITUTIONAL_PERSISTENCE: Final[str] = (
     "v3-bench-27-institutional-persistence"
 )
 V3_BENCH_28_INSTITUTIONAL_DECAY: Final[str] = "v3-bench-28-institutional-decay"
-V3_BENCH_29_FOUNDER_CONTINGENCY: Final[str] = (
-    "v3-bench-29-founder-contingency"
-)
-V3_BENCH_30_MULTIGENERATION_FORK: Final[str] = (
-    "v3-bench-30-multigeneration-fork"
-)
+V3_BENCH_29_FOUNDER_CONTINGENCY: Final[str] = "v3-bench-29-founder-contingency"
+V3_BENCH_30_MULTIGENERATION_FORK: Final[str] = "v3-bench-30-multigeneration-fork"
 
 V3_BENCHMARK_SCENARIO_IDS: Final[tuple[str, ...]] = (
     V3_BENCH_01_BLANK_SLATE,
@@ -634,7 +616,11 @@ def _build_registry() -> dict[str, V3BenchmarkSpec]:
             request_number=24,
             scenario_id=V3_BENCH_24_NARRATIVE_AFTER_WITNESSES,
             title="Historical narrative survives after eyewitness extinction",
-            required_specs=("generational_narratives",),
+            required_specs=(
+                "population_lifecycle",
+                "generational_narratives",
+                "cultural_feature_provenance",
+            ),
             required_modes=(
                 "cultural_narrative_mode",
                 "cultural_historical_memory",
@@ -651,7 +637,11 @@ def _build_registry() -> dict[str, V3BenchmarkSpec]:
             request_number=25,
             scenario_id=V3_BENCH_25_PERSISTENT_ROLE,
             title="Emergence of a persistent social role",
-            required_specs=("institution_concept_mode",),
+            required_specs=(
+                "population_lifecycle",
+                "new_agent_initialization",
+                "institution_concept_mode",
+            ),
             required_modes=("institution_concept_mode",),
             selectors=(
                 "institution_concept_evidence",
@@ -669,6 +659,8 @@ def _build_registry() -> dict[str, V3BenchmarkSpec]:
             scenario_id=V3_BENCH_26_OFFICE_SUCCESSION,
             title="Succession of an office after its occupant dies",
             required_specs=(
+                "population_lifecycle",
+                "new_agent_initialization",
                 "office_succession_mode",
                 "institution_concept_mode",
                 "institutional_memory_mode",
@@ -693,6 +685,8 @@ def _build_registry() -> dict[str, V3BenchmarkSpec]:
             scenario_id=V3_BENCH_27_INSTITUTIONAL_PERSISTENCE,
             title="Institutional persistence across generations",
             required_specs=(
+                "population_lifecycle",
+                "new_agent_initialization",
                 "office_succession_mode",
                 "institution_concept_mode",
                 "institutional_memory_mode",
@@ -717,6 +711,8 @@ def _build_registry() -> dict[str, V3BenchmarkSpec]:
             scenario_id=V3_BENCH_28_INSTITUTIONAL_DECAY,
             title="Institutional decay or disappearance",
             required_specs=(
+                "population_lifecycle",
+                "new_agent_initialization",
                 "institutional_decay_mode",
                 "institution_concept_mode",
                 "office_succession_mode",
@@ -838,17 +834,13 @@ def list_v3_benchmark_scenarios() -> tuple[V3BenchmarkSpec, ...]:
 def get_v3_benchmark_scenario(scenario_id: str) -> V3BenchmarkSpec:
     """Return one registered spec or raise a fail-closed benchmark error."""
     if type(scenario_id) is not str:
-        raise V3BenchmarkError(
-            "unknown_scenario", "scenario_id must be a str"
-        )
+        raise V3BenchmarkError("unknown_scenario", "scenario_id must be a str")
     try:
         object_id = require_stable_id("scenario_id", scenario_id)
     except ValueError as exc:
         raise V3BenchmarkError("unknown_scenario", str(exc)) from exc
     if not object_id.startswith(V3_BENCHMARK_ID_PREFIX):
-        raise V3BenchmarkError(
-            "unknown_scenario", f"unknown scenario_id={object_id}"
-        )
+        raise V3BenchmarkError("unknown_scenario", f"unknown scenario_id={object_id}")
     try:
         return _REGISTRY[object_id]
     except KeyError as exc:
@@ -869,13 +861,9 @@ def v3_benchmark_suite_registry() -> Mapping[str, V3BenchmarkSpec]:
 def v3_benchmark_scenario_id_for_request(request_number: int) -> str:
     """Resolve a 1-based request number to its locked scenario id."""
     if type(request_number) is not int or isinstance(request_number, bool):
-        raise V3BenchmarkError(
-            "invalid_request_number", "request_number must be int"
-        )
+        raise V3BenchmarkError("invalid_request_number", "request_number must be int")
     if request_number < 1 or request_number > V3_BENCHMARK_SCENARIO_COUNT:
-        raise V3BenchmarkError(
-            "invalid_request_number", "request_number out of range"
-        )
+        raise V3BenchmarkError("invalid_request_number", "request_number out of range")
     return V3_BENCHMARK_SCENARIO_IDS[request_number - 1]
 
 

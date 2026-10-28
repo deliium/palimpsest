@@ -473,6 +473,86 @@ def _required_checks(
                     mechanism_available=(config.resource_exchange_profile is not None),
                 )
             )
+        elif selector.selector_id == "generational_narrative_evidence":
+            from experiments.civilization_benchmark_institutions import (
+                evaluate_generational_narratives,
+            )
+
+            checks.append(
+                evaluate_generational_narratives(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.generational_narratives is not None,
+                )
+            )
+        elif selector.selector_id == "institution_concept_evidence":
+            from experiments.civilization_benchmark_institutions import (
+                evaluate_institution_concepts,
+            )
+
+            checks.append(
+                evaluate_institution_concepts(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.institution_concept_mode.value
+                        == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
+        elif selector.selector_id == "office_succession_evidence":
+            from experiments.civilization_benchmark_institutions import (
+                evaluate_office_succession,
+            )
+
+            checks.append(
+                evaluate_office_succession(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.office_succession_mode.value == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
+        elif selector.selector_id == "institutional_memory_evidence":
+            from experiments.civilization_benchmark_institutions import (
+                evaluate_institutional_memory,
+            )
+
+            checks.append(
+                evaluate_institutional_memory(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.institutional_memory_mode.value
+                        == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
+        elif selector.selector_id == "institutional_decay_evidence":
+            from experiments.civilization_benchmark_institutions import (
+                evaluate_institutional_decay,
+            )
+
+            checks.append(
+                evaluate_institutional_decay(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.institutional_decay_mode.value
+                        == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
         else:
             observations = probe.observations
             checks.append(

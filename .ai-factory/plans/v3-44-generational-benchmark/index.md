@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–11 complete (Phase 5 closed 2026-10-28)
+Status: implementation in progress; Tasks 1–13 complete (Phase 6 closed 2026-10-28)
 
 ## Original Request
 
@@ -440,8 +440,8 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 11: Exercise vocabulary divergence, semantic drift and mistranslation ([details](v3-44-phase-05-regions-and-language.md#task-11-exercise-vocabulary-divergence-semantic-drift-and-mistranslation)) (depends on 3, 10)
 
 ### Phase 6
-- [ ] Task 12: Exercise narrative survival, roles, succession, persistence and decay ([details](v3-44-phase-06-institutions-and-forks.md#task-12-exercise-narrative-survival-roles-succession-persistence-and-decay)) (depends on 7, 10, 11)
-- [ ] Task 13: Execute founder perturbations and multigeneration grouped forks ([details](v3-44-phase-06-institutions-and-forks.md#task-13-execute-founder-perturbations-and-multigeneration-grouped-forks)) (depends on 4, 5, 12)
+- [x] Task 12: Exercise narrative survival, roles, succession, persistence and decay ([details](v3-44-phase-06-institutions-and-forks.md#task-12-exercise-narrative-survival-roles-succession-persistence-and-decay)) (depends on 7, 10, 11)
+- [x] Task 13: Execute founder perturbations and multigeneration grouped forks ([details](v3-44-phase-06-institutions-and-forks.md#task-13-execute-founder-perturbations-and-multigeneration-grouped-forks)) (depends on 4, 5, 12)
 
 ### Phase 7
 - [ ] Task 14: Gate all generational scientific invariants ([details](v3-44-phase-07-invariants-and-replay.md#task-14-gate-all-generational-scientific-invariants)) (depends on 6, 7, 8, 9, 10, 11, 12, 13)

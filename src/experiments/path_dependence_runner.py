@@ -48,6 +48,12 @@ class PathDependenceExecutionContext:
     child_observer: Callable[[SimulationRunner, BranchSlot], Awaitable[None]] | None = (
         None
     )
+    child_installer: (
+        Callable[[SimulationRunner, BranchSlot], Awaitable[None]] | None
+    ) = None
+    child_finalizer: (
+        Callable[[SimulationRunner, BranchSlot], Awaitable[None]] | None
+    ) = None
     source_identity: str = "unspecified"
 
 
@@ -80,6 +86,7 @@ class PrefixExecutionResult:
     snapshot_hash: str = ""
     objective_head_hash: str = ""
     eligibility_witness: tuple[object, ...] = ()
+    parent_unchanged: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +134,27 @@ def _setup_arbiter(setup: Sequence[CommonSetupCommand]) -> MilestoneIntervention
         for index, command in enumerate(setup)
     ]
     return MilestoneInterventionArbiter(milestones, override_budget=len(milestones))
+
+
+async def _safe_hook(
+    hook: Callable[[SimulationRunner, BranchSlot], Awaitable[None]] | None,
+    child: SimulationRunner,
+    slot: BranchSlot,
+    *,
+    label: str,
+) -> None:
+    """Child capture/observer failure stays outside scientific execution."""
+    if hook is None:
+        return
+    try:
+        await hook(child, slot)
+    except Exception:
+        _LOG.warning(
+            "path_dependence_child_hook_failed child_run_id=%s hook=%s "
+            "reason_code=child_hook_unavailable",
+            slot.child_run_id,
+            label,
+        )
 
 
 def _arm_actions(
@@ -225,10 +253,26 @@ class PathDependenceBatchRunner:
                                     override_budget=(spec.max_interventions_per_arm),
                                 )
                                 child.set_intervention_arbiter(arbiter)
+                                await _safe_hook(
+                                    context.child_installer,
+                                    child,
+                                    slot,
+                                    label="installer",
+                                )
                                 result = await child.run()
                                 arbiter.finalize_unreached()
-                                if context.child_observer is not None:
-                                    await context.child_observer(child, slot)
+                                await _safe_hook(
+                                    context.child_finalizer,
+                                    child,
+                                    slot,
+                                    label="finalizer",
+                                )
+                                await _safe_hook(
+                                    context.child_observer,
+                                    child,
+                                    slot,
+                                    label="observer",
+                                )
                                 failed = runner_stop_is_failure(result.stop_reason)
                                 child_digest = None
                                 child_head = None
@@ -284,6 +328,17 @@ class PathDependenceBatchRunner:
                                     error_code="child_execution_failed",
                                 )
                             )
+                parent_unchanged = True
+                if eligibility.eligible:
+                    try:
+                        after = await parent.capture_fork_checkpoint()
+                        parent_unchanged = (
+                            after.snapshot.integrity_hash
+                            == checkpoint.snapshot.integrity_hash
+                            and after.boundary_revision == checkpoint.boundary_revision
+                        )
+                    except Exception:
+                        parent_unchanged = False
                 prefixes.append(
                     PrefixExecutionResult(
                         parent_run_id=parent_run_id.value,
@@ -321,6 +376,7 @@ class PathDependenceBatchRunner:
                                 },
                             )
                         ),
+                        parent_unchanged=parent_unchanged,
                     )
                 )
             return PathDependenceExecutionSummary(

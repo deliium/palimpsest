@@ -26,6 +26,10 @@ from experiments.civilization_benchmark_execution import (
     CivilizationBenchmarkRecipe,
     execute_civilization_benchmark,
 )
+from experiments.civilization_benchmark_forks import (
+    build_fork_benchmark_spec,
+    execute_grouped_benchmark,
+)
 from experiments.civilization_benchmark_models import (
     V3BenchmarkCoverage,
     V3BenchmarkEvidenceAvailability,
@@ -100,14 +104,19 @@ async def execute_selection(
         else:
             spec = get_v3_benchmark_scenario(item.scenario_id)
             if spec.recipe.arm_count > 1:
-                raise BenchmarkCompositionError("grouped_case_not_supported")
-            build = build_v3_benchmark_scenario(
-                item.scenario_id,
-                seed=item.seed,
-                profile=item.profile,
-                lane=item.lane,
-            )
-            config = next(arm.config for arm in build.arms if arm.arm_id == item.arm_id)
+                config = build_fork_benchmark_spec(
+                    item.scenario_id, seed=item.seed, profile=item.profile
+                ).base
+            else:
+                build = build_v3_benchmark_scenario(
+                    item.scenario_id,
+                    seed=item.seed,
+                    profile=item.profile,
+                    lane=item.lane,
+                )
+                config = next(
+                    arm.config for arm in build.arms if arm.arm_id == item.arm_id
+                )
         assignment = ExperimentAssignment(
             experiment_id="v3-generational-civilization-benchmark",
             condition_id=item.scenario_id,
@@ -131,24 +140,52 @@ async def execute_selection(
                     ),
                     timeout=timeout_seconds,
                 )
-            else:
+            elif get_v3_benchmark_scenario(item.scenario_id).recipe.arm_count > 1:
                 recipe = CivilizationBenchmarkRecipe(
                     scenario_id=item.scenario_id,
                     lane=item.lane,
                     profile=item.profile,
                     seed=item.seed,
                     arm_id=item.arm_id,
+                    command_plan_id="v3-benchmark-grouped-v1",
+                    command_plan_version="1",
                 )
+                captured: dict[str, object] = {}
+
+                async def _finalize_child(
+                    child: object,
+                    slot: object,
+                    *,
+                    rows: dict[str, object] = captured,
+                ) -> None:
+                    try:
+                        boundary = await child.export_finalized_research_boundary()  # type: ignore[attr-defined]
+                    except Exception:
+                        rows[slot.child_run_id] = "unavailable"  # type: ignore[attr-defined]
+                        return
+                    rows[slot.child_run_id] = boundary  # type: ignore[attr-defined]
+
+                async def _grouped_runner(
+                    grouped_recipe: CivilizationBenchmarkRecipe,
+                    grouped_context: CivilizationBenchmarkContext,
+                ) -> V3BenchmarkRunResult:
+                    del grouped_context
+                    return await execute_grouped_benchmark(
+                        grouped_recipe.scenario_id,
+                        lane=grouped_recipe.lane,
+                        profile=grouped_recipe.profile,
+                        seed=grouped_recipe.seed,
+                        child_finalizer=_finalize_child,
+                        factories=RunnerDependencyFactories(),
+                        source_identity=str(
+                            source_identity.get("code_revision", "unspecified")
+                        ),
+                    )
+
                 context = CivilizationBenchmarkContext(
                     assignment=assignment,
-                    execution_context=GenerationalExecutionContext(
-                        artifact_root=store.root / "archives",
-                        source_identity=dict(source_identity),
-                        recipe=_execution_recipe(item),
-                        factories=RunnerDependencyFactories(),
-                        attempt_id=f"{item.scenario_id}-{item.arm_id}",
-                    ),
                     probe=probe,
+                    grouped_runner=_grouped_runner,
                 )
                 result = await asyncio.wait_for(
                     execute_civilization_benchmark(recipe, context),
