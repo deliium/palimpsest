@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–16 complete (Task 15 DB gate and Godot baseline verified). Task 17 now has 7 of 8 source-backed visual markers (new agents, deaths, migration, collective project, teaching, technology spread, cultural differentiation). Office succession is still unavailable because its scheduled `office_succession` speech remains rejected even with daylight visibility, holds on both participants, and UNREFERENCED source basis. Godot fixture tests and browser acceptance remain.
+Status: implementation in progress; Tasks 1–17 complete. The visual fixture reaches all eight source-backed markers on a real 160-tick run (new agents, deaths, migration, collective project, teaching, technology spread, cultural differentiation, office succession), and the pinned Godot suite passes 47 suites including the new multigeneration replay suite. Task 15 DB gate remains verified; Phase 8 continues at Task 18.
 
 ## Original Request
 
@@ -449,7 +449,7 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 16: Replay recorded LLM cognition in a real independent generational run ([details](v3-44-phase-07-invariants-and-replay.md#task-16-replay-recorded-llm-cognition-in-a-real-independent-generational-run)) (depends on 4, 5, 15)
 
 ### Phase 8
-- [ ] Task 17: Replay one real multi-generation visual fixture in Godot ([details](v3-44-phase-08-presentation-and-release.md#task-17-replay-one-real-multi-generation-visual-fixture-in-godot)) (depends on 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
+- [x] Task 17: Replay one real multi-generation visual fixture in Godot ([details](v3-44-phase-08-presentation-and-release.md#task-17-replay-one-real-multi-generation-visual-fixture-in-godot)) (depends on 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
 - [ ] Task 18: Inspect populated evidence and fork history in the Research UI ([details](v3-44-phase-08-presentation-and-release.md#task-18-inspect-populated-evidence-and-fork-history-in-the-research-ui)) (depends on 5, 12, 13, 14, 15, 16)
 - [ ] Task 19: Ship both Web clients in the normal release image ([details](v3-44-phase-08-presentation-and-release.md#task-19-ship-both-web-clients-in-the-normal-release-image)) (depends on 1)
 - [ ] Task 20: Gate release on authenticated real-browser benchmark acceptance ([details](v3-44-phase-08-presentation-and-release.md#task-20-gate-release-on-authenticated-real-browser-benchmark-acceptance)) (depends on 17, 18, 19)
