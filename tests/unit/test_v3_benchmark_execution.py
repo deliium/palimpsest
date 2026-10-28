@@ -303,16 +303,16 @@ async def test_independent_dispatch_reports_honest_partial_evidence(tmp_path) ->
     assert result.ticks_committed == 2
     assert result.declared_horizon == 2
     assert result.coverage.value == "exercised"
-    # Unimplemented selector evaluators keep evidence honest and partial.
-    assert result.evidence is V3BenchmarkEvidenceAvailability.PARTIAL
+    assert result.evidence is V3BenchmarkEvidenceAvailability.COMPLETE
     assert result.phenomenon.value == "unknown"
     statuses = {check.selector_id: check.status for check in result.checks}
     assert statuses["new_agent_initialization_evidence"] is (
         V3BenchmarkCheckStatus.PASS
     )
     assert statuses["population_lifecycle_evidence"] is (
-        V3BenchmarkCheckStatus.UNEXECUTED
+        V3BenchmarkCheckStatus.PASS
     )
+    assert statuses["objective_event_journal"] is V3BenchmarkCheckStatus.PASS
 
 
 @pytest.mark.asyncio

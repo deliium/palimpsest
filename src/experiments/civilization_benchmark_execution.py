@@ -15,6 +15,10 @@ from typing import TYPE_CHECKING, Final
 from experiments.civilization_benchmark_evidence import (
     BenchmarkBoundaryProbe,
     blank_slate_check,
+    evaluate_cultural_mutation,
+    evaluate_dependency_care,
+    evaluate_developmental_teaching,
+    evaluate_population_lifecycle,
     evaluate_required_actions,
 )
 from experiments.civilization_benchmark_models import (
@@ -39,6 +43,7 @@ from simulation.runner_models import (
     RunnerAttemptReceipt,
     RunnerAttemptStatus,
     RunnerStopReasonCode,
+    SimulationRunnerConfig,
     SimulationRunnerResult,
     runner_stop_is_failure,
 )
@@ -213,10 +218,30 @@ class CivilizationBenchmarkContext:
     comparison_id: str | None = None
 
 
+def _learner_profile_available(
+    config: SimulationRunnerConfig,
+) -> bool:
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
+        SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+    )
+
+    initialization = config.new_agent_initialization
+    return (
+        initialization is not None
+        and initialization.species_defaults_id
+        in {
+            SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+            SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
+        }
+    )
+
+
 def _required_checks(
     recipe: CivilizationBenchmarkRecipe,
     probe: BenchmarkBoundaryProbe,
     *,
+    config: SimulationRunnerConfig,
     boundary_end_tick: int,
 ) -> tuple[V3BenchmarkCheck, ...]:
     spec = get_v3_benchmark_scenario(recipe.scenario_id)
@@ -234,6 +259,40 @@ def _required_checks(
             )
 
             checks.append(evaluate_event_journal(probe))
+        elif selector.selector_id == "population_lifecycle_evidence":
+            checks.append(
+                evaluate_population_lifecycle(
+                    probe, boundary_end_tick=boundary_end_tick
+                )
+            )
+        elif selector.selector_id == "dependency_care_evidence":
+            checks.append(
+                evaluate_dependency_care(
+                    probe, boundary_end_tick=boundary_end_tick
+                )
+            )
+        elif selector.selector_id in {
+            "mentorship_evidence",
+            "developmental_learning_evidence",
+        }:
+            checks.append(
+                evaluate_developmental_teaching(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    selector_id=selector.selector_id,
+                    mechanism_available=_learner_profile_available(config),
+                )
+            )
+        elif selector.selector_id == "cultural_feature_evidence":
+            checks.append(
+                evaluate_cultural_mutation(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=(
+                        config.cultural_feature_provenance is not None
+                    ),
+                )
+            )
         else:
             observations = probe.observations
             checks.append(
@@ -356,7 +415,10 @@ async def execute_civilization_benchmark(
     assert horizon is not None
     receipts = _collect_intervention_receipts(context.arbiter)
     checks = _required_checks(
-        recipe, context.probe, boundary_end_tick=runner_result.ticks_committed
+        recipe,
+        context.probe,
+        config=context.assignment.runner_config,
+        boundary_end_tick=runner_result.ticks_committed,
     )
     if context.required_milestone_ids:
         checks = (

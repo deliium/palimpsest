@@ -183,15 +183,17 @@ async def test_teaching_case_keeps_unmeasured_selectors_unexecuted(
     )
     result = await execute_civilization_benchmark(recipe, context)
     assert result.execution_status is V3BenchmarkExecutionStatus.COMPLETED
-    assert result.evidence is V3BenchmarkEvidenceAvailability.PARTIAL
+    assert result.evidence is V3BenchmarkEvidenceAvailability.COMPLETE
     statuses = {check.selector_id: check for check in result.checks}
     for selector_id in (
         "mentorship_evidence",
         "developmental_learning_evidence",
     ):
         check = statuses[selector_id]
-        assert check.status is V3BenchmarkCheckStatus.UNEXECUTED
-        assert check.reason_code == "selector_evaluator_unavailable"
+        assert check.status is V3BenchmarkCheckStatus.PASS
+        assert check.reason_code == "teaching_window_complete"
+        assert check.denominator >= 1
+        assert 0 <= (check.numerator or 0) <= check.denominator
 
 
 @pytest.mark.asyncio
@@ -218,3 +220,73 @@ def test_base_case_has_no_extra_optional_specs() -> None:
     assert base.config.mentorship is None
     assert base.config.developmental_learning is None
     assert base.config.cultural_feature_provenance is not None
+
+
+@pytest.mark.asyncio
+async def test_all_four_cases_reach_complete_evidence(tmp_path) -> None:
+    for index, scenario_id in enumerate(POPULATION_BENCHMARK_IDS):
+        build = build_population_benchmark(scenario_id)
+        config = _short_config(build.arms[0].config, max_ticks=3)
+        probe = BenchmarkBoundaryProbe()
+        recipe = CivilizationBenchmarkRecipe(
+            scenario_id=scenario_id,
+            lane=V3BenchmarkLane.RESEARCH,
+            profile=V3BenchmarkProfile.SMOKE,
+            seed=23,
+            arm_id="observation",
+        )
+        context = CivilizationBenchmarkContext(
+            assignment=_assignment(config, f"run-all-{index}"),
+            execution_context=_context(tmp_path / scenario_id, probe),
+            probe=probe,
+        )
+        result = await execute_civilization_benchmark(recipe, context)
+        assert result.execution_status is V3BenchmarkExecutionStatus.COMPLETED
+        assert result.ticks_committed == 3
+        assert result.evidence is V3BenchmarkEvidenceAvailability.COMPLETE, (
+            scenario_id,
+            [(check.selector_id, check.status.value) for check in result.checks],
+        )
+        for check in result.checks:
+            assert check.status is V3BenchmarkCheckStatus.PASS
+
+
+@pytest.mark.asyncio
+async def test_teaching_requires_the_recipient_learner_profile(tmp_path) -> None:
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_V1,
+        default_new_agent_initialization_spec,
+    )
+
+    build = build_population_benchmark(V3_BENCH_03_INTERGENERATIONAL_TEACHING)
+    config = _short_config(build.arms[0].config, max_ticks=3)
+    config = replace(
+        config,
+        new_agent_initialization=replace(
+            default_new_agent_initialization_spec(),
+            species_defaults_id=SPECIES_DEFAULT_V1,
+        ),
+    )
+    probe = BenchmarkBoundaryProbe()
+    recipe = CivilizationBenchmarkRecipe(
+        scenario_id=V3_BENCH_03_INTERGENERATIONAL_TEACHING,
+        lane=V3BenchmarkLane.RESEARCH,
+        profile=V3BenchmarkProfile.SMOKE,
+        seed=23,
+        arm_id="observation",
+    )
+    context = CivilizationBenchmarkContext(
+        assignment=_assignment(config, "run-teaching-mode-off"),
+        execution_context=_context(tmp_path / "mode-off", probe),
+        probe=probe,
+    )
+    result = await execute_civilization_benchmark(recipe, context)
+    assert result.evidence is V3BenchmarkEvidenceAvailability.PARTIAL
+    statuses = {check.selector_id: check for check in result.checks}
+    for selector_id in (
+        "mentorship_evidence",
+        "developmental_learning_evidence",
+    ):
+        check = statuses[selector_id]
+        assert check.status is V3BenchmarkCheckStatus.UNEXECUTED
+        assert check.reason_code == "recipient_mode_disabled"

@@ -117,6 +117,10 @@ class OwnerStoreSnapshot:
     counts: tuple[tuple[str, int | None], ...]
     measured_stores: tuple[str, ...]
     unmeasured_stores: tuple[str, ...]
+    teaching_audits: int = 0
+    developmental_acquisitions: int = 0
+    mentorship_audits: int = 0
+    cultural_audits: int = 0
 
     def count(self, store: str) -> int | None:
         for name, value in self.counts:
@@ -137,6 +141,8 @@ class BoundaryObservation:
     owners: tuple[OwnerStoreSnapshot, ...]
     new_owners: tuple[OwnerStoreSnapshot, ...]
     event_count: int = 0
+    event_kind_counts: tuple[tuple[str, int], ...] = ()
+    needs_applied_body_ids: tuple[str, ...] = ()
 
 
 def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapshot:
@@ -166,6 +172,12 @@ def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapsh
         counts=tuple(counts),
         measured_stores=tuple(measured),
         unmeasured_stores=tuple(unmeasured),
+        teaching_audits=content_count(getattr(runtime, "teaching_audits", ())),
+        developmental_acquisitions=content_count(
+            getattr(runtime, "developmental_acquisition_audits", ())
+        ),
+        mentorship_audits=content_count(getattr(runtime, "mentorship_audits", ())),
+        cultural_audits=content_count(getattr(runtime, "cultural_feature_audits", ())),
     )
 
 
@@ -205,11 +217,23 @@ class BenchmarkBoundaryProbe:
         new = tuple(owner for owner in owners if owner.owner_id not in self._seen)
         for owner in new:
             self._seen.add(owner.owner_id)
+        kind_counts: dict[str, int] = {}
+        needs_bodies: list[str] = []
+        for event in boundary.events:
+            details = getattr(event, "details", None)
+            kind = type(details).__name__
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+            if kind == "NeedsApplied":
+                body = getattr(details, "body_id", None)
+                if body is not None:
+                    needs_bodies.append(body.value)
         observation = BoundaryObservation(
             boundary_tick=boundary.boundary_tick.value,
             owners=owners,
             new_owners=new,
             event_count=len(boundary.events),
+            event_kind_counts=tuple(sorted(kind_counts.items())),
+            needs_applied_body_ids=tuple(needs_bodies),
         )
         self._observations.append(observation)
         _LOG.debug(
@@ -350,6 +374,217 @@ def evaluate_event_journal(probe: BenchmarkBoundaryProbe) -> V3BenchmarkCheck:
     )
 
 
+def _entrants(probe: BenchmarkBoundaryProbe) -> tuple[OwnerStoreSnapshot, ...]:
+    observations = probe.observations
+    if not observations:
+        return ()
+    founders = {owner.owner_id for owner in observations[0].owners}
+    return tuple(
+        owner
+        for observation in observations[1:]
+        for owner in observation.new_owners
+        if owner.owner_id not in founders
+    )
+
+
+def _window_complete(probe: BenchmarkBoundaryProbe, boundary_end_tick: int) -> bool:
+    observations = probe.observations
+    return (
+        bool(observations)
+        and observations[-1].boundary_tick == boundary_end_tick
+        and not probe.failures
+    )
+
+
+def _entrant_sources(
+    entrants: tuple[OwnerStoreSnapshot, ...],
+) -> tuple[V3BenchmarkSourceReference, ...]:
+    return tuple(
+        V3BenchmarkSourceReference(
+            source_kind=V3BenchmarkSourceKind.SUBJECTIVE_DEBUG,
+            reference_id=owner.owner_id,
+            owner_id=owner.owner_id,
+        )
+        for owner in entrants
+    )
+
+
+def evaluate_population_lifecycle(
+    probe: BenchmarkBoundaryProbe, *, boundary_end_tick: int
+) -> V3BenchmarkCheck:
+    """Confirm population change across a complete observed window."""
+    entrants = _entrants(probe)
+    complete = _window_complete(probe, boundary_end_tick)
+    return V3BenchmarkCheck(
+        selector_id="population_lifecycle_evidence",
+        selector_version=1,
+        status=(
+            V3BenchmarkCheckStatus.PASS
+            if complete
+            else V3BenchmarkCheckStatus.UNEXECUTED
+        ),
+        reason_code=(
+            "population_window_complete" if complete else "probe_unavailable"
+        ),
+        evidence=(
+            V3BenchmarkEvidenceAvailability.COMPLETE
+            if complete
+            else V3BenchmarkEvidenceAvailability.PARTIAL
+        ),
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=_entrant_sources(entrants),
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=len(entrants),
+        denominator=len(entrants),
+    )
+
+
+def evaluate_dependency_care(
+    probe: BenchmarkBoundaryProbe, *, boundary_end_tick: int
+) -> V3BenchmarkCheck:
+    """Measure applied care for actually admitted dependents."""
+    entrants = _entrants(probe)
+    if not entrants:
+        return V3BenchmarkCheck(
+            selector_id="dependency_care_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="no_dependent_entrant_observed",
+            evidence=V3BenchmarkEvidenceAvailability.UNAVAILABLE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    cared_bodies: set[str] = set()
+    for observation in probe.observations:
+        cared_bodies.update(observation.needs_applied_body_ids)
+    cared = [owner for owner in entrants if owner.entity_id in cared_bodies]
+    complete = _window_complete(probe, boundary_end_tick)
+    return V3BenchmarkCheck(
+        selector_id="dependency_care_evidence",
+        selector_version=1,
+        status=(
+            V3BenchmarkCheckStatus.PASS
+            if complete
+            else V3BenchmarkCheckStatus.UNEXECUTED
+        ),
+        reason_code=(
+            "care_window_complete" if complete else "probe_unavailable"
+        ),
+        evidence=(
+            V3BenchmarkEvidenceAvailability.COMPLETE
+            if complete
+            else V3BenchmarkEvidenceAvailability.PARTIAL
+        ),
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=_entrant_sources(entrants),
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=len(cared),
+        denominator=len(entrants),
+    )
+
+
+def evaluate_developmental_teaching(
+    probe: BenchmarkBoundaryProbe,
+    *,
+    boundary_end_tick: int,
+    selector_id: str,
+    mechanism_available: bool,
+) -> V3BenchmarkCheck:
+    """Measure recipient acquisition; zero acquisition is a valid null."""
+    if not mechanism_available:
+        return V3BenchmarkCheck(
+            selector_id=selector_id,
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="recipient_mode_disabled",
+            evidence=V3BenchmarkEvidenceAvailability.UNAVAILABLE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    entrants = _entrants(probe)
+    acquired = [
+        owner
+        for owner in entrants
+        if owner.teaching_audits > 0 or owner.developmental_acquisitions > 0
+    ]
+    complete = _window_complete(probe, boundary_end_tick)
+    return V3BenchmarkCheck(
+        selector_id=selector_id,
+        selector_version=1,
+        status=(
+            V3BenchmarkCheckStatus.PASS
+            if complete
+            else V3BenchmarkCheckStatus.UNEXECUTED
+        ),
+        reason_code=(
+            "teaching_window_complete" if complete else "probe_unavailable"
+        ),
+        evidence=(
+            V3BenchmarkEvidenceAvailability.COMPLETE
+            if complete
+            else V3BenchmarkEvidenceAvailability.PARTIAL
+        ),
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=_entrant_sources(entrants),
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=len(acquired),
+        denominator=len(entrants),
+    )
+
+
+def evaluate_cultural_mutation(
+    probe: BenchmarkBoundaryProbe,
+    *,
+    boundary_end_tick: int,
+    mechanism_available: bool,
+) -> V3BenchmarkCheck:
+    """Measure cultural acquisition; mutation itself is never required."""
+    if not mechanism_available:
+        return V3BenchmarkCheck(
+            selector_id="cultural_feature_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="cultural_provenance_disabled",
+            evidence=V3BenchmarkEvidenceAvailability.UNAVAILABLE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    entrants = _entrants(probe)
+    acquired = [
+        owner
+        for owner in entrants
+        if (owner.count("cultural_features") or 0) > 0
+        or owner.cultural_audits > 0
+    ]
+    complete = _window_complete(probe, boundary_end_tick)
+    return V3BenchmarkCheck(
+        selector_id="cultural_feature_evidence",
+        selector_version=1,
+        status=(
+            V3BenchmarkCheckStatus.PASS
+            if complete
+            else V3BenchmarkCheckStatus.UNEXECUTED
+        ),
+        reason_code=(
+            "cultural_window_complete" if complete else "probe_unavailable"
+        ),
+        evidence=(
+            V3BenchmarkEvidenceAvailability.COMPLETE
+            if complete
+            else V3BenchmarkEvidenceAvailability.PARTIAL
+        ),
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=_entrant_sources(entrants),
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=len(acquired),
+        denominator=len(entrants),
+    )
+
+
 def evaluate_required_actions(
     receipts: tuple[V3BenchmarkInterventionReceipt, ...],
     required_milestone_ids: tuple[str, ...],
@@ -417,6 +652,10 @@ __all__ = [
     "blank_slate_check",
     "content_count",
     "evaluate_blank_slate",
+    "evaluate_cultural_mutation",
+    "evaluate_dependency_care",
+    "evaluate_developmental_teaching",
     "evaluate_event_journal",
+    "evaluate_population_lifecycle",
     "evaluate_required_actions",
 ]

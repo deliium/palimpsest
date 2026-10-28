@@ -428,7 +428,7 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 5: Publish reproducible sibling reports and a bounded CLI ([details](v3-44-phase-02-execution.md#task-5-publish-reproducible-sibling-reports-and-a-bounded-cli)) (depends on 4)
 
 ### Phase 3
-- [ ] Task 6: Exercise blank entry, care, teaching and cultural mutation ([details](v3-44-phase-03-population-and-memory.md#task-6-exercise-blank-entry-care-teaching-and-cultural-mutation)) (depends on 1, 2, 3, 4, 5)
+- [x] Task 6: Exercise blank entry, care, teaching and cultural mutation ([details](v3-44-phase-03-population-and-memory.md#task-6-exercise-blank-entry-care-teaching-and-cultural-mutation)) (depends on 1, 2, 3, 4, 5)
 - [ ] Task 7: Exercise memory layers and true or false surviving records ([details](v3-44-phase-03-population-and-memory.md#task-7-exercise-memory-layers-and-true-or-false-surviving-records)) (depends on 6)
 
 ### Phase 4
