@@ -531,3 +531,15 @@ def test_disabled_select_leaves_intent_unset_and_hello_stays_truthful(
     assert any("communication_strategy_message" in item for item in channel)
     assert any("mode_disabled" in item for item in channel)
     assert all("hello" not in item for item in channel)
+
+
+def test_duplicate_source_atoms_render_one_unique_concept() -> None:
+    intent, _audit = _choose(source_atom_tokens=("food", "food"))
+    command = render_communication_intent(
+        intent,
+        speaker_id=_SPEAKER,
+        recipient_entity_id=_LISTENER,
+        action_kind="tell",
+    )
+    assert command is not None
+    assert command.utterance.content.concepts == ("food",)

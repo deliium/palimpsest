@@ -975,7 +975,7 @@ def render_communication_intent(
     confidence = intent.source_confidence
     if intent.strategy is CommunicationStrategy.EXAGGERATION:
         confidence = 1.0
-    tokens = _render_tokens(intent, view)
+    tokens = tuple(dict.fromkeys(_render_tokens(intent, view)))
     kind = action_kind
     relations: tuple[CommunicationRelation, ...] = ()
     if intent.strategy is CommunicationStrategy.UNCERTAIN:

@@ -7,10 +7,12 @@ materializes the same six-founder visual world under a stable recipe identity.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from agents.models import AgentId
 from experiments.civilization_benchmark_base import (
     V3BenchmarkBase,
     build_v3_benchmark_base,
@@ -21,7 +23,19 @@ from experiments.civilization_benchmark_models import (
     V3BenchmarkProfile,
 )
 from experiments.civilization_benchmark_suite import V3_BENCH_01_BLANK_SLATE
-from world.identifiers import require_stable_id
+from experiments.interventions import (
+    MilestoneInterventionArbiter,
+    MilestoneOverride,
+)
+from simulation.runner_models import SimulationRunnerConfig
+from world.actions import Move, StartCollectiveProject, Talk
+from world.communications import (
+    CommunicationRelation,
+    CommunicationSourceBasis,
+    origin_utterance,
+)
+from world.identifiers import EntityId, require_stable_id
+from world.values import DayPhase
 
 VISUAL_BENCHMARK_RECIPE_ID: Final[str] = V3_VISUAL_BENCHMARK_ID
 
@@ -41,8 +55,10 @@ __all__ = [
     "VisualMarkerKind",
     "VisualMarkerStatus",
     "build_v3_visual_benchmark",
+    "build_v3_visual_fixture",
     "build_visual_marker_manifest",
     "require_all_visual_markers",
+    "visual_fixture_arbiter",
 ]
 
 
@@ -236,3 +252,124 @@ def require_all_visual_markers(
         if marker.status is VisualMarkerStatus.UNAVAILABLE
     )
     return missing
+
+
+def build_v3_visual_fixture(*, seed: int = 23) -> V3BenchmarkBase:
+    """Controlled visual world with the prerequisites for all eight markers."""
+    from dataclasses import replace
+
+    from simulation.new_agent_initialization import (
+        SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
+        default_new_agent_initialization_spec,
+    )
+    from simulation.runner_models import (
+        ArtifactInterpretationMode,
+        InstitutionConceptMode,
+        OfficeSuccessionMode,
+        example_bounded_experimentation_spec,
+        example_collective_projects_spec,
+        example_developmental_learning_spec,
+        example_knowledge_genealogy_spec,
+        example_mentorship_spec,
+        example_technique_lifecycle_spec,
+    )
+    from world.production import example_production_catalog
+
+    base = build_v3_visual_benchmark(seed=seed)
+    catalog = example_production_catalog()
+    agents = tuple(
+        replace(
+            agent,
+            cognition=replace(
+                agent.cognition,
+                artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
+                institution_concept_mode=InstitutionConceptMode.DETERMINISTIC,
+                office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
+                production_catalog=catalog,
+            ),
+        )
+        for agent in base.config.agents
+    )
+    config = replace(
+        base.config,
+        agents=agents,
+        new_agent_initialization=replace(
+            default_new_agent_initialization_spec(),
+            species_defaults_id=SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
+        ),
+        developmental_learning=example_developmental_learning_spec(),
+        mentorship=example_mentorship_spec(),
+        knowledge_genealogy=example_knowledge_genealogy_spec(),
+        technique_lifecycle=example_technique_lifecycle_spec(),
+        bounded_experimentation=example_bounded_experimentation_spec(
+            learn_into_genealogy=True
+        ),
+        collective_projects=example_collective_projects_spec(),
+    )
+    return replace(
+        base,
+        config=config,
+        founder_ids=tuple(agent.agent_id.value for agent in config.agents),
+    )
+
+
+def visual_fixture_arbiter(
+    config: SimulationRunnerConfig,
+) -> MilestoneInterventionArbiter:
+    """Sparse ordinary-command opportunities; no ledger is seeded."""
+    horizon = config.stop_policy.max_ticks or 160
+    days = tuple(
+        tick
+        for tick in range(horizon)
+        if config.resolve_physical_rules().day_phase_for_tick(tick) is DayPhase.DAY
+    ) or (0,)
+    milestones: list[MilestoneOverride] = [
+        MilestoneOverride(
+            milestone_id="v3-visual-project-start",
+            tick=0,
+            agent_id=AgentId("agent-origin"),
+            build_command=lambda: StartCollectiveProject(project_kind="shared_shelter"),
+        ),
+        MilestoneOverride(
+            milestone_id="v3-visual-journey",
+            tick=1,
+            agent_id=AgentId("agent-origin"),
+            build_command=lambda: Move(EntityId("loc-spring")),
+        ),
+    ]
+    for index, day in enumerate(days[:6]):
+        milestones.append(
+            MilestoneOverride(
+                milestone_id=f"v3-visual-endorse-{index}",
+                tick=day,
+                agent_id=AgentId("agent-extra-1"),
+                build_command=_endorse_command(day, "body-extra-1", "body-origin"),
+            )
+        )
+    milestones.sort(key=lambda item: (item.tick, item.agent_id.value))
+    return MilestoneInterventionArbiter(
+        tuple(milestones), override_budget=len(milestones)
+    )
+
+
+def _endorse_command(tick: int, speaker: str, occupant: str) -> Callable[[], Talk]:
+    def build() -> Talk:
+        return Talk(
+            recipient_id=EntityId("body-origin"),
+            utterance=origin_utterance(
+                speaker_id=EntityId(speaker),
+                communication_id=f"v3-visual-endorse-{tick}",
+                text="endorse",
+                sender_confidence=0.7,
+                relations=(
+                    CommunicationRelation(
+                        subject="collective_project",
+                        predicate="office_endorse",
+                        object=f"fedcba9876543210|{occupant}|-",
+                    ),
+                ),
+                source_basis=CommunicationSourceBasis.UNREFERENCED,
+            ),
+        )
+
+    return build
