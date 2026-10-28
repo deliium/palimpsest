@@ -30,8 +30,18 @@ _LOG: Final[logging.Logger] = logging.getLogger("experiments.generational_execut
 
 PLAIN_RECIPE_ID: Final[str] = "plain-generational"
 BL_RECIPE_ID: Final[str] = "bl-diagnostic"
+BENCHMARK_RECIPE_ID: Final[str] = "v3-benchmark"
 BL_TREATMENTS: Final[frozenset[str]] = frozenset(
     {"single_cohort", "unassisted", "contact"}
+)
+_BENCHMARK_RECIPE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "scenario_id",
+        "lane",
+        "profile",
+        "command_plan_id",
+        "command_plan_version",
+    }
 )
 
 
@@ -39,6 +49,94 @@ class GenerationalExecutionError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+def _validate_benchmark_recipe(
+    recipe: GenerationalExecutionRecipe,
+    config: SimulationRunnerConfig,
+    lifecycle: object,
+) -> None:
+    """Validate the closed ``v3-benchmark`` descriptor and its bounded world."""
+    from experiments.civilization_benchmark_base import (
+        V3_BENCHMARK_PROFILE_BUDGETS,
+    )
+    from experiments.civilization_benchmark_models import (
+        V3BenchmarkLane,
+        V3BenchmarkProfile,
+    )
+    from experiments.civilization_benchmark_suite import (
+        get_v3_benchmark_scenario,
+    )
+    from simulation.runner_models import RUNNER_SCHEMA_VERSION_V55
+
+    if recipe.version != "1":
+        raise GenerationalExecutionError("unknown_execution_recipe")
+    params = recipe.params or {}
+    if set(params) != _BENCHMARK_RECIPE_KEYS:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    if recipe.intervention_id is not None:
+        raise GenerationalExecutionError("recipe_intervention_mismatch")
+    scenario_id = params["scenario_id"]
+    lane = params["lane"]
+    profile = params["profile"]
+    command_plan_id = params["command_plan_id"]
+    command_plan_version = params["command_plan_version"]
+    if (
+        type(scenario_id) is not str
+        or type(lane) is not str
+        or type(profile) is not str
+    ):
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    try:
+        spec = get_v3_benchmark_scenario(scenario_id)
+        lane_value = V3BenchmarkLane(lane)
+        profile_value = V3BenchmarkProfile(profile)
+    except ValueError as exc:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch") from exc
+    if lane_value not in spec.lanes:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    grouped = spec.recipe.arm_count > 1
+    if grouped:
+        if (
+            type(command_plan_id) is not str
+            or not command_plan_id
+            or type(command_plan_version) is not str
+            or not command_plan_version
+        ):
+            raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    elif command_plan_id is not None or command_plan_version is not None:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    if config.schema_version != RUNNER_SCHEMA_VERSION_V55:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    if config.new_agent_initialization is None:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    budget = V3_BENCHMARK_PROFILE_BUDGETS[profile_value]
+    if config.seed not in budget.seeds:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    if config.stop_policy.max_ticks != budget.horizon_ticks:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    policy_id = getattr(lifecycle, "demographic_policy_id", None)
+    if policy_id != "generational_interval_entry":
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    if config.stop_policy.stop_on_all_agents_terminal:
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    if config.generational_run is None:
+        raise GenerationalExecutionError("generational_config_required")
+    if (
+        config.generational_run.max_generation_index is not None
+        or config.generational_run.stop_on_extinction
+        or config.generational_run.population_threshold is not None
+        or config.generational_run.experiment_criteria
+    ):
+        raise GenerationalExecutionError("recipe_descriptor_mismatch")
+    _LOG.debug(
+        "benchmark_recipe_validated scenario_id=%s lane=%s profile=%s "
+        "command_plan=%s",
+        scenario_id,
+        lane,
+        profile,
+        command_plan_id is not None,
+    )
 
 
 def _validate_recipe(
@@ -49,6 +147,9 @@ def _validate_recipe(
     lifecycle = config.population_lifecycle
     if lifecycle is None:
         raise GenerationalExecutionError("lifecycle_required")
+    if recipe.recipe_id == BENCHMARK_RECIPE_ID:
+        _validate_benchmark_recipe(recipe, config, lifecycle)
+        return
     if recipe.recipe_id == PLAIN_RECIPE_ID:
         if recipe.version != "1" or recipe.params or recipe.intervention_id is not None:
             raise GenerationalExecutionError("recipe_descriptor_mismatch")
@@ -353,6 +454,7 @@ async def execute_generational_assignment(
 
 
 __all__ = [
+    "BENCHMARK_RECIPE_ID",
     "BL_RECIPE_ID",
     "BL_TREATMENTS",
     "PLAIN_RECIPE_ID",

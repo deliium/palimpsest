@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Final
 from experiments.civilization_benchmark_evidence import (
     BenchmarkBoundaryProbe,
     blank_slate_check,
+    evaluate_required_actions,
 )
 from experiments.civilization_benchmark_models import (
     V3BenchmarkCheck,
@@ -24,6 +25,7 @@ from experiments.civilization_benchmark_models import (
     V3BenchmarkEvidenceAvailability,
     V3BenchmarkExecutionKind,
     V3BenchmarkExecutionStatus,
+    V3BenchmarkInterventionReceipt,
     V3BenchmarkLane,
     V3BenchmarkPhenomenon,
     V3BenchmarkProfile,
@@ -106,6 +108,7 @@ async def execute_stepped_benchmark_runner(
     await _notify(runner, None, boundary_observer, failures)
     receipts: list[RunnerAttemptReceipt] = []
     stop_reason: RunnerStopReasonCode | None = None
+    final_receipt: RunnerAttemptReceipt | None = None
     while stop_reason is None:
         receipt = await runner.run_tick()
         receipts.append(receipt)
@@ -122,10 +125,16 @@ async def execute_stepped_benchmark_runner(
             and runner.ticks_committed >= runner.config.stop_policy.max_ticks
         ):
             stop_reason = RunnerStopReasonCode.MAX_TICKS
-        # The tick is fully finalized; observe before the next tick or finish.
-        await _notify(runner, receipt, boundary_observer, failures)
+        if stop_reason is None:
+            # The tick is fully finalized; observe before the next tick.
+            await _notify(runner, receipt, boundary_observer, failures)
+        else:
+            # Terminal boundaries are inspectable only after finish_run.
+            final_receipt = receipt
     assert stop_reason is not None
     result = await runner.finish_run(stop_reason)
+    if final_receipt is not None:
+        await _notify(runner, final_receipt, boundary_observer, failures)
     _LOG.info(
         "benchmark_stepped_run_finished run_id=%s ticks_committed=%s "
         "stop_reason=%s probe_failure_count=%s",
@@ -191,6 +200,8 @@ class CivilizationBenchmarkContext:
     assignment: ExperimentAssignment | None = None
     execution_context: GenerationalExecutionContext | None = None
     probe: BenchmarkBoundaryProbe | None = None
+    arbiter: object | None = None
+    required_milestone_ids: tuple[str, ...] = ()
     grouped_runner: (
         Callable[
             [CivilizationBenchmarkRecipe, CivilizationBenchmarkContext],
@@ -255,6 +266,47 @@ def _execution_status(result: SimulationRunnerResult) -> V3BenchmarkExecutionSta
     return V3BenchmarkExecutionStatus.COMPLETED
 
 
+def _collect_intervention_receipts(
+    arbiter: object | None,
+) -> tuple[V3BenchmarkInterventionReceipt, ...]:
+    if arbiter is None:
+        return ()
+    records = {
+        record.milestone_id: record
+        for record in getattr(arbiter, "proposed_versus_effective", ())
+    }
+    receipts: list[V3BenchmarkInterventionReceipt] = []
+    status_lookup = getattr(arbiter, "milestone_status", None)
+    for milestone in getattr(arbiter, "milestones", ()):
+        milestone_id = milestone.milestone_id
+        if status_lookup is None:
+            continue
+        status = status_lookup(milestone_id)
+        record = records.get(milestone_id)
+        receipts.append(
+            V3BenchmarkInterventionReceipt(
+                milestone_id=milestone_id,
+                status=getattr(status, "value", str(status)),
+                proposed_command_kind=(
+                    "none"
+                    if record is None
+                    else getattr(record, "proposed_command_kind", "none")
+                ),
+                effective_command_kind=(
+                    "none"
+                    if record is None
+                    else getattr(record, "effective_command_kind", "none")
+                ),
+                resolution_status=(
+                    None
+                    if record is None
+                    else getattr(record, "resolution_status", None)
+                ),
+            )
+        )
+    return tuple(receipts)
+
+
 async def execute_civilization_benchmark(
     recipe: CivilizationBenchmarkRecipe,
     context: CivilizationBenchmarkContext,
@@ -288,13 +340,31 @@ async def execute_civilization_benchmark(
     execution_context = replace(
         context.execution_context, boundary_observer=context.probe
     )
+    if context.arbiter is not None:
+        base_configurator = execution_context.configurator
+        arbiter = context.arbiter
+
+        def _configure(runner: SimulationRunner) -> None:
+            runner.set_intervention_arbiter(arbiter)
+            if base_configurator is not None:
+                base_configurator(runner)
+
+        execution_context = replace(execution_context, configurator=_configure)
     arm = await execute_generational_assignment(context.assignment, execution_context)
     runner_result = arm.runner_result
     horizon = context.assignment.runner_config.stop_policy.max_ticks
     assert horizon is not None
+    receipts = _collect_intervention_receipts(context.arbiter)
     checks = _required_checks(
         recipe, context.probe, boundary_end_tick=runner_result.ticks_committed
     )
+    if context.required_milestone_ids:
+        checks = (
+            *checks,
+            evaluate_required_actions(
+                receipts, context.required_milestone_ids
+            ),
+        )
     status = _execution_status(runner_result)
     observations = context.probe.observations
     all_required_pass = bool(checks) and all(
@@ -332,6 +402,7 @@ async def execute_civilization_benchmark(
             "published" if context.publication_receipts else "not_requested"
         ),
         comparison_id=context.comparison_id,
+        intervention_receipts=receipts,
     )
     _LOG.info(
         "benchmark_attempt_executed scenario_id=%s lane=%s status=%s "

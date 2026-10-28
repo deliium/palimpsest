@@ -19,6 +19,7 @@ from experiments.civilization_benchmark_models import (
     V3BenchmarkCoverage,
     V3BenchmarkError,
     V3BenchmarkEvidenceAvailability,
+    V3BenchmarkInterventionReceipt,
     V3BenchmarkSourceKind,
     V3BenchmarkSourceReference,
 )
@@ -349,6 +350,64 @@ def evaluate_event_journal(probe: BenchmarkBoundaryProbe) -> V3BenchmarkCheck:
     )
 
 
+def evaluate_required_actions(
+    receipts: tuple[V3BenchmarkInterventionReceipt, ...],
+    required_milestone_ids: tuple[str, ...],
+) -> V3BenchmarkCheck:
+    """Require APPLIED acknowledgements for every declared mechanism action."""
+    by_id = {receipt.milestone_id: receipt for receipt in receipts}
+    sources = tuple(
+        V3BenchmarkSourceReference(
+            source_kind=V3BenchmarkSourceKind.OBJECTIVE_INSPECTION,
+            reference_id=milestone_id,
+        )
+        for milestone_id in required_milestone_ids
+        if milestone_id in by_id
+    )
+    applied = 0
+    for milestone_id in required_milestone_ids:
+        receipt = by_id.get(milestone_id)
+        if receipt is not None and receipt.status == "applied":
+            applied += 1
+    missing = [item for item in required_milestone_ids if item not in by_id]
+    denominator = len(required_milestone_ids)
+    if missing:
+        return V3BenchmarkCheck(
+            selector_id="mechanism_intervention_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="required_action_not_applied",
+            evidence=V3BenchmarkEvidenceAvailability.PARTIAL,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=sources,
+            numerator=applied,
+            denominator=denominator,
+        )
+    if applied != denominator:
+        return V3BenchmarkCheck(
+            selector_id="mechanism_intervention_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.FAIL,
+            reason_code="required_action_not_applied",
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=sources,
+            numerator=applied,
+            denominator=denominator,
+        )
+    return V3BenchmarkCheck(
+        selector_id="mechanism_intervention_evidence",
+        selector_version=1,
+        status=V3BenchmarkCheckStatus.PASS,
+        reason_code="required_actions_applied",
+        evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=sources,
+        numerator=applied,
+        denominator=denominator,
+    )
+
+
 __all__ = [
     "NOT_PERSISTED_STORES",
     "STORE_PROBE_PATHS",
@@ -359,4 +418,5 @@ __all__ = [
     "content_count",
     "evaluate_blank_slate",
     "evaluate_event_journal",
+    "evaluate_required_actions",
 ]

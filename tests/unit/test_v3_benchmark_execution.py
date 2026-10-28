@@ -12,6 +12,7 @@ from experiments.civilization_benchmark_evidence import (
     OwnerStoreSnapshot,
     blank_slate_check,
     evaluate_blank_slate,
+    evaluate_required_actions,
 )
 from experiments.civilization_benchmark_execution import (
     CivilizationBenchmarkContext,
@@ -24,6 +25,7 @@ from experiments.civilization_benchmark_models import (
     V3BenchmarkCheckStatus,
     V3BenchmarkEvidenceAvailability,
     V3BenchmarkExecutionStatus,
+    V3BenchmarkInterventionReceipt,
     V3BenchmarkLane,
     V3BenchmarkProfile,
 )
@@ -357,3 +359,172 @@ def test_grouped_recipe_requires_a_command_plan() -> None:
             arm_id="fork-child",
         )
     assert excinfo.value.code == "recipe_descriptor_mismatch"
+
+
+def _benchmark_recipe_params(command_plan: bool = False) -> dict[str, object]:
+    return {
+        "scenario_id": V3_BENCH_01_BLANK_SLATE,
+        "lane": "research",
+        "profile": "smoke",
+        "command_plan_id": "plan-smoke" if command_plan else None,
+        "command_plan_version": "1" if command_plan else None,
+    }
+
+
+def test_persisted_benchmark_recipe_is_closed_and_validated(tmp_path) -> None:
+    from experiments.generational_execution import (
+        BENCHMARK_RECIPE_ID,
+        GenerationalExecutionError,
+    )
+
+    base = build_v3_benchmark_base(
+        seed=None,
+        profile=V3BenchmarkProfile.SMOKE,
+        scenario_id=V3_BENCH_01_BLANK_SLATE,
+    )
+    valid = _execution_context(tmp_path)
+    valid = replace(
+        valid,
+        recipe=GenerationalExecutionRecipe(
+            recipe_id=BENCHMARK_RECIPE_ID,
+            version="1",
+            params=_benchmark_recipe_params(),
+        ),
+    )
+    valid.preflight(base.config)
+
+    bad_keys = replace(
+        valid,
+        recipe=replace(
+            valid.recipe,
+            params={**_benchmark_recipe_params(), "arbitrary_callable": "evil"},
+        ),
+    )
+    with pytest.raises(GenerationalExecutionError) as excinfo:
+        bad_keys.preflight(base.config)
+    assert excinfo.value.code == "recipe_descriptor_mismatch"
+
+    grouped_plan = replace(
+        valid,
+        recipe=replace(
+            valid.recipe, params=_benchmark_recipe_params(command_plan=True)
+        ),
+    )
+    with pytest.raises(GenerationalExecutionError) as excinfo:
+        grouped_plan.preflight(base.config)
+    assert excinfo.value.code == "recipe_descriptor_mismatch"
+
+    shortened = _config(max_ticks=3)
+    with pytest.raises(GenerationalExecutionError) as excinfo:
+        valid.preflight(shortened)
+    assert excinfo.value.code == "recipe_descriptor_mismatch"
+
+
+def test_required_action_receipts_require_applied_acknowledgements() -> None:
+    applied = V3BenchmarkInterventionReceipt(
+        milestone_id="milestone-1",
+        status="applied",
+        proposed_command_kind="wait",
+        effective_command_kind="move",
+        resolution_status="applied",
+    )
+    rejected = V3BenchmarkInterventionReceipt(
+        milestone_id="milestone-2",
+        status="rejected",
+        proposed_command_kind="wait",
+        effective_command_kind="move",
+        resolution_status="rejected",
+    )
+    passed = evaluate_required_actions((applied,), ("milestone-1",))
+    assert passed.status is V3BenchmarkCheckStatus.PASS
+    assert passed.reason_code == "required_actions_applied"
+
+    failed = evaluate_required_actions(
+        (applied, rejected), ("milestone-1", "milestone-2")
+    )
+    assert failed.status is V3BenchmarkCheckStatus.FAIL
+    assert failed.reason_code == "required_action_not_applied"
+    assert failed.numerator == 1
+    assert failed.denominator == 2
+
+    missing = evaluate_required_actions((applied,), ("milestone-1", "milestone-9"))
+    assert missing.status is V3BenchmarkCheckStatus.UNEXECUTED
+    assert missing.evidence is V3BenchmarkEvidenceAvailability.PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_terminal_export_rejects_pending_publication_stage() -> None:
+    from simulation.run_control import GenerationalBoundaryStage
+
+    config = _config(max_ticks=1)
+    async with await SimulationRunner.from_config(config) as runner:
+        await runner.run()
+        runner._generational_boundary_stage = (
+            GenerationalBoundaryStage.PUBLICATION_PENDING
+        )
+        with pytest.raises(ForkCheckpointError) as excinfo:
+            await runner.export_finalized_research_boundary()
+    assert excinfo.value.code == "research_boundary_incomplete"
+
+
+@pytest.mark.asyncio
+async def test_two_assignments_keep_isolated_probe_observations() -> None:
+    config = _config(max_ticks=2)
+    first_probe = BenchmarkBoundaryProbe()
+    second_probe = BenchmarkBoundaryProbe()
+    async with await SimulationRunner.from_config(config) as runner:
+        await execute_stepped_benchmark_runner(runner, boundary_observer=first_probe)
+    async with await SimulationRunner.from_config(config) as runner:
+        await execute_stepped_benchmark_runner(runner, boundary_observer=second_probe)
+    assert first_probe.observations == second_probe.observations
+    assert first_probe is not second_probe
+    assert first_probe.new_owners() is not second_probe.new_owners()
+    assert len(first_probe.observations) == 3
+
+
+@pytest.mark.asyncio
+async def test_generation_stop_parity_between_normal_and_stepped() -> None:
+    config = _config(max_ticks=5)
+    assert config.generational_run is not None
+    config = replace(
+        config,
+        generational_run=replace(config.generational_run, max_generation_index=1),
+    )
+    async with await SimulationRunner.from_config(config) as normal_runner:
+        normal = await normal_runner.run()
+    async with await SimulationRunner.from_config(config) as stepped_runner:
+        stepped = await execute_stepped_benchmark_runner(stepped_runner)
+    assert stepped.result.stop_reason is normal.stop_reason
+    assert stepped.result.ticks_committed == normal.ticks_committed
+    assert stepped.result.objective_state_hash == normal.objective_state_hash
+
+
+@pytest.mark.asyncio
+async def test_capture_toggle_preserves_objective_scientific_results(
+    tmp_path,
+) -> None:
+    from experiments.cultural_metric_artifacts import CulturalCaptureOptions
+    from experiments.generational_execution import execute_generational_assignment
+
+    config = _config(max_ticks=2)
+    off_context = replace(
+        _execution_context(tmp_path / "off"), attempt_id="attempt-off"
+    )
+    on_context = replace(
+        _execution_context(tmp_path / "on"),
+        attempt_id="attempt-on",
+        cultural_capture=CulturalCaptureOptions(enabled=True),
+    )
+    off_arm = await execute_generational_assignment(
+        _assignment(config, "run-capture-off"), off_context
+    )
+    on_arm = await execute_generational_assignment(
+        _assignment(config, "run-capture-on"), on_context
+    )
+    assert off_arm.runner_result.ticks_committed == on_arm.runner_result.ticks_committed
+    assert off_arm.runner_result.stop_reason is on_arm.runner_result.stop_reason
+    assert (
+        off_arm.runner_result.objective_state_hash
+        == on_arm.runner_result.objective_state_hash
+    )
+    assert len(off_arm.committed_events or ()) == len(on_arm.committed_events or ())

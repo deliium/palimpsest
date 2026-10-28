@@ -424,7 +424,7 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 3: Add an explicit blank civilization learner profile ([details](v3-44-phase-01-contracts.md#task-3-add-an-explicit-blank-civilization-learner-profile)) (depends on 1, 2)
 
 ### Phase 2
-- [ ] Task 4: Execute independent lanes with real owner and admission probes ([details](v3-44-phase-02-execution.md#task-4-execute-independent-lanes-with-real-owner-and-admission-probes)) (depends on 1, 2, 3)
+- [x] Task 4: Execute independent lanes with real owner and admission probes ([details](v3-44-phase-02-execution.md#task-4-execute-independent-lanes-with-real-owner-and-admission-probes)) (depends on 1, 2, 3)
 - [ ] Task 5: Publish reproducible sibling reports and a bounded CLI ([details](v3-44-phase-02-execution.md#task-5-publish-reproducible-sibling-reports-and-a-bounded-cli)) (depends on 4)
 
 ### Phase 3

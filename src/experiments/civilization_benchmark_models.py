@@ -162,6 +162,7 @@ EVIDENCE_SELECTOR_VERSIONS: Final[Mapping[str, int]] = {
     "path_dependence_outcome_evidence": 1,
     "objective_event_journal": 1,
     "recording_replay_evidence": 1,
+    "mechanism_intervention_evidence": 1,
 }
 
 # Closed run-level specification IDs a recipe may declare as prerequisites.
@@ -655,6 +656,39 @@ class V3BenchmarkCheck:
 
 
 @dataclass(frozen=True, slots=True)
+class V3BenchmarkInterventionReceipt:
+    """Applied/rejected acknowledgement of one declared mechanism action."""
+
+    milestone_id: str
+    status: str
+    proposed_command_kind: str
+    effective_command_kind: str
+    resolution_status: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "milestone_id", require_stable_id("milestone_id", self.milestone_id)
+        )
+        object.__setattr__(self, "status", require_stable_id("status", self.status))
+        object.__setattr__(
+            self,
+            "proposed_command_kind",
+            require_stable_id("proposed_command_kind", self.proposed_command_kind),
+        )
+        object.__setattr__(
+            self,
+            "effective_command_kind",
+            require_stable_id("effective_command_kind", self.effective_command_kind),
+        )
+        if self.resolution_status is not None:
+            object.__setattr__(
+                self,
+                "resolution_status",
+                require_stable_id("resolution_status", self.resolution_status),
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class V3BenchmarkRunResult:
     """Separated execution, evidence, phenomenon and publication state."""
 
@@ -669,6 +703,7 @@ class V3BenchmarkRunResult:
     checks: tuple[V3BenchmarkCheck, ...]
     publication_status: str = "not_requested"
     comparison_id: str | None = None
+    intervention_receipts: tuple[V3BenchmarkInterventionReceipt, ...] = ()
 
     def __post_init__(self) -> None:
         scenario_id = require_stable_id("scenario_id", self.scenario_id)
@@ -706,6 +741,18 @@ class V3BenchmarkRunResult:
                 "duplicate_check_selector", "checks must reference unique selectors"
             )
         object.__setattr__(self, "checks", checks)
+        receipts = _ordered_typed_tuple(
+            "intervention_receipt",
+            self.intervention_receipts,
+            V3BenchmarkInterventionReceipt,
+            allow_empty=True,
+        )
+        if len({item.milestone_id for item in receipts}) != len(receipts):
+            raise V3BenchmarkError(
+                "duplicate_intervention_receipt",
+                "intervention receipts must be unique per milestone",
+            )
+        object.__setattr__(self, "intervention_receipts", receipts)
         if type(self.publication_status) is not str:
             raise V3BenchmarkError(
                 "invalid_publication_status", "publication_status must be str"
@@ -789,6 +836,7 @@ __all__ = [
     "V3BenchmarkEvidenceSelector",
     "V3BenchmarkExecutionKind",
     "V3BenchmarkExecutionStatus",
+    "V3BenchmarkInterventionReceipt",
     "V3BenchmarkLane",
     "V3BenchmarkPhenomenon",
     "V3BenchmarkProfile",
