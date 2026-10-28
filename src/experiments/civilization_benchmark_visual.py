@@ -170,7 +170,10 @@ def build_visual_marker_manifest(
             ("ProjectCreated", "ProjectContributed"),
         )
     )
-    taught = sum(owner.teaching_audits + owner.mentorship_audits for owner in owners)
+    result_teaching = tuple(getattr(result, "teaching_audits", ()) or ())
+    taught = sum(
+        owner.teaching_audits + owner.mentorship_audits for owner in owners
+    ) + len(result_teaching)
     stamps.append(
         VisualAcceptanceMarker(
             kind=VisualMarkerKind.TEACHING,
@@ -184,7 +187,13 @@ def build_visual_marker_manifest(
             owner_ids=owner_ids if taught else (),
         )
     )
-    knowledge = sum(int(owner.count("practical_knowledge") or 0) for owner in owners)
+    skill_audits = tuple(getattr(result, "skill_audits", ()) or ())
+    practical_audits = tuple(getattr(result, "practical_knowledge_audits", ()) or ())
+    knowledge = (
+        sum(int(owner.count("practical_knowledge") or 0) for owner in owners)
+        + len(skill_audits)
+        + len(practical_audits)
+    )
     stamps.append(
         VisualAcceptanceMarker(
             kind=VisualMarkerKind.TECHNOLOGY_SPREAD,
@@ -199,7 +208,9 @@ def build_visual_marker_manifest(
         )
     )
     cultural_owners = tuple(
-        owner.owner_id for owner in owners if owner.cultural_audits > 0
+        owner.owner_id
+        for owner in owners
+        if owner.cultural_audits > 0 or int(owner.count("cultural_features") or 0) > 0
     )
     stamps.append(
         VisualAcceptanceMarker(
@@ -363,16 +374,29 @@ def visual_fixture_arbiter(
         milestones.append(
             MilestoneOverride(
                 milestone_id="v3-visual-succession",
-                tick=days[2],
+                tick=days[1],
                 agent_id=AgentId("agent-extra-2"),
                 build_command=_succession_command(
-                    days[2], "body-extra-2", "body-origin", "body-extra-1"
+                    days[1], "body-extra-2", "body-origin", "body-extra-1"
                 ),
             )
         )
     occupied = {(item.tick, item.agent_id.value) for item in milestones}
     for tick in range(3):
         for agent_id in ("agent-origin", "agent-extra-1"):
+            if (tick, agent_id) in occupied:
+                continue
+            milestones.append(
+                MilestoneOverride(
+                    milestone_id=f"v3-visual-hold-{agent_id}-{tick}",
+                    tick=tick,
+                    agent_id=AgentId(agent_id),
+                    build_command=lambda: Wait(),
+                )
+            )
+    occupied = {(item.tick, item.agent_id.value) for item in milestones}
+    for tick in range(days[1]):
+        for agent_id in ("agent-origin", "agent-extra-2"):
             if (tick, agent_id) in occupied:
                 continue
             milestones.append(
