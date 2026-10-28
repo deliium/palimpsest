@@ -429,7 +429,7 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 
 ### Phase 3
 - [x] Task 6: Exercise blank entry, care, teaching and cultural mutation ([details](v3-44-phase-03-population-and-memory.md#task-6-exercise-blank-entry-care-teaching-and-cultural-mutation)) (depends on 1, 2, 3, 4, 5)
-- [ ] Task 7: Exercise memory layers and true or false surviving records ([details](v3-44-phase-03-population-and-memory.md#task-7-exercise-memory-layers-and-true-or-false-surviving-records)) (depends on 6)
+- [x] Task 7: Exercise memory layers and true or false surviving records ([details](v3-44-phase-03-population-and-memory.md#task-7-exercise-memory-layers-and-true-or-false-surviving-records)) (depends on 6)
 
 ### Phase 4
 - [ ] Task 8: Exercise discovery, diffusion, loss and independent rediscovery ([details](v3-44-phase-04-technology-and-exchange.md#task-8-exercise-discovery-diffusion-loss-and-independent-rediscovery)) (depends on 6, 7)

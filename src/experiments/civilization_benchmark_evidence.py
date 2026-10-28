@@ -121,6 +121,7 @@ class OwnerStoreSnapshot:
     developmental_acquisitions: int = 0
     mentorship_audits: int = 0
     cultural_audits: int = 0
+    artifact_interpretations: int = 0
 
     def count(self, store: str) -> int | None:
         for name, value in self.counts:
@@ -178,6 +179,9 @@ def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapsh
         ),
         mentorship_audits=content_count(getattr(runtime, "mentorship_audits", ())),
         cultural_audits=content_count(getattr(runtime, "cultural_feature_audits", ())),
+        artifact_interpretations=content_count(
+            getattr(runtime, "artifact_interpretations", ())
+        ),
     )
 
 
@@ -406,6 +410,121 @@ def _entrant_sources(
             owner_id=owner.owner_id,
         )
         for owner in entrants
+    )
+
+
+def _event_total(probe: BenchmarkBoundaryProbe, kind: str) -> int:
+    return sum(
+        dict(observation.event_kind_counts).get(kind, 0)
+        for observation in probe.observations
+    )
+
+
+def evaluate_historical_memory(
+    probe: BenchmarkBoundaryProbe, *, boundary_end_tick: int
+) -> V3BenchmarkCheck:
+    """Measure retained owner memory over a complete observed window."""
+    observations = probe.observations
+    owners = observations[-1].owners if observations else ()
+    with_memory = [owner for owner in owners if owner.count("episodic_memory")]
+    complete = _window_complete(probe, boundary_end_tick)
+    return V3BenchmarkCheck(
+        selector_id="historical_memory_evidence",
+        selector_version=1,
+        status=(
+            V3BenchmarkCheckStatus.PASS
+            if complete
+            else V3BenchmarkCheckStatus.UNEXECUTED
+        ),
+        reason_code=(
+            "memory_window_complete" if complete else "probe_unavailable"
+        ),
+        evidence=(
+            V3BenchmarkEvidenceAvailability.COMPLETE
+            if complete
+            else V3BenchmarkEvidenceAvailability.PARTIAL
+        ),
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=tuple(
+            V3BenchmarkSourceReference(
+                source_kind=V3BenchmarkSourceKind.SUBJECTIVE_DEBUG,
+                reference_id=owner.owner_id,
+                owner_id=owner.owner_id,
+            )
+            for owner in with_memory
+        ),
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=len(with_memory),
+        denominator=len(owners),
+    )
+
+
+def evaluate_durable_records(
+    probe: BenchmarkBoundaryProbe,
+    *,
+    boundary_end_tick: int,
+    mechanism_available: bool,
+) -> V3BenchmarkCheck:
+    """A record must physically exist; interpretation is measured separately."""
+    if not mechanism_available:
+        return V3BenchmarkCheck(
+            selector_id="durable_record_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="durable_records_disabled",
+            evidence=V3BenchmarkEvidenceAvailability.UNAVAILABLE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    created = _event_total(probe, "ArtifactCreated")
+    destroyed = _event_total(probe, "ArtifactDestroyed")
+    complete = _window_complete(probe, boundary_end_tick)
+    if not complete:
+        return V3BenchmarkCheck(
+            selector_id="durable_record_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="probe_unavailable",
+            evidence=V3BenchmarkEvidenceAvailability.PARTIAL,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=(),
+        )
+    if created < 1:
+        return V3BenchmarkCheck(
+            selector_id="durable_record_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="no_record_observed",
+            evidence=V3BenchmarkEvidenceAvailability.PARTIAL,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    observations = probe.observations
+    sources = tuple(
+        V3BenchmarkSourceReference(
+            source_kind=V3BenchmarkSourceKind.OBJECTIVE_INSPECTION,
+            reference_id=f"artifact-events-t{observation.boundary_tick}",
+            tick=observation.boundary_tick,
+        )
+        for observation in observations[-1:]
+    )
+    return V3BenchmarkCheck(
+        selector_id="durable_record_evidence",
+        selector_version=1,
+        status=V3BenchmarkCheckStatus.PASS,
+        reason_code=(
+            "record_persisted"
+            if destroyed == 0
+            else "record_physically_removed"
+        ),
+        evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=sources,
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=created,
+        denominator=created,
     )
 
 
@@ -655,7 +774,9 @@ __all__ = [
     "evaluate_cultural_mutation",
     "evaluate_dependency_care",
     "evaluate_developmental_teaching",
+    "evaluate_durable_records",
     "evaluate_event_journal",
+    "evaluate_historical_memory",
     "evaluate_population_lifecycle",
     "evaluate_required_actions",
 ]

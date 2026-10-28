@@ -18,6 +18,8 @@ from experiments.civilization_benchmark_evidence import (
     evaluate_cultural_mutation,
     evaluate_dependency_care,
     evaluate_developmental_teaching,
+    evaluate_durable_records,
+    evaluate_historical_memory,
     evaluate_population_lifecycle,
     evaluate_required_actions,
 )
@@ -281,6 +283,20 @@ def _required_checks(
                     boundary_end_tick=boundary_end_tick,
                     selector_id=selector.selector_id,
                     mechanism_available=_learner_profile_available(config),
+                )
+            )
+        elif selector.selector_id == "historical_memory_evidence":
+            checks.append(
+                evaluate_historical_memory(
+                    probe, boundary_end_tick=boundary_end_tick
+                )
+            )
+        elif selector.selector_id == "durable_record_evidence":
+            checks.append(
+                evaluate_durable_records(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.durable_records is not None,
                 )
             )
         elif selector.selector_id == "cultural_feature_evidence":
