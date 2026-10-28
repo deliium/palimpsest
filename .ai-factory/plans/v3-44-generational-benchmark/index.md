@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–13 complete (Phase 6 closed 2026-10-28)
+Status: implementation in progress; Tasks 1–16 complete (Phase 7 closed except the Task 15 DB integration gate, which awaits `PALIMPSEST_TEST_DATABASE_URL`); Phase 8 next
 
 ## Original Request
 
@@ -444,9 +444,9 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 13: Execute founder perturbations and multigeneration grouped forks ([details](v3-44-phase-06-institutions-and-forks.md#task-13-execute-founder-perturbations-and-multigeneration-grouped-forks)) (depends on 4, 5, 12)
 
 ### Phase 7
-- [ ] Task 14: Gate all generational scientific invariants ([details](v3-44-phase-07-invariants-and-replay.md#task-14-gate-all-generational-scientific-invariants)) (depends on 6, 7, 8, 9, 10, 11, 12, 13)
-- [ ] Task 15: Qualify objective replay and captured subjective lineage separately ([details](v3-44-phase-07-invariants-and-replay.md#task-15-qualify-objective-replay-and-captured-subjective-lineage-separately)) (depends on 14)
-- [ ] Task 16: Replay recorded LLM cognition in a real independent generational run ([details](v3-44-phase-07-invariants-and-replay.md#task-16-replay-recorded-llm-cognition-in-a-real-independent-generational-run)) (depends on 4, 5, 15)
+- [x] Task 14: Gate all generational scientific invariants ([details](v3-44-phase-07-invariants-and-replay.md#task-14-gate-all-generational-scientific-invariants)) (depends on 6, 7, 8, 9, 10, 11, 12, 13)
+- [x] Task 15: Qualify objective replay and captured subjective lineage separately ([details](v3-44-phase-07-invariants-and-replay.md#task-15-qualify-objective-replay-and-captured-subjective-lineage-separately)) (depends on 14)
+- [x] Task 16: Replay recorded LLM cognition in a real independent generational run ([details](v3-44-phase-07-invariants-and-replay.md#task-16-replay-recorded-llm-cognition-in-a-real-independent-generational-run)) (depends on 4, 5, 15)
 
 ### Phase 8
 - [ ] Task 17: Replay one real multi-generation visual fixture in Godot ([details](v3-44-phase-08-presentation-and-release.md#task-17-replay-one-real-multi-generation-visual-fixture-in-godot)) (depends on 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)

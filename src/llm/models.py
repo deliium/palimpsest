@@ -7,6 +7,7 @@ world authority. Validated values remain untrusted input to later cognition.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -118,10 +119,20 @@ def validate_structured_output[T: StructuredOutput](
         ValueError: when validation fails or the result type is not exact.
     """
     require_structured_output_type(model)
+    payload = dict(data)
     try:
-        validated = model.model_validate(dict(data))
+        validated = model.model_validate(payload)
     except ValidationError:
-        raise ValueError("structured output failed schema validation") from None
+        # Canonical JSON stores decode tuples as arrays. Strict JSON validation
+        # preserves type strictness while accepting the documented wire shape.
+        try:
+            validated = model.model_validate_json(
+                json.dumps(payload, separators=(",", ":"), allow_nan=False)
+            )
+        except (TypeError, ValueError):
+            raise ValueError("structured output failed schema validation") from None
+        except ValidationError:
+            raise ValueError("structured output failed schema validation") from None
     if type(validated) is not model:
         raise ValueError("structured output type mismatch")
     return validated

@@ -80,6 +80,24 @@ _MEASURABLE_STORES: Final[tuple[str, ...]] = tuple(
     store for store in BLANK_SLATE_SUBJECTIVE_STORES if store in STORE_PROBE_PATHS
 )
 
+# Closed generational invariant identifiers. Each one is exercised by a
+# behavioral test with qualified receipts; a missing source stays unexecuted.
+GENERATIONAL_INVARIANT_IDS: Final[tuple[str, ...]] = (
+    "blank_slate",
+    "valid_historical_channels",
+    "dead_stop_acting",
+    "physical_record_persistence",
+    "false_records_legal",
+    "technology_loss_possible",
+    "auditable_knowledge_lineage",
+    "subjective_roles",
+    "possession_not_legitimacy",
+    "isolated_knowledge",
+    "engine_migration",
+    "coordinates_nonsemantic",
+    "observer_read_only",
+)
+
 
 def content_count(value: object) -> int:
     """Count retained rows in an opaque owner ledger without reading payloads."""
@@ -901,6 +919,7 @@ def evaluate_required_actions(
 
 
 __all__ = [
+    "GENERATIONAL_INVARIANT_IDS",
     "NOT_PERSISTED_STORES",
     "STORE_PROBE_PATHS",
     "BenchmarkBoundaryProbe",
