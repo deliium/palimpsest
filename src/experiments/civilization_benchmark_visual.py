@@ -28,7 +28,7 @@ from experiments.interventions import (
     MilestoneOverride,
 )
 from simulation.runner_models import SimulationRunnerConfig
-from world.actions import Move, StartCollectiveProject, Talk, Tell
+from world.actions import Move, StartCollectiveProject, Talk, Wait
 from world.communications import (
     CommunicationRelation,
     CommunicationSourceBasis,
@@ -354,9 +354,9 @@ def visual_fixture_arbiter(
     milestones.append(
         MilestoneOverride(
             milestone_id="v3-visual-teach",
-            tick=1,
+            tick=3,
             agent_id=AgentId("agent-origin"),
-            build_command=_teach_command(1, "body-origin", "body-extra-1"),
+            build_command=_teach_command(3, "body-origin", "body-extra-1"),
         )
     )
     if len(days) > 2:
@@ -370,6 +370,19 @@ def visual_fixture_arbiter(
                 ),
             )
         )
+    occupied = {(item.tick, item.agent_id.value) for item in milestones}
+    for tick in range(3):
+        for agent_id in ("agent-origin", "agent-extra-1"):
+            if (tick, agent_id) in occupied:
+                continue
+            milestones.append(
+                MilestoneOverride(
+                    milestone_id=f"v3-visual-hold-{agent_id}-{tick}",
+                    tick=tick,
+                    agent_id=AgentId(agent_id),
+                    build_command=lambda: Wait(),
+                )
+            )
     for index, day in enumerate(days[:6]):
         milestones.append(
             MilestoneOverride(
@@ -408,9 +421,9 @@ def _endorse_command(tick: int, speaker: str, occupant: str) -> Callable[[], Tal
     return build
 
 
-def _teach_command(tick: int, speaker: str, recipient: str) -> Callable[[], Tell]:
-    def build() -> Tell:
-        return Tell(
+def _teach_command(tick: int, speaker: str, recipient: str) -> Callable[[], Talk]:
+    def build() -> Talk:
+        return Talk(
             recipient_id=EntityId(recipient),
             utterance=origin_utterance(
                 speaker_id=EntityId(speaker),
