@@ -381,9 +381,19 @@ def visual_fixture_arbiter(
                 ),
             )
         )
+    for index, day in enumerate(days[:6]):
+        milestones.append(
+            MilestoneOverride(
+                milestone_id=f"v3-visual-endorse-{index}",
+                tick=day,
+                agent_id=AgentId("agent-extra-1"),
+                build_command=_endorse_command(day, "body-extra-1", "body-origin"),
+            )
+        )
     occupied = {(item.tick, item.agent_id.value) for item in milestones}
-    for tick in range(3):
-        for agent_id in ("agent-origin", "agent-extra-1"):
+    hold_until = days[1] if len(days) > 1 else days[0]
+    for tick in range(hold_until):
+        for agent_id in ("agent-origin", "agent-extra-1", "agent-extra-2"):
             if (tick, agent_id) in occupied:
                 continue
             milestones.append(
@@ -407,13 +417,13 @@ def visual_fixture_arbiter(
                     build_command=lambda: Wait(),
                 )
             )
-    for index, day in enumerate(days[:6]):
+    if len(days) > 1:
         milestones.append(
             MilestoneOverride(
-                milestone_id=f"v3-visual-endorse-{index}",
-                tick=day,
-                agent_id=AgentId("agent-extra-1"),
-                build_command=_endorse_command(day, "body-extra-1", "body-origin"),
+                milestone_id="v3-visual-hold-origin-succession",
+                tick=days[1],
+                agent_id=AgentId("agent-origin"),
+                build_command=lambda: Wait(),
             )
         )
     milestones.sort(key=lambda item: (item.tick, item.agent_id.value))
@@ -462,7 +472,7 @@ def _teach_command(tick: int, speaker: str, recipient: str) -> Callable[[], Talk
                         object="crafting:high",
                     ),
                 ),
-                source_basis=CommunicationSourceBasis.BELIEF,
+                source_basis=CommunicationSourceBasis.UNREFERENCED,
             ),
         )
 
