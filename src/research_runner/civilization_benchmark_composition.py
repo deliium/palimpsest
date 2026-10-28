@@ -50,7 +50,6 @@ from simulation.models import RunId
 from simulation.runner import RunnerDependencyFactories
 from simulation.runner_models import runner_stop_is_failure
 from simulation.runner_serialization import runner_config_fingerprint
-from world.identifiers import require_stable_id
 
 _LOG: Final[logging.Logger] = logging.getLogger(
     "research_runner.civilization_benchmark_composition"
@@ -75,11 +74,8 @@ class BenchmarkSelectionItem:
 def _run_id(item: BenchmarkSelectionItem, revision: str) -> RunId:
     suffix = revision[:16] if revision else "unknown"
     return RunId(
-        require_stable_id(
-            "run_id",
-            f"v3bench-{item.scenario_id}-{item.lane.value}-{item.arm_id}"
-            f"-s{item.seed}-{suffix}",
-        )
+        f"v3bench-{item.scenario_id}-{item.lane.value}-{item.arm_id}"
+        f"-s{item.seed}-{suffix}"
     )
 
 
@@ -111,9 +107,7 @@ async def execute_selection(
                 profile=item.profile,
                 lane=item.lane,
             )
-            config = next(
-                arm.config for arm in build.arms if arm.arm_id == item.arm_id
-            )
+            config = next(arm.config for arm in build.arms if arm.arm_id == item.arm_id)
         assignment = ExperimentAssignment(
             experiment_id="v3-generational-civilization-benchmark",
             condition_id=item.scenario_id,
