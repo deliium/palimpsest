@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
+from experiments.civilization_benchmark_execution import BoundaryObserver
 from experiments.collectors import collect_for_experiment
 from experiments.coordinator import ExperimentArmResult, ExperimentAssignment
 from experiments.cultural_metric_artifacts import CulturalCaptureOptions
@@ -91,6 +92,7 @@ class GenerationalExecutionContext:
     lineage_finalizer: Callable[[object, object], Awaitable[object]] | None = None
     civilization_installer: Callable[[SimulationRunner], object] | None = None
     civilization_finalizer: Callable[[object, object], Awaitable[object]] | None = None
+    boundary_observer: BoundaryObserver | None = None
 
     def preflight(self, config: SimulationRunnerConfig) -> None:
         _validate_recipe(self.recipe, config)
@@ -193,7 +195,17 @@ async def execute_generational_assignment(
                 arbiter = generational_runner_arbiter(assignment.condition_id, config)
                 if arbiter is not None:
                     runner.set_intervention_arbiter(arbiter)
-            result = await runner.run()
+            if context.boundary_observer is not None:
+                from experiments.civilization_benchmark_execution import (
+                    execute_stepped_benchmark_runner,
+                )
+
+                stepped = await execute_stepped_benchmark_runner(
+                    runner, boundary_observer=context.boundary_observer
+                )
+                result = stepped.result
+            else:
+                result = await runner.run()
             if recorder is not None:
                 recorder.merge_capture_status(runner.export_cultural_capture_status())
             committed_events = tuple(runner.engine.export_events().events)

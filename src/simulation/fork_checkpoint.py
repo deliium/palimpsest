@@ -376,6 +376,7 @@ class FinalizedResearchOwnerSnapshot:
     practical_knowledge_ledger: object | None = None
     narrative_ledger: object | None = None
     cultural_owner: CulturalOwnerExport | None = None
+    runtime_checkpoint: AgentRuntimeCheckpoint | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -466,6 +467,15 @@ class FinalizedResearchOwnerSnapshot:
             if self.cultural_owner.owner_id != self.owner_id:
                 raise ForkCheckpointError(
                     "research_snapshot_invalid", "cultural owner mismatch"
+                )
+        if self.runtime_checkpoint is not None:
+            if type(self.runtime_checkpoint) is not AgentRuntimeCheckpoint:
+                raise ForkCheckpointError(
+                    "research_snapshot_invalid", "invalid runtime checkpoint"
+                )
+            if self.runtime_checkpoint.agent_id != self.owner_id:
+                raise ForkCheckpointError(
+                    "research_snapshot_invalid", "runtime checkpoint owner mismatch"
                 )
 
 

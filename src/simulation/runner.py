@@ -88,6 +88,7 @@ from simulation.agent_runtime import (
     PreparedObservation,
 )
 from simulation.bootstrap import (
+    AgentRegistration,
     RegistrationTranslator,
     WorldBootstrap,
     registration_translator,
@@ -117,6 +118,7 @@ from simulation.engine import (
     teaching_interaction_policy,
 )
 from simulation.fork_checkpoint import (
+    AgentRuntimeForkState,
     ForkCheckpointError,
     RunnerForkCheckpoint,
 )
@@ -223,6 +225,7 @@ from simulation.subjective_state import (
     ForkCapableSubjectiveOwnerBundle,
     InMemorySubjectiveOwnerBundle,
     SubjectiveOwnerBundle,
+    SubjectiveOwnerForkState,
     SubjectiveStateService,
 )
 from social.contracts import RelationshipService
@@ -1689,6 +1692,31 @@ class _AgentBundle:
     relationship_service: RelationshipService
     subjective_state: SubjectiveStateService
     memory_retriever: ReferenceMemoryRetriever | ScopedMemoryRetriever | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _DetachedBoundaryInputs:
+    """Detached owner/runtime/world inputs for a finalized boundary.
+
+    Assembled identically for fork capture (nonterminal only) and terminal-safe
+    research inspection. This type never feeds cognition or world state.
+    """
+
+    boundary_tick: Tick
+    boundary_revision: WorldRevision
+    config_fingerprint: str
+    registrations: tuple[AgentRegistration, ...]
+    runtime_states: tuple[AgentRuntimeForkState, ...]
+    owner_states: tuple[SubjectiveOwnerForkState, ...]
+    snapshot: WorldSnapshot
+
+    def owner_state(self, agent_id: AgentId) -> SubjectiveOwnerForkState:
+        for state in self.owner_states:
+            if state.scope.owner_id == agent_id:
+                return state
+        raise ForkCheckpointError(
+            "fork_roster_mismatch", "owner state is not captured"
+        )
 
 
 class SimulationRunner:
@@ -4142,13 +4170,22 @@ class SimulationRunner:
             len(self._runtimes),
         )
 
-    async def capture_fork_checkpoint(self) -> RunnerForkCheckpoint:
-        """Capture complete process-local state at a finalized boundary."""
+    async def _detached_boundary_inputs(
+        self, *, allow_terminal: bool = False
+    ) -> _DetachedBoundaryInputs:
+        """Assemble detached boundary inputs without capturing a fork checkpoint.
+
+        ``allow_terminal=False`` preserves every strict fork guard. Terminal
+        research inspection still requires agreed cursors and complete owner
+        finalization/publication; it never weakens fork eligibility.
+        """
         if not self._started:
             raise ForkCheckpointError(
                 "fork_boundary_not_finalized", "runner is not initialized"
             )
-        if self._terminal_receipt is not None or self._finished_result is not None:
+        if not allow_terminal and (
+            self._terminal_receipt is not None or self._finished_result is not None
+        ):
             raise ForkCheckpointError(
                 "fork_terminal_boundary", "runner is already terminal"
             )
@@ -4159,6 +4196,7 @@ class SimulationRunner:
         if (
             self._config.generational_run is not None
             and self._generational_boundary_stage is GenerationalBoundaryStage.TERMINAL
+            and not allow_terminal
         ):
             raise ForkCheckpointError(
                 "fork_terminal_boundary", "generational stage is terminal"
@@ -4171,7 +4209,33 @@ class SimulationRunner:
                 raise ForkCheckpointError(
                     "fork_boundary_not_finalized", "pending finalizations exist"
                 )
-        if (
+        if allow_terminal:
+            if self._terminal_receipt is not None and self._finished_result is None:
+                raise ForkCheckpointError(
+                    "research_boundary_incomplete",
+                    "terminal receipt without a finished result",
+                )
+            if (
+                self._finished_result is not None
+                and self._finished_result.ticks_committed != self._ticks_committed
+            ):
+                raise ForkCheckpointError(
+                    "research_boundary_incomplete",
+                    "finished result disagrees with runner cursors",
+                )
+            if (
+                self._config.generational_run is not None
+                and self._generational_boundary_stage
+                in {
+                    GenerationalBoundaryStage.OWNER_FINALIZATION_PENDING,
+                    GenerationalBoundaryStage.PUBLICATION_PENDING,
+                }
+            ):
+                raise ForkCheckpointError(
+                    "research_boundary_incomplete",
+                    "owner finalization or publication is pending",
+                )
+        elif (
             self._cultural_boundary_sink is not None
             and not self._cultural_capture_failed
             and self._cultural_capture_last_boundary != self._ticks_committed
@@ -4214,25 +4278,38 @@ class SimulationRunner:
             ),
             next_tick=boundary_tick,
         )
-        checkpoint = RunnerForkCheckpoint(
-            run_id=self._run_id,
-            config=self._config,
-            config_fingerprint=runner_config_fingerprint(self._config),
+        return _DetachedBoundaryInputs(
             boundary_tick=boundary_tick,
             boundary_revision=self._engine.revision,
-            snapshot=snapshot,
-            bootstrap=self._bootstrap,
-            bootstrap_snapshot=self._bootstrap_checkpoint,
+            config_fingerprint=runner_config_fingerprint(self._config),
             registrations=tuple(registrations),
             runtime_states=runtime_states,
             owner_states=tuple(owner_states),
+            snapshot=snapshot,
+        )
+
+    async def capture_fork_checkpoint(self) -> RunnerForkCheckpoint:
+        """Capture complete process-local state at a finalized boundary."""
+        inputs = await self._detached_boundary_inputs(allow_terminal=False)
+        checkpoint = RunnerForkCheckpoint(
+            run_id=self._run_id,
+            config=self._config,
+            config_fingerprint=inputs.config_fingerprint,
+            boundary_tick=inputs.boundary_tick,
+            boundary_revision=inputs.boundary_revision,
+            snapshot=inputs.snapshot,
+            bootstrap=self._bootstrap,
+            bootstrap_snapshot=self._bootstrap_checkpoint,
+            registrations=inputs.registrations,
+            runtime_states=inputs.runtime_states,
+            owner_states=inputs.owner_states,
             runner_control=self.export_runtime_checkpoint(),
         )
         _LOG.info(
             "runner_fork_checkpoint_captured run_id=%s boundary_tick=%s owner_count=%s",
             self._run_id.value,
             self._ticks_committed,
-            len(registrations),
+            len(inputs.registrations),
         )
         return checkpoint
 
@@ -4248,7 +4325,7 @@ class SimulationRunner:
             ResearchResourceHolding,
         )
 
-        checkpoint = await self.capture_fork_checkpoint()
+        inputs = await self._detached_boundary_inputs(allow_terminal=True)
         generations: dict[str, int] = {}
         for record in self._engine.lifecycle_records:
             owner = getattr(record, "agent_id", None)
@@ -4265,18 +4342,18 @@ class SimulationRunner:
             for runtime in self._runtimes
         }
         runtime_by_agent = {
-            state.checkpoint.agent_id: state for state in checkpoint.runtime_states
+            state.checkpoint.agent_id: state for state in inputs.runtime_states
         }
         live_runtime_by_agent = {
             runtime.agent_id: runtime for runtime in self._runtimes
         }
         entity_by_agent = {
             registration.agent_id: registration.entity_id
-            for registration in checkpoint.registrations
+            for registration in inputs.registrations
         }
         owners: list[FinalizedResearchOwnerSnapshot] = []
-        for registration in checkpoint.registrations:
-            owner_state = checkpoint.owner_state(registration.agent_id)
+        for registration in inputs.registrations:
+            owner_state = inputs.owner_state(registration.agent_id)
             runtime_state = runtime_by_agent[registration.agent_id]
             runtime_checkpoint = runtime_state.checkpoint
             owners.append(
@@ -4308,12 +4385,13 @@ class SimulationRunner:
                         ),
                         living=living_by_owner.get(registration.agent_id.value, False),
                     ),
+                    runtime_checkpoint=runtime_checkpoint,
                 )
             )
         events = tuple(
             event
             for event in self._engine.export_events().events
-            if event.tick < checkpoint.boundary_tick.value
+            if event.tick < inputs.boundary_tick.value
         )
         item_counts: dict[str, int] = {
             agent_id.value: 0 for agent_id in entity_by_agent
@@ -4321,7 +4399,7 @@ class SimulationRunner:
         entity_to_agent = {
             entity.value: agent.value for agent, entity in entity_by_agent.items()
         }
-        for item in checkpoint.snapshot.items:
+        for item in inputs.snapshot.items:
             holder = getattr(item, "holder_id", None)
             if holder is None:
                 continue
@@ -4345,9 +4423,9 @@ class SimulationRunner:
             )
         boundary = FinalizedResearchBoundary(
             run_id=self._run_id,
-            boundary_tick=checkpoint.boundary_tick,
-            boundary_revision=checkpoint.boundary_revision,
-            config_fingerprint=checkpoint.config_fingerprint,
+            boundary_tick=inputs.boundary_tick,
+            boundary_revision=inputs.boundary_revision,
+            config_fingerprint=inputs.config_fingerprint,
             owners=tuple(owners),
             events=events,
             resource_holdings=holdings,
@@ -4357,7 +4435,7 @@ class SimulationRunner:
             "runner_finalized_research_boundary_exported run_id=%s "
             "boundary_tick=%s owner_count=%s event_count=%s",
             self._run_id.value,
-            checkpoint.boundary_tick.value,
+            inputs.boundary_tick.value,
             len(owners),
             len(events),
         )

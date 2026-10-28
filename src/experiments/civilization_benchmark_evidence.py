@@ -1,0 +1,362 @@
+"""Detached boundary evidence for the V3 civilization benchmark.
+
+Every measured store is read from retained owner evidence after full
+finalization. The probe never feeds cognition, world state or a stop selector,
+and a missing measurement is reported as unavailable rather than as zero.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import logging
+from collections.abc import Mapping, Sized
+from dataclasses import dataclass
+from typing import Final
+
+from experiments.civilization_benchmark_models import (
+    V3BenchmarkCheck,
+    V3BenchmarkCheckStatus,
+    V3BenchmarkCoverage,
+    V3BenchmarkError,
+    V3BenchmarkEvidenceAvailability,
+    V3BenchmarkSourceKind,
+    V3BenchmarkSourceReference,
+)
+from simulation.fork_checkpoint import (
+    FinalizedResearchBoundary,
+    FinalizedResearchOwnerSnapshot,
+)
+from simulation.new_agent_initialization import BLANK_SLATE_SUBJECTIVE_STORES
+from simulation.runner import SimulationRunner
+from simulation.runner_models import RunnerAttemptReceipt
+
+_LOG: Final[logging.Logger] = logging.getLogger(
+    "experiments.civilization_benchmark_evidence"
+)
+
+# Stores that are not persisted owner state at a finalized boundary. Deriving
+# them would require cognition internals, so they are declared out of coverage
+# instead of being reported as measured zeros.
+NOT_PERSISTED_STORES: Final[frozenset[str]] = frozenset(
+    {
+        "self_model",
+        "cognition_trace",
+        "skill_ledger",
+        "taught_content_lineage",
+        "experiment_ledger",
+    }
+)
+
+# store -> (source, attribute) where source is "snapshot" or "runtime".
+STORE_PROBE_PATHS: Final[Mapping[str, tuple[str, str]]] = {
+    "episodic_memory": ("snapshot", "memories"),
+    "semantic_beliefs": ("snapshot", "beliefs"),
+    "relationships": ("snapshot", "relationship_profiles"),
+    "goals": ("runtime", "goals"),
+    "theory_of_mind": ("runtime", "theory_of_mind"),
+    "cultural_narratives": ("runtime", "cultural_narratives"),
+    "semantic_naming": ("runtime", "semantic_naming"),
+    "symbolic_language": ("runtime", "symbolic_language"),
+    "translation": ("runtime", "translation"),
+    "institution_concepts": ("runtime", "institution_concepts"),
+    "institutional_decay": ("runtime", "institutional_decay"),
+    "office_concepts": ("runtime", "office_concepts"),
+    "mediation": ("runtime", "mediation"),
+    "social_norms": ("runtime", "social_norms"),
+    "social_conventions": ("runtime", "social_conventions"),
+    "developmental_knowledge": ("runtime", "developmental_knowledge"),
+    "mentorship_bonds": ("runtime", "mentorship"),
+    "cultural_features": ("runtime", "cultural_features"),
+    "practical_knowledge": ("runtime", "practical_knowledge"),
+    "possession_legitimacy": ("runtime", "possession_legitimacy"),
+    "structured_commitments": ("runtime", "structured_commitments"),
+    "subjective_valuations": ("runtime", "subjective_valuations"),
+    "scarcity_beliefs": ("runtime", "scarcity_beliefs"),
+    "acceptance_memories": ("runtime", "acceptance_memories"),
+}
+
+_MEASURABLE_STORES: Final[tuple[str, ...]] = tuple(
+    store for store in BLANK_SLATE_SUBJECTIVE_STORES if store in STORE_PROBE_PATHS
+)
+
+
+def content_count(value: object) -> int:
+    """Count retained rows in an opaque owner ledger without reading payloads."""
+    if value is None:
+        return 0
+    if isinstance(value, Mapping):
+        return len(value)
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return len(value)
+    if isinstance(value, Sized):
+        try:
+            return len(value)
+        except TypeError:
+            pass
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        total = 0
+        for field in dataclasses.fields(value):
+            item = getattr(value, field.name)
+            if isinstance(item, (tuple, list, set, frozenset, Mapping)):
+                total += len(item)
+        return total
+    # An opaque populated object is still content.
+    return 1
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerStoreSnapshot:
+    """Measured content of one owner at one finalized boundary."""
+
+    owner_id: str
+    entity_id: str
+    generation_index: int
+    living: bool
+    invocation_count: int
+    counts: tuple[tuple[str, int | None], ...]
+    measured_stores: tuple[str, ...]
+    unmeasured_stores: tuple[str, ...]
+
+    def count(self, store: str) -> int | None:
+        for name, value in self.counts:
+            if name == store:
+                return value
+        raise KeyError(store)
+
+    def is_blank(self) -> bool:
+        zero_content = all(value == 0 for _, value in self.counts if value is not None)
+        return zero_content and self.invocation_count == 0
+
+
+@dataclass(frozen=True, slots=True)
+class BoundaryObservation:
+    """One finalized boundary with newly observed owners highlighted."""
+
+    boundary_tick: int
+    owners: tuple[OwnerStoreSnapshot, ...]
+    new_owners: tuple[OwnerStoreSnapshot, ...]
+    event_count: int = 0
+
+
+def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapshot:
+    runtime = getattr(snapshot, "runtime_checkpoint", None)
+    if runtime is None:
+        raise V3BenchmarkError(
+            "probe_unavailable", "owner runtime checkpoint is missing"
+        )
+    counts: list[tuple[str, int | None]] = []
+    measured: list[str] = []
+    unmeasured: list[str] = []
+    for store in BLANK_SLATE_SUBJECTIVE_STORES:
+        if store in NOT_PERSISTED_STORES or store not in STORE_PROBE_PATHS:
+            counts.append((store, None))
+            unmeasured.append(store)
+            continue
+        source, attribute = STORE_PROBE_PATHS[store]
+        holder = snapshot if source == "snapshot" else runtime
+        counts.append((store, content_count(getattr(holder, attribute, None))))
+        measured.append(store)
+    return OwnerStoreSnapshot(
+        owner_id=snapshot.owner_id.value,
+        entity_id=snapshot.entity_id.value,
+        generation_index=snapshot.generation_index,
+        living=snapshot.living,
+        invocation_count=runtime.processed_invocation_count,
+        counts=tuple(counts),
+        measured_stores=tuple(measured),
+        unmeasured_stores=tuple(unmeasured),
+    )
+
+
+class BenchmarkBoundaryProbe:
+    """Read-only boundary observer collecting first-sight owner measurements."""
+
+    def __init__(self) -> None:
+        self._seen: set[str] = set()
+        self._observations: list[BoundaryObservation] = []
+        self._failures: list[str] = []
+
+    @property
+    def observations(self) -> tuple[BoundaryObservation, ...]:
+        return tuple(self._observations)
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        return tuple(self._failures)
+
+    def new_owners(self) -> tuple[OwnerStoreSnapshot, ...]:
+        owners: list[OwnerStoreSnapshot] = []
+        for observation in self._observations:
+            owners.extend(observation.new_owners)
+        return tuple(owners)
+
+    async def __call__(
+        self,
+        runner: SimulationRunner,
+        receipt: RunnerAttemptReceipt | None,
+    ) -> None:
+        boundary = await runner.export_finalized_research_boundary()
+        if type(boundary) is not FinalizedResearchBoundary:
+            raise V3BenchmarkError(
+                "probe_unavailable", "research boundary projection is unsupported"
+            )
+        owners = tuple(_measure_owner(owner) for owner in boundary.owners)
+        new = tuple(owner for owner in owners if owner.owner_id not in self._seen)
+        for owner in new:
+            self._seen.add(owner.owner_id)
+        observation = BoundaryObservation(
+            boundary_tick=boundary.boundary_tick.value,
+            owners=owners,
+            new_owners=new,
+            event_count=len(boundary.events),
+        )
+        self._observations.append(observation)
+        _LOG.debug(
+            "benchmark_boundary_observed owner_count=%s new_owner_count=%s "
+            "boundary_tick=%s",
+            len(owners),
+            len(new),
+            observation.boundary_tick,
+        )
+
+
+def blank_slate_check(
+    probe: BenchmarkBoundaryProbe,
+    *,
+    boundary_end_tick: int,
+) -> V3BenchmarkCheck:
+    """Evaluate measured newborn content against the blank-slate contract."""
+    return evaluate_blank_slate(probe.new_owners(), boundary_end_tick=boundary_end_tick)
+
+
+def evaluate_blank_slate(
+    owners: tuple[OwnerStoreSnapshot, ...],
+    *,
+    boundary_end_tick: int,
+) -> V3BenchmarkCheck:
+    """Pure blank-slate evaluation over already measured owner rows."""
+    if not owners:
+        return V3BenchmarkCheck(
+            selector_id="new_agent_initialization_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="no_admitted_owner_observed",
+            evidence=V3BenchmarkEvidenceAvailability.UNAVAILABLE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    sources = tuple(
+        V3BenchmarkSourceReference(
+            source_kind=V3BenchmarkSourceKind.SUBJECTIVE_DEBUG,
+            reference_id=owner.owner_id,
+            owner_id=owner.owner_id,
+        )
+        for owner in owners
+    )
+    measured_complete = all(
+        not owner.unmeasured_stores
+        or set(owner.unmeasured_stores).issubset(NOT_PERSISTED_STORES)
+        for owner in owners
+    )
+    blank = [owner for owner in owners if owner.is_blank()]
+    copied = [owner for owner in owners if not owner.is_blank()]
+    if copied:
+        return V3BenchmarkCheck(
+            selector_id="new_agent_initialization_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.FAIL,
+            reason_code="subjective_copy_forbidden",
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=sources,
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=len(blank),
+            denominator=len(owners),
+        )
+    if not measured_complete:
+        return V3BenchmarkCheck(
+            selector_id="new_agent_initialization_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="probe_unavailable",
+            evidence=V3BenchmarkEvidenceAvailability.PARTIAL,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=sources,
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=len(blank),
+            denominator=len(owners),
+        )
+    return V3BenchmarkCheck(
+        selector_id="new_agent_initialization_evidence",
+        selector_version=1,
+        status=V3BenchmarkCheckStatus.PASS,
+        reason_code="blank_slate_measured",
+        evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=sources,
+        boundary_start_tick=0,
+        boundary_end_tick=boundary_end_tick,
+        numerator=len(blank),
+        denominator=len(owners),
+    )
+
+
+def evaluate_event_journal(probe: BenchmarkBoundaryProbe) -> V3BenchmarkCheck:
+    """Check that committed objective events were retained for this run."""
+    observations = probe.observations
+    if not observations:
+        return V3BenchmarkCheck(
+            selector_id="objective_event_journal",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="probe_unavailable",
+            evidence=V3BenchmarkEvidenceAvailability.UNAVAILABLE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+        )
+    last = observations[-1]
+    total = sum(item.event_count for item in observations)
+    sources = tuple(
+        V3BenchmarkSourceReference(
+            source_kind=V3BenchmarkSourceKind.OBJECTIVE_INSPECTION,
+            reference_id=f"boundary-tick-{item.boundary_tick}",
+            tick=item.boundary_tick,
+        )
+        for item in observations[-1:]
+    )
+    return V3BenchmarkCheck(
+        selector_id="objective_event_journal",
+        selector_version=1,
+        status=(
+            V3BenchmarkCheckStatus.PASS
+            if total > 0
+            else V3BenchmarkCheckStatus.UNEXECUTED
+        ),
+        reason_code=("events_retained" if total > 0 else "no_events_observed"),
+        evidence=(
+            V3BenchmarkEvidenceAvailability.COMPLETE
+            if total > 0
+            else V3BenchmarkEvidenceAvailability.UNAVAILABLE
+        ),
+        coverage=V3BenchmarkCoverage.EXERCISED,
+        source_references=sources,
+        boundary_start_tick=0,
+        boundary_end_tick=last.boundary_tick,
+        numerator=total,
+        denominator=total,
+    )
+
+
+__all__ = [
+    "NOT_PERSISTED_STORES",
+    "STORE_PROBE_PATHS",
+    "BenchmarkBoundaryProbe",
+    "BoundaryObservation",
+    "OwnerStoreSnapshot",
+    "blank_slate_check",
+    "content_count",
+    "evaluate_blank_slate",
+    "evaluate_event_journal",
+]
