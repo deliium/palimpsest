@@ -8,6 +8,7 @@ objective authority; this module is subjective.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 from collections.abc import Mapping, Sequence
@@ -286,7 +287,9 @@ class TaughtContentLineageEntry:
         lineage_id = self.lineage_id
         if lineage_id is None:
             # Deterministic opaque id from root + hop + content key (no free text).
-            lineage_id = f"lin:{root_id}:h{hop}:{kind.value}:{content_key}"
+            # Long declared roots are hashed so the stable id stays bounded.
+            root_token = hashlib.sha256(str(root_id).encode("utf-8")).hexdigest()[:24]
+            lineage_id = f"lin:{root_token}:h{hop}:{kind.value}:{content_key}"
             object.__setattr__(
                 self, "lineage_id", require_stable_id("lineage_id", lineage_id)
             )
