@@ -5830,9 +5830,7 @@ def order_matched_stop_reasons(
             )
         )
     }
-    success_rank = {
-        code: index for index, code in enumerate(_SUCCESS_STOP_PRECEDENCE)
-    }
+    success_rank = {code: index for index, code in enumerate(_SUCCESS_STOP_PRECEDENCE)}
     return tuple(
         sorted(
             ordered_input,
@@ -5874,8 +5872,7 @@ def validate_stop_evidence_primary(evidence: StopEvidence) -> str:
         return evidence.primary_condition_code
     try:
         codes = tuple(
-            RunnerStopReasonCode(value)
-            for value in evidence.matched_condition_codes
+            RunnerStopReasonCode(value) for value in evidence.matched_condition_codes
         )
     except ValueError as exc:
         raise ValueError(
@@ -6602,9 +6599,7 @@ class SimulationRunnerResult:
         if self.generational_progress is not None and (
             type(self.generational_progress) is not PopulationProgress
         ):
-            raise TypeError(
-                "generational_progress must be PopulationProgress or None"
-            )
+            raise TypeError("generational_progress must be PopulationProgress or None")
         if self.stop_evidence is not None and (
             type(self.stop_evidence) is not StopEvidence
         ):
@@ -7596,7 +7591,8 @@ class SimulationRunnerConfig:
                 ):
                     _LOGGER.error(
                         "invalid_fields path=new_agent_initialization "
-                        "reason_code=civilization_learner_profile_requires_prerequisites "
+                        "reason_code="
+                        "civilization_learner_profile_requires_prerequisites "
                         "schema_version=%s",
                         self.schema_version,
                     )
@@ -12022,13 +12018,8 @@ class SimulationRunnerResultDocument:
             ):
                 raise ValueError("runner-result-v1 forbids v2 result fields")
         if self.schema_version == RESULT_SCHEMA_VERSION_V2:
-            if (
-                self.generational_progress is not None
-                or self.stop_evidence is not None
-            ):
-                raise ValueError(
-                    "runner-result-v2 forbids generational result fields"
-                )
+            if self.generational_progress is not None or self.stop_evidence is not None:
+                raise ValueError("runner-result-v2 forbids generational result fields")
         if self.schema_version == RESULT_SCHEMA_VERSION_V3:
             if self.generational_progress is None or self.stop_evidence is None:
                 raise ValueError(
@@ -12039,10 +12030,7 @@ class SimulationRunnerResultDocument:
                 raise TypeError("generational_progress must be PopulationProgress")
             if type(self.stop_evidence) is not StopEvidence:
                 raise TypeError("stop_evidence must be StopEvidence")
-            if (
-                self.stop_evidence.boundary.progress
-                != self.generational_progress
-            ):
+            if self.stop_evidence.boundary.progress != self.generational_progress:
                 raise ValueError(
                     "stop evidence boundary progress must match result progress "
                     "(code=generational_result_inconsistent)"
