@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–16 complete (Phase 7 closed except the Task 15 DB integration gate, which awaits `PALIMPSEST_TEST_DATABASE_URL`); Phase 8 next
+Status: implementation in progress; Tasks 1–16 complete. Task 17 is in progress: the source-pinned eight-marker manifest and Python tests are implemented, but the real visual fixture schedule, Godot suite registration/execution and browser acceptance remain. `GODOT_BIN` is not installed; the Task 15 DB integration gate also awaits `PALIMPSEST_TEST_DATABASE_URL`.
 
 ## Original Request
 
