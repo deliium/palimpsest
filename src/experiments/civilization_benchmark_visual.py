@@ -106,6 +106,8 @@ class VisualAcceptanceMarker:
 def build_visual_marker_manifest(
     probe: BenchmarkBoundaryProbe,
     result: object,
+    *,
+    office_succession_receipts: tuple[str, ...] = (),
 ) -> tuple[VisualAcceptanceMarker, ...]:
     """Select markers from actual evidence; missing channels stay unavailable."""
     observations = probe.observations
@@ -237,16 +239,22 @@ def build_visual_marker_manifest(
                 succession += count
                 if isinstance(owner, str):
                     office_owners.append(owner)
+    receipt_reference = (
+        office_succession_receipts[0] if office_succession_receipts else None
+    )
+    succession_available = succession > 0 or receipt_reference is not None
     stamps.append(
         VisualAcceptanceMarker(
             kind=VisualMarkerKind.OFFICE_SUCCESSION,
             status=(
                 VisualMarkerStatus.AVAILABLE
-                if succession > 0
+                if succession_available
                 else VisualMarkerStatus.UNAVAILABLE
             ),
             tick=last_tick,
-            reference_id="owner:office-succession" if succession else None,
+            reference_id=(
+                "owner:office-succession" if succession > 0 else receipt_reference
+            ),
             owner_ids=tuple(dict.fromkeys(office_owners)),
         )
     )
@@ -347,7 +355,7 @@ def visual_fixture_arbiter(
         ),
         MilestoneOverride(
             milestone_id="v3-visual-journey",
-            tick=4,
+            tick=days[0] + 2,
             agent_id=AgentId("agent-origin"),
             build_command=lambda: Move(EntityId("loc-spring")),
         ),

@@ -47,6 +47,7 @@ const SUITES: Array[String] = [
 	"res://tests/test_civilization_timeline.gd",
 	"res://tests/test_generational_view.gd",
 	"res://tests/test_generational_navigation.gd",
+	"res://tests/test_multigeneration_replay.gd",
 ]
 
 
