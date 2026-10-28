@@ -288,8 +288,9 @@ class TaughtContentLineageEntry:
         if lineage_id is None:
             # Deterministic opaque id from root + hop + content key (no free text).
             # Long declared roots are hashed so the stable id stays bounded.
-            root_token = hashlib.sha256(str(root_id).encode("utf-8")).hexdigest()[:24]
-            lineage_id = f"lin:{root_token}:h{hop}:{kind.value}:{content_key}"
+            material = f"{root_id}|{hop}|{kind.value}|{content_key}"
+            digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+            lineage_id = f"lin:{digest}:h{hop}"
             object.__setattr__(
                 self, "lineage_id", require_stable_id("lineage_id", lineage_id)
             )
