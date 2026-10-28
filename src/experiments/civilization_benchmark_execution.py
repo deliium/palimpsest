@@ -38,6 +38,7 @@ from experiments.civilization_benchmark_models import (
     V3BenchmarkRunResult,
 )
 from experiments.civilization_benchmark_suite import (
+    V3_BENCH_09_TECHNOLOGY_DIFFUSION,
     get_v3_benchmark_scenario,
 )
 from simulation.runner import SimulationRunner
@@ -94,8 +95,7 @@ async def _notify(
     except Exception:
         failures.append(label)
         _LOG.warning(
-            "benchmark_boundary_probe_unavailable run_id=%s boundary=%s "
-            "reason_code=%s",
+            "benchmark_boundary_probe_unavailable run_id=%s boundary=%s reason_code=%s",
             runner.run_id.value,
             label,
             "probe_unavailable",
@@ -190,10 +190,7 @@ class CivilizationBenchmarkRecipe:
                     "recipe_descriptor_mismatch",
                     "grouped cases require a declared command plan",
                 )
-        elif (
-            self.command_plan_id is not None
-            or self.command_plan_version is not None
-        ):
+        elif self.command_plan_id is not None or self.command_plan_version is not None:
             raise V3BenchmarkError(
                 "recipe_descriptor_mismatch",
                 "independent research lanes are unassisted",
@@ -229,14 +226,10 @@ def _learner_profile_available(
     )
 
     initialization = config.new_agent_initialization
-    return (
-        initialization is not None
-        and initialization.species_defaults_id
-        in {
-            SPECIES_DEFAULT_DEVELOPMENTAL_V1,
-            SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
-        }
-    )
+    return initialization is not None and initialization.species_defaults_id in {
+        SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+        SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
+    }
 
 
 def _required_checks(
@@ -244,6 +237,7 @@ def _required_checks(
     probe: BenchmarkBoundaryProbe,
     *,
     config: SimulationRunnerConfig,
+    result: SimulationRunnerResult,
     boundary_end_tick: int,
 ) -> tuple[V3BenchmarkCheck, ...]:
     spec = get_v3_benchmark_scenario(recipe.scenario_id)
@@ -252,9 +246,7 @@ def _required_checks(
         if not selector.required:
             continue
         if selector.selector_id == "new_agent_initialization_evidence":
-            checks.append(
-                blank_slate_check(probe, boundary_end_tick=boundary_end_tick)
-            )
+            checks.append(blank_slate_check(probe, boundary_end_tick=boundary_end_tick))
         elif selector.selector_id == "objective_event_journal":
             from experiments.civilization_benchmark_evidence import (
                 evaluate_event_journal,
@@ -269,9 +261,7 @@ def _required_checks(
             )
         elif selector.selector_id == "dependency_care_evidence":
             checks.append(
-                evaluate_dependency_care(
-                    probe, boundary_end_tick=boundary_end_tick
-                )
+                evaluate_dependency_care(probe, boundary_end_tick=boundary_end_tick)
             )
         elif selector.selector_id in {
             "mentorship_evidence",
@@ -287,9 +277,7 @@ def _required_checks(
             )
         elif selector.selector_id == "historical_memory_evidence":
             checks.append(
-                evaluate_historical_memory(
-                    probe, boundary_end_tick=boundary_end_tick
-                )
+                evaluate_historical_memory(probe, boundary_end_tick=boundary_end_tick)
             )
         elif selector.selector_id == "durable_record_evidence":
             checks.append(
@@ -307,6 +295,83 @@ def _required_checks(
                     mechanism_available=(
                         config.cultural_feature_provenance is not None
                     ),
+                )
+            )
+        elif selector.selector_id == "knowledge_genealogy_evidence":
+            from experiments.civilization_benchmark_technology import (
+                evaluate_knowledge_genealogy,
+            )
+
+            checks.append(
+                evaluate_knowledge_genealogy(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.knowledge_genealogy is not None,
+                    require_transmission=(
+                        recipe.scenario_id == V3_BENCH_09_TECHNOLOGY_DIFFUSION
+                    ),
+                )
+            )
+        elif selector.selector_id == "technique_lifecycle_evidence":
+            from experiments.civilization_benchmark_technology import (
+                evaluate_technique_lifecycle,
+            )
+
+            checks.append(
+                evaluate_technique_lifecycle(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    spec=config.technique_lifecycle,
+                )
+            )
+        elif selector.selector_id == "possession_succession_evidence":
+            from experiments.civilization_benchmark_exchange import (
+                evaluate_possession_succession,
+            )
+
+            checks.append(
+                evaluate_possession_succession(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.possession_succession is not None,
+                )
+            )
+        elif selector.selector_id == "commitment_evidence":
+            from experiments.civilization_benchmark_exchange import (
+                evaluate_commitments,
+            )
+
+            checks.append(
+                evaluate_commitments(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.structured_commitments is not None,
+                )
+            )
+        elif selector.selector_id == "subjective_exchange_evidence":
+            from experiments.civilization_benchmark_exchange import (
+                evaluate_subjective_exchange,
+            )
+
+            checks.append(
+                evaluate_subjective_exchange(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.subjective_valuation is not None,
+                )
+            )
+        elif selector.selector_id == "exchange_function_evidence":
+            from experiments.civilization_benchmark_exchange import (
+                evaluate_exchange_functions,
+            )
+
+            checks.append(
+                evaluate_exchange_functions(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=(config.resource_exchange_profile is not None),
                 )
             )
         else:
@@ -391,9 +456,7 @@ async def execute_civilization_benchmark(
     grouped = spec.execution_kind is V3BenchmarkExecutionKind.GROUPED
     if grouped:
         if context.grouped_runner is None:
-            raise CivilizationBenchmarkExecutionError(
-                "grouped_executor_required"
-            )
+            raise CivilizationBenchmarkExecutionError("grouped_executor_required")
         result = await context.grouped_runner(recipe, context)
         if type(result) is not V3BenchmarkRunResult:
             raise CivilizationBenchmarkExecutionError("grouped_result_invalid")
@@ -434,14 +497,13 @@ async def execute_civilization_benchmark(
         recipe,
         context.probe,
         config=context.assignment.runner_config,
+        result=runner_result,
         boundary_end_tick=runner_result.ticks_committed,
     )
     if context.required_milestone_ids:
         checks = (
             *checks,
-            evaluate_required_actions(
-                receipts, context.required_milestone_ids
-            ),
+            evaluate_required_actions(receipts, context.required_milestone_ids),
         )
     status = _execution_status(runner_result)
     observations = context.probe.observations

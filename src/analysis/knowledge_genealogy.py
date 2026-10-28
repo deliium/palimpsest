@@ -7,6 +7,7 @@ only — live ledgers never store peer ``entry_id`` parents.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -322,16 +323,28 @@ def _clamp_depth(max_query_depth: int) -> int:
     return min(depth, KNOWLEDGE_GENEALOGY_QUERY_DEPTH_CEILING)
 
 
+def _bounded_token(raw: str) -> str:
+    """Keep the stable-id ceiling without changing short, readable values."""
+    if len(raw) <= 128:
+        return raw
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return f"{raw[:80]}:{digest}"
+
+
 def _holder_node_id(agent_id: str) -> str:
-    return f"holder:{agent_id}"
+    return _bounded_token(f"holder:{agent_id}")
 
 
 def _entry_node_id(entry_id: str) -> str:
-    return f"entry:{entry_id}"
+    return _bounded_token(f"entry:{entry_id}")
 
 
 def _root_node_id(root_id: str) -> str:
-    return f"root:{root_id}"
+    return _bounded_token(f"root:{root_id}")
+
+
+def _edge_id(*parts: str) -> str:
+    return _bounded_token(":".join(parts))
 
 
 def _find_peer_source_entry(
@@ -431,7 +444,7 @@ def build_knowledge_genealogy_graph(
             )
             edges.append(
                 KnowledgeGenealogyEdge(
-                    edge_id=f"root-entry:{row.lineage_root_id}:{row.entry_id}",
+                    edge_id=_edge_id("root-entry", row.lineage_root_id, row.entry_id),
                     kind=KnowledgeGenealogyEdgeKind.TRANSMITTED_FROM,
                     source_node_id=root_id,
                     target_node_id=entry_id,
@@ -441,7 +454,7 @@ def build_knowledge_genealogy_graph(
         if row.active:
             edges.append(
                 KnowledgeGenealogyEdge(
-                    edge_id=f"holds:{row.owner_id}:{row.entry_id}",
+                    edge_id=_edge_id("holds", row.owner_id, row.entry_id),
                     kind=KnowledgeGenealogyEdgeKind.HOLDS,
                     source_node_id=holder_id,
                     target_node_id=entry_id,
@@ -473,7 +486,7 @@ def build_knowledge_genealogy_graph(
             depth = min(row.hop_index, depth_cap)
             edges.append(
                 KnowledgeGenealogyEdge(
-                    edge_id=f"{edge_kind.value}:{parent_id}:{row.entry_id}",
+                    edge_id=_edge_id(edge_kind.value, parent_id, row.entry_id),
                     kind=edge_kind,
                     source_node_id=parent_node,
                     target_node_id=entry_id,
@@ -497,7 +510,7 @@ def build_knowledge_genealogy_graph(
                 unresolved += 1
                 edges.append(
                     KnowledgeGenealogyEdge(
-                        edge_id=f"unresolved:{peer_source}:{row.entry_id}",
+                        edge_id=_edge_id("unresolved", peer_source, row.entry_id),
                         kind=KnowledgeGenealogyEdgeKind.UNRESOLVED_TRANSMISSION,
                         source_node_id=_holder_node_id(peer_source),
                         target_node_id=entry_id,
@@ -515,7 +528,7 @@ def build_knowledge_genealogy_graph(
             else:
                 edges.append(
                     KnowledgeGenealogyEdge(
-                        edge_id=f"tx:{peer.entry_id}:{row.entry_id}",
+                        edge_id=_edge_id("tx", peer.entry_id, row.entry_id),
                         kind=KnowledgeGenealogyEdgeKind.TRANSMITTED_FROM,
                         source_node_id=_entry_node_id(peer.entry_id),
                         target_node_id=entry_id,

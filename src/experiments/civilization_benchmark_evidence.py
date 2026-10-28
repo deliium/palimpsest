@@ -144,6 +144,11 @@ class BoundaryObservation:
     event_count: int = 0
     event_kind_counts: tuple[tuple[str, int], ...] = ()
     needs_applied_body_ids: tuple[str, ...] = ()
+    # Cumulative metadata-only counts over every event below this boundary.
+    event_kind_totals: tuple[tuple[str, int], ...] = ()
+    death_ticks_by_body: tuple[tuple[str, int], ...] = ()
+    commitment_promises: tuple[tuple[str, str, int | None], ...] = ()
+    given_transfers: tuple[tuple[int, str, str], ...] = ()
 
 
 def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapshot:
@@ -192,6 +197,11 @@ class BenchmarkBoundaryProbe:
         self._seen: set[str] = set()
         self._observations: list[BoundaryObservation] = []
         self._failures: list[str] = []
+        self._scanned_events = 0
+        self._event_kind_totals: dict[str, int] = {}
+        self._death_ticks_by_body: dict[str, int] = {}
+        self._commitment_promises: list[tuple[str, str, int | None]] = []
+        self._given_transfers: list[tuple[int, str, str]] = []
 
     @property
     def observations(self) -> tuple[BoundaryObservation, ...]:
@@ -200,6 +210,100 @@ class BenchmarkBoundaryProbe:
     @property
     def failures(self) -> tuple[str, ...]:
         return tuple(self._failures)
+
+    @property
+    def event_kind_totals(self) -> tuple[tuple[str, int], ...]:
+        """Cumulative metadata-only event counts for the observed window."""
+        return tuple(sorted(self._event_kind_totals.items()))
+
+    @property
+    def death_ticks_by_body(self) -> tuple[tuple[str, int], ...]:
+        """First observed death tick per body, in stable order."""
+        return tuple(sorted(self._death_ticks_by_body.items()))
+
+    @property
+    def commitment_promises(self) -> tuple[tuple[str, str, int | None], ...]:
+        """Public propose declarations: (actor, counterparty, due tick)."""
+        return tuple(self._commitment_promises)
+
+    @property
+    def given_transfers(self) -> tuple[tuple[int, str, str], ...]:
+        """Committed give outcomes: (tick, actor, recipient)."""
+        return tuple(self._given_transfers)
+
+    def event_total(self, kind: str) -> int:
+        """Return the cumulative count for one committed event kind."""
+        return self._event_kind_totals.get(kind, 0)
+
+    def owner_death_ticks(self) -> dict[str, int]:
+        """Map measured owner ids to death ticks through their own bodies."""
+        entity_to_owner: dict[str, str] = {}
+        for observation in self._observations:
+            for owner in observation.owners:
+                entity_to_owner[owner.entity_id] = owner.owner_id
+        deaths: dict[str, int] = {}
+        for body_id, tick in self._death_ticks_by_body.items():
+            owner_id = entity_to_owner.get(body_id)
+            if owner_id is not None:
+                deaths[owner_id] = tick
+        return deaths
+
+    def living_owner_ids(self) -> frozenset[str]:
+        """Owner ids measured as living at the latest boundary."""
+        if not self._observations:
+            return frozenset()
+        return frozenset(
+            owner.owner_id for owner in self._observations[-1].owners if owner.living
+        )
+
+    def _scan_new_events(self, events: tuple[object, ...]) -> None:
+        """Accumulate only newly visible events; boundaries are prefix-stable."""
+        if len(events) < self._scanned_events:
+            # Defensive: a non-prefix export would double count. Re-scan from 0.
+            self._scanned_events = 0
+            self._event_kind_totals.clear()
+            self._death_ticks_by_body.clear()
+            self._commitment_promises.clear()
+            self._given_transfers.clear()
+        for event in events[self._scanned_events :]:
+            details = getattr(event, "details", None)
+            kind = type(details).__name__
+            self._event_kind_totals[kind] = self._event_kind_totals.get(kind, 0) + 1
+            tick = getattr(event, "tick", None)
+            if (
+                kind == "CommitmentDeclared"
+                and getattr(details, "act", None) == "propose"
+            ):
+                actor = getattr(getattr(details, "actor_id", None), "value", None)
+                other = getattr(
+                    getattr(details, "counterparty_id", None), "value", None
+                )
+                due = getattr(details, "due_tick", None)
+                if isinstance(actor, str) and isinstance(other, str):
+                    self._commitment_promises.append(
+                        (actor, other, due if type(due) is int else None)
+                    )
+            elif kind == "Given":
+                actor = getattr(getattr(event, "actor_id", None), "value", None)
+                recipient = getattr(
+                    getattr(details, "recipient_id", None), "value", None
+                )
+                if (
+                    isinstance(actor, str)
+                    and isinstance(recipient, str)
+                    and type(tick) is int
+                ):
+                    self._given_transfers.append((tick, actor, recipient))
+            if kind != "Died":
+                continue
+            body = getattr(details, "body_id", None)
+            body_id = getattr(body, "value", None)
+            if not isinstance(body_id, str) or type(tick) is not int:
+                continue
+            prior = self._death_ticks_by_body.get(body_id)
+            if prior is None or tick < prior:
+                self._death_ticks_by_body[body_id] = tick
+        self._scanned_events = len(events)
 
     def new_owners(self) -> tuple[OwnerStoreSnapshot, ...]:
         owners: list[OwnerStoreSnapshot] = []
@@ -231,6 +335,7 @@ class BenchmarkBoundaryProbe:
                 body = getattr(details, "body_id", None)
                 if body is not None:
                     needs_bodies.append(body.value)
+        self._scan_new_events(boundary.events)
         observation = BoundaryObservation(
             boundary_tick=boundary.boundary_tick.value,
             owners=owners,
@@ -238,6 +343,10 @@ class BenchmarkBoundaryProbe:
             event_count=len(boundary.events),
             event_kind_counts=tuple(sorted(kind_counts.items())),
             needs_applied_body_ids=tuple(needs_bodies),
+            event_kind_totals=self.event_kind_totals,
+            death_ticks_by_body=self.death_ticks_by_body,
+            commitment_promises=self.commitment_promises,
+            given_transfers=self.given_transfers,
         )
         self._observations.append(observation)
         _LOG.debug(
@@ -436,9 +545,7 @@ def evaluate_historical_memory(
             if complete
             else V3BenchmarkCheckStatus.UNEXECUTED
         ),
-        reason_code=(
-            "memory_window_complete" if complete else "probe_unavailable"
-        ),
+        reason_code=("memory_window_complete" if complete else "probe_unavailable"),
         evidence=(
             V3BenchmarkEvidenceAvailability.COMPLETE
             if complete
@@ -514,9 +621,7 @@ def evaluate_durable_records(
         selector_version=1,
         status=V3BenchmarkCheckStatus.PASS,
         reason_code=(
-            "record_persisted"
-            if destroyed == 0
-            else "record_physically_removed"
+            "record_persisted" if destroyed == 0 else "record_physically_removed"
         ),
         evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
         coverage=V3BenchmarkCoverage.EXERCISED,
@@ -542,9 +647,7 @@ def evaluate_population_lifecycle(
             if complete
             else V3BenchmarkCheckStatus.UNEXECUTED
         ),
-        reason_code=(
-            "population_window_complete" if complete else "probe_unavailable"
-        ),
+        reason_code=("population_window_complete" if complete else "probe_unavailable"),
         evidence=(
             V3BenchmarkEvidenceAvailability.COMPLETE
             if complete
@@ -587,9 +690,7 @@ def evaluate_dependency_care(
             if complete
             else V3BenchmarkCheckStatus.UNEXECUTED
         ),
-        reason_code=(
-            "care_window_complete" if complete else "probe_unavailable"
-        ),
+        reason_code=("care_window_complete" if complete else "probe_unavailable"),
         evidence=(
             V3BenchmarkEvidenceAvailability.COMPLETE
             if complete
@@ -637,9 +738,7 @@ def evaluate_developmental_teaching(
             if complete
             else V3BenchmarkCheckStatus.UNEXECUTED
         ),
-        reason_code=(
-            "teaching_window_complete" if complete else "probe_unavailable"
-        ),
+        reason_code=("teaching_window_complete" if complete else "probe_unavailable"),
         evidence=(
             V3BenchmarkEvidenceAvailability.COMPLETE
             if complete
@@ -675,8 +774,7 @@ def evaluate_cultural_mutation(
     acquired = [
         owner
         for owner in entrants
-        if (owner.count("cultural_features") or 0) > 0
-        or owner.cultural_audits > 0
+        if (owner.count("cultural_features") or 0) > 0 or owner.cultural_audits > 0
     ]
     complete = _window_complete(probe, boundary_end_tick)
     return V3BenchmarkCheck(
@@ -687,9 +785,7 @@ def evaluate_cultural_mutation(
             if complete
             else V3BenchmarkCheckStatus.UNEXECUTED
         ),
-        reason_code=(
-            "cultural_window_complete" if complete else "probe_unavailable"
-        ),
+        reason_code=("cultural_window_complete" if complete else "probe_unavailable"),
         evidence=(
             V3BenchmarkEvidenceAvailability.COMPLETE
             if complete

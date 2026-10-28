@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: planned; implementation, regression runs and benchmark measurements not started
+Status: implementation in progress; Tasks 1–9 complete (Phase 4 closed 2026-10-28)
 
 ## Original Request
 
@@ -432,8 +432,8 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 7: Exercise memory layers and true or false surviving records ([details](v3-44-phase-03-population-and-memory.md#task-7-exercise-memory-layers-and-true-or-false-surviving-records)) (depends on 6)
 
 ### Phase 4
-- [ ] Task 8: Exercise discovery, diffusion, loss and independent rediscovery ([details](v3-44-phase-04-technology-and-exchange.md#task-8-exercise-discovery-diffusion-loss-and-independent-rediscovery)) (depends on 6, 7)
-- [ ] Task 9: Exercise inheritance claims, delayed commitments, barter and exchange functions ([details](v3-44-phase-04-technology-and-exchange.md#task-9-exercise-inheritance-claims-delayed-commitments-barter-and-exchange-functions)) (depends on 4, 5, 6, 7, 8)
+- [x] Task 8: Exercise discovery, diffusion, loss and independent rediscovery ([details](v3-44-phase-04-technology-and-exchange.md#task-8-exercise-discovery-diffusion-loss-and-independent-rediscovery)) (depends on 6, 7)
+- [x] Task 9: Exercise inheritance claims, delayed commitments, barter and exchange functions ([details](v3-44-phase-04-technology-and-exchange.md#task-9-exercise-inheritance-claims-delayed-commitments-barter-and-exchange-functions)) (depends on 4, 5, 6, 7, 8)
 
 ### Phase 5
 - [ ] Task 10: Exercise collective work, public goods, migration and re-contact ([details](v3-44-phase-05-regions-and-language.md#task-10-exercise-collective-work-public-goods-migration-and-re-contact)) (depends on 6, 7, 8, 9)
