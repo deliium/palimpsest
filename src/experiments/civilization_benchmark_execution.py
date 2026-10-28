@@ -39,6 +39,7 @@ from experiments.civilization_benchmark_models import (
 )
 from experiments.civilization_benchmark_suite import (
     V3_BENCH_09_TECHNOLOGY_DIFFUSION,
+    V3_BENCH_20_RECONTACT_EXCHANGE,
     get_v3_benchmark_scenario,
 )
 from simulation.runner import SimulationRunner
@@ -308,9 +309,11 @@ def _required_checks(
                     result,
                     boundary_end_tick=boundary_end_tick,
                     mechanism_available=config.knowledge_genealogy is not None,
-                    require_transmission=(
-                        recipe.scenario_id == V3_BENCH_09_TECHNOLOGY_DIFFUSION
-                    ),
+                    require_transmission=recipe.scenario_id
+                    in {
+                        V3_BENCH_09_TECHNOLOGY_DIFFUSION,
+                        V3_BENCH_20_RECONTACT_EXCHANGE,
+                    },
                 )
             )
         elif selector.selector_id == "technique_lifecycle_evidence":
@@ -360,6 +363,102 @@ def _required_checks(
                     probe,
                     boundary_end_tick=boundary_end_tick,
                     mechanism_available=config.subjective_valuation is not None,
+                )
+            )
+        elif selector.selector_id == "symbolic_language_evidence":
+            from experiments.civilization_benchmark_language import (
+                evaluate_symbolic_language,
+            )
+
+            checks.append(
+                evaluate_symbolic_language(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.symbolic_language_mode.value == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
+        elif selector.selector_id == "semantic_drift_evidence":
+            from experiments.civilization_benchmark_language import (
+                evaluate_semantic_drift,
+            )
+
+            checks.append(
+                evaluate_semantic_drift(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.semantic_naming_mode.value == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
+        elif selector.selector_id == "translation_evidence":
+            from experiments.civilization_benchmark_language import (
+                evaluate_translation,
+            )
+
+            checks.append(
+                evaluate_translation(
+                    probe,
+                    result,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=any(
+                        agent.cognition.translation_mode.value == "deterministic"
+                        for agent in config.agents
+                    ),
+                )
+            )
+        elif selector.selector_id == "collective_project_evidence":
+            from experiments.civilization_benchmark_coordination import (
+                evaluate_collective_projects,
+            )
+
+            checks.append(
+                evaluate_collective_projects(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.collective_projects is not None,
+                )
+            )
+        elif selector.selector_id == "public_goods_evidence":
+            from experiments.civilization_benchmark_coordination import (
+                evaluate_public_goods,
+            )
+
+            checks.append(
+                evaluate_public_goods(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.public_goods is not None,
+                )
+            )
+        elif selector.selector_id == "migration_evidence":
+            from experiments.civilization_benchmark_regions import (
+                evaluate_migration,
+            )
+
+            checks.append(
+                evaluate_migration(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.regions_migration is not None,
+                )
+            )
+        elif selector.selector_id == "cultural_contact_evidence":
+            from experiments.civilization_benchmark_regions import (
+                evaluate_cultural_contact,
+            )
+
+            checks.append(
+                evaluate_cultural_contact(
+                    probe,
+                    boundary_end_tick=boundary_end_tick,
+                    mechanism_available=config.cultural_contact is not None,
                 )
             )
         elif selector.selector_id == "exchange_function_evidence":

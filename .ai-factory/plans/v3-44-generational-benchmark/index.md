@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–9 complete (Phase 4 closed 2026-10-28)
+Status: implementation in progress; Tasks 1–11 complete (Phase 5 closed 2026-10-28)
 
 ## Original Request
 
@@ -436,8 +436,8 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 - [x] Task 9: Exercise inheritance claims, delayed commitments, barter and exchange functions ([details](v3-44-phase-04-technology-and-exchange.md#task-9-exercise-inheritance-claims-delayed-commitments-barter-and-exchange-functions)) (depends on 4, 5, 6, 7, 8)
 
 ### Phase 5
-- [ ] Task 10: Exercise collective work, public goods, migration and re-contact ([details](v3-44-phase-05-regions-and-language.md#task-10-exercise-collective-work-public-goods-migration-and-re-contact)) (depends on 6, 7, 8, 9)
-- [ ] Task 11: Exercise vocabulary divergence, semantic drift and mistranslation ([details](v3-44-phase-05-regions-and-language.md#task-11-exercise-vocabulary-divergence-semantic-drift-and-mistranslation)) (depends on 3, 10)
+- [x] Task 10: Exercise collective work, public goods, migration and re-contact ([details](v3-44-phase-05-regions-and-language.md#task-10-exercise-collective-work-public-goods-migration-and-re-contact)) (depends on 6, 7, 8, 9)
+- [x] Task 11: Exercise vocabulary divergence, semantic drift and mistranslation ([details](v3-44-phase-05-regions-and-language.md#task-11-exercise-vocabulary-divergence-semantic-drift-and-mistranslation)) (depends on 3, 10)
 
 ### Phase 6
 - [ ] Task 12: Exercise narrative survival, roles, succession, persistence and decay ([details](v3-44-phase-06-institutions-and-forks.md#task-12-exercise-narrative-survival-roles-succession-persistence-and-decay)) (depends on 7, 10, 11)

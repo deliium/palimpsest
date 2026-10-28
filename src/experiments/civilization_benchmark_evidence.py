@@ -639,6 +639,20 @@ def evaluate_population_lifecycle(
     """Confirm population change across a complete observed window."""
     entrants = _entrants(probe)
     complete = _window_complete(probe, boundary_end_tick)
+    if complete and not entrants:
+        return V3BenchmarkCheck(
+            selector_id="population_lifecycle_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="no_entrant_observed",
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=0,
+            denominator=0,
+        )
     return V3BenchmarkCheck(
         selector_id="population_lifecycle_evidence",
         selector_version=1,
@@ -724,6 +738,20 @@ def evaluate_developmental_teaching(
             source_references=(),
         )
     entrants = _entrants(probe)
+    if not entrants:
+        return V3BenchmarkCheck(
+            selector_id=selector_id,
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="no_entrant_observed",
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=0,
+            denominator=0,
+        )
     acquired = [
         owner
         for owner in entrants
@@ -771,6 +799,20 @@ def evaluate_cultural_mutation(
             source_references=(),
         )
     entrants = _entrants(probe)
+    if not entrants:
+        return V3BenchmarkCheck(
+            selector_id="cultural_feature_evidence",
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.UNEXECUTED,
+            reason_code="no_entrant_observed",
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.NOT_EXERCISED,
+            source_references=(),
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=0,
+            denominator=0,
+        )
     acquired = [
         owner
         for owner in entrants
