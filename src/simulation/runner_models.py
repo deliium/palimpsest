@@ -7510,6 +7510,7 @@ class SimulationRunnerConfig:
             )
         if self.new_agent_initialization is not None:
             from simulation.new_agent_initialization import (
+                SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
                 SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
                 SPECIES_DEFAULT_OFFICES_V1,
             )
@@ -7557,6 +7558,54 @@ class SimulationRunnerConfig:
                     "species_default_offices_v1 requires runner-config-v50 "
                     "(code=offices_profile_requires_v50)"
                 )
+            if (
+                self.new_agent_initialization.species_defaults_id
+                == SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1
+            ):
+                if self.schema_version != RUNNER_SCHEMA_VERSION_V55:
+                    _LOGGER.error(
+                        "invalid_fields path=new_agent_initialization "
+                        "reason_code=civilization_learner_profile_requires_v55 "
+                        "schema_version=%s",
+                        self.schema_version,
+                    )
+                    raise ValueError(
+                        "species_default_civilization_learner_v1 requires "
+                        "runner-config-v55 "
+                        "(code=civilization_learner_profile_requires_v55)"
+                    )
+                if not (
+                    self.v3_capability_flags.generational_population
+                    and self.v3_capability_flags.cultural_historical_memory
+                ):
+                    _LOGGER.error(
+                        "invalid_fields path=new_agent_initialization "
+                        "reason_code=civilization_learner_profile_requires_flags "
+                        "schema_version=%s",
+                        self.schema_version,
+                    )
+                    raise ValueError(
+                        "species_default_civilization_learner_v1 requires "
+                        "generational_population and cultural_historical_memory "
+                        "(code=civilization_learner_profile_requires_flags)"
+                    )
+                if (
+                    self.population_lifecycle is None
+                    or self.cultural_feature_provenance is None
+                    or self.generational_run is None
+                ):
+                    _LOGGER.error(
+                        "invalid_fields path=new_agent_initialization "
+                        "reason_code=civilization_learner_profile_requires_prerequisites "
+                        "schema_version=%s",
+                        self.schema_version,
+                    )
+                    raise ValueError(
+                        "species_default_civilization_learner_v1 requires "
+                        "population_lifecycle, cultural_feature_provenance and "
+                        "generational_run "
+                        "(code=civilization_learner_profile_requires_prerequisites)"
+                    )
         if self.kinship is not None and type(self.kinship) is not KinshipSpec:
             raise TypeError("kinship must be KinshipSpec or None")
         if (

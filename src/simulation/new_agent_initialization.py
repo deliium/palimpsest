@@ -24,13 +24,17 @@ from simulation.runner_models import (
     ArtifactInterpretationMode,
     CulturalNarrativeMode,
     DriveOverrideSpec,
+    InstitutionalDecayMode,
     InstitutionalMemoryMode,
+    InstitutionConceptMode,
     OfficeSuccessionMode,
     SemanticNamingMode,
     SkillLearningMode,
     SocialConventionMode,
     SocialNormMode,
+    SymbolicLanguageMode,
     TeachingInteractionMode,
+    TranslationMode,
 )
 from world.identifiers import EntityId, require_stable_id
 
@@ -39,6 +43,7 @@ __all__ = [
     "BLANK_SLATE_SUBJECTIVE_STORES",
     "CREATION_REASON_CODES",
     "NEW_AGENT_INITIALIZATION_KEYS",
+    "SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1",
     "SPECIES_DEFAULT_DEVELOPMENTAL_V1",
     "SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1",
     "SPECIES_DEFAULT_OFFICES_V1",
@@ -72,6 +77,9 @@ _LOG = logging.getLogger("simulation.new_agent_initialization")
 
 SPECIES_DEFAULT_V1: Final[str] = "species_default_v1"
 SPECIES_DEFAULT_DEVELOPMENTAL_V1: Final[str] = "species_default_developmental_v1"
+SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1: Final[str] = (
+    "species_default_civilization_learner_v1"
+)
 SPECIES_DEFAULT_OFFICES_V1: Final[str] = "species_default_offices_v1"
 SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1: Final[str] = (
     "species_default_institutional_memory_v1"
@@ -256,6 +264,7 @@ _KNOWN_SPECIES_DEFAULT_IDS: Final[frozenset[str]] = frozenset(
     {
         SPECIES_DEFAULT_V1,
         SPECIES_DEFAULT_DEVELOPMENTAL_V1,
+        SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
         SPECIES_DEFAULT_OFFICES_V1,
         SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
     }
@@ -974,6 +983,40 @@ def _species_default_developmental_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     )
 
 
+def _species_default_civilization_learner_v1(
+    agent_id: AgentId,
+) -> SpeciesDefaultsPack:
+    """Descendant civilizational learner: modes on, every owner store empty.
+
+    Enables the developmental learner modes plus owner-scoped symbolic,
+    translation and institutional cognition. It supplies no vocabulary,
+    narrative, role, successor, institution or truth, and never copies a
+    founder specification.
+    """
+    cognition = AgentCognitionSpec(
+        agent_id=agent_id,
+        skill_learning_mode=SkillLearningMode.DETERMINISTIC,
+        teaching_interaction_mode=TeachingInteractionMode.DETERMINISTIC,
+        semantic_naming_mode=SemanticNamingMode.DETERMINISTIC,
+        social_norm_mode=SocialNormMode.DETERMINISTIC,
+        social_convention_mode=SocialConventionMode.DETERMINISTIC,
+        cultural_narrative_mode=CulturalNarrativeMode.DETERMINISTIC,
+        artifact_interpretation_mode=ArtifactInterpretationMode.DETERMINISTIC,
+        symbolic_language_mode=SymbolicLanguageMode.DETERMINISTIC,
+        translation_mode=TranslationMode.DETERMINISTIC,
+        institution_concept_mode=InstitutionConceptMode.DETERMINISTIC,
+        office_succession_mode=OfficeSuccessionMode.DETERMINISTIC,
+        institutional_memory_mode=InstitutionalMemoryMode.DETERMINISTIC,
+        institutional_decay_mode=InstitutionalDecayMode.DETERMINISTIC,
+    )
+    drive_profile = cognition.resolve_drive_profile()
+    return SpeciesDefaultsPack(
+        species_defaults_id=SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
+        cognition=cognition,
+        drive_profile=drive_profile,
+    )
+
+
 def _species_default_offices_v1(agent_id: AgentId) -> SpeciesDefaultsPack:
     """Office-capable pack with empty office content and default other modes."""
     cognition = AgentCognitionSpec(
@@ -1010,6 +1053,9 @@ def _species_default_institutional_memory_v1(
 _SPECIES_DEFAULTS: Final[Mapping[str, Callable[[AgentId], SpeciesDefaultsPack]]] = {
     SPECIES_DEFAULT_V1: _species_default_v1,
     SPECIES_DEFAULT_DEVELOPMENTAL_V1: _species_default_developmental_v1,
+    SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1: (
+        _species_default_civilization_learner_v1
+    ),
     SPECIES_DEFAULT_OFFICES_V1: _species_default_offices_v1,
     SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1: (_species_default_institutional_memory_v1),
 }
