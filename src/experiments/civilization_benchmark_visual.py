@@ -28,7 +28,7 @@ from experiments.interventions import (
     MilestoneOverride,
 )
 from simulation.runner_models import SimulationRunnerConfig
-from world.actions import Move, StartCollectiveProject, Talk
+from world.actions import Move, StartCollectiveProject, Talk, Tell
 from world.communications import (
     CommunicationRelation,
     CommunicationSourceBasis,
@@ -258,6 +258,10 @@ def build_v3_visual_fixture(*, seed: int = 23) -> V3BenchmarkBase:
     """Controlled visual world with the prerequisites for all eight markers."""
     from dataclasses import replace
 
+    from experiments.civilization_benchmark_technology import (
+        _experimentation,
+        _with_material_opportunities,
+    )
     from simulation.new_agent_initialization import (
         SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
         default_new_agent_initialization_spec,
@@ -266,7 +270,6 @@ def build_v3_visual_fixture(*, seed: int = 23) -> V3BenchmarkBase:
         ArtifactInterpretationMode,
         InstitutionConceptMode,
         OfficeSuccessionMode,
-        example_bounded_experimentation_spec,
         example_collective_projects_spec,
         example_developmental_learning_spec,
         example_knowledge_genealogy_spec,
@@ -290,8 +293,11 @@ def build_v3_visual_fixture(*, seed: int = 23) -> V3BenchmarkBase:
         )
         for agent in base.config.agents
     )
+    config = _with_material_opportunities(
+        replace(base.config, agents=agents), held_body_ids=("body-origin",)
+    )
     config = replace(
-        base.config,
+        config,
         agents=agents,
         new_agent_initialization=replace(
             default_new_agent_initialization_spec(),
@@ -301,9 +307,7 @@ def build_v3_visual_fixture(*, seed: int = 23) -> V3BenchmarkBase:
         mentorship=example_mentorship_spec(),
         knowledge_genealogy=example_knowledge_genealogy_spec(),
         technique_lifecycle=example_technique_lifecycle_spec(),
-        bounded_experimentation=example_bounded_experimentation_spec(
-            learn_into_genealogy=True
-        ),
+        bounded_experimentation=_experimentation(),
         collective_projects=example_collective_projects_spec(),
     )
     return replace(
@@ -332,11 +336,40 @@ def visual_fixture_arbiter(
         ),
         MilestoneOverride(
             milestone_id="v3-visual-journey",
-            tick=1,
+            tick=4,
             agent_id=AgentId("agent-origin"),
             build_command=lambda: Move(EntityId("loc-spring")),
         ),
     ]
+    from experiments.civilization_benchmark_technology import _experiment_command
+
+    milestones.append(
+        MilestoneOverride(
+            milestone_id="v3-visual-experiment",
+            tick=2,
+            agent_id=AgentId("agent-origin"),
+            build_command=_experiment_command,
+        )
+    )
+    milestones.append(
+        MilestoneOverride(
+            milestone_id="v3-visual-teach",
+            tick=1,
+            agent_id=AgentId("agent-origin"),
+            build_command=_teach_command(1, "body-origin", "body-extra-1"),
+        )
+    )
+    if len(days) > 2:
+        milestones.append(
+            MilestoneOverride(
+                milestone_id="v3-visual-succession",
+                tick=days[2],
+                agent_id=AgentId("agent-extra-2"),
+                build_command=_succession_command(
+                    days[2], "body-extra-2", "body-origin", "body-extra-1"
+                ),
+            )
+        )
     for index, day in enumerate(days[:6]):
         milestones.append(
             MilestoneOverride(
@@ -369,6 +402,55 @@ def _endorse_command(tick: int, speaker: str, occupant: str) -> Callable[[], Tal
                     ),
                 ),
                 source_basis=CommunicationSourceBasis.UNREFERENCED,
+            ),
+        )
+
+    return build
+
+
+def _teach_command(tick: int, speaker: str, recipient: str) -> Callable[[], Tell]:
+    def build() -> Tell:
+        return Tell(
+            recipient_id=EntityId(recipient),
+            utterance=origin_utterance(
+                speaker_id=EntityId(speaker),
+                communication_id=f"v3-visual-teach-{tick}",
+                text="explain",
+                sender_confidence=0.8,
+                concepts=("crafting",),
+                relations=(
+                    CommunicationRelation(
+                        subject="crafting",
+                        predicate="explain",
+                        object="crafting:high",
+                    ),
+                ),
+                source_basis=CommunicationSourceBasis.BELIEF,
+            ),
+        )
+
+    return build
+
+
+def _succession_command(
+    tick: int, speaker: str, recipient: str, successor: str
+) -> Callable[[], Talk]:
+    def build() -> Talk:
+        return Talk(
+            recipient_id=EntityId(recipient),
+            utterance=origin_utterance(
+                speaker_id=EntityId(speaker),
+                communication_id=f"v3-visual-succession-{tick}",
+                text="succession",
+                sender_confidence=0.7,
+                relations=(
+                    CommunicationRelation(
+                        subject="collective_project",
+                        predicate="office_succession",
+                        object=f"fedcba9876543210|{successor}|-",
+                    ),
+                ),
+                source_basis=CommunicationSourceBasis.BELIEF,
             ),
         )
 

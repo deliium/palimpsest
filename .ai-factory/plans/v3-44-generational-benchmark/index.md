@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–16 complete (Task 15 DB gate and Godot baseline verified). Task 17 is partially implemented: the source-pinned marker manifest, a 160-tick visual fixture and sparse opportunity schedule now run to completion, and a real communication bug (duplicate rendered concepts) was fixed. The current fixture covers 4 of 8 markers (new agents, deaths, migration, collective project); teaching, technology spread, cultural differentiation and office succession still need additional ordinary-command opportunities before Godot/browser acceptance can be claimed.
+Status: implementation in progress; Tasks 1–16 complete (Task 15 DB gate and Godot baseline verified). Task 17 is partially implemented: the 160-tick visual fixture now covers 5 of 8 markers (new agents, deaths, migration, collective project, office succession). Teaching delivery and technology/cultural evidence still need additional ordinary-command work; Godot fixture tests and browser acceptance remain.
 
 ## Original Request
 
