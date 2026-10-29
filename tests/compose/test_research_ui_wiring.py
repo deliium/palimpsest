@@ -1,21 +1,24 @@
-"""Opt-in Research UI compose wiring checks (not in default pytest)."""
+"""Authenticated image-owned Research UI wiring checks (not default pytest)."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
+
+from tests.compose.conftest import GenerationalStack
 
 pytestmark = pytest.mark.compose
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_DEV = ROOT / "compose.dev.yaml"
-DIST = ROOT / "clients" / "research-ui" / "dist"
 BENCHMARK_MATRIX_FIXTURE = (
     ROOT / "tests" / "fixtures" / "matrices" / "v2-benchmark-suite.json"
 )
+_REQUIRED = os.environ.get("PALIMPSEST_V3_ACCEPTANCE_REQUIRED", "") == "1"
 
 
 def test_compose_dev_documents_research_ui_env() -> None:
@@ -34,36 +37,36 @@ def test_benchmark_matrix_fixture_exists_for_research_ui() -> None:
     assert "matrix-metric-summary-v1" not in text  # summary is a runtime sidecar
 
 
-def test_research_ui_index_when_dist_served() -> None:
-    """Smoke: when a local API already serves RESEARCH_WEB_ROOT, /research/ is HTML.
-
-    Skips unless ``PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL`` is set (e.g.
-    ``http://127.0.0.1:8080``) and ``clients/research-ui/dist/index.html`` exists.
-    """
-    base = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL", "").strip()
-    if not base:
-        pytest.skip("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL unset")
-    if not (DIST / "index.html").is_file():
-        pytest.skip("research-ui dist/index.html missing")
-    response = httpx.get(f"{base.rstrip('/')}/research/", timeout=5.0)
+def test_shipped_image_serves_research_spa_without_host_dist(
+    benchmark_stack: tuple[GenerationalStack, dict[str, Any]],
+) -> None:
+    stack, _manifest = benchmark_stack
+    response = httpx.get(f"{stack.base_url}/research/", timeout=30.0)
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
-    assert "html" in response.text.lower()
+    assert "<html" in response.text.lower()
+    deep = httpx.get(
+        f"{stack.base_url}/research/runs/demo/technology", timeout=30.0
+    )
+    assert deep.status_code == 200
+    asset = httpx.get(
+        f"{stack.base_url}/research/assets/missing.js", timeout=30.0
+    )
+    assert asset.status_code == 404
 
 
-def test_research_ui_matrix_metric_summary_when_mounted() -> None:
-    """Smoke: allowlisted metric-summary for v2-benchmark-suite when
-    MATRIX_ROOT is live.
-
-    Skips unless ``PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL`` is set and the running
-    stack has ``PALIMPSEST_RESEARCH_MATRIX_ROOT`` populated with that matrix id.
-    """
-    base = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL", "").strip()
-    if not base:
-        pytest.skip("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL unset")
-    url = f"{base.rstrip('/')}/v1/research/matrices/v2-benchmark-suite/metric-summary"
-    response = httpx.get(url, timeout=5.0)
-    if response.status_code == 404:
-        pytest.skip("v2-benchmark-suite metric-summary not mounted in this stack")
+def test_shipped_image_serves_real_v2_matrix_summary(
+    benchmark_stack: tuple[GenerationalStack, dict[str, Any]],
+) -> None:
+    stack, _manifest = benchmark_stack
+    response = httpx.get(
+        f"{stack.base_url}/v1/research/matrices/v2-benchmark-suite/metric-summary",
+        headers={"x-palimpsest-token": stack.inspection_token},
+        timeout=30.0,
+    )
+    if response.status_code in {404, 401, 403} and _REQUIRED:
+        pytest.fail(
+            f"required matrix summary unavailable status={response.status_code}"
+        )
     assert response.status_code == 200
     assert response.json().get("schema_version") == "matrix-metric-summary-v1"

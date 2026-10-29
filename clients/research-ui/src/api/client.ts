@@ -146,6 +146,12 @@ export type BranchLineageOut = {
   branch_id: string
 }
 
+export type BranchListOut = {
+  items: BranchLineageOut[]
+  next_cursor: string | null
+  count: number
+}
+
 export function listInspectRuns(after?: string | null): Promise<RunListOut> {
   return apiFetch<RunListOut>('/v1/research/runs', {
     capability: 'objective_inspection',
@@ -173,6 +179,19 @@ export function getExperimental(runId: string): Promise<ExperimentalStateOut> {
 export function getBranchLineage(runId: string): Promise<BranchLineageOut> {
   return apiFetch<BranchLineageOut>(`/v1/simulations/${runId}/branch`, {
     capability: 'objective_inspection',
+  })
+}
+
+export function listBranchChildren(
+  runId: string,
+  afterChildRunId: string | null = null,
+): Promise<BranchListOut> {
+  return apiFetch<BranchListOut>(`/v1/simulations/${runId}/branches`, {
+    capability: 'objective_inspection',
+    query: {
+      after_child_run_id: afterChildRunId ?? undefined,
+      limit: 100,
+    },
   })
 }
 

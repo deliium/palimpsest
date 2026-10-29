@@ -132,6 +132,46 @@ async def test_dense_scope_pages_skip_prior_shards_within_budget(
     assert pages == 3
 
 
+@pytest.mark.asyncio
+async def test_long_row_keys_keep_distinct_bounded_index_ranges(tmp_path: Path) -> None:
+    """Multi-shard scopes with long row ids stay readable.
+
+    Truncating ``scope|tick|row`` to the 128-code-point stable-id bound used to
+    collapse every shard of one scope+boundary onto the same range key, which
+    the reader then rejected as ``civilization_storage_corrupt``.
+    """
+    traits = tuple(
+        CivilizationOwnerTrait(f"trait-{index:04d}", f"{'y' * 80}{index:04d}", 0, 4)
+        for index in range(450)
+    )
+    history = _history_with_inventory(_inventory_dense(traits))
+    publication = compose_civilization_boundary(history, 4)
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-long", publication)
+    sealed = await publisher.seal_catalogue(history.run_id, "pub-long")
+    reader = create_civilization_reader(tmp_path)
+    cursor = CivilizationCursor(history.run_id, history.world_id, 4, None, 4, 4)
+    scope = CivilizationScope(
+        CivilizationLayer.CULTURE, CivilizationEvidenceClass.ANALYTICAL
+    )
+    after: str | None = None
+    rows = 0
+    while True:
+        page = await reader.rows(
+            cursor,
+            scope,
+            publication=sealed,
+            after_key=after,
+            entity_id=None,
+            budget=CivilizationReadBudget(limit=200),
+        )
+        rows += len(page.rows)
+        if page.next_cursor is None:
+            break
+        after = page.next_cursor
+    assert rows == 450
+
+
 def _history_with_inventory(inventory: object) -> CivilizationCapturedHistory:
     from tests.unit.test_civilization_publication import (
         _RUN,

@@ -97,6 +97,8 @@ async def test_research_and_v1_win_over_presentation(
     async with running_client(app) as client:
         research_page = await client.get("/research/")
         spa_route = await client.get("/research/runs/demo")
+        asset = await client.get("/research/assets/app.js")
+        missing_asset = await client.get("/research/assets/missing.js")
         health = await client.get("/health")
         version = await client.get("/version")
         godot = await client.get("/")
@@ -105,6 +107,12 @@ async def test_research_and_v1_win_over_presentation(
     assert "research" in research_page.text
     assert spa_route.status_code == 200
     assert "research" in spa_route.text
+    assert asset.status_code == 200
+    assert asset.headers["content-type"].startswith("text/javascript")
+    assert "console.log" in asset.text
+    # A missing asset is not rewritten to the SPA shell.
+    assert missing_asset.status_code == 404
+    assert "research" not in missing_asset.text
     assert health.status_code == 200
     assert version.json()["research_ui_configured"] is True
     assert godot.status_code == 200

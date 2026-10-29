@@ -1822,8 +1822,11 @@ def _project_help(state: WorldState, event: WorldEvent, details: Helped) -> Worl
     bodies[actor_id] = copy_body(
         helper, fatigue=Fatigue(details.resulting_helper_fatigue)
     )
+    resulting = details.resulting_target_health
     bodies[details.target_id] = copy_body(
-        target, health=Health(details.resulting_target_health)
+        target,
+        health=Health(0.0 if resulting <= 0.0 else resulting),
+        life_status=LifeStatus.DEAD if resulting <= 0.0 else target.life_status,
     )
     try:
         return rebuild_world_state(state, bodies=bodies)
@@ -1979,12 +1982,14 @@ def _project_needs(state: WorldState, details: NeedsApplied) -> WorldState:
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
     body = state.bodies[details.body_id]
     bodies = dict(state.bodies)
+    resulting = details.resulting_health
     bodies[details.body_id] = copy_body(
         body,
         hunger=Hunger(details.resulting_hunger),
         thirst=Thirst(details.resulting_thirst),
         fatigue=Fatigue(details.resulting_fatigue),
-        health=Health(details.resulting_health),
+        health=Health(0.0 if resulting <= 0.0 else resulting),
+        life_status=LifeStatus.DEAD if resulting <= 0.0 else body.life_status,
     )
     try:
         return rebuild_world_state(state, bodies=bodies)
@@ -1997,10 +2002,12 @@ def _project_exposure(state: WorldState, details: ExposureApplied) -> WorldState
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
     body = state.bodies[details.body_id]
     bodies = dict(state.bodies)
+    resulting = details.resulting_health
     bodies[details.body_id] = copy_body(
         body,
         temperature=TemperatureCelsius(details.resulting_temperature),
-        health=Health(details.resulting_health),
+        health=Health(0.0 if resulting <= 0.0 else resulting),
+        life_status=LifeStatus.DEAD if resulting <= 0.0 else body.life_status,
     )
     try:
         return rebuild_world_state(state, bodies=bodies)

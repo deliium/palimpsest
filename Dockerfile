@@ -7,6 +7,8 @@
 ARG PYTHON_IMAGE=python:3.12.14-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.10
 ARG DEBIAN_IMAGE=debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
+ARG PNPM_VERSION=10.34.9
 
 FROM ${DEBIAN_IMAGE} AS observer-export-tools
 RUN apt-get update \
@@ -44,6 +46,16 @@ COPY --from=observer-export-tools /export /
 
 FROM ${UV_IMAGE} AS uv
 
+FROM ${NODE_IMAGE} AS research-ui-builder
+ARG PNPM_VERSION
+WORKDIR /src/clients/research-ui
+ENV CI=1
+RUN npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"
+COPY clients/research-ui/package.json clients/research-ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY clients/research-ui ./
+RUN pnpm run build
+
 FROM ${PYTHON_IMAGE} AS builder
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -63,15 +75,41 @@ RUN groupadd --system --gid 1001 palimpsest \
     && useradd --system --uid 1001 --gid palimpsest --home-dir /app --create-home palimpsest
 WORKDIR /app
 ARG PALIMPSEST_REVISION=unknown
+ARG PALIMPSEST_SOURCE_CLEAN=false
+ARG PALIMPSEST_SOURCE_ARTIFACT_DIGEST=
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PALIMPSEST_PRESENTATION_WEB_ROOT=/app/share/observer-web \
+    PALIMPSEST_RESEARCH_WEB_ROOT=/app/share/research-web \
     PALIMPSEST_REVISION=${PALIMPSEST_REVISION}
+LABEL org.opencontainers.image.revision="${PALIMPSEST_REVISION}" \
+      io.palimpsest.source-clean="${PALIMPSEST_SOURCE_CLEAN}" \
+      io.palimpsest.source-artifact-digest="${PALIMPSEST_SOURCE_ARTIFACT_DIGEST}"
+RUN set -eu; \
+    revision="${PALIMPSEST_REVISION}"; \
+    clean="${PALIMPSEST_SOURCE_CLEAN}"; \
+    digest="${PALIMPSEST_SOURCE_ARTIFACT_DIGEST}"; \
+    case "$clean" in \
+      true|false) ;; \
+      *) echo "palimpsest_source_attestation_invalid reason=source_clean_invalid" >&2; exit 1 ;; \
+    esac; \
+    if [ "$clean" = "true" ] && [ -n "$digest" ]; then \
+      echo "palimpsest_source_attestation_invalid reason=conflicting_attestation" >&2; exit 1; \
+    fi; \
+    if { [ "$clean" = "true" ] || [ -n "$digest" ]; } \
+       && { [ -z "$revision" ] || [ "$revision" = "unknown" ]; }; then \
+      echo "palimpsest_source_attestation_invalid reason=revision_missing" >&2; exit 1; \
+    fi; \
+    if [ -n "$digest" ] && ! printf '%s' "$digest" | grep -Eq '^[0-9a-f]{64}$'; then \
+      echo "palimpsest_source_attestation_invalid reason=digest_invalid" >&2; exit 1; \
+    fi
 COPY --from=builder --chown=palimpsest:palimpsest /app/.venv /app/.venv
 COPY --from=builder --chown=palimpsest:palimpsest /app/alembic.ini /app/alembic.ini
 COPY --from=builder --chown=palimpsest:palimpsest /app/alembic /app/alembic
 COPY --from=observer-export --chown=palimpsest:palimpsest / /app/share/observer-web
+COPY --from=research-ui-builder --chown=palimpsest:palimpsest \
+    /src/clients/research-ui/dist /app/share/research-web
 USER palimpsest
 EXPOSE 8080
 CMD ["uvicorn", "api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]

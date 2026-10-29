@@ -20,6 +20,7 @@ from infrastructure.database import DatabaseResources
 from infrastructure.settings import Settings
 from persistence import (
     create_branch_lineage_repository,
+    create_empty_boundary_subjective_clone,
     create_experiment_repository,
     create_run_control_repository,
     create_run_repository,
@@ -164,6 +165,9 @@ def get_branch_api_service(request: Request) -> BranchApiService:
         journal=journal,
         snapshots=snapshots,
         lineage=lineage,
+        subjective_clone=create_empty_boundary_subjective_clone(
+            resources.session_factory
+        ),
         run_control=run_control,
     )
     compare = JournalBranchCompare(journal=journal, lineage=lineage)

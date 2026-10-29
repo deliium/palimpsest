@@ -114,6 +114,17 @@
     </aside>
   {/if}
 
+  {#if graph.edges.length > 0}
+    <ul class="edges" aria-label="Qualified lineage edges">
+      {#each graph.edges.slice(0, 20) as item (item.edge_key)}
+        <li>
+          <span class="relation">{item.relation}</span>
+          {item.native_id} · {item.source_presence}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+
   <p class="muted">
     Coverage: {JSON.stringify(graph.coverage)}
   </p>
@@ -174,5 +185,17 @@
     margin: 0.3rem 0 0;
     padding-left: 1rem;
     font-size: 0.75rem;
+  }
+
+  .edges {
+    margin: 0;
+    padding-left: 1rem;
+    font-size: 0.75rem;
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .edges .relation {
+    font-weight: 600;
   }
 </style>

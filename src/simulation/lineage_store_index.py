@@ -725,7 +725,10 @@ def _group_entries(
                     schema_version=page_schema,
                 )
             )
-            chunk = [entry]
+            # Start the next page empty; the shared append below adds this entry
+            # exactly once. Pre-seeding the chunk duplicated the first entry of
+            # every byte-split page and broke strictly increasing key ranges.
+            chunk = []
             encoded = _canonical(
                 LineageIndexPage(
                     kind=kind, level=level, entries=(entry,)

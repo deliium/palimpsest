@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import shutil
 import socket
 import subprocess
-from collections.abc import Iterator
+import tempfile
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,7 @@ from typing import Any
 import pytest
 
 from infrastructure.settings import redact_secrets
+from tests.compose.source_identity import parse_source_identity_labels
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = ROOT / "compose.yaml"
@@ -22,6 +25,10 @@ SEED_SCRIPT = ROOT / "tests" / "compose" / "seed_generational_evidence.py"
 CIVILIZATION_SEED = ROOT / "tests" / "compose" / "seed_civilization_evidence.py"
 CIVILIZATION_PRODUCER = ROOT / "tests" / "compose" / "start_civilization.py"
 CIVILIZATION_OVERRIDE = ROOT / "compose.civilization.yaml"
+BENCHMARK_PRODUCER = ROOT / "tests" / "compose" / "start_v3_benchmark.py"
+BENCHMARK_MATRIX_FIXTURE = (
+    ROOT / "tests" / "fixtures" / "matrices" / "v2-benchmark-suite.json"
+)
 
 
 def docker_cli() -> str:
@@ -73,6 +80,8 @@ class GenerationalStack:
     debug_token: str
     lineage_enabled: bool
     civilization_root: Path | None = None
+    benchmark_root: Path | None = None
+    matrix_root: Path | None = None
     compose_files: tuple[Path, ...] = (COMPOSE_FILE,)
 
 
@@ -81,7 +90,8 @@ def _generational_stack(
     *,
     lineage_enabled: bool,
     civilization_enabled: bool = False,
-) -> Iterator[GenerationalStack]:
+    benchmark_enabled: bool = False,
+) -> Generator[GenerationalStack, None, None]:
     image = os.environ.get("PALIMPSEST_API_IMAGE", "").strip()
     if not image:
         pytest.skip("PALIMPSEST_API_IMAGE is not set")
@@ -95,6 +105,12 @@ def _generational_stack(
     civilization_root = tmp_path / "civilization"
     civilization_root.mkdir()
     civilization_root.chmod(0o777)
+    benchmark_root = tmp_path / "benchmark"
+    benchmark_root.mkdir()
+    benchmark_root.chmod(0o777)
+    matrix_root = tmp_path / "matrices"
+    matrix_root.mkdir()
+    matrix_root.chmod(0o777)
     control = secrets.token_urlsafe(32)
     inspection = secrets.token_urlsafe(32)
     debug = secrets.token_urlsafe(32)
@@ -137,17 +153,50 @@ def _generational_stack(
         '      PALIMPSEST_API_DEBUG_ENABLED: "true"',
         '      PALIMPSEST_API_DEBUG_CREDENTIAL: "${PALIMPSEST_ACCEPT_DEBUG}"',
     ]
+    volume_lines: list[str] = []
     if lineage_enabled:
         lines.extend(
             [
                 '      PALIMPSEST_LINEAGE_ROOT: "/srv/palimpsest/lineage"',
-                "    volumes:",
+            ]
+        )
+        volume_lines.extend(
+            [
                 "      - type: bind",
                 f"        source: {lineage_root}",
                 "        target: /srv/palimpsest/lineage",
-                "        read_only: true",
+                f"        read_only: {str(not benchmark_enabled).lower()}",
             ]
         )
+    if benchmark_enabled:
+        lines.extend(
+            [
+                '      PALIMPSEST_CIVILIZATION_ROOT: "/civilization"',
+                '      PALIMPSEST_CIVILIZATION_CURSOR_KEY: '
+                '"${PALIMPSEST_CIVILIZATION_CURSOR_KEY}"',
+                '      PALIMPSEST_LOG_LEVEL: "DEBUG"',
+                '      PALIMPSEST_RESEARCH_MATRIX_ROOT: "/matrices"',
+            ]
+        )
+        volume_lines.extend(
+            [
+                "      - type: bind",
+                f"        source: {matrix_root}",
+                "        target: /matrices",
+                "        read_only: true",
+                "      - type: bind",
+                f"        source: {civilization_root}",
+                "        target: /civilization",
+                "        read_only: false",
+                "      - type: bind",
+                f"        source: {benchmark_root}",
+                "        target: /benchmark",
+                "        read_only: false",
+            ]
+        )
+    if volume_lines:
+        lines.append("    volumes:")
+        lines.extend(volume_lines)
     override.write_text("\n".join(lines) + "\n", encoding="utf-8")
     compose_files = [COMPOSE_FILE, override]
     if civilization_enabled:
@@ -188,7 +237,11 @@ def _generational_stack(
             inspection_token=inspection,
             debug_token=debug,
             lineage_enabled=lineage_enabled,
-            civilization_root=civilization_root if civilization_enabled else None,
+            civilization_root=civilization_root if (
+                civilization_enabled or benchmark_enabled
+            ) else None,
+            benchmark_root=benchmark_root if benchmark_enabled else None,
+            matrix_root=matrix_root if benchmark_enabled else None,
             compose_files=tuple(compose_files),
         )
     except Exception:
@@ -258,6 +311,39 @@ def published_civilization_stack(
     yield from _generational_stack(
         tmp_path, lineage_enabled=False, civilization_enabled=True
     )
+
+
+@pytest.fixture
+def published_benchmark_stack(
+    tmp_path: Path,
+) -> Iterator[GenerationalStack]:
+    yield from _generational_stack(
+        tmp_path,
+        lineage_enabled=True,
+        civilization_enabled=False,
+        benchmark_enabled=True,
+    )
+
+
+@pytest.fixture(scope="session")
+def benchmark_stack() -> Iterator[tuple[GenerationalStack, dict[str, Any]]]:
+    """One authenticated image stack serving a real produced benchmark history.
+
+    Release acceptance modules share this stack so the expensive production run
+    happens once per session and the same shipped image serves every check.
+    """
+    root = Path(tempfile.mkdtemp(prefix="v3-benchmark-"))
+    generator = _generational_stack(
+        root, lineage_enabled=True, benchmark_enabled=True
+    )
+    try:
+        stack = next(generator)
+    except StopIteration:  # pragma: no cover - defensive
+        pytest.fail("benchmark stack did not start")
+    try:
+        yield stack, produce_v3_benchmark(stack)
+    finally:
+        generator.close()
 
 
 @pytest.fixture
@@ -407,4 +493,126 @@ def seed_civilization(
     for line in reversed(completed.stdout.splitlines()):
         if line.strip().startswith("{"):
             return line.strip()
+    pytest.fail(redact_secrets(completed.stdout + completed.stderr))
+
+
+def research_credentials_script(stack: GenerationalStack) -> str:
+    """Session-scoped SPA credentials for authenticated browser acceptance."""
+    payload = json.dumps(
+        {
+            "simulation_control": "",
+            "objective_inspection": stack.inspection_token,
+            "agent_visible": "",
+            "subjective_debug": stack.debug_token,
+        }
+    )
+    return (
+        "sessionStorage.setItem('palimpsest.research_ui.credentials.v1', "
+        f"{json.dumps(payload)});"
+    )
+
+
+def image_source_identity(stack: GenerationalStack) -> tuple[str, list[str]]:
+    """Read verified build attestations from the release image labels."""
+    docker = docker_cli()
+    completed = subprocess.run(
+        [
+            docker,
+            "image",
+            "inspect",
+            stack.image,
+            "--format",
+            "{{json .Config.Labels}}",
+        ],
+        cwd=str(ROOT),
+        env=stack.env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("image_labels_unavailable")
+    labels = json.loads(completed.stdout or "{}")
+    if not isinstance(labels, dict):
+        raise RuntimeError("image_labels_unavailable")
+    return parse_source_identity_labels(labels)
+
+
+def produce_v3_benchmark(stack: GenerationalStack) -> dict[str, object]:
+    """Run the release benchmark producer inside the shipped image."""
+    if (
+        stack.benchmark_root is None
+        or stack.civilization_root is None
+        or stack.matrix_root is None
+    ):
+        raise AssertionError("benchmark roots are not mounted")
+    revision, source_args = image_source_identity(stack)
+    del revision
+    docker = docker_cli()
+    dsn = "postgresql+asyncpg://palimpsest:palimpsest@db:5432/palimpsest_test"
+    args = [
+        docker,
+        "run",
+        "--rm",
+        "--network",
+        f"{stack.project}_default",
+        "-e",
+        f"PALIMPSEST_DATABASE_URL={dsn}",
+        "-e",
+        "PALIMPSEST_ENVIRONMENT=production",
+        "-v",
+        f"{stack.benchmark_root}:/benchmark",
+        "-v",
+        f"{stack.civilization_root}:/civilization",
+        "-v",
+        f"{stack.lineage_root}:/srv/palimpsest/lineage",
+        "-v",
+        f"{stack.matrix_root}:/matrices",
+        "-v",
+        f"{BENCHMARK_MATRIX_FIXTURE}:/acceptance/matrix.json:ro",
+        "-v",
+        f"{BENCHMARK_PRODUCER}:/acceptance/producer.py:ro",
+        "--entrypoint",
+        "/app/.venv/bin/python",
+        stack.image,
+        "/acceptance/producer.py",
+        "--base-url",
+        "http://api:8080",
+        f"--inspection-token={stack.inspection_token}",
+        f"--control-token={stack.control_token}",
+        "--benchmark-root",
+        "/benchmark",
+        "--civilization-root",
+        "/civilization",
+        "--lineage-root",
+        "/srv/palimpsest/lineage",
+        "--matrix-root",
+        "/matrices",
+        "--matrix-fixture",
+        "/acceptance/matrix.json",
+        *source_args,
+    ]
+    completed = subprocess.run(
+        args,
+        cwd=str(ROOT),
+        env=stack.env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        pytest.fail(
+            redact_secrets(
+                completed.stdout
+                + completed.stderr
+                + "\n--- API ---\n"
+                + stack_api_logs(stack)
+            )
+        )
+    for line in reversed(completed.stdout.splitlines()):
+        if line.strip().startswith("{"):
+            payload: object = json.loads(line.strip())
+            if not isinstance(payload, dict):
+                pytest.fail("benchmark_manifest_invalid")
+            return payload
     pytest.fail(redact_secrets(completed.stdout + completed.stderr))

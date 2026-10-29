@@ -6,7 +6,7 @@ Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-27
 Improved: 2026-10-27 (`$aif-improve`; six approved refinements; task IDs/statuses preserved)
 Plan identifier: `v3-44-generational-benchmark`
-Status: implementation in progress; Tasks 1–17 complete. The visual fixture reaches all eight source-backed markers on a real 160-tick run (new agents, deaths, migration, collective project, teaching, technology spread, cultural differentiation, office succession), and the pinned Godot suite passes 47 suites including the new multigeneration replay suite. Task 15 DB gate remains verified; Phase 8 continues at Task 18.
+Status: implementation in progress; Tasks 1–20 complete. Task 20 is certified by the required authenticated browser gate: 19 required tests executed with zero failures and zero skips across the image stack, V2 observer, generational, civilization, Research UI, wiring and V3 benchmark suites. Three real defects were fixed to reach it: censored institution episodes were rejected as `invalid_civilization_contract` (so boundaries after tick 41 were skipped), byte-split index pages duplicated their first entry (so settlements overlays after tick ~120 reported `civilization_storage_corrupt`), and release harness locators/credentials were corrected. Full publication now covers all 161 boundaries. Tasks 21–23 remain unstarted. Known unrelated failure: `tests/unit/test_path_dependence_end_to_end.py` expects all-unknown smoke outcomes but the in-flight replay work yields evidence-backed rows; it is not caused by Task 20 changes and is left for Task 21/22 qualification.
 
 ## Original Request
 
@@ -450,9 +450,9 @@ All IDs below have prefix `v3-bench-`. Phase tables define required sources, con
 
 ### Phase 8
 - [x] Task 17: Replay one real multi-generation visual fixture in Godot ([details](v3-44-phase-08-presentation-and-release.md#task-17-replay-one-real-multi-generation-visual-fixture-in-godot)) (depends on 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
-- [ ] Task 18: Inspect populated evidence and fork history in the Research UI ([details](v3-44-phase-08-presentation-and-release.md#task-18-inspect-populated-evidence-and-fork-history-in-the-research-ui)) (depends on 5, 12, 13, 14, 15, 16)
-- [ ] Task 19: Ship both Web clients in the normal release image ([details](v3-44-phase-08-presentation-and-release.md#task-19-ship-both-web-clients-in-the-normal-release-image)) (depends on 1)
-- [ ] Task 20: Gate release on authenticated real-browser benchmark acceptance ([details](v3-44-phase-08-presentation-and-release.md#task-20-gate-release-on-authenticated-real-browser-benchmark-acceptance)) (depends on 17, 18, 19)
+- [x] Task 18: Inspect populated evidence and fork history in the Research UI ([details](v3-44-phase-08-presentation-and-release.md#task-18-inspect-populated-evidence-and-fork-history-in-the-research-ui)) (depends on 5, 12, 13, 14, 15, 16)
+- [x] Task 19: Ship both Web clients in the normal release image ([details](v3-44-phase-08-presentation-and-release.md#task-19-ship-both-web-clients-in-the-normal-release-image)) (depends on 1)
+- [x] Task 20: Gate release on authenticated real-browser benchmark acceptance ([details](v3-44-phase-08-presentation-and-release.md#task-20-gate-release-on-authenticated-real-browser-benchmark-acceptance)) (depends on 17, 18, 19)
 
 ### Phase 9
 - [ ] Task 21: Execute all V1 and V2 regression lanes without silent skips ([details](v3-44-phase-09-qualification.md#task-21-execute-all-v1-and-v2-regression-lanes-without-silent-skips)) (depends on 14, 15, 16, 17, 18, 19, 20)

@@ -3,6 +3,8 @@
     ApiClientError,
     compareBranches,
     getBranchLineage,
+    listBranchChildren,
+    type BranchLineageOut,
     type BranchTimelineCompare,
   } from '../api/client'
   import {
@@ -21,32 +23,109 @@
 
   let leftId = $state('')
   let rightId = $state('')
+  let parentRunId = $state<string | null>(null)
+  let forkTick = $state<number | null>(null)
+  let children = $state<BranchLineageOut[]>([])
+  let childrenCursor = $state<string | null>(null)
+  let childrenError = $state<string | null>(null)
+  let childrenLoading = $state(false)
+  let selectedChildren = $state<string[]>([])
   let result = $state<BranchTimelineCompare | null>(null)
   let error = $state<string | null>(null)
   let loading = $state(false)
 
   $effect(() => {
-    leftId = runId
-    void getBranchLineage(runId)
-      .then((lineage) => {
-        if (rightId === '') {
-          rightId = lineage.parent_run_id
-        }
-      })
-      .catch(() => {
-        // parent optional
-      })
+    const current = runId
+    leftId = current
+    rightId = ''
+    result = null
+    error = null
+    parentRunId = null
+    forkTick = null
+    children = []
+    childrenCursor = null
+    childrenError = null
+    selectedChildren = []
+    void loadLineage(current)
+    void loadChildren(current, null)
   })
+
+  async function loadLineage(target: string): Promise<void> {
+    try {
+      const lineage = await getBranchLineage(target)
+      if (target !== runId) {
+        return
+      }
+      parentRunId = lineage.parent_run_id
+      forkTick = lineage.fork_tick
+      if (rightId === '') {
+        rightId = lineage.parent_run_id
+      }
+    } catch {
+      // parent optional: a root run has no branch lineage
+    }
+  }
+
+  async function loadChildren(
+    target: string,
+    after: string | null,
+  ): Promise<void> {
+    childrenLoading = true
+    childrenError = null
+    try {
+      const page = await listBranchChildren(target, after)
+      if (target !== runId) {
+        return
+      }
+      children = after === null ? page.items : [...children, ...page.items]
+      childrenCursor = page.next_cursor
+    } catch (err) {
+      if (target !== runId) {
+        return
+      }
+      childrenError =
+        err instanceof ApiClientError ? err.code : 'children_fetch_failed'
+    } finally {
+      childrenLoading = false
+    }
+  }
+
+  function toggleChild(childRunId: string): void {
+    if (selectedChildren.includes(childRunId)) {
+      selectedChildren = selectedChildren.filter((item) => item !== childRunId)
+      return
+    }
+    selectedChildren = [...selectedChildren, childRunId].slice(-2)
+  }
+
+  function compareSelectedChildren(): void {
+    if (selectedChildren.length !== 2) {
+      return
+    }
+    void compare(selectedChildren[0]!, selectedChildren[1]!)
+  }
 
   async function runCompare(event: Event): Promise<void> {
     event.preventDefault()
+    await compare(leftId, rightId)
+  }
+
+  async function compare(left: string, right: string): Promise<void> {
+    const leftRun = left.trim()
+    const rightRun = right.trim()
+    if (leftRun === '' || rightRun === '') {
+      error = 'run_id_required'
+      return
+    }
+    leftId = leftRun
+    rightId = rightRun
     loading = true
     error = null
     result = null
     try {
       result = await compareBranches({
-        left_run_id: leftId.trim(),
-        right_run_id: rightId.trim(),
+        left_run_id: leftRun,
+        right_run_id: rightRun,
         include_event_kind_counts: true,
       })
       if (import.meta.env.DEV) {
@@ -61,8 +140,8 @@
     }
   }
 
-  function openObserver(targetRun: string): void {
-    const href = buildGodotObserverUrl({
+  function observerHref(targetRun: string): string {
+    return buildGodotObserverUrl({
       runId: targetRun,
       tick: result?.diverge_tick ?? deepLink.tick,
       eventId: null,
@@ -70,11 +149,10 @@
       agentId: deepLink.agentId,
       debugger: false,
     })
-    window.open(href, '_blank', 'noopener,noreferrer')
   }
 
-  function openResearch(targetRun: string): void {
-    const href = buildResearchUiPath({
+  function researchHref(targetRun: string): string {
+    return buildResearchUiPath({
       runId: targetRun,
       tick: result?.diverge_tick ?? null,
       eventId: null,
@@ -82,8 +160,32 @@
       agentId: deepLink.agentId,
       view: 'compare',
     })
-    window.location.assign(href)
   }
+
+  function shortHash(value: string | null): string {
+    return value === null || value === ''
+      ? 'not recorded'
+      : `${value.slice(0, 12)}…`
+  }
+
+  function eventKindCount(compare: BranchTimelineCompare): number {
+    return compare.event_kind_counts === null
+      ? 0
+      : Object.keys(compare.event_kind_counts).length
+  }
+
+  const parentHref = $derived(
+    parentRunId === null
+      ? null
+      : buildResearchUiPath({
+          runId: parentRunId,
+          tick: forkTick ?? deepLink.tick,
+          eventId: null,
+          sequence: null,
+          agentId: deepLink.agentId,
+          view: 'overview',
+        }),
+  )
 </script>
 
 <section class="panel">
@@ -96,6 +198,60 @@
     Timeline compare via branches/compare — not a dual World Observer viewport.
     Distinct from agent imagination.
   </p>
+
+  {#if parentHref !== null}
+    <p class="lede">
+      Forked from <a href={parentHref}>parent run</a>{#if forkTick !== null}
+        at tick {forkTick}{/if}.
+    </p>
+  {/if}
+
+  <section class="children">
+    <h3>Child runs at this fork</h3>
+    {#if childrenError !== null}
+      <p class="error" role="alert">{childrenError}</p>
+    {:else if children.length === 0}
+      <p class="muted">
+        {childrenLoading
+          ? 'Loading child runs…'
+          : 'No child runs are indexed for this run.'}
+      </p>
+    {:else}
+      <ul>
+        {#each children as child (child.child_run_id)}
+          <li>
+            <button
+              type="button"
+              class:selected={selectedChildren.includes(child.child_run_id)}
+              aria-pressed={selectedChildren.includes(child.child_run_id)}
+              onclick={() => toggleChild(child.child_run_id)}
+            >
+              {child.child_run_id}
+            </button>
+            <span class="muted">
+              {child.intervention_kind} · fork tick {child.fork_tick}
+            </span>
+          </li>
+        {/each}
+      </ul>
+      {#if childrenCursor !== null}
+        <button
+          type="button"
+          onclick={() => void loadChildren(runId, childrenCursor)}
+          disabled={childrenLoading}
+        >
+          Load more child runs
+        </button>
+      {/if}
+      <button
+        type="button"
+        onclick={compareSelectedChildren}
+        disabled={selectedChildren.length !== 2}
+      >
+        Compare selected children
+      </button>
+    {/if}
+  </section>
 
   <form onsubmit={(e) => void runCompare(e)}>
     <label>
@@ -149,19 +305,38 @@
         {/each}
       </ul>
     {/if}
+    <h3>Comparison coverage</h3>
+    <dl>
+      <div>
+        <dt>prefix coverage</dt>
+        <dd>{compare.prefix_equivalent ? 'equivalent' : 'diverged'}</dd>
+      </div>
+      <div>
+        <dt>post-fork left</dt>
+        <dd>{shortHash(compare.left_post_fork_trajectory_hash)}</dd>
+      </div>
+      <div>
+        <dt>post-fork right</dt>
+        <dd>{shortHash(compare.right_post_fork_trajectory_hash)}</dd>
+      </div>
+      <div>
+        <dt>event kind groups</dt>
+        <dd>{eventKindCount(compare)}</dd>
+      </div>
+    </dl>
     <div class="actions">
-      <button type="button" onclick={() => openObserver(compare.left_run_id)}>
-        Left in Observer
-      </button>
-      <button type="button" onclick={() => openObserver(compare.right_run_id)}>
-        Right in Observer
-      </button>
-      <button type="button" onclick={() => openResearch(compare.left_run_id)}>
-        Left in Research
-      </button>
-      <button type="button" onclick={() => openResearch(compare.right_run_id)}>
-        Right in Research
-      </button>
+      <a
+        href={observerHref(compare.left_run_id)}
+        target="_blank"
+        rel="noopener noreferrer">Left in Observer</a
+      >
+      <a
+        href={observerHref(compare.right_run_id)}
+        target="_blank"
+        rel="noopener noreferrer">Right in Observer</a
+      >
+      <a href={researchHref(compare.left_run_id)}>Left in Research</a>
+      <a href={researchHref(compare.right_run_id)}>Right in Research</a>
     </div>
   {/if}
 </section>
@@ -201,8 +376,42 @@
     color: #5a6a72;
   }
 
+  .lede a {
+    color: #2e5c6e;
+  }
+
   .error {
     color: #8a3030;
+  }
+
+  .muted {
+    color: #5a6a72;
+    font-size: 0.85rem;
+  }
+
+  .children {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .children ul {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .children li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .children button.selected {
+    background: rgba(46, 92, 110, 0.18);
+    border-color: rgba(46, 92, 110, 0.55);
   }
 
   form {
@@ -259,5 +468,18 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
+  }
+
+  .actions a {
+    font: inherit;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid rgba(28, 36, 40, 0.22);
+    background: rgba(255, 255, 255, 0.6);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .actions a:hover {
+    text-decoration: underline;
   }
 </style>

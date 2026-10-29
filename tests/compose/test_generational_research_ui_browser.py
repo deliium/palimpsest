@@ -1,17 +1,25 @@
-"""Opt-in browser acceptance for the generational Research UI.
+"""Browser acceptance for the generational Research UI panels.
 
-Skips unless ``PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL`` points at a running API
-that serves the prebuilt SPA at ``/research/``. The harness uses the existing
-Playwright fixture and never asserts emergent science from constructed data.
+Required release runs use the shared authenticated benchmark stack, so the
+shipped image and its real produced history determine the result. A local
+convenience mode may instead point ``PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL``
+and ``PALIMPSEST_COMPOSE_RESEARCH_RUN_ID`` at an already-running API; that mode
+never determines required release results.
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
-from tests.compose.conftest import playwright_api
+from tests.compose.conftest import (
+    GenerationalStack,
+    playwright_api,
+    research_credentials_script,
+)
 
 pytestmark = pytest.mark.compose
 
@@ -31,26 +39,42 @@ PANELS = (
 )
 
 
-def _base_url() -> str:
-    base = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL", "").strip()
-    if not base:
-        pytest.skip("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL unset")
-    return base.rstrip("/")
+_Target = tuple[str, str, str | None]
 
 
-def _run_id() -> str:
-    value = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_RUN_ID", "").strip()
-    if not value:
-        pytest.skip("PALIMPSEST_COMPOSE_RESEARCH_RUN_ID unset")
-    return value
+@pytest.fixture(scope="module")
+def research_target(request: pytest.FixtureRequest) -> Iterator[_Target]:
+    external = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_SMOKE_URL", "").strip()
+    if external:
+        run_id = os.environ.get("PALIMPSEST_COMPOSE_RESEARCH_RUN_ID", "").strip()
+        if not run_id:
+            pytest.skip("PALIMPSEST_COMPOSE_RESEARCH_RUN_ID unset")
+        yield external.rstrip("/"), run_id, None
+        return
+    fixture: tuple[GenerationalStack, dict[str, Any]] = request.getfixturevalue(
+        "benchmark_stack"
+    )
+    stack, manifest = fixture
+    yield (
+        stack.base_url,
+        str(manifest["run_id"]),
+        research_credentials_script(stack),
+    )
 
 
-def test_grouped_research_panels_are_reachable() -> None:
-    base = _base_url()
-    run_id = _run_id()
-    with playwright_api() as playwright:
+def _open(page: Any, credentials: str | None) -> None:
+    if credentials is not None:
+        page.add_init_script(credentials)
+
+
+def test_grouped_research_panels_are_reachable(
+    research_target: _Target,
+) -> None:
+    base, run_id, credentials = research_target
+    with playwright_api()() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page()
+        _open(page, credentials)
         try:
             for view, heading in PANELS:
                 page.goto(
@@ -64,13 +88,15 @@ def test_grouped_research_panels_are_reachable() -> None:
             browser.close()
 
 
-def test_workflow_preserves_tick_across_generational_panels() -> None:
-    base = _base_url()
-    run_id = _run_id()
+def test_workflow_preserves_tick_across_generational_panels(
+    research_target: _Target,
+) -> None:
+    base, run_id, credentials = research_target
     headings = dict(PANELS)
-    with playwright_api() as playwright:
+    with playwright_api()() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page()
+        _open(page, credentials)
         try:
             for view, _heading in PANELS:
                 page.goto(
@@ -86,12 +112,14 @@ def test_workflow_preserves_tick_across_generational_panels() -> None:
             browser.close()
 
 
-def test_direct_link_back_forward_and_reload_preserve_tick() -> None:
-    base = _base_url()
-    run_id = _run_id()
-    with playwright_api() as playwright:
+def test_direct_link_back_forward_and_reload_preserve_tick(
+    research_target: _Target,
+) -> None:
+    base, run_id, credentials = research_target
+    with playwright_api()() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page()
+        _open(page, credentials)
         try:
             page.goto(
                 f"{base}/research/runs/{run_id}/population?run_id={run_id}&tick=0",

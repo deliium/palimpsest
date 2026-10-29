@@ -79,6 +79,7 @@ __all__ = [
     "create_cognition_trace_repository",
     "create_debugger_event_lookup",
     "create_debugger_lineage_ports",
+    "create_empty_boundary_subjective_clone",
     "create_experiment_record_repository",
     "create_experiment_repository",
     "create_inspection_evidence_loader",
@@ -248,6 +249,22 @@ def create_stream_repository(
     )
 
     return impl(session_factory)
+
+
+def create_empty_boundary_subjective_clone(
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> object:
+    """Return the fail-closed empty-boundary subjective clone adapter."""
+    if session_factory is None:
+        raise PersistenceAdapterError(
+            "missing_session_factory",
+            operation="create_empty_boundary_subjective_clone",
+        )
+    from persistence.subjective_clone_sqlalchemy import (
+        EmptyBoundarySubjectiveClone,
+    )
+
+    return EmptyBoundarySubjectiveClone(session_factory)
 
 
 def create_branch_lineage_repository(

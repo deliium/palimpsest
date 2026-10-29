@@ -74,8 +74,13 @@ jobs:
       - name: Build the runtime image
         run: |
           set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            printf 'dirty checkout cannot assert a clean source\n' >&2
+            exit 1
+          fi
           docker build \
             --build-arg "PALIMPSEST_REVISION=${GITHUB_SHA}" \
+            --build-arg "PALIMPSEST_SOURCE_CLEAN=true" \
             -t palimpsest-api:ci \
             .
 
@@ -160,20 +165,81 @@ jobs:
           uv run --frozen --python 3.12.14 python tests/compose/start_reference.py \
             --base-url http://127.0.0.1:8080
 
-      - name: Install Playwright for the smoke job
+      - name: Install Playwright for the acceptance job
         run: |
           set -euo pipefail
           uv pip install playwright
           uv run playwright install --with-deps chromium
 
-      - name: Run the browser smoke
+      - name: Run required client acceptance
         env:
           PALIMPSEST_API_IMAGE: palimpsest-api:ci
+          PALIMPSEST_V3_ACCEPTANCE_REQUIRED: "1"
+          PALIMPSEST_API_PUBLISH_PORT: "8080"
         run: |
           set -euo pipefail
-          uv run --no-sync pytest -m compose \
+          mkdir -p acceptance-reports
+          uv run --no-sync pytest -m compose -q \
+            --junitxml=acceptance-reports/required.xml \
+            tests/compose/test_stack.py \
             tests/compose/test_observer_browser.py \
-            tests/compose/test_observer_generational_browser.py -q
+            tests/compose/test_observer_generational_browser.py \
+            tests/compose/test_observer_civilization_browser.py \
+            tests/compose/test_generational_research_ui_browser.py \
+            tests/compose/test_research_ui_wiring.py \
+            tests/compose/test_v3_benchmark_release.py
+
+      - name: Assert required acceptance executed without skips
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          expected = {
+              "test_stack",
+              "test_observer_browser",
+              "test_observer_generational_browser",
+              "test_observer_civilization_browser",
+              "test_generational_research_ui_browser",
+              "test_research_ui_wiring",
+              "test_v3_benchmark_release",
+          }
+          root = ET.parse("acceptance-reports/required.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else list(root)
+          totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+          seen: set[str] = set()
+          for suite in suites:
+              for key in totals:
+                  totals[key] += int(suite.get(key, 0))
+              for case in suite.iter("testcase"):
+                  name = (case.get("classname") or "").rsplit(".", 1)[-1]
+                  if name:
+                      seen.add(name)
+          print(
+              "required_acceptance tests={tests} failures={failures} "
+              "errors={errors} skipped={skipped}".format(**totals)
+          )
+          if totals["tests"] == 0:
+              raise SystemExit("required_acceptance_not_collected")
+          if totals["failures"] or totals["errors"]:
+              raise SystemExit("required_acceptance_failed")
+          if totals["skipped"]:
+              raise SystemExit("required_acceptance_skipped")
+          missing = expected - seen
+          if missing:
+              raise SystemExit(
+                  "required_modules_missing:" + ",".join(sorted(missing))
+              )
+          PY
+
+      - name: Retain redacted acceptance reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v3-acceptance-reports
+          path: acceptance-reports
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Publish the release image
         if: startsWith(github.ref, 'refs/tags/v')

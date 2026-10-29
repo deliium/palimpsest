@@ -1085,10 +1085,11 @@ class ReplayService:
             )
         except Exception as exc:
             _LOGGER.error(
-                "%s code=bounded_restore_failed error=%s run_id=%s "
+                "%s code=bounded_restore_failed error=%s detail=%s run_id=%s "
                 "target_tick=%s",
                 EngineDiagnosticCode.PROJECTION_FAILED.value,
                 type(exc).__name__,
+                str(exc)[:200],
                 run_id.value,
                 target_tick.value,
             )

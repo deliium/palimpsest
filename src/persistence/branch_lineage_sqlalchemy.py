@@ -105,6 +105,7 @@ class SqlAlchemyBranchLineageRepository:
                         created_as_of_parent_head=document["created_as_of_parent_head"],
                     )
                 )
+                await session.commit()
         except PersistenceConflictError:
             raise
         except IntegrityError as exc:

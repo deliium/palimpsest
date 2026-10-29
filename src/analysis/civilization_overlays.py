@@ -82,6 +82,15 @@ _InstitutionStatus = Literal[
     "lost",
 ]
 
+_EPISODE_STATUS_BY_LIFECYCLE: Final = {
+    "emerging": "emerging",
+    "stable": "stable",
+    "weakening": "weakening",
+    "collapsed": "collapsed",
+    "unknown": "censored",
+    "right_censored": "censored",
+}
+
 _CULTURAL_CHANNEL_BY_REPRESENTATION: Final = {
     CivilizationInventoryChannel.CULTURAL_FEATURES: "ledger_carriage",
     CivilizationInventoryChannel.TERMINOLOGY: "label_inventory",
@@ -1022,7 +1031,10 @@ def compose_institution_rows(
                         episode.owner_id,
                         episode.episode_id,
                         "episode",
-                        cast(_InstitutionStatus, episode.state),
+                        cast(
+                            _InstitutionStatus,
+                            _EPISODE_STATUS_BY_LIFECYCLE.get(episode.state, "censored"),
+                        ),
                         episode.first_tick,
                         episode.last_tick,
                         episode.first_tick,

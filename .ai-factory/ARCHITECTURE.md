@@ -483,7 +483,10 @@ Research UI are read-only presentation work over already-published evidence. The
 add no command, event, observer semantic, metric family, runner/result schema,
 replay/codec marker, SQL migration, capability ownership, or `/v2` route. Python
 modules still never import either client; the API only serves their prebuilt
-trees, and `/research/` mounts before the Godot root. Presentation selection,
+trees, and `/research/` mounts before the Godot root. The release image builds
+both trees in pinned build stages (Godot export and Node/pnpm SPA build) and
+runs them as static assets; the runtime image contains no editor, Node, pnpm, or
+export templates. Presentation selection,
 layout, overlays, focus, and deep links never mutate world state or obtain capture
 or subjective authority beyond their existing inspection/debug credentials.
 

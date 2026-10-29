@@ -1,5 +1,9 @@
 # Palimpsest local development stack.
 #
+# The published image contains both prebuilt browser clients: the read-only
+# Godot observer at `/` and the research SPA at `/research/`. End users need a
+# container runtime and browser only; no host Godot, editor, Node, or pnpm.
+#
 # Credentials in this file are non-production development defaults.
 # `docker compose config` expands interpolations and is not secret-safe;
 # do not paste expanded output into logs, tickets, or commits.

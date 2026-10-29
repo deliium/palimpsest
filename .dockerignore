@@ -25,3 +25,7 @@ compose.override.yaml
 clients/godot-observer/override.cfg
 clients/godot-observer/.godot/
 clients/godot-observer/build/
+clients/research-ui/node_modules/
+clients/research-ui/dist/
+clients/research-ui/coverage/
+clients/research-ui/.vite/

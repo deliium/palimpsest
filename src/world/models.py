@@ -221,7 +221,10 @@ class AgentBody:
         )
         object.__setattr__(self, "inventory", inventory)
         if self.life_status is LifeStatus.ALIVE and self.health.value <= 0.0:
-            raise ValueError("LifeStatus.ALIVE requires positive health")
+            raise ValueError(
+                "LifeStatus.ALIVE requires positive health "
+                f"(body_id={self.entity_id.value})"
+            )
         if self.life_status is LifeStatus.DEAD and self.health.value != 0.0:
             raise ValueError("LifeStatus.DEAD requires zero health")
 

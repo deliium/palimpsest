@@ -302,6 +302,16 @@ def test_cumulative_decay_samples_are_deduplicated_and_never_duplicated_rows():
     )
 
 
+def test_censored_episode_lifecycle_publishes_as_censored_instead_of_rejecting():
+    # A single decay sample cannot form a complete four-tick window, so the
+    # lifecycle state is `unknown`; the presentation row must still compose.
+    inventories = (_inventory("agent-a", decay=(_decay("agent-a", 1),)),)
+    rows = compose_institution_rows(_frame(2, inventories=inventories))
+    episodes = [row for row in rows if row.kind == "episode"]
+    assert len(episodes) == 1
+    assert episodes[0].status == "censored"
+
+
 def test_publication_requires_an_exact_boundary_and_keeps_owner_scope_separate():
     frame = _frame(0, inventories=(_inventory("agent-a"),))
     history = CivilizationCapturedHistory(_RUN, _WORLD, (frame,), ())

@@ -102,7 +102,7 @@ from simulation.runner_serialization import (
 )
 from simulation.subjective_state import SubjectiveOwnerSnapshot
 from world.events import Asked, Talked, Told, WorldEvent
-from world.identifiers import EntityId, require_stable_id
+from world.identifiers import EntityId, EventId, require_stable_id
 
 __all__ = [
     "BranchService",
@@ -366,12 +366,29 @@ def derive_fork_snapshot_id(
 
 
 def rematerialize_event(event: WorldEvent, child_run_id: RunId) -> WorldEvent:
-    """Rewrite event ``run_id`` for the child journal (payload otherwise intact)."""
+    """Rewrite event identity for the child journal (payload otherwise intact).
+
+    Event ids are globally content-addressed in durable storage, so a copied
+    prefix must receive deterministic child-scoped ids. The derivation keeps
+    replay identical for the same child identity and leaves the parent journal
+    untouched.
+    """
     if type(event) is not WorldEvent:
         raise TypeError("rematerialize_event requires WorldEvent")
     if type(child_run_id) is not RunId:
         raise TypeError("rematerialize_event requires RunId")
-    return replace(event, run_id=child_run_id.value)
+    if event.run_id == child_run_id.value:
+        return replace(event, run_id=child_run_id.value)
+    hasher = hashlib.sha256()
+    hasher.update(b"research-fork-event\x00")
+    hasher.update(child_run_id.value.encode("utf-8"))
+    hasher.update(b"\x00")
+    hasher.update(event.event_id.value.encode("utf-8"))
+    return replace(
+        event,
+        run_id=child_run_id.value,
+        event_id=EventId(hasher.hexdigest()),
+    )
 
 
 def rematerialize_snapshot(

@@ -110,6 +110,12 @@ _LOG = logging.getLogger(__name__)
 _POLICY = "civilization-overlays.v1"
 _SAFE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _STATE = "state.json"
+# Index keys must stay inside the 128-code-point stable-id bound. The full
+# scope digest plus a tick plus a row id can exceed it, and truncation both
+# collapses shard ranges and breaks row-key pagination. Keys therefore carry a
+# fixed-width scope tag and a per-(scope, boundary) shard ordinal instead.
+_INDEX_SCOPE_TAG_LENGTH = 16
+_INDEX_SHARD_ORDINAL_WIDTH = 8
 
 
 class CivilizationFilesystemError(CivilizationError):
@@ -540,6 +546,7 @@ class FilesystemCivilizationPublisher:
                 max_bytes=CIVILIZATION_MAX_METADATA_BYTES,
             )
             row_entries: list[LineageIndexEntry] = []
+            shard_ordinals: dict[tuple[str, int], int] = {}
             for ref in refs:
                 boundary_tick = ref.cursor.boundary_tick
                 if boundary_tick is None:
@@ -576,15 +583,18 @@ class FilesystemCivilizationPublisher:
                         or not all(type(item) is str for item in bounds)
                     ):
                         raise CivilizationError("civilization_storage_corrupt")
-                    first_row, last_row = bounds
+                    ordinal_key = (scope_key, boundary_tick)
+                    ordinal = shard_ordinals.get(ordinal_key, 0)
+                    shard_ordinals[ordinal_key] = ordinal + 1
+                    index_key = (
+                        f"{scope_key[:_INDEX_SCOPE_TAG_LENGTH]}"
+                        f"|{boundary_tick:08d}"
+                        f"|{ordinal:0{_INDEX_SHARD_ORDINAL_WIDTH}d}"
+                    )
                     row_entries.append(
                         LineageIndexEntry(
-                            first_key=(
-                                f"{scope_key}|{boundary_tick:08d}|{first_row}"
-                            ),
-                            last_key=(
-                                f"{scope_key}|{boundary_tick:08d}|{last_row}"
-                            ),
+                            first_key=index_key,
+                            last_key=index_key,
                             digest=child.digest,
                             path=child.key,
                             row_count=child.row_count,
@@ -1085,22 +1095,34 @@ class FilesystemCivilizationReader:
         )
         store_root = self._store_root(publication_root, budget)
         scope_key = _scope_key(scope)
+        scope_tag = scope_key[:_INDEX_SCOPE_TAG_LENGTH]
         candidates: list[tuple[str, str]] = []
         if store_root is not None:
             if store_root.publication_id != state["publication_id"]:
                 raise CivilizationError("civilization_storage_corrupt")
-            lower = f"{scope_key}|{boundary:08d}|"
-            upper = lower + "\uffff"
-            for entry in self._iter_index_entries(
-                publication_root,
-                store_root.rows,
-                budget,
-                lower=lower,
-                upper=upper,
-            ):
-                last_row_key = entry.last_key.rsplit("|", 1)[-1]
-                if after_key is not None and last_row_key <= after_key:
-                    continue
+            entries = list(
+                self._iter_index_entries(
+                    publication_root,
+                    store_root.rows,
+                    budget,
+                    lower=f"{scope_tag}|{boundary:08d}|",
+                    upper=f"{scope_tag}|{boundary:08d}|\uffff",
+                )
+            )
+            if not entries:
+                # Legacy range-key layouts embedded the full scope digest and a
+                # truncated row key. Read them only when the bounded tag range
+                # found nothing, so new publications never use the old form.
+                entries = list(
+                    self._iter_index_entries(
+                        publication_root,
+                        store_root.rows,
+                        budget,
+                        lower=f"{scope_key}|{boundary:08d}|",
+                        upper=f"{scope_key}|{boundary:08d}|\uffff",
+                    )
+                )
+            for entry in entries:
                 candidates.append((entry.path, entry.digest))
         else:
             boundary_root = _safe_path(

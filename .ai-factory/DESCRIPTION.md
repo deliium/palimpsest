@@ -25,6 +25,7 @@ Palimpsest is a Python 3.12+ modular monolith for reproducible, discrete, text-b
 
 - **Programming language:** Python >=3.12 (reference pin 3.12.14)
 - **Package manager / build:** uv + Hatchling (`src` layout, committed `uv.lock`)
+- **Client build:** pinned Node 24.22.1 + pnpm 10.34.9 image stage; the runtime image ships prebuilt Godot Web and Svelte SPA trees with no Node, pnpm, editor or export templates
 - **Framework:** FastAPI + Uvicorn
 - **Validation:** Pydantic v2 + pydantic-settings (LLM structured-output contracts only; domain packages stay Pydantic-free)
 - **Database:** PostgreSQL 17 with pgvector

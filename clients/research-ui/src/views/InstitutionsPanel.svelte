@@ -205,7 +205,7 @@
 <section class="panel">
   <header>
     <div>
-      <h2>Institutions</h2>
+      <h1>Institutions</h1>
       <p class="lede">
         Analytical pattern bundles and persistence classifications. No
         institution type exists; these labels never enter agent cognition,

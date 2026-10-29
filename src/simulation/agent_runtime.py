@@ -284,6 +284,9 @@ class PendingRuntimeFinalization:
             f"{run_id.value}|{self.invocation_id}|{self.integrity_hash}|tick"
         ).encode()
         delivery_hash = hashlib.sha256(content_material).hexdigest()
+        if len(delivery_id) > 128:
+            # Long matrix/cell run ids must not exceed the delivery contract.
+            delivery_id = f"delivery:{delivery_hash[:96]}"
         return FinalizationCommand(
             codec_version=FINALIZATION_COMMAND_CODEC_VERSION,
             run_id=run_id,
