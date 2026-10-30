@@ -46,21 +46,45 @@ def test_godot_protocol_and_layout_mirror_python() -> None:
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == compat_layout == "observer-layout-v1"
 
 
-def test_version_payload_source_has_no_v3_capability_fields() -> None:
-    """Non-goal: GET /version must not grow V3 capability fields in scaffolding."""
+def test_version_payload_has_no_capability_flag_payloads() -> None:
+    """`GET /version` advertises metadata only, never capability-flag values.
+
+    Protocol, layout, and capability *names* are additive advisory metadata.
+    Capability-flag values, configuration payloads, and run content must never
+    appear on this unauthenticated endpoint.
+    """
     source = (ROOT / "src" / "api" / "presentation_static.py").read_text(
         encoding="utf-8"
     )
-    # Locked application/protocol/export/revision/research_ui keys only.
-    assert '"protocol_version"' in source
-    assert '"research_ui_configured"' in source
+    for allowed in (
+        '"protocol_version"',
+        '"research_ui_configured"',
+        '"supported_observer_protocols"',
+        '"observer_layout_version"',
+        '"observer_capabilities"',
+        '"observer_reserved_capabilities"',
+    ):
+        assert allowed in source
     for forbidden in (
         "v3_capability_flags",
+        "v4_capability_flags",
         "generational_population",
         "kinship_inheritance",
         "multi_polity_migration",
         "institutional_economy",
         "cultural_historical_memory",
+        "organizations",
+        "formal_rules",
+        "legal_disputes",
+        "diplomacy",
+        "organized_conflict",
+        "infrastructure_networks",
+        "supply_chains",
+        "markets_credit",
+        "science",
+        "epidemics",
+        "ecological_feedback",
+        "disasters",
     ):
         assert forbidden not in source
 
@@ -80,9 +104,7 @@ def test_civilization_schema_and_marker_mirror_python() -> None:
         r"const MARKER_TYPES := \{(?P<body>.*?)\n\}", text, re.DOTALL
     )
     assert marker_block is not None
-    pairs = dict(
-        re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', marker_block.group("body"))
-    )
+    pairs = dict(re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', marker_block.group("body")))
     assert pairs == {
         marker.value: {
             CivilizationMarkerType.SETTLEMENT_ACTIVATED: "settlements",

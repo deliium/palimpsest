@@ -280,9 +280,9 @@ V3 benchmark 30; `prepare_parallel=False`. `institutional_economy` and
 - [x] Task 8: Define the ordered migration sequence ([details](phase-03-wire-and-persistence.md#task-8-define-the-ordered-migration-sequence)) (depends on 3, 7)
 
 ### Phase 4: Observer Protocol and Scale Contracts
-- [ ] Task 9: Add observer protocol negotiation and capabilities ([details](phase-04-observer-and-scale.md#task-9-add-observer-protocol-negotiation-and-capabilities)) (depends on 2, 3)
-- [ ] Task 10: Add deterministic scale contracts ([details](phase-04-observer-and-scale.md#task-10-add-deterministic-scale-contracts)) (depends on 3, 7)
-- [ ] Task 11: Add the opt-in V4 scale qualification lane ([details](phase-04-observer-and-scale.md#task-11-add-the-opt-in-v4-scale-qualification-lane)) (depends on 10)
+- [x] Task 9: Add observer protocol negotiation and capabilities ([details](phase-04-observer-and-scale.md#task-9-add-observer-protocol-negotiation-and-capabilities)) (depends on 2, 3)
+- [x] Task 10: Add deterministic scale contracts ([details](phase-04-observer-and-scale.md#task-10-add-deterministic-scale-contracts)) (depends on 3, 7)
+- [x] Task 11: Add the opt-in V4 scale qualification lane ([details](phase-04-observer-and-scale.md#task-11-add-the-opt-in-v4-scale-qualification-lane)) (depends on 10)
 
 ### Phase 5: Client Scaffolding
 - [ ] Task 12: Add Godot multi-scale and protocol scaffolding ([details](phase-05-client-scaffolding.md#task-12-add-godot-multi-scale-and-protocol-scaffolding)) (depends on 9)

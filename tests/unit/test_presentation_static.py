@@ -214,8 +214,28 @@ async def test_version_uses_distribution_revision_and_build_info(
         "export_renderer",
         "revision",
         "research_ui_configured",
+        "supported_observer_protocols",
+        "observer_layout_version",
+        "observer_capabilities",
+        "observer_reserved_capabilities",
     }
     assert body["research_ui_configured"] is False
+    assert body["supported_observer_protocols"] == ["observer-protocol-v1"]
+    assert body["observer_layout_version"] == "observer-layout-v1"
+    assert body["observer_capabilities"] == [
+        "structured_manifest",
+        "replay_cursors",
+        "aggregate_demographics",
+        "civilization_overlays",
+    ]
+    assert body["observer_reserved_capabilities"] == [
+        "multi_scale_summaries",
+        "organization_rows",
+        "network_rows",
+        "epidemic_rows",
+        "conflict_rows",
+        "disaster_rows",
+    ]
     assert "route_version" in caplog.text
     assert "status" in caplog.text
     assert "duration" in caplog.text

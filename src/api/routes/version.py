@@ -18,7 +18,7 @@ _LOGGER = get_logger("api.routes.version")
 @router.get("/version")
 def get_version(
     settings: Settings = Depends(get_settings),
-) -> dict[str, str | bool | None]:
+) -> dict[str, str | bool | list[str] | None]:
     started = time.perf_counter()
     payload = version_payload(settings)
     _LOGGER.info(

@@ -20,6 +20,7 @@ from starlette.types import Scope
 
 from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
+from observer.capabilities import observer_capability_manifest
 from observer.version import OBSERVER_PROTOCOL_VERSION
 
 _LOGGER = get_logger("api.presentation")
@@ -122,7 +123,7 @@ def _optional_text(value: object) -> str | None:
     return None
 
 
-def version_payload(settings: Settings) -> dict[str, str | bool | None]:
+def version_payload(settings: Settings) -> dict[str, str | bool | list[str] | None]:
     from api.research_static import research_ui_configured
 
     try:
@@ -136,11 +137,14 @@ def version_payload(settings: Settings) -> dict[str, str | bool | None]:
     info = read_build_info(presentation_root(settings))
     revision = settings.revision or _optional_text(info.get("revision"))
     research_configured = research_ui_configured(settings)
+    manifest = observer_capability_manifest()
     _LOGGER.debug(
         "version_payload_built",
         has_export_engine=_optional_text(info.get("export_engine")) is not None,
         has_revision=revision is not None,
         research_ui_configured=research_configured,
+        capability_count=len(manifest.capabilities),
+        supported_protocol_count=len(manifest.supported_protocols),
     )
     return {
         "application_version": application_version,
@@ -149,6 +153,10 @@ def version_payload(settings: Settings) -> dict[str, str | bool | None]:
         "export_renderer": _optional_text(info.get("export_renderer")),
         "revision": revision,
         "research_ui_configured": research_configured,
+        "supported_observer_protocols": list(manifest.supported_protocols),
+        "observer_layout_version": manifest.layout_schema_version,
+        "observer_capabilities": list(manifest.capabilities),
+        "observer_reserved_capabilities": list(manifest.reserved_capabilities),
     }
 
 
