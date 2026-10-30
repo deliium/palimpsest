@@ -175,6 +175,14 @@ and no global registry exists. Candidates may overlap, be disputed, be
 fragmented, or lack self-identification. Findings never feed cognition, memory
 formation, prompts, admission, observations, or stop criteria.
 
+V4-02 implements the context in `analysis.macro_society_*` (evidence, detection,
+identity, lineage, layers, metrics), `simulation.macro_society_*` (snapshot DTOs,
+canonical codec, bounded paging, read/publication ports),
+`experiments.macro_society_publication`, `persistence.macro_society_filesystem`,
+and four GET-only `/v1` routes. It adds no capability flag, command, event,
+observer semantic type, write pair, or migration. See
+[Macro-societies](macro-societies.md).
+
 ## Cross-context contracts
 
 - Owner-scoped constructs travel only through ordinary commands, perception,
@@ -221,7 +229,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 136 families | `analysis.specifications` |
+| Metric catalog | 140 families (V4-02 adds four macro-society families) | `analysis.specifications` |
 | HTTP API | `/v1` | `api` |
 
 ## Compatibility and deprecation policy

@@ -14,6 +14,8 @@ from simulation.macro_society_codec import decode_macro_society_snapshot
 from simulation.macro_society_models import (
     MACRO_SOCIETY_STORE_SCHEMA_VERSION,
     MacroSocietyArtifactError,
+    MacroSocietyCandidateRecord,
+    MacroSocietyLineageEdgeRecord,
     MacroSocietySnapshot,
     MacroSocietySnapshotRef,
 )
@@ -25,7 +27,6 @@ from simulation.macro_society_ports import (
     MacroSocietySummary,
     require_known_candidate,
 )
-from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
     "FilesystemMacroSocietyPublisher",
@@ -37,6 +38,18 @@ __all__ = [
 _LOG: Final[logging.Logger] = logging.getLogger(
     "persistence.macro_society_filesystem"
 )
+
+
+def _stable(name: str, value: object) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise MacroSocietyArtifactError("macro_society_invalid_value")
+    return value
+
+
+def _int(name: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise MacroSocietyArtifactError("macro_society_invalid_value")
+    return value
 
 _STATE_MAX_BYTES: Final[int] = 4096
 _MANIFEST_MAX_BYTES: Final[int] = 16384
@@ -84,15 +97,15 @@ class FilesystemMacroSocietyPublisher(MacroSocietyPublicationPort):
         max_artifact_bytes: int = 8 * 1024 * 1024,
     ) -> None:
         self._root = Path(root)
-        self._max_publications = require_exact_nonneg_int(
+        self._max_publications = _int(
             "max_publications", max_publications
         )
-        self._max_artifact_bytes = require_exact_nonneg_int(
+        self._max_artifact_bytes = _int(
             "max_artifact_bytes", max_artifact_bytes
         )
 
     def _run_dir(self, run_id: str) -> Path:
-        return self._root / require_stable_id("run_id", run_id)
+        return self._root / _stable("run_id", run_id)
 
     def _state(self, run_dir: Path) -> _StoredState | None:
         state_path = run_dir / "state.json"
@@ -199,7 +212,7 @@ class FilesystemMacroSocietyReader(MacroSocietyReadPort):
         self._root = Path(root)
 
     def _load(self, run_id: str, publication_id: str | None) -> MacroSocietySnapshot:
-        run_dir = self._root / require_stable_id("run_id", run_id)
+        run_dir = self._root / _stable("run_id", run_id)
         state_path = run_dir / "state.json"
         if not state_path.exists():
             raise MacroSocietyArtifactError("macro_society_publication_missing")
@@ -243,18 +256,20 @@ class FilesystemMacroSocietyReader(MacroSocietyReadPort):
         publication_id: str | None,
         offset: int,
         limit: int,
-    ) -> tuple[tuple[object, ...], int | None]:
+    ) -> tuple[tuple[MacroSocietyCandidateRecord, ...], int | None]:
         snapshot = self._load(run_id, publication_id)
         page = select_macro_society_rows(
             snapshot.candidates, offset=offset, limit=limit, max_bytes=2 * 1024 * 1024
         )
-        return page.rows, page.next_offset
+        return tuple(
+            row for row in page.rows if isinstance(row, MacroSocietyCandidateRecord)
+        ), page.next_offset
 
     def read_candidate(
-        self, run_id: str, macro_society_id: str, *, publication_id: str | None
-    ) -> object:
+        self, run_id: str, macro_id: str, *, publication_id: str | None
+    ) -> MacroSocietyCandidateRecord:
         snapshot = self._load(run_id, publication_id)
-        return require_known_candidate(snapshot, macro_society_id)
+        return require_known_candidate(snapshot, macro_id)
 
     def read_lineage(
         self,
@@ -263,12 +278,16 @@ class FilesystemMacroSocietyReader(MacroSocietyReadPort):
         publication_id: str | None,
         offset: int,
         limit: int,
-    ) -> tuple[tuple[object, ...], int | None]:
+    ) -> tuple[tuple[MacroSocietyLineageEdgeRecord, ...], int | None]:
         snapshot = self._load(run_id, publication_id)
         page = select_macro_society_rows(
             snapshot.edges, offset=offset, limit=limit, max_bytes=2 * 1024 * 1024
         )
-        return page.rows, page.next_offset
+        return tuple(
+            row
+            for row in page.rows
+            if isinstance(row, MacroSocietyLineageEdgeRecord)
+        ), page.next_offset
 
 
 def create_macro_society_publisher(

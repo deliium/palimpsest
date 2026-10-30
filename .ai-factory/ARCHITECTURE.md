@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 136 (including the V3-36 comparison and six V3-37 cultural families) |
+| Metric families | 140 (including the V3-36 comparison, six V3-37 cultural families, and four V4-02 macro-society families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -542,8 +542,9 @@ types, 136 metric families, replay-v22/codec v20 when selected, Alembic `0017`,
 
 `simulation.v4_architecture`, `simulation.versioning`, `simulation.migration_plan`,
 `simulation.scale`, and `observer.capabilities` publish the V4 vocabulary without
-implementing behavior. Thirteen contexts are declared: twelve closed capability
-flags plus analysis-only `societal_resilience`. Every context names one authority
+implementing behavior. Fourteen contexts are declared: twelve closed capability
+flags plus analysis-only `societal_resilience` and `macro_society_identity`;
+the registry revision is `v4-context-map-v2`. Every context names one authority
 (`objective_world`, `owner_scoped`, `detached_analysis`, `presentation_only`),
 owning packages, prerequisites, and non-goals; no context declares an
 organization, market, polity, institution, or civilization actor, and no global
@@ -573,3 +574,22 @@ V4-01 adds no command, event, observer semantic type, metric family, write-pair
 activation, API route, migration, or behavior. Historical "no v56" sentences
 inside the V3 seam sections are scoped to those plans and are not current pins;
 the pin table above is unchanged.
+
+### V4-02 macro-society identity seam
+
+`analysis.macro_society_*` owns the closed vocabulary, evidence adapters,
+deterministic per-lane and cross-lane detection, stable `msoc-` identity,
+forward-only split/merge lineage, three-layer projection, and four metric
+families (catalog 136 -> 140). `simulation.macro_society_*` owns the bounded
+`macro-society-snapshot-v1` contract, canonical codec, paging, and read/
+publication ports. `experiments.macro_society_publication` is the only bridge
+from analysis to artifact; `persistence.macro_society_filesystem` stores snapshots
+atomically with quotas; `api.routes.macro_society` serves four GET-only `/v1`
+routes under `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only panel.
+
+Candidates may overlap, be disputed, be fragmented, or lack self-identification.
+Membership is never a partition, and no country, nation, polity, civilization,
+government, or organization entity or registry exists. `WorldEngine` authority,
+observer protocol, Godot, commands (43), observer semantic types (73), replay
+`EVENT_SCHEMA_REPLAY_V22`, codec `v20`, runner v4/v55/v56, and Alembic `0017`
+are unchanged. No capability flag is claimed.

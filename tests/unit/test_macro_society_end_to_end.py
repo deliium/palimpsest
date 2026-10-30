@@ -103,12 +103,12 @@ def test_layers_remain_separate_in_the_analysis() -> None:
     result = build_macro_society_harvest_result(_harvest())
     view = result.analysis.layer_view
     assert view is not None
-    for row in view.objective_rows:
-        assert not row.region_id.startswith("msoc-")
+    for objective_row in view.objective_rows:
+        assert not objective_row.region_id.startswith("msoc-")
     candidate_ids = set(view.candidate_ids)
-    for row in view.subjective_rows:
-        assert row.local_token_id not in candidate_ids
-        assert not row.local_token_id.startswith("msoc-")
+    for subjective_row in view.subjective_rows:
+        assert subjective_row.local_token_id not in candidate_ids
+        assert not subjective_row.local_token_id.startswith("msoc-")
 
 
 def test_objective_rows_survive_publication_as_counts() -> None:

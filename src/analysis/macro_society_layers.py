@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
 from analysis.macro_society_contract import (
     MacroSocietyError,
@@ -37,7 +37,7 @@ def _field(row: object, *names: str) -> object | None:
         else:
             value = getattr(row, name, None)
         if value is not None:
-            return value
+            return cast(object | None, value)
     return None
 
 
@@ -153,6 +153,8 @@ def _subjective_row(row: object) -> MacroSocietySubjectiveRow:
     token = _field(row, "local_token_id", "token_id", "group_id")
     if owner is None or lane is None or token is None:
         raise MacroSocietyError("macro_society_invalid_subjective_row")
+    if not isinstance(lane, str):
+        raise MacroSocietyError("macro_society_unknown_lane")
     try:
         lane_value = MacroSocietyLane(lane)
     except ValueError as exc:
@@ -201,15 +203,19 @@ def assert_layer_separation(view: MacroSocietyLayerView) -> None:
     """Fail closed when any layer leaks another layer's identity."""
     if type(view) is not MacroSocietyLayerView:
         raise MacroSocietyError("macro_society_invalid_layer_view")
-    for row in view.objective_rows:
-        for value in (row.region_id, row.cohort_id, row.stage_id):
+    for objective_row in view.objective_rows:
+        for value in (
+            objective_row.region_id,
+            objective_row.cohort_id,
+            objective_row.stage_id,
+        ):
             if isinstance(value, str) and value.startswith(_ANALYTICAL_PREFIX):
                 raise MacroSocietyError("macro_society_objective_identity_leak")
     candidate_ids = set(view.candidate_ids)
-    for row in view.subjective_rows:
-        if row.local_token_id in candidate_ids:
+    for subjective_row in view.subjective_rows:
+        if subjective_row.local_token_id in candidate_ids:
             raise MacroSocietyError("macro_society_subjective_identity_leak")
-        if row.local_token_id.startswith(_ANALYTICAL_PREFIX):
+        if subjective_row.local_token_id.startswith(_ANALYTICAL_PREFIX):
             raise MacroSocietyError("macro_society_subjective_identity_leak")
     if len(candidate_ids) != len(view.candidate_ids):
         raise MacroSocietyError("macro_society_duplicate_candidate")

@@ -110,7 +110,7 @@ def compute_macro_society_structure_metric(
         (len(candidate.member_ids) for candidate in final.candidates), default=0
     )
     availability = _availability(analysis)
-    values = {
+    values: dict[str, object] = {
         "candidate_count": len(final.candidates),
         "largest_candidate_share": quantize_float(largest / known) if known else None,
         "covered_person_count": len(members),
@@ -182,7 +182,7 @@ def compute_macro_society_identity_alignment_metric(
         if support is not None and support.member_count == len(candidate.member_ids):
             territory_aligned += 1
     availability = _availability(analysis)
-    values = {
+    values: dict[str, object] = {
         "candidates_with_self_identification": len(with_self_id),
         "self_identified_member_share": (
             quantize_float(len(self_id_members) / len(members)) if members else None
@@ -231,7 +231,7 @@ def compute_macro_society_lineage_metric(
         and edge.from_id != edge.to_id
     ]
     availability = _availability(analysis)
-    values = {
+    values: dict[str, object] = {
         "continuation_count": kinds.count(MacroSocietyLineageKind.CONTINUED),
         "transform_count": kinds.count(MacroSocietyLineageKind.TRANSFORMED),
         "split_count": kinds.count(MacroSocietyLineageKind.SPLIT),
@@ -279,7 +279,7 @@ def compute_macro_society_membership_dispute_metric(
             disputed.update(contested)
     known = len(final.known_person_ids)
     availability = _availability(analysis)
-    values = {
+    values: dict[str, object] = {
         "disputed_member_count": len(disputed),
         "disputed_candidate_count": disputed_candidates,
         "overlap_member_count": len(final.overlap_person_ids),

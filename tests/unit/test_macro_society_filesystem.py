@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from analysis.macro_society_contract import MacroSocietyLane
@@ -48,7 +50,7 @@ def _harvest(*, generated_tick: int = 9) -> MacroSocietyHarvest:
     )
 
 
-def _publication(*, generated_tick: int = 9):
+def _publication(*, generated_tick: int = 9) -> MacroSocietyPublication:
     result = build_macro_society_harvest_result(_harvest(generated_tick=generated_tick))
     payload = encode_macro_society_snapshot(result.snapshot)
     return MacroSocietyPublication(
@@ -58,7 +60,7 @@ def _publication(*, generated_tick: int = 9):
     )
 
 
-def test_publish_then_read_round_trips(tmp_path) -> None:
+def test_publish_then_read_round_trips(tmp_path: Path) -> None:
     publisher = create_macro_society_publisher(tmp_path)
     reader = create_macro_society_reader(tmp_path)
     assert publisher is not None and reader is not None
@@ -89,7 +91,7 @@ def test_publish_then_read_round_trips(tmp_path) -> None:
     assert candidate == rows[0]
 
 
-def test_duplicate_publication_is_rejected(tmp_path) -> None:
+def test_duplicate_publication_is_rejected(tmp_path: Path) -> None:
     publisher = create_macro_society_publisher(tmp_path)
     assert publisher is not None
     publication = _publication()
@@ -100,7 +102,7 @@ def test_duplicate_publication_is_rejected(tmp_path) -> None:
         publisher.publish(publication)
 
 
-def test_publication_quota_is_enforced(tmp_path) -> None:
+def test_publication_quota_is_enforced(tmp_path: Path) -> None:
     publisher = create_macro_society_publisher(tmp_path, max_publications=1)
     assert publisher is not None
     publisher.publish(_publication())
@@ -108,7 +110,7 @@ def test_publication_quota_is_enforced(tmp_path) -> None:
         publisher.publish(_publication(generated_tick=10))
 
 
-def test_corrupt_snapshot_fails_digest_check(tmp_path) -> None:
+def test_corrupt_snapshot_fails_digest_check(tmp_path: Path) -> None:
     publisher = create_macro_society_publisher(tmp_path)
     reader = create_macro_society_reader(tmp_path)
     assert publisher is not None and reader is not None
@@ -128,7 +130,7 @@ def test_corrupt_snapshot_fails_digest_check(tmp_path) -> None:
         reader.read_summary("run-1")
 
 
-def test_lock_file_blocks_a_concurrent_publish(tmp_path) -> None:
+def test_lock_file_blocks_a_concurrent_publish(tmp_path: Path) -> None:
     publisher = create_macro_society_publisher(tmp_path)
     assert publisher is not None
     (tmp_path / "run-1").mkdir(parents=True)
@@ -137,7 +139,7 @@ def test_lock_file_blocks_a_concurrent_publish(tmp_path) -> None:
         publisher.publish(_publication())
 
 
-def test_missing_publication_is_reported(tmp_path) -> None:
+def test_missing_publication_is_reported(tmp_path: Path) -> None:
     reader = create_macro_society_reader(tmp_path)
     assert reader is not None
     with pytest.raises(

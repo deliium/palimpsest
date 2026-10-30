@@ -6,8 +6,6 @@ import ast
 import re
 from pathlib import Path
 
-import pytest
-
 from analysis.macro_society_contract import MacroSocietyLane
 from analysis.macro_society_evidence import MacroSocietyEdge, MacroSocietyWindowEvidence
 from experiments.macro_society_publication import (
@@ -18,8 +16,8 @@ from simulation.macro_society_models import (
     MACRO_SOCIETY_SNAPSHOT_SCHEMA_VERSION,
     MacroSocietySnapshot,
 )
-from simulation.v4_architecture import V4ContextId
 from simulation.runner_models import V4CapabilityFlags
+from simulation.v4_architecture import V4ContextId
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,7 +67,14 @@ def test_analysis_modules_import_only_the_analysis_layer() -> None:
 
 def test_simulation_modules_import_no_outer_layer() -> None:
     assert SIMULATION_MODULES
-    forbidden = {"analysis", "experiments", "api", "persistence", "observer", "infrastructure"}
+    forbidden = {
+        "analysis",
+        "experiments",
+        "api",
+        "persistence",
+        "observer",
+        "infrastructure",
+    }
     for path in SIMULATION_MODULES:
         assert not _imports(path) & forbidden, path
 

@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 from analysis.macro_society_contract import MacroSocietyLane, MacroSocietyLineageKind
-from analysis.macro_society_detection import detect_macro_society_candidates
+from analysis.macro_society_detection import (
+    MacroSocietyWindowResult,
+    detect_macro_society_candidates,
+)
 from analysis.macro_society_evidence import (
     MacroSocietyToken,
     MacroSocietyWindowEvidence,
 )
 from analysis.macro_society_identity import assign_macro_society_identities
-from analysis.macro_society_lineage import build_macro_society_analysis
+from analysis.macro_society_lineage import (
+    MacroSocietyAnalysis,
+    build_macro_society_analysis,
+)
 from analysis.macro_society_metrics import (
     compute_macro_society_identity_alignment_metric,
     compute_macro_society_lineage_metric,
     compute_macro_society_membership_dispute_metric,
     compute_macro_society_structure_metric,
 )
-from analysis.models import MetricAvailability
+from analysis.models import MetricAvailability, MetricDocument
 from analysis.numerical import quantize_float
 from analysis.serialization import (
     decode_metric_document,
@@ -31,7 +37,7 @@ def _persons(start: int, count: int) -> tuple[str, ...]:
 
 def _window(
     index: int, groups: dict[str, tuple[str, ...]], *, extra: tuple[str, ...] = ()
-):
+) -> MacroSocietyWindowResult:
     tokens = tuple(
         MacroSocietyToken(MacroSocietyLane.CULTURE, person, token)
         for token, members in groups.items()
@@ -53,18 +59,22 @@ def _window(
     )
 
 
-def _analysis(windows):
+def _analysis(
+    windows: list[MacroSocietyWindowResult],
+) -> MacroSocietyAnalysis:
     assignment = assign_macro_society_identities(windows)
     return build_macro_society_analysis(windows=windows, assignment=assignment)
 
 
-def _structure(analysis):
+def _structure(analysis: MacroSocietyAnalysis) -> MetricDocument:
     return compute_macro_society_structure_metric(
         analysis, run_id="run-1", input_revision="rev-1"
     )
 
 
-def _all_documents(analysis):
+def _all_documents(
+    analysis: MacroSocietyAnalysis,
+) -> tuple[MetricDocument, ...]:
     return (
         _structure(analysis),
         compute_macro_society_identity_alignment_metric(
@@ -139,7 +149,8 @@ def test_dispute_metric_reports_contested_membership() -> None:
         analysis, run_id="run-1", input_revision="rev-1"
     )
     assert document.values["overlap_member_count"] == 2
-    assert document.values["disputed_member_count"] >= 0
+    disputed = document.values["disputed_member_count"]
+    assert isinstance(disputed, int) and disputed >= 0
     assert document.values["contested_share"] is not None
 
 

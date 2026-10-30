@@ -70,9 +70,11 @@ def _seed(root: Path, *, generated_tick: int = 9) -> str:
     return result.snapshot.candidates[0].macro_society_id
 
 
-def _client(root: Path | None, *, clock: list[float]) -> tuple:
+def _client(
+    root: Path | None, *, clock: list[float]
+) -> tuple[FastAPI, httpx.AsyncClient]:
     app = FastAPI()
-    app.add_exception_handler(ApiError, api_error_handler)
+    app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
     app.include_router(router)
     settings = Settings(
         api_debug_enabled=True,
@@ -96,7 +98,7 @@ def _clock() -> list[float]:
 
 
 @pytest.mark.asyncio
-async def test_summary_route_returns_published_metadata(tmp_path) -> None:
+async def test_summary_route_returns_published_metadata(tmp_path: Path) -> None:
     _seed(tmp_path)
     _, client = _client(tmp_path, clock=_clock())
     async with client:
@@ -111,7 +113,7 @@ async def test_summary_route_returns_published_metadata(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_candidates_and_candidate_routes(tmp_path) -> None:
+async def test_candidates_and_candidate_routes(tmp_path: Path) -> None:
     macro_id = _seed(tmp_path)
     _, client = _client(tmp_path, clock=_clock())
     async with client:
@@ -133,7 +135,7 @@ async def test_candidates_and_candidate_routes(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lineage_route_returns_emergence(tmp_path) -> None:
+async def test_lineage_route_returns_emergence(tmp_path: Path) -> None:
     _seed(tmp_path)
     _, client = _client(tmp_path, clock=_clock())
     async with client:
@@ -146,7 +148,7 @@ async def test_lineage_route_returns_emergence(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_credential_is_rejected(tmp_path) -> None:
+async def test_missing_credential_is_rejected(tmp_path: Path) -> None:
     _seed(tmp_path)
     _, client = _client(tmp_path, clock=_clock())
     async with client:
@@ -166,7 +168,7 @@ async def test_disabled_reader_returns_503() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_candidate_returns_404(tmp_path) -> None:
+async def test_unknown_candidate_returns_404(tmp_path: Path) -> None:
     _seed(tmp_path)
     _, client = _client(tmp_path, clock=_clock())
     async with client:
@@ -178,7 +180,7 @@ async def test_unknown_candidate_returns_404(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_invalid_and_expired_cursor_are_distinguished(tmp_path) -> None:
+async def test_invalid_and_expired_cursor_are_distinguished(tmp_path: Path) -> None:
     _seed(tmp_path)
     clock = _clock()
     app, client = _client(tmp_path, clock=clock)

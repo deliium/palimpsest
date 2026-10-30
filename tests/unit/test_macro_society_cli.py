@@ -47,7 +47,7 @@ def _harvest() -> MacroSocietyHarvest:
 
 
 def _args(**overrides: object) -> argparse.Namespace:
-    values = {
+    values: dict[str, object] = {
         "macro_society_root": None,
         "macro_society_max_publications": 16,
         "macro_society_max_bytes": 8_388_608,
@@ -67,7 +67,7 @@ def test_options_parse_and_validate() -> None:
         producer_options_from_args(_args(macro_society_max_bytes=300_000_000))
 
 
-def test_disabled_options_write_nothing(tmp_path) -> None:
+def test_disabled_options_write_nothing(tmp_path: Path) -> None:
     receipt = publish_macro_society_harvest(
         options=MacroSocietyProducerOptions(root=None), harvest=_harvest()
     )
@@ -75,7 +75,7 @@ def test_disabled_options_write_nothing(tmp_path) -> None:
     assert not any(tmp_path.iterdir())
 
 
-def test_missing_harvest_is_unavailable_not_success(tmp_path) -> None:
+def test_missing_harvest_is_unavailable_not_success(tmp_path: Path) -> None:
     receipt = publish_macro_society_harvest(
         options=MacroSocietyProducerOptions(root=tmp_path), harvest=None
     )
@@ -83,7 +83,7 @@ def test_missing_harvest_is_unavailable_not_success(tmp_path) -> None:
     assert receipt["reason_code"] == "macro_society_harvest_unavailable"
 
 
-def test_published_receipt_is_id_free(tmp_path) -> None:
+def test_published_receipt_is_id_free(tmp_path: Path) -> None:
     receipt = publish_macro_society_harvest(
         options=MacroSocietyProducerOptions(root=tmp_path), harvest=_harvest()
     )
@@ -92,7 +92,7 @@ def test_published_receipt_is_id_free(tmp_path) -> None:
     assert "person-" not in repr(receipt)
 
 
-def test_storage_failure_becomes_a_failed_receipt(tmp_path) -> None:
+def test_storage_failure_becomes_a_failed_receipt(tmp_path: Path) -> None:
     blocked = tmp_path / "not-a-directory"
     blocked.write_text("x", encoding="utf-8")
     receipt = publish_macro_society_harvest(

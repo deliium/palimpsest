@@ -20,7 +20,7 @@ MAX_PAGE_ROWS: Final[int] = 500
 
 def _encode_row(value: object) -> bytes:
     if is_dataclass(value) and not isinstance(value, type):
-        value = asdict(value)  # type: ignore[arg-type]
+        value = asdict(value)
     return encode_macro_society_value(value)
 
 

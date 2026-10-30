@@ -30,6 +30,7 @@ from persistence import (
 )
 from simulation.branch_compare import JournalBranchCompare
 from simulation.branch_service import BranchService
+from simulation.macro_society_ports import MacroSocietyReadPort
 from simulation.persistence import (
     ExperimentRepository,
     RunControlRepository,
@@ -137,7 +138,7 @@ def get_replay_api_service(request: Request) -> ReplayApiService:
     return cast(ReplayApiService, service)
 
 
-def get_macro_society_reader(request: Request):
+def get_macro_society_reader(request: Request) -> MacroSocietyReadPort | None:
     """Return the read-only macro-society reader, or ``None`` when disabled."""
     return getattr(request.app.state, "macro_society_reader", None)
 

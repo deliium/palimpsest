@@ -11,7 +11,10 @@ from analysis.macro_society_contract import (
     MacroSocietyStatus,
     derive_macro_society_id,
 )
-from analysis.macro_society_detection import detect_macro_society_candidates
+from analysis.macro_society_detection import (
+    MacroSocietyWindowResult,
+    detect_macro_society_candidates,
+)
 from analysis.macro_society_evidence import (
     MacroSocietyToken,
     MacroSocietyWindowEvidence,
@@ -21,6 +24,7 @@ from analysis.macro_society_identity import (
     assign_macro_society_identities,
 )
 from analysis.macro_society_lineage import (
+    MacroSocietyAnalysis,
     MacroSocietyLineageEdge,
     build_macro_society_analysis,
     validate_macro_society_lineage,
@@ -31,7 +35,9 @@ def _persons(start: int, count: int) -> tuple[str, ...]:
     return tuple(f"person-{index}" for index in range(start, start + count))
 
 
-def _window(index: int, groups: dict[str, tuple[str, ...]]):
+def _window(
+    index: int, groups: dict[str, tuple[str, ...]]
+) -> MacroSocietyWindowResult:
     tokens = tuple(
         MacroSocietyToken(MacroSocietyLane.CULTURE, person, token)
         for token, members in groups.items()
@@ -51,7 +57,9 @@ def _window(index: int, groups: dict[str, tuple[str, ...]]):
     )
 
 
-def _analysis(windows):
+def _analysis(
+    windows: list[MacroSocietyWindowResult],
+) -> MacroSocietyAnalysis:
     assignment = assign_macro_society_identities(windows)
     return build_macro_society_analysis(windows=windows, assignment=assignment)
 

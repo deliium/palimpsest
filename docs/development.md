@@ -314,6 +314,22 @@ Both are synthetic measurement lanes. They are reported separately and are
 never counted as required-gate passes or as 10k/100k scientific-scale
 certification.
 
+## Macro-society verification
+
+| Command | Coverage |
+| --- | --- |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/test_macro_society_*.py -q` | Contract, evidence, detection, identity, lineage, layers, metrics, codec, publication, filesystem, API, CLI |
+| `uv run --frozen --python 3.12.14 pytest tests/architecture/test_macro_society_boundaries.py -q` | Analysis-only authority, import boundaries, magic-actor scan, pins |
+| `uv run --frozen --python 3.12.14 pytest tests/architecture/test_v4_context_registry.py tests/architecture/test_v4_architecture_invariants.py -q` | Fourteen-context registry at `v4-context-map-v2` |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/test_metric_specifications.py -q` | Catalog at 140 families |
+| `pnpm --dir clients/research-ui build` / `pnpm --dir clients/research-ui test` | Read-only Macro-societies panel |
+
+Publication is opt-in: `palimpsest-matrix generational ... --macro-society-root
+<dir>` reports `macro_society_publication_status`. A missing completed-run
+harvest producer reports `status=unavailable` with
+`reason_code=macro_society_harvest_unavailable`; a storage failure changes only
+the receipt. No capacity claim is made.
+
 ## See also
 
 - [Long-horizon scalability](long-horizon-scalability.md)

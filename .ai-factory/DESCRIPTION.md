@@ -201,3 +201,23 @@ observer semantic types 73, metric families 136, replay-v22/codec v20,
 `/v1`, and `observer-protocol-v1`; `institutional_economy` and
 `multi_hop_testimony_tracking` remain unowned. V4-01 claims no capacity and adds
 no V4 social mechanic.
+
+V4-02 (macro-society analytical identity, 2026-10-30) implements the
+analysis-only `macro_society_identity` context. `analysis.macro_society_*`
+declares nine evidence lanes, deterministic cross-lane candidate detection with
+legal overlap, fragmented and contested statuses, creation-evidence `msoc-`
+identities, forward-only split/merge lineage, three strictly separated layers,
+and four metric families (`macro_society_structure@1`,
+`macro_society_identity_alignment@1`, `macro_society_lineage@1`,
+`macro_society_membership_dispute@1`), raising the catalog from 136 to 140.
+`simulation.macro_society_*` defines the bounded canonical
+`macro-society-snapshot-v1` document and ports; `experiments.macro_society_publication`
+maps completed-run harvests; `persistence.macro_society_filesystem` stores them
+atomically with quotas; four GET-only `/v1` routes require `SUBJECTIVE_DEBUG` and
+return `macro_society_disabled` when unconfigured; the Research UI adds a
+read-only Macro-societies panel. No capability flag, runner schema, command,
+event, observer semantic type, API version, or migration is added: runner
+v4/v55/v56, result v2/v3, commands 43, observer semantic types 73, metric
+families 140, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic
+`0017` remain the pins. `institutional_economy` and
+`multi_hop_testimony_tracking` remain unowned.

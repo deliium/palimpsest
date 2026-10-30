@@ -273,10 +273,10 @@ fail closed.
 
 ### Phase 8: Invariants and Regression
 - [x] Task 17: Add the macro-society boundary and determinism suite ([details](phase-08-invariants-and-regression.md#task-17-add-the-macro-society-boundary-and-determinism-suite)) (depends on 2-16)
-- [ ] Task 18: Execute the full V1-V4 regression and qualification lanes ([details](phase-08-invariants-and-regression.md#task-18-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 17)
+- [x] Task 18: Execute the full V1-V4 regression and qualification lanes ([details](phase-08-invariants-and-regression.md#task-18-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 17)
 
 ### Phase 9: Documentation and Final Verification
-- [ ] Task 19: Execute the mandatory documentation checkpoint ([details](phase-09-documentation-and-verification.md#task-19-execute-the-mandatory-documentation-checkpoint)) (depends on 2-18)
+- [x] Task 19: Execute the mandatory documentation checkpoint ([details](phase-09-documentation-and-verification.md#task-19-execute-the-mandatory-documentation-checkpoint)) (depends on 2-18)
 - [ ] Task 20: Perform final V4-02 verification ([details](phase-09-documentation-and-verification.md#task-20-perform-final-v4-02-verification)) (depends on 18, 19)
 
 ## Commit Plan

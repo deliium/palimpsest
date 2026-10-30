@@ -14,6 +14,7 @@ from infrastructure.logging import get_logger
 from infrastructure.settings import Settings
 from simulation.macro_society_models import MacroSocietyArtifactError
 from simulation.macro_society_ports import (
+    MacroSocietyCursor,
     MacroSocietyReadPort,
     macro_society_query_fingerprint,
 )
@@ -28,6 +29,8 @@ def _cursor_codec(request: Request) -> MacroSocietyCursorCodec:
     codec = getattr(request.app.state, "macro_society_cursor_codec", None)
     if codec is None:
         raise service_unavailable(code="macro_society_disabled")
+    if not isinstance(codec, MacroSocietyCursorCodec):
+        raise service_unavailable(code="macro_society_disabled")
     return codec
 
 
@@ -39,7 +42,7 @@ def _reader(reader: MacroSocietyReadPort | None) -> MacroSocietyReadPort:
 
 def _decode_cursor(
     codec: MacroSocietyCursorCodec, token: str, *, purpose: str
-):
+) -> MacroSocietyCursor:
     try:
         cursor, _ = codec.decode(token, purpose=purpose)
     except MacroSocietyCursorError as exc:

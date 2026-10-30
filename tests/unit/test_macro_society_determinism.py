@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import random
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from analysis.macro_society_contract import MacroSocietyLane
 from analysis.macro_society_detection import detect_macro_society_candidates
@@ -49,7 +50,9 @@ def _window(
     )
 
 
-def _fingerprint(window: MacroSocietyWindowEvidence):
+def _fingerprint(
+    window: MacroSocietyWindowEvidence,
+) -> tuple[tuple[object, ...], tuple[str, ...], str]:
     result = detect_macro_society_candidates(window)
     assignment = assign_macro_society_identities((result,))
     analysis = build_macro_society_analysis(windows=(result,), assignment=assignment)

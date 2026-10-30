@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -97,7 +98,7 @@ class MacroSocietyCursorCodec:
         encoded, signature = token.split(".", 1)
         try:
             payload = _b64decode(encoded)
-        except (ValueError, base64.binascii.Error) as exc:
+        except (ValueError, binascii.Error) as exc:
             raise MacroSocietyCursorError(
                 "macro_society_cursor_invalid"
             ) from exc

@@ -20,6 +20,7 @@ from experiments.macro_society_publication import (
     publish_macro_society_snapshot,
 )
 from simulation.macro_society_models import MacroSocietySnapshotRef
+from simulation.macro_society_ports import MacroSocietyPublication
 
 ROOT = Path(__file__).resolve().parents[2]
 PERSONS = tuple(f"person-{index}" for index in range(1, 9))
@@ -106,10 +107,12 @@ def test_non_monotonic_harvest_is_rejected() -> None:
 
 
 def test_publish_hands_exactly_one_publication_to_the_port() -> None:
-    recorded: list[object] = []
+    recorded: list[MacroSocietyPublication] = []
 
     class _Port:
-        def publish(self, publication):
+        def publish(
+            self, publication: MacroSocietyPublication
+        ) -> MacroSocietySnapshotRef:
             recorded.append(publication)
             return MacroSocietySnapshotRef(
                 publication_id=publication.publication_id,

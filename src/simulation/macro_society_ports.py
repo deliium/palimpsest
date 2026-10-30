@@ -10,7 +10,9 @@ from typing import Final, Protocol, runtime_checkable
 
 from simulation.macro_society_models import (
     MacroSocietyArtifactError,
+    MacroSocietyCandidateRecord,
     MacroSocietyCoverage,
+    MacroSocietyLineageEdgeRecord,
     MacroSocietySnapshot,
     MacroSocietySnapshotRef,
     require_macro_society_id,
@@ -163,11 +165,11 @@ class MacroSocietyReadPort(Protocol):
         publication_id: str | None,
         offset: int,
         limit: int,
-    ) -> tuple[tuple[object, ...], int | None]: ...
+    ) -> tuple[tuple[MacroSocietyCandidateRecord, ...], int | None]: ...
 
     def read_candidate(
         self, run_id: str, macro_society_id: str, *, publication_id: str | None
-    ) -> object: ...
+    ) -> MacroSocietyCandidateRecord: ...
 
     def read_lineage(
         self,
@@ -176,7 +178,7 @@ class MacroSocietyReadPort(Protocol):
         publication_id: str | None,
         offset: int,
         limit: int,
-    ) -> tuple[tuple[object, ...], int | None]: ...
+    ) -> tuple[tuple[MacroSocietyLineageEdgeRecord, ...], int | None]: ...
 
 
 @runtime_checkable
@@ -190,7 +192,7 @@ class MacroSocietyPublicationPort(Protocol):
 
 def require_known_candidate(
     snapshot: MacroSocietySnapshot, macro_society_id: str
-) -> object:
+) -> MacroSocietyCandidateRecord:
     """Return one candidate record or fail closed."""
     wanted = require_macro_society_id(macro_society_id)
     for candidate in snapshot.candidates:

@@ -256,6 +256,27 @@ Every later V3 feature plan must satisfy this checklist before merge:
 
 Register roadmap milestones via `/aif-roadmap` (e.g. **M7 — V3 Generational Architecture Scaffolding**) — not from individual feature plans inventing milestone IDs ad hoc. Keep later plan filenames / bundle stems prefixed with `v3-`.
 
+### Downstream V4 macro-society contract
+
+A plan that extends `macro_society_identity` must keep these invariants:
+
+1. **Analysis-only authority** — the context owns only `analysis`, has no
+   capability flag, and reserves no write pair.
+2. **Three layers stay separate** — objective counts, owner-scoped claims, and
+   analytical candidates are distinct types with leakage checks.
+3. **Overlap is legal** — no exclusive partition, no forced self-identification,
+   no global society registry.
+4. **Identity is minted once** from creation evidence; split children and merge
+   results mint new ids; lineage stays forward-only and acyclic.
+5. **Artifact independence** — `simulation` owns the snapshot contract,
+   `experiments` bridges analysis, `persistence` stores, `api` reads; none
+   imports analysis from the wrong side.
+6. **No capacity or prevalence claim** — candidate counts are analytical counts
+   under stated coverage.
+7. **Pins stay put** — runner v4/v55/v56, commands 43, observer semantic types
+   73, metric families 140, replay v22, codec v20, Alembic `0017`, `/v1`,
+   `observer-protocol-v1`.
+
 ## See also
 
 - [V4 architecture](v4-architecture.md)

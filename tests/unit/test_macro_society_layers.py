@@ -5,7 +5,10 @@ from __future__ import annotations
 import pytest
 
 from analysis.macro_society_contract import MacroSocietyError, MacroSocietyLane
-from analysis.macro_society_detection import detect_macro_society_candidates
+from analysis.macro_society_detection import (
+    MacroSocietyWindowResult,
+    detect_macro_society_candidates,
+)
 from analysis.macro_society_evidence import (
     MacroSocietyEdge,
     MacroSocietyWindowEvidence,
@@ -21,7 +24,7 @@ from analysis.macro_society_layers import (
 PERSONS = ("person-1", "person-2", "person-3", "person-4", "person-5")
 
 
-def _window_result():
+def _window_result() -> MacroSocietyWindowResult:
     edges = tuple(
         MacroSocietyEdge(MacroSocietyLane.INTERACTION, source, target, 0)
         for index, source in enumerate(PERSONS[:4])
