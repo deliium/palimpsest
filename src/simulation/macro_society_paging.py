@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from typing import Final
 
 from simulation.macro_society_codec import encode_macro_society_value
@@ -16,6 +16,12 @@ __all__ = [
 ]
 
 MAX_PAGE_ROWS: Final[int] = 500
+
+
+def _encode_row(value: object) -> bytes:
+    if is_dataclass(value) and not isinstance(value, type):
+        value = asdict(value)  # type: ignore[arg-type]
+    return encode_macro_society_value(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +45,7 @@ def select_macro_society_rows(
     offset: int,
     limit: int,
     max_bytes: int,
-    encode: Callable[[object], bytes] = encode_macro_society_value,
+    encode: Callable[[object], bytes] = _encode_row,
 ) -> MacroSocietyRowSelection:
     """Select at most ``max_bytes`` of canonical rows from ``offset``.
 

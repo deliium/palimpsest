@@ -28,6 +28,12 @@ from persistence.lineage_filesystem import (
     create_lineage_publisher,
     create_lineage_reader,
 )
+from persistence.macro_society_filesystem import (
+    FilesystemMacroSocietyPublisher,
+    FilesystemMacroSocietyReader,
+    create_macro_society_publisher,
+    create_macro_society_reader,
+)
 from simulation.persistence import (
     ExperimentRepository,
     SimulationRunRepository,
@@ -70,6 +76,8 @@ if TYPE_CHECKING:
 __all__ = [
     "FilesystemLineagePublisher",
     "FilesystemLineageReader",
+    "FilesystemMacroSocietyPublisher",
+    "FilesystemMacroSocietyReader",
     "PersistenceAdapterError",
     "PersistenceConflictError",
     "PersistenceCorruptionError",
@@ -85,6 +93,8 @@ __all__ = [
     "create_inspection_evidence_loader",
     "create_lineage_publisher",
     "create_lineage_reader",
+    "create_macro_society_publisher",
+    "create_macro_society_reader",
     "create_memory_service",
     "create_metric_document_repository",
     "create_metric_set_repository",

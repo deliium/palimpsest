@@ -368,7 +368,13 @@ def compute_macro_society_publication_id(
     if not isinstance(snapshot_payload, (bytes, bytearray)):
         raise MacroSocietyArtifactError("macro_society_invalid_value")
     run = require_stable_id("run_id", run_id)
-    digest = hashlib.sha256(
-        run.encode("utf-8") + b"\x00" + bytes(snapshot_payload)
-    ).hexdigest()[:16]
+    data = decode_macro_society_value(bytes(snapshot_payload))
+    if not isinstance(data, dict):
+        raise MacroSocietyArtifactError("macro_society_invalid_value")
+    # The publication id is derived from content only, so the id field itself is
+    # normalized away to keep derivation idempotent.
+    normalized = dict(data)
+    normalized["publication_id"] = ""
+    encoded = encode_macro_society_value(normalized)
+    digest = hashlib.sha256(run.encode("utf-8") + b"\x00" + encoded).hexdigest()[:16]
     return require_publication_id(f"msoc-edge-{digest}")

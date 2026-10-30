@@ -263,8 +263,8 @@ fail closed.
 - [x] Task 11: Add bounded paging and read/publication ports ([details](phase-05-artifact-contract.md#task-11-add-bounded-paging-and-readpublication-ports)) (depends on 10)
 
 ### Phase 6: Composition and Durable Publication
-- [ ] Task 12: Compose completed-run harvests into snapshots ([details](phase-06-composition-and-persistence.md#task-12-compose-completed-run-harvests-into-snapshots)) (depends on 7, 11)
-- [ ] Task 13: Implement the atomic quota-bounded filesystem store ([details](phase-06-composition-and-persistence.md#task-13-implement-the-atomic-quota-bounded-filesystem-store)) (depends on 11)
+- [x] Task 12: Compose completed-run harvests into snapshots ([details](phase-06-composition-and-persistence.md#task-12-compose-completed-run-harvests-into-snapshots)) (depends on 7, 11)
+- [x] Task 13: Implement the atomic quota-bounded filesystem store ([details](phase-06-composition-and-persistence.md#task-13-implement-the-atomic-quota-bounded-filesystem-store)) (depends on 11)
 
 ### Phase 7: Read-Only API, CLI, and Research UI
 - [ ] Task 14: Add settings and GET-only API routes ([details](phase-07-api-cli-and-ui.md#task-14-add-settings-and-get-only-api-routes)) (depends on 13)

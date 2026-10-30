@@ -274,6 +274,13 @@ from experiments.interventions import (
     make_false_story_intervention,
     unwrap_arbiter_command,
 )
+from experiments.macro_society_publication import (
+    MacroSocietyHarvest,
+    MacroSocietyHarvestResult,
+    build_macro_society_harvest_result,
+    macro_society_publication_document,
+    publish_macro_society_snapshot,
+)
 from experiments.matrix_aggregate import (
     MATRIX_AGGREGATE_SCHEMA_VERSION,
     MatrixAggregateDocument,
@@ -471,6 +478,8 @@ __all__ = [
     "GenerationalComparisonSpec",
     "GroupRole",
     "InMemoryExperimentRecordRepository",
+    "MacroSocietyHarvest",
+    "MacroSocietyHarvestResult",
     "MatrixAggregateDocument",
     "MatrixBatchDependencies",
     "MatrixBatchResult",
@@ -557,6 +566,7 @@ __all__ = [
     "benchmark_suite_registry",
     "bounded_experimentation_profile",
     "build_generational_comparison",
+    "build_macro_society_harvest_result",
     "build_matrix_aggregate",
     "build_observer_graphical_scenario",
     "build_reference_scenario",
@@ -686,6 +696,7 @@ __all__ = [
     "list_benchmark_scenarios",
     "list_v3_benchmark_scenarios",
     "load_cultural_metric_comparison",
+    "macro_society_publication_document",
     "make_false_story_intervention",
     "map_consolidation_audits_to_report",
     "map_recall_audits_to_dynamics_report",
@@ -698,6 +709,7 @@ __all__ = [
     "matrix_spec_fingerprint",
     "new_agent_bootstrap_profile",
     "persist_metric_bundle",
+    "publish_macro_society_snapshot",
     "regional_context_from_run",
     "regional_destination_evidence_rows_from_traces",
     "regional_metric_inputs_from_snapshots",
