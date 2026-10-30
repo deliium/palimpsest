@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 import httpx
 import pytest
@@ -44,7 +45,8 @@ def _settings() -> Settings:
 
 
 def _factory(_settings: Settings) -> DatabaseResourcesLike:
-    return FakeResources(engine=FakeEngine())
+    # The fake intentionally omits session_factory so lifespan skips persistence.
+    return cast(DatabaseResourcesLike, FakeResources(engine=FakeEngine()))
 
 
 def _app() -> FastAPI:

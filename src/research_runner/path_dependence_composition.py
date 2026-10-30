@@ -1,4 +1,4 @@
-"""Production repository composition for path-dependence resume (no HTTP)."""
+"""PostgreSQL execution and read-only path-dependence resume (no HTTP)."""
 
 from __future__ import annotations
 
@@ -15,8 +15,17 @@ from persistence import (
     create_snapshot_repository,
     create_tick_journal_repository,
 )
+from simulation.branch_service import BranchService, rematerialize_snapshot
 from simulation.clock import Tick
+from simulation.engine import WorldEngine
+from simulation.fork_checkpoint import RunnerForkCheckpoint
 from simulation.models import RunId
+from simulation.persistence import (
+    SimulationRunRepository,
+    SnapshotId,
+    SnapshotRepository,
+    TickJournalRepository,
+)
 from simulation.runner import RunnerDependencyFactories
 
 _LOG: Final[logging.Logger] = logging.getLogger(
@@ -28,9 +37,9 @@ _LOG: Final[logging.Logger] = logging.getLogger(
 class PostgresObjectivePresence:
     """Read-only objective presence used by resume classification."""
 
-    runs: object
-    journal: object
-    snapshots: object
+    runs: SimulationRunRepository
+    journal: TickJournalRepository
+    snapshots: SnapshotRepository
 
     async def exists(self, run_id: str) -> bool:
         get_run = getattr(self.runs, "get_run", None)
@@ -71,6 +80,39 @@ class PathDependencePostgresComposition:
     presence: PostgresObjectivePresence
     factories: RunnerDependencyFactories
 
+    async def materialize_engine(
+        self, checkpoint: RunnerForkCheckpoint, child_run: RunId
+    ) -> WorldEngine:
+        """Persist the ordinary objective prefix before binding a fork child."""
+        result = await BranchService(
+            runs=self.presence.runs,
+            journal=self.presence.journal,
+            snapshots=self.presence.snapshots,
+        ).materialize_objective_fork(
+            parent_run_id=checkpoint.run_id,
+            child_run_id=child_run,
+            fork_tick=checkpoint.boundary_tick.value,
+        )
+        predecessor = (
+            result.child_commits[-1].commit_hash if result.child_commits else None
+        )
+        snapshot = rematerialize_snapshot(
+            checkpoint.snapshot,
+            child_run_id=child_run,
+            snapshot_id=SnapshotId(f"child-{child_run.value}"),
+            predecessor_commit_hash=predecessor,
+            next_tick=checkpoint.boundary_tick,
+        )
+        config = checkpoint.config
+        return WorldEngine.restore_from_snapshot(
+            snapshot,
+            population_lifecycle=config.population_lifecycle,
+            new_agent_initialization=config.new_agent_initialization,
+            kinship_spec=config.kinship,
+            environmental_dynamics=config.environmental_dynamics,
+            artifacts_enabled=config.artifacts_enabled,
+        )
+
     async def close(self) -> None:
         await self.resources.engine.dispose()
 
@@ -82,7 +124,7 @@ class PathDependencePostgresComposition:
 def build_path_dependence_postgres_composition(
     settings: Settings,
 ) -> PathDependencePostgresComposition:
-    """Build read-only repositories from existing validated infrastructure."""
+    """Compose execution and inspection from existing validated adapters."""
     resources = create_database_resources(settings)
     runs = create_run_repository(resources.session_factory)
     journal = create_tick_journal_repository(resources.session_factory)

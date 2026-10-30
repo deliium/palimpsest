@@ -24,9 +24,9 @@ from tests.simulation_helpers import (
 )
 from world.actions import Take, Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.lifecycle import LifecycleStageId
+from world.lifecycle import AgentLifecycleRecord, LifecycleStageId
 from world.lifecycle_effects import StageCapabilityEffect
-from world.models import non_lethal_physical_rules
+from world.models import Item, non_lethal_physical_rules
 from world.values import ItemKind
 
 _LOG = logging.getLogger("tests.lifecycle_capacity_fatigue_effects")
@@ -37,7 +37,7 @@ def _developmental_engine(
     carry_capacity: int = 10,
     physical_capacity_factor: float = 0.5,
     fatigue_accrual_factor: float = 1.5,
-    items: tuple = (),
+    items: tuple[Item, ...] = (),
     inventory: tuple[EntityId, ...] = (),
 ) -> WorldEngine:
     body = alive_body("body-1", carry_capacity=carry_capacity, inventory=inventory)
@@ -197,8 +197,10 @@ def test_fatigue_factor_multiplies_metabolism_map() -> None:
 def test_age_zero_uses_dependent_factor_immediately() -> None:
     _LOG.debug("case_id=age_zero_factor")
     engine = _developmental_engine(physical_capacity_factor=0.5)
-    assert engine.lifecycle_records[0].stage == LifecycleStageId("dependent")
-    assert engine.lifecycle_records[0].entry_tick == 0
+    record = engine.lifecycle_records[0]
+    assert isinstance(record, AgentLifecycleRecord)
+    assert record.stage == LifecycleStageId("dependent")
+    assert record.entry_tick == 0
     capacity_map = engine._lifecycle_effective_carry_capacity(tick=0)
     assert capacity_map is not None
     assert capacity_map[EntityId("body-1")] == 5

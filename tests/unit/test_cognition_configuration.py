@@ -17,7 +17,11 @@ from agents.cognition.configuration import (
     build_cognitive_loop,
     production_cognition_config,
 )
-from agents.cognition.defaults import PresentStateImagination, default_cognitive_loop
+from agents.cognition.defaults import (
+    DirectSelfStateProjector,
+    PresentStateImagination,
+    default_cognitive_loop,
+)
 from agents.cognition.epistemic import EPISTEMIC_POLICY_VERSION, EpistemicPolicy
 from agents.cognition.imagination import ImaginationEngine
 from agents.cognition.models import (
@@ -109,7 +113,6 @@ def test_build_loop_selects_emotional_state_modes() -> None:
 
 
 def test_build_loop_threads_identity_mode() -> None:
-    from agents.cognition.defaults import DirectSelfStateProjector
 
     passthrough = build_cognitive_loop(CognitionLoopConfig())
     assert type(passthrough._self_state) is DirectSelfStateProjector
@@ -117,6 +120,7 @@ def test_build_loop_threads_identity_mode() -> None:
     enabled = build_cognitive_loop(
         CognitionLoopConfig(identity_mode=CognitionIdentityMode.ENABLED)
     )
+    assert isinstance(enabled._self_state, DirectSelfStateProjector)
     assert enabled._self_state._identity_mode is CognitionIdentityMode.ENABLED
     material = CognitionLoopConfig(
         identity_mode=CognitionIdentityMode.ENABLED
@@ -134,6 +138,7 @@ def test_build_loop_selects_present_state_and_disabled_mortality() -> None:
     )
     loop = build_cognitive_loop(config)
     assert type(loop._futures) is PresentStateImagination
+    assert isinstance(loop._motivation, MotivationAppraisal)
     assert loop._motivation._mortality_appraisal_enabled is False
 
 

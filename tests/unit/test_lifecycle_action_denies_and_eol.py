@@ -10,7 +10,7 @@ import pytest
 from agents.models import AgentId
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.models import SimulationRunConfig
 from simulation.runner_models import (
     LifespanDistributionSpec,
@@ -23,10 +23,11 @@ from tests.simulation_helpers import (
     make_resource,
     make_weather,
 )
-from world.actions import Harvest, Wait
+from world.actions import AgentCommand, Harvest, Wait
 from world.effects import DeathCause
 from world.events import Died
 from world.identifiers import EntityId, RecipeId, WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.lifecycle_effects import resolve_stage_effect
 from world.models import LifeStatus, non_lethal_physical_rules
 from world.production import example_production_catalog
@@ -77,7 +78,7 @@ def _engine(*, lifespan_ticks: int = 8) -> WorldEngine:
     )
 
 
-def _step(engine: WorldEngine, command=None) -> object:
+def _step(engine: WorldEngine, command: AgentCommand | None = None) -> TickResult:
     command = Wait() if command is None else command
     batch = engine.observe()
     submissions = tuple(
@@ -96,6 +97,7 @@ def test_dependent_denies_harvest_structural_rejection(
 ) -> None:
     _LOG.debug("case_id=dependent_harvest_denied")
     engine = _engine(lifespan_ticks=20)
+    assert isinstance(engine.lifecycle_records[0], AgentLifecycleRecord)
     assert engine.lifecycle_records[0].stage.value == "dependent"
     with caplog.at_level(logging.WARNING):
         result = _step(engine, Harvest(RecipeId("harvest_wood"), EntityId("res-wood")))
@@ -129,6 +131,7 @@ def test_elder_empty_denies_match_independent() -> None:
 def test_assigned_lifespan_eol_emits_died_lifespan() -> None:
     _LOG.debug("case_id=assigned_eol")
     engine = _engine(lifespan_ticks=6)
+    assert isinstance(engine.lifecycle_records[0], AgentLifecycleRecord)
     assert engine.lifecycle_records[0].assigned_lifespan_ticks == 6
     for _ in range(8):
         _step(engine)

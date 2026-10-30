@@ -12,6 +12,7 @@ import pytest
 from agents.cognition.communication_strategy import (
     CommunicationDivergence,
     CommunicationFactor,
+    CommunicationIntent,
     CommunicationIntentAudit,
     CommunicationStrategy,
     SpeakerStance,
@@ -23,12 +24,15 @@ from memory.models import MemoryTrace
 from simulation.runner_models import SimulationRunnerResultDocument
 from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 from social.models import CommunicationEnvelope
+from world.actions import Ask, Talk, Tell
 from world.communications import (
     CommunicationSourceBasis,
     DeclaredTransmission,
     StructuredUtterance,
 )
-from world.observations import ObservedCommunication
+from world.effects import ActionCause
+from world.events import WorldEvent
+from world.observations import Observation, ObservedCommunication
 
 _FORBIDDEN = {
     "strategy",
@@ -72,16 +76,19 @@ def test_trace_projection_does_not_name_strategy_fields() -> None:
 async def test_disabled_finalize_and_abort_append_no_audit(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    from simulation.agent_runtime import PreparedObservation
     from tests.unit.test_agent_runtime import _runtime, _self, _token
 
     runtime, _memories, _beliefs = _runtime()
     runtime.start()
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     runtime.abort_pending(pending)
     assert runtime.export_communication_intent_audits() == ()
 
     prepared_again = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared_again, PreparedObservation)
     finalized = await runtime.bind_effective_command(prepared_again)
     with caplog.at_level(logging.DEBUG, logger="simulation.agent_runtime"):
         await runtime.finalize_pending(finalized)
@@ -152,7 +159,11 @@ def test_commit_keeps_strategy_and_stance_out_of_atom_text(
     assert "food" not in message
 
 
-def _pair(**overrides: object):
+def _pair(
+    **overrides: object,
+) -> tuple[
+    Talk | Ask | Tell | None, CommunicationIntent, CommunicationIntentAudit
+]:
     from agents.cognition.communication_strategy import apply_communication_strategy
     from world.identifiers import EntityId
 
@@ -172,13 +183,11 @@ def _pair(**overrides: object):
     return apply_communication_strategy(**payload)  # type: ignore[arg-type]
 
 
-def _seen_event():
+def _seen_event() -> WorldEvent:
     from world.events import (
         EVENT_SCHEMA_REPLAY_V5,
-        ActionCause,
         OccurrenceContext,
         Searched,
-        WorldEvent,
     )
     from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
@@ -280,10 +289,8 @@ def test_false_statement_does_not_move_trust_until_contradiction() -> None:
     from analysis.communication_strategy_metrics import (
         compute_communication_strategy_metrics,
     )
-    from memory.belief_formation import (
-        DEFAULT_BELIEF_FORMATION_POLICY,
-        CommunicatedEvidenceDecision,
-    )
+    from memory.belief_formation import DEFAULT_BELIEF_FORMATION_POLICY
+    from memory.beliefs import CommunicatedEvidenceDecision
     from social.relationships import RelationshipDimension
     from tests.unit.test_communication_strategy import (
         _LISTENER,
@@ -356,9 +363,9 @@ def test_false_statement_does_not_move_trust_until_contradiction() -> None:
     assert labeled.categories == ("deliberate_deception",)
 
 
-def _false_view():
+def _false_view() -> Observation:
     from world.identifiers import EntityId, WorldId, WorldRevision
-    from world.observations import Observation, ObservedLocation
+    from world.observations import ObservedLocation
 
     return Observation(
         world_id=WorldId("world-1"),
@@ -441,7 +448,7 @@ async def test_omission_planner_emits_wait_without_a_social_command() -> None:
         ),
     )
     assert type(plan.command) is Wait
-    assert plan.communication_intent is not None
+    assert isinstance(plan.communication_intent, CommunicationIntent)
     assert plan.communication_intent.delivered is False
     assert type(plan.command) not in {Talk, Ask, Tell}
 

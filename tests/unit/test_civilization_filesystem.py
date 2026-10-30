@@ -14,20 +14,25 @@ from persistence.civilization_filesystem import (
     create_civilization_publisher,
     create_civilization_reader,
 )
-from simulation.civilization_capture import CivilizationOwnerTrait
+from simulation.civilization_capture import (
+    CivilizationOwnerInventory,
+    CivilizationOwnerTrait,
+)
 from simulation.civilization_models import (
     CivilizationCursor,
     CivilizationError,
     CivilizationEvidenceClass,
     CivilizationLayer,
+    CivilizationMarker,
     CivilizationScope,
 )
 from simulation.civilization_ports import CivilizationReadBudget
+from simulation.civilization_rows import CivilizationSettlementRow
 
 pytestmark = pytest.mark.unit
 
 
-def _history():
+def _history() -> CivilizationCapturedHistory:
     from tests.unit.test_civilization_publication import (
         _RUN,
         _WORLD,
@@ -41,7 +46,7 @@ def _history():
 
 
 @pytest.mark.asyncio
-async def test_publish_seal_catalogue_and_exact_row_reads(tmp_path: Path):
+async def test_publish_seal_catalogue_and_exact_row_reads(tmp_path: Path) -> None:
     history = _history()
     first = compose_civilization_boundary(history, 0)
     second = compose_civilization_boundary(history, 1)
@@ -78,7 +83,9 @@ async def test_publish_seal_catalogue_and_exact_row_reads(tmp_path: Path):
         budget=CivilizationReadBudget(limit=100),
     )
     assert page.rows
-    assert all(row.history.scope == scope for row in page.rows)
+    for row in page.rows:
+        assert isinstance(row, CivilizationSettlementRow)
+        assert row.history.scope == scope
     markers = await reader.markers(
         cursor, publication=publication, budget=CivilizationReadBudget()
     )
@@ -172,7 +179,9 @@ async def test_long_row_keys_keep_distinct_bounded_index_ranges(tmp_path: Path) 
     assert rows == 450
 
 
-def _history_with_inventory(inventory: object) -> CivilizationCapturedHistory:
+def _history_with_inventory(
+    inventory: CivilizationOwnerInventory,
+) -> CivilizationCapturedHistory:
     from tests.unit.test_civilization_publication import (
         _RUN,
         _WORLD,
@@ -188,7 +197,7 @@ def _history_with_inventory(inventory: object) -> CivilizationCapturedHistory:
 
 
 @pytest.mark.asyncio
-async def test_corruption_tampering_and_unsafe_ids_fail_closed(tmp_path: Path):
+async def test_corruption_tampering_and_unsafe_ids_fail_closed(tmp_path: Path) -> None:
     history = _history()
     publication = compose_civilization_boundary(history, 0)
     publisher = create_civilization_publisher(tmp_path)
@@ -217,7 +226,7 @@ async def test_corruption_tampering_and_unsafe_ids_fail_closed(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_keyset_filter_empty_pages_and_read_budgets(tmp_path: Path):
+async def test_keyset_filter_empty_pages_and_read_budgets(tmp_path: Path) -> None:
     history = _history()
     publication = compose_civilization_boundary(history, 1)
     publisher = create_civilization_publisher(tmp_path)
@@ -247,7 +256,9 @@ async def test_keyset_filter_empty_pages_and_read_budgets(tmp_path: Path):
         entity_id=None,
         budget=CivilizationReadBudget(limit=10),
     )
-    assert all(row.context.row_id > first.next_cursor for row in second.rows)
+    for row in second.rows:
+        assert not isinstance(row, CivilizationMarker)
+        assert row.context.row_id > first.next_cursor
     empty = await reader.rows(
         cursor,
         scope,
@@ -262,7 +273,9 @@ async def test_keyset_filter_empty_pages_and_read_budgets(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_uncommitted_interrupted_publication_stays_invisible(tmp_path: Path):
+async def test_uncommitted_interrupted_publication_stays_invisible(
+    tmp_path: Path,
+) -> None:
     history = _history()
     publisher = create_civilization_publisher(tmp_path)
     await publisher.publish_boundary("pub-1", compose_civilization_boundary(history, 0))
@@ -337,7 +350,9 @@ async def test_v2_deep_row_read_skips_prior_shards_and_root_is_bounded(
     assert all(path.stat().st_size <= 65536 for path in index_objects)
 
 
-def _inventory_dense(traits: tuple[CivilizationOwnerTrait, ...]) -> object:
+def _inventory_dense(
+    traits: tuple[CivilizationOwnerTrait, ...],
+) -> CivilizationOwnerInventory:
     from tests.unit.test_civilization_publication import _inventory
 
     return _inventory("owner-dense", cultural=traits)
@@ -405,9 +420,15 @@ async def test_v1_fallback_reads_match_v2_layout(tmp_path: Path) -> None:
     assert [ref.cursor.boundary_tick for ref in v1_catalogue.boundaries] == [
         ref.cursor.boundary_tick for ref in v2_catalogue.boundaries
     ]
-    assert [row.context.row_id for row in v1_rows.rows] == [
-        row.context.row_id for row in v2_rows.rows
-    ]
+    v1_keys = []
+    for row in v1_rows.rows:
+        assert not isinstance(row, CivilizationMarker)
+        v1_keys.append(row.context.row_id)
+    v2_keys = []
+    for row in v2_rows.rows:
+        assert not isinstance(row, CivilizationMarker)
+        v2_keys.append(row.context.row_id)
+    assert v1_keys == v2_keys
 
 
 @pytest.mark.asyncio

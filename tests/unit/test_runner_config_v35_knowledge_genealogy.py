@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -14,6 +15,9 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V35,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    DurableRecordsSpec,
+    KnowledgeRepositoriesSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -32,7 +36,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -64,7 +68,12 @@ def _plain_base():
     )
 
 
-def _genealogy_config(**extra):
+class _ConfigOverrides(TypedDict, total=False):
+    durable_records: DurableRecordsSpec
+    knowledge_repositories: KnowledgeRepositoriesSpec
+
+
+def _genealogy_config(**extra: Unpack[_ConfigOverrides]) -> SimulationRunnerConfig:
     base = _plain_base()
     return replace(
         base,

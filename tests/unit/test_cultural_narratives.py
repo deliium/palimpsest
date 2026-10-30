@@ -695,3 +695,47 @@ def test_semantic_uplift_gates() -> None:
         mode=CognitionCulturalNarrativeMode.DISABLED,
     )
     assert disabled == ()
+
+def test_same_lineage_identity_collision_merges_measured_evidence() -> None:
+    from agents.cognition.cultural_narratives import _merge_frozen_collision
+
+    owner = AgentId("agent-collision")
+    content = NarrativeContent(concepts=("founding",))
+    other_content = NarrativeContent(concepts=("founding", "loss"))
+    fingerprint = narrative_content_fingerprint(content)
+    other_fingerprint = narrative_content_fingerprint(other_content)
+    variant_id = narrative_variant_id(owner, fingerprint, 0, "")
+    first = NarrativeVariant(
+        variant_id=variant_id,
+        owner_id=owner,
+        content=content,
+        content_fingerprint=fingerprint,
+        origin=NarrativeOrigin.OBSERVED_EVENT,
+        status=NarrativeStatus.CANDIDATE,
+        strength=0.4,
+        repetition_count=1,
+        first_tick=3,
+        last_tick=4,
+        location_ids=("loc-origin",),
+    )
+    second = NarrativeVariant(
+        variant_id=variant_id,
+        owner_id=owner,
+        content=other_content,
+        content_fingerprint=other_fingerprint,
+        origin=NarrativeOrigin.OBSERVED_EVENT,
+        status=NarrativeStatus.ACTIVE,
+        strength=0.7,
+        repetition_count=2,
+        first_tick=2,
+        last_tick=9,
+        location_ids=("loc-spring",),
+    )
+    merged = _merge_frozen_collision(first, second)
+    assert merged.variant_id == variant_id
+    assert merged.status is NarrativeStatus.ACTIVE
+    assert merged.strength == 0.7
+    assert merged.repetition_count == 2
+    assert merged.first_tick == 2
+    assert merged.last_tick == 9
+    assert merged.location_ids == ("loc-origin", "loc-spring")

@@ -7,6 +7,7 @@ from analysis.cultural_evolution_evidence import (
     ArchiveKnowledgeState,
     CulturalAnalysisWindow,
     CulturalEvolutionInputs,
+    CulturalMeasurement,
     InventoryBoundary,
     TraitPresence,
 )
@@ -89,7 +90,7 @@ def _archive(
 
 
 def _inputs(
-    boundaries,
+    boundaries: tuple[InventoryBoundary, ...],
     *,
     baseline: int = 0,
     end: int | None = 1,
@@ -104,7 +105,9 @@ def _inputs(
     )
 
 
-def _row(rows, measurement_id):
+def _row(
+    rows: tuple[CulturalMeasurement, ...], measurement_id: str
+) -> CulturalMeasurement:
     matches = [row for row in rows if row.measurement_id == measurement_id]
     assert len(matches) == 1, (measurement_id, matches)
     return matches[0]

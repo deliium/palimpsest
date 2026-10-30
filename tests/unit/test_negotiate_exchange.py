@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import get_args
 
 import pytest
@@ -10,6 +11,7 @@ from simulation.serialization import decode_domain, encode_domain
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
 from world._operations import (
     OperationAccepted,
+    PendingBatch,
     prepare_action_batch,
     validate_action_request,
 )
@@ -24,6 +26,7 @@ from world.actions import (
 )
 from world.events import ExchangeCompleted, ExchangeProposed
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
+from world.models import Item
 from world.subjective_value import SubjectiveValuationRuleContext
 from world.values import ItemKind
 
@@ -41,7 +44,7 @@ def _world(
     alice_capacity: int = 10,
     foods: int = 4,
     extra_body: bool = False,
-):
+) -> tuple[WorldState, Item, tuple[Item, ...], Item | None]:
     tool = make_item(
         "tool-1", name="Axe", kind=ItemKind.TOOL, location_id=None, holder_id="body-a"
     )
@@ -83,7 +86,7 @@ def _world(
     return state, tool, food, cara_food
 
 
-def _request(command, *, actor: str, request_id: str) -> ActionRequest:
+def _request(command: AgentCommand, *, actor: str, request_id: str) -> ActionRequest:
     return ActionRequest(
         request_id=RequestId(request_id),
         proposal_id=ProposalId(f"p-{request_id}"),
@@ -94,7 +97,9 @@ def _request(command, *, actor: str, request_id: str) -> ActionRequest:
     )
 
 
-def _offer(tool: EntityId, food: tuple[EntityId, ...], *, actor: str = "body-a"):
+def _offer(
+    tool: EntityId, food: tuple[EntityId, ...], *, actor: str = "body-a"
+) -> NegotiateExchange:
     return NegotiateExchange(
         EntityId("body-b" if actor == "body-a" else "body-a"),
         "offer",
@@ -103,7 +108,10 @@ def _offer(tool: EntityId, food: tuple[EntityId, ...], *, actor: str = "body-a")
     )
 
 
-def _run(state, requests, *, tick: int = 1, context=None):
+def _run(
+    state: WorldState, requests: Sequence[ActionRequest], *, tick: int = 1,
+    context: SubjectiveValuationRuleContext | None = None,
+) -> PendingBatch:
     return prepare_action_batch(
         world_id=_WORLD,
         starting_state=state,

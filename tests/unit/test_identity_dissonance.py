@@ -13,6 +13,7 @@ from agents.cognition.identity import (
     IDENTITY_POLICY_ID,
     IDENTITY_POLICY_VERSION,
     IdentityAspect,
+    IdentityBeliefView,
     IdentityConflictCode,
     IdentityProvenanceKind,
     IdentityRevisionPoint,
@@ -56,8 +57,10 @@ from memory.beliefs import (
     BeliefValueKind,
     ClaimValue,
     EvidenceStance,
+    SemanticBeliefHistory,
+    SemanticClaim,
 )
-from memory.models import MemoryId, MemoryRunId, MemoryScope
+from memory.models import MemoryId, MemoryRunId, MemoryScope, MemoryTrace
 from tests.typecheck.cognitive_loop import (
     ScriptedFutureImagination,
     ScriptedIntentionSelector,
@@ -74,7 +77,7 @@ from world.actions import Move, Wait
 from world.identifiers import EntityId
 
 
-def _claim(owner: AgentId, aspect: IdentityAspect, token: str):
+def _claim(owner: AgentId, aspect: IdentityAspect, token: str) -> SemanticClaim:
     return build_identity_claim(
         owner,
         identity_predicate(aspect, IdentityProvenanceKind.GOAL_OUTCOME, token),
@@ -91,7 +94,7 @@ def _view(
     confidence: float = 0.8,
     support: tuple[str, ...] = ("mem-move",),
     contradict: tuple[str, ...] = (),
-):
+) -> IdentityBeliefView:
     claim = build_identity_claim(
         owner,
         identity_predicate(aspect, provenance, token),
@@ -119,7 +122,7 @@ def _view(
     )
 
 
-def _identity(owner: AgentId, *views) -> IdentityState:
+def _identity(owner: AgentId, *views: IdentityBeliefView) -> IdentityState:
     return IdentityState(
         owner_id=owner,
         policy_id=IDENTITY_POLICY_ID,
@@ -141,7 +144,7 @@ def _goal(owner: AgentId) -> Goal:
     )
 
 
-def _memory_trace(owner: AgentId):
+def _memory_trace(owner: AgentId) -> MemoryTrace:
     return _memory(owner)
 
 
@@ -329,7 +332,7 @@ async def test_contradiction_lowers_stability() -> None:
     claim = _claim(owner, IdentityAspect.COMMITMENT, "goal-reach")
     scope = MemoryScope(run_id=MemoryRunId("run-dissonance"), owner_id=owner)
 
-    async def history(*, contradict: bool):
+    async def history(*, contradict: bool) -> SemanticBeliefHistory | None:
         service = InMemorySemanticBeliefService(scope)
         belief_id = belief_id_for_claim(owner_id=owner, claim=claim)
         first = BeliefRevisionRequest(
@@ -359,6 +362,8 @@ async def test_contradiction_lowers_stability() -> None:
 
     calm_history = await history(contradict=False)
     clash_history = await history(contradict=True)
+    assert calm_history is not None
+    assert clash_history is not None
     calm = project_identity_state(owner_id=owner, histories=(calm_history,))
     clash = project_identity_state(owner_id=owner, histories=(clash_history,))
     assert clash.views[0].derived_stability < calm.views[0].derived_stability

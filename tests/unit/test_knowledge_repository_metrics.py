@@ -34,7 +34,9 @@ def test_survival_empty_is_absent() -> None:
         f"{document.metric_family}@{document.algorithm_version}"
         == KNOWLEDGE_REPOSITORY_SURVIVAL_METRIC_VERSION
     )
-    assert document.values["censoring_policy"].startswith("analysis-only")
+    policy = document.values["censoring_policy"]
+    assert isinstance(policy, str)
+    assert policy.startswith("analysis-only")
 
 
 def test_survival_founder_death_and_status_counts(

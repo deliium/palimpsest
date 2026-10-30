@@ -24,9 +24,9 @@ from analysis.theory_of_mind_metrics import (
 from experiments.catalog import experiment_l_theory_of_mind
 from tests.unit.test_simulation_runner_e2e import _config
 from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS
+from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
-    ActionCause,
     OccurrenceContext,
     Waited,
     WorldEvent,

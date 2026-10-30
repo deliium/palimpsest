@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from typing import cast
 
 import pytest
 
@@ -36,7 +38,9 @@ def _owner(value: str = "north_a") -> AgentId:
     return AgentId(value)
 
 
-def _snapshot(owner: AgentId, *, ledger: object | None = None, tick: int = 2):
+def _snapshot(
+    owner: AgentId, *, ledger: object | None = None, tick: int = 2
+) -> CognitiveLoopInput:
     snapshot = SubjectiveSnapshot(
         owner_id=owner,
         revision=0,
@@ -78,17 +82,10 @@ def _runtime(loop: object, owner: str = "agent-1") -> AgentRuntime:
 def test_runtime_slot_defaults_absent_and_owner_check_is_closed() -> None:
     assert "_cultural_narratives" in AgentRuntime.__slots__
     owner = AgentId("ada")
-    assert (
-        require_owner_cultural_narratives(None, owner, field_name="cultural_narratives")
-        is None
-    )
+    check_narratives = cast(Callable[..., object], require_owner_cultural_narratives)
+    assert check_narratives(None, owner, field_name="cultural_narratives") is None
     ledger = empty_narrative_ledger(owner)
-    assert (
-        require_owner_cultural_narratives(
-            ledger, owner, field_name="cultural_narratives"
-        )
-        is None
-    )
+    assert check_narratives(ledger, owner, field_name="cultural_narratives") is None
     with pytest.raises(ValueError, match="owner_id mismatch"):
         require_owner_cultural_narratives(
             ledger, AgentId("ben"), field_name="cultural_narratives"

@@ -6,17 +6,23 @@ from dataclasses import replace
 
 import pytest
 
+from agents.cognition.collective_decisions import CollectiveDecisionLedger
+from agents.models import AgentId
 from experiments.institutionalization_scenario import institutionalization_scenario
 from simulation.models import RunId
+from simulation.run_control import RunnerRuntimeCheckpoint
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V51,
     CollectiveDecisionMode,
     InstitutionConceptMode,
+    SimulationRunnerConfig,
 )
 
 
-def _config(max_ticks: int = 6, *, enabled: bool = True):
+def _config(
+    max_ticks: int = 6, *, enabled: bool = True
+) -> SimulationRunnerConfig:
     definition = institutionalization_scenario(seed=23, max_ticks=max_ticks)
     base = next(
         condition.runner_config
@@ -131,9 +137,10 @@ async def test_disabled_owners_export_nothing() -> None:
         assert runner.export_collective_decision_ledgers() == ()
 
 
-def _synthetic_ledger(owner, *, window_last: int = 1):
+def _synthetic_ledger(
+    owner: AgentId, *, window_last: int = 1
+) -> CollectiveDecisionLedger:
     from agents.cognition.collective_decisions import (
-        CollectiveDecisionLedger,
         CollectiveEvidence,
         CollectiveEvidenceChannel,
         CollectiveProposal,
@@ -192,7 +199,7 @@ def test_foreign_collective_owner_in_checkpoint_rejects() -> None:
 
     config = _config()
 
-    async def capture():
+    async def capture() -> RunnerRuntimeCheckpoint:
         async with await SimulationRunner.from_config(
             config, run_id=RunId("run-decisions-foreign")
         ) as runner:
@@ -215,7 +222,7 @@ def test_duplicate_runtime_owner_in_checkpoint_rejects() -> None:
 
     config = _config()
 
-    async def capture():
+    async def capture() -> RunnerRuntimeCheckpoint:
         async with await SimulationRunner.from_config(
             config, run_id=RunId("run-decisions-duplicate")
         ) as runner:
@@ -229,7 +236,7 @@ def test_duplicate_runtime_owner_in_checkpoint_rejects() -> None:
     states[-1] = states[0]
     bad = dataclass_replace(checkpoint, runtime_states=tuple(states))
 
-    async def restore():
+    async def restore() -> None:
         async with await SimulationRunner.from_config(
             config, run_id=RunId("run-decisions-duplicate")
         ) as runner:
@@ -244,7 +251,7 @@ def test_duplicate_runtime_owner_in_checkpoint_rejects() -> None:
 def test_reapplying_checkpoint_is_idempotent() -> None:
     config = _config()
 
-    async def run():
+    async def run() -> tuple[tuple[object, ...], tuple[object, ...]]:
         async with await SimulationRunner.from_config(
             config, run_id=RunId("run-decisions-retry")
         ) as runner:
@@ -267,7 +274,7 @@ def test_expiry_survives_restore() -> None:
 
     config = _config(max_ticks=4)
 
-    async def run():
+    async def run() -> tuple[object, ...]:
         async with await SimulationRunner.from_config(
             config, run_id=RunId("run-decisions-expiry")
         ) as runner:
@@ -292,6 +299,7 @@ def test_expiry_survives_restore() -> None:
     import asyncio
 
     ledgers = asyncio.run(run())
+    assert isinstance(ledgers[0], CollectiveDecisionLedger)
     assert ledgers[0].proposals[0].status.value == "expired"
 
 
@@ -302,7 +310,7 @@ def test_terminal_actor_checkpoint_keeps_ledger_without_confirmation() -> None:
 
     config = _config(max_ticks=4)
 
-    async def run():
+    async def run() -> tuple[object, ...]:
         async with await SimulationRunner.from_config(
             config, run_id=RunId("run-decisions-terminal")
         ) as runner:
@@ -327,7 +335,9 @@ def test_terminal_actor_checkpoint_keeps_ledger_without_confirmation() -> None:
 
     ledgers = asyncio.run(run())
     terminal_ledger = next(
-        ledger for ledger in ledgers if ledger.owner_id.value == "agent-a"
+        ledger for ledger in ledgers
+        if isinstance(ledger, CollectiveDecisionLedger)
+        and ledger.owner_id.value == "agent-a"
     )
     assert len(terminal_ledger.proposals) == 1
     assert terminal_ledger.compliance == ()

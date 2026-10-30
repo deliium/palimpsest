@@ -39,7 +39,7 @@ def test_create_memory_service_rejects_invalid_max_candidates() -> None:
             scope=scope,
             session_factory=object(),  # type: ignore[arg-type]
             scoring_policy=policy,
-            max_candidates=True,  # type: ignore[arg-type]
+            max_candidates=True,
         )
     with pytest.raises(PersistenceAdapterError):
         create_sqlalchemy_memory_service(

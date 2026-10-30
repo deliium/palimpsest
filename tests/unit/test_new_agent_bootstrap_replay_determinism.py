@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import replace
 
 import pytest
@@ -17,19 +18,25 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     MortalityMode,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
-from world.events import AgentCreated, AgentEnteredWorld, AgentInitializationRecorded
+from world.events import (
+    AgentCreated,
+    AgentEnteredWorld,
+    AgentInitializationRecorded,
+    WorldEvent,
+)
 from world.identifiers import WorldId, WorldRevision
 from world.models import non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.new_agent_bootstrap_replay_determinism")
 
 
-def _v25_config(*, seed: int, max_ticks: int = 8):
+def _v25_config(*, seed: int, max_ticks: int = 8) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return replace(
@@ -65,8 +72,10 @@ def _v25_config(*, seed: int, max_ticks: int = 8):
     )
 
 
-def _creation_fingerprint(events) -> tuple[tuple, ...]:
-    rows: list[tuple] = []
+def _creation_fingerprint(
+    events: Sequence[WorldEvent],
+) -> tuple[tuple[object, ...], ...]:
+    rows: list[tuple[object, ...]] = []
     for event in events:
         details = event.details
         if type(details) is AgentCreated:
@@ -90,7 +99,7 @@ def _creation_fingerprint(events) -> tuple[tuple, ...]:
 async def test_same_seed_twins_match_creation_provenance() -> None:
     _LOG.info("case_id=nai_twin_seed_identity")
     config = _v25_config(seed=91, max_ticks=8)
-    fingerprints: list[tuple] = []
+    fingerprints: list[tuple[tuple[object, ...], ...]] = []
     for ordinal in range(2):
         async with await SimulationRunner.from_config(
             config, run_id=RunId(f"run-nai-twin-{ordinal}")

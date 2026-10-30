@@ -73,7 +73,7 @@ def test_command_json_round_trip() -> None:
         encoded = _encode_command(command)
         decoded = _decode_command(tag, encoded, path="$")
         assert type(decoded) is type(command)
-        assert agent_command_tag(decoded) == tag  # type: ignore[arg-type]
+        assert agent_command_tag(decoded) == tag
 
 
 def test_legacy_inscribe_without_genre_still_decodes() -> None:

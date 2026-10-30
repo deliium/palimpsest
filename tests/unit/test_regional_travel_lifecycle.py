@@ -5,7 +5,7 @@ from __future__ import annotations
 from agents.models import AgentId
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from simulation.models import SimulationRunConfig
 from tests.physical_helpers import dead_body
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -71,7 +71,7 @@ def _engine(*, destination_capacity: int, blocker: bool) -> WorldEngine:
     )
 
 
-def _move(engine: WorldEngine) -> object:
+def _move(engine: WorldEngine) -> TickResult | None:
     batch = engine.observe()
     return engine.resolve_tick(
         (
@@ -341,7 +341,9 @@ def test_full_capacity_swap_routes_wait_without_reserving_or_overfilling() -> No
         cognition_mode=CognitionMode.DISABLED,
     )
 
-    def journey(journey_id: str, body_id: str, origin: str, destination: str):
+    def journey(
+        journey_id: str, body_id: str, origin: str, destination: str
+    ) -> Journey:
         return Journey(
             journey_id=journey_id,
             participant_body_ids=(EntityId(body_id),),
@@ -377,7 +379,9 @@ def test_full_capacity_swap_routes_wait_without_reserving_or_overfilling() -> No
     assert waiting.bodies[EntityId("body-b")].location_id == EntityId("loc-b")
     ended, endings = advance_due_journeys(waiting, tick=2)
     assert [row.journey_id for row in endings] == ["journey-a", "journey-b"]
-    assert all(row.reason == "arrival_timeout" for row in endings)
+    for row in endings:
+        assert isinstance(row, JourneyEnded)
+        assert row.reason == "arrival_timeout"
     assert ended.journeys == {}
 
 

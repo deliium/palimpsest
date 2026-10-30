@@ -20,6 +20,7 @@ import logging
 import os
 import time
 import tracemalloc
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
@@ -91,7 +92,7 @@ def _frames(count: int) -> tuple[CulturalBoundaryExport, ...]:
     return tuple(frames)
 
 
-def _traced(action):
+def _traced[T](action: Callable[[], T]) -> tuple[T, int, float]:
     tracemalloc.start()
     try:
         started = time.perf_counter()

@@ -509,3 +509,31 @@ event, observer semantic, metric family, runner/result schema, replay/codec
 marker, SQL migration, capability ownership or `/v2` route is added. The
 verified scale envelope stops at 10k for measured lanes; 100k attempts remain
 incomplete and real-browser playback is unverified.
+
+### V3-44 generational civilization benchmark seam
+
+`experiments.civilization_benchmark_*` owns the immutable thirty-case registry,
+domain fixtures, evidence checks and the thin seed-block comparison composer.
+`research_runner.civilization_benchmark_{cli,composition}` owns the bounded CLI,
+domain builder/arbiter dispatch, supervised execution, isolated artifact roots
+and immutable publication. Simulation still imports none of these modules and
+the benchmark never grants world authority, installs a global culture/technology/
+office registry or feeds research comparisons into cognition, prompts or stop
+selectors.
+
+Artifacts are sibling `civilization-benchmark-run-v1`/`suite-v1` documents with
+canonical hashes; they do not alter runner/result/archive schemas. The controlled
+mechanism lane may schedule normally admitted commands and must pass its declared
+checks. The unassisted research lane records legal nulls as explicit
+`unexecuted` checks with complete/partial evidence; a strict suite verification
+therefore fails for an honest null, while integrity verification succeeds.
+Founder-roster effects stay founder-scoped, initializer differences are composite
+treatments with every changed mode declared, and grouped forks delegate to the
+existing path-dependence estimator.
+
+V3-44 adds no capability flag, runner schema, command, event, observer semantic,
+metric family, write-pair, API route, SQL migration or `/v2` route. Pins remain
+runner v4/result v2, latest feature runner v55, 43 commands, 73 observer semantic
+types, 136 metric families, replay-v22/codec v20 when selected, Alembic `0017`,
+`/v1` and `observer-protocol-v1`. `institutional_economy` and
+`multi_hop_testimony_tracking` remain unowned.

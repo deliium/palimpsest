@@ -135,9 +135,11 @@ def test_codec_v16_round_trip_and_owner_guard() -> None:
     )
     payload = acceptance_memories_checkpoint_payload({owner.value: ledger}, codec="v16")
     restored = decode_acceptance_memories_checkpoint(payload, codec="v16")
-    assert received_count_for(restored[owner.value], ItemKind.GENERIC) == 1
+    restored_ledger = restored[owner.value]
+    assert isinstance(restored_ledger, AcceptanceMemoryLedger)
+    assert received_count_for(restored_ledger, ItemKind.GENERIC) == 1
     require_owner_acceptance_memories(
-        restored[owner.value], owner, field_name="acceptance_memories"
+        restored_ledger, owner, field_name="acceptance_memories"
     )
     with pytest.raises(ValueError, match="owner_id mismatch"):
         require_owner_acceptance_memories(

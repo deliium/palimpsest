@@ -19,8 +19,6 @@ from simulation.journal import (
 )
 from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
 from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V18,
-    EVENT_SCHEMA_REPLAY_V19,
     PROJECTOR_VERSION,
     PayloadHash,
     SnapshotId,
@@ -38,14 +36,18 @@ from world.collective_projects import (
 )
 from world.effects import ActionCause
 from world.events import (
-    EVENT_SCHEMA_REPLAY_V19 as WORLD_SCHEMA_19,
-)
-from world.events import (
+    EVENT_SCHEMA_REPLAY_V18,
+    EVENT_SCHEMA_REPLAY_V19,
+    EventDetails,
     OccurrenceContext,
     ProjectCompleted,
     ProjectContributed,
     ProjectCreated,
+    WorldEvent,
     make_physical_replayable_event,
+)
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V19 as WORLD_SCHEMA_19,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 from world.models import non_lethal_physical_rules
@@ -103,7 +105,7 @@ def _snapshot(
     *,
     codec: str,
     schema: int,
-    projects: tuple[object, ...] = (),
+    projects: tuple[CollectiveProject, ...] = (),
     structures: tuple[Structure, ...] = (),
 ) -> WorldSnapshot:
     state = engine._snapshot.world.state
@@ -222,6 +224,7 @@ def test_v17_round_trips_a_project(caplog: pytest.LogCaptureFixture) -> None:
     encoded = encode_persistence(snap)
     assert "collective_projects encoded project_count=1" in caplog.text
     decoded = decode_persistence(encoded, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.persistence_codec_version == "v17"
     assert len(decoded.collective_projects) == 1
     assert decoded.collective_projects[0].project_id == EntityId("project-1")
@@ -241,7 +244,9 @@ def test_v16_payload_with_project_key_warns(
     assert "project_count=0" in caplog.text
 
 
-def _event(details, *, event_id: str, sequence: int, actor: EntityId):
+def _event(
+    details: EventDetails, *, event_id: str, sequence: int, actor: EntityId
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(event_id),
         run_id=_RUN,

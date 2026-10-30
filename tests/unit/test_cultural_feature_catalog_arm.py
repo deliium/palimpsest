@@ -14,6 +14,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V31,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -23,7 +24,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.cultural_feature_catalog_arm")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -80,4 +81,5 @@ def test_al_profile_and_arms() -> None:
     mutation = next(
         item for item in definition.conditions if item.condition_id == "al-mutation"
     ).runner_config
+    assert mutation.cultural_feature_provenance is not None
     assert mutation.cultural_feature_provenance.mutation_policy.allow_mutation is True

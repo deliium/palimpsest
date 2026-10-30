@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -15,7 +16,12 @@ from analysis.skill_learning_metrics import (
 from experiments.catalog import experiment_r_skill_learning
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
-from simulation.runner_models import SkillAudit, SkillAuditSide
+from simulation.runner_models import (
+    SimulationRunnerConfig,
+    SimulationRunnerResult,
+    SkillAudit,
+    SkillAuditSide,
+)
 from tests.unit.test_v2_flag_defaults import _base
 from world.events import Searched
 
@@ -147,14 +153,16 @@ async def test_two_deterministic_runs_match_and_belief_lags_one_tick() -> None:
         assert belief_foraging == belief_foraging_after
 
 
-def _audit_key(result: object) -> tuple[object, ...]:
+def _audit_key(result: SimulationRunnerResult) -> tuple[object, ...]:
+    audits = cast(tuple[SkillAudit, ...], result.skill_audits)
     return tuple(
-        (row.agent_id.value, row.side.value, row.domain, row.level)
-        for row in result.skill_audits
+        (row.agent_id.value, row.side.value, row.domain, row.level) for row in audits
     )
 
 
-async def _run(config: object, run_id: str):
+async def _run(
+    config: SimulationRunnerConfig, run_id: str
+) -> tuple[SimulationRunnerResult, tuple[bool, ...]]:
     async with await SimulationRunner.from_config(
         config, run_id=RunId(run_id)
     ) as runner:

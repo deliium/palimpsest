@@ -7,13 +7,18 @@ bounded journal-recovery proof remain separate Task4 acceptance work.
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, asdict, replace
+from typing import Any, Never
 
 import pytest
 
 from experiments.civilization_capture import CivilizationEvidenceRecorder
+from simulation.civilization_boundaries import CivilizationBoundaryInput
 from simulation.civilization_capture import (
     CivilizationCaptureOptions,
+    CivilizationEventBatch,
     CivilizationEventKind,
+    CivilizationOwnerConceptEvidence,
+    CivilizationOwnerInventory,
     CivilizationReceiptItem,
     civilization_event_bytes,
     civilization_event_receipt,
@@ -25,12 +30,17 @@ from simulation.civilization_models import (
     CivilizationError,
     CivilizationWindow,
 )
+from simulation.clock import Tick
+from simulation.lineage_ports import LineageBoundaryFrame
+from simulation.models import RunId
+from simulation.runner_models import SimulationRunnerConfig
 from world.artifacts import ArtifactKind
 from world.communications import origin_utterance
 from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     ArtifactCreated,
+    EventDetails,
     ExchangeCompleted,
     ExchangeProposed,
     Given,
@@ -45,6 +55,7 @@ from world.events import (
     RepositoryMemberDeposited,
     Talked,
     Waited,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
@@ -54,7 +65,13 @@ from world.values import ItemKind
 pytestmark = pytest.mark.unit
 
 
-def _event(detail, *, tick=0, sequence=0, occurrence=None):
+def _event(
+    detail: EventDetails,
+    *,
+    tick: int = 0,
+    sequence: int = 0,
+    occurrence: OccurrenceContext | None = None,
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(f"event-{tick}-{sequence}"),
         run_id="run-capture",
@@ -70,7 +87,7 @@ def _event(detail, *, tick=0, sequence=0, occurrence=None):
     )
 
 
-def _exchange():
+def _exchange() -> ExchangeCompleted:
     return ExchangeCompleted(
         EntityId("body-a"),
         EntityId("body-b"),
@@ -82,7 +99,7 @@ def _exchange():
     )
 
 
-def _batch(*, tick=0):
+def _batch(*, tick: int = 0) -> CivilizationEventBatch:
     return project_civilization_events(
         "run-capture",
         tick,
@@ -92,9 +109,11 @@ def _batch(*, tick=0):
     )
 
 
-def test_completed_exchange_has_exact_item_kinds_directions_and_event_time_endpoint():
+def test_completed_exchange_has_exact_item_kinds_directions_and_event_time_endpoint(
+) -> None:
     event = _event(_exchange())
     receipt = civilization_event_receipt(event)
+    assert receipt is not None
     assert receipt.kind is CivilizationEventKind.EXCHANGE_COMPLETED
     assert receipt.participant_ids == ("body-a", "body-b")
     assert receipt.items == (
@@ -105,12 +124,13 @@ def test_completed_exchange_has_exact_item_kinds_directions_and_event_time_endpo
     unplaced = civilization_event_receipt(
         replace(event, occurrence=OccurrenceContext())
     )
+    assert unplaced is not None
     assert unplaced.origin_location_id is None
     assert unplaced.destination_location_id is None
     assert receipt.outcome == "completed"
 
 
-def test_proposals_and_gifts_are_not_counted_as_trade():
+def test_proposals_and_gifts_are_not_counted_as_trade() -> None:
     proposal = ExchangeProposed(
         EntityId("body-a"),
         EntityId("body-b"),
@@ -137,7 +157,7 @@ def test_proposals_and_gifts_are_not_counted_as_trade():
     assert batch.receipts[0].items[0].direction == "transfer"
 
 
-def test_known_empty_and_irrelevant_sources_differ_from_unavailable_recovery():
+def test_known_empty_and_irrelevant_sources_differ_from_unavailable_recovery() -> None:
     empty = project_civilization_events(
         "run-capture", 0, (), expected_count=0, source="journal"
     )
@@ -168,8 +188,8 @@ def test_known_empty_and_irrelevant_sources_differ_from_unavailable_recovery():
     ],
 )
 def test_source_count_order_identity_or_tick_conflict_is_an_explicit_gap(
-    events, expected
-):
+    events: tuple[WorldEvent, ...], expected: int
+) -> None:
     batch = project_civilization_events(
         "run-capture", 0, events, expected_count=expected, source="journal"
     )
@@ -179,7 +199,9 @@ def test_source_count_order_identity_or_tick_conflict_is_an_explicit_gap(
     assert not batch.receipts
 
 
-def test_private_speech_is_discarded_without_payload_fingerprints_or_log_leaks(caplog):
+def test_private_speech_is_discarded_without_payload_fingerprints_or_log_leaks(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     speech = Talked(
         EntityId("body-b"),
         origin_utterance(text="CANARY_PRIVATE_SPEECH", speaker_id=EntityId("body-a")),
@@ -240,15 +262,18 @@ def test_private_speech_is_discarded_without_payload_fingerprints_or_log_leaks(c
         ),
     ],
 )
-def test_facility_receipts_copy_only_typed_physical_metadata(detail, expected_kind):
+def test_facility_receipts_copy_only_typed_physical_metadata(
+    detail: EventDetails, expected_kind: CivilizationEventKind
+) -> None:
     receipt = civilization_event_receipt(_event(detail))
+    assert receipt is not None
     assert receipt.kind is expected_kind
     assert not {"marks", "content", "labels", "index_entries", "ledger"} & set(
         asdict(receipt)
     )
 
 
-def test_journey_start_arrival_and_end_keep_their_distinct_outcomes():
+def test_journey_start_arrival_and_end_keep_their_distinct_outcomes() -> None:
     journey = Journey(
         "journey",
         (EntityId("body-a"),),
@@ -286,6 +311,9 @@ def test_journey_start_arrival_and_end_keep_their_distinct_outcomes():
             )
         )
     )
+    assert start is not None
+    assert arrived is not None
+    assert ended is not None
     assert start.origin_region_id == "r1" and start.destination_region_id == "r2"
     assert start.outcome is None
     assert arrived.outcome == "arrived"
@@ -293,30 +321,36 @@ def test_journey_start_arrival_and_end_keep_their_distinct_outcomes():
     assert start.journey_id == arrived.journey_id == ended.journey_id == "journey"
 
 
-def test_constructor_detaches_sequences_and_rejects_mutable_payloads_or_future_types():
+def test_constructor_detaches_sequences_and_rejects_mutable_payloads_or_future_types(
+) -> None:
     receipt = _batch().receipts[0]
     participants = ["a", "b"]
-    copied = replace(receipt, participant_ids=participants)
+    # Mutable caller input must be detached by the frozen contract.
+    copied = replace(receipt, participant_ids=participants)  # type: ignore[arg-type]
     participants.append("later")
     assert copied.participant_ids == ("a", "b")
     with pytest.raises(FrozenInstanceError):
-        copied.tick = 2
+        copied.tick = 2  # type: ignore[misc]  # Exercise frozen-field enforcement.
     with pytest.raises(CivilizationError):
         replace(receipt, tick=True)
     with pytest.raises(CivilizationError):
-        replace(receipt, items=({"payload": "secret"},))
+        # Deliberately malformed nested receipt input must be rejected.
+        replace(receipt, items=({"payload": "secret"},))  # type: ignore[arg-type]
     with pytest.raises(CivilizationError):
         replace(receipt, participant_ids=("same", "same"))
     with pytest.raises(CivilizationError):
-        replace(receipt, kind="exchange_completed")
+        # The boundary rejects strings in place of the closed enum.
+        replace(receipt, kind="exchange_completed")  # type: ignore[arg-type]
     with pytest.raises(CivilizationError):
         replace(receipt, outcome="arrived")
 
 
-def test_capture_defaults_off_and_disabled_does_not_build_or_retain(monkeypatch):
+def test_capture_defaults_off_and_disabled_does_not_build_or_retain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from experiments import civilization_capture as module
 
-    def forbidden(_batch):
+    def forbidden(_batch: CivilizationEventBatch) -> Never:
         raise AssertionError("disabled recorder encoded evidence")
 
     monkeypatch.setattr(module, "civilization_event_bytes", forbidden)
@@ -326,7 +360,7 @@ def test_capture_defaults_off_and_disabled_does_not_build_or_retain(monkeypatch)
     assert not recorder.event_batches
 
 
-def test_cadence_three_does_not_skip_event_source_coverage():
+def test_cadence_three_does_not_skip_event_source_coverage() -> None:
     recorder = CivilizationEvidenceRecorder(
         CivilizationCaptureOptions(enabled=True, cadence=3)
     )
@@ -336,7 +370,8 @@ def test_cadence_three_does_not_skip_event_source_coverage():
     assert recorder.covered_event_intervals == (CivilizationWindow(0, 4),)
 
 
-def test_event_gaps_and_missing_prefix_are_not_repaired_by_later_complete_batches():
+def test_event_gaps_and_missing_prefix_are_not_repaired_by_later_complete_batches(
+) -> None:
     recorder = CivilizationEvidenceRecorder(CivilizationCaptureOptions(enabled=True))
     recorder.capture_events(_batch(tick=3))
     recorder.capture_events(unavailable_civilization_events("run-capture", 4))
@@ -349,7 +384,8 @@ def test_event_gaps_and_missing_prefix_are_not_repaired_by_later_complete_batche
     assert not recorder.status.failed
 
 
-def test_identical_batch_is_idempotent_and_conflicting_duplicate_latches_failure():
+def test_identical_batch_is_idempotent_and_conflicting_duplicate_latches_failure(
+) -> None:
     recorder = CivilizationEvidenceRecorder(CivilizationCaptureOptions(enabled=True))
     batch = _batch()
     recorder.capture_events(batch)
@@ -364,7 +400,9 @@ def test_identical_batch_is_idempotent_and_conflicting_duplicate_latches_failure
 
 
 @pytest.mark.parametrize("dimension", ["rows", "bytes"])
-def test_quota_failure_is_atomic_and_includes_nested_items_and_batch_headers(dimension):
+def test_quota_failure_is_atomic_and_includes_nested_items_and_batch_headers(
+    dimension: str,
+) -> None:
     batch = _batch()
     limits = (
         {"max_rows": 4}
@@ -389,11 +427,11 @@ def test_quota_failure_is_atomic_and_includes_nested_items_and_batch_headers(dim
 
 
 def test_build_failure_is_latched_without_raw_exception_or_event_content(
-    monkeypatch, caplog
-):
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     from experiments import civilization_capture as module
 
-    def failing(_batch):
+    def failing(_batch: CivilizationEventBatch) -> Never:
         raise RuntimeError("CANARY_PRIVATE_EXCEPTION")
 
     recorder = CivilizationEvidenceRecorder(CivilizationCaptureOptions(enabled=True))
@@ -415,12 +453,15 @@ def test_build_failure_is_latched_without_raw_exception_or_event_content(
         ("max_boundaries", 10_001),
     ],
 )
-def test_options_are_exact_default_off_and_cannot_expand_hard_limits(field, value):
+def test_options_are_exact_default_off_and_cannot_expand_hard_limits(
+    field: str, value: Any
+) -> None:
     with pytest.raises(CivilizationError):
         CivilizationCaptureOptions(**{field: value})
 
 
-def test_physical_boundary_has_exact_bindings_but_never_pretends_private_capture():
+def test_physical_boundary_has_exact_bindings_but_never_pretends_private_capture(
+) -> None:
     from simulation.civilization_boundaries import (
         civilization_boundary_bytes,
         project_civilization_boundary,
@@ -439,7 +480,7 @@ def test_physical_boundary_has_exact_bindings_but_never_pretends_private_capture
         replace(frame, bodies=frame.bodies + frame.bodies[:1])
 
 
-def test_sampled_boundary_cadence_duplicates_and_conflicts_are_explicit():
+def test_sampled_boundary_cadence_duplicates_and_conflicts_are_explicit() -> None:
     from simulation.civilization_boundaries import project_civilization_boundary
     from tests.unit.test_observer_civilization import _physical_scene
 
@@ -477,7 +518,9 @@ def test_sampled_boundary_cadence_duplicates_and_conflicts_are_explicit():
     assert recorder.status.failure_code == "capture_conflict"
 
 
-def _runner_config(*, ticks=3, two_owners=False):
+def _runner_config(
+    *, ticks: int = 3, two_owners: bool = False
+) -> SimulationRunnerConfig:
     from agents.models import AgentId
     from simulation.runner_models import AgentCognitionSpec, AgentRunnerSpec
     from tests.simulation_helpers import alive_body
@@ -504,14 +547,14 @@ def _runner_config(*, ticks=3, two_owners=False):
 
 @pytest.mark.asyncio
 async def test_runner_capture_off_on_disabled_and_failing_have_identical_science(
-    caplog,
-):
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
     from simulation.runner_serialization import build_runner_result_document
 
     class Failing(CivilizationEvidenceRecorder):
-        def capture_boundary(self, frame):
+        def capture_boundary(self, frame: CivilizationBoundaryInput) -> bool:
             raise RuntimeError("CANARY_SINK_EXCEPTION")
 
     outputs = []
@@ -542,10 +585,12 @@ async def test_runner_capture_off_on_disabled_and_failing_have_identical_science
             )
             status = runner.export_civilization_capture_status()
         if mode == "on":
+            assert status is not None
             assert [frame.cursor.tick for frame in recorder.boundaries] == [0, 1, 2, 3]
             assert [batch.tick for batch in recorder.event_batches] == [0, 1, 2]
             assert not status.failed
         if mode == "failing":
+            assert status is not None
             assert status.failed and status.failure_boundary == 0
             assert status.failure_code == "capture_failed"
         if mode == "disabled":
@@ -555,18 +600,21 @@ async def test_runner_capture_off_on_disabled_and_failing_have_identical_science
 
 
 @pytest.mark.asyncio
-async def test_runner_publishes_only_after_both_owners_finalize_and_acknowledge():
+async def test_runner_publishes_only_after_both_owners_finalize_and_acknowledge() -> (
+    None
+):
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
 
     class Checked(CivilizationEvidenceRecorder):
-        def capture_boundary(self, frame):
+        def capture_boundary(self, frame: CivilizationBoundaryInput) -> bool:
             checkpoint = runner.export_runtime_checkpoint()
             if frame.cursor.tick:
                 assert checkpoint.pending_count == 0
                 assert len(checkpoint.runtime_states) == 2
                 assert all(
-                    state.last_observation_key[0] == frame.cursor.tick - 1
+                    state.last_observation_key is not None
+                    and state.last_observation_key[0] == frame.cursor.tick - 1
                     for state in checkpoint.runtime_states
                 )
             return super().capture_boundary(frame)
@@ -583,7 +631,7 @@ async def test_runner_publishes_only_after_both_owners_finalize_and_acknowledge(
 
 
 @pytest.mark.asyncio
-async def test_runner_sink_installation_is_once_and_before_start():
+async def test_runner_sink_installation_is_once_and_before_start() -> None:
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
 
@@ -602,7 +650,8 @@ async def test_runner_sink_installation_is_once_and_before_start():
 
 
 @pytest.mark.asyncio
-async def test_runner_cadence_three_keeps_all_events_and_only_sampled_boundaries():
+async def test_runner_cadence_three_keeps_all_events_and_only_sampled_boundaries(
+) -> None:
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
 
@@ -625,8 +674,8 @@ async def test_runner_cadence_three_keeps_all_events_and_only_sampled_boundaries
     [("before_objective_commit", None), ("during_owner_finalization", 1)],
 )
 async def test_abort_or_partial_finalization_never_publishes_a_premature_boundary(
-    point, ordinal
-):
+    point: str, ordinal: int | None
+) -> None:
     from simulation.memory_finalization import InMemoryPendingFinalizationRepository
     from simulation.models import RunId
     from simulation.run_control import RunnerCrashInjected, RunnerCrashPoint
@@ -634,7 +683,7 @@ async def test_abort_or_partial_finalization_never_publishes_a_premature_boundar
 
     target = RunnerCrashPoint(point)
 
-    def crash(current, owner_ordinal):
+    def crash(current: RunnerCrashPoint, owner_ordinal: int | None) -> None:
         if current is target and owner_ordinal == ordinal:
             raise RunnerCrashInjected(current, ordinal=owner_ordinal)
 
@@ -662,13 +711,13 @@ async def test_abort_or_partial_finalization_never_publishes_a_premature_boundar
             assert recorder.event_batches[0].expected_count is None
 
 
-def test_disabled_coordinator_does_not_export_facts_even_at_boundary_zero():
+def test_disabled_coordinator_does_not_export_facts_even_at_boundary_zero() -> None:
     from simulation.civilization_boundaries import CivilizationCaptureCoordinator
 
     recorder = CivilizationEvidenceRecorder()
     coordinator = CivilizationCaptureCoordinator(recorder, "run-disabled")
 
-    def forbidden():
+    def forbidden() -> Never:
         raise AssertionError("disabled capture called the objective exporter")
 
     coordinator.publish(0, forbidden)
@@ -677,7 +726,8 @@ def test_disabled_coordinator_does_not_export_facts_even_at_boundary_zero():
     assert not coordinator.status.failed
 
 
-def test_physical_capture_never_retains_artifact_marks_or_repository_index_contents():
+def test_physical_capture_never_retains_artifact_marks_or_repository_index_contents(
+) -> None:
     from simulation.civilization_boundaries import (
         civilization_boundary_bytes,
         project_civilization_boundary,
@@ -716,7 +766,7 @@ def test_physical_capture_never_retains_artifact_marks_or_repository_index_conte
     assert b"index_entries" not in encoded and b"content_revision" not in encoded
 
 
-def test_boundary_cap_is_atomic_and_does_not_evict_the_earlier_boundary():
+def test_boundary_cap_is_atomic_and_does_not_evict_the_earlier_boundary() -> None:
     from simulation.civilization_boundaries import project_civilization_boundary
     from tests.unit.test_observer_civilization import _physical_scene
 
@@ -737,7 +787,7 @@ def test_boundary_cap_is_atomic_and_does_not_evict_the_earlier_boundary():
     assert recorder.status.failure_boundary == 5
 
 
-def test_event_and_physical_lanes_share_one_cumulative_byte_budget():
+def test_event_and_physical_lanes_share_one_cumulative_byte_budget() -> None:
     from simulation.civilization_boundaries import (
         civilization_boundary_bytes,
         project_civilization_boundary,
@@ -746,7 +796,7 @@ def test_event_and_physical_lanes_share_one_cumulative_byte_budget():
 
     frame = project_civilization_boundary(_physical_scene())
 
-    def batch_for(tick):
+    def batch_for(tick: int) -> CivilizationEventBatch:
         batch = _batch(tick=tick)
         return replace(
             batch,
@@ -773,7 +823,8 @@ def test_event_and_physical_lanes_share_one_cumulative_byte_budget():
 
 
 @pytest.mark.asyncio
-async def test_restored_runner_keeps_missing_prefix_without_boundary_zero_backfill():
+async def test_restored_runner_keeps_missing_prefix_without_boundary_zero_backfill(
+) -> None:
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
 
@@ -789,22 +840,23 @@ async def test_restored_runner_keeps_missing_prefix_without_boundary_zero_backfi
         await restored.run_tick()
         status = restored.export_civilization_capture_status()
     assert [frame.cursor.tick for frame in recorder.boundaries] == [2]
+    assert status is not None
     assert status.missing_prefix_through == 1
     assert [batch.tick for batch in recorder.event_batches] == [1]
 
 
 @pytest.mark.asyncio
-async def test_existing_cultural_and_lineage_sinks_stay_independent():
+async def test_existing_cultural_and_lineage_sinks_stay_independent() -> None:
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
     from tests.unit.test_cultural_evidence_capture import _RecordingSink
     from tests.unit.test_lineage_capture import _config as lineage_config
 
     class Lineage:
-        def __init__(self):
-            self.boundaries = []
+        def __init__(self) -> None:
+            self.boundaries: list[int] = []
 
-        async def capture(self, frame):
+        async def capture(self, frame: LineageBoundaryFrame) -> None:
             self.boundaries.append(frame.boundary_tick)
 
     cultural = _RecordingSink()
@@ -818,13 +870,15 @@ async def test_existing_cultural_and_lineage_sinks_stay_independent():
         runner.set_civilization_boundary_sink(recorder)
         await runner.run()
         assert not runner.export_cultural_capture_status().failed
-        assert not runner.export_civilization_capture_status().failed
+        status = runner.export_civilization_capture_status()
+        assert status is not None
+        assert not status.failed
     assert [frame.boundary_tick for frame in cultural.frames] == [0, 1, 2]
     assert set(lineage.boundaries) == {0, 1, 2}
     assert [frame.cursor.tick for frame in recorder.boundaries] == [0, 1, 2]
 
 
-def test_cadence_skip_does_not_copy_physical_facts_for_a_known_empty_tick():
+def test_cadence_skip_does_not_copy_physical_facts_for_a_known_empty_tick() -> None:
     from simulation.civilization_boundaries import CivilizationCaptureCoordinator
     from simulation.clock import Tick
     from simulation.lifecycle import TickResult
@@ -834,7 +888,7 @@ def test_cadence_skip_does_not_copy_physical_facts_for_a_known_empty_tick():
     )
     coordinator = CivilizationCaptureCoordinator(recorder, "run-skipped-boundary")
 
-    def forbidden():
+    def forbidden() -> Never:
         raise AssertionError("unsampled boundary exported objective facts")
 
     result = TickResult(Tick(0), Tick(1), WorldRevision(0), WorldRevision(0), (), ())
@@ -849,7 +903,9 @@ def test_cadence_skip_does_not_copy_physical_facts_for_a_known_empty_tick():
     assert recorder.event_batches[0].expected_count == 0
 
 
-def _owner_inventory_with_evidence(*evidence):
+def _owner_inventory_with_evidence(
+    *evidence: CivilizationOwnerConceptEvidence,
+) -> CivilizationOwnerInventory:
     from simulation.civilization_capture import (
         CivilizationInventoryChannel,
         CivilizationInventoryCoverage,
@@ -888,7 +944,7 @@ def _owner_inventory_with_evidence(*evidence):
     )
 
 
-def test_exact_project_and_repository_grounding_witnesses():
+def test_exact_project_and_repository_grounding_witnesses() -> None:
     from simulation.civilization_capture import (
         CivilizationGroundingObservation,
         CivilizationGroundingProject,
@@ -931,7 +987,7 @@ def test_exact_project_and_repository_grounding_witnesses():
     ]
 
 
-def test_testimony_forged_or_out_of_range_ordinals_never_ground_institutions():
+def test_testimony_forged_or_out_of_range_ordinals_never_ground_institutions() -> None:
     from simulation.civilization_capture import (
         CivilizationGroundingObservation,
         CivilizationOwnerConceptEvidence,
@@ -973,7 +1029,7 @@ def test_testimony_forged_or_out_of_range_ordinals_never_ground_institutions():
     assert coverage.reason == "grounding_unavailable"
 
 
-def test_missing_or_incomplete_grounding_observation_is_explicit():
+def test_missing_or_incomplete_grounding_observation_is_explicit() -> None:
     from simulation.civilization_capture import (
         CivilizationGroundingObservation,
         CivilizationOwnerConceptEvidence,
@@ -1001,7 +1057,7 @@ def test_missing_or_incomplete_grounding_observation_is_explicit():
 
 
 class _JournalCommit:
-    def __init__(self, run_id, tick, count):
+    def __init__(self, run_id: str, tick: int, count: int) -> None:
         from simulation.clock import Tick
         from simulation.models import RunId
 
@@ -1011,21 +1067,33 @@ class _JournalCommit:
 
 
 class _Journal:
-    def __init__(self, commit=None, events=()):
+    def __init__(
+        self,
+        commit: _JournalCommit | None = None,
+        events: tuple[WorldEvent, ...] = (),
+    ) -> None:
         self.commit = commit
         self.events = tuple(events)
-        self.pages = []
+        self.pages: list[tuple[int, int, int, int]] = []
 
-    async def get_tick_commit(self, run_id, tick):
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> _JournalCommit | None:
         return self.commit
 
-    async def list_events(self, run_id, *, from_tick, to_tick, limit, offset):
+    async def list_events(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        to_tick: Tick,
+        limit: int,
+        offset: int,
+    ) -> tuple[WorldEvent, ...]:
         self.pages.append((from_tick.value, to_tick.value, limit, offset))
         return self.events[offset : offset + limit]
 
 
 @pytest.mark.asyncio
-async def test_journal_recovery_proves_known_empty_and_exact_nonempty_ticks():
+async def test_journal_recovery_proves_known_empty_and_exact_nonempty_ticks() -> None:
     from simulation.civilization_capture import recover_civilization_events
 
     empty = await recover_civilization_events(
@@ -1050,7 +1118,7 @@ async def test_journal_recovery_proves_known_empty_and_exact_nonempty_ticks():
 
 
 @pytest.mark.asyncio
-async def test_missing_or_mismatched_journal_evidence_is_never_known_empty():
+async def test_missing_or_mismatched_journal_evidence_is_never_known_empty() -> None:
     from simulation.civilization_capture import recover_civilization_events
 
     missing = await recover_civilization_events(_Journal(), "run-capture", 3)
@@ -1080,7 +1148,7 @@ async def test_missing_or_mismatched_journal_evidence_is_never_known_empty():
 
 
 @pytest.mark.asyncio
-async def test_runner_recovery_uses_journal_proof_instead_of_unknown_events():
+async def test_runner_recovery_uses_journal_proof_instead_of_unknown_events() -> None:
     from simulation.memory_finalization import InMemoryPendingFinalizationRepository
     from simulation.models import RunId
     from simulation.run_control import RunnerCrashInjected, RunnerCrashPoint
@@ -1090,7 +1158,7 @@ async def test_runner_recovery_uses_journal_proof_instead_of_unknown_events():
     journal = _Journal(_JournalCommit("run-recovery-journal", 0, 0))
     recorder = CivilizationEvidenceRecorder(CivilizationCaptureOptions(enabled=True))
 
-    def crash(current, owner_ordinal):
+    def crash(current: RunnerCrashPoint, owner_ordinal: int | None) -> None:
         if (
             current is RunnerCrashPoint.DURING_OWNER_FINALIZATION
             and owner_ordinal == 1
@@ -1120,7 +1188,7 @@ async def test_runner_recovery_uses_journal_proof_instead_of_unknown_events():
     assert batch.receipts == ()
 
 
-def test_newborn_empty_owner_inventory_is_complete_empty_not_unavailable():
+def test_newborn_empty_owner_inventory_is_complete_empty_not_unavailable() -> None:
     from agents.models import AgentId
     from simulation.civilization_owner_export import (
         owner_inventory_from_runtime,

@@ -78,6 +78,7 @@ def test_same_audit_is_deterministic_and_omits_claim_text() -> None:
     assert first.values["stability_high"] == 2
     assert first.values["stability_low"] == 1
     assert first.values["dissonance_commitment_command"] == 2
+    assert isinstance(first.values["owner_divergence"], (int, float))
     assert first.values["owner_divergence"] > 0
     rendered = str(first.values) + repr(report)
     assert "identity.ability" not in rendered

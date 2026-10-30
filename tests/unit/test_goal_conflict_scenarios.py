@@ -486,12 +486,13 @@ async def test_believed_impossible_resource_fails_subgoal_not_parent() -> None:
     assert by_id[parent.goal_id].status is GoalStatus.ACTIVE
     assert by_id[desire.goal_id].status is GoalStatus.ACTIVE
     assert subgoal.goal_id not in board.foci_ids
-    assert by_id[parent.goal_id].confidence is not None
+    updated_parent = by_id[parent.goal_id]
+    assert updated_parent.confidence is not None
     assert parent.confidence is not None
-    assert by_id[parent.goal_id].confidence < parent.confidence
-    assert by_id[parent.goal_id].progress is not None
+    assert updated_parent.confidence < parent.confidence
+    assert updated_parent.progress is not None
     assert parent.progress is not None
-    assert by_id[parent.goal_id].progress.estimate < parent.progress.estimate
+    assert updated_parent.progress.estimate < parent.progress.estimate
     assert any(
         intent.reason_code is GoalTransitionIntentReason.FAILED
         and intent.goal_id == subgoal.goal_id

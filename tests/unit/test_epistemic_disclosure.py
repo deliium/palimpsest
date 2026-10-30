@@ -20,7 +20,8 @@ from agents.cognition.models import DecisionMetadata, RetrievedMemoryContext
 from agents.cognition.theory_of_mind import TheoryOfMind
 from agents.models import AgentId
 from memory import BeliefId
-from tests.unit.test_epistemic_model import _belief, _watch
+from tests.unit.test_epistemic_model import _belief
+from tests.unit.test_theory_of_mind import _watch
 from world.actions import Tell
 from world.identifiers import EntityId
 

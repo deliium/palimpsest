@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Protocol, TypedDict, runtime_checkable
 
 import pytest
 
 from api.routes.observer_stream import ObserverStreamConfig, ObserverStreamSession
 from infrastructure.database import DatabaseResources
 from persistence import create_tick_journal_repository
+from simulation.clock import Tick
+from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from tests.benchmarks.harness import (
     build_scale_config,
@@ -27,8 +30,28 @@ from tests.benchmarks.harness import (
     run_durable_scale_scenario,
     unique_run_id,
 )
+from world.events import WorldEvent
 
 _LOG = logging.getLogger("scale.bench")
+
+
+class _JournalEvent(TypedDict):
+    tick: int
+    sequence: int
+    event_id: str
+
+
+@runtime_checkable
+class _KeysetJournal(Protocol):
+    async def list_events_keyset(
+        self,
+        run_id: RunId,
+        *,
+        after_tick: int,
+        after_sequence: int,
+        to_tick: Tick | None,
+        limit: int,
+    ) -> tuple[WorldEvent, ...]: ...
 
 pytestmark = [pytest.mark.integration, pytest.mark.scale]
 
@@ -101,6 +124,7 @@ async def test_scale_snapshot_seek_and_reconnect_catchup(
     assert catchup_ms >= 0.0
 
     journal = create_tick_journal_repository(session_factory)
+    assert isinstance(journal, _KeysetJournal)
     first = await journal.list_events_keyset(
         run_id, after_tick=0, after_sequence=-1, to_tick=None, limit=10
     )
@@ -128,7 +152,7 @@ async def test_scale_multi_observer_slow_consumer_isolation(
     database_resources: DatabaseResources,
 ) -> None:
     del database_resources
-    journal = [
+    journal: list[_JournalEvent] = [
         {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
         for index in range(40)
     ]

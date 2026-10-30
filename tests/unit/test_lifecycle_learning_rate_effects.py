@@ -23,6 +23,7 @@ from world._skills import (
     default_objective_skill_policy,
     fold_skill_growth,
 )
+from world._state import WorldState
 from world.actions import Wait
 from world.events import Searched
 from world.identifiers import EntityId, WorldId, WorldRevision
@@ -31,7 +32,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.lifecycle_learning_rate_effects")
 
 
-def _world_state():
+def _world_state() -> tuple[WorldState, EntityId]:
     body = alive_body("body-1")
     bootstrap = WorldBootstrap(
         world_id=WorldId("world-learning-rate"),

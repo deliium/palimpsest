@@ -32,14 +32,16 @@ def _record(agent: str, generation: int, entry_tick: int = 0) -> AgentLifecycleR
     )
 
 
-def _result(**kwargs: object) -> SimulationRunnerResult:
+def _result(
+    *, initial_lifecycle_records: tuple[object, ...] = ()
+) -> SimulationRunnerResult:
     return SimulationRunnerResult(
         run_id=RunId("run-lifecycle-export"),
         ticks_committed=1,
         stop_reason=RunnerStopReasonCode.MAX_TICKS,
         attempt_receipts=(),
         cognition_counters=CognitionCounters(),
-        **kwargs,
+        initial_lifecycle_records=initial_lifecycle_records,
     )
 
 
@@ -53,7 +55,8 @@ def test_result_accepts_deterministic_lifecycle_tuple() -> None:
 
 def test_result_rejects_unordered_or_invalid_lifecycle_items() -> None:
     try:
-        _result(initial_lifecycle_records=frozenset())
+        # Deliberately unordered input must still be rejected by the model.
+        _result(initial_lifecycle_records=frozenset())  # type: ignore[arg-type]
     except TypeError as error:
         assert "must be ordered" in str(error)
     else:  # pragma: no cover - defensive

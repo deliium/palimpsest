@@ -25,6 +25,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     MortalityMode,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
@@ -51,7 +52,7 @@ def _lifecycle_config(
     max_ticks: int,
     lifespan_ticks: int,
     policy_id: str,
-):
+) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return replace(
@@ -86,9 +87,9 @@ def _lifecycle_config(
     )
 
 
-def _lifecycle_event_fingerprint(engine: WorldEngine) -> tuple[tuple, ...]:
+def _lifecycle_event_fingerprint(engine: WorldEngine) -> tuple[tuple[object, ...], ...]:
     assert engine.last_tick_result is not None
-    rows: list[tuple] = []
+    rows: list[tuple[object, ...]] = []
     for record in engine.last_tick_result.events:
         details = record.event.details
         if type(details) is LifecycleStageChanged:
@@ -127,12 +128,12 @@ async def test_same_seed_twin_runs_share_lifecycle_event_sequence() -> None:
     config = _lifecycle_config(
         seed=53, max_ticks=12, lifespan_ticks=40, policy_id="fixed_interval_entry"
     )
-    sequences: list[tuple[tuple, ...]] = []
+    sequences: list[tuple[tuple[tuple[object, ...], ...], ...]] = []
     for index in range(2):
         runner = await SimulationRunner.from_config(
             config, run_id=RunId(f"run-lifecycle-twin-{index}")
         )
-        tick_rows: list[tuple] = []
+        tick_rows: list[tuple[tuple[object, ...], ...]] = []
         for _ in range(10):
             await runner.run_tick()
             tick_rows.append(_lifecycle_event_fingerprint(runner.engine))
@@ -156,12 +157,12 @@ async def test_multi_seed_lifespan_death_path_deterministic_per_seed() -> None:
         config = _lifecycle_config(
             seed=seed, max_ticks=12, lifespan_ticks=8, policy_id="disabled"
         )
-        first: tuple[tuple, ...] | None = None
+        first: tuple[tuple[tuple[object, ...], ...], ...] | None = None
         for replica in range(2):
             runner = await SimulationRunner.from_config(
                 config, run_id=RunId(f"run-lifespan-{seed}-{replica}")
             )
-            rows: list[tuple] = []
+            rows: list[tuple[tuple[object, ...], ...]] = []
             for _ in range(10):
                 await runner.run_tick()
                 rows.append(_lifecycle_event_fingerprint(runner.engine))

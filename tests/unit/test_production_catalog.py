@@ -25,8 +25,10 @@ from world.production import (
     ProductionAction,
     ProductionCatalog,
     ProductionRecipe,
+    RepairProduct,
     ResourceNameInput,
     ShelterProduct,
+    StoreProduct,
     Structure,
     StructureKind,
     ToolRole,
@@ -116,8 +118,10 @@ def test_example_catalog_is_exactly_the_six_locked_recipes(
     assert shelter.output == ShelterProduct(StructureKind.SHELTER)
     assert shelter.output.initial_integrity == 0.75
     assert repair.action is ProductionAction.REPAIR
+    assert isinstance(repair.output, RepairProduct)
     assert repair.output.integrity_delta == 0.25
     assert store.action is ProductionAction.STORE
+    assert isinstance(store.output, StoreProduct)
     assert store.inputs == (HeldItemKindInput(ItemKind.FOOD),)
     assert store.output.quantity_delta == 1
     assert store.output.initial_integrity == 1.0

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world._operations import (
     OperationAccepted,
+    ValidatedWorldOperation,
     prepare_action_batch,
     validate_action_request,
 )
@@ -15,11 +18,11 @@ from world._rules import (
     find_eligible_flee_destinations,
 )
 from world._state import WorldState
-from world.actions import ActionRequest, Flee, Move, Transport, Wait
+from world.actions import ActionRequest, AgentCommand, Flee, Move, Transport, Wait
 from world.dependency_care import DependencyCareRuleContext
 from world.effects import ResolvedActionEffects, ResolvedFleeEffect
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
-from world.models import PhysicalRules
+from world.models import AgentBody, PhysicalRules
 from world.regions import (
     CognitionMode,
     LocationRegion,
@@ -45,7 +48,9 @@ def _spec(routes: tuple[RouteSpec, ...]) -> RegionsMigrationSpec:
     )
 
 
-def _request(state: WorldState, command, *, actor: str = "body-1"):
+def _request(
+    state: WorldState, command: AgentCommand, *, actor: str = "body-1"
+) -> ValidatedWorldOperation:
     from world.actions import require_agent_command
 
     outcome = validate_action_request(
@@ -64,7 +69,9 @@ def _request(state: WorldState, command, *, actor: str = "body-1"):
     return outcome.operation
 
 
-def _world_state(*, spec: RegionsMigrationSpec, bodies):
+def _world_state(
+    *, spec: RegionsMigrationSpec, bodies: Sequence[AgentBody]
+) -> WorldState:
     locations = (
         make_location("loc-1", adjacent=("loc-2", "loc-3"), body_capacity=4),
         make_location("loc-2", adjacent=("loc-1",), body_capacity=1),
@@ -102,7 +109,7 @@ def test_long_move_starts_at_origin_without_reserving_full_destination() -> None
         "loc-1"
     )
     assert application.next_state.bodies[EntityId("body-1")].fatigue.value == 7
-    journey = application.event_details.journey  # type: ignore[union-attr]
+    journey = application.event_details.journey
     assert journey.due_tick == 12
     assert journey.charged_fatigue_cost == 7
 
@@ -238,7 +245,7 @@ def test_deferred_flee_resolution_sees_prior_working_state_change() -> None:
     )
     seen: list[tuple[EntityId, ...]] = []
 
-    def resolve_flee(request: ActionRequest, working: WorldState):
+    def resolve_flee(request: ActionRequest, working: WorldState) -> ResolvedFleeEffect:
         destinations = find_eligible_flee_destinations(working, request.actor_id)
         seen.append(destinations)
         assert EntityId("loc-2") not in destinations
@@ -284,7 +291,7 @@ def test_long_only_flee_routes_skip_deferred_random_resolution() -> None:
     )
     calls = 0
 
-    def resolve_flee(_request: ActionRequest, _working: WorldState):
+    def resolve_flee(_request: ActionRequest, _working: WorldState) -> None:
         nonlocal calls
         calls += 1
         return None
@@ -315,7 +322,7 @@ def test_transport_conflicts_second_caregiver_but_allows_wait() -> None:
     )
     world_id = WorldId("world-routes")
 
-    def request(request_id: str, actor_id: str, command):
+    def request(request_id: str, actor_id: str, command: AgentCommand) -> ActionRequest:
         return ActionRequest(
             RequestId(request_id),
             ProposalId(f"proposal-{request_id}"),
@@ -327,7 +334,9 @@ def test_transport_conflicts_second_caregiver_but_allows_wait() -> None:
 
     flee_calls = 0
 
-    def resolve_flee(request_value: ActionRequest, working: WorldState):
+    def resolve_flee(
+        request_value: ActionRequest, working: WorldState
+    ) -> ResolvedFleeEffect:
         nonlocal flee_calls
         flee_calls += 1
         destinations = find_eligible_flee_destinations(working, request_value.actor_id)

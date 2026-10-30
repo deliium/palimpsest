@@ -20,6 +20,7 @@ from persistence.civilization_filesystem import (
     create_civilization_publisher,
     create_civilization_reader,
 )
+from simulation.civilization_boundaries import CivilizationCaptureSink
 from simulation.civilization_capture import CivilizationCaptureOptions
 from simulation.civilization_models import CivilizationPublicationRef
 from simulation.civilization_ports import CivilizationReadBudget
@@ -34,7 +35,9 @@ _LOG = logging.getLogger("research_runner.civilization_composition")
 
 
 class _RunnerSink(Protocol):
-    def set_civilization_boundary_sink(self, sink: object) -> None: ...
+    def set_civilization_boundary_sink(
+        self, sink: CivilizationCaptureSink | None
+    ) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)

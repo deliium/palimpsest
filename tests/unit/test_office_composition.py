@@ -108,6 +108,12 @@ def test_disabled_office_mode_emits_no_office_metrics() -> None:
 def test_real_exports_and_detached_snapshot_inputs_harvest_identically() -> None:
     from dataclasses import replace as dc_replace
 
+    from agents.cognition.offices import OfficeConceptLedger
+
+    def detached_copy(ledger: object) -> OfficeConceptLedger:
+        assert isinstance(ledger, OfficeConceptLedger)
+        return dc_replace(ledger)
+
     arm = next(
         item
         for item in asyncio.run(
@@ -116,5 +122,5 @@ def test_real_exports_and_detached_snapshot_inputs_harvest_identically() -> None
         if item.assignment.condition_id == "office-on"
     )
     exported = arm.runner_result.office_concept_ledgers
-    detached = tuple(dc_replace(ledger) for ledger in exported)
+    detached = tuple(detached_copy(ledger) for ledger in exported)
     assert harvest_office_rows(exported) == harvest_office_rows(detached)

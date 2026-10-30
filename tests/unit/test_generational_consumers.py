@@ -6,13 +6,14 @@ import asyncio
 
 import pytest
 
-from api.simulation_manager import SimulationManager, _RunHandle
+from api.simulation_manager import SimulationManager, TickExecutionResult, _RunHandle
 from experiments.matrix_models import DEFAULT_SUCCESS_STOP_REASONS
 from experiments.matrix_runner import _stop_is_success
 from infrastructure.settings import load_settings
 from simulation.memory_run_control import InMemoryRunControlRepository
 from simulation.models import RunId
 from simulation.runner_models import (
+    RunnerAttemptReceipt,
     RunnerStopReasonCode,
     SimulationRunnerResult,
     runner_stop_is_failure,
@@ -24,7 +25,7 @@ class _FakeRunner:
         self.ticks_committed = 3
         self._reason = reason
 
-    async def run_tick(self):
+    async def run_tick(self) -> RunnerAttemptReceipt:
         from simulation.runner_models import RunnerAttemptReceipt, RunnerAttemptStatus
 
         return RunnerAttemptReceipt(
@@ -36,7 +37,7 @@ class _FakeRunner:
         )
 
 
-async def _execute(reason: RunnerStopReasonCode):
+async def _execute(reason: RunnerStopReasonCode) -> TickExecutionResult:
     manager = SimulationManager(
         settings=load_settings(env_file=False),
         run_control=InMemoryRunControlRepository(),

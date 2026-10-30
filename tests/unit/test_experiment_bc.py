@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from experiments.catalog import OFF_GATE_MATRIX_EXPERIMENT_IDS
+from experiments.models import ExperimentDefinition
 from experiments.semantic_drift_scenario import (
     assert_semantic_drift_structure,
     bc_unsupported_config,
@@ -17,15 +18,16 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V46,
     SemanticNamingMode,
+    SimulationRunnerConfig,
     SymbolicLanguageMode,
 )
 
 
-def _definition():
+def _definition() -> ExperimentDefinition:
     return semantic_drift_scenario()
 
 
-def _by_id(config):
+def _by_id(config: ExperimentDefinition) -> dict[str, SimulationRunnerConfig]:
     return {
         condition.condition_id: condition.runner_config
         for condition in config.conditions
@@ -83,11 +85,11 @@ def test_generation_arm_sets_lifecycle_and_blank_slate_bootstrap() -> None:
     assert generation.v3_capability_flags.generational_population is True
 
 
-def _binding(history):
+def _binding(history: tuple[SimpleNamespace, ...]) -> SimpleNamespace:
     return SimpleNamespace(sense_revision=1, sense_history=tuple(history))
 
 
-def _ledger(*bindings):
+def _ledger(*bindings: SimpleNamespace) -> SimpleNamespace:
     return SimpleNamespace(bindings=tuple(bindings))
 
 

@@ -34,7 +34,12 @@ from simulation.persistence import (
     WorldSnapshot,
 )
 from world.effects import ActionCause
-from world.events import OccurrenceContext, Waited, make_physical_replayable_event
+from world.events import (
+    OccurrenceContext,
+    Waited,
+    WorldEvent,
+    make_physical_replayable_event,
+)
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus
 from world.values import (
@@ -113,11 +118,11 @@ def _bootstrap(*, run_id: str, seed: int = 41) -> WorldSnapshot:
     )
 
 
-def _wait_event(*, run_id: str, tick: int, sequence: int, revision: int) -> object:
+def _wait_event(*, run_id: str, tick: int, sequence: int, revision: int) -> WorldEvent:
     actor = EntityId("body-1")
-    request_id = RequestId(f"req-{tick}-{sequence}")
+    request_id = RequestId(f"req-{run_id}-{tick}-{sequence}")
     return make_physical_replayable_event(
-        event_id=EventId(f"evt-{tick}-{sequence}"),
+        event_id=EventId(f"evt-{run_id}-{tick}-{sequence}"),
         run_id=run_id,
         world_id=WorldId("world-1"),
         tick=tick,
@@ -159,7 +164,7 @@ async def test_objective_event_keyset_pagination(
                 run_id=run_id, tick=tick, sequence=0, revision=base_revision + 1
             ),
             _wait_event(
-                run_id=run_id, tick=tick, sequence=1, revision=base_revision + 2
+                run_id=run_id, tick=tick, sequence=1, revision=base_revision + 1
             ),
         )
         commit = await journal.append_tick(
@@ -189,7 +194,11 @@ async def test_objective_event_keyset_pagination(
     )
     assert len(third.events) == 2
     fourth = await loader.load_events_page(
-        run_id=run_id, after=third.next_cursor, limit=2
+        run_id=run_id,
+        after=EventKeysetCursor(
+            tick=third.events[-1].tick, sequence=third.events[-1].sequence
+        ),
+        limit=2,
     )
     assert len(fourth.events) == 0
     assert fourth.next_cursor is None

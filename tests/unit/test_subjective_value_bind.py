@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import (
     ActionPlan,
+    CognitiveLoopInput,
     CognitiveLoopResult,
     ComponentBoundaryRecord,
     ComponentKind,
@@ -17,6 +19,7 @@ from agents.cognition.models import (
     MotivationCode,
     SelectedIntention,
 )
+from agents.cognition.scarcity_beliefs import ScarcityBeliefLedger
 from agents.cognition.subjective_value import (
     SubjectiveValuationLedger,
     appraise_reservation,
@@ -114,8 +117,12 @@ def test_checkpoint_restores_both_reservations() -> None:
         codec="v15",
     )
     restored = decode_subjective_valuation_checkpoint(payload, codec="v15")
-    assert _reservation(restored["subjective_valuations"]["alice"], ItemKind.TOOL) == 8
-    assert _reservation(restored["subjective_valuations"]["bob"], ItemKind.TOOL) == 3
+    alice_ledger = restored["subjective_valuations"]["alice"]
+    bob_ledger = restored["subjective_valuations"]["bob"]
+    assert isinstance(alice_ledger, SubjectiveValuationLedger)
+    assert isinstance(bob_ledger, SubjectiveValuationLedger)
+    assert _reservation(alice_ledger, ItemKind.TOOL) == 8
+    assert _reservation(bob_ledger, ItemKind.TOOL) == 3
 
 
 def test_judgment_cap_drops_the_oldest_and_keeps_kind_rows() -> None:
@@ -179,7 +186,9 @@ def test_channel_off_writes_neither_store() -> None:
     loop = CognitiveLoop.__new__(CognitiveLoop)
     loop._subjective_valuation_active = False
     assert loop._prepare_subjective_valuations(
-        None, world_model=None, emotional_evaluation=None
+        cast(CognitiveLoopInput, None),
+        world_model=None,
+        emotional_evaluation=None,
     ) == (None, None, None)
 
 
@@ -232,7 +241,9 @@ def test_loop_result_exposes_both_ledgers() -> None:
         subjective_valuations=valuations,
         scarcity_beliefs=scarcity,
     )
+    assert isinstance(result.subjective_valuations, SubjectiveValuationLedger)
     assert _reservation(result.subjective_valuations, ItemKind.TOOL) == 8
+    assert isinstance(result.scarcity_beliefs, ScarcityBeliefLedger)
     assert result.scarcity_beliefs.owner_id == agent
 
 

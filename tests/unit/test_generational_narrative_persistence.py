@@ -126,7 +126,7 @@ def test_ledger_rejects_world_and_analysis_boundaries(name: str) -> None:
         apply_narrative_update(
             observation=_observation(tick=2),
             identity=_identity(),
-            previous=foreign,  # type: ignore[arg-type]
+            previous=foreign,
             policy=default_generational_narrative_policy(),
         )
 

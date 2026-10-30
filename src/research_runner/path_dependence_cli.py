@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Final, cast
 
@@ -386,10 +387,18 @@ async def _execute(
     code_revision: str,
     source_artifact_digest: str,
     factories: RunnerDependencyFactories | None = None,
+    materialize_engine: (
+        Callable[[RunnerForkCheckpoint, RunId], Awaitable[WorldEngine]] | None
+    ) = None,
 ) -> tuple[dict[str, object], PathDependenceExecutionSummary]:
     store = _store(root)
     payload = await asyncio.to_thread(spec_path.read_bytes)
     spec = decode_path_dependence_spec(payload)
+    if factories is not None and factories.run_repository is not None:
+        if not spec.base.persistence.durable:
+            raise PathDependenceCliError("durable_config_required")
+        if materialize_engine is None:
+            raise PathDependenceCliError("durable_materializer_required")
     ensemble = build_ensemble_document(
         spec,
         source_revision=code_revision,
@@ -430,7 +439,7 @@ async def _execute(
         spec,
         PathDependenceExecutionContext(
             factories=factories or RunnerDependencyFactories(),
-            materialize_engine=_materialize,
+            materialize_engine=materialize_engine or _materialize,
             cultural_sink_factory=_sink_factory,
             child_observer=_observe_child,
             source_identity=code_revision,
@@ -661,6 +670,7 @@ async def _execute_with_database(
             code_revision=code_revision,
             source_artifact_digest=source_artifact_digest,
             factories=composition.factories,
+            materialize_engine=composition.materialize_engine,
         )
     finally:
         await composition.close()

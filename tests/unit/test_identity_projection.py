@@ -294,7 +294,7 @@ def test_unknown_predicate_segment_fails_closed(
         for record in caplog.records
         if record.message == "identity_projection_rejected"
     ]
-    assert rejected[-1].reason_code == "unknown_aspect"
+    assert rejected[-1].__dict__["reason_code"] == "unknown_aspect"
     assert "move_north" not in caplog.text
 
 
@@ -358,8 +358,8 @@ async def test_projector_fills_identity_only_when_enabled(
     projected = [
         record for record in caplog.records if record.message == "self_model_projected"
     ]
-    assert projected[-1].identity_mode == "passthrough"
-    assert projected[-1].identity_belief_count == 0
+    assert projected[-1].__dict__["identity_mode"] == "passthrough"
+    assert projected[-1].__dict__["identity_belief_count"] == 0
     enabled = await DirectSelfStateProjector(
         identity_mode=CognitionIdentityMode.ENABLED,
         belief_histories=(history,),

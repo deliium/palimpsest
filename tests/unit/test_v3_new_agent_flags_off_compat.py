@@ -18,6 +18,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
@@ -31,7 +32,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.v3_new_agent_flags_off_compat")
 
 
-def _base(*, max_ticks: int = 4):
+def _base(*, max_ticks: int = 4) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

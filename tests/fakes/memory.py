@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from memory.codec import reconstructed_memory_payload_sha256
+from memory.errors import MemoryServiceError, MemoryServiceErrorCode
 from memory.models import (
     MemoryAccessReceipt,
     MemoryApplyResult,
@@ -272,3 +273,32 @@ class FakeMemoryService:
     async def forget(self, request: MemoryForgetRequest) -> MemoryForgetResult:
         _ = request
         return MemoryForgetResult(forgotten_count=0, examined_count=len(self._records))
+
+    async def forget_selected_ids(
+        self, memory_ids: tuple[MemoryId, ...], *, tick: int
+    ) -> int:
+        if type(memory_ids) is not tuple or type(tick) is not int or tick < 0:
+            raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+        forgotten = 0
+        for memory_id in memory_ids:
+            if type(memory_id) is not MemoryId:
+                raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+            trace = self._records.get(memory_id)
+            if trace is None or trace.forgotten_at_tick is not None:
+                continue
+            if tick < trace.created_tick:
+                raise MemoryServiceError(MemoryServiceErrorCode.INVALID_REQUEST)
+            self._records[memory_id] = replace(trace, forgotten_at_tick=tick)
+            forgotten += 1
+        self.calls.append(
+            FakeMemoryCallRecord(
+                operation="forget_selected",
+                run_id=self._scope.run_id.value,
+                owner_id=self._scope.owner_id.value,
+                tick=tick,
+                write_count=forgotten,
+                access_count=0,
+                result_count=0,
+            )
+        )
+        return forgotten

@@ -25,6 +25,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -38,7 +39,7 @@ _RUNNER_PY = Path(runner_mod.__file__).resolve()
 _LOGGER_NAME = "simulation.runner"
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -70,7 +71,7 @@ def _plain_base():
     )
 
 
-def _v32_layers_config():
+def _v32_layers_config() -> SimulationRunnerConfig:
     base = _plain_base()
     return replace(
         base,
@@ -83,7 +84,7 @@ def _v32_layers_config():
     )
 
 
-def _v31_al_config():
+def _v31_al_config() -> SimulationRunnerConfig:
     base = _plain_base()
     return replace(
         base,

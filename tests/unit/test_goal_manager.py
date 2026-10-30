@@ -372,7 +372,13 @@ async def test_hierarchical_food_reserve_decomposition() -> None:
     # Two food_reserve subgoals plus minted CURRENT_INTENTION foci for ready subgoals.
     subgoals = [goal for goal in children if goal.horizon is GoalHorizon.SUBGOAL]
     assert len(subgoals) == 2
-    assert {goal.provenance.template_code for goal in subgoals} == {"food_reserve.v1"}
+    for goal in subgoals:
+        assert goal.provenance is not None
+    assert {
+        goal.provenance.template_code
+        for goal in subgoals
+        if goal.provenance is not None
+    } == {"food_reserve.v1"}
     assert any(
         goal.outcome is not None and goal.outcome.kind is GoalOutcomeKind.OBTAIN_ENTITY
         for goal in subgoals
@@ -665,6 +671,7 @@ async def test_hierarchical_metadata_has_no_total_reward(
     ]
     assert cognition_payloads
     for payload in cognition_payloads:
+        assert isinstance(payload, dict)
         assert set(payload).issubset(_LOG_ALLOWLIST_KEYS)
         joined = str(payload)
         assert "secret-description-payload" not in joined

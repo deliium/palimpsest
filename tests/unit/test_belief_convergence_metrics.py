@@ -56,4 +56,6 @@ def test_convergence_jaccard_increases() -> None:
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["owner_count"] == 2
     assert doc.values["mean_pairwise_jaccard_final"] == 1.0
-    assert float(doc.values["mean_pairwise_jaccard_delta"]) > 0.0
+    delta = doc.values["mean_pairwise_jaccard_delta"]
+    assert isinstance(delta, (int, float, str))
+    assert float(delta) > 0.0

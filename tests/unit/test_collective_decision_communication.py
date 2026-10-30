@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
 
 from agents.cognition.collective_decision_communication import (
@@ -14,6 +16,7 @@ from agents.cognition.collective_decision_communication import (
 )
 from agents.cognition.collective_decisions import (
     CollectiveAct,
+    CollectiveDecisionLedger,
     CollectiveTopic,
     apply_collective_decision_update,
     collective_context_key,
@@ -114,7 +117,7 @@ def _message(
     tick: int,
     speaker: str,
     root: str,
-    relations: tuple[CommunicationRelation, ...],
+    relations: Sequence[CommunicationRelation],
 ) -> ObservedCommunication:
     utterance = origin_utterance(
         text="collective",
@@ -136,7 +139,7 @@ def _message(
     )
 
 
-def _ledger_with_proposal() -> object:
+def _ledger_with_proposal() -> CollectiveDecisionLedger:
     context = collective_context_key(_observation(tick=1))
     ref = collective_proposal_ref(
         _OWNER,

@@ -119,6 +119,7 @@ def test_codec_v19_round_trips_region_definitions_and_capacity_wait() -> None:
     snapshot = _snapshot()
     payload = encode_persistence(snapshot)
     decoded = decode_persistence(payload, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.regions_migration == snapshot.regions_migration
     assert decoded.journeys == snapshot.journeys
     assert hash_snapshot(decoded) == decoded.integrity_hash
@@ -212,6 +213,7 @@ async def test_codec_v19_arrival_retry_is_idempotent() -> None:
 
 def test_snapshot_replay_tail_arrival_matches_live_arrival_effect() -> None:
     snapshot = _snapshot()
+    assert snapshot.journeys is not None
     journey = snapshot.journeys[0]
     details = JourneyArrived(
         journey.journey_id,

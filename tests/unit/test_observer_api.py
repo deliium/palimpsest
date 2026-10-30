@@ -6,6 +6,7 @@ import logging
 import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 import httpx
 import pytest
@@ -13,10 +14,10 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from agents.models import AgentId
-from api.app import DisposableEngine, create_app
+from api.app import DatabaseResourcesLike, DisposableEngine, create_app
 from api.observer_service import ObserverReadService
 from api.simulation_manager import SimulationManager
-from experiments.reference_scenario import _build_locations
+from experiments.reference_scenario import LOC_CAMP, LOC_SPRING, _build_locations
 from infrastructure.logging import reset_logging_for_tests
 from infrastructure.settings import Settings, load_settings
 from simulation.bootstrap import AgentRegistration
@@ -43,8 +44,6 @@ from simulation.replay import ReplayService
 from tests.simulation_helpers import alive_body, weather_for_locations
 from tests.unit.test_observer_replay import (
     BODY_ID,
-    LOC_CAMP,
-    LOC_SPRING,
     RUN_ID,
     WORLD_ID,
     FakeJournal,
@@ -86,6 +85,10 @@ class FakeEngine:
 class FakeResources:
     def __init__(self) -> None:
         self.engine: DisposableEngine = FakeEngine()
+
+
+def _database_factory(_settings: Settings) -> DatabaseResourcesLike:
+    return cast(DatabaseResourcesLike, FakeResources())
 
 
 @pytest.fixture(autouse=True)
@@ -136,7 +139,7 @@ def _app() -> FastAPI:
     settings = _settings()
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=_database_factory,
         simulation_manager=SimulationManager(
             settings=settings,
             run_control=InMemoryRunControlRepository(),
@@ -156,7 +159,7 @@ def test_observer_routes_are_get_only() -> None:
     methods = {
         method
         for route in router.routes
-        if isinstance(route, APIRoute)
+        if isinstance(route, APIRoute) and route.methods is not None
         for method in route.methods
     }
     assert methods == {"GET"}
@@ -169,7 +172,7 @@ async def test_observer_ticks_rejects_range_above_api_max_page_size() -> None:
     settings = _settings(api_max_page_size=10, observer_catchup_page_size=10)
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=_database_factory,
         simulation_manager=SimulationManager(
             settings=settings,
             run_control=InMemoryRunControlRepository(),
@@ -419,7 +422,7 @@ async def test_observer_events_agent_id_matches_actor_or_target(
     settings = _settings()
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=_database_factory,
         simulation_manager=SimulationManager(
             settings=settings,
             run_control=InMemoryRunControlRepository(),

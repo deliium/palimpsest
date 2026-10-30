@@ -54,7 +54,14 @@ def test_semantic_catalog_counts_sixty_six() -> None:
 def test_project_events_adapt(caplog: pytest.LogCaptureFixture) -> None:
     project_id = EntityId("project-1")
     actor = EntityId("body-a")
-    details = (
+    details: tuple[
+        ProjectCreated
+        | ProjectContributed
+        | ProjectShortage
+        | ProjectAbandoned
+        | ProjectCompleted,
+        ...,
+    ] = (
         ProjectCreated(
             project_id=project_id,
             location_id=EntityId("loc-1"),

@@ -17,8 +17,10 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V47,
     RUNNER_SCHEMA_VERSION_V48,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
+    AgentRunnerSpec,
     CulturalNarrativeMode,
     GenerationalNarrativesSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     example_cultural_feature_provenance_spec,
     example_population_lifecycle_spec,
@@ -31,7 +33,9 @@ from simulation.runner_serialization import (
 _OFF_ARM = regional_migration_scenario().conditions[0].runner_config
 
 
-def _agents(config, *, narrative: bool = True):
+def _agents(
+    config: SimulationRunnerConfig, *, narrative: bool = True
+) -> tuple[AgentRunnerSpec, ...]:
     return tuple(
         replace(
             agent,
@@ -48,7 +52,7 @@ def _agents(config, *, narrative: bool = True):
     )
 
 
-def _v48(**overrides: object):
+def _v48(**overrides: object) -> SimulationRunnerConfig:
     values: dict[str, object] = {
         "schema_version": RUNNER_SCHEMA_VERSION_V48,
         "agents": _agents(_OFF_ARM),

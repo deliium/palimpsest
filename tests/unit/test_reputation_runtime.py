@@ -31,6 +31,7 @@ from agents.cognition.reputation import (
     reputation_profile_id,
 )
 from agents.models import AgentId
+from simulation.run_control import AgentRuntimeCheckpoint
 from world.actions import Help, Tell, Wait
 from world.communications import CommunicationSourceBasis
 from world.identifiers import EntityId, WorldId, WorldRevision
@@ -165,7 +166,9 @@ def _selected(direction: ActionDirection, future_id: str) -> SelectedIntention:
     )
 
 
-def _futures(direction: ActionDirection, future_id: str, target: str | None = None):
+def _futures(
+    direction: ActionDirection, future_id: str, target: str | None = None
+) -> PossibleFutures:
     return PossibleFutures(
         owner_id=_owner(),
         futures=(
@@ -240,8 +243,9 @@ async def test_disabled_mode_does_not_emit_a_reputation_tell(
         reputation_mode=CognitionReputationMode.DISABLED,
     )
     assert type(plan.command) is Wait
-    assert _input().snapshot is not None
-    assert _input().snapshot.reputation is None
+    snapshot = _input().snapshot
+    assert snapshot is not None
+    assert snapshot.reputation is None
     assert "mode_disabled" in caplog.text
 
 
@@ -271,6 +275,7 @@ def test_runtime_checkpoint_copies_the_owner_ledger() -> None:
     )
     runtime._reputation = ledger
     exported = runtime.export_runtime_checkpoint()
+    assert isinstance(exported, AgentRuntimeCheckpoint)
     assert exported.reputation == ledger
     other, _other_reader = _runtime()
     other.restore_runtime_checkpoint(exported)

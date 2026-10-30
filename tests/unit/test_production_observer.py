@@ -19,7 +19,7 @@ from tests.physical_helpers import (
     two_location_fixture,
 )
 from tests.simulation_helpers import alive_body, make_item, make_resource
-from world.actions import Build, Craft, Harvest, Repair, Store, Wait
+from world.actions import AgentCommand, Build, Craft, Harvest, Repair, Store, Wait
 from world.identifiers import EntityId, RecipeId
 from world.production import example_production_catalog
 from world.values import ItemKind, ResourceKind
@@ -113,7 +113,7 @@ def test_production_projection_has_no_coordinates() -> None:
         weather=base.weather,
         registrations=base.registrations,
     )
-    commands = (
+    commands: tuple[AgentCommand | None, ...] = (
         Harvest(RecipeId("harvest_wood"), EntityId("res-wood")),
         Craft(RecipeId("craft_tool")),
         Wait(),
@@ -164,7 +164,7 @@ def test_production_projection_has_no_coordinates() -> None:
         items=tuple(state.items.values()),
         resources=tuple(state.resources.values()),
         weather=tuple(state.weather.values()),
-        registrations=engine._registrations,
+        registrations=tuple(engine._registrations),
         structures=tuple(state.structures.values()),
     )
     frame = project_frame(

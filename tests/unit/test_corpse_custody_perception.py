@@ -15,8 +15,9 @@ from world.events import (
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.models import LifeStatus, copy_body
+from world.models import Item, LifeStatus, copy_body
 from world.observations import (
+    Observation,
     ObservationAudienceRole,
     ObservationContext,
     ObservedItemPlacement,
@@ -24,7 +25,7 @@ from world.observations import (
 from world.values import Health
 
 
-def _state():
+def _state() -> tuple[WorldState, Item]:
     item = make_item("item-1", location_id=None, holder_id="body-dead")
     corpse = copy_body(
         alive_body("body-dead", inventory=(item.entity_id,)),
@@ -48,7 +49,7 @@ def _state():
     return state, item
 
 
-def _observe(state: WorldState, observer: str, *, active: bool):
+def _observe(state: WorldState, observer: str, *, active: bool) -> Observation:
     observations = PerceptionService(possession_succession_active=active).project(
         world_id=WorldId("world-1"),
         state=state,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pytest
 
@@ -20,7 +21,13 @@ from agents.cognition.models import (
     SubjectiveSnapshot,
 )
 from agents.models import AgentId
-from llm import FinishReason, LLMResult, LLMResultMetadata, StructuredOutput
+from llm import (
+    FinishReason,
+    LLMRequest,
+    LLMResult,
+    LLMResultMetadata,
+    StructuredOutput,
+)
 from memory.consolidation import plan_offline_consolidation
 from memory.models import (
     ConceptMention,
@@ -31,6 +38,7 @@ from memory.models import (
     MemoryTrace,
     MentionId,
     OfflineConsolidationPolicy,
+    OfflineConsolidationSelection,
 )
 from tests.typecheck.cognitive_loop import (
     ScriptedFutureImagination,
@@ -74,7 +82,7 @@ def _trace(memory_id: str, concepts: tuple[str, ...]) -> MemoryTrace:
     )
 
 
-def _selection():
+def _selection() -> OfflineConsolidationSelection:
     traces = (
         _trace("m-a", ("path", "water", "night", "only-a")),
         _trace("m-b", ("path", "water", "night", "only-b")),
@@ -113,12 +121,36 @@ class _ScriptedProvider:
         self.output = output
         self.calls = 0
 
-    async def generate(self, request: object) -> LLMResult:
+    async def generate[T: StructuredOutput](
+        self, request: LLMRequest[T]
+    ) -> LLMResult[T]:
+        _ = request
         self.calls += 1
         if self.output is None:
             raise RuntimeError("provider_down")
         return LLMResult(
-            output=self.output,
+            output=cast(T, self.output),
+            metadata=LLMResultMetadata(
+                provider_name="fake",
+                model_name="fake",
+                finish_reason=FinishReason.STOP,
+            ),
+        )
+
+
+class _WrongShapeProvider:
+    """Provider whose output is a closed shape the selector cannot accept."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate[T: StructuredOutput](
+        self, request: LLMRequest[T]
+    ) -> LLMResult[T]:
+        _ = request
+        self.calls += 1
+        return LLMResult(
+            output=cast(T, _WrongShape()),
             metadata=LLMResultMetadata(
                 provider_name="fake",
                 model_name="fake",
@@ -208,21 +240,7 @@ async def test_schema_invalid_falls_back(
 ) -> None:
     caplog.set_level(logging.DEBUG, logger="agents.cognition.consolidation")
     selection = _selection()
-    provider = _ScriptedProvider(None)
-
-    async def _generate(request: object) -> LLMResult:
-        _ = request
-        provider.calls += 1
-        return LLMResult(
-            output=_WrongShape(),
-            metadata=LLMResultMetadata(
-                provider_name="fake",
-                model_name="fake",
-                finish_reason=FinishReason.STOP,
-            ),
-        )
-
-    provider.generate = _generate  # type: ignore[method-assign]
+    provider = _WrongShapeProvider()
     restricted = await LLMOfflineConsolidationSelector(provider).restrict(
         selection, policy=OfflineConsolidationPolicy(allow_provider=True)
     )

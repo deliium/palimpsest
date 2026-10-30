@@ -12,7 +12,9 @@ from agents.cognition.configuration import (
 from agents.cognition.reflection import ReflectionPolicy
 from agents.models import Agent, AgentId
 from memory.belief_service import InMemorySemanticBeliefService
+from memory.beliefs import SemanticBelief, SemanticBeliefHistory
 from memory.models import (
+    BeliefId,
     BeliefStore,
     EntityMention,
     MemoryId,
@@ -29,7 +31,7 @@ from memory.models import (
     RelationEndpointKind,
 )
 from memory.service import InMemoryMemoryService
-from simulation.agent_runtime import AgentRuntime
+from simulation.agent_runtime import AgentRuntime, PreparedObservation
 from simulation.bootstrap import (
     AgentRegistration,
     WorldBootstrap,
@@ -38,6 +40,7 @@ from simulation.bootstrap import (
 from simulation.engine import WorldEngine
 from simulation.journal import hash_tick_events
 from simulation.models import SimulationRunConfig
+from simulation.persistence import PayloadHash
 from simulation.subjective_state import InMemorySubjectiveStateService
 from social.service import InMemoryRelationshipService
 from tests.simulation_helpers import (
@@ -46,7 +49,7 @@ from tests.simulation_helpers import (
     make_resource,
     weather_for_locations,
 )
-from world.actions import Wait
+from world.actions import AgentCommand, Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.values import ResourceKind
 
@@ -55,8 +58,11 @@ class _BeliefReader:
     def __init__(self, service: InMemorySemanticBeliefService) -> None:
         self._service = service
 
-    def snapshot(self):  # type: ignore[no-untyped-def]
+    def snapshot(self) -> tuple[SemanticBelief, ...]:
         return self._service._store.snapshot()
+
+    def history(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
+        return self._service.history_sync(belief_id)
 
 
 def _bootstrap() -> WorldBootstrap:
@@ -158,11 +164,20 @@ def _runtime(mode: CognitionReflectionMode) -> AgentRuntime:
     return runtime
 
 
-async def _command_and_events(runtime: AgentRuntime, engine: WorldEngine):
+async def _command_and_events(
+    runtime: AgentRuntime, engine: WorldEngine
+) -> tuple[
+    type[AgentCommand],
+    tuple[PayloadHash, ...],
+    tuple[PayloadHash, ...],
+    WorldRevision,
+    WorldRevision,
+]:
     batch = engine.observe()
     prepared = await runtime.prepare_observation(
         engine.observation_for(AgentId("agent-1")), token=batch.token
     )
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     result = engine.resolve_tick((pending.submission,))
     before = hash_tick_events(tuple(record.event for record in result.events))

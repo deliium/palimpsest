@@ -18,6 +18,7 @@ from world.actions import Wait
 from world.effects import DeathCause
 from world.events import Died, LifecycleStageChanged
 from world.identifiers import WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.models import LifeStatus, non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.lifecycle_progression_determinism")
@@ -65,7 +66,9 @@ def _step(engine: WorldEngine) -> None:
 def test_stage_progression_emits_lifecycle_stage_changed() -> None:
     _LOG.debug("case_id=stage_progression")
     engine = _engine(lifespan_ticks=20)
-    assert engine.lifecycle_records[0].stage.value == "infant"
+    record = engine.lifecycle_records[0]
+    assert isinstance(record, AgentLifecycleRecord)
+    assert record.stage.value == "infant"
     # infant inclusive max age 2 → first juvenile age is 3 (resolve tick 3)
     for _ in range(4):
         _step(engine)
@@ -77,7 +80,9 @@ def test_stage_progression_emits_lifecycle_stage_changed() -> None:
     ]
     assert stages
     assert stages[0].new_stage == "juvenile"
-    assert engine.lifecycle_records[0].stage.value == "juvenile"
+    record = engine.lifecycle_records[0]
+    assert isinstance(record, AgentLifecycleRecord)
+    assert record.stage.value == "juvenile"
 
 
 def test_lifespan_death_emits_died_lifespan() -> None:
@@ -102,8 +107,8 @@ def test_lifespan_death_emits_died_lifespan() -> None:
 
 def test_same_seed_stage_timeline_identical() -> None:
     _LOG.debug("case_id=stage_timeline_twin")
-    events_a: list[tuple] = []
-    events_b: list[tuple] = []
+    events_a: list[tuple[tuple[object, ...], ...]] = []
+    events_b: list[tuple[tuple[object, ...], ...]] = []
     for sink in (events_a, events_b):
         engine = _engine(lifespan_ticks=20)
         for _ in range(6):

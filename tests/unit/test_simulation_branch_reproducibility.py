@@ -12,10 +12,10 @@ import pytest
 from agents.cognition.counterfactual import CounterfactualScenario
 from agents.cognition.models import ImaginedFuture
 from agents.models import AgentId
+from memory import BeliefId
 from memory.beliefs import (
     BeliefActivationState,
     BeliefConfidenceState,
-    BeliefId,
     BeliefPolicyRef,
     BeliefRevisionId,
     BeliefValueKind,
@@ -421,8 +421,10 @@ def test_identical_fork_config_mints_stable_child_and_branch_ids() -> None:
 def test_research_fork_excludes_agent_counterfactual_and_belief_types() -> None:
     intervention = _memory_intervention()
     assert type(intervention) is ResearchIntervention
-    assert CounterfactualScenario is not ResearchIntervention
-    assert ImaginedFuture is not ResearchIntervention
+    counterfactual_type: type[object] = CounterfactualScenario
+    imagined_type: type[object] = ImaginedFuture
+    assert counterfactual_type is not ResearchIntervention
+    assert imagined_type is not ResearchIntervention
     belief = SemanticBelief(
         belief_id=BeliefId("belief-1"),
         owner_id=AgentId("agent-1"),
@@ -446,7 +448,8 @@ def test_research_fork_excludes_agent_counterfactual_and_belief_types() -> None:
         evidence_contradiction_count=0,
     )
     assert belief.claim.predicate != "research_fork"
-    assert type(belief) is not ResearchIntervention
+    belief_type: type[object] = type(belief)
+    assert belief_type is not ResearchIntervention
     assert not issubclass(ResearchIntervention, CounterfactualScenario)
     assert not issubclass(ResearchIntervention, ImaginedFuture)
 

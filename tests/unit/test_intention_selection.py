@@ -69,8 +69,8 @@ def _loop_input(
     *, thirst: float = 0.0, with_water: bool = False, with_threat: bool = False
 ) -> CognitiveLoopInput:
     agent = AgentId("agent-1")
-    resources = ()
-    bodies = ()
+    resources: tuple[ObservedResource, ...] = ()
+    bodies: tuple[VisibleBody, ...] = ()
     if with_water:
         resources = (
             ObservedResource(
@@ -125,7 +125,7 @@ def _future(
         drives.append(
             DriveEffect(kind=DriveKind.PREDICTABILITY, delta=0.2, confidence=0.8)
         )
-    risks = ()
+    risks: tuple[SubjectiveRisk, ...] = ()
     if harm > 0.0:
         risks = (
             SubjectiveRisk(

@@ -286,6 +286,8 @@ def test_stochastic_identity_equalizes_streams_across_run_ids() -> None:
         stochastic_identity=StochasticIdentity("paired-world-2"),
     )
     cognition_fingerprint = "condition-memory-reconstructive-v1"
+    assert shared.stochastic_identity is not None
+    assert other.stochastic_identity is not None
     assert cognition_fingerprint not in (
         shared.stochastic_identity.value,
         other.stochastic_identity.value,

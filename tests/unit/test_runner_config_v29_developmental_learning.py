@@ -16,6 +16,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     DevelopmentalLearningSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_dependency_care_spec,
@@ -28,7 +29,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _two_agent_base():
+def _two_agent_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")

@@ -11,6 +11,7 @@ from agents.cognition.subjective_value import (
     _counter_or_withdraw,
 )
 from agents.models import AgentId
+from world.actions import NegotiateExchange
 from world.identifiers import EntityId
 from world.observations import ObservedItemPlacement
 from world.values import ItemKind, ItemLoad
@@ -62,6 +63,7 @@ def test_inert_portable_is_spent_before_food() -> None:
         max_bundle=8,
         prefer_inert=True,
     )
+    assert isinstance(chosen, NegotiateExchange)
     assert chosen.act == "counteroffer"
     assert chosen.give_item_ids[0] == EntityId("pebble")
     assert chosen.give_item_ids[1:] == (
@@ -92,6 +94,7 @@ def test_channel_off_keeps_reference_count() -> None:
         max_bundle=8,
         prefer_inert=False,
     )
+    assert isinstance(chosen, NegotiateExchange)
     assert chosen.act == "counteroffer"
     assert EntityId("pebble") not in chosen.give_item_ids
     assert len(chosen.give_item_ids) == 4

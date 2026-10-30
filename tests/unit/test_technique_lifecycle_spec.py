@@ -14,6 +14,9 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V37,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    BoundedExperimentationSpec,
+    SimulationRunnerConfig,
+    TechniqueLifecycleSpec,
     TechniqueMaterialAnchor,
     V3CapabilityFlags,
     WorldScenarioSpec,
@@ -33,7 +36,7 @@ from world.models import default_physical_rules
 from world.production import example_production_catalog
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -65,7 +68,7 @@ def _plain_base():
     )
 
 
-def _with_catalog(config):
+def _with_catalog(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
     catalog = example_production_catalog()
     agents = tuple(
         replace(
@@ -77,17 +80,24 @@ def _with_catalog(config):
     return replace(config, agents=agents)
 
 
-def _lifecycle_config(**extra):
-    base = _plain_base()
-    fields = {
-        "schema_version": RUNNER_SCHEMA_VERSION_V37,
-        "v3_capability_flags": V3CapabilityFlags(cultural_historical_memory=True),
-        "cultural_feature_provenance": example_cultural_feature_provenance_spec(),
-        "knowledge_genealogy": example_knowledge_genealogy_spec(),
-        "technique_lifecycle": example_technique_lifecycle_spec(),
-    }
-    fields.update(extra)
-    return replace(base, **fields)
+def _lifecycle_config(
+    *,
+    bounded_experimentation: BoundedExperimentationSpec | None = None,
+    technique_lifecycle: TechniqueLifecycleSpec | None = None,
+) -> SimulationRunnerConfig:
+    return replace(
+        _plain_base(),
+        schema_version=RUNNER_SCHEMA_VERSION_V37,
+        v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+        cultural_feature_provenance=example_cultural_feature_provenance_spec(),
+        knowledge_genealogy=example_knowledge_genealogy_spec(),
+        technique_lifecycle=(
+            example_technique_lifecycle_spec()
+            if technique_lifecycle is None
+            else technique_lifecycle
+        ),
+        bounded_experimentation=bounded_experimentation,
+    )
 
 
 def test_v37_round_trip_with_anchor() -> None:

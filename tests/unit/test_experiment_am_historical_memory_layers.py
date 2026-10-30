@@ -25,6 +25,7 @@ from experiments import (
 )
 from experiments.catalog import base_runner_config_from_scenario, v3_scaffolding_profile
 from experiments.matrix_schema import finalize_matrix_cell_config
+from experiments.models import ExperimentDefinition
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
@@ -36,6 +37,7 @@ from simulation.runner_models import (
     CulturalNarrativeMode,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -60,7 +62,7 @@ _AM_ARM_IDS = (
 )
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -90,7 +92,7 @@ def _base():
     )
 
 
-def _arm(definition, arm_id: str):
+def _arm(definition: ExperimentDefinition, arm_id: str) -> SimulationRunnerConfig:
     return next(
         item for item in definition.conditions if item.condition_id == arm_id
     ).runner_config
@@ -126,6 +128,7 @@ def test_am_profile_gates_and_arms() -> None:
     assert cultural.population_lifecycle is not None
 
     narrative = _arm(definition, "am-narrative-join")
+    assert narrative.historical_memory_layers is not None
     assert narrative.historical_memory_layers.include_narrative_lineage is True
     modes = {agent.cognition.cultural_narrative_mode for agent in narrative.agents}
     assert CulturalNarrativeMode.DETERMINISTIC in modes

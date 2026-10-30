@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
+
+import pytest
 
 from agents.cognition.cultural_features import (
     CulturalFeatureAudit,
@@ -10,7 +13,7 @@ from agents.cognition.cultural_features import (
     CulturalTransmissionChannelId,
 )
 from agents.models import AgentId
-from analysis.historical_memory import HistoricalMemoryHarvest
+from analysis.historical_memory import HistoricalMemoryHarvest, HistoricalSourceRef
 from analysis.metric_service import MetricComputationInputs, assemble_metric_documents
 from analysis.models import MetricAvailability
 from experiments.composition import historical_memory_harvest_from_run
@@ -24,7 +27,9 @@ from simulation.runner_models import (
 )
 
 
-def _audit(*, digest: str = "dig-evt-1", source: str | None = "evt-1"):
+def _audit(
+    *, digest: str = "dig-evt-1", source: str | None = "evt-1"
+) -> CulturalFeatureAudit:
     return CulturalFeatureAudit(
         owner_id=AgentId("bob"),
         feature_kind=CulturalFeatureKindId.TERM,
@@ -49,7 +54,9 @@ def test_harvest_none_when_layers_absent() -> None:
     assert harvest is None
 
 
-def test_harvest_builds_from_audits_and_deaths(caplog) -> None:
+def test_harvest_builds_from_audits_and_deaths(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     import logging
 
     layers = example_historical_memory_layers_spec()
@@ -79,13 +86,16 @@ def test_harvest_builds_from_audits_and_deaths(caplog) -> None:
     assert type(harvest) is HistoricalMemoryHarvest
     assert harvest is not None
     assert harvest.as_of_tick == 4
-    assert any(s.source_event_id == "evt-1" for s in harvest.sources)
+    sources = cast(tuple[HistoricalSourceRef, ...], harvest.sources)
+    assert any(s.source_event_id == "evt-1" for s in sources)
     assert harvest.death_ticks == {"w1": 3}
     assert len(harvest.communication_edges) == 1
     assert "historical_memory_harvest_built" in caplog.text
 
 
-def test_warn_when_layers_on_but_audits_empty(caplog) -> None:
+def test_warn_when_layers_on_but_audits_empty(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     import logging
 
     layers = example_historical_memory_layers_spec()
@@ -171,8 +181,10 @@ def test_runner_result_audits_feed_collector_path() -> None:
         ),
     )
     assert harvest is not None
+    assert isinstance(harvest, HistoricalMemoryHarvest)
     assert len(harvest.cultural_feature_audits) == 1
-    assert any(s.source_event_id == "dig-evt-1" for s in harvest.sources)
+    sources = cast(tuple[HistoricalSourceRef, ...], harvest.sources)
+    assert any(s.source_event_id == "dig-evt-1" for s in sources)
     inputs = inputs_with_opt_in_metric_rows(
         MetricComputationInputs(
             run_id="run-hm-result",

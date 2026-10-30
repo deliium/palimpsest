@@ -20,6 +20,7 @@ from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -30,7 +31,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _V1_GATE = _REPO_ROOT / "tests" / "unit" / "test_v1_regression_gate.py"
 
 
-def _base(*, max_ticks: int = 4, seed: int = 41):
+def _base(*, max_ticks: int = 4, seed: int = 41) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

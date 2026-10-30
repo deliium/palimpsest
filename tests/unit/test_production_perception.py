@@ -9,14 +9,14 @@ import pytest
 
 from agents.models import AgentId
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from tests.physical_helpers import (
     PhysicalWorldFixture,
     physical_config,
     two_location_fixture,
 )
 from tests.simulation_helpers import alive_body, make_item
-from world.actions import Build, Wait
+from world.actions import AgentCommand, Build, Wait
 from world.identifiers import EntityId, RecipeId
 from world.production import StructureKind, example_production_catalog
 from world.values import ItemKind, UnitInterval
@@ -63,10 +63,10 @@ def _engine(fixture: PhysicalWorldFixture) -> WorldEngine:
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 

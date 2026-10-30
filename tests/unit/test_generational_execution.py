@@ -135,7 +135,7 @@ async def test_coordinator_routes_generational_assignments_through_context(
     )
 
     definition = generational_runner_scenario(seed=23, max_ticks=6)
-    sources = {
+    sources: dict[str, object] = {
         "code_revision": "abc123",
         "source_artifact_digest": None,
         "source_clean": True,
@@ -201,7 +201,6 @@ async def test_expanded_matrix_routes_bl_cells_through_context(tmp_path: Path) -
     from experiments.matrix_models import (
         EXPERIMENT_MATRIX_SCHEMA_VERSION,
         ExperimentMatrixSpec,
-        ExperimentSeedMatrix,
         GroupRole,
         MatrixEmbeddedBase,
         MatrixFactor,
@@ -209,6 +208,7 @@ async def test_expanded_matrix_routes_bl_cells_through_context(tmp_path: Path) -
         MatrixFactorLevel,
     )
     from experiments.matrix_runner import MatrixBatchDependencies, MatrixBatchRunner
+    from experiments.models import ExperimentSeedMatrix
 
     source = generational_runner_scenario(seed=23, max_ticks=6)
     base = next(
@@ -267,7 +267,6 @@ async def test_matrix_requires_generational_context_by_default(
     from experiments.matrix_models import (
         EXPERIMENT_MATRIX_SCHEMA_VERSION,
         ExperimentMatrixSpec,
-        ExperimentSeedMatrix,
         GroupRole,
         MatrixEmbeddedBase,
         MatrixFactor,
@@ -275,6 +274,7 @@ async def test_matrix_requires_generational_context_by_default(
         MatrixFactorLevel,
     )
     from experiments.matrix_runner import MatrixBatchDependencies, MatrixBatchRunner
+    from experiments.models import ExperimentSeedMatrix
 
     source = generational_runner_scenario(seed=23, max_ticks=6)
     base = next(

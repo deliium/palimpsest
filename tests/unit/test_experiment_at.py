@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+from collections.abc import Mapping
 from pathlib import Path
+
+import pytest
 
 from agents.cognition.memory import build_direct_observation_memory_trace
 from agents.cognition.structured_commitments import (
@@ -26,7 +29,12 @@ from memory.models import MemoryMutationBatch, MemoryRunId, MemoryScope
 from memory.service import InMemoryMemoryService
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import (
+    ActionResolutionStatus,
+    ActionSubmission,
+    ObservationBatch,
+    TickResult,
+)
 from simulation.models import SimulationRunConfig
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
@@ -34,20 +42,21 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V39,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_possession_succession_spec,
     example_structured_commitments_spec,
 )
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
-from world.actions import Attack, DeclareCommitment, Give, Wait
+from world.actions import AgentCommand, Attack, DeclareCommitment, Give, Wait
 from world.events import CommitmentDeclared
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import non_lethal_physical_rules
 from world.values import ItemKind
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     giver = alive_body("body-a")
     other = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -77,7 +86,7 @@ def _base():
     )
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     definition = experiment_at_structured_commitments(_base())
     return next(
         item.runner_config
@@ -86,12 +95,14 @@ def _arm(arm_id: str):
     )
 
 
-def _engine(*, active: bool, food_holder: str, material_holder: str | None):
+def _engine(
+    *, active: bool, food_holder: str, material_holder: str | None
+) -> WorldEngine:
     food = make_item(
         "food-1", location_id=None, holder_id=food_holder, kind=ItemKind.FOOD
     )
     items = [food]
-    inventories = {
+    inventories: dict[str, list[EntityId]] = {
         "body-a": [],
         "body-b": [],
     }
@@ -129,7 +140,9 @@ def _engine(*, active: bool, food_holder: str, material_holder: str | None):
     )
 
 
-def _step(engine: WorldEngine, commands: dict[str, object]):
+def _step(
+    engine: WorldEngine, commands: Mapping[str, AgentCommand]
+) -> tuple[ObservationBatch, TickResult]:
     batch = engine.observe()
     submissions = []
     for observation in batch.observations:
@@ -142,16 +155,16 @@ def _step(engine: WorldEngine, commands: dict[str, object]):
     return batch, result
 
 
-def _kinds(result) -> tuple[str, ...]:
+def _kinds(result: TickResult) -> tuple[str, ...]:
     return tuple(type(record.event.details).__name__ for record in result.events)
 
 
-def _digest(result) -> str:
+def _digest(result: TickResult) -> str:
     payload = "|".join(_kinds(result)).encode()
     return hashlib.sha256(payload).hexdigest()
 
 
-def _status(result, kind: str):
+def _status(result: TickResult, kind: str) -> ActionResolutionStatus:
     match = [
         resolution
         for resolution in result.resolutions
@@ -161,7 +174,7 @@ def _status(result, kind: str):
     return match[0].status
 
 
-def _declare(*, due_tick: int, kind: str = "future_exchange"):
+def _declare(*, due_tick: int, kind: str = "future_exchange") -> DeclareCommitment:
     return DeclareCommitment(
         EntityId("body-b"),
         kind,
@@ -176,7 +189,7 @@ def _declare(*, due_tick: int, kind: str = "future_exchange"):
     )
 
 
-def test_at_is_off_the_v1_gate(caplog) -> None:
+def test_at_is_off_the_v1_gate(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
     gate = Path("tests/unit/test_v1_regression_gate.py").read_text(encoding="utf-8")
     assert "structured_commitments@1" in OFF_GATE_MATRIX_EXPERIMENT_IDS
@@ -241,7 +254,7 @@ def test_food_stays_open_until_the_scripted_material_give() -> None:
         engine, {"agent-2": Give(EntityId("body-a"), EntityId("material-1"))}
     )
     assert _status(moved, "give") is ActionResolutionStatus.APPLIED
-    assert type(later) is not Attack
+    assert not isinstance(later, Attack)
     material_view, _done = _step(engine, {})
     material_obs = next(
         observation
@@ -294,6 +307,7 @@ def test_divergent_terms_forget_only_one_owners_traces() -> None:
         for record in declared.events
         if type(record.event.details) is CommitmentDeclared
     )
+    assert isinstance(speech.details, CommitmentDeclared)
     assert speech.details.item_kind == "material"
 
     async def forget() -> None:

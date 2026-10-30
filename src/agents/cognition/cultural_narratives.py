@@ -16,7 +16,7 @@ import logging
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Final, TypeGuard
@@ -3400,6 +3400,111 @@ def _decay(
             )
 
 
+_STATUS_PRIORITY: Final[dict[NarrativeStatus, int]] = {
+    NarrativeStatus.ACTIVE: 3,
+    NarrativeStatus.CANDIDATE: 2,
+    NarrativeStatus.MERGED: 1,
+    NarrativeStatus.RETIRED: 0,
+}
+
+
+def _union_ordered[T](left: tuple[T, ...], right: tuple[T, ...]) -> tuple[T, ...]:
+    return tuple(dict.fromkeys((*left, *right)))
+
+
+def _merge_frozen_collision(
+    existing: NarrativeVariant,
+    candidate: NarrativeVariant,
+) -> NarrativeVariant:
+    """Merge two frozen rows that resolved to the same stable variant id.
+
+    Stable ids derive from founding fingerprint, mutation generation and parent
+    salt, so a collision means both rows describe the same lineage identity for
+    this owner. Measured evidence is unioned rather than discarded; the first
+    row keeps the content identity while lifecycle state follows the more
+    active row. This prevents a long run from failing ledger validation.
+    """
+    _LOG.warning(
+        "narrative_variant_id_collision owner_id=%s variant_id=%s "
+        "reason_code=same_lineage_identity",
+        existing.owner_id.value,
+        existing.variant_id,
+    )
+    status = (
+        existing.status
+        if _STATUS_PRIORITY[existing.status] >= _STATUS_PRIORITY[candidate.status]
+        else candidate.status
+    )
+    first_ticks = [
+        t for t in (existing.first_tick, candidate.first_tick) if t is not None
+    ]
+    last_ticks = [
+        t for t in (existing.last_tick, candidate.last_tick) if t is not None
+    ]
+    utterance_ticks = [
+        t
+        for t in (existing.last_utterance_tick, candidate.last_utterance_tick)
+        if t is not None
+    ]
+    return replace(
+        existing,
+        status=status,
+        strength=max(existing.strength, candidate.strength),
+        repetition_count=max(existing.repetition_count, candidate.repetition_count),
+        first_tick=min(first_ticks) if first_ticks else None,
+        last_tick=max(last_ticks) if last_ticks else None,
+        last_utterance_tick=max(utterance_ticks) if utterance_ticks else None,
+        mutation_generation=max(
+            existing.mutation_generation, candidate.mutation_generation
+        ),
+        parent_variant_ids=_union_ordered(
+            existing.parent_variant_ids, candidate.parent_variant_ids
+        ),
+        merged_into_id=existing.merged_into_id or candidate.merged_into_id,
+        competing_variant_ids=_union_ordered(
+            existing.competing_variant_ids, candidate.competing_variant_ids
+        ),
+        evidence=_union_ordered(existing.evidence, candidate.evidence),
+        source_event_id=existing.source_event_id or candidate.source_event_id,
+        source_memory_id=existing.source_memory_id or candidate.source_memory_id,
+        reconstruction_id=existing.reconstruction_id or candidate.reconstruction_id,
+        transmission_root_id=(
+            existing.transmission_root_id or candidate.transmission_root_id
+        ),
+        last_communication_id=(
+            existing.last_communication_id or candidate.last_communication_id
+        ),
+        location_ids=_union_ordered(existing.location_ids, candidate.location_ids),
+        carrier_agent_ids=_union_ordered(
+            existing.carrier_agent_ids, candidate.carrier_agent_ids
+        ),
+        notices=_union_ordered(existing.notices, candidate.notices),
+        declared_source_basis=(
+            existing.declared_source_basis or candidate.declared_source_basis
+        ),
+        source_witnesses=_union_ordered(
+            existing.source_witnesses, candidate.source_witnesses
+        ),
+        declared_source_entity_ids=_union_ordered(
+            existing.declared_source_entity_ids,
+            candidate.declared_source_entity_ids,
+        ),
+        declared_hop_count=max(
+            existing.declared_hop_count, candidate.declared_hop_count
+        ),
+        first_hand=existing.first_hand or candidate.first_hand,
+        record_refs=_union_ordered(existing.record_refs, candidate.record_refs),
+        transitions=_union_ordered(existing.transitions, candidate.transitions),
+        source_loss=existing.source_loss or candidate.source_loss,
+        themes=_union_ordered(existing.themes, candidate.themes),
+        theme_basis=(
+            existing.theme_basis
+            if existing.theme_basis is not NarrativeThemeBasis.UNCLASSIFIED
+            else candidate.theme_basis
+        ),
+    )
+
+
 def _freeze(
     owner_id: AgentId,
     drafts: list[_VariantDraft],
@@ -3454,9 +3559,18 @@ def _freeze(
                 theme_basis=draft.theme_basis,
             )
         )
+    frozen_by_id: dict[str, NarrativeVariant] = {}
+    for variant in variants:
+        existing = frozen_by_id.get(variant.variant_id)
+        if existing is None:
+            frozen_by_id[variant.variant_id] = variant
+        else:
+            frozen_by_id[variant.variant_id] = _merge_frozen_collision(
+                existing, variant
+            )
     return NarrativeLedger(
         owner_id=owner_id,
-        variants=tuple(variants),
+        variants=tuple(frozen_by_id.values()),
         notices=tuple(notices),
         policy_version=policy_version,
     )

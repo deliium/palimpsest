@@ -47,7 +47,9 @@ def test_repeated_conventions_known_answer_support() -> None:
     )
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["top_motif_support"] == 4
-    assert doc.values["motif_count"] >= 1
+    motif_count = doc.values["motif_count"]
+    assert isinstance(motif_count, int)
+    assert motif_count >= 1
     assert doc.values["ngram_order_max"] == 3
     coverage = doc.values["motif_opportunity_coverage"]
     assert type(coverage) is float and coverage > 0.0

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pytest
 
@@ -123,12 +124,15 @@ def test_disabled_leaves_the_command_and_a_request_explains(
         mode=CognitionTeachingInteractionMode.DISABLED,
     )
     assert unchanged == plain
-    explained = attach_teaching_act(
-        plain,
-        model=_model(1.0),
-        policy=policy,
-        observation=_request(),
-        mode=CognitionTeachingInteractionMode.DETERMINISTIC,
+    explained = cast(
+        Talk,
+        attach_teaching_act(
+            plain,
+            model=_model(1.0),
+            policy=policy,
+            observation=_request(),
+            mode=CognitionTeachingInteractionMode.DETERMINISTIC,
+        ),
     )
     relation = explained.utterance.content.relations[0]
     assert relation.predicate == "explain"
@@ -182,12 +186,15 @@ def test_missing_model_and_false_provider_do_not_call_out() -> None:
     )
     assert kept == command
     assert provider_calls == []
-    demonstrated = attach_teaching_act(
-        command,
-        model=_model(1.0),
-        policy=TeachingClaimPolicy(allow_provider=False),
-        observation=None,
-        mode=CognitionTeachingInteractionMode.DETERMINISTIC,
+    demonstrated = cast(
+        Talk,
+        attach_teaching_act(
+            command,
+            model=_model(1.0),
+            policy=TeachingClaimPolicy(allow_provider=False),
+            observation=None,
+            mode=CognitionTeachingInteractionMode.DETERMINISTIC,
+        ),
     )
     relation = demonstrated.utterance.content.relations[0]
     assert relation.predicate == AdviceAct.DEMONSTRATE.value
@@ -250,4 +257,5 @@ def test_explain_leaves_the_level_zero_search_probability() -> None:
         policy=policy,
     )
     assert draw == level_zero
+    assert engine._skill_ledger is not None
     assert engine._skill_ledger.level(EntityId("body-2"), SkillDomain.FORAGING) == 0.0

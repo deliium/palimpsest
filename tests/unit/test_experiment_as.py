@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -16,13 +17,14 @@ from experiments.catalog import base_runner_config_from_scenario
 from experiments.matrix_schema import finalize_matrix_cell_config
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.models import SimulationRunConfig
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V38,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -31,7 +33,7 @@ from simulation.runner_models import (
     example_technique_lifecycle_spec,
 )
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
-from world.actions import AssertPossessionClaim, Take, Wait
+from world.actions import AgentCommand, AssertPossessionClaim, Take, Wait
 from world.events import (
     CorpseCustodyOpened,
     Died,
@@ -40,6 +42,7 @@ from world.events import (
 )
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import (
+    AgentBody,
     LifeStatus,
     copy_body,
     default_physical_rules,
@@ -50,7 +53,7 @@ from world.values import Fatigue, Health, Hunger, Thirst
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     parent = alive_body("body-parent")
     child = alive_body("body-child")
     return base_runner_config_from_scenario(
@@ -80,7 +83,7 @@ def _base():
     )
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     definition = experiment_as_possession_succession(_base())
     return next(
         item.runner_config
@@ -89,7 +92,7 @@ def _arm(arm_id: str):
     )
 
 
-def _starving_parent():
+def _starving_parent() -> AgentBody:
     return copy_body(
         alive_body("body-parent"),
         health=Health(5),
@@ -99,7 +102,7 @@ def _starving_parent():
     )
 
 
-def _engine(*, active: bool, kinship: bool):
+def _engine(*, active: bool, kinship: bool) -> WorldEngine:
     item = make_item("item-1", location_id=None, holder_id="body-parent")
     parent = _starving_parent()
     parent = copy_body(parent, inventory=(item.entity_id,))
@@ -116,22 +119,22 @@ def _engine(*, active: bool, kinship: bool):
             AgentRegistration(AgentId("agent-2"), child.entity_id),
         ),
     )
-    kwargs = {}
+    kinship_spec = None
     if kinship:
         from simulation.runner_models import example_kinship_spec
 
-        kwargs["kinship_spec"] = example_kinship_spec(
+        kinship_spec = example_kinship_spec(
             parent_agent_id="agent-1", child_agent_id="agent-2"
         )
     return WorldEngine(
         config=SimulationRunConfig(seed=16, physical_rules=default_physical_rules()),
         bootstrap=bootstrap,
         possession_succession_active=active,
-        **kwargs,
+        kinship_spec=kinship_spec,
     )
 
 
-def _tick(engine: WorldEngine, commands: dict[str, object]):
+def _tick(engine: WorldEngine, commands: Mapping[str, AgentCommand]) -> TickResult:
     batch = engine.observe()
     submissions = []
     for observation in batch.observations:
@@ -144,11 +147,11 @@ def _tick(engine: WorldEngine, commands: dict[str, object]):
     return result
 
 
-def _kinds(result) -> tuple[str, ...]:
+def _kinds(result: TickResult) -> tuple[str, ...]:
     return tuple(type(record.event.details).__name__ for record in result.events)
 
 
-def _status(result, kind: str):
+def _status(result: TickResult, kind: str) -> ActionResolutionStatus:
     match = [
         resolution
         for resolution in result.resolutions
@@ -173,7 +176,9 @@ def test_as_is_off_the_v1_gate() -> None:
     ]
 
 
-def test_as_channel_off_matches_pre_plan_and_rejects_take(caplog) -> None:
+def test_as_channel_off_matches_pre_plan_and_rejects_take(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.INFO)
     config = _arm("as-channel-off")
     assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
@@ -273,7 +278,7 @@ def test_as_claim_conflict_does_not_move_the_item() -> None:
     assert "ClaimResolved" not in names
 
 
-def _engine_with_witness():
+def _engine_with_witness() -> WorldEngine:
     item = make_item("item-1", location_id=None, holder_id="body-parent")
     parent = copy_body(
         _starving_parent(),

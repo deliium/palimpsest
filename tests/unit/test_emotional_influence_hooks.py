@@ -48,7 +48,8 @@ def _evaluation(*, kind: EmotionKind, intensity: float) -> EmotionalStateEvaluat
 
 
 def test_emotion_kind_fear_distinct_from_relationship_fear() -> None:
-    assert EmotionKind.FEAR is not RelationshipDimension.FEAR
+    emotion: object = EmotionKind.FEAR
+    assert emotion is not RelationshipDimension.FEAR
 
 
 def test_updated_emotion_bias_inactive_for_neutral() -> None:

@@ -20,6 +20,8 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     GradualAgingSpec,
     LifespanDistributionSpec,
+    PopulationLifecycleSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
@@ -38,7 +40,7 @@ from world.models import default_physical_rules
 _LOG = logging.getLogger("tests.runner_config_v26_developmental_stages")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -63,7 +65,7 @@ def _base():
     )
 
 
-def _developmental_lifecycle():
+def _developmental_lifecycle() -> PopulationLifecycleSpec:
     base = example_population_lifecycle_spec(lifespan_ticks=20)
     effects = (
         StageCapabilityEffect(

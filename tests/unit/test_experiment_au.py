@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
+import pytest
+
 from agents.cognition.subjective_value import (
+    SubjectiveValuationLedger,
     propose_exchange_command,
     refresh_owner_ledgers,
 )
@@ -20,7 +24,13 @@ from experiments.catalog import base_runner_config_from_scenario
 from experiments.matrix_schema import finalize_matrix_cell_config
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import (
+    ActionResolution,
+    ActionResolutionStatus,
+    ActionSubmission,
+    ObservationBatch,
+    TickResult,
+)
 from simulation.models import SimulationRunConfig
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
@@ -28,20 +38,22 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V40,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_structured_commitments_spec,
     example_subjective_valuation_spec,
 )
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
-from world.actions import Give, NegotiateExchange, Wait
+from world.actions import AgentCommand, Give, NegotiateExchange, Wait
 from world.events import ExchangeCompleted, ExchangeProposed
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import non_lethal_physical_rules
+from world.observations import Observation
 from world.values import ItemKind
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     alice = alive_body("body-a", carry_capacity=10)
     bob = alive_body("body-b", carry_capacity=10)
     return base_runner_config_from_scenario(
@@ -71,7 +83,7 @@ def _base():
     )
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     definition = experiment_au_subjective_exchange(_base())
     return next(
         item.runner_config
@@ -80,7 +92,7 @@ def _arm(arm_id: str):
     )
 
 
-def _engine(*, active: bool, foods: int):
+def _engine(*, active: bool, foods: int) -> WorldEngine:
     tool = make_item(
         "tool-1",
         name="Axe",
@@ -125,7 +137,9 @@ def _engine(*, active: bool, foods: int):
     )
 
 
-def _step(engine: WorldEngine, commands: dict[str, object]):
+def _step(
+    engine: WorldEngine, commands: Mapping[str, AgentCommand]
+) -> tuple[ObservationBatch, TickResult]:
     batch = engine.observe()
     submissions = []
     for observation in batch.observations:
@@ -138,11 +152,11 @@ def _step(engine: WorldEngine, commands: dict[str, object]):
     return batch, result
 
 
-def _kinds(result) -> tuple[str, ...]:
+def _kinds(result: TickResult) -> tuple[str, ...]:
     return tuple(type(record.event.details).__name__ for record in result.events)
 
 
-def _digest(result) -> str:
+def _digest(result: TickResult) -> str:
     payload = "|".join(_kinds(result)).encode()
     return hashlib.sha256(payload).hexdigest()
 
@@ -151,7 +165,7 @@ def _holder(engine: WorldEngine, item_id: str) -> EntityId | None:
     return engine._snapshot.world.state.items[EntityId(item_id)].holder_id
 
 
-def test_au_is_off_the_v1_gate(caplog) -> None:
+def test_au_is_off_the_v1_gate(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
     gate = Path("tests/unit/test_v1_regression_gate.py").read_text(encoding="utf-8")
     invariants = Path("tests/unit/test_v2_scientific_invariants.py").read_text(
@@ -389,7 +403,7 @@ def test_matrix_subjective_valuation_beats_commitments() -> None:
     )
 
 
-def _observation(batch, body_id: str):
+def _observation(batch: ObservationBatch, body_id: str) -> Observation:
     return next(
         observation
         for observation in batch.observations
@@ -397,11 +411,11 @@ def _observation(batch, body_id: str):
     )
 
 
-def _reservation(ledger, kind: ItemKind) -> int:
+def _reservation(ledger: SubjectiveValuationLedger, kind: ItemKind) -> int:
     return next(row.reservation for row in ledger.kind_rows if row.item_kind is kind)
 
 
-def _resolution(result, agent: str):
+def _resolution(result: TickResult, agent: str) -> ActionResolution:
     return next(
         resolution
         for resolution in result.resolutions

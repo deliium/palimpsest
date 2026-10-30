@@ -13,7 +13,7 @@ from agents.models import AgentId
 from simulation.runner_models import example_developmental_learning_spec
 from world.environment import HazardKind
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import LifeStatus, ResourceKind
+from world.models import LifeStatus
 from world.observations import (
     Observation,
     ObservedLocation,
@@ -25,6 +25,7 @@ from world.values import (
     Fatigue,
     Health,
     Hunger,
+    ResourceKind,
     TemperatureCelsius,
     Thirst,
 )

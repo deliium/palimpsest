@@ -72,6 +72,7 @@ def test_trust_network_structure_metrics() -> None:
     )
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["node_count"] == 4
+    assert isinstance(doc.values["edge_count"], int)
     assert doc.values["edge_count"] >= 3
     assert type(doc.values["density"]) is float
     assert type(doc.values["reciprocity"]) is float
@@ -143,6 +144,7 @@ def test_trust_network_star_centrality_present() -> None:
     assert doc.values["mean_degree_centrality"] is not None
     assert doc.values["mean_betweenness_centrality"] is not None
     assert doc.values["mean_closeness_centrality"] is not None
+    assert isinstance(doc.values["mean_betweenness_centrality"], float)
     assert doc.values["mean_betweenness_centrality"] > 0.0
 
 

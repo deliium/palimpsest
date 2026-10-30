@@ -48,6 +48,7 @@ from world.effects import ActionCause
 from world.events import (
     OccurrenceContext,
     Told,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
@@ -244,11 +245,13 @@ async def test_loader_reconstructs_transmission_meta_and_report(
     assert tx.communication_id == "comm-alice-pg"
     assert tx.source_agent_chain == (alice,)
     assert len(snap.events) == 1
+    retained_event = snap.events[0]
+    assert isinstance(retained_event, WorldEvent)
 
     report = build_social_transmission_report(
         experiment_id=exp_id,
         run_id=run_id,
-        events=snap.events,
+        events=(retained_event,),
         traces=snap.traces,
         transmission_root_id="comm-alice-pg",
     )

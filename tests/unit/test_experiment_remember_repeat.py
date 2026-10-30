@@ -8,6 +8,7 @@ import pytest
 
 from agents.cognition.experimentation import (
     ExperimentCognitionBinding,
+    ExperimentLedger,
     compile_experiment_command,
     empty_experiment_ledger,
     score_remembered_experiment,
@@ -41,7 +42,7 @@ class _Observation:
         self.artifacts = ()
 
 
-def _ledger():
+def _ledger() -> ExperimentLedger:
     return empty_experiment_ledger(
         _OWNER,
         ExperimentCognitionBinding(

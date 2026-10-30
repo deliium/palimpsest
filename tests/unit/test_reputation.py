@@ -28,7 +28,9 @@ from agents.cognition.reputation import (
     source_trust_band_for,
 )
 from agents.models import AgentId
+from memory.models import MemoryTrace
 from simulation.runner_models import ReputationMode
+from world.communications import StructuredUtterance
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
 from world.observations import (
     Observation,
@@ -475,7 +477,7 @@ def test_world_inputs_are_rejected() -> None:
             tick=2,
             observation=observation,
             social_identity=identity,
-            world_state=WorldState,  # type: ignore[arg-type]
+            world_state=WorldState,
         )
     with pytest.raises(TypeError, match="forbidden_input"):
         apply_reputation_update(
@@ -505,7 +507,7 @@ def _memory_trace(
     occurrence: ObservedOccurrence,
     *,
     observation_tick: int = 2,
-):
+) -> MemoryTrace:
     from agents.cognition.memory import build_direct_observation_memory_trace
 
     return build_direct_observation_memory_trace(
@@ -621,7 +623,7 @@ def _tell(
     object_text: str,
     communication_id: str,
     hop: int = 0,
-):
+) -> StructuredUtterance:
     from world.communications import (
         CommunicationRelation,
         origin_utterance,
@@ -657,7 +659,7 @@ def _tell(
 
 
 def _heard(
-    utterance,
+    utterance: StructuredUtterance,
     *,
     speaker: str,
     listener: str,
@@ -732,7 +734,9 @@ def test_source_trust_scales_third_party_testimony(
     cautious_profile = cautious.profile_for(_agent("focal"))
     missing_profile = missing.profile_for(_agent("focal"))
     assert cautious_profile is not None and missing_profile is not None
-    trusted_harm = trusting.profile_for(_agent("focal")).harm.value
+    trusted_profile = trusting.profile_for(_agent("focal"))
+    assert trusted_profile is not None
+    trusted_harm = trusted_profile.harm.value
     assert cautious_profile.harm.value < trusted_harm
     assert missing_profile.harm.value == 0.2
     assert "source_trust_missing" in caplog.text

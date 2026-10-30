@@ -11,12 +11,13 @@ from world.events import (
     OccurrenceContext,
     PossessionClaimAsserted,
     TakenFromCorpse,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def _event(details: object, cause: object, sequence: int):
+def _event(details: object, cause: object, sequence: int) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(f"evt-{sequence}"),
         run_id="run-1",

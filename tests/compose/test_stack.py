@@ -20,6 +20,7 @@ import httpx
 import pytest
 
 from infrastructure.settings import redact_secrets
+from tests.compose.acceptance import require_prerequisite
 
 pytestmark = pytest.mark.compose
 
@@ -32,7 +33,7 @@ _LOGGER = logging.getLogger("palimpsest.compose.tests")
 def _docker() -> str:
     docker = shutil.which("docker")
     if docker is None:
-        pytest.skip("docker CLI is not available")
+        require_prerequisite("docker CLI is not available")
     return docker
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agents.cognition.competence import (
     CompetenceDomain,
+    CompetenceSelfModel,
     default_competence_belief_policy,
     empty_competence_model,
     update_competence,
@@ -30,6 +31,7 @@ def test_checkpoint_copies_competence_like_reputation() -> None:
     fresh.restore_runtime_checkpoint(exported)
     restored = fresh._competence
     assert restored is not None
+    assert isinstance(restored, CompetenceSelfModel)
     assert restored.owner_id == runtime.agent_id
     assert restored.belief_for(CompetenceDomain.FORAGING).support_mass == 0.10
     blank = AgentRuntimeCheckpoint(

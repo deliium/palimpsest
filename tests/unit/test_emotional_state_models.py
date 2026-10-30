@@ -35,7 +35,8 @@ def test_default_catalog_is_seven_closed_kinds() -> None:
         EmotionKind.CONFIDENCE,
     )
     assert len(DEFAULT_EMOTION_KINDS) == 7
-    assert EmotionKind.FEAR is not RelationshipDimension.FEAR
+    emotion: object = EmotionKind.FEAR
+    assert emotion is not RelationshipDimension.FEAR
     assert EmotionKind.FEAR.value == "fear"
     assert RelationshipDimension.FEAR.value == "fear"
 

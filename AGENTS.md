@@ -80,6 +80,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | Experiments | `docs/experiments.md` | AY treatments, reproduction, and demographic interpretation |
 | Cultural metrics | `docs/cultural-evolution-metrics.md` | Opt-in capture, six families, seed-block intervals, provenance limits |
 | Historical contingency | `docs/historical-contingency.md` | Experiment BN forked replay, intervention lineage, seven outcome domains, seed-block statistics |
+| V3 benchmark suite | `docs/v3-benchmark-suite.md` | Thirty generational cases, controlled/autonomous lanes, seed-block comparison, qualification matrix, measured envelope |
 | Lineage explorer | `docs/lineage-explorer.md` | Eight-family read-only lineage graph API, optional capture, cursors and availability semantics |
 | Observer | `docs/observer.md` | Read-only region and journey presentation |
 | Physical simulation | `docs/physical-simulation.md` | Discrete journeys, fatigue, capacity, and death |

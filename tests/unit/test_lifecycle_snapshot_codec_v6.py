@@ -24,6 +24,7 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.events import EVENT_SCHEMA_REPLAY_V9
 from world.identifiers import WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.models import non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.lifecycle_snapshot_codec_v6")
@@ -110,11 +111,13 @@ def test_lifecycle_snapshot_round_trip_and_restore() -> None:
     assert type(decoded) is WorldSnapshot
     assert decoded.persistence_codec_version == "v6"
     assert len(decoded.lifecycle_records) == 1
+    assert isinstance(decoded.lifecycle_records[0], AgentLifecycleRecord)
     assert decoded.lifecycle_records[0].cohort_id == "cohort-bootstrap"
 
     restored = WorldEngine.restore_from_snapshot(decoded, population_lifecycle=spec)
     assert restored.lifecycle_channel_active is True
     assert len(restored.lifecycle_records) == 1
+    assert isinstance(restored.lifecycle_records[0], AgentLifecycleRecord)
     assert restored.lifecycle_records[0].stage.value == "infant"
 
 
@@ -199,6 +202,8 @@ def test_research_fork_rematerialize_preserves_lifecycle_records() -> None:
     assert child.run_id.value == "run-lifecycle-fork-child"
     assert child.persistence_codec_version == "v6"
     assert len(child.lifecycle_records) == len(parent.lifecycle_records)
+    assert isinstance(child.lifecycle_records[0], AgentLifecycleRecord)
+    assert isinstance(parent.lifecycle_records[0], AgentLifecycleRecord)
     assert child.lifecycle_records[0].cohort_id == parent.lifecycle_records[0].cohort_id
     assert child.registrations == parent.registrations
     restored = WorldEngine.restore_from_snapshot(child, population_lifecycle=spec)

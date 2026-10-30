@@ -9,6 +9,7 @@ import uuid
 import httpx
 import pytest
 from fastapi import FastAPI
+from tests.integration.api_helpers import seed_api_run
 
 from api.app import create_app
 from api.simulation_manager import SimulationManager, TickExecutionResult
@@ -39,6 +40,7 @@ async def test_v1_api_create_status_and_stream_publication(
     migrated_test_database: Settings,
 ) -> None:
     run_id = _unique("v1-e2e")
+    await seed_api_run(database_resources, run_id)
     settings = load_settings(
         env_file=False,
         database_url=migrated_test_database.database_dsn(),

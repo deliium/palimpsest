@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,13 +14,26 @@ from experiments.generational_artifacts import (
 from research_runner.generational_composition import open_generational_archive
 from simulation.clock import Tick
 from simulation.models import RunId
+from simulation.persistence import (
+    RunCreateRequest,
+    RunManifest,
+    SnapshotId,
+    TickAppendRequest,
+    TickCommit,
+    WorldSnapshot,
+)
 from simulation.runner import SimulationRunner
+from simulation.runner_models import SimulationRunnerConfig
 from tests.unit.test_generational_population_runner import _v55_config
+from tests.unit.test_persistence_serialization import _commit, _manifest, _snapshot
+from world.events import WorldEvent
 from world.identifiers import WorldRevision
 
 
 class _Reader:
-    async def reference(self, run_id: str, boundary_tick: int):
+    async def reference(
+        self, run_id: str, boundary_tick: int
+    ) -> HistoricalBoundaryReference:
         return HistoricalBoundaryReference(
             revision=boundary_tick,
             objective_commit_hash=f"{boundary_tick:064d}",
@@ -63,7 +77,7 @@ async def test_real_runner_writes_terminal_history_and_completion(
         await runner.aclose()
 
 
-async def _completed_archive(tmp_path: Path):
+async def _completed_archive(tmp_path: Path) -> tuple[SimulationRunnerConfig, RunId]:
     from research_runner.generational_composition import open_generational_archive
 
     config = _v55_config()
@@ -140,36 +154,60 @@ async def test_archive_adoption_rejects_incomplete_output(tmp_path: Path) -> Non
 
 
 class _Runs:
-    async def get_run(self, run_id):
-        return object()
+    async def get_run(self, run_id: RunId) -> RunManifest:
+        return _manifest()
 
-
-class _Commit:
-    resulting_tick = Tick(4)
-    resulting_revision = WorldRevision(4)
-    commit_hash = type("H", (), {"value": "a" * 64})()
+    async def create_run(self, request: RunCreateRequest) -> RunManifest:
+        raise AssertionError("historical reader must not create runs")
 
 
 class _Journal:
-    def __init__(self, commit=None) -> None:
+    def __init__(self, commit: TickCommit | None = None) -> None:
         self.commit = commit
 
-    async def get_tick_commit(self, run_id, tick):
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
         return self.commit
 
+    async def append_tick(self, request: TickAppendRequest) -> TickCommit:
+        raise AssertionError("historical reader must not append ticks")
 
-class _Snap:
-    next_tick = Tick(4)
-    snapshot_id = type("S", (), {"value": "snap-4"})()
-    integrity_hash = type("I", (), {"value": "b" * 64})()
+    async def list_events(
+        self,
+        run_id: RunId,
+        *,
+        from_tick: Tick,
+        to_tick: Tick | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[WorldEvent, ...]:
+        raise AssertionError("historical reader must not list events")
+
+    async def list_tick_commits(
+        self, run_id: RunId, *, from_tick: Tick, to_tick: Tick | None
+    ) -> tuple[TickCommit, ...]:
+        raise AssertionError("historical reader must not list commits")
+
+
+def _boundary_snapshot(*, next_tick: int = 4) -> WorldSnapshot:
+    return replace(
+        _snapshot(integrity="b" * 64),
+        snapshot_id=SnapshotId("snap-4"),
+        next_tick=Tick(next_tick),
+        revision=WorldRevision(4),
+    )
 
 
 class _Snaps:
-    def __init__(self, snapshot=None) -> None:
+    def __init__(self, snapshot: WorldSnapshot | None = None) -> None:
         self.snapshot = snapshot
 
-    async def get_latest_at_or_before(self, run_id, tick):
+    async def get_latest_at_or_before(
+        self, run_id: RunId, tick: Tick
+    ) -> WorldSnapshot | None:
         return self.snapshot
+
+    async def get_snapshot(self, snapshot_id: SnapshotId) -> WorldSnapshot | None:
+        raise AssertionError("historical reader must use boundary lookup")
 
 
 @pytest.mark.asyncio
@@ -179,7 +217,9 @@ async def test_postgres_boundary_reader_reads_exact_commit_and_snapshot() -> Non
     )
 
     reader = PostgresHistoricalBoundaryReader(
-        runs=_Runs(), journal=_Journal(_Commit()), snapshots=_Snaps(_Snap())
+        runs=_Runs(),
+        journal=_Journal(_commit(tick=3, predecessor=None, commit="a" * 64)),
+        snapshots=_Snaps(_boundary_snapshot()),
     )
     reference = await reader.reference("run-1", 4)
     assert reference.revision == 4
@@ -195,17 +235,14 @@ async def test_postgres_boundary_reader_rejects_bad_evidence() -> None:
 
     with pytest.raises(ValueError, match="historical_commit_missing"):
         await PostgresHistoricalBoundaryReader(
-            runs=_Runs(), journal=_Journal(None), snapshots=_Snaps(_Snap())
+            runs=_Runs(), journal=_Journal(None), snapshots=_Snaps(_boundary_snapshot())
         ).reference("run-1", 4)
-
-    class _LateSnap(_Snap):
-        next_tick = Tick(5)
 
     with pytest.raises(ValueError, match="historical_snapshot_after_boundary"):
         await PostgresHistoricalBoundaryReader(
             runs=_Runs(),
-            journal=_Journal(_Commit()),
-            snapshots=_Snaps(_LateSnap()),
+            journal=_Journal(_commit(tick=3, predecessor=None, commit="a" * 64)),
+            snapshots=_Snaps(_boundary_snapshot(next_tick=5)),
         ).reference("run-1", 4)
 
 
@@ -272,6 +309,7 @@ async def test_community_provider_builds_sample_and_criterion() -> None:
     )
     payload = await provider.sample(boundary)
     assert payload is not None
+    assert isinstance(payload, dict)
     assert payload["living_count"] == 1
     assert payload["coverage_complete"] is True
 
@@ -283,6 +321,9 @@ async def test_community_provider_builds_sample_and_criterion() -> None:
             params={"count": 1, "window_ticks": 5},
         )
     )
+    from experiments.generational_sampling import CommunityCountCriterion
+
+    assert isinstance(criterion, CommunityCountCriterion)
     decision = await criterion.evaluate(boundary)
     assert decision.measurements["coverage_complete"] is True
     assert decision.measurements["candidate_community_count"] == 0

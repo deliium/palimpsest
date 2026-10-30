@@ -140,7 +140,9 @@ def test_harvest_attaches_rows_when_durable_enabled(
             tick=1,
         )
     assert payload is not None
+    assert isinstance(payload["durable_record_rows"], tuple)
     assert len(payload["durable_record_rows"]) == 1
+    assert isinstance(payload["durable_record_event_rows"], tuple)
     assert len(payload["durable_record_event_rows"]) == 1
     assert "durable_record_harvest_built" in caplog.text
 

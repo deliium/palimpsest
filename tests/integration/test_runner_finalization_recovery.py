@@ -7,6 +7,8 @@ boundaries with injectable pending repositories.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from tests.simulation_helpers import alive_body, make_location, make_weather
 
@@ -58,7 +60,7 @@ def _config(*, max_ticks: int = 3) -> SimulationRunnerConfig:
     )
 
 
-def _crash(point: RunnerCrashPoint):
+def _crash(point: RunnerCrashPoint) -> Callable[[RunnerCrashPoint, int | None], None]:
     def _hook(seen: RunnerCrashPoint, _ordinal: int | None) -> None:
         if seen is point:
             raise RunnerCrashInjected(seen)

@@ -11,15 +11,13 @@ from agents.cognition.acceptance_memory import empty_acceptance_memories
 from agents.cognition.configuration import build_cognitive_loop
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
-from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V18,
-    checkpoint_schema_for_production,
-)
+from simulation.persistence import checkpoint_schema_for_production
 from simulation.runner import _resource_exchange_profile_loop_kwargs
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V41,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_resource_exchange_profile_spec,
     example_subjective_valuation_spec,
@@ -32,11 +30,12 @@ from simulation.serialization import (
     subjective_valuation_checkpoint_payload,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
+from world.events import EVENT_SCHEMA_REPLAY_V18
 from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     agent_a = AgentId("agent-a")
     return base_runner_config_from_scenario(

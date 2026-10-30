@@ -158,9 +158,9 @@ class _GiveDirection:
     value = "give"
 
 
-def _belief(ledger: object, pattern: NormPattern) -> NormBelief:
+def _belief(ledger: NormLedger | None, pattern: NormPattern) -> NormBelief:
     assert ledger is not None
-    matches = [item for item in ledger.beliefs if item.pattern is pattern]  # type: ignore[attr-defined]
+    matches = [item for item in ledger.beliefs if item.pattern is pattern]
     assert len(matches) == 1
     return matches[0]
 

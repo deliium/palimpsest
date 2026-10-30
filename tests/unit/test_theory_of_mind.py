@@ -30,6 +30,7 @@ from agents.cognition.theory_of_mind import (
     update_theory_of_mind,
 )
 from agents.models import AgentId
+from social.models import RelationshipId
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
 from world.models import LifeStatus
 from world.observations import (
@@ -239,6 +240,7 @@ def test_empty_model_and_enabled_config_build_default_policy() -> None:
         theory_of_mind_mode=CognitionTheoryOfMindMode.ENABLED,
         theory_of_mind_policy=custom,
     )
+    assert configured.theory_of_mind_policy is not None
     assert configured.theory_of_mind_policy.allow_provider is True
 
 
@@ -428,7 +430,6 @@ def test_testimony_weight_follows_trust_and_drops_multi_hop() -> None:
         RelationshipConfidence,
         RelationshipDimension,
         RelationshipDimensionState,
-        RelationshipId,
         RelationshipPolicyRef,
         RelationshipRevisionId,
     )
@@ -647,7 +648,6 @@ def test_food_ask_is_unreferenced_and_distrust_does_not_steer() -> None:
         RelationshipConfidence,
         RelationshipDimension,
         RelationshipDimensionState,
-        RelationshipId,
         RelationshipPolicyRef,
         RelationshipRevisionId,
     )
@@ -717,6 +717,7 @@ def test_food_ask_is_unreferenced_and_distrust_does_not_steer() -> None:
         mind=model,
     )
     assert kept is not None
+    assert kept.command is not None
     assert kept.command.recipient_id == EntityId("body-ann")
     policy_ref = RelationshipPolicyRef(policy_id="rel-v1", version="1")
     low_trust = DirectedRelationshipProfile(
@@ -909,6 +910,7 @@ def test_move_exit_and_false_attack_choose_direction() -> None:
         mind=social,
     )
     assert decision is not None
+    assert decision.command is not None
     assert decision.command.recipient_id != EntityId("body-carol")
     nested = origin_utterance(
         text="note",

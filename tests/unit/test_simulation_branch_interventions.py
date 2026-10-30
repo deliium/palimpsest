@@ -7,7 +7,7 @@ import json
 import pytest
 
 from agents.models import AgentId
-from memory.beliefs import BeliefId
+from memory.models import BeliefId
 from simulation.branch_service import (
     InMemorySubjectiveClonePort,
     apply_belief_patch,
@@ -286,11 +286,10 @@ async def test_belief_patch_on_in_memory_clone_port() -> None:
         ),
     )
     port.replace_child_snapshot(run_id=child, owner_id=owner, snapshot=patched)
-    assert port.child_snapshot(run_id=child, owner_id=owner) is not None
+    child_snapshot = port.child_snapshot(run_id=child, owner_id=owner)
+    assert child_snapshot is not None
     assert (
-        port.child_snapshot(run_id=child, owner_id=owner)
-        .semantic_beliefs[0]
-        .claim.predicate
+        child_snapshot.semantic_beliefs[0].claim.predicate
         == "hungry"
     )
     assert BeliefId("belief-1") == belief.belief_id

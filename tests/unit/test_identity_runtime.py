@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pytest
 
@@ -30,6 +31,8 @@ from memory.beliefs import (
     BeliefRevisionRequest,
     BeliefValueKind,
     ClaimValue,
+    SemanticBelief,
+    SemanticBeliefHistory,
 )
 from memory.models import (
     OFFLINE_CONSOLIDATION_POLICY_VERSION,
@@ -49,7 +52,7 @@ from memory.models import (
     OfflineConsolidationSelection,
 )
 from memory.service import InMemoryMemoryService
-from simulation.agent_runtime import AgentRuntime
+from simulation.agent_runtime import AgentRuntime, PreparedObservation
 from simulation.bootstrap import registration_translator
 from simulation.subjective_state import InMemorySubjectiveStateService
 from social.service import InMemoryRelationshipService
@@ -173,10 +176,10 @@ class _BeliefReader:
     def __init__(self, service: InMemorySemanticBeliefService) -> None:
         self._service = service
 
-    def snapshot(self) -> tuple[object, ...]:
+    def snapshot(self) -> tuple[SemanticBelief, ...]:
         return self._service._store.snapshot()
 
-    def history(self, belief_id: BeliefId) -> object | None:
+    def history(self, belief_id: BeliefId) -> SemanticBeliefHistory | None:
         return self._service.history_sync(belief_id)
 
 
@@ -278,7 +281,7 @@ def _runtime() -> tuple[AgentRuntime, _BeliefReader]:
         belief_reader=BeliefStore(owner),
         belief_writer=BeliefStore(owner),
         subjective_state=subjective,
-        semantic_belief_reader=reader,  # type: ignore[arg-type]
+        semantic_belief_reader=reader,
     )
     runtime.start()
     return runtime, reader
@@ -290,13 +293,16 @@ async def test_finalize_applies_identity_and_bind_does_not(
 ) -> None:
     runtime, reader = _runtime()
     prepared = await runtime.prepare_observation(_observation(), token=_token(4))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     assert reader.snapshot() == ()
     with caplog.at_level(logging.DEBUG, logger="simulation.agent_runtime"):
         await runtime.finalize_pending(pending)
     heads = reader.snapshot()
     assert heads
-    histories = tuple(reader.history(item.belief_id) for item in heads)  # type: ignore[attr-defined]
+    raw_histories = tuple(reader.history(item.belief_id) for item in heads)
+    assert all(history is not None for history in raw_histories)
+    histories = cast("tuple[SemanticBeliefHistory, ...]", raw_histories)
     state = project_identity_state(owner_id=AgentId("agent-1"), histories=histories)
     assert state.views
     assert all(view.claim.value.bool_value is True for view in state.views)

@@ -83,6 +83,7 @@ def test_canonical_payload_exact_keys() -> None:
         "perception_mode",
         "rng_namespace",
     }
+    assert isinstance(payload["copy_fidelity_policy"], dict)
     assert set(payload["copy_fidelity_policy"]) == {
         "copy_requires_hold_or_colocation",
         "default_fidelity",
@@ -90,6 +91,7 @@ def test_canonical_payload_exact_keys() -> None:
         "max_relation_edits",
         "preserve_genre",
     }
+    assert isinstance(payload["integrity_policy"], dict)
     assert set(payload["integrity_policy"]) == {
         "allow_damage",
         "allow_partial_loss",

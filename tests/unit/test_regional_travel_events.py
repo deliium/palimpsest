@@ -21,6 +21,7 @@ from world.events import (
     JourneyEnded,
     JourneyStarted,
     OccurrenceContext,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
@@ -46,14 +47,14 @@ def _journey() -> Journey:
 
 
 def _event(
-    details,
+    details: JourneyStarted | JourneyArrived | JourneyEnded,
     *,
     event_id: str,
     tick: int,
     sequence: int,
-    origin,
-    destination=None,
-):
+    origin: EntityId | None,
+    destination: EntityId | None = None,
+) -> WorldEvent:
     actor = (
         details.journey.actor_body_id if isinstance(details, JourneyStarted) else None
     )

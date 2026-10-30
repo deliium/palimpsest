@@ -45,9 +45,12 @@ from memory.models import (
     MemoryLineage,
     MemoryMutationBatch,
     MemoryProvenance,
+    MemoryRecallRequest,
+    MemoryRecallResult,
     MemoryReconstructionPolicy,
     MemoryRelation,
     MemoryRetrieveRequest,
+    MemoryRetrieveResult,
     MemoryRunId,
     MemoryScope,
     MemoryScoreWeights,
@@ -180,12 +183,21 @@ def _lane_trace(
     )
 
 
-def _loop_parts(observation: Observation, owner: AgentId):
+def _loop_parts(
+    observation: Observation, owner: AgentId
+) -> tuple[
+    CognitiveLoopInput,
+    InterpretedPerception,
+    ActionPlan,
+    SelectedIntention,
+    RetrievedMemoryContext,
+]:
     loop_input = CognitiveLoopInput(
         agent_id=owner,
         observation=observation,
         internal_state=InternalAgentState(owner_id=owner),
     )
+    assert observation.self_body is not None
     perception = InterpretedPerception(
         owner_id=owner,
         observer_id=observation.observer_id,
@@ -221,16 +233,16 @@ def _loop_parts(observation: Observation, owner: AgentId):
 
 
 class _SpyMemoryService(InMemoryMemoryService):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, scope: MemoryScope) -> None:
+        super().__init__(scope)
         self.retrieve_requests: list[MemoryRetrieveRequest] = []
-        self.recall_requests = []
+        self.recall_requests: list[MemoryRecallRequest] = []
 
-    async def retrieve(self, request):
+    async def retrieve(self, request: MemoryRetrieveRequest) -> MemoryRetrieveResult:
         self.retrieve_requests.append(request)
         return await super().retrieve(request)
 
-    async def recall(self, request):
+    async def recall(self, request: MemoryRecallRequest) -> MemoryRecallResult:
         self.recall_requests.append(request)
         return await super().recall(request)
 
@@ -416,9 +428,9 @@ async def test_scoped_retriever_uses_bounded_destination_lane_and_unique_ids() -
     assert service.retrieve_requests[0].operation_id == "cog:agent-1:t10:1"
     assert service.retrieve_requests[1].filters.location_id is None
     assert service.retrieve_requests[1].limit == 2
-    assert service.retrieve_requests[1].operation_id.startswith(
-        "destination-operation-"
-    )
+    destination_operation_id = service.retrieve_requests[1].operation_id
+    assert destination_operation_id is not None
+    assert destination_operation_id.startswith("destination-operation-")
     assert len(service.recall_requests) == 2
     local_recall, destination_recall = service.recall_requests
     assert local_recall.reconstruction_id.value == "recon-agent-1-t10-1"

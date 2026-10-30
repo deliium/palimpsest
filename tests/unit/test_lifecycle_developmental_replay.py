@@ -26,6 +26,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_developmental_lifecycle_spec,
@@ -33,12 +34,13 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.events import EVENT_SCHEMA_REPLAY_V10
 from world.identifiers import WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.models import non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.lifecycle_developmental_replay")
 
 
-def _developmental_config(*, seed: int, max_ticks: int = 24):
+def _developmental_config(*, seed: int, max_ticks: int = 24) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return replace(
@@ -77,7 +79,7 @@ def _developmental_config(*, seed: int, max_ticks: int = 24):
     )
 
 
-def _obs_lifecycle_payload(engine: WorldEngine) -> tuple[tuple, ...]:
+def _obs_lifecycle_payload(engine: WorldEngine) -> tuple[tuple[object, ...], ...]:
     return tuple(
         (
             obs.observer_id.value,
@@ -94,7 +96,11 @@ def _obs_lifecycle_payload(engine: WorldEngine) -> tuple[tuple, ...]:
 
 
 def _assigned_lifespans(engine: WorldEngine) -> tuple[int, ...]:
-    return tuple(record.assigned_lifespan_ticks for record in engine.lifecycle_records)
+    lifespans = []
+    for record in engine.lifecycle_records:
+        assert isinstance(record, AgentLifecycleRecord)
+        lifespans.append(record.assigned_lifespan_ticks)
+    return tuple(lifespans)
 
 
 @pytest.mark.asyncio

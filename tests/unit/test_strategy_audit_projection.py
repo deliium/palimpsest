@@ -9,9 +9,9 @@ import pytest
 
 from observer.strategy_audit import project_strategy_audit_overlay
 from world.communications import origin_utterance
+from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
-    ActionCause,
     OccurrenceContext,
     Searched,
     Talked,

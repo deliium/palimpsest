@@ -9,7 +9,7 @@ import pytest
 
 from agents.models import AgentId
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from simulation.serialization import decode_domain, encode_domain
 from tests.physical_helpers import (
     PhysicalWorldFixture,
@@ -17,7 +17,7 @@ from tests.physical_helpers import (
     two_location_fixture,
 )
 from tests.simulation_helpers import alive_body
-from world.actions import Inscribe, TransferArtifact
+from world.actions import AgentCommand, Inscribe, TransferArtifact
 from world.artifacts import ArtifactContent, ArtifactKind, ArtifactRelation
 from world.events import ArtifactCreated
 from world.identifiers import EntityId, WorldId, WorldRevision
@@ -70,17 +70,17 @@ def _engine(fixture: PhysicalWorldFixture | None = None) -> WorldEngine:
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 
-def _created_id(result: object) -> EntityId:
+def _created_id(result: TickResult) -> EntityId:
     details = [
         record.event.details
-        for record in result.events  # type: ignore[attr-defined]
+        for record in result.events
         if type(record.event.details) is ArtifactCreated
     ]
     assert len(details) == 1

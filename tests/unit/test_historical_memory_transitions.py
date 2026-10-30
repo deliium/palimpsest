@@ -10,6 +10,7 @@ import pytest
 from analysis.historical_memory import (
     HistoricalMemoryLayerId,
     HistoricalMemoryTransitionCause,
+    HistoricalProvenanceGraph,
     HistoricalSourceRef,
     build_historical_provenance_graph,
     track_historical_memory_transitions,
@@ -22,7 +23,7 @@ def test_living_to_communicative_on_last_witness_death(
     source = HistoricalSourceRef(source_event_id="evt-1")
     deaths = {"w1": 3}
 
-    def graph_builder(as_of_tick: int):
+    def graph_builder(as_of_tick: int) -> HistoricalProvenanceGraph:
         return build_historical_provenance_graph(
             as_of_tick=as_of_tick,
             sources=(source,),
@@ -70,7 +71,7 @@ def test_communicative_to_cultural_on_chain_expiry() -> None:
     # artifact attestation remains -> cultural.
     deaths = {"w1": 2, "c1": 5}
 
-    def graph_builder(as_of_tick: int):
+    def graph_builder(as_of_tick: int) -> HistoricalProvenanceGraph:
         return build_historical_provenance_graph(
             as_of_tick=as_of_tick,
             sources=(source,),
@@ -120,7 +121,7 @@ def test_resolution_filters_non_boundary_ticks(
     source = HistoricalSourceRef(source_event_id="evt-1")
     deaths = {"w1": 4}
 
-    def graph_builder(as_of_tick: int):
+    def graph_builder(as_of_tick: int) -> HistoricalProvenanceGraph:
         return build_historical_provenance_graph(
             as_of_tick=as_of_tick,
             sources=(source,),

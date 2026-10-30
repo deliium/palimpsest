@@ -6,6 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import pytest
@@ -13,6 +14,7 @@ from fastapi import FastAPI
 from pydantic import SecretStr
 
 from api.app import DatabaseResourcesLike, DisposableEngine, create_app
+from api.simulation_manager import SimulationManager
 from infrastructure.logging import reset_logging_for_tests
 from infrastructure.settings import Settings
 
@@ -52,7 +54,7 @@ def logging_sandbox() -> Iterator[None]:
 
 
 def _factory(_settings: Settings) -> DatabaseResourcesLike:
-    return FakeResources(engine=FakeEngine())
+    return cast(DatabaseResourcesLike, FakeResources(engine=FakeEngine()))
 
 
 def _enum(value: str) -> SimpleNamespace:
@@ -116,7 +118,7 @@ def _app(manager: FakeManager) -> FastAPI:
     return create_app(
         settings=settings,
         database_factory=_factory,
-        simulation_manager=manager,
+        simulation_manager=cast(SimulationManager, manager),
     )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import agents.cognition.possession_legitimacy as legitimacy
 from agents.cognition.possession_legitimacy import (
     PossessionAlignmentContext,
@@ -123,7 +125,7 @@ def test_two_owners_keep_separate_ledgers_after_one_claim() -> None:
     assert parent_next.support_count("group_owns") == 1
     assert neighbor_next.support_count("children_should_inherit") == 1
     assert neighbor_next.support_count("caregiver_inherits") == 1
-    assert parent_next.claims[0].claimant_id != neighbor.owner_id
+    assert parent_next.claims[0].claimant_id != cast(EntityId, neighbor.owner_id)
 
 
 def test_blank_child_does_not_receive_parent_doctrines() -> None:

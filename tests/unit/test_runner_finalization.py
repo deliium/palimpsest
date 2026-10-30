@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from agents.cognition.defaults import default_cognitive_loop
@@ -26,6 +28,7 @@ from simulation.memory_finalization import InMemoryPendingFinalizationRepository
 from simulation.models import RunId, StochasticIdentity
 from simulation.run_control import (
     FINALIZATION_COMMAND_CODEC_VERSION,
+    FinalizationCommand,
     ResumeMode,
     RunnerCrashInjected,
     RunnerCrashPoint,
@@ -154,7 +157,9 @@ def _config(*, max_ticks: int = 2) -> SimulationRunnerConfig:
     )
 
 
-def _crash_at(point: RunnerCrashPoint, *, ordinal: int | None = None):
+def _crash_at(
+    point: RunnerCrashPoint, *, ordinal: int | None = None
+) -> Callable[[RunnerCrashPoint, int | None], None]:
     def _hook(seen: RunnerCrashPoint, seen_ordinal: int | None) -> None:
         if seen is point and (ordinal is None or seen_ordinal == ordinal):
             raise RunnerCrashInjected(seen, ordinal=seen_ordinal)
@@ -199,6 +204,7 @@ async def test_abort_pending_allows_retry() -> None:
     assert exc_info.value.code is AgentRuntimeErrorCode.PENDING_MISSING
 
     prepared2 = await runtime.prepare_observation(_obs(tick=1), token=_token(1))
+    assert isinstance(prepared2, PreparedObservation)
     pending2 = await runtime.bind_effective_command(prepared2)
     result = await runtime.finalize_pending(pending2)
     assert result.invocation_id == pending2.invocation_id
@@ -209,8 +215,10 @@ async def test_finalization_command_roundtrip_without_recognition() -> None:
     runtime, _ = _runtime()
     runtime.start()
     prepared = await runtime.prepare_observation(_obs(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     command = pending.to_finalization_command(run_id=RunId("run-cmd-1"))
+    assert isinstance(command, FinalizationCommand)
     assert command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION
     encoded = encode_finalization_command(command)
     decoded = decode_finalization_command(encoded)
@@ -220,6 +228,7 @@ async def test_finalization_command_roundtrip_without_recognition() -> None:
     assert result.invocation_id == command.invocation_id
     assert runtime.internal_state.invocation_count == 1
     again = pending_from_finalization_command(decoded)
+    assert isinstance(again, PendingRuntimeFinalization)
     assert again.integrity_hash == command.integrity_hash
 
 

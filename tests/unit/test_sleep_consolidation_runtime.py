@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from agents.cognition.configuration import (
@@ -30,6 +32,7 @@ from memory.models import (
     MemorySourceKind,
     MemoryTrace,
     MentionId,
+    OfflineConsolidationAudit,
 )
 from memory.service import InMemoryMemoryService
 from tests.typecheck.cognitive_loop import (
@@ -223,7 +226,7 @@ async def test_selected_forget_and_access_receipts_are_idempotent() -> None:
 @pytest.mark.asyncio
 async def test_abort_drops_pending_and_finalize_commits_selected_ids() -> None:
     from memory.models import BeliefStore, MemoryStore
-    from simulation.agent_runtime import AgentRuntime
+    from simulation.agent_runtime import AgentRuntime, PreparedObservation
     from simulation.bootstrap import registration_translator
     from tests.unit.test_agent_runtime import (
         _agent,
@@ -264,6 +267,7 @@ async def test_abort_drops_pending_and_finalize_commits_selected_ids() -> None:
     )
     runtime.start()
     prepared = await runtime.prepare_observation(_self(tick=4), token=_token(4))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared, effective_command=Sleep())
     assert pending.loop_result.offline_consolidation is not None
     runtime.abort_pending(pending)
@@ -272,6 +276,7 @@ async def test_abort_drops_pending_and_finalize_commits_selected_ids() -> None:
     assert active == {"m-a", "m-b", "m-faint"}
 
     prepared_again = await runtime.prepare_observation(_self(tick=5), token=_token(5))
+    assert isinstance(prepared_again, PreparedObservation)
     committed = await runtime.bind_effective_command(
         prepared_again, effective_command=Sleep()
     )
@@ -284,4 +289,5 @@ async def test_abort_drops_pending_and_finalize_commits_selected_ids() -> None:
     assert forgotten.forgotten_at_tick == 5
     audits = runtime.export_offline_consolidation_audits()
     assert len(audits) == 1
-    assert audits[0].soft_forget_count == 1
+    audit = cast(OfflineConsolidationAudit, audits[0])
+    assert audit.soft_forget_count == 1

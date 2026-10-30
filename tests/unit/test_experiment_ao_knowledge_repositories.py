@@ -23,14 +23,16 @@ from experiments.composition import (
     knowledge_repository_harvest_from_run,
     repository_objective_rows_from_repositories,
 )
+from experiments.models import ExperimentDefinition
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V33,
     RUNNER_SCHEMA_VERSION_V34,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_durable_records_spec,
     example_knowledge_repositories_spec,
@@ -38,6 +40,7 @@ from simulation.runner_models import (
 from tests.physical_helpers import physical_config, two_location_fixture
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.actions import (
+    AgentCommand,
     Attack,
     DamageRecord,
     DepositRecord,
@@ -77,7 +80,7 @@ _AO_ARM_IDS = (
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -107,7 +110,7 @@ def _base():
     )
 
 
-def _arm(definition, arm_id: str):
+def _arm(definition: ExperimentDefinition, arm_id: str) -> SimulationRunnerConfig:
     return next(
         item for item in definition.conditions if item.condition_id == arm_id
     ).runner_config
@@ -185,10 +188,10 @@ def _engine(
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 
@@ -230,7 +233,7 @@ def test_arm_establish_deposit_survival_family() -> None:
     repo = engine._snapshot.world.state.repositories[repository_id]
     assert artifact_id in repo.member_artifact_ids, arm_id
     rows = repository_objective_rows_from_repositories(
-        engine._snapshot.world.state.repositories
+        tuple(engine._snapshot.world.state.repositories.values())
     )
     document = compute_knowledge_repository_survival(
         rows, run_id="ao-run", input_revision="rev-1"
@@ -257,7 +260,7 @@ def test_arm_creator_death_repository_survives() -> None:
     assert repo.status is not RepositoryStatus.DESTROYED, arm_id
     assert artifact_id in repo.member_artifact_ids, arm_id
     rows = repository_objective_rows_from_repositories(
-        engine._snapshot.world.state.repositories
+        tuple(engine._snapshot.world.state.repositories.values())
     )
     document = compute_knowledge_repository_survival(
         rows,
@@ -265,7 +268,9 @@ def test_arm_creator_death_repository_survives() -> None:
         input_revision="rev-1",
         founder_death_ticks={"body-1": engine.tick.value},
     )
+    assert isinstance(document.values["surviving_after_founder_death_count"], int)
     assert document.values["surviving_after_founder_death_count"] >= 1, arm_id
+    assert isinstance(document.values["orphaned_member_count"], int)
     assert document.values["orphaned_member_count"] >= 1, arm_id
 
 
@@ -301,10 +306,11 @@ def test_arm_neglect_decay_organization() -> None:
         knowledge_repositories_spec=example_knowledge_repositories_spec(
             neglect_ticks=2
         ),
-        repositories=engine._snapshot.world.state.repositories,
+        repositories=tuple(engine._snapshot.world.state.repositories.values()),
         events=(),
     )
     assert harvest is not None
+    assert isinstance(harvest["repository_objective_rows"], tuple)
     org = compute_knowledge_repository_organization(
         harvest["repository_objective_rows"],
         run_id="ao-run",
@@ -316,6 +322,7 @@ def test_arm_neglect_decay_organization() -> None:
             },
         ),
     )
+    assert isinstance(org.values["member_count_total"], int)
     assert org.values["member_count_total"] >= 1, arm_id
 
 
@@ -342,6 +349,7 @@ def test_arm_inaccessible_blocks_access_family() -> None:
         inaccessible_expectations=({"repository_id": repository_id.value},),
     )
     assert access.values["retrieve_deny_count"] == 1, arm_id
+    assert isinstance(access.values["inaccessible_block_count"], int)
     assert access.values["inaccessible_block_count"] >= 1, arm_id
 
 

@@ -16,6 +16,7 @@ from world.events import (
     RepositoryMemberDeposited,
     RepositoryMemberRetrieved,
     RepositoryNeglected,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import (
@@ -45,7 +46,12 @@ def _system_cause() -> SystemCause:
     )
 
 
-def _event(details: object, *, schema_version: int, cause: object | None = None):
+def _event(
+    details: object,
+    *,
+    schema_version: int,
+    cause: ActionCause | SystemCause | None = None,
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-1"),
         run_id="run-1",
@@ -102,5 +108,6 @@ def test_repository_detail_round_trip() -> None:
         event = _event(details, schema_version=EVENT_SCHEMA_REPLAY_V14, cause=cause)
         encoded = encode_domain(event)
         decoded = decode_domain(encoded)
+        assert isinstance(decoded, WorldEvent)
         assert type(decoded.details) is type(details)
         assert decoded.schema_version == EVENT_SCHEMA_REPLAY_V14

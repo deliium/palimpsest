@@ -39,6 +39,7 @@ def test_write_and_read_metric_sidecar(tmp_path: Path) -> None:
     loaded = store.read_metric_documents("cell-1")
     assert loaded is not None
     assert len(loaded) == 1
+    assert isinstance(loaded[0], MetricDocument)
     assert loaded[0].metric_family == "cooperation"
     assert loaded[0].values["coop_occurrence_rate"] == 0.5
 

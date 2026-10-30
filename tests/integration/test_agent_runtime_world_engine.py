@@ -125,6 +125,9 @@ class _FixedCommandPlanner:
         self_model: object | None = None,
         strategy_mode: object | None = None,
         strategy_policy: object | None = None,
+        reputation: object | None = None,
+        reputation_mode: object | None = None,
+        reputation_policy: object | None = None,
     ) -> ActionPlan:
         _ = (
             intention,
@@ -245,18 +248,21 @@ async def test_cognition_failure_yields_no_submission() -> None:
     class BoomPlanner:
         async def plan(
             self,
-            loop_input,
-            intention,
-            futures,
-            memory=None,
-            goal_board=None,
-            emotional_state=None,
-            causal_world_model=None,
-            theory_of_mind=None,
-            self_model=None,
-            strategy_mode=None,
-            strategy_policy=None,
-        ):  # type: ignore[no-untyped-def]
+            loop_input: CognitiveLoopInput,
+            intention: object,
+            futures: object,
+            memory: object | None = None,
+            goal_board: object | None = None,
+            emotional_state: object | None = None,
+            causal_world_model: object | None = None,
+            theory_of_mind: object | None = None,
+            self_model: object | None = None,
+            strategy_mode: object | None = None,
+            strategy_policy: object | None = None,
+            reputation: object | None = None,
+            reputation_mode: object | None = None,
+            reputation_policy: object | None = None,
+        ) -> ActionPlan:
             raise RuntimeError("secret planner boom")
 
     bootstrap = _bootstrap(("agent-1", "body-1"))

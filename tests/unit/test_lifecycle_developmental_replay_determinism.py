@@ -26,6 +26,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_developmental_lifecycle_spec,
@@ -43,7 +44,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.lifecycle_developmental_replay_determinism")
 
 
-def _base(*, seed: int = 173, max_ticks: int = 10):
+def _base(*, seed: int = 173, max_ticks: int = 10) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

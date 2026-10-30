@@ -163,3 +163,20 @@ No command, event, observer semantic, metric family, runner/result schema,
 capability ownership, SQL migration or API version is added; current pins remain
 runner v4/result v2, latest feature runner v55, 43 commands, 73 observer semantic
 types, 136 metric families, Alembic `0017`, `/v1` and `observer-protocol-v1`.
+
+The V3-44 generational civilization benchmark adds a separate thirty-case
+registry (`v3-generational-civilization-benchmark-v1`), domain-specific bounded
+v55 fixtures, a controlled mechanism lane plus an unassisted or declared grouped
+research lane, immutable `civilization-benchmark-run-v1`/`-suite-v1` sibling
+artifacts, a thin seed-block comparison composer, and a production CLI harness
+under `research_runner`. The `v3-bench` IDs and the v55-only content-empty
+`species_default_civilization_learner_v1` pack are benchmark composition, not new
+scientific schemas: default runner/result stay v4/v2, latest feature runner stays
+v55, commands stay 43, observer semantic types stay 73, metric families stay 136,
+Alembic head stays `0017`, and `institutional_economy` and
+`multi_hop_testimony_tracking` remain unowned. Research nulls are retained as
+explicit `unexecuted` checks; no emergence of government, money, religion, myth
+or institutions is required. The 2026-10-30 qualification measured all thirty
+mechanisms, 150 predeclared research runs, deterministic twins, and truthful
+10k/100k envelope limits (generational 100k completed ticks with an extinct
+final population; evidence-rich 100k incomplete).

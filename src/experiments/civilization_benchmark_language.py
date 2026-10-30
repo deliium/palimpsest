@@ -20,7 +20,9 @@ from experiments.civilization_benchmark_base import (
 )
 from experiments.civilization_benchmark_evidence import (
     BenchmarkBoundaryProbe,
+    ObservedOwnerStore,
     content_count,
+    observed_store_counts,
 )
 from experiments.civilization_benchmark_models import (
     V3BenchmarkCheck,
@@ -416,6 +418,7 @@ def _history_gate(
     owners: tuple[str, ...],
     reason_code: str,
     missing_reason: str,
+    observed: tuple[ObservedOwnerStore, ...] = (),
 ) -> V3BenchmarkCheck:
     if not mechanism_available:
         return _unavailable(selector, f"{selector}_disabled")
@@ -431,7 +434,7 @@ def _history_gate(
             boundary_start_tick=0,
             boundary_end_tick=boundary_end_tick,
         )
-    if rows < 1:
+    if rows < 1 and not observed:
         return V3BenchmarkCheck(
             selector_id=selector,
             selector_version=1,
@@ -444,6 +447,29 @@ def _history_gate(
             boundary_end_tick=boundary_end_tick,
             numerator=0,
             denominator=0,
+        )
+    if rows < 1:
+        observed_total = sum(row.count for row in observed)
+        return V3BenchmarkCheck(
+            selector_id=selector,
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.PASS,
+            reason_code=reason_code,
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=tuple(
+                V3BenchmarkSourceReference(
+                    source_kind=V3BenchmarkSourceKind.SUBJECTIVE_DEBUG,
+                    reference_id=f"boundary-tick-{row.boundary_tick}",
+                    owner_id=row.owner_id,
+                    tick=row.boundary_tick,
+                )
+                for row in observed
+            ),
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=observed_total,
+            denominator=observed_total,
         )
     return V3BenchmarkCheck(
         selector_id=selector,
@@ -494,6 +520,7 @@ def evaluate_symbolic_language(
             else "symbolic_interpretations_observed"
         ),
         missing_reason="no_symbolic_evidence_observed",
+        observed=observed_store_counts(probe, "symbolic_language"),
     )
 
 
@@ -543,6 +570,7 @@ def evaluate_translation(
         owners=_ledger_owners(ledgers),
         reason_code="translation_hypotheses_observed",
         missing_reason="no_translation_hypothesis_observed",
+        observed=observed_store_counts(probe, "translation"),
     )
 
 

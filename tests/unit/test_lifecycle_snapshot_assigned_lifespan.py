@@ -103,8 +103,10 @@ def test_new_snapshot_round_trips_assigned_lifespan() -> None:
     )
     decoded = decode_persistence(encode_persistence(snap), WorldSnapshot)
     assert type(decoded) is WorldSnapshot
+    assert isinstance(decoded.lifecycle_records[0], AgentLifecycleRecord)
     assert decoded.lifecycle_records[0].assigned_lifespan_ticks == 20
     restored = WorldEngine.restore_from_snapshot(decoded, population_lifecycle=spec)
+    assert isinstance(restored.lifecycle_records[0], AgentLifecycleRecord)
     assert restored.lifecycle_records[0].assigned_lifespan_ticks == 20
 
 
@@ -206,5 +208,7 @@ def test_legacy_keyset_synthesizes_run_lifespan_on_restore() -> None:
         "utf-8"
     )
     decoded = decode_persistence(legacy_bytes, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     restored = WorldEngine.restore_from_snapshot(decoded, population_lifecycle=spec)
+    assert isinstance(restored.lifecycle_records[0], AgentLifecycleRecord)
     assert restored.lifecycle_records[0].assigned_lifespan_ticks == 20

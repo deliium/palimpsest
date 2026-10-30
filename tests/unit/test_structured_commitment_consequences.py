@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import SimpleNamespace
+from typing import cast
 
 from agents.cognition.configuration import build_cognitive_loop
-from agents.cognition.models import MemoryUpdateKind
+from agents.cognition.models import (
+    CognitiveLoopInput,
+    CognitiveLoopProposal,
+    MemoryUpdateIntent,
+    MemoryUpdateKind,
+)
 from agents.cognition.reputation import (
     _OBSERVATION_DELTAS,
     ReputationLedger,
@@ -25,6 +31,8 @@ from agents.cognition.social_norms import (
 )
 from agents.cognition.structured_commitments import (
     CommitmentInterpretation,
+    CommitmentSocialRequest,
+    StructuredCommitmentLedger,
     apply_commitment_sanction,
     commitment_social_requests,
     empty_structured_commitments,
@@ -34,6 +42,7 @@ from social.relationships import (
     RelationshipDimension,
     RelationshipFormationPolicy,
     RelationshipInteractionSignal,
+    RelationshipRevisionRequest,
     RelationshipSignalKind,
     merge_relationship_revision,
 )
@@ -69,12 +78,17 @@ def _row(status: str, debtor: str, creditor: str) -> CommitmentInterpretation:
     )
 
 
-def _ledger(owner: str, row: CommitmentInterpretation):
+def _ledger(owner: str, row: CommitmentInterpretation) -> StructuredCommitmentLedger:
     base = empty_structured_commitments(AgentId(owner))
     return replace(base, interpretations=(row,))
 
 
-def _requests(owner_entity: str, before_status: str, after_status: str, **flags):
+def _requests(
+    owner_entity: str,
+    before_status: str,
+    after_status: str,
+    **flags: bool,
+) -> tuple[CommitmentSocialRequest, ...]:
     debtor, creditor = ("body-a", "body-b")
     if owner_entity == "body-b":
         debtor, creditor = ("body-a", "body-b")
@@ -209,18 +223,23 @@ def test_the_live_loop_stores_a_sanction_and_queues_a_relationship() -> None:
         agent_id=AgentId("owner-a"),
     )
     folded, _reputation, _norms = loop._fold_commitment_consequences(
-        loop_input, after, None, None
+        cast(CognitiveLoopInput, loop_input), after, None, None
     )
-    assert folded.interpretations[0].sanction == "criticism"
+    folded_ledger = cast(StructuredCommitmentLedger, folded)
+    assert folded_ledger.interpretations[0].sanction == "criticism"
     proposal = SimpleNamespace(
         structured_commitments=after,
         loop_input=loop_input,
         agent_id=AgentId("owner-a"),
     )
-    updates = loop._append_commitment_relationships(proposal, ())
+    updates = loop._append_commitment_relationships(
+        cast(CognitiveLoopProposal, proposal), ()
+    )
     assert len(updates) == 1
-    assert updates[0].kind is MemoryUpdateKind.REVISE_RELATIONSHIP
-    assert updates[0].relationship_revision.signals[0].kind is (
+    update = cast(MemoryUpdateIntent, updates[0])
+    assert update.kind is MemoryUpdateKind.REVISE_RELATIONSHIP
+    revision = cast(RelationshipRevisionRequest, update.relationship_revision)
+    assert revision.signals[0].kind is (
         RelationshipSignalKind.CONTRADICTION_RECEIVED
     )
 

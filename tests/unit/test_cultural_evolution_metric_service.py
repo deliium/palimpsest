@@ -43,7 +43,9 @@ def _boundary(tick: int, entries: tuple[TraitPresence, ...]) -> InventoryBoundar
     )
 
 
-def _inputs(*, boundaries: tuple[InventoryBoundary, ...] | None = None):
+def _inputs(
+    *, boundaries: tuple[InventoryBoundary, ...] | None = None
+) -> CulturalEvolutionInputs:
     return CulturalEvolutionInputs(
         run_id="run-metrics",
         source_revision="rev-metrics",
@@ -62,7 +64,9 @@ def _entry(tick: int) -> TraitPresence:
     )
 
 
-def _computation(cultural=None):
+def _computation(
+    cultural: CulturalEvolutionInputs | None = None,
+) -> MetricComputationInputs:
     return MetricComputationInputs(
         run_id="run-metrics",
         input_revision="rev-metrics",
@@ -132,7 +136,9 @@ def test_complete_capture_produces_six_separate_documents() -> None:
         assert document.values["evidence_manifest_digest"] == _DIGEST
         assert isinstance(document.values["rows_json"], str)
     dynamics = documents["cultural_trait_dynamics"]
+    assert isinstance(dynamics.values["measurement_count"], int)
     assert dynamics.values["measurement_count"] > 0
+    assert isinstance(dynamics.values["rows_json"], str)
     rows = json.loads(dynamics.values["rows_json"])
     assert rows
     assert all(set(row) == set(_measurement_keys()) for row in rows)
@@ -205,6 +211,7 @@ def test_rows_json_is_canonical_and_digest_bound_before_any_write() -> None:
         for doc in first.documents
         if doc.metric_family == "cultural_trait_dynamics"
     )
+    assert isinstance(rows_json, str)
     assert rows_json == json.dumps(
         json.loads(rows_json),
         ensure_ascii=False,

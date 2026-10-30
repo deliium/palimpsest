@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -12,18 +13,71 @@ from experiments.generational_comparison_base import generational_comparison_bas
 from simulation.branch_service import rematerialize_event, rematerialize_snapshot
 from simulation.clock import Tick
 from simulation.engine import WorldEngine
-from simulation.fork_checkpoint import RunnerForkCheckpoint, fork_state_digest
+from simulation.fork_checkpoint import (
+    ForkCheckpointError,
+    RunnerForkCheckpoint,
+    fork_state_digest,
+)
 from simulation.models import RunId
-from simulation.persistence import SnapshotId
-from simulation.runner import SimulationRunner
+from simulation.persistence import SnapshotId, TickCommit, TickJournalRepository
+from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import SimulationRunnerConfig
+from simulation.runner_serialization import runner_config_fingerprint
 from world.events import WorldEvent
+from world.identifiers import WorldRevision
 
 pytestmark = pytest.mark.unit
 
 
 def _config() -> SimulationRunnerConfig:
     return generational_comparison_base(seed=23, max_ticks=8)
+
+
+@pytest.mark.parametrize("mismatch", ["missing", "run", "tick", "revision"])
+async def test_durable_fork_rejects_missing_or_mismatched_child_prefix(
+    mismatch: str,
+) -> None:
+    parent = await SimulationRunner.from_config(_config(), run_id=RunId("guard-parent"))
+    try:
+        await parent.run_tick()
+        checkpoint = await parent.capture_fork_checkpoint()
+        config = replace(
+            checkpoint.config,
+            persistence=replace(checkpoint.config.persistence, durable=True),
+        )
+        checkpoint = replace(
+            checkpoint,
+            config=config,
+            config_fingerprint=runner_config_fingerprint(config),
+        )
+        run_id = RunId("guard-child")
+        events = parent._engine.export_events().events
+        engine = _restored_engine(checkpoint, events, run_id)
+        commit = Mock(
+            spec=TickCommit,
+            run_id=RunId("wrong-run") if mismatch == "run" else run_id,
+            tick=Tick(9) if mismatch == "tick" else Tick(0),
+            resulting_tick=checkpoint.boundary_tick,
+            resulting_revision=(
+                WorldRevision(checkpoint.boundary_revision.value + 1)
+                if mismatch == "revision" else checkpoint.boundary_revision
+            ),
+        )
+        journal = Mock(spec=TickJournalRepository)
+        journal.list_tick_commits = AsyncMock(
+            return_value=[] if mismatch == "missing" else [commit]
+        )
+        with pytest.raises(ForkCheckpointError) as rejected:
+            await SimulationRunner.from_fork_checkpoint(
+                config,
+                run_id=run_id,
+                checkpoint=checkpoint,
+                restored_engine=engine,
+                factories=RunnerDependencyFactories(journal=journal),
+            )
+        assert rejected.value.code == "fork_engine_mismatch"
+    finally:
+        await parent.aclose()
 
 
 def _restored_engine(

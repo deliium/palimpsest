@@ -178,6 +178,7 @@ def test_enabled_finalize_appends_a_journal_without_moving_the_cursor_tick() -> 
     assert runtime._decision_journal[-1].command_kind == "Search"
     assert runtime._decision_journal[-1].outcome_code is DecisionOutcomeCode.UNKNOWN
     assert runtime._reflection_cursor is not None
+    assert isinstance(runtime._reflection_cursor, ReflectionCursor)
     assert runtime._reflection_cursor.last_reflection_tick is None
     assert runtime._reflection_capture is None
 
@@ -185,6 +186,9 @@ def test_enabled_finalize_appends_a_journal_without_moving_the_cursor_tick() -> 
 def test_disabled_checkpoint_is_empty_and_restore_keeps_the_tick() -> None:
     runtime, _, _ = _runtime()
     checkpoint = runtime.export_runtime_checkpoint()
+    from simulation.run_control import AgentRuntimeCheckpoint
+
+    assert isinstance(checkpoint, AgentRuntimeCheckpoint)
     assert checkpoint.reflection_cursor is None
     assert checkpoint.decision_journal is None
     cursor = ReflectionCursor(owner_id=AgentId("agent-1"), last_reflection_tick=7)
@@ -194,4 +198,5 @@ def test_disabled_checkpoint_is_empty_and_restore_keeps_the_tick() -> None:
     other, _, _ = _runtime()
     other.restore_runtime_checkpoint(saved)
     assert other._reflection_cursor is not None
+    assert isinstance(other._reflection_cursor, ReflectionCursor)
     assert other._reflection_cursor.last_reflection_tick == 7

@@ -51,6 +51,7 @@ from simulation.civilization_ports import CivilizationReadBudget
 from simulation.run_control import RunControlRecord
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
+    SimulationRunnerConfig,
     example_collective_projects_spec,
     example_cultural_feature_provenance_spec,
     example_durable_records_spec,
@@ -258,7 +259,9 @@ class _CivilizationEvidenceArbiter:
         return Wait()
 
 
-def civilization_config(*, seed: int = 23, max_ticks: int = HORIZON):
+def civilization_config(
+    *, seed: int = 23, max_ticks: int = HORIZON
+) -> SimulationRunnerConfig:
     """Representative AY/BL base plus retained-record and civic channels."""
     source = regional_migration_scenario(seed=seed, max_ticks=max_ticks)
     by_id = {item.condition_id: item for item in source.conditions}

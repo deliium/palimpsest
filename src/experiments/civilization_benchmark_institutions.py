@@ -21,7 +21,10 @@ from experiments.civilization_benchmark_base import (
 )
 from experiments.civilization_benchmark_evidence import (
     BenchmarkBoundaryProbe,
+    ObservedOwnerStore,
     content_count,
+    observed_institutional_memory,
+    observed_store_counts,
 )
 from experiments.civilization_benchmark_models import (
     V3BenchmarkCheck,
@@ -631,6 +634,20 @@ def _window_complete(probe: BenchmarkBoundaryProbe, boundary_end_tick: int) -> b
     )
 
 
+def _observed_refs(
+    observed: tuple[ObservedOwnerStore, ...],
+) -> tuple[V3BenchmarkSourceReference, ...]:
+    return tuple(
+        V3BenchmarkSourceReference(
+            source_kind=V3BenchmarkSourceKind.SUBJECTIVE_DEBUG,
+            reference_id=f"boundary-tick-{row.boundary_tick}",
+            owner_id=row.owner_id,
+            tick=row.boundary_tick,
+        )
+        for row in observed
+    )
+
+
 def _owner_refs(owners: tuple[str, ...]) -> tuple[V3BenchmarkSourceReference, ...]:
     return tuple(
         V3BenchmarkSourceReference(
@@ -665,6 +682,7 @@ def _history_gate(
     owners: tuple[str, ...],
     reason_code: str,
     missing_reason: str,
+    observed: tuple[ObservedOwnerStore, ...] = (),
 ) -> V3BenchmarkCheck:
     if not mechanism_available:
         return _unavailable(selector, disabled_reason)
@@ -680,7 +698,7 @@ def _history_gate(
             boundary_start_tick=0,
             boundary_end_tick=boundary_end_tick,
         )
-    if rows < 1:
+    if rows < 1 and not observed:
         return V3BenchmarkCheck(
             selector_id=selector,
             selector_version=1,
@@ -693,6 +711,21 @@ def _history_gate(
             boundary_end_tick=boundary_end_tick,
             numerator=0,
             denominator=0,
+        )
+    if rows < 1:
+        observed_total = sum(row.count for row in observed)
+        return V3BenchmarkCheck(
+            selector_id=selector,
+            selector_version=1,
+            status=V3BenchmarkCheckStatus.PASS,
+            reason_code=reason_code,
+            evidence=V3BenchmarkEvidenceAvailability.COMPLETE,
+            coverage=V3BenchmarkCoverage.EXERCISED,
+            source_references=_observed_refs(observed),
+            boundary_start_tick=0,
+            boundary_end_tick=boundary_end_tick,
+            numerator=observed_total,
+            denominator=observed_total,
         )
     return V3BenchmarkCheck(
         selector_id=selector,
@@ -770,6 +803,7 @@ def evaluate_generational_narratives(
         owners=tuple(dict.fromkeys(owners)),
         reason_code="narrative_lineage_observed",
         missing_reason="no_narrative_lineage_observed",
+        observed=observed_store_counts(probe, "cultural_narratives"),
     )
 
 
@@ -792,6 +826,7 @@ def evaluate_institution_concepts(
         owners=_ledger_owners(ledgers),
         reason_code="institution_concept_evidence_observed",
         missing_reason="no_institution_concept_evidence_observed",
+        observed=observed_store_counts(probe, "institution_concepts"),
     )
 
 
@@ -818,6 +853,7 @@ def evaluate_office_succession(
             "office_succession_observed" if succession > 0 else "office_claims_observed"
         ),
         missing_reason="no_office_claims_observed",
+        observed=observed_store_counts(probe, "office_concepts"),
     )
     return check
 
@@ -848,6 +884,7 @@ def evaluate_institutional_memory(
             else "institutional_memory_channels_observed"
         ),
         missing_reason="no_institutional_memory_entries_observed",
+        observed=observed_institutional_memory(probe),
     )
 
 
@@ -872,6 +909,7 @@ def evaluate_institutional_decay(
         owners=_ledger_owners(ledgers),
         reason_code="decay_updates_observed",
         missing_reason="no_decay_updates_observed",
+        observed=observed_store_counts(probe, "institutional_decay"),
     )
 
 

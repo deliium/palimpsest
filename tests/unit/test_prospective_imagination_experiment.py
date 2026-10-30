@@ -23,7 +23,9 @@ from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS
 from world.events import EVENT_SCHEMA_REPLAY_V5
 
 
-def test_experiment_j_shares_identity_and_stays_off_the_v1_gate(caplog) -> None:
+def test_experiment_j_shares_identity_and_stays_off_the_v1_gate(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="experiments.catalog")
     definition = experiment_j_prospective(_config())
     ids = {experiment_id for experiment_id, _builder in _CATALOG_BUILDERS}
@@ -70,7 +72,9 @@ def test_false_belief_audit_has_large_harm_error() -> None:
     assert PROSPECTIVE_IMAGINATION_METRIC_VERSION == "prospective_imagination@1"
     assert document.values["harm_count"] == 0.0
     assert document.values["matched_count"] == 0.0
-    assert document.values["absolute_error"] >= 0.5
+    absolute_error = document.values["absolute_error"]
+    assert isinstance(absolute_error, (int, float))
+    assert absolute_error >= 0.5
 
 
 def test_metric_source_does_not_import_the_rollout() -> None:

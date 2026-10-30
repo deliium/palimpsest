@@ -126,6 +126,7 @@ def test_uplift_uses_synthetic_memory_anchor_when_source_missing() -> None:
         mode=CognitionCulturalNarrativeMode.DETERMINISTIC,
     )
     assert len(requests) == 1
+    assert isinstance(requests[0], BeliefRevisionRequest)
     memory_id = requests[0].evidence.supporting[0].memory_id
     assert type(memory_id) is MemoryId
     assert memory_id.value.startswith("narrative-lineage-")

@@ -20,6 +20,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V23,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -33,7 +34,7 @@ pytestmark = pytest.mark.unit
 _LOG = logging.getLogger("tests.v3_scaffolding_gate")
 
 
-def _base_config():
+def _base_config() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

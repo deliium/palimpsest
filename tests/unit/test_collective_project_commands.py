@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 from agents.models import AgentId
 from simulation.actions import canonical_admission_keys
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
@@ -12,11 +14,12 @@ from simulation.lifecycle import ActionSubmission
 from simulation.models import SimulationRunConfig
 from simulation.serialization import decode_domain, encode_domain
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
-from world._operations import BatchItemStatus, prepare_action_batch
+from world._operations import BatchItemStatus, PendingBatch, prepare_action_batch
 from world._skills import ObjectiveSkillLedger, ObjectiveSkillPolicy, SkillDomain
 from world._state import WorldState
 from world.actions import (
     ActionRequest,
+    AgentCommand,
     ContributeCollectiveProject,
     StartCollectiveProject,
     require_agent_command,
@@ -24,14 +27,14 @@ from world.actions import (
 from world.collective_projects import CollectiveProjectsRuleContext
 from world.events import ProjectContributed, ProjectCreated, ProjectShortage
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
-from world.models import non_lethal_physical_rules
+from world.models import AgentBody, Item, non_lethal_physical_rules
 from world.values import ItemKind
 
 _WORLD = WorldId("world-1")
 _CONTEXT = CollectiveProjectsRuleContext(active=True, idle_ticks=4)
 
 
-def _wood(entity_id: str, holder: str):
+def _wood(entity_id: str, holder: str) -> Item:
     return make_item(
         entity_id,
         name="wood",
@@ -41,7 +44,7 @@ def _wood(entity_id: str, holder: str):
     )
 
 
-def _request(command, *, actor: str, request_id: str) -> ActionRequest:
+def _request(command: AgentCommand, *, actor: str, request_id: str) -> ActionRequest:
     return ActionRequest(
         request_id=RequestId(request_id),
         proposal_id=ProposalId(f"p-{request_id}"),
@@ -52,7 +55,7 @@ def _request(command, *, actor: str, request_id: str) -> ActionRequest:
     )
 
 
-def _state(*bodies, items=()):
+def _state(*bodies: AgentBody, items: tuple[Item, ...] = ()) -> WorldState:
     return WorldState(
         WorldRevision(1),
         locations=(make_location(),),
@@ -62,7 +65,13 @@ def _state(*bodies, items=()):
     )
 
 
-def _run(state, requests, *, context=_CONTEXT, draw=None):
+def _run(
+    state: WorldState,
+    requests: Sequence[ActionRequest],
+    *,
+    context: CollectiveProjectsRuleContext | None = _CONTEXT,
+    draw: Callable[[ActionRequest, WorldState], bool] | None = None,
+) -> PendingBatch:
     return prepare_action_batch(
         world_id=_WORLD,
         starting_state=state,
@@ -88,7 +97,7 @@ def test_same_tick_start_is_visible_to_contribute() -> None:
     bob = alive_body("body-b", inventory=(wood.entity_id,))
     draws: list[str] = []
 
-    def _draw(request, _working) -> bool:
+    def _draw(request: ActionRequest, _working: WorldState) -> bool:
         draws.append(request.request_id.value)
         return True
 
@@ -150,6 +159,11 @@ def test_second_material_contribute_does_not_consume() -> None:
 
 def test_shortage_does_not_draw() -> None:
     draws: list[str] = []
+
+    def _draw(request: ActionRequest, _working: WorldState) -> bool:
+        draws.append(request.request_id.value)
+        return True
+
     pending = _run(
         _state(alive_body("body-a"), alive_body("body-b")),
         (
@@ -162,7 +176,7 @@ def test_shortage_does_not_draw() -> None:
                 request_id="c1",
             ),
         ),
-        draw=lambda request, _working: draws.append(request.request_id.value) or True,
+        draw=_draw,
     )
     project = pending.working_state.collective_projects[EntityId("project-s1")]
     assert draws == []

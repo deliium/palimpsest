@@ -34,6 +34,7 @@ class FakeEngine:
 class FakeResources:
     def __init__(self) -> None:
         self.engine: DisposableEngine = FakeEngine()
+        self.session_factory: object = object()
 
 
 @pytest.fixture(autouse=True)
@@ -143,7 +144,4 @@ async def test_query_string_secret_rejected(logging_sandbox: None) -> None:
         assert response.json()["code"] == "query_string_secret"
 
 
-@pytest.mark.integration
-async def test_api_simulation_lifecycle_integration_stub() -> None:
-    """PostgreSQL lifecycle proofs live in Task 21."""
-    pytest.skip("integration stub reserved for Task 21")
+# PostgreSQL replacement: tests/integration/test_api_simulation_lifecycle.py.

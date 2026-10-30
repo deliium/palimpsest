@@ -178,15 +178,19 @@ def test_hop_cap_rejected() -> None:
     _LOG.debug("case_id=hop_cap")
     owner = AgentId("learner")
     ledger = empty_cultural_feature_ledger(owner)
-    from agents.cognition.cultural_features import SubjectiveCulturalBelief
+    from agents.cognition.cultural_features import (
+        CulturalFeatureKindId,
+        CulturalTransmissionChannelId,
+        SubjectiveCulturalBelief,
+    )
 
     deep = SubjectiveCulturalBelief(
         belief_id="deep-parent",
         owner_agent_id=owner,
-        feature_kind="practice",
+        feature_kind=CulturalFeatureKindId("practice"),
         content_key="deep",
         content_fingerprint="fpdeep01",
-        channel="observation",
+        channel=CulturalTransmissionChannelId("observation"),
         confidence=0.5,
         parent_belief_ids=("ghost",),
         hop_index=CULTURAL_FEATURE_DEFAULT_HOP_CAP,

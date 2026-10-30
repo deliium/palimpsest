@@ -134,7 +134,7 @@ def _future(
     harm: float = 0.0,
     drive_effects: tuple[DriveEffect, ...] = (),
 ) -> ImaginedFuture:
-    risks = ()
+    risks: tuple[SubjectiveRisk, ...] = ()
     if harm > 0.0:
         risks = (
             SubjectiveRisk(

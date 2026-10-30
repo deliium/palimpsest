@@ -10,6 +10,7 @@ from agents.models import DriveKind
 from experiments.institutionalization_scenario import institutionalization_scenario
 from simulation.generational_models import GenerationalRunSpec
 from simulation.new_agent_initialization import (
+    NewAgentInitializationSpec,
     ParameterDistributionSpec,
     creation_config_fingerprint,
     default_new_agent_initialization_spec,
@@ -27,8 +28,6 @@ from simulation.runner_models import (
     InstitutionalDecayMode,
     InstitutionalMemoryMode,
     InstitutionConceptMode,
-    LifecycleStageId,
-    LifecycleStageThreshold,
     MediationMode,
     OfficeSuccessionMode,
     PopulationLifecycleSpec,
@@ -37,9 +36,10 @@ from simulation.runner_models import (
     schema_supports_explicit_new_agent_initialization,
 )
 from world.events import AgentInitializationRecorded
+from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
 
-def _init_spec():
+def _init_spec() -> NewAgentInitializationSpec:
     return replace(
         default_new_agent_initialization_spec(),
         parameter_distributions=ParameterDistributionSpec(
@@ -158,11 +158,13 @@ async def test_entrant_uses_forwarded_initialization_and_acts_next_tick() -> Non
             if type(record.event.details) is AgentInitializationRecorded
         ]
         assert events
+        assert config.new_agent_initialization is not None
         expected = creation_config_fingerprint(
             config.new_agent_initialization,
             demographic_policy_id="generational_interval_entry",
         )
         details = events[0].details
+        assert isinstance(details, AgentInitializationRecorded)
         assert details.creation_config_id == expected
         assert details.creation_reason == "demographic_policy"
         assert details.initial_conditions["location_id"] == "loc-clearing"

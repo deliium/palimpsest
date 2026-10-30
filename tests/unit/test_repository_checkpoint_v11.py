@@ -14,7 +14,7 @@ from simulation.journal import (
     encode_persistence,
     hash_snapshot,
 )
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.models import RunId
 from simulation.persistence import (
     PROJECTOR_VERSION,
@@ -28,7 +28,7 @@ from simulation.runner_models import (
     example_knowledge_repositories_spec,
 )
 from tests.physical_helpers import physical_config, two_location_fixture
-from world.actions import DepositRecord, EstablishRepository, Inscribe
+from world.actions import AgentCommand, DepositRecord, EstablishRepository, Inscribe
 from world.artifacts import ArtifactContent, ArtifactKind, DurableRecordGenre
 from world.events import EVENT_SCHEMA_REPLAY_V13, EVENT_SCHEMA_REPLAY_V14
 from world.identifiers import EntityId
@@ -52,10 +52,10 @@ def _engine() -> WorldEngine:
     )
 
 
-def _act(engine: WorldEngine, command: object):
+def _act(engine: WorldEngine, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId("agent-1"), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId("agent-1"), command),)
     )
 
 
@@ -111,6 +111,7 @@ def test_v11_repository_snapshot_round_trip() -> None:
     )
     encoded = encode_persistence(snap)
     decoded = decode_persistence(encoded, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.persistence_codec_version == "v11"
     assert len(decoded.repositories) == 1
     assert decoded.repositories[0].repository_id == repo.repository_id
@@ -168,6 +169,7 @@ def test_v10_snapshot_synthesizes_empty_repositories() -> None:
     payload = __import__("json").loads(encoded)
     assert "repositories" not in payload["data"]
     decoded = decode_persistence(encoded, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.repositories == ()
     restored = WorldEngine.restore_from_snapshot(decoded)
     assert restored._snapshot.world.state.repositories == {}
@@ -208,6 +210,7 @@ def test_live_establish_deposit_survives_codec_v11_restore() -> None:
     assert len(snap.repositories) == 1
     encoded = encode_persistence(snap)
     decoded = decode_persistence(encoded, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert len(decoded.repositories) == 1
     assert decoded.repositories[0].member_artifact_ids == (artifact_id,)
     restored_art = next(
@@ -288,6 +291,7 @@ def test_knowledge_repository_model_round_trips_index_entries() -> None:
         repositories=draft.repositories,
     )
     decoded = decode_persistence(encode_persistence(snap), WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.repositories[0].status is RepositoryStatus.NEGLECTED
     assert decoded.repositories[0].neglect_streak == 2
     assert decoded.repositories[0].access_mode is RepositoryAccessMode.FOUNDER_LIST

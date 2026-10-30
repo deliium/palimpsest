@@ -20,11 +20,18 @@ from observer.project import project_frame
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_EVENT_TYPES
 from simulation.bootstrap import WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from simulation.observer_facts import ObjectiveFacts, scene_from_facts
 from simulation.runner_models import example_durable_records_spec
 from tests.physical_helpers import physical_config, two_location_fixture
-from world.actions import Amend, CopyRecord, Erase, Inscribe, TransferArtifact
+from world.actions import (
+    AgentCommand,
+    Amend,
+    CopyRecord,
+    Erase,
+    Inscribe,
+    TransferArtifact,
+)
 from world.artifacts import (
     ArtifactContent,
     ArtifactKind,
@@ -92,10 +99,10 @@ def _content(*marks: str) -> ArtifactContent:
     return ArtifactContent(marks=marks)
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 
@@ -332,7 +339,7 @@ def test_project_frame_orders_artifacts_without_readings(
         items=tuple(state.items.values()),
         resources=tuple(state.resources.values()),
         weather=tuple(state.weather.values()),
-        registrations=engine._registrations,
+        registrations=tuple(engine._registrations),
         artifacts=tuple(state.artifacts.values()),
     )
     with caplog.at_level(logging.DEBUG, logger="observer.project"):
@@ -458,7 +465,7 @@ def test_rejects_presentation_instructions_on_events() -> None:
             tick=0,
             sequence=0,
             artifact_id="art-1",
-            pixels=1,  # type: ignore[call-arg]
+            pixels=1,
         )
     assert pixels.value.reason_code == "presentation_instruction_forbidden"
     with pytest.raises(ObserverContractError) as inverse:

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from agents.cognition.counterfactual import (
     CounterfactualPolicy,
     CounterfactualProvenanceKind,
+    RememberedDecision,
     consider_counterfactuals,
     counterfactual_belief_requests,
 )
@@ -17,7 +19,7 @@ from agents.cognition.imagination import ImaginationEngine
 from agents.cognition.memory import build_direct_observation_memory_trace
 from agents.cognition.models import EmotionKind, ImaginedFuture, PossibleFutures
 from agents.models import AgentId
-from memory.beliefs import SemanticBelief
+from memory.beliefs import BeliefRevisionRequest, SemanticBelief
 from memory.models import MemorySourceKind, MemoryTrace
 from memory.service import InMemoryMemoryService
 from tests.unit.test_counterfactual_reasoning import _decision, _input
@@ -38,7 +40,9 @@ from world.observations import Observation, ObservationSourceKind, ObservedOccur
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_scenario_is_not_a_memory_belief_future_or_event(caplog) -> None:
+def test_scenario_is_not_a_memory_belief_future_or_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from dataclasses import replace
 
     caplog.set_level(logging.DEBUG, logger="agents.cognition.counterfactual")
@@ -69,20 +73,21 @@ def test_scenario_is_not_a_memory_belief_future_or_event(caplog) -> None:
     assert type(ordinary) is SemanticBelief
     assert ordinary.claim.predicate != "counterfactual_alternative"
     assert type(loop_input.observation) is Observation
-    assert type(scenario) is not MemoryTrace
-    assert type(scenario) is not SemanticBelief
-    assert type(scenario) is not ImaginedFuture
-    assert type(scenario) is not Observation
-    assert type(scenario) is not ObservedOccurrence
-    assert type(scenario) is not WorldEvent
+    assert not isinstance(scenario, MemoryTrace)
+    assert not isinstance(scenario, SemanticBelief)
+    assert not isinstance(scenario, ImaginedFuture)
+    assert not isinstance(scenario, Observation)
+    assert not isinstance(scenario, ObservedOccurrence)
+    assert not isinstance(scenario, WorldEvent)
     assert type(trace) is MemoryTrace
     assert trace.provenance.kind is MemorySourceKind.DIRECT_OBSERVATION
     assert trace.concepts[0].concept == "help"
     assert scenario.scenario_id not in {trace.memory_id.value}
     assert not hasattr(MemorySourceKind, "IMAGINED")
     assert not any(member.name == "REGRET" for member in EmotionKind)
-    assert requests[0].claim.predicate == "counterfactual_alternative"
-    assert requests[0].evidence.supporting[0].memory_id.value == "memory-help"
+    request = cast(BeliefRevisionRequest, requests[0])
+    assert request.claim.predicate == "counterfactual_alternative"
+    assert request.evidence.supporting[0].memory_id.value == "memory-help"
     messages = " ".join(record.getMessage() for record in caplog.records)
     assert "direction_code=wait" in messages
     assert "affect_code=regret" in messages
@@ -115,7 +120,7 @@ def test_scenario_is_not_a_memory_belief_future_or_event(caplog) -> None:
     with pytest.raises(TypeError, match="not a subjective input"):
         consider_counterfactuals(
             loop_input,
-            (event,),
+            (cast(RememberedDecision, event),),
             policy=CounterfactualPolicy(),
         )
     with pytest.raises(TypeError, match="invalid_provenance"):
@@ -129,7 +134,9 @@ def test_scenario_is_not_a_memory_belief_future_or_event(caplog) -> None:
             confidence=scenario.confidence,
             goal_ids=scenario.goal_ids,
             emotional_impact=scenario.emotional_impact,
-            provenance=ObservationSourceKind.OCCURRENCE,
+            provenance=cast(
+                CounterfactualProvenanceKind, ObservationSourceKind.OCCURRENCE
+            ),
         )
     assert event.event_id.value != scenario.scenario_id
 

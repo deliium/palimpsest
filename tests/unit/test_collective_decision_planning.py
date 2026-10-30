@@ -371,5 +371,6 @@ def test_late_command_replacement_is_not_credited_as_execution() -> None:
         final_direction=ActionDirection.COMMUNICATE,
         tick=6,
     )
-    assert replaced.influence[0].kind is CollectiveInfluenceKind.FINAL_COMMAND_CHANGED
-    assert replaced.influence[0].kind is not CollectiveInfluenceKind.EXECUTED
+    kind: CollectiveInfluenceKind = replaced.influence[0].kind
+    assert kind is not CollectiveInfluenceKind.EXECUTED
+    assert kind is CollectiveInfluenceKind.FINAL_COMMAND_CHANGED

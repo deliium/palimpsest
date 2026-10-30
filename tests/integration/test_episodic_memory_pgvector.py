@@ -9,6 +9,7 @@ from tests.simulation_helpers import make_location, make_weather
 
 from agents.models import AgentId
 from infrastructure.database import DatabaseResources
+from memory.contracts import MemoryService
 from memory.models import (
     ConceptMention,
     MemoryAccessReceipt,
@@ -465,6 +466,7 @@ async def test_sql_and_memory_destination_lane_recall_parity(
         CognitiveLoopInput,
         InternalAgentState,
         InterpretedPerception,
+        RetrievedMemoryContext,
     )
     from agents.cognition.regional_migration import destination_memory_trace
     from memory.models import MemoryReconstructionPolicy
@@ -572,7 +574,7 @@ async def test_sql_and_memory_destination_lane_recall_parity(
         confidence=1.0,
     )
 
-    async def retrieve(service):
+    async def retrieve(service: MemoryService) -> RetrievedMemoryContext:
         retriever = ScopedMemoryRetriever(
             service,
             scoring_policy=policy,

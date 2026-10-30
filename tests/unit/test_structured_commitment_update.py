@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from agents.cognition.structured_commitments import (
+    StructuredCommitmentLedger,
     apply_structured_commitment_update,
     empty_structured_commitments,
 )
@@ -18,7 +19,9 @@ from world.observations import (
 )
 
 
-def _occurrence(kind: str, actor: str, other: str, facts: dict, event: str = "evt-1"):
+def _occurrence(
+    kind: str, actor: str, other: str, facts: dict[str, object], event: str = "evt-1"
+) -> ObservedOccurrence:
     return ObservedOccurrence(
         provenance=ObservationProvenance(
             source_kind=ObservationSourceKind.OCCURRENCE,
@@ -33,8 +36,8 @@ def _occurrence(kind: str, actor: str, other: str, facts: dict, event: str = "ev
     )
 
 
-def _speech(**overrides):
-    facts = {
+def _speech(**overrides: object) -> ObservedOccurrence:
+    facts: dict[str, object] = {
         "kind": "future_exchange",
         "act": "propose",
         "owed_by": "counterparty",
@@ -49,7 +52,7 @@ def _speech(**overrides):
     return _occurrence("commitment_declared", "body-a", "body-b", facts)
 
 
-def _give(actor: str, recipient: str, item_kind: str, event: str):
+def _give(actor: str, recipient: str, item_kind: str, event: str) -> ObservedOccurrence:
     return _occurrence(
         "give",
         actor,
@@ -59,7 +62,13 @@ def _give(actor: str, recipient: str, item_kind: str, event: str):
     )
 
 
-def _obs(occurrences, *, tick: int = 2, bodies: tuple = (), observer: str = "body-a"):
+def _obs(
+    occurrences: tuple[ObservedOccurrence, ...],
+    *,
+    tick: int = 2,
+    bodies: tuple[SimpleNamespace, ...] = (),
+    observer: str = "body-a",
+) -> SimpleNamespace:
     return SimpleNamespace(
         occurrences=occurrences,
         visible_bodies=bodies,
@@ -68,7 +77,7 @@ def _obs(occurrences, *, tick: int = 2, bodies: tuple = (), observer: str = "bod
     )
 
 
-def _ledger():
+def _ledger() -> StructuredCommitmentLedger:
     return empty_structured_commitments(AgentId("owner-a"), max_open_interpretations=4)
 
 

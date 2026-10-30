@@ -282,19 +282,19 @@ async def test_failed_prepare_discards_tentative_model() -> None:
         CognitionLoopConfig(world_model_mode=CognitionWorldModelMode.ENABLED)
     )
     loop = CognitiveLoop(
-        perception=enabled._perception,  # type: ignore[attr-defined]
-        memory=enabled._memory,  # type: ignore[attr-defined]
-        situation=enabled._situation,  # type: ignore[attr-defined]
-        self_state=enabled._self_state,  # type: ignore[attr-defined]
-        goal_manager=enabled._goal_manager,  # type: ignore[attr-defined]
-        emotional_state=enabled._emotional_state,  # type: ignore[attr-defined]
-        futures=enabled._futures,  # type: ignore[attr-defined]
-        motivation=enabled._motivation,  # type: ignore[attr-defined]
-        intention=enabled._intention,  # type: ignore[attr-defined]
+        perception=enabled._perception,
+        memory=enabled._memory,
+        situation=enabled._situation,
+        self_state=enabled._self_state,
+        goal_manager=enabled._goal_manager,
+        emotional_state=enabled._emotional_state,
+        futures=enabled._futures,
+        motivation=enabled._motivation,
+        intention=enabled._intention,
         planner=_BoomPlanner(),  # type: ignore[arg-type]
-        memory_updates=enabled._memory_updates,  # type: ignore[attr-defined]
+        memory_updates=enabled._memory_updates,
         world_model_mode=CognitionWorldModelMode.ENABLED,
-        world_model_policy=enabled._world_model_policy,  # type: ignore[attr-defined]
+        world_model_policy=enabled._world_model_policy,
     )
     runtime = _runtime(loop)
     runtime.start()
@@ -663,7 +663,7 @@ def test_countered_hypotheses_become_a_reflection_goal(
     cited = tuple(
         item.hypothesis_id
         for item in model.hypotheses
-        if item.latest_reason() is not None and item.latest_reason().value == "counter"
+        if (reason := item.latest_reason()) is not None and reason.value == "counter"
     )
     assert cited
     plan = plan_reflection(
@@ -680,7 +680,9 @@ def test_countered_hypotheses_become_a_reflection_goal(
         and intent.resulting_goal.goal_id.value.endswith(":prediction_error:causal")
     ]
     assert len(goals) == 1
-    assert set(goals[0].resulting_goal.belief_refs) == set(cited)
+    causal_goal = goals[0].resulting_goal
+    assert causal_goal is not None
+    assert set(causal_goal.belief_refs) == set(cited)
     for request in plan.belief_revisions:
         for item in request.evidence.supporting:
             assert item.memory_id.value not in cited

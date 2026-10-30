@@ -409,13 +409,14 @@ class FakeGoalManager:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
-    ):
+    ) -> GoalBoard:
         if self._queue is None:
             return await self._passthrough.manage(
                 loop_input, situation, self_state, memory
             )
         _ = loop_input, situation, self_state, memory
         output = self._queue.consume(invocation_id=_active_invocation(), ordinal=4)
+        assert type(output) is GoalBoard
         return output
 
 
@@ -496,13 +497,13 @@ class FakeFutureImagination:
         situation: SituationModel,
         self_state: SelfModel,
         memory: RetrievedMemoryContext,
-        goal_board=None,
-        emotional_state=None,
-        causal_world_model=None,
-        theory_of_mind=None,
-        prospective_policy=None,
-        llm_provider=None,
-        budget_ledger=None,
+        goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
+        causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
+        prospective_policy: object | None = None,
+        llm_provider: object | None = None,
+        budget_ledger: object | None = None,
     ) -> PossibleFutures:
         _ = (
             loop_input,
@@ -540,10 +541,10 @@ class FakeMotivationEvaluator:
         situation: SituationModel,
         self_state: SelfModel,
         futures: PossibleFutures,
-        goal_board=None,
-        emotional_state=None,
-        causal_world_model=None,
-        theory_of_mind=None,
+        goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
+        causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
     ) -> MotivationEvaluation:
         _ = (
             loop_input,
@@ -577,13 +578,13 @@ class FakeIntentionSelector:
         loop_input: CognitiveLoopInput,
         motivation: MotivationEvaluation,
         futures: PossibleFutures,
-        goal_board=None,
-        emotional_state=None,
-        self_state=None,
-        causal_world_model=None,
-        theory_of_mind=None,
+        goal_board: GoalBoard | None = None,
+        emotional_state: object | None = None,
+        self_state: SelfModel | None = None,
+        causal_world_model: object | None = None,
+        theory_of_mind: object | None = None,
         *,
-        counterfactual_bias=None,
+        counterfactual_bias: object | None = None,
     ) -> SelectedIntention:
         _ = (
             loop_input,

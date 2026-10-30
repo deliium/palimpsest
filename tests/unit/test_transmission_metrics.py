@@ -126,7 +126,9 @@ def test_knowledge_diffusion_reach_by_stage() -> None:
     )
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["root_count"] == 1
+    assert isinstance(doc.values["reach_world_delivery"], (int, float))
     assert doc.values["reach_world_delivery"] > 0.0
+    assert isinstance(doc.values["reach_receiver_trace"], (int, float))
     assert doc.values["reach_receiver_trace"] > 0.0
 
 

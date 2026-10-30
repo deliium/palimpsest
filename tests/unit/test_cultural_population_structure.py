@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 import pytest
 
@@ -10,6 +11,7 @@ from analysis.cultural_evolution_evidence import (
     CULTURAL_DIMENSIONS,
     CulturalAnalysisWindow,
     CulturalEvolutionInputs,
+    CulturalMeasurement,
     GroupMembership,
     InventoryBoundary,
     TraitPresence,
@@ -91,7 +93,11 @@ def _inputs(
     )
 
 
-def _row(rows, measurement_id, *, baseline=None, end=None, group_ids=None):
+def _row(
+    rows: Sequence[CulturalMeasurement], measurement_id: str, *,
+    baseline: int | None = None, end: int | None = None,
+    group_ids: tuple[str, ...] | None = None,
+) -> CulturalMeasurement:
     matches = [
         row
         for row in rows
@@ -122,7 +128,9 @@ def test_identical_and_disjoint_group_distributions() -> None:
     )
     js = _row(disjoint, "between_group_js_divergence", baseline=0)
     assert js.value == pytest.approx(math.log(2))
-    assert 0.0 <= js.value <= math.log(2) + 1e-6
+    value = js.value
+    assert value is not None
+    assert 0.0 <= value <= math.log(2) + 1e-6
 
 
 def test_partial_overlap_is_between_bounds() -> None:
@@ -133,7 +141,9 @@ def test_partial_overlap_is_between_bounds() -> None:
         )
     )
     js = _row(rows, "between_group_js_divergence", baseline=0)
-    assert 0.0 < js.value < math.log(2)
+    value = js.value
+    assert value is not None
+    assert 0.0 < value < math.log(2)
 
 
 def test_empty_group_mass_yields_null_divergence() -> None:

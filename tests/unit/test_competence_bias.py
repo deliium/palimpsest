@@ -32,6 +32,7 @@ from agents.cognition.models import (
     SituationClaimCode,
 )
 from agents.models import AgentId
+from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission
 from tests.physical_helpers import make_engine, two_location_fixture
 from tests.unit.test_skill_resolution import _engine, _search_bit
@@ -211,7 +212,7 @@ def test_believed_skill_does_not_change_level_zero_world_math() -> None:
     assert _move_delta(enabled_seed_engine()) == _move_delta(disabled_seed_engine())
 
 
-def enabled_seed_engine():
+def enabled_seed_engine() -> WorldEngine:
     policy = default_objective_skill_policy()
     return _engine(
         11,
@@ -221,11 +222,11 @@ def enabled_seed_engine():
     )
 
 
-def disabled_seed_engine():
+def disabled_seed_engine() -> WorldEngine:
     return make_engine(two_location_fixture(item_on_ground=False), seed=11)
 
 
-def _move_delta(engine) -> float:
+def _move_delta(engine: WorldEngine) -> float:
     batch = engine.observe()
     result = engine.resolve_tick(
         (ActionSubmission(batch.token, AgentId("agent-1"), Move(EntityId("loc-2"))),)

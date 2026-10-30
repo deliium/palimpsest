@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Mapping
 from pathlib import Path
+
+import pytest
 
 from agents.models import AgentId
 from analysis.exchange_functions import classify_exchange_functions
@@ -17,25 +20,26 @@ from experiments.catalog import base_runner_config_from_scenario
 from experiments.matrix_schema import finalize_matrix_cell_config
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, ObservationBatch, TickResult
 from simulation.models import SimulationRunConfig
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V40,
     RUNNER_SCHEMA_VERSION_V41,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_resource_exchange_profile_spec,
 )
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
-from world.actions import NegotiateExchange, Wait
-from world.events import ExchangeCompleted
+from world.actions import AgentCommand, NegotiateExchange, Wait
+from world.events import ExchangeCompleted, WorldEvent
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import non_lethal_physical_rules
+from world.models import AgentBody, Item, non_lethal_physical_rules
 from world.values import ItemKind
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     alice = alive_body("body-a", carry_capacity=10)
     bob = alive_body("body-b", carry_capacity=10)
     return base_runner_config_from_scenario(
@@ -65,7 +69,7 @@ def _base():
     )
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     definition = experiment_av_exchange_functions(_base())
     return next(
         item.runner_config
@@ -75,8 +79,8 @@ def _arm(arm_id: str):
 
 
 def _engine(
-    items: tuple[object, ...],
-    bodies: tuple[object, ...],
+    items: tuple[Item, ...],
+    bodies: tuple[AgentBody, ...],
     registrations: tuple[AgentRegistration, ...],
     *,
     profile_active: bool,
@@ -99,7 +103,9 @@ def _engine(
     )
 
 
-def _pair() -> tuple[object, ...]:
+def _pair() -> tuple[
+    tuple[Item, ...], tuple[AgentBody, ...], tuple[AgentRegistration, ...]
+]:
     pebble = make_item(
         "pebble-1",
         name="Pebble",
@@ -124,16 +130,18 @@ def _pair() -> tuple[object, ...]:
     return (pebble, tool), (alice, bob), regs
 
 
-def _digest(result) -> str:
+def _digest(result: TickResult) -> str:
     names = tuple(type(record.event.details).__name__ for record in result.events)
     return hashlib.sha256("|".join(names).encode()).hexdigest()
 
 
-def _history(engine: WorldEngine) -> tuple[object, ...]:
+def _history(engine: WorldEngine) -> tuple[WorldEvent, ...]:
     return tuple(engine._snapshot.event_history)
 
 
-def _step(engine: WorldEngine, commands: dict[str, object]):
+def _step(
+    engine: WorldEngine, commands: Mapping[str, AgentCommand]
+) -> tuple[ObservationBatch, TickResult]:
     batch = engine.observe()
     submissions = []
     for observation in batch.observations:
@@ -146,7 +154,7 @@ def _step(engine: WorldEngine, commands: dict[str, object]):
     return batch, result
 
 
-def test_av_is_off_the_v1_gate(caplog) -> None:
+def test_av_is_off_the_v1_gate(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
     gate = Path("tests/unit/test_v1_regression_gate.py").read_text(encoding="utf-8")
     assert "exchange_functions@1" in OFF_GATE_MATRIX_EXPERIMENT_IDS
@@ -168,7 +176,7 @@ def test_av_is_off_the_v1_gate(caplog) -> None:
     assert finalized.schema_version == RUNNER_SCHEMA_VERSION_V41
 
 
-def _same_tick_swap(engine: WorldEngine) -> object:
+def _same_tick_swap(engine: WorldEngine) -> TickResult:
     _, swapped = _step(
         engine,
         {
@@ -218,7 +226,9 @@ def test_channel_off_swap_hash_matches_the_v40_baseline() -> None:
     assert documents == ()
 
 
-def test_inert_item_is_unused_and_scripted_arms_stay_numeric(caplog) -> None:
+def test_inert_item_is_unused_and_scripted_arms_stay_numeric(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="analysis.exchange_functions")
     spec = example_resource_exchange_profile_spec()
     pebble = make_item(

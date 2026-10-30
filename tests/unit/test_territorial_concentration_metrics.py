@@ -30,6 +30,8 @@ def test_presence_hhi_and_top_shares() -> None:
     assert doc.values["presence_location_count"] == 2
     # Shares 2/3 and 1/3 → HHI = (2/3)^2 + (1/3)^2
     expected_hhi = (2.0 / 3.0) ** 2 + (1.0 / 3.0) ** 2
+    assert isinstance(doc.values["presence_hhi"], (int, float))
+    assert isinstance(doc.values["presence_top1_share"], (int, float))
     assert abs(float(doc.values["presence_hhi"]) - expected_hhi) < 1e-12
     assert abs(float(doc.values["presence_top1_share"]) - (2.0 / 3.0)) < 1e-12
     assert "control_hhi" not in doc.values

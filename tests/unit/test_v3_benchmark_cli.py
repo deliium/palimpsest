@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
@@ -28,9 +30,21 @@ from experiments.civilization_benchmark_suite import (
     V3_BENCH_29_FOUNDER_CONTINGENCY,
 )
 from research_runner import civilization_benchmark_cli as cli
+from research_runner.civilization_benchmark_composition import BenchmarkSelectionItem
 from research_runner.cli import main
 
 _SOURCE_ARGS = ("--code-revision", "deadbeef", "--source-clean")
+
+
+class _ExecuteSelection(Protocol):
+    async def __call__(
+        self,
+        items: list[BenchmarkSelectionItem],
+        *,
+        output_root: Path,
+        source_identity: Mapping[str, object],
+        timeout_seconds: int,
+    ) -> Sequence[Mapping[str, object]]: ...
 
 
 def _result(
@@ -89,8 +103,14 @@ def _result(
     )
 
 
-def _fake_execute(passing: bool = True):
-    async def execute(items, *, output_root, source_identity, timeout_seconds):
+def _fake_execute(passing: bool = True) -> _ExecuteSelection:
+    async def execute(
+        items: list[BenchmarkSelectionItem],
+        *,
+        output_root: Path,
+        source_identity: Mapping[str, object],
+        timeout_seconds: int,
+    ) -> Sequence[Mapping[str, object]]:
         store = BenchmarkArtifactStore(output_root, profile=items[0].profile)
         references = []
         documents = []
@@ -226,7 +246,7 @@ def test_invalid_source_assertions_exit_two(tmp_path: Path) -> None:
     ) == 2
 
 
-def test_visual_and_grouped_selections_fail_closed(tmp_path: Path) -> None:
+def test_visual_selection_fails_closed(tmp_path: Path) -> None:
     visual = [
         "civilization-benchmark",
         "run",
@@ -241,6 +261,7 @@ def test_visual_and_grouped_selections_fail_closed(tmp_path: Path) -> None:
         *_SOURCE_ARGS,
     ]
     assert main([*visual, "--scenario", V3_BENCH_01_BLANK_SLATE]) == 2
+    assert main([*visual, "--seed", "23"]) == 2
     assert main(
         [
             "civilization-benchmark",
@@ -256,19 +277,114 @@ def test_visual_and_grouped_selections_fail_closed(tmp_path: Path) -> None:
             *_SOURCE_ARGS,
         ]
     ) == 2
+
+
+def test_grouped_case_selection_uses_the_grouped_arm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[BenchmarkSelectionItem]] = []
+    base = _fake_execute(passing=True)
+
+    async def capture(
+        items: list[BenchmarkSelectionItem],
+        *,
+        output_root: Path,
+        source_identity: Mapping[str, object],
+        timeout_seconds: int,
+    ) -> Sequence[Mapping[str, object]]:
+        seen.append(list(items))
+        return await base(
+            items,
+            output_root=output_root,
+            source_identity=source_identity,
+            timeout_seconds=timeout_seconds,
+        )
+
+    monkeypatch.setattr(cli, "_execute_selection", capture)
     assert main(
         [
             "civilization-benchmark",
             "run",
             "--scenario",
             V3_BENCH_29_FOUNDER_CONTINGENCY,
+            "--profile",
+            "smoke",
+            "--lane",
+            "research",
             "--output",
-            str(tmp_path),
+            str(tmp_path / "grouped"),
             "--timeout-seconds",
             "5",
             *_SOURCE_ARGS,
         ]
-    ) == 2
+    ) == 0
+    item = seen[0][0]
+    assert item.scenario_id == V3_BENCH_29_FOUNDER_CONTINGENCY
+    assert item.arm_id == "grouped"
+
+
+def test_research_profile_selects_every_predeclared_seed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from experiments.civilization_benchmark_suite import RESEARCH_SEEDS
+
+    seen: list[list[BenchmarkSelectionItem]] = []
+    base = _fake_execute(passing=True)
+
+    async def capture(
+        items: list[BenchmarkSelectionItem],
+        *,
+        output_root: Path,
+        source_identity: Mapping[str, object],
+        timeout_seconds: int,
+    ) -> Sequence[Mapping[str, object]]:
+        seen.append(list(items))
+        return await base(
+            items,
+            output_root=output_root,
+            source_identity=source_identity,
+            timeout_seconds=timeout_seconds,
+        )
+
+    monkeypatch.setattr(cli, "_execute_selection", capture)
+    assert main(
+        [
+            "civilization-benchmark",
+            "run",
+            "--scenario",
+            V3_BENCH_01_BLANK_SLATE,
+            "--profile",
+            "research",
+            "--lane",
+            "research",
+            "--output",
+            str(tmp_path / "research"),
+            "--timeout-seconds",
+            "5",
+            *_SOURCE_ARGS,
+        ]
+    ) == 0
+    assert tuple(item.seed for item in seen[0]) == RESEARCH_SEEDS
+
+
+def test_undeclared_or_duplicate_seeds_fail_closed(tmp_path: Path) -> None:
+    base = [
+        "civilization-benchmark",
+        "run",
+        "--scenario",
+        V3_BENCH_01_BLANK_SLATE,
+        "--profile",
+        "smoke",
+        "--lane",
+        "research",
+        "--output",
+        str(tmp_path),
+        "--timeout-seconds",
+        "5",
+        *_SOURCE_ARGS,
+    ]
+    assert main([*base, "--seed", "11"]) == 2
+    assert main([*base, "--seed", "23", "--seed", "23"]) == 2
 
 
 def test_visual_selection_uses_the_integration_recipe(
@@ -278,11 +394,17 @@ def test_visual_selection_uses_the_integration_recipe(
         VISUAL_BENCHMARK_RECIPE_ID,
     )
 
-    seen: list[list[object]] = []
+    seen: list[list[BenchmarkSelectionItem]] = []
 
     base = _fake_execute(passing=True)
 
-    async def capture(items, *, output_root, source_identity, timeout_seconds):
+    async def capture(
+        items: list[BenchmarkSelectionItem],
+        *,
+        output_root: Path,
+        source_identity: Mapping[str, object],
+        timeout_seconds: int,
+    ) -> Sequence[Mapping[str, object]]:
         seen.append(list(items))
         return await base(
             items,

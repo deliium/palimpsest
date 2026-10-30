@@ -9,7 +9,7 @@ import pytest
 from agents.models import AgentId
 from observer.adapt import adapt_event
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from tests.physical_helpers import (
     PhysicalWorldFixture,
     physical_config,
@@ -17,6 +17,7 @@ from tests.physical_helpers import (
 )
 from tests.simulation_helpers import alive_body
 from world.actions import (
+    AgentCommand,
     Amend,
     Erase,
     Inscribe,
@@ -67,22 +68,24 @@ def _engine(
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 
-def _artifact_details(result: object) -> list[object]:
+def _artifact_details(
+    result: TickResult,
+) -> list[ArtifactCreated | ArtifactModified | ArtifactMoved | ArtifactDestroyed]:
     return [
         record.event.details
-        for record in result.events  # type: ignore[attr-defined]
-        if type(record.event.details) in _ARTIFACT_DETAILS
+        for record in result.events
+        if isinstance(record.event.details, _ARTIFACT_DETAILS)
     ]
 
 
-def _created_id(result: object) -> EntityId:
+def _created_id(result: TickResult) -> EntityId:
     details = _artifact_details(result)
     assert len(details) == 1
     assert type(details[0]) is ArtifactCreated
@@ -243,7 +246,9 @@ def test_transfer_claim_deposit_give_and_fixed_rejects(
         TransferArtifact(artifact_id=note_id, mode="deposit"),
     )
     assert deposited.resolutions[0].status is ActionResolutionStatus.APPLIED
-    assert _artifact_details(deposited)[0].resulting_location_id == EntityId("loc-1")
+    deposited_move = _artifact_details(deposited)[0]
+    assert type(deposited_move) is ArtifactMoved
+    assert deposited_move.resulting_location_id == EntityId("loc-1")
 
     _act(engine, "agent-1", TransferArtifact(artifact_id=note_id, mode="claim"))
     given = _act(
@@ -256,7 +261,9 @@ def test_transfer_claim_deposit_give_and_fixed_rejects(
         ),
     )
     assert given.resolutions[0].status is ActionResolutionStatus.APPLIED
-    assert _artifact_details(given)[0].resulting_holder_id == EntityId("body-2")
+    given_move = _artifact_details(given)[0]
+    assert type(given_move) is ArtifactMoved
+    assert given_move.resulting_holder_id == EntityId("body-2")
     assert (
         note_id not in engine._snapshot.world.state.bodies[EntityId("body-2")].inventory
     )

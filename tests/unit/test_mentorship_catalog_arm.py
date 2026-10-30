@@ -15,6 +15,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V30,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -24,7 +25,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.mentorship_catalog_arm")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -81,4 +82,5 @@ def test_ak_profile_and_arms() -> None:
     mutation = next(
         item for item in definition.conditions if item.condition_id == "ak-mutation"
     ).runner_config
+    assert mutation.mentorship is not None
     assert mutation.mentorship.lineage_policy.allow_learner_mutation is True

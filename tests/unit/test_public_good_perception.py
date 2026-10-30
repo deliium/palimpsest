@@ -24,10 +24,11 @@ from world.events import (
     OccurrenceContext,
     ProjectContributed,
     PublicGoodBenefit,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.observations import ObservationContext
+from world.observations import Observation, ObservationContext
 from world.production import Structure, StructureKind
 
 pytestmark = pytest.mark.unit
@@ -82,8 +83,10 @@ def _state() -> WorldState:
     )
 
 
-def _event(details: object, *, event_id: str, sequence: int):
-    actor_id = details.actor_id  # type: ignore[attr-defined]
+def _event(
+    details: ProjectContributed | PublicGoodBenefit, *, event_id: str, sequence: int
+) -> WorldEvent:
+    actor_id = details.actor_id
     return make_physical_replayable_event(
         event_id=EventId(event_id),
         run_id="run-public-goods",
@@ -92,13 +95,13 @@ def _event(details: object, *, event_id: str, sequence: int):
         sequence=sequence,
         cause=ActionCause(RequestId(f"request-{event_id}"), actor_id),
         resulting_revision=WorldRevision(1),
-        details=details,  # type: ignore[arg-type]
+        details=details,
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
         schema_version=EVENT_SCHEMA_REPLAY_V20,
     )
 
 
-def _observe(*, public_goods_active: bool):
+def _observe(*, public_goods_active: bool) -> tuple[Observation, ...]:
     project_id = EntityId("project-well")
     events = (
         _event(
@@ -154,6 +157,7 @@ def test_colocated_observer_sees_non_contributor_draw_and_act_tail() -> None:
     assert remote.collective_projects == ()
     assert remote.occurrences == ()
     restored = decode_domain(encode_domain(local))
+    assert isinstance(restored, Observation)
     assert (
         restored.collective_projects[0].public_acts
         == local.collective_projects[0].public_acts

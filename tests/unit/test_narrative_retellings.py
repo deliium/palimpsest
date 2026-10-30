@@ -15,6 +15,7 @@ from tests.unit.test_cultural_narratives import _communication, _identity, _obse
 from world.communications import (
     CommunicationRelation,
     CommunicationSourceBasis,
+    StructuredUtterance,
     origin_utterance,
     retell_utterance,
 )
@@ -23,7 +24,7 @@ from world.identifiers import EntityId
 _OWNER = AgentId("alice")
 
 
-def _first_utterance():
+def _first_utterance() -> StructuredUtterance:
     return origin_utterance(
         text="tell_story",
         speaker_id=EntityId("body-ben"),

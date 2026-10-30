@@ -10,7 +10,7 @@ from experiments.catalog import (
     OFF_GATE_MATRIX_EXPERIMENT_IDS,
     experiment_bg_offices_succession,
 )
-from experiments.coordinator import ExperimentCoordinator
+from experiments.coordinator import ExperimentArmResult, ExperimentCoordinator
 from experiments.offices_succession_scenario import (
     assert_office_structure,
     bg_unsupported_config,
@@ -80,7 +80,7 @@ def test_office_mode_on_v49_rejects() -> None:
 
 
 def test_bg_run_is_deterministic_and_preserves_disagreement_free_structure() -> None:
-    async def run() -> dict[str, object]:
+    async def run() -> dict[str, ExperimentArmResult]:
         definition = office_succession_scenario(max_ticks=4)
         arms = await ExperimentCoordinator(definition).run_all()
         return {arm.assignment.condition_id: arm for arm in arms}

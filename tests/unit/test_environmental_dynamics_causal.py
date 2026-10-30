@@ -11,6 +11,7 @@ import pytest
 
 from agents.cognition.models import ActionDirection
 from agents.cognition.world_model import (
+    CausalAtom,
     CausalOutcome,
     CausalSlot,
     CausalWorldModel,
@@ -65,13 +66,13 @@ def test_updater_rejects_world_authority_types() -> None:
 
     with pytest.raises(TypeError):
         episodes_from_observation(
-            EnvironmentalDynamicsSpec(),  # type: ignore[arg-type]
+            EnvironmentalDynamicsSpec(),
             AgentId("agent-1"),
             None,
         )
     with pytest.raises(TypeError):
         episodes_from_observation(
-            WorldState(),  # type: ignore[arg-type]
+            WorldState(),
             AgentId("agent-1"),
             None,
         )
@@ -191,7 +192,7 @@ def test_cognition_modules_do_not_import_the_spec() -> None:
 
 def _search_failure_score(
     model: CausalWorldModel,
-    atoms: tuple,
+    atoms: tuple[CausalAtom, ...],
 ) -> float:
     match = match_hypothesis(model, outcome=CausalOutcome.SEARCH_FAILURE, atoms=atoms)
     if match is None:

@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
-from world._operations import OperationAccepted, validate_action_request
+from world._operations import (
+    OperationAccepted,
+    ValidatedWorldOperation,
+    validate_action_request,
+)
 from world._rules import (
     RuleDisposition,
     RuleReason,
@@ -16,7 +20,7 @@ from world._state import WorldState
 from world.actions import ActionRequest, Give, Take, require_agent_command
 from world.events import Taken, TakenFromCorpse
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
-from world.models import LifeStatus, copy_body
+from world.models import Item, LifeStatus, Location, copy_body
 from world.possession_succession import PossessionSuccessionRuleContext
 from world.values import CarryCapacity, Health
 
@@ -25,7 +29,9 @@ def _context() -> PossessionSuccessionRuleContext:
     return PossessionSuccessionRuleContext(allow_corpse_take=True, allow_claim=True)
 
 
-def _corpse_state(*, location: str = "loc-1", load: int = 1, capacity: int = 10):
+def _corpse_state(
+    *, location: str = "loc-1", load: int = 1, capacity: int = 10
+) -> tuple[WorldState, Item]:
     item = make_item("item-1", location_id=None, holder_id="body-dead", load=load)
     corpse = copy_body(
         alive_body("body-dead", location_id=location, inventory=(item.entity_id,)),
@@ -33,7 +39,7 @@ def _corpse_state(*, location: str = "loc-1", load: int = 1, capacity: int = 10)
         health=Health(0),
     )
     living = copy_body(alive_body("body-live"), carry_capacity=CarryCapacity(capacity))
-    locations = (make_location("loc-1"),)
+    locations: tuple[Location, ...] = (make_location("loc-1"),)
     if location != "loc-1":
         locations = (
             make_location("loc-1", adjacent=("loc-2",)),
@@ -50,7 +56,7 @@ def _corpse_state(*, location: str = "loc-1", load: int = 1, capacity: int = 10)
     return state, item
 
 
-def _take(state: WorldState):
+def _take(state: WorldState) -> ValidatedWorldOperation:
     outcome = validate_action_request(
         world_id=WorldId("world-1"),
         state=state,

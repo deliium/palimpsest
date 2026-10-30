@@ -7,9 +7,13 @@ import pytest
 from agents.cognition.identity import IdentityAspect
 from agents.cognition.models import project_identity_state
 from experiments.catalog import experiment_h_identity
-from experiments.reference_scenario import identity_divergence_scenario
+from experiments.reference_scenario import (
+    IdentityDivergenceBundle,
+    identity_divergence_scenario,
+)
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
+from simulation.runner_models import SimulationRunnerResult
 from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS
 
 
@@ -39,7 +43,14 @@ def _states_from_runtimes(runtimes: object) -> dict[str, object]:
     return states
 
 
-async def _run(success_agent: str, *, enabled: bool, run_id: str):
+async def _run(
+    success_agent: str, *, enabled: bool, run_id: str
+) -> tuple[
+    SimulationRunnerResult,
+    dict[str, object] | None,
+    list[str],
+    IdentityDivergenceBundle,
+]:
     bundle = identity_divergence_scenario(success_agent_id=success_agent)
     definition = experiment_h_identity(bundle.config)
     condition_id = "h-enabled" if enabled else "h-disabled"
@@ -54,10 +65,11 @@ async def _run(success_agent: str, *, enabled: bool, run_id: str):
         runner.set_intervention_arbiter(bundle.arbiter)
         result = await runner.run()
         states = _states_from_runtimes(runner.runtimes) if enabled else None
-        predicates = []
+        predicates: list[str] = []
         if not enabled:
             for runtime in runner.runtimes:
                 reader = runtime._semantic_belief_reader
+                assert reader is not None
                 predicates.extend(
                     belief.claim.predicate for belief in reader.snapshot()
                 )

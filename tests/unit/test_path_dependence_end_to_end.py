@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from math import isfinite
 from pathlib import Path
 from typing import cast
 
@@ -22,7 +23,7 @@ pytestmark = pytest.mark.unit
 SOURCE_DIGEST = "a" * 64
 
 
-def test_smoke_ensemble_seals_complete_lineage_and_honest_unknown_outcomes(
+def test_smoke_ensemble_seals_complete_lineage_and_source_qualified_outcomes(
     tmp_path: Path,
 ) -> None:
     spec = replace(
@@ -69,7 +70,33 @@ def test_smoke_ensemble_seals_complete_lineage_and_honest_unknown_outcomes(
         coverage = cast(dict[str, object], data["coverage"])
         assert coverage["complete"] is False
         rows = cast(list[dict[str, object]], data["rows"])
-        assert {row["availability"] for row in rows} == {"unknown"}
+        assert {row["availability"] for row in rows} <= {
+            "present", "known_zero", "unknown"
+        }
+        measured = [
+            row for row in rows if row["availability"] in {"present", "known_zero"}
+        ]
+        assert measured  # Real endpoint capture must not become all-unknown.
+        for row in measured:
+            value = row["value"]
+            assert type(value) in {int, float}
+            assert isfinite(cast(float, value))
+            assert row["coverage"] == "complete"
+            refs = cast(list[str], row["evidence_refs"])
+            assert any(ref.startswith("algorithm:") for ref in refs)
+            if row["availability"] == "known_zero":
+                assert value == 0.0
+        unknown = [row for row in rows if row["availability"] == "unknown"]
+        assert unknown  # Incomplete capture cannot certify every domain.
+        for row in unknown:
+            assert row["value"] is None
+            assert row["reason_code"]
+        institution = next(
+            row for row in rows
+            if row["selector_id"] == "institutions.persistent_candidates"
+        )
+        assert institution["availability"] == "unknown"
+        assert institution["reason_code"] == "incomplete_candidate_search"
         assert {row["selector_id"] for row in rows} == {
             "norms.active_beliefs",
             "norms.belief_persistence",

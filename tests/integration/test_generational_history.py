@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from tests.benchmarks.harness import durable_factories, unique_run_id
@@ -36,7 +37,7 @@ pytestmark = pytest.mark.integration
 @pytest.mark.asyncio
 async def test_durable_history_refs_match_replay_at_boundaries(
     database_resources: DatabaseResources,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     base = _v55_config()
     generational = base.generational_run
@@ -89,7 +90,8 @@ async def test_durable_history_refs_match_replay_at_boundaries(
         history = decode_generational_document(
             payload, schema_version="generational-history-v1"
         )
-        boundary = int(history["boundary_tick"])
+        boundary = history["boundary_tick"]
+        assert isinstance(boundary, int)
         outcome = await replay.replay(
             ReplayRequest(
                 run_id=run_id,
@@ -102,9 +104,11 @@ async def test_durable_history_refs_match_replay_at_boundaries(
         assert outcome.engine.tick.value == boundary
         reference = await reader.reference(run_id.value, boundary)
         assert reference.objective_commit_hash == history["objective_commit_hash"]
+        snapshot_ref = history["snapshot_ref"]
+        assert isinstance(snapshot_ref, dict)
         assert (
             reference.snapshot_ref.snapshot_id
-            == history["snapshot_ref"]["snapshot_id"]
+            == snapshot_ref["snapshot_id"]
         )
 
     # Non-cadence lookup may use the nearest checkpoint while folding to B.

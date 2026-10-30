@@ -133,6 +133,7 @@ def test_drift_keys_on_separate_setup() -> None:
     assert document.values["meaning_shift_rate"] == 0.5
     assert document.values["label_turnover_rate"] == 1.0
     assert document.values["mean_sense_revision"] == 0.5
+    assert isinstance(document.values["merge_rate"], float)
     assert document.values["merge_rate"] > 0.0
 
 

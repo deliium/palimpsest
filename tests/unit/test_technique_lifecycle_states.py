@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 
 from analysis.models import AppliedActionRow
 from analysis.technique_lifecycle import (
+    TechniqueLifecycleSnapshot,
     TechniqueLifecycleState,
     TechniqueLossCause,
     classify_technique_lifecycle,
     technique_lineage_diffusion,
 )
-from simulation.runner_models import example_technique_lifecycle_spec
+from simulation.runner_models import (
+    TechniqueLifecycleSpec,
+    example_technique_lifecycle_spec,
+)
 
 
 def _audit(**overrides: object) -> SimpleNamespace:
@@ -44,12 +49,20 @@ def _move(agent: str, tick: int, location: str) -> AppliedActionRow:
     )
 
 
-def _global(audits, **kwargs):
+def _global(
+    audits: Sequence[object], *, as_of_tick: int = 4,
+    spec: TechniqueLifecycleSpec | None = None,
+    death_ticks: Mapping[str, int] | None = None,
+    artifact_rows: Sequence[object] = (),
+    applied_actions: Sequence[AppliedActionRow] = (),
+) -> TechniqueLifecycleSnapshot:
     rows = classify_technique_lifecycle(
         audits,
-        as_of_tick=kwargs.pop("as_of_tick", 4),
-        spec=kwargs.pop("spec", example_technique_lifecycle_spec()),
-        **kwargs,
+        as_of_tick=as_of_tick,
+        spec=example_technique_lifecycle_spec() if spec is None else spec,
+        death_ticks=death_ticks,
+        artifact_rows=artifact_rows,
+        applied_actions=applied_actions,
     )
     return next(row for row in rows if row.scope == "global")
 

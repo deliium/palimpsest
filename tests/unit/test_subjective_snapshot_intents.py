@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pytest
 
+from agents.cognition.contracts import Planner
 from agents.cognition.defaults import (
     DirectSelfStateProjector,
     DirectSituationModeler,
@@ -336,7 +338,7 @@ async def test_runtime_defers_revise_intents_without_mutation(
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
-        planner=WaitFallbackPlanner(),
+        planner=cast(Planner, WaitFallbackPlanner()),
         memory_updates=SubjectiveRevisionHook(
             belief_policy=BeliefFormationPolicy(
                 policy_id="test",

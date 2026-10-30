@@ -31,6 +31,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from simulation.runner_serialization import runner_config_fingerprint
@@ -52,7 +53,7 @@ _CATALOG_BUILDERS = (
 )
 
 
-def _short_base(*, seed: int = 11, max_ticks: int = 1):
+def _short_base(*, seed: int = 11, max_ticks: int = 1) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

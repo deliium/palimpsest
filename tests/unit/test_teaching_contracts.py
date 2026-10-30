@@ -99,7 +99,7 @@ def test_policy_rejects_bad_weights(caplog: pytest.LogCaptureFixture) -> None:
     with pytest.raises(ValueError, match="offer_window"):
         TeachingInteractionPolicy(offer_window=65)
     with pytest.raises(ValueError, match="invalid_type"):
-        TeachingInteractionPolicy(offer_window=True)  # type: ignore[arg-type]
+        TeachingInteractionPolicy(offer_window=True)
     with pytest.raises(ValueError, match="out_of_range"):
         TeachingInteractionPolicy(teaching_response_weight=1.1)
     assert "reason_code=threshold_order" in caplog.text

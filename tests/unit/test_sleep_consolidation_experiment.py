@@ -5,12 +5,14 @@ from __future__ import annotations
 import pytest
 
 from experiments import experiment_f_sleep_consolidation
+from memory.models import OfflineConsolidationAudit
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
+from simulation.runner_models import SimulationRunnerResult
 from tests.unit.test_experiment_definitions import _base
 
 
-async def _run(condition_id: str, run_id: str):
+async def _run(condition_id: str, run_id: str) -> SimulationRunnerResult:
     definition = experiment_f_sleep_consolidation(_base())
     config = next(
         item.runner_config
@@ -34,13 +36,17 @@ async def test_both_arms_sleep_and_only_deterministic_audits() -> None:
     )
     assert disabled.offline_consolidation_audits == ()
     assert deterministic.offline_consolidation_audits
+    audits: list[OfflineConsolidationAudit] = []
+    for audit in deterministic.offline_consolidation_audits:
+        assert isinstance(audit, OfflineConsolidationAudit)
+        audits.append(audit)
     assert any(
         audit.merge_count
         + audit.strengthen_count
         + audit.soft_forget_count
         + audit.belief_count
         > 0
-        for audit in deterministic.offline_consolidation_audits
+        for audit in audits
     )
     disabled_kinds = [
         resolution.command_kind

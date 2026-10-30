@@ -28,6 +28,7 @@ from agents.cognition.models import (
     ActionDirection,
     FutureAppraisal,
     GoalBoard,
+    ImaginedFuture,
     MotivationEvaluation,
     PossibleFutures,
     SelfModel,
@@ -143,7 +144,7 @@ def _board() -> GoalBoard:
 
 def _evaluation(
     appraisals: tuple[FutureAppraisal, ...],
-    futures: tuple[object, ...],
+    futures: tuple[ImaginedFuture, ...],
     *,
     drives: tuple[DriveKind, ...] = (),
 ) -> tuple[MotivationEvaluation, PossibleFutures]:

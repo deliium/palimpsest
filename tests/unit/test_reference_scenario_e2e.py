@@ -37,6 +37,7 @@ from simulation.lifecycle import ActionResolutionStatus
 from simulation.runner_models import GoalTransitionReasonCode
 from tests.reference_scenario_helpers import (
     REFERENCE_AGENT_IDS,
+    ReferenceRunOutcome,
     agent_resolutions_after,
     applied_command_kinds,
     assert_owned_logs_privacy_safe,
@@ -48,31 +49,38 @@ from tests.reference_scenario_helpers import (
     result_document_hashes,
     run_reference_scenario,
 )
-from world.models import DayPhase, LifeStatus
+from world.models import LifeStatus
+from world.values import DayPhase
 
 pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-async def reference_outcome():
+async def reference_outcome() -> ReferenceRunOutcome:
     """One shared 48-tick reference run for invariant proofs."""
     return await run_reference_scenario(run_id="run-reference-e2e-shared")
 
 
-def test_reference_scenario_completes_forty_eight_ticks(reference_outcome) -> None:
+def test_reference_scenario_completes_forty_eight_ticks(
+    reference_outcome: ReferenceRunOutcome,
+) -> None:
     result = reference_outcome.result
     assert result.ticks_committed == REFERENCE_MAX_TICKS
     assert result.stop_reason.value == "max_ticks"
     assert len(result.finalized_tick_receipts) == REFERENCE_MAX_TICKS
 
 
-def test_day_and_night_cover_reference_window(reference_outcome) -> None:
+def test_day_and_night_cover_reference_window(
+    reference_outcome: ReferenceRunOutcome,
+) -> None:
     phases = day_night_phases(reference_outcome.bundle)
     assert DayPhase.DAY in phases
     assert DayPhase.NIGHT in phases
 
 
-def test_food_water_extract_consume_and_regen_configured(reference_outcome) -> None:
+def test_food_water_extract_consume_and_regen_configured(
+    reference_outcome: ReferenceRunOutcome,
+) -> None:
     kinds = applied_command_kinds(reference_outcome.result)
     assert kinds.get("search", 0) >= 1
     assert kinds.get("drink", 0) >= 1
@@ -87,7 +95,9 @@ def test_food_water_extract_consume_and_regen_configured(reference_outcome) -> N
     assert arbiter.milestone_status(MILESTONE_EAT_FOOD) is MilestoneStatus.APPLIED
 
 
-def test_direct_reconstructed_divergence(reference_outcome) -> None:
+def test_direct_reconstructed_divergence(
+    reference_outcome: ReferenceRunOutcome,
+) -> None:
     direct = direct_trace_count(reference_outcome.memories)
     reconstructed = reconstructed_trace_count(reference_outcome.memories)
     assert direct >= 1
@@ -95,7 +105,7 @@ def test_direct_reconstructed_divergence(reference_outcome) -> None:
     assert direct != reconstructed
 
 
-def test_communication_propagation(reference_outcome) -> None:
+def test_communication_propagation(reference_outcome: ReferenceRunOutcome) -> None:
     kinds = applied_command_kinds(reference_outcome.result)
     assert kinds.get("tell", 0) >= 1
     assert (
@@ -105,18 +115,18 @@ def test_communication_propagation(reference_outcome) -> None:
     assert communicated_trace_count(reference_outcome.memories) >= 1
 
 
-def test_imagination_invoked(reference_outcome) -> None:
+def test_imagination_invoked(reference_outcome: ReferenceRunOutcome) -> None:
     counters = reference_outcome.result.cognition_counters
     assert counters.imagination_evaluations >= 1
     assert counters.cognition_invocations >= 1
 
 
-def test_asymmetric_relationships(reference_outcome) -> None:
+def test_asymmetric_relationships(reference_outcome: ReferenceRunOutcome) -> None:
     assert sum(len(items) for items in reference_outcome.relationships.values()) >= 1
     assert has_asymmetric_relationships(reference_outcome.relationships)
 
 
-def test_goal_outcomes_recorded(reference_outcome) -> None:
+def test_goal_outcomes_recorded(reference_outcome: ReferenceRunOutcome) -> None:
     receipts = reference_outcome.result.goal_transition_receipts
     assert len(receipts) >= 1
     reasons = {item.reason_code for item in receipts}
@@ -125,7 +135,9 @@ def test_goal_outcomes_recorded(reference_outcome) -> None:
     )
 
 
-def test_early_death_n_plus_one_terminal_no_later_action(reference_outcome) -> None:
+def test_early_death_n_plus_one_terminal_no_later_action(
+    reference_outcome: ReferenceRunOutcome,
+) -> None:
     bundle = reference_outcome.bundle
     result = reference_outcome.result
     assert bundle.death_tick == REFERENCE_DEATH_TICK
@@ -149,7 +161,7 @@ def test_early_death_n_plus_one_terminal_no_later_action(reference_outcome) -> N
     assert applied_later == []
 
 
-def test_all_metric_families_assemble(reference_outcome) -> None:
+def test_all_metric_families_assemble(reference_outcome: ReferenceRunOutcome) -> None:
     result = reference_outcome.result
     applied: list[AppliedActionRow] = []
     resolutions: list[ActionResolutionRow] = []

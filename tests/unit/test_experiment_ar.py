@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from agents.models import AgentId
 from analysis.models import AppliedActionRow
 from analysis.technique_lifecycle import (
+    TechniqueLifecycleSnapshot,
     TechniqueLifecycleState,
     classify_technique_lifecycle,
 )
@@ -20,12 +22,15 @@ from experiments import (
     experiment_ar_technique_lifecycle,
 )
 from experiments.catalog import base_runner_config_from_scenario
+from experiments.models import ExperimentDefinition
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V36,
     RUNNER_SCHEMA_VERSION_V37,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
+    TechniqueLifecycleSpec,
     WorldScenarioSpec,
 )
 from simulation.runner_serialization import (
@@ -41,7 +46,7 @@ from world.models import default_physical_rules
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -73,11 +78,11 @@ def _base():
     )
 
 
-def _definition():
+def _definition() -> ExperimentDefinition:
     return experiment_ar_technique_lifecycle(_base())
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     definition = _definition()
     return next(
         item.runner_config
@@ -106,23 +111,20 @@ def _audit(**overrides: object) -> SimpleNamespace:
     return SimpleNamespace(**payload)
 
 
-def _state(config, audits, **kwargs):
+def _state(
+    config: SimulationRunnerConfig, audits: Sequence[object], *,
+    as_of_tick: int, death_ticks: Mapping[str, int] | None = None,
+    applied_actions: Sequence[AppliedActionRow] = (AppliedActionRow(
+        tick=1, ordinal=0, agent_id="agent-a", action_kind="move", location_id="loc-1"
+    ),),
+) -> TechniqueLifecycleSnapshot:
+    assert config.technique_lifecycle is not None
     rows = classify_technique_lifecycle(
         audits,
         spec=config.technique_lifecycle,
-        applied_actions=kwargs.pop(
-            "applied_actions",
-            (
-                AppliedActionRow(
-                    tick=1,
-                    ordinal=0,
-                    agent_id="agent-a",
-                    action_kind="move",
-                    location_id="loc-1",
-                ),
-            ),
-        ),
-        **kwargs,
+        applied_actions=applied_actions,
+        as_of_tick=as_of_tick,
+        death_ticks=death_ticks,
     )
     return next(row for row in rows if row.scope == "global")
 
@@ -131,7 +133,9 @@ def test_ar_is_off_gate() -> None:
     assert "experiment-ar-technique-lifecycle" in OFF_GATE_MATRIX_EXPERIMENT_IDS
 
 
-def test_ar_channel_off_matches_v36_without_lifecycle(caplog) -> None:
+def test_ar_channel_off_matches_v36_without_lifecycle(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.INFO)
     config = _arm("ar-channel-off")
     assert config.schema_version == RUNNER_SCHEMA_VERSION_V36
@@ -195,9 +199,10 @@ def test_ar_discovered_then_diffusing_then_known() -> None:
     assert known.known_by_n == 2
 
 
-def example_window(spec):
+def example_window(spec: TechniqueLifecycleSpec | None) -> TechniqueLifecycleSpec:
     from dataclasses import replace
 
+    assert spec is not None
     return replace(spec, diffusion_window_ticks=2)
 
 
@@ -205,7 +210,7 @@ def test_ar_flags_off_stays_v4() -> None:
     config = _arm("ar-flags-off")
     assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
     assert config.technique_lifecycle is None
-    assert len(AgentCommand.__args__) == 43  # type: ignore[attr-defined]
+    assert len(AgentCommand.__args__) == 43
 
 
 def test_ar_not_a_tree_rejects_requires_technique() -> None:

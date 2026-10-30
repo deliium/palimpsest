@@ -12,6 +12,7 @@ from simulation.serialization import decode_domain, encode_domain
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import PhysicalRules
+from world.observations import Observation
 from world.regions import (
     CognitionMode,
     Journey,
@@ -68,7 +69,7 @@ def _bootstrap(*, regional: bool) -> WorldBootstrap:
     )
 
 
-def _observation(*, regional: bool):
+def _observation(*, regional: bool) -> Observation:
     engine = WorldEngine(
         config=SimulationRunConfig(
             seed=88,

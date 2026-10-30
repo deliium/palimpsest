@@ -5,16 +5,16 @@ from __future__ import annotations
 import pytest
 
 from simulation.demographic_policy import (
+    DemographicEntryCandidate,
     DemographicPopulationSnapshot,
     FixedIntervalEntryPolicy,
     GenerationalIntervalEntryPolicy,
     demographic_policy_for,
 )
 from simulation.runner_models import (
-    LifecycleStageId,
-    LifecycleStageThreshold,
     PopulationLifecycleSpec,
 )
+from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
 
 def _spec(
@@ -66,7 +66,9 @@ def _snapshot(
     )
 
 
-def _propose(spec: PopulationLifecycleSpec, snapshot: DemographicPopulationSnapshot):
+def _propose(
+    spec: PopulationLifecycleSpec, snapshot: DemographicPopulationSnapshot
+) -> tuple[DemographicEntryCandidate, ...]:
     return GenerationalIntervalEntryPolicy().propose_entries(
         snapshot=snapshot,
         params=spec.demographic_policy_params,

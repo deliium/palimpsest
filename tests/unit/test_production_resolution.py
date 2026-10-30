@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
 from agents.models import AgentId
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from tests.physical_helpers import (
     PhysicalWorldFixture,
     physical_config,
@@ -23,12 +24,23 @@ from world._production import (
 )
 from world._skills import default_objective_skill_policy
 from world._state import rebuild_world_state
-from world.actions import Attack, Build, Craft, Harvest, Move, Repair, Search, Store
+from world.actions import (
+    AgentCommand,
+    Attack,
+    Build,
+    Craft,
+    Harvest,
+    Move,
+    Repair,
+    Search,
+    Store,
+)
 from world.events import (
     CraftStarted,
     ItemCrafted,
     ItemStored,
     ResourceHarvested,
+    Searched,
     StructureBuilt,
     StructureRepaired,
 )
@@ -125,23 +137,19 @@ def _engine(
     rules: object | None = None,
     skill: bool = False,
 ) -> WorldEngine:
-    kwargs: dict[str, object] = {}
-    if catalog is not None:
-        kwargs["production_catalog"] = catalog
-    if skill:
-        kwargs["skill_policy"] = default_objective_skill_policy()
-        kwargs["skill_entity_ids"] = (EntityId("body-1"),)
     return WorldEngine(
         config=physical_config(seed, rules=rules),  # type: ignore[arg-type]
         bootstrap=fixture.as_bootstrap(),
-        **kwargs,
+        production_catalog=catalog,
+        skill_policy=default_objective_skill_policy() if skill else None,
+        skill_entity_ids=(EntityId("body-1"),) if skill else None,
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 
@@ -180,7 +188,9 @@ def test_empty_catalog_rejects_without_a_draw(
         Search(),
     )
     right = _act(_engine(fixture, seed=4), "agent-1", Search())
-    assert left.events[0].event.details.success == right.events[0].event.details.success
+    left_details = cast(Searched, left.events[0].event.details)
+    right_details = cast(Searched, right.events[0].event.details)
+    assert left_details.success == right_details.success
 
 
 def test_harvest_emits_success_and_failure_without_logging_probability(
@@ -296,7 +306,10 @@ def test_dead_actor_drops_a_due_job() -> None:
             rules=rules,
         )
         started = _act(candidate, "agent-1", Craft(_TOOL))
-        if _kinds(started) and _kinds(started)[0].success:
+        started_details = _kinds(started)
+        if started_details:
+            assert isinstance(started_details[0], CraftStarted)
+        if started_details and cast(CraftStarted, started_details[0]).success:
             engine = candidate
             break
     assert engine is not None
@@ -395,7 +408,9 @@ def test_shelter_repair_and_store() -> None:
     stored_again = _kinds(second)[0]
     assert type(stored_again) is ItemStored
     assert stored_again.resulting_stored_quantity == 2
-    assert stored_again.structure_id == _kinds(first)[0].structure_id
+    first_stored = _kinds(first)[0]
+    assert isinstance(first_stored, ItemStored)
+    assert stored_again.structure_id == first_stored.structure_id
     stores = [
         structure
         for structure in again._snapshot.world.state.structures.values()
@@ -454,7 +469,11 @@ def test_skill_level_zero_preserves_recipe_probability() -> None:
             "agent-1",
             Harvest(_WOOD, EntityId("res-wood")),
         )
-        assert _kinds(plain)[0].success == _kinds(skilled)[0].success
+        plain_details = _kinds(plain)[0]
+        skilled_details = _kinds(skilled)[0]
+        assert isinstance(plain_details, ResourceHarvested)
+        assert isinstance(skilled_details, ResourceHarvested)
+        assert plain_details.success == skilled_details.success
 
 
 def test_dead_job_completion_emits_nothing() -> None:

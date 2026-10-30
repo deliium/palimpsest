@@ -70,6 +70,11 @@ class _StubMemoryService:
         _ = request
         return MemoryForgetResult(forgotten_count=0, examined_count=0)
 
+    async def forget_selected_ids(
+        self, memory_ids: tuple[MemoryId, ...], *, tick: int
+    ) -> int:
+        return 0
+
 
 class _StubReconstructor:
     async def reconstruct(self, evidence: RecallEvidence) -> ReconstructedMemory:

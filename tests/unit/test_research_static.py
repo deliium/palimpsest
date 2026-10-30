@@ -6,6 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import cast
 
 import httpx
 import pytest
@@ -25,6 +26,7 @@ class FakeEngine:
 
 
 class FakeResources:
+    # Deliberately no ``session_factory``: the app must not attach persistence.
     def __init__(self, engine: DisposableEngine) -> None:
         self.engine = engine
 
@@ -41,7 +43,7 @@ def logging_sandbox() -> Iterator[None]:
 
 
 def _factory(_settings: Settings) -> DatabaseResourcesLike:
-    return FakeResources(engine=FakeEngine())
+    return cast(DatabaseResourcesLike, FakeResources(engine=FakeEngine()))
 
 
 def _settings(**overrides: object) -> Settings:

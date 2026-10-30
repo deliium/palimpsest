@@ -100,7 +100,9 @@ def test_transitions_present_after_witness_death() -> None:
     )
     assert transitions.availability is MetricAvailability.PRESENT
     assert HISTORICAL_MEMORY_TRANSITIONS_METRIC_VERSION.endswith("@1")
+    assert isinstance(transitions.values["transition_count"], int)
     assert transitions.values["transition_count"] >= 1
+    assert isinstance(transitions.values["living_to_communicative_count"], int)
     assert transitions.values["living_to_communicative_count"] >= 1
 
 

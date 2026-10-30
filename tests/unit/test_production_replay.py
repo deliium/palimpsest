@@ -19,7 +19,6 @@ from simulation.journal import (
 from simulation.lifecycle import ActionSubmission
 from simulation.models import DERIVATION_VERSION
 from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V6,
     PROJECTOR_VERSION,
     PayloadHash,
     SnapshotId,
@@ -33,8 +32,9 @@ from tests.physical_helpers import (
 from tests.simulation_helpers import alive_body, make_item, make_resource
 from tests.unit.determinism_helpers import project_world_state
 from world._replay import ProjectionError, project_events
+from world._state import WorldState
 from world.actions import Build, Craft, Harvest, Move, Repair, Search, Store
-from world.events import EVENT_SCHEMA_REPLAY_V5
+from world.events import EVENT_SCHEMA_REPLAY_V5, EVENT_SCHEMA_REPLAY_V6
 from world.identifiers import EntityId, RecipeId, WorldRevision
 from world.production import (
     ProductionCatalog,
@@ -96,13 +96,15 @@ def _engine(
     seed: int = 1,
     catalog: ProductionCatalog | None = None,
 ) -> WorldEngine:
-    kwargs: dict[str, object] = {}
     if catalog is not None:
-        kwargs["production_catalog"] = catalog
+        return WorldEngine(
+            config=physical_config(seed),
+            bootstrap=fixture.as_bootstrap(),
+            production_catalog=catalog,
+        )
     return WorldEngine(
         config=physical_config(seed),
         bootstrap=fixture.as_bootstrap(),
-        **kwargs,
     )
 
 
@@ -163,7 +165,7 @@ def _snapshot(engine: WorldEngine, *, codec: str, schema: int) -> WorldSnapshot:
     )
 
 
-def _fold(engine: WorldEngine, catalog: ProductionCatalog | None) -> object:
+def _fold(engine: WorldEngine, catalog: ProductionCatalog | None) -> WorldState:
     start = WorldEngine(
         config=engine._config,
         bootstrap=engine._bootstrap,

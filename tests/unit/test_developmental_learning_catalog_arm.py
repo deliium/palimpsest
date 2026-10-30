@@ -16,6 +16,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V29,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -25,7 +26,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.developmental_learning_catalog_arm")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -88,8 +89,10 @@ def test_aj_profile_and_arms() -> None:
     socialized = next(
         item for item in definition.conditions if item.condition_id == "aj-socialized"
     ).runner_config
+    assert socialized.developmental_learning is not None
     assert "instruction" in socialized.developmental_learning.enabled_sources
     artifact = next(
         item for item in definition.conditions if item.condition_id == "aj-artifact"
     ).runner_config
+    assert artifact.developmental_learning is not None
     assert "artifact" in artifact.developmental_learning.enabled_sources

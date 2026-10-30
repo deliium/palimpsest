@@ -20,22 +20,21 @@ from world.production import StructureKind, example_production_catalog
 from world.values import ItemKind
 
 
-def _project(**extra) -> CollectiveProject:
-    fields = {
-        "project_id": EntityId("project-well"),
-        "location_id": EntityId("loc-1"),
-        "kind": CollectiveProjectKind.WELL,
-        "status": CollectiveProjectStatus.COMPLETED,
-        "labor_done": 3,
-        "labor_required": 3,
-        "materials_done": 2,
-        "materials_required": 2,
-        "opened_tick": 0,
-        "last_accepted_tick": 1,
-        "shortage_count": 0,
-    }
-    fields.update(extra)
-    return CollectiveProject(**fields)
+def _project(*, public_acts: tuple[PublicGoodAct, ...] = ()) -> CollectiveProject:
+    return CollectiveProject(
+        project_id=EntityId("project-well"),
+        location_id=EntityId("loc-1"),
+        kind=CollectiveProjectKind.WELL,
+        status=CollectiveProjectStatus.COMPLETED,
+        labor_done=3,
+        labor_required=3,
+        materials_done=2,
+        materials_required=2,
+        opened_tick=0,
+        last_accepted_tick=1,
+        shortage_count=0,
+        public_acts=public_acts,
+    )
 
 
 def test_well_and_warning_post_labor_and_materials() -> None:

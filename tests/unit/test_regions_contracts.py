@@ -42,7 +42,10 @@ def test_spec_canonicalizes_order_and_detaches_callers() -> None:
     memberships.clear()
     routes.clear()
     encoded = spec.canonical()
-    assert [item["region_id"] for item in encoded["regions"]] == ["a", "z"]  # type: ignore[index]
+    encoded_regions = encoded["regions"]
+    assert isinstance(encoded_regions, list)
+    assert all(isinstance(item, dict) for item in encoded_regions)
+    assert [item["region_id"] for item in encoded_regions] == ["a", "z"]
     assert spec.regions
     assert spec.routes[0].edge_key == ("a-loc", "z-loc")
 

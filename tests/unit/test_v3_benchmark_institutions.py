@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agents.cognition.offices import OfficeConceptLedger
 from agents.models import AgentId
 from experiments.civilization_benchmark_evidence import BenchmarkBoundaryProbe
 from experiments.civilization_benchmark_execution import (
@@ -192,8 +193,10 @@ def test_institution_cases_build_exact_modes() -> None:
     for scenario_id, modes in expected.items():
         build = build_institutions_benchmark(scenario_id)
         config = build.arms[0].config
+        initialization = config.new_agent_initialization
+        assert initialization is not None
         assert (
-            config.new_agent_initialization.species_defaults_id
+            initialization.species_defaults_id
             == SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1
         )
         assert decode_runner_config(encode_runner_config(config)) == config
@@ -308,7 +311,8 @@ async def test_office_succession_after_natural_death(tmp_path: Path) -> None:
         (tick, ledger)
         for tick, ledgers in capture.rows
         for ledger in ledgers
-        if getattr(ledger, "owner_id", None) == AgentId("agent-origin")
+        if isinstance(ledger, OfficeConceptLedger)
+        and ledger.owner_id == AgentId("agent-origin")
     ]
     assert origin_rows
     concepts = [

@@ -29,13 +29,13 @@ from agents.models import (
     GoalStatus,
     default_drive_profile,
 )
+from social import RelationshipId
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipActivationState,
     RelationshipConfidence,
     RelationshipDimension,
     RelationshipDimensionState,
-    RelationshipId,
     RelationshipPolicyRef,
     RelationshipRevisionId,
 )

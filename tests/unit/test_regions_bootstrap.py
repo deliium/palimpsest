@@ -14,6 +14,7 @@ from tests.simulation_helpers import (
 )
 from world._state import WorldState, rebuild_world_state
 from world.identifiers import EntityId, WorldId, WorldRevision
+from world.models import Location
 from world.regions import (
     CognitionMode,
     Journey,
@@ -24,7 +25,7 @@ from world.regions import (
 )
 
 
-def _topology() -> tuple[tuple, RegionsMigrationSpec]:
+def _topology() -> tuple[tuple[Location, ...], RegionsMigrationSpec]:
     locations = connected_locations(
         ("loc-1", "One"), ("loc-2", "Two"), ("loc-3", "Three")
     )

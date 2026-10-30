@@ -26,6 +26,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_dependency_care_spec,
@@ -43,7 +44,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.v3_dependency_care_flags_off_compat")
 
 
-def _base(*, max_ticks: int = 3, agents: int = 2):
+def _base(*, max_ticks: int = 3, agents: int = 2) -> SimulationRunnerConfig:
     bodies = tuple(alive_body(f"body-{index}") for index in range(agents))
     specs = tuple(
         AgentRunnerSpec(
@@ -157,6 +158,7 @@ def test_v28_dependency_care_round_trip() -> None:
     restored = decode_runner_config(encode_runner_config(config))
     assert restored.schema_version == RUNNER_SCHEMA_VERSION_V28
     assert restored.dependency_care is not None
+    assert config.dependency_care is not None
     assert (
         restored.dependency_care.enabled_needs == config.dependency_care.enabled_needs
     )

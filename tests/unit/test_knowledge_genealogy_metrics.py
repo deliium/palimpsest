@@ -19,8 +19,8 @@ from analysis.specifications import METRIC_FAMILY_COUNT, all_metric_specificatio
 _LOG = logging.getLogger("tests.knowledge_genealogy_metrics")
 
 
-def _audit(**kwargs) -> SimpleNamespace:
-    base = dict(
+def _audit(**kwargs: object) -> SimpleNamespace:
+    base: dict[str, object] = dict(
         owner_id="alice",
         entry_id="e1",
         kind="foraging_method",
@@ -122,9 +122,13 @@ def test_lineage_empty_and_dual_emergence() -> None:
         audits, run_id="run-a", input_revision="rev-1", as_of_tick=4
     )
     assert doc.availability is MetricAvailability.PRESENT
+    assert isinstance(doc.values["independent_root_count"], int)
     assert doc.values["independent_root_count"] >= 2
+    assert isinstance(doc.values["multi_parent_share"], (int, float))
     assert float(doc.values["multi_parent_share"]) > 0.0
+    assert isinstance(doc.values["combination_rate"], (int, float))
     assert float(doc.values["combination_rate"]) > 0.0
+    assert isinstance(doc.values["dual_independent_emergence_rate"], (int, float))
     assert float(doc.values["dual_independent_emergence_rate"]) > 0.0
 
 
@@ -154,7 +158,9 @@ def test_mutation_mean_distance_and_histogram() -> None:
     )
     assert doc.availability is MetricAvailability.PRESENT
     assert doc.values["mutated_count"] == 1
+    assert isinstance(doc.values["mutated_hop_share"], (int, float))
     assert float(doc.values["mutated_hop_share"]) == 0.5
+    assert isinstance(doc.values["mean_fingerprint_distance_q"], (int, float))
     assert float(doc.values["mean_fingerprint_distance_q"]) == 0.1
     assert doc.values["origin_independent_discovery_count"] == 1
     assert doc.values["origin_teaching_count"] == 1

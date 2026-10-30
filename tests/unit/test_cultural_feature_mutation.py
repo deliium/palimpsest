@@ -8,6 +8,9 @@ import pytest
 
 from agents.cognition.cultural_features import (
     CULTURAL_FEATURE_DEFAULT_HOP_CAP,
+    CulturalFeatureKindId,
+    CulturalFeatureLedger,
+    CulturalTransmissionChannelId,
     SubjectiveCulturalBelief,
     empty_cultural_feature_ledger,
     form_or_reinforce_cultural_belief,
@@ -22,7 +25,7 @@ _LOG = logging.getLogger("tests.cultural_feature_mutation")
 _CHANNELS = ("observation", "teaching", "communication")
 
 
-def _seed_two_parents(owner: AgentId):
+def _seed_two_parents(owner: AgentId) -> CulturalFeatureLedger:
     ledger = empty_cultural_feature_ledger(owner)
     ledger = form_or_reinforce_cultural_belief(
         ledger,
@@ -161,10 +164,10 @@ def test_recombine_hop_cap() -> None:
     deep_a = SubjectiveCulturalBelief(
         belief_id="a",
         owner_agent_id=owner,
-        feature_kind="practice",
+        feature_kind=CulturalFeatureKindId.PRACTICE,
         content_key="a",
         content_fingerprint="xxxx:yyyy",
-        channel="observation",
+        channel=CulturalTransmissionChannelId.OBSERVATION,
         confidence=0.5,
         parent_belief_ids=("ghost",),
         hop_index=CULTURAL_FEATURE_DEFAULT_HOP_CAP,
@@ -177,10 +180,10 @@ def test_recombine_hop_cap() -> None:
     deep_b = SubjectiveCulturalBelief(
         belief_id="b",
         owner_agent_id=owner,
-        feature_kind="practice",
+        feature_kind=CulturalFeatureKindId.PRACTICE,
         content_key="b",
         content_fingerprint="yyyy:zzzz",
-        channel="observation",
+        channel=CulturalTransmissionChannelId.OBSERVATION,
         confidence=0.5,
         parent_belief_ids=("ghost",),
         hop_index=CULTURAL_FEATURE_DEFAULT_HOP_CAP,

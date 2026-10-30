@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import fields
 
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
@@ -13,17 +14,19 @@ from world.events import (
     CommitmentDeclared,
     Given,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.observations import ObservationContext
+from world.models import AgentBody, Item
+from world.observations import Observation, ObservationContext
 from world.values import ItemKind
 
 _RUN = "run-perception"
 _WORLD = WorldId("world-perception")
 
 
-def _state():
+def _state() -> tuple[WorldState, Item, AgentBody, AgentBody]:
     food = make_item("food-1", kind=ItemKind.FOOD, location_id=None, holder_id="body-a")
     giver = alive_body("body-a", inventory=(food.entity_id,))
     other = alive_body("body-b")
@@ -43,7 +46,7 @@ def _state():
     return state, food, giver, other
 
 
-def _declaration(giver, other):
+def _declaration(giver: AgentBody, other: AgentBody) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-declare"),
         run_id=_RUN,
@@ -70,7 +73,7 @@ def _declaration(giver, other):
     )
 
 
-def _given(giver, other, food):
+def _given(giver: AgentBody, other: AgentBody, food: Item) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-give"),
         run_id=_RUN,
@@ -84,7 +87,9 @@ def _given(giver, other, food):
     )
 
 
-def _see(state, observer: str, events, *, active: bool):
+def _see(
+    state: WorldState, observer: str, events: Sequence[WorldEvent], *, active: bool
+) -> Observation:
     return PerceptionService(structured_commitments_active=active).project(
         world_id=_WORLD,
         state=state,

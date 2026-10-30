@@ -165,6 +165,17 @@ percentile ranges, not confidence intervals. See
 
 Composition/validation scenarios (`bench-01`…`bench-16`), observer graphical world, scientific invariants, and zero-install acceptance are documented in [V2 benchmark suite](v2-benchmark-suite.md). Example matrix fixture: `tests/fixtures/matrices/v2-benchmark-suite.json`. The suite stays off the V1 regression gate and does not own `multi_hop_testimony_tracking`.
 
+## V3 generational civilization benchmark
+
+Thirty small generational cases (`v3-bench-01`…`v3-bench-30`), each with a
+controlled mechanism lane and an unassisted (or declared grouped) research lane,
+are documented in [V3 benchmark suite](v3-benchmark-suite.md). The suite uses
+`runner-config-v55`, the content-empty
+`species_default_civilization_learner_v1` pack, predeclared smoke/research/visual
+budgets, immutable sibling artifacts and a separate qualification harness. It
+stays off the V1 gate, requires no positive civilizational outcome, and does not
+own `institutional_economy` or `multi_hop_testimony_tracking`.
+
 ## Experiment AY: Regional migration
 
 AY (`regional_migration@1`) stays off the V1 gate. Its connected five-location graph spans three regions,

@@ -19,7 +19,6 @@ from experiments.civilization_benchmark_artifacts import (
     BenchmarkRunReference,
     build_run_document,
 )
-from experiments.civilization_benchmark_base import build_v3_benchmark_scenario
 from experiments.civilization_benchmark_evidence import BenchmarkBoundaryProbe
 from experiments.civilization_benchmark_execution import (
     CivilizationBenchmarkContext,
@@ -52,7 +51,7 @@ from experiments.generational_execution import (
 )
 from simulation.models import RunId
 from simulation.runner import RunnerDependencyFactories
-from simulation.runner_models import runner_stop_is_failure
+from simulation.runner_models import SimulationRunnerConfig, runner_stop_is_failure
 from simulation.runner_serialization import runner_config_fingerprint
 
 _LOG: Final[logging.Logger] = logging.getLogger(
@@ -75,12 +74,227 @@ class BenchmarkSelectionItem:
     arm_id: str
 
 
-def _run_id(item: BenchmarkSelectionItem, revision: str) -> RunId:
-    suffix = revision[:16] if revision else "unknown"
-    return RunId(
-        f"v3bench-{item.scenario_id}-{item.lane.value}-{item.arm_id}"
-        f"-s{item.seed}-{suffix}"
+def _independent_case_config(
+    item: BenchmarkSelectionItem,
+) -> SimulationRunnerConfig:
+    """Materialize the domain-specific bounded world for one independent case."""
+    from experiments.civilization_benchmark_coordination import (
+        COORDINATION_BENCHMARK_IDS,
+        build_coordination_benchmark,
     )
+    from experiments.civilization_benchmark_exchange import (
+        EXCHANGE_BENCHMARK_IDS,
+        build_exchange_benchmark,
+    )
+    from experiments.civilization_benchmark_institutions import (
+        INSTITUTIONS_BENCHMARK_IDS,
+        build_institutions_benchmark,
+    )
+    from experiments.civilization_benchmark_language import (
+        LANGUAGE_BENCHMARK_IDS,
+        build_language_benchmark,
+    )
+    from experiments.civilization_benchmark_memory import (
+        MEMORY_BENCHMARK_IDS,
+        build_memory_benchmark,
+    )
+    from experiments.civilization_benchmark_population import (
+        POPULATION_BENCHMARK_IDS,
+        build_population_benchmark,
+    )
+    from experiments.civilization_benchmark_regions import (
+        REGION_BENCHMARK_IDS,
+        build_region_benchmark,
+    )
+    from experiments.civilization_benchmark_technology import (
+        TECHNOLOGY_BENCHMARK_IDS,
+        build_technology_benchmark,
+    )
+
+    scenario_id = item.scenario_id
+    build: object
+    if scenario_id in POPULATION_BENCHMARK_IDS:
+        build = build_population_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in MEMORY_BENCHMARK_IDS:
+        build = build_memory_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in TECHNOLOGY_BENCHMARK_IDS:
+        build = build_technology_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in EXCHANGE_BENCHMARK_IDS:
+        build = build_exchange_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in COORDINATION_BENCHMARK_IDS:
+        build = build_coordination_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in REGION_BENCHMARK_IDS:
+        build = build_region_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in LANGUAGE_BENCHMARK_IDS:
+        build = build_language_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    elif scenario_id in INSTITUTIONS_BENCHMARK_IDS:
+        build = build_institutions_benchmark(
+            scenario_id,
+            seed=item.seed,
+            profile=item.profile,
+            lane=item.lane,
+        )
+    else:
+        raise BenchmarkCompositionError("unknown_case_builder")
+    from experiments.civilization_benchmark_base import V3BenchmarkScenarioBuild
+
+    if type(build) is not V3BenchmarkScenarioBuild:
+        raise BenchmarkCompositionError("case_builder_result_invalid")
+    for arm in build.arms:
+        if arm.arm_id == item.arm_id:
+            return arm.config
+    raise BenchmarkCompositionError("case_arm_missing")
+
+
+def _case_arbiter(
+    scenario_id: str,
+    config: SimulationRunnerConfig,
+    *,
+    run_id: RunId,
+) -> object | None:
+    """Return the declared mechanism arbiter; research lanes stay unassisted."""
+    from experiments.civilization_benchmark_coordination import (
+        COORDINATION_BENCHMARK_IDS,
+        coordination_benchmark_arbiter,
+    )
+    from experiments.civilization_benchmark_exchange import (
+        EXCHANGE_BENCHMARK_IDS,
+        exchange_benchmark_arbiter,
+    )
+    from experiments.civilization_benchmark_institutions import (
+        INSTITUTIONS_BENCHMARK_IDS,
+        institutions_benchmark_arbiter,
+    )
+    from experiments.civilization_benchmark_language import (
+        LANGUAGE_BENCHMARK_IDS,
+        language_benchmark_arbiter,
+    )
+    from experiments.civilization_benchmark_memory import (
+        MEMORY_BENCHMARK_IDS,
+        memory_benchmark_arbiter,
+    )
+    from experiments.civilization_benchmark_regions import (
+        REGION_BENCHMARK_IDS,
+        region_benchmark_arbiter,
+    )
+    from experiments.civilization_benchmark_technology import (
+        TECHNOLOGY_BENCHMARK_IDS,
+        technology_benchmark_arbiter,
+    )
+
+    if scenario_id in MEMORY_BENCHMARK_IDS:
+        return memory_benchmark_arbiter(scenario_id, config)
+    if scenario_id in TECHNOLOGY_BENCHMARK_IDS:
+        return technology_benchmark_arbiter(scenario_id, config)
+    if scenario_id in EXCHANGE_BENCHMARK_IDS:
+        return exchange_benchmark_arbiter(scenario_id, config)
+    if scenario_id in COORDINATION_BENCHMARK_IDS:
+        return coordination_benchmark_arbiter(scenario_id, config, run_id=run_id)
+    if scenario_id in REGION_BENCHMARK_IDS:
+        return region_benchmark_arbiter(scenario_id, config)
+    if scenario_id in LANGUAGE_BENCHMARK_IDS:
+        return language_benchmark_arbiter(scenario_id, config)
+    if scenario_id in INSTITUTIONS_BENCHMARK_IDS:
+        return institutions_benchmark_arbiter(scenario_id, config)
+    return None
+
+
+def _case_required_milestones(
+    scenario_id: str, config: SimulationRunnerConfig
+) -> tuple[str, ...]:
+    """Declared mechanism acknowledgements required by the controlled lane."""
+    from experiments.civilization_benchmark_coordination import (
+        COORDINATION_BENCHMARK_IDS,
+        required_coordination_milestones,
+    )
+    from experiments.civilization_benchmark_exchange import (
+        EXCHANGE_BENCHMARK_IDS,
+        required_exchange_milestones,
+    )
+    from experiments.civilization_benchmark_institutions import (
+        INSTITUTIONS_BENCHMARK_IDS,
+        required_institutions_milestones,
+    )
+    from experiments.civilization_benchmark_language import (
+        LANGUAGE_BENCHMARK_IDS,
+        required_language_milestones,
+    )
+    from experiments.civilization_benchmark_regions import (
+        REGION_BENCHMARK_IDS,
+        required_region_milestones,
+    )
+    from experiments.civilization_benchmark_technology import (
+        TECHNOLOGY_BENCHMARK_IDS,
+        required_technology_milestones,
+    )
+
+    if scenario_id in COORDINATION_BENCHMARK_IDS:
+        return required_coordination_milestones(scenario_id)
+    if scenario_id in EXCHANGE_BENCHMARK_IDS:
+        return required_exchange_milestones(scenario_id)
+    if scenario_id in INSTITUTIONS_BENCHMARK_IDS:
+        return required_institutions_milestones(scenario_id, config)
+    if scenario_id in LANGUAGE_BENCHMARK_IDS:
+        return required_language_milestones(scenario_id, config)
+    if scenario_id in REGION_BENCHMARK_IDS:
+        return required_region_milestones(scenario_id)
+    if scenario_id in TECHNOLOGY_BENCHMARK_IDS:
+        return required_technology_milestones(scenario_id)
+    return ()
+
+
+def _run_id(item: BenchmarkSelectionItem, revision: str) -> RunId:
+    """Build a bounded, deterministic run identity (safe archive segment)."""
+    from simulation.generational_seeds import canonical_sha256
+
+    digest = canonical_sha256(
+        {
+            "scenario_id": item.scenario_id,
+            "lane": item.lane.value,
+            "arm_id": item.arm_id,
+            "seed": item.seed,
+            "revision": revision,
+        }
+    )[:12]
+    scenario = item.scenario_id.removeprefix("v3-bench-")[:20]
+    lane = item.lane.value[:4]
+    arm = item.arm_id[:4]
+    return RunId(f"v3b-{scenario}-{lane}-{arm}-s{item.seed}-{digest}")
 
 
 async def execute_selection(
@@ -108,15 +322,7 @@ async def execute_selection(
                     item.scenario_id, seed=item.seed, profile=item.profile
                 ).base
             else:
-                build = build_v3_benchmark_scenario(
-                    item.scenario_id,
-                    seed=item.seed,
-                    profile=item.profile,
-                    lane=item.lane,
-                )
-                config = next(
-                    arm.config for arm in build.arms if arm.arm_id == item.arm_id
-                )
+                config = _independent_case_config(item)
         assignment = ExperimentAssignment(
             experiment_id="v3-generational-civilization-benchmark",
             condition_id=item.scenario_id,
@@ -186,6 +392,52 @@ async def execute_selection(
                     assignment=assignment,
                     probe=probe,
                     grouped_runner=_grouped_runner,
+                )
+                result = await asyncio.wait_for(
+                    execute_civilization_benchmark(recipe, context),
+                    timeout=timeout_seconds,
+                )
+            else:
+                recipe = CivilizationBenchmarkRecipe(
+                    scenario_id=item.scenario_id,
+                    lane=item.lane,
+                    profile=item.profile,
+                    seed=item.seed,
+                    arm_id=item.arm_id,
+                )
+                execution_context = GenerationalExecutionContext(
+                    artifact_root=(
+                        store.root
+                        / "archives"
+                        / item.scenario_id
+                        / item.lane.value
+                        / f"s{item.seed}"
+                    ),
+                    source_identity=dict(source_identity),
+                    recipe=_execution_recipe(item),
+                    factories=RunnerDependencyFactories(),
+                    attempt_id=(
+                        f"{item.scenario_id}-{item.lane.value}-s{item.seed}"
+                    ),
+                )
+                context = CivilizationBenchmarkContext(
+                    assignment=assignment,
+                    execution_context=execution_context,
+                    probe=probe,
+                    arbiter=(
+                        _case_arbiter(
+                            item.scenario_id,
+                            config,
+                            run_id=assignment.run_id,
+                        )
+                        if item.lane is V3BenchmarkLane.MECHANISM
+                        else None
+                    ),
+                    required_milestone_ids=(
+                        _case_required_milestones(item.scenario_id, config)
+                        if item.lane is V3BenchmarkLane.MECHANISM
+                        else ()
+                    ),
                 )
                 result = await asyncio.wait_for(
                     execute_civilization_benchmark(recipe, context),

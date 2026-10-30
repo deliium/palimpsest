@@ -9,6 +9,7 @@ import pytest
 from agents.cognition.experimentation import (
     ExperimentCognitionBinding,
     ExperimentHypothesis,
+    ExperimentLedger,
     ExperimentTrial,
     admit_hypothesis,
     commit_experiment_learning,
@@ -34,7 +35,7 @@ from world.observations import (
 _OWNER = AgentId("owner-1")
 
 
-def _ledger(*, learn: bool = False, threshold: int = 2):
+def _ledger(*, learn: bool = False, threshold: int = 2) -> ExperimentLedger:
     return empty_experiment_ledger(
         _OWNER,
         ExperimentCognitionBinding(

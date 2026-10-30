@@ -34,13 +34,12 @@ from simulation.civilization_rows import (
     CivilizationSettlementRow,
 )
 from simulation.memory_run_control import InMemoryRunControlRepository
-from simulation.models import DERIVATION_VERSION, RunId
+from simulation.models import DERIVATION_VERSION, RunId, SimulationRunConfig
 from simulation.persistence import (
     EVENT_SCHEMA_VERSION,
     PERSISTENCE_CODEC_VERSION,
     PROJECTOR_VERSION,
     RunManifest,
-    SimulationRunConfig,
 )
 from tests.unit.test_civilization_publication import (
     _RUN,
@@ -98,7 +97,7 @@ def _app(
     resolved = codec or CivilizationCursorCodec(b"c" * 32)
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: _FakeResources(),  # type: ignore[arg-type,return-value]
+        database_factory=lambda _s: _FakeResources(),
         simulation_manager=SimulationManager(
             settings=settings, run_control=InMemoryRunControlRepository()
         ),
@@ -227,7 +226,9 @@ async def _publish_direct(
     await publisher.seal_catalogue(_RUN, "pub-1")
 
 
-async def test_catalogue_and_overlays_keep_evidence_scopes_separate(tmp_path: Path):
+async def test_catalogue_and_overlays_keep_evidence_scopes_separate(
+    tmp_path: Path,
+) -> None:
     await _publish_composed(tmp_path)
     async with _client(_app(tmp_path)) as client:
         objective_catalogue = await client.get(
@@ -337,7 +338,9 @@ async def test_catalogue_and_overlays_keep_evidence_scopes_separate(tmp_path: Pa
     assert migration.json()["reason"] == "channel_absent"
 
 
-async def test_missing_boundary_publication_pin_and_filter_changes(tmp_path: Path):
+async def test_missing_boundary_publication_pin_and_filter_changes(
+    tmp_path: Path,
+) -> None:
     await _publish_composed(tmp_path)
     async with _client(_app(tmp_path)) as client:
         missing = await client.get(
@@ -379,10 +382,10 @@ async def test_missing_boundary_publication_pin_and_filter_changes(tmp_path: Pat
 
 async def test_450_rows_are_keyset_paged_and_sparse_filters_do_not_hide_rows(
     tmp_path: Path,
-):
+) -> None:
     await _publish_direct(tmp_path, _settlement_boundary(450))
     async with _client(_app(tmp_path)) as client:
-        params = {
+        params: dict[str, str | int] = {
             "tick": 4,
             "layer": "settlements",
             "evidence_class": "ANALYTICAL",
@@ -418,7 +421,7 @@ async def test_450_rows_are_keyset_paged_and_sparse_filters_do_not_hide_rows(
 
 async def test_complete_empty_scope_and_read_only_filesystem(
     tmp_path: Path,
-):
+) -> None:
     scope = CivilizationScope(
         CivilizationLayer.TECHNOLOGY,
         __import__(
@@ -450,7 +453,9 @@ async def test_complete_empty_scope_and_read_only_filesystem(
     assert _tree(tmp_path) == before
 
 
-async def test_corruption_wrong_run_and_cursor_expiry_fail_closed(tmp_path: Path):
+async def test_corruption_wrong_run_and_cursor_expiry_fail_closed(
+    tmp_path: Path,
+) -> None:
     await _publish_direct(tmp_path, _settlement_boundary(450))
     clock = [1000]
     codec = CivilizationCursorCodec(b"z" * 32, now=lambda: clock[0])
@@ -509,7 +514,7 @@ async def test_corruption_wrong_run_and_cursor_expiry_fail_closed(tmp_path: Path
     assert wrong_run.status_code == 404
 
 
-async def test_cursor_filter_changes_are_rejected(tmp_path: Path):
+async def test_cursor_filter_changes_are_rejected(tmp_path: Path) -> None:
     await _publish_composed(tmp_path)
     async with _client(_app(tmp_path)) as client:
         first = await client.get(
@@ -538,7 +543,7 @@ async def test_cursor_filter_changes_are_rejected(tmp_path: Path):
     assert duplicate.status_code == 400
 
 
-async def test_world_identity_and_forged_revision_fail_closed(tmp_path: Path):
+async def test_world_identity_and_forged_revision_fail_closed(tmp_path: Path) -> None:
     await _publish_direct(
         tmp_path,
         CivilizationBoundaryPublication(

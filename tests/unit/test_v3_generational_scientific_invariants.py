@@ -12,6 +12,7 @@ import pytest
 from experiments.civilization_benchmark_evidence import (
     GENERATIONAL_INVARIANT_IDS,
     BenchmarkBoundaryProbe,
+    BoundaryObservation,
     OwnerStoreSnapshot,
     evaluate_blank_slate,
 )
@@ -35,6 +36,7 @@ from experiments.civilization_benchmark_memory import (
     memory_benchmark_arbiter,
 )
 from experiments.civilization_benchmark_models import (
+    V3BenchmarkCheck,
     V3BenchmarkCheckStatus,
     V3BenchmarkExecutionStatus,
     V3BenchmarkLane,
@@ -238,7 +240,7 @@ async def _run(
     return await execute_civilization_benchmark(recipe, context), probe
 
 
-def _check(result: V3BenchmarkRunResult, selector: str):
+def _check(result: V3BenchmarkRunResult, selector: str) -> V3BenchmarkCheck:
     return {check.selector_id: check for check in result.checks}[selector]
 
 
@@ -279,11 +281,12 @@ async def _valid_historical_channels(tmp_path: Path) -> None:
         evaluate_generational_narratives,
     )
 
+    empty_probe = BenchmarkBoundaryProbe()
+    empty_probe._observations.append(
+        BoundaryObservation(boundary_tick=10, owners=(), new_owners=())
+    )
     empty = evaluate_generational_narratives(
-        SimpleNamespace(
-            observations=[SimpleNamespace(boundary_tick=10, owners=())],
-            failures=(),
-        ),
+        empty_probe,
         SimpleNamespace(cultural_narrative_ledgers=()),
         boundary_end_tick=10,
         mechanism_available=True,

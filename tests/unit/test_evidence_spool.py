@@ -652,7 +652,7 @@ def test_source_normalization_reopens_source_without_all_frames() -> None:
         window=CulturalAnalysisWindow(end_boundary=1),
         parent_child_edges=(("teacher", "learner"),),
     )
-    assert inputs == _inputs()  # type: ignore[no-untyped-call]
+    assert inputs == _inputs()
     assert probe["calls"] >= 2
     assert probe["max_live"] == 1
 

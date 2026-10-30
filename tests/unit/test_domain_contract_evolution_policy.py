@@ -268,9 +268,9 @@ def test_live_restored_observation_parity_gate_remains_present() -> None:
 
 def test_require_agent_command_rejects_non_commands() -> None:
     with pytest.raises(TypeError):
-        require_agent_command({"kind": "wait"})  # type: ignore[arg-type]
+        require_agent_command({"kind": "wait"})
     with pytest.raises(TypeError):
-        require_agent_command("wait")  # type: ignore[arg-type]
+        require_agent_command("wait")
 
 
 def test_v3_scaffolding_adds_no_roster_birth_or_kinship_observation_fields() -> None:

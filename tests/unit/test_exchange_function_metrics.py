@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from analysis.exchange_functions import FORBIDDEN_KEYS
 from analysis.exchange_functions_metrics import assemble_exchange_function_metrics
 from analysis.metric_service import MetricComputationInputs, assemble_metric_documents
 from simulation.runner_models import example_resource_exchange_profile_spec
 from tests.unit.test_exchange_functions import _completed
+from world.events import WorldEvent
 
 
-def _swap(event_id: str) -> object:
-    return _completed(
+def _swap(event_id: str) -> WorldEvent:
+    event = _completed(
         event_id,
         tick=1,
         actor="body-a",
@@ -20,9 +23,11 @@ def _swap(event_id: str) -> object:
         give=(("pebble", "generic"),),
         take=(("axe", "tool"),),
     )
+    assert isinstance(event, WorldEvent)
+    return event
 
 
-def test_absent_spec_emits_nothing(caplog) -> None:
+def test_absent_spec_emits_nothing(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
     documents = assemble_exchange_function_metrics(
         (_swap("swap-1"),),
@@ -35,7 +40,9 @@ def test_absent_spec_emits_nothing(caplog) -> None:
     assert "exchange_functions_metrics_empty" in caplog.text
 
 
-def test_documents_are_counts_without_a_money_label(caplog) -> None:
+def test_documents_are_counts_without_a_money_label(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG)
     documents = assemble_exchange_function_metrics(
         (_swap("swap-1"),),

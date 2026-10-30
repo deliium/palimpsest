@@ -168,7 +168,12 @@ def _ledger(
     )
 
 
-def _appraise(ledger, *, tick: int, occurrences) -> object:
+def _appraise(
+    ledger: CollectiveDecisionLedger,
+    *,
+    tick: int,
+    occurrences: tuple[ObservedOccurrence, ...],
+) -> CollectiveDecisionLedger:
     return appraise_collective_compliance(
         ledger,
         _observation(tick=tick, occurrences=occurrences),

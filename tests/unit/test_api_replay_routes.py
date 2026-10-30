@@ -6,12 +6,13 @@ import logging
 import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from api.app import DisposableEngine, create_app
+from api.app import DatabaseFactory, DisposableEngine, create_app
 from api.schemas import AvailabilityOut, ReplayRequest, ReplayResultOut
 from api.services import ReplayApiService
 from api.simulation_manager import SimulationManager
@@ -83,7 +84,7 @@ def _app() -> FastAPI:
     settings = _settings()
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=cast(DatabaseFactory, lambda _s: FakeResources()),
         simulation_manager=SimulationManager(
             settings=settings,
             run_control=InMemoryRunControlRepository(),
@@ -114,6 +115,4 @@ async def test_replay_corruption_stable_code(logging_sandbox: None) -> None:
     assert response.json()["code"] == "replay_corruption"
 
 
-@pytest.mark.integration
-async def test_api_replay_integration_stub() -> None:
-    pytest.skip("integration stub reserved for Task 21")
+# PostgreSQL replacement: tests/integration/test_simulation_persistence_replay.py.

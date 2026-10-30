@@ -8,6 +8,7 @@ import pytest
 
 from agents.cognition.competence import (
     CompetenceDomain,
+    CompetenceSelfModel,
     empty_competence_model,
 )
 from agents.cognition.configuration import (
@@ -37,13 +38,13 @@ from agents.cognition.teaching import (
     record_teaching,
 )
 from agents.models import AgentId
+from social import RelationshipId
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipActivationState,
     RelationshipConfidence,
     RelationshipDimension,
     RelationshipDimensionState,
-    RelationshipId,
     RelationshipPolicyRef,
     RelationshipRevisionId,
 )
@@ -149,7 +150,7 @@ def _heard(predicate: str, obj: str, *, event: str = "evt-1") -> Observation:
     )
 
 
-def _fresh() -> tuple[AdviceStore, object, TeachingClaimPolicy]:
+def _fresh() -> tuple[AdviceStore, CompetenceSelfModel, TeachingClaimPolicy]:
     return (
         empty_advice_store(_LEARNER),
         empty_competence_model(_LEARNER),
@@ -179,6 +180,7 @@ def test_false_high_band_moves_belief_and_leaves_objective_skill(
     assert row.band is AdviceBand.HIGH
     assert row.source_agent_id == _TEACHER
     updated = apply_teaching_belief(model, stored, policy, (_profile(1.0),))
+    assert isinstance(updated, CompetenceSelfModel)
     belief = updated.belief_for(CompetenceDomain.FORAGING)
     assert belief.support_mass == 0.08
     assert belief.counter_mass == 0.0
@@ -201,6 +203,7 @@ def test_low_uncertain_missing_trust_and_request() -> None:
         _identity(),
     )
     lowered = apply_teaching_belief(model, low, policy, (_profile(1.0),))
+    assert isinstance(lowered, CompetenceSelfModel)
     belief = lowered.belief_for(CompetenceDomain.FORAGING)
     assert belief.support_mass == 0.0
     assert belief.counter_mass == 0.08
@@ -214,6 +217,7 @@ def test_low_uncertain_missing_trust_and_request() -> None:
         _identity(),
     )
     held = apply_teaching_belief(model, uncertain, policy, ())
+    assert isinstance(held, CompetenceSelfModel)
     same = held.belief_for(CompetenceDomain.FORAGING)
     assert same.support_mass == 0.0
     assert same.counter_mass == 0.0
@@ -226,6 +230,7 @@ def test_low_uncertain_missing_trust_and_request() -> None:
         _identity(),
     )
     half = apply_teaching_belief(model, cautious, policy, ())
+    assert isinstance(half, CompetenceSelfModel)
     expected = half.belief_for(CompetenceDomain.FORAGING)
     assert expected.support_mass == 0.04
     assert expected.believed_level == _quantize(0.04 / 1.04)
@@ -239,6 +244,7 @@ def test_low_uncertain_missing_trust_and_request() -> None:
     )
     assert requested.rows[0].band is AdviceBand.UNSPECIFIED
     untouched = apply_teaching_belief(model, requested, policy, ())
+    assert isinstance(untouched, CompetenceSelfModel)
     masses = untouched.belief_for(CompetenceDomain.HEALING)
     assert masses.support_mass == 0.0
     assert masses.counter_mass == 0.0
@@ -316,6 +322,8 @@ def test_prepare_applies_the_prior_utterance_and_not_a_repeat(
     )
     model, advice = loop._prepare_teaching(loop_input, empty_competence_model(_LEARNER))
     assert advice is not None
+    assert isinstance(advice, AdviceStore)
+    assert model is not None
     belief = model.belief_for(CompetenceDomain.FORAGING)
     assert belief.believed_level == _quantize(0.08 / 1.08)
     repeated = CognitiveLoopInput(
@@ -340,6 +348,8 @@ def test_prepare_applies_the_prior_utterance_and_not_a_repeat(
         ),
     )
     again, store = loop._prepare_teaching(repeated, model)
+    assert again is not None
+    assert isinstance(store, AdviceStore)
     assert again.belief_for(CompetenceDomain.FORAGING) == belief
     assert store.rows == advice.rows
     disabled = CognitiveLoop(

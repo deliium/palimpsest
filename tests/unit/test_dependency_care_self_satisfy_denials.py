@@ -24,7 +24,7 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.actions import Eat, Wait
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.lifecycle import DependencyStatus, LifecycleStageId
+from world.lifecycle import AgentLifecycleRecord, DependencyStatus, LifecycleStageId
 from world.models import Item, non_lethal_physical_rules
 from world.values import ItemKind, ItemLoad
 
@@ -78,6 +78,7 @@ def test_dependent_eat_denied_by_dependency_care(
 ) -> None:
     engine = _engine()
     assert engine.dependency_care_channel_active is True
+    assert isinstance(engine.lifecycle_records[0], AgentLifecycleRecord)
     assert engine.lifecycle_records[0].dependency_status is DependencyStatus.DEPENDENT
     batch = engine.observe()
     with caplog.at_level(logging.DEBUG):

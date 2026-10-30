@@ -9,6 +9,7 @@ import pytest
 from agents.cognition.models import (
     ActionDirection,
     MotivationEvaluation,
+    PossibleFutures,
     SelectedIntention,
 )
 from agents.models import (
@@ -37,7 +38,7 @@ from world.actions import Drink, Help, Move, Search, Talk, Wait
 pytestmark = pytest.mark.unit
 
 
-def _harm_on_wait(futures) -> float:  # type: ignore[no-untyped-def]
+def _harm_on_wait(futures: PossibleFutures) -> float:
     wait = next(
         item for item in futures.futures if item.direction is ActionDirection.WAIT
     )

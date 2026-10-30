@@ -22,6 +22,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V26,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     SkillLearningMode,
     V3CapabilityFlags,
     WorldScenarioSpec,
@@ -30,12 +31,13 @@ from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.effects import DeathCause
 from world.events import Died, LifecycleStageChanged
 from world.identifiers import WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.models import non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.developmental_stages_catalog_arm")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -117,12 +119,9 @@ def test_ag_arms_cover_gradual_and_skill_modes() -> None:
         ].population_lifecycle.gradual_aging.intra_stage_interpolation
         is False
     )
-    assert (
-        by_id[
-            "ag-gradual-aging-on"
-        ].population_lifecycle.gradual_aging.intra_stage_interpolation
-        is True
-    )
+    gradual_on = by_id["ag-gradual-aging-on"].population_lifecycle
+    assert gradual_on is not None
+    assert gradual_on.gradual_aging.intra_stage_interpolation is True
     skill = by_id["ag-skill-learning-on"].agents[0].cognition.skill_learning_mode
     assert skill is SkillLearningMode.DETERMINISTIC
     skill_off = by_id["ag-gradual-aging-off"].agents[0].cognition.skill_learning_mode
@@ -163,7 +162,9 @@ async def test_ag_on_arm_crosses_stages_and_assigned_eol() -> None:
             for event in runner.engine._snapshot.event_history
             if type(event.details) is Died
         ]
-        assigned = runner.engine.lifecycle_records[0].assigned_lifespan_ticks
+        first_record = runner.engine.lifecycle_records[0]
+        assert isinstance(first_record, AgentLifecycleRecord)
+        assigned = first_record.assigned_lifespan_ticks
         _LOG.debug(
             "case_id=ag_on_arm stage_transitions=%s death_count=%s assigned=%s",
             stages,

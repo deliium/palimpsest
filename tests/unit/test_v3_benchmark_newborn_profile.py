@@ -7,7 +7,10 @@ from dataclasses import replace
 import pytest
 
 from agents.models import AgentId
-from experiments.civilization_benchmark_base import build_v3_benchmark_base
+from experiments.civilization_benchmark_base import (
+    V3BenchmarkBase,
+    build_v3_benchmark_base,
+)
 from experiments.civilization_benchmark_models import V3BenchmarkProfile
 from experiments.civilization_benchmark_suite import V3_BENCH_01_BLANK_SLATE
 from experiments.regional_migration_scenario import regional_migration_scenario
@@ -17,6 +20,7 @@ from simulation.new_agent_initialization import (
     SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,
     SPECIES_DEFAULT_OFFICES_V1,
     SPECIES_DEFAULT_V1,
+    NewAgentInitializationSpec,
     creation_config_fingerprint,
     default_new_agent_initialization_spec,
     species_defaults_for,
@@ -57,14 +61,14 @@ _EXPECTED_ENABLED_MODES = (
 )
 
 
-def _pack_spec():
+def _pack_spec() -> NewAgentInitializationSpec:
     return replace(
         default_new_agent_initialization_spec(),
         species_defaults_id=SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1,
     )
 
 
-def _benchmark_base():
+def _benchmark_base() -> V3BenchmarkBase:
     return build_v3_benchmark_base(
         seed=None,
         profile=V3BenchmarkProfile.SMOKE,
@@ -162,6 +166,7 @@ def test_new_profile_is_valid_on_v55_with_prerequisites() -> None:
     base = _benchmark_base()
     spec = _pack_spec()
     config = replace(base.config, new_agent_initialization=spec)
+    assert config.new_agent_initialization is not None
     assert (
         config.new_agent_initialization.species_defaults_id
         == SPECIES_DEFAULT_CIVILIZATION_LEARNER_V1

@@ -76,8 +76,11 @@ class DisposableEngine(Protocol):
 
 
 class DatabaseResourcesLike(Protocol):
-    engine: DisposableEngine
-    session_factory: object
+    @property
+    def engine(self) -> DisposableEngine: ...
+
+    @property
+    def session_factory(self) -> object: ...
 
 
 DatabaseFactory = Callable[[Settings], DatabaseResourcesLike]

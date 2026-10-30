@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agents.cognition.collective_decisions import (
+    CollectiveDecisionLedger,
     CollectiveEvidenceChannel,
     CollectiveExecutionStatus,
     CollectivePositionStance,
@@ -31,6 +32,7 @@ from world.observations import (
     ObservationProvenance,
     ObservationSourceKind,
     ObservedCommunication,
+    ObservedOccurrence,
     ObservedSelf,
 )
 from world.values import (
@@ -78,7 +80,7 @@ def _observation(
     *,
     tick: int,
     communications: tuple[ObservedCommunication, ...] = (),
-    occurrences: tuple[object, ...] = (),
+    occurrences: tuple[ObservedOccurrence, ...] = (),
 ) -> Observation:
     return Observation(
         world_id=WorldId("world-w"),
@@ -194,8 +196,8 @@ def _act(
 def _apply(
     *communications: ObservedCommunication,
     tick: int,
-    previous: object = None,
-) -> object:
+    previous: CollectiveDecisionLedger | None = None,
+) -> CollectiveDecisionLedger:
     return apply_collective_decision_update(
         _observation(tick=tick, communications=tuple(communications)),
         _identity(),

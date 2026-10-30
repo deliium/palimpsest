@@ -34,7 +34,9 @@ def test_lineage_empty_is_absent() -> None:
         f"{document.metric_family}@{document.algorithm_version}"
         == DURABLE_RECORD_LINEAGE_METRIC_VERSION
     )
-    assert document.values["censoring_policy"].startswith("analysis-only")
+    censoring_policy = document.values["censoring_policy"]
+    assert isinstance(censoring_policy, str)
+    assert censoring_policy.startswith("analysis-only")
 
 
 def test_lineage_nonempty_histogram_and_tombstone_share(

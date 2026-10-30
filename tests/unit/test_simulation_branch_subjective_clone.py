@@ -19,6 +19,11 @@ from simulation.branching import BranchError
 from simulation.models import RunId
 from simulation.subjective_state import SubjectiveOwnerSnapshot
 from tests.unit.test_goal_manager import _belief, _goal
+from tests.unit.test_simulation_branch_fork import (
+    _FakeJournal,
+    _FakeRuns,
+    _FakeSnapshots,
+)
 from world.identifiers import EntityId, WorldRevision
 
 pytestmark = pytest.mark.unit
@@ -70,9 +75,9 @@ async def test_subjective_clone_copies_as_of_tick_and_preserves_parent() -> None
     )
 
     service = BranchService(
-        runs=object(),  # unused for clone path
-        journal=object(),
-        snapshots=object(),
+        runs=_FakeRuns(),
+        journal=_FakeJournal(),
+        snapshots=_FakeSnapshots([]),
         subjective_clone=port,
     )
     result = await service.clone_subjective_state(
@@ -100,9 +105,9 @@ async def test_subjective_clone_incomplete_fails_closed() -> None:
     port = InMemorySubjectiveClonePort()
     port._force_incomplete = True
     service = BranchService(
-        runs=object(),
-        journal=object(),
-        snapshots=object(),
+        runs=_FakeRuns(),
+        journal=_FakeJournal(),
+        snapshots=_FakeSnapshots([]),
         subjective_clone=port,
     )
     with pytest.raises(BranchError) as exc:

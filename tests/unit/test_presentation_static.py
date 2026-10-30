@@ -29,6 +29,11 @@ class FakeResources:
     def __init__(self, engine: DisposableEngine) -> None:
         self.engine = engine
 
+    @property
+    def session_factory(self) -> object:
+        """Keep persistence unavailable in this static-presentation fake."""
+        raise AttributeError("engine-only resources have no session factory")
+
 
 @pytest.fixture
 def logging_sandbox() -> Iterator[None]:

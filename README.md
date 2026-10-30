@@ -59,6 +59,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Historical contingency](docs/historical-contingency.md) | Experiment BN forked replay, intervention lineage, seven outcome domains, seed-block statistics |
 | [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile` / `v2_regression_profile` / `v3_scaffolding_profile`, coordinator, generational comparison (BM) axes and matrix factors, persistence (`0010`) |
 | [V2 benchmark suite](docs/v2-benchmark-suite.md) | Sixteen composition scenarios, observer graphical fixture, zero-install + scientific gates (off V1 gate) |
+| [V3 benchmark suite](docs/v3-benchmark-suite.md) | Thirty generational civilization cases, controlled/autonomous lanes, seed-block comparison, qualification matrix, measured envelope |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |
 | [Cultural evolution metrics](docs/cultural-evolution-metrics.md) | Opt-in owner-level capture, six cultural families, repeated-seed intervals, paired contrasts, provenance limits |
 | [Research API](docs/research-api.md) | FastAPI control/inspection/debug, WebSocket cursors/backpressure, capability credentials |

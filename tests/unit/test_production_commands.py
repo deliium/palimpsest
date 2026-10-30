@@ -33,7 +33,7 @@ from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
 from tests.physical_helpers import physical_config, two_location_fixture
 from tests.simulation_helpers import alive_body, make_item
-from world.actions import Craft, Drink, Harvest, Search, Wait
+from world.actions import Craft, Drink, Harvest, Search, Store, Wait
 from world.identifiers import EntityId, RecipeId, WorldId, WorldRevision
 from world.observations import Observation, ObservedResource
 from world.production import example_production_catalog
@@ -269,6 +269,7 @@ def test_held_food_is_not_required_for_false_craft() -> None:
     observation = SimpleNamespace(items=(item,), resources=(), structures=())
     stored = compile_production_command(_beliefs(("store_food", True)), observation)
     assert type(stored).__name__ == "Store"
+    assert isinstance(stored, Store)
     assert stored.item_id == EntityId("food-1")
 
 

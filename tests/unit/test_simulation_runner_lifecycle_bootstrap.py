@@ -15,19 +15,20 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V24,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import WorldId, WorldRevision
-from world.lifecycle import OriginProvenance
+from world.lifecycle import AgentLifecycleRecord, OriginProvenance
 from world.models import default_physical_rules
 
 _LOG = logging.getLogger("tests.simulation_runner_lifecycle_bootstrap")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -78,6 +79,7 @@ async def test_flag_on_seeds_bootstrap_lifecycle_without_birth_events() -> None:
     records = runner.engine.lifecycle_records
     assert len(records) == 1
     record = records[0]
+    assert isinstance(record, AgentLifecycleRecord)
     assert record.entry_tick == 0
     assert record.provenance is OriginProvenance.BOOTSTRAP
     assert record.cohort_id == "cohort-bootstrap"

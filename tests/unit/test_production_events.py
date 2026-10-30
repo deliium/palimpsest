@@ -20,6 +20,7 @@ from world.events import (
     REPLAYABLE_EVENT_SCHEMA_VERSIONS,
     SUPPORTED_EVENT_SCHEMA_VERSIONS,
     CraftStarted,
+    EventDetails,
     EventValidationCode,
     ItemCrafted,
     ItemStored,
@@ -212,7 +213,7 @@ def test_v5_detail_decoder_rejects_production_kind() -> None:
 
 
 def test_success_events_round_trip() -> None:
-    events = [
+    events: list[EventDetails] = [
         ResourceHarvested(
             RecipeId("harvest_wood"),
             EntityId("res-wood"),

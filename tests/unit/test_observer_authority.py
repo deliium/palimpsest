@@ -18,7 +18,7 @@ from simulation.models import RunId
 from simulation.observer_facts import scene_from_facts
 from simulation.replay import scene_at_tick
 from simulation.runner import SimulationRunner
-from simulation.runner_models import CognitionTraceSpec
+from simulation.runner_models import CognitionTraceSpec, RunnerAttemptReceipt
 from simulation.runner_serialization import exact_trajectory_hash
 from tests.unit.test_cognition_trace_regression import _short_pair
 from tests.unit.test_observer_replay import BODY_ID, RUN_ID, observer_replay_service
@@ -216,12 +216,17 @@ async def test_missed_events_resume_without_duplicates(
     with caplog.at_level(logging.DEBUG):
         missed = await _collect(b"after_tick=0&after_sequence=0")
         resumed = await _collect(b"after_tick=0&after_sequence=1")
-    missed_ids = [
-        item["event"]["event_id"] for item in missed if item["kind"] == "event"
-    ]
-    resumed_ids = [
-        item["event"]["event_id"] for item in resumed if item["kind"] == "event"
-    ]
+    def _event_ids(items: list[dict[str, object]]) -> list[object]:
+        identifiers: list[object] = []
+        for item in items:
+            if item["kind"] == "event":
+                event = item["event"]
+                assert isinstance(event, dict)
+                identifiers.append(event["event_id"])
+        return identifiers
+
+    missed_ids = _event_ids(missed)
+    resumed_ids = _event_ids(resumed)
     assert missed_ids == ["evt-wait"]
     assert resumed_ids == []
     assert resumed[0]["kind"] == "hello"
@@ -236,7 +241,7 @@ async def test_missed_events_resume_without_duplicates(
 
 
 class _ProjectingRunner(SimulationRunner):
-    async def run_tick(self):  # type: ignore[override]
+    async def run_tick(self) -> RunnerAttemptReceipt:
         receipt = await super().run_tick()
         scene = scene_from_facts(self.engine.detached_objective_facts())
         project_frame(scene, _EMPTY_LAYOUT, mode="live")

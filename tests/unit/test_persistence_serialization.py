@@ -193,6 +193,7 @@ def test_replay_v21_project_completed_decay_round_trip() -> None:
         schema_version=EVENT_SCHEMA_REPLAY_V21,
     )
     decoded = decode_persistence(encode_persistence(event), WorldEvent)
+    assert isinstance(decoded, WorldEvent)
     assert decoded.details == details
 
 
@@ -456,6 +457,7 @@ def test_persistence_accepts_v5_and_legacy_v4_text_talk() -> None:
         legacy_envelope, separators=(",", ":"), sort_keys=True
     ).encode()
     decoded = decode_persistence(legacy_bytes, WorldEvent)
+    assert isinstance(decoded, WorldEvent)
     assert decoded.schema_version == EVENT_SCHEMA_REPLAY_V4
     assert type(decoded.details) is Talked
     assert decoded.details.utterance.content.text == "legacy-hi"

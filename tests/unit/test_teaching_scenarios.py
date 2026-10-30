@@ -25,6 +25,7 @@ from simulation.runner import SimulationRunner
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V11,
     RUNNER_SCHEMA_VERSION_V12,
+    SimulationRunnerResult,
     TeachingAudit,
     TeachingAuditStore,
 )
@@ -32,7 +33,7 @@ from tests.physical_helpers import physical_config, two_location_fixture
 from tests.unit.test_v2_flag_defaults import _base
 from world._skills import SkillDomain, default_objective_skill_policy
 from world._teaching import default_teaching_interaction_policy
-from world.actions import Help, Search, Talk
+from world.actions import AgentCommand, Help, Search, Talk
 from world.communications import CommunicationRelation, origin_utterance
 from world.identifiers import EntityId
 from world.models import PhysicalRules
@@ -60,7 +61,7 @@ def _engine(*, teaching: bool) -> WorldEngine:
     )
 
 
-def _submit(engine: WorldEngine, agent: str, command: object) -> None:
+def _submit(engine: WorldEngine, agent: str, command: AgentCommand) -> None:
     batch = engine.observe()
     engine.resolve_tick((ActionSubmission(batch.token, AgentId(agent), command),))
 
@@ -276,7 +277,7 @@ async def test_two_runner_invocations_match_audits() -> None:
     enabled = definition.conditions[1].runner_config
     enabled = replace(enabled, stop_policy=replace(enabled.stop_policy, max_ticks=1))
 
-    async def _run(run_id: str):
+    async def _run(run_id: str) -> SimulationRunnerResult:
         async with await SimulationRunner.from_config(
             enabled, run_id=RunId(run_id)
         ) as runner:

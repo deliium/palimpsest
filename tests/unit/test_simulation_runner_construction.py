@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TypedDict, cast
 
 import pytest
 
-from agents.cognition.defaults import PresentStateImagination
+from agents.cognition.defaults import DirectSelfStateProjector, PresentStateImagination
 from agents.cognition.imagination import ImaginationEngine
 from agents.cognition.memory import ReferenceMemoryRetriever, ScopedMemoryRetriever
+from agents.cognition.motivation import MotivationAppraisal
 from agents.models import AgentId, DriveKind
-from llm.factory import DeterministicFakeLLMProvider
+from llm.factory import ConcurrencyLimitedLLMProvider, DeterministicFakeLLMProvider
 from memory.service import InMemoryMemoryService
 from simulation.agent_runtime import AgentRuntimeStatus
 from simulation.models import RunId, StochasticIdentity
@@ -114,8 +116,16 @@ def _config(
         stop_policy=RunnerStopPolicy(max_ticks=5),
         mortality_mode=mortality_mode,
         persistence=RunnerPersistenceSpec(durable=durable),
-        **({} if schema_version is None else {"schema_version": schema_version}),
+        **(
+            _SchemaOverride()
+            if schema_version is None
+            else _SchemaOverride(schema_version=schema_version)
+        ),
     )
+
+
+class _SchemaOverride(TypedDict, total=False):
+    schema_version: str
 
 
 def test_non_lethal_rules_cover_all_death_causes() -> None:
@@ -209,7 +219,9 @@ async def test_from_config_selects_reference_memory_and_disabled_imagination() -
         loop = runner.runtimes[0]._loop
         assert isinstance(loop._memory, ReferenceMemoryRetriever)
         assert isinstance(loop._futures, PresentStateImagination)
-        assert loop._motivation._mortality_appraisal_enabled is False
+        assert cast(
+            MotivationAppraisal, loop._motivation
+        )._mortality_appraisal_enabled is False
         assert runner.run_config.physical_rules is not None
         assert (
             runner.run_config.physical_rules.version
@@ -226,13 +238,18 @@ async def test_from_config_default_reconstructive_and_imagination() -> None:
         loop = runner.runtimes[0]._loop
         assert isinstance(loop._memory, ScopedMemoryRetriever)
         assert isinstance(loop._futures, ImaginationEngine)
-        assert loop._motivation._mortality_appraisal_enabled is True
+        assert cast(
+            MotivationAppraisal, loop._motivation
+        )._mortality_appraisal_enabled is True
         # Bundle readers must be wired (not disconnected MemoryStore).
         agent_bundle = runner._agents[0]
         assert agent_bundle.bundle.scope.owner_id.value == "agent-1"
         snap = await agent_bundle.bundle.snapshot()
         assert snap.memories == ()
-        assert isinstance(runner._provider._inner, DeterministicFakeLLMProvider)
+        assert isinstance(
+            cast(ConcurrencyLimitedLLMProvider, runner._provider)._inner,
+            DeterministicFakeLLMProvider,
+        )
         assert loop._memory._dynamics_policy is None
 
 
@@ -257,7 +274,10 @@ async def test_from_config_uses_deterministic_fake_provider() -> None:
     async with await SimulationRunner.from_config(
         config, run_id=RunId("run-det-fake")
     ) as runner:
-        assert type(runner._provider._inner) is DeterministicFakeLLMProvider
+        assert (
+            type(cast(ConcurrencyLimitedLLMProvider, runner._provider)._inner)
+            is DeterministicFakeLLMProvider
+        )
         await runner._provider.close()
 
 
@@ -296,8 +316,9 @@ async def test_replay_without_store_fails_closed(tmp_path: object) -> None:
     async with await SimulationRunner.from_config(
         config, run_id=RunId("run-replay-ok"), factories=factories
     ) as runner:
-        assert type(runner._provider._inner) is RecordingLLMProvider
-        assert runner._provider._inner.mode.value == "replay"
+        inner = cast(ConcurrencyLimitedLLMProvider, runner._provider)._inner
+        assert type(inner) is RecordingLLMProvider
+        assert inner.mode.value == "replay"
 
 
 def test_recording_store_settings_absent_from_provider_json() -> None:
@@ -467,7 +488,9 @@ async def test_from_config_allows_owned_identity_flag(
             config, run_id=RunId("run-identity-cap")
         ) as runner:
             loop = runner.runtimes[0]._loop
-            assert loop._self_state._identity_mode is CognitionIdentityMode.ENABLED
+            assert cast(
+                DirectSelfStateProjector, loop._self_state
+            )._identity_mode is CognitionIdentityMode.ENABLED
     assert any(
         "identity_mode=enabled" in record.getMessage()
         and "extended_self_model=True" in record.getMessage()
@@ -548,7 +571,9 @@ async def test_runtimes_not_started_after_construction() -> None:
 
 
 @pytest.mark.asyncio
-async def test_v7_prospective_config_constructs_with_policy(caplog) -> None:
+async def test_v7_prospective_config_constructs_with_policy(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="simulation.runner")
     with pytest.raises(ValueError, match="prospective_mode_requires_v7"):
         _config(
@@ -583,7 +608,9 @@ async def test_v7_prospective_config_constructs_with_policy(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_v8_counterfactual_config_constructs_with_policy(caplog) -> None:
+async def test_v8_counterfactual_config_constructs_with_policy(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="simulation.runner")
     with pytest.raises(ValueError, match="counterfactual_mode_requires_v8"):
         _config(
@@ -640,7 +667,7 @@ async def test_v8_counterfactual_config_constructs_with_policy(caplog) -> None:
 
 @pytest.mark.asyncio
 async def test_v9_communication_strategy_config_constructs_with_policy(
-    caplog,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.DEBUG, logger="simulation.runner")
     with pytest.raises(ValueError, match="communication_strategy_mode_requires_v9"):

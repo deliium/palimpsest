@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from agents.cognition.cultural_narratives import (
     CULTURAL_NARRATIVE_POLICY_VERSION_V2,
+    NarrativeLedger,
     NarrativeTransitionKind,
+    NarrativeVariant,
     apply_narrative_update,
     default_generational_narrative_policy,
     empty_narrative_ledger,
@@ -79,11 +81,9 @@ def test_retired_transition_is_emitted_under_v2() -> None:
     }
 
 
-def ledger_with(*variants: object) -> object:
-    from agents.cognition.cultural_narratives import NarrativeLedger
-
+def ledger_with(*variants: NarrativeVariant) -> NarrativeLedger:
     return NarrativeLedger(
         owner_id=_OWNER,
         policy_version=CULTURAL_NARRATIVE_POLICY_VERSION_V2,
-        variants=variants,  # type: ignore[arg-type]
+        variants=variants,
     )

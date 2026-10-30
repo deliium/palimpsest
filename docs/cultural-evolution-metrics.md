@@ -298,9 +298,11 @@ Only two exact paths are incremental in V3-43:
 `INCREMENTAL_CULTURAL_FAMILIES` and `BATCH_CULTURAL_FAMILIES` are logged by
 generational execution. The other five cultural families remain exact
 batch/global calculators with separate resource limits. Rebuildable
-`v3-analytical-view-v1` checkpoints are disposable sidecars keyed by source,
+`v3-analytical-view-v2` checkpoints are disposable sidecars keyed by source,
 window, config, manifest, high-water and pass identity; they never replace source
-evidence or feed cognition. See
+evidence or feed cognition. Sealed checkpoints keep the exact row digest rather
+than duplicating derived final rows, which resume recomputes and verifies; legacy
+`v1` checkpoints stay readable. See
 [Long-horizon scalability](long-horizon-scalability.md).
 
 ## See also

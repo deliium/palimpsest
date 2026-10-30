@@ -1111,6 +1111,17 @@ class ReplayService:
             if last_commits
             else snapshot.predecessor_commit_hash
         )
+        _LOGGER.debug(
+            "[simulation.replay] seek_snapshot_selected run_id=%s target_tick=%s "
+            "snapshot_next_tick=%s fold_event_count=%s "
+            "lifecycle_record_count=%s population_lifecycle=%s",
+            run_id.value,
+            target_tick.value,
+            snapshot.next_tick.value,
+            counts["events"],
+            len(snapshot.lifecycle_records),
+            "on" if request.population_lifecycle is not None else "off",
+        )
         result = ReplayResult(
             run_id=run_id,
             status=ReplayStatus.OK,

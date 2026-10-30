@@ -311,6 +311,8 @@ def test_goal_accepts_structured_outcome_and_progress() -> None:
             estimate=0.25, confidence=0.7, stall_count=1, horizon_ticks=3
         ),
     )
+    assert goal.outcome is not None
+    assert goal.progress is not None
     assert goal.outcome.kind is GoalOutcomeKind.SATISFY_DRIVE
     assert goal.outcome.drive_kind is DriveKind.THIRST
     assert goal.progress.horizon_ticks == 3

@@ -29,6 +29,12 @@ async def test_path_dependence_database_durability(
             seeds=(901,),
             replicates_per_seed=1,
         )
+        spec = replace(
+            spec,
+            base=replace(
+                spec.base, persistence=replace(spec.base.persistence, durable=True)
+            ),
+        )
         spec_path = tmp_path / "spec.json"
         spec_path.write_bytes(encode_path_dependence_spec(spec))
         ensemble, summary = await _execute(
@@ -37,6 +43,7 @@ async def test_path_dependence_database_durability(
             code_revision="integration-revision",
             source_artifact_digest="a" * 64,
             factories=composition.factories,
+            materialize_engine=composition.materialize_engine,
         )
         assert summary.completed_count == 2
         for prefix in summary.prefixes:
@@ -64,6 +71,12 @@ async def test_tick_100_multigeneration_ensemble(
             seeds=(902,),
             replicates_per_seed=1,
         )
+        spec = replace(
+            spec,
+            base=replace(
+                spec.base, persistence=replace(spec.base.persistence, durable=True)
+            ),
+        )
         spec_path = tmp_path / "spec.json"
         spec_path.write_bytes(encode_path_dependence_spec(spec))
         _ensemble, summary = await _execute(
@@ -72,6 +85,7 @@ async def test_tick_100_multigeneration_ensemble(
             code_revision="integration-scale-revision",
             source_artifact_digest="b" * 64,
             factories=composition.factories,
+            materialize_engine=composition.materialize_engine,
         )
         assert summary.prefixes
         assert summary.prefixes[0].fork_tick == 100

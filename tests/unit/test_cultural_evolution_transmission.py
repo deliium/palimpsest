@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
 
 from analysis.cultural_evolution_evidence import (
     CulturalAnalysisWindow,
     CulturalEvolutionInputs,
+    CulturalMeasurement,
     TransmissionEdge,
 )
 from analysis.cultural_evolution_transmission import (
@@ -60,7 +63,9 @@ def _inputs(edges: tuple[TransmissionEdge, ...]) -> CulturalEvolutionInputs:
     )
 
 
-def _row(rows, measurement_id: str):
+def _row(
+    rows: Sequence[CulturalMeasurement], measurement_id: str
+) -> CulturalMeasurement:
     matches = [row for row in rows if row.measurement_id == measurement_id]
     assert len(matches) == 1
     return matches[0]

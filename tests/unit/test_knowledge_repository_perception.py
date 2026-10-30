@@ -9,13 +9,14 @@ import pytest
 from agents.models import AgentId
 from simulation.engine import WorldEngine
 from simulation.inspection import DetachedInspectionProjector
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.runner_models import (
     example_durable_records_spec,
     example_knowledge_repositories_spec,
 )
 from tests.physical_helpers import physical_config, two_location_fixture
 from world.actions import (
+    AgentCommand,
     DepositRecord,
     EstablishRepository,
     Inscribe,
@@ -41,10 +42,10 @@ def _engine(*, perception_mode: str = "container_and_meta") -> WorldEngine:
     )
 
 
-def _act(engine: WorldEngine, command: object):
+def _act(engine: WorldEngine, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId("agent-1"), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId("agent-1"), command),)
     )
 
 

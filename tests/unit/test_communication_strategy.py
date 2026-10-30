@@ -12,6 +12,7 @@ from agents.cognition.communication_strategy import (
     COMMUNICATION_STRATEGY_POLICY_VERSION,
     CommunicationDivergence,
     CommunicationFactor,
+    CommunicationIntent,
     CommunicationIntentAudit,
     CommunicationStrategy,
     SpeakerStance,
@@ -28,13 +29,13 @@ from agents.cognition.epistemic import EpistemicJudgment
 from agents.cognition.models import SubjectiveRisk, SubjectiveRiskKind
 from agents.models import AgentId
 from simulation.runner_models import CommunicationStrategyMode
+from social import RelationshipId
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipActivationState,
     RelationshipConfidence,
     RelationshipDimension,
     RelationshipDimensionState,
-    RelationshipId,
     RelationshipPolicyRef,
     RelationshipRevisionId,
 )
@@ -52,7 +53,7 @@ _SOURCE = Path("src/agents/cognition/communication_strategy.py").read_text(
 )
 
 
-def _intent(**overrides: object):
+def _intent(**overrides: object) -> CommunicationIntent:
     payload: dict[str, object] = {
         "owner_id": _OWNER,
         "recipient_id": _RECIPIENT,
@@ -214,7 +215,9 @@ def _profile(**values: float) -> DirectedRelationshipProfile:
     )
 
 
-def _choose(**overrides: object):
+def _choose(
+    **overrides: object,
+) -> tuple[CommunicationIntent, CommunicationIntentAudit]:
     payload: dict[str, object] = {
         "owner_id": _OWNER,
         "recipient_id": _RECIPIENT,
@@ -513,6 +516,7 @@ def test_disabled_select_leaves_intent_unset_and_hello_stays_truthful(
     assert disabled.command is not None
     assert enabled is not None
     assert enabled.intent is not None
+    assert isinstance(enabled.intent, CommunicationIntent)
     assert enabled.intent.strategy is CommunicationStrategy.TRUTHFUL
     assert enabled.command is not None
     assert type(enabled.command) is type(disabled.command)

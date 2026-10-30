@@ -143,10 +143,11 @@ def test_modes_match_and_disabled_allocates_nothing() -> None:
     assert {item.value for item in TerritorialClaimMode} == {
         item.value for item in CognitionTerritorialClaimMode
     }
-    assert CognitionTerritorialClaimMode.DISABLED.value == "disabled"
-    assert CognitionTerritorialClaimMode.DISABLED is not (
-        CognitionTerritorialClaimMode.DETERMINISTIC
+    disabled_mode: CognitionTerritorialClaimMode = (
+        CognitionTerritorialClaimMode.DISABLED
     )
+    assert disabled_mode.value == "disabled"
+    assert disabled_mode is not CognitionTerritorialClaimMode.DETERMINISTIC
 
 
 def test_banned_field_names_are_absent() -> None:
@@ -686,6 +687,7 @@ def test_take_at_a_claim_stays_physical_and_records_a_private_breach(
 ) -> None:
     from tests.unit.test_world_rules import _state
     from world._state import World, WorldState
+    from world._transitions import TransitionResult
     from world.actions import ActionRequest, Take, TransitionOutcome
     from world.identifiers import ProposalId, RequestId
     from world.models import Location
@@ -706,6 +708,7 @@ def test_take_at_a_claim_stays_physical_and_records_a_private_breach(
         run_id="run-1",
         tick=0,
     )
+    assert isinstance(result, TransitionResult)
     assert result.outcome is TransitionOutcome.APPLIED
     assert "territorial_claims" not in WorldState.__slots__
     assert "owner" not in Location.__dataclass_fields__
@@ -850,13 +853,13 @@ def _signed_trust(projected: float) -> float:
 def _relationship(
     source: AgentId, target: AgentId, *, trust: float, resentment: float, fear: float
 ) -> object:
+    from social.models import RelationshipId
     from social.relationships import (
         DirectedRelationshipProfile,
         RelationshipActivationState,
         RelationshipConfidence,
         RelationshipDimension,
         RelationshipDimensionState,
-        RelationshipId,
         RelationshipPolicyRef,
         RelationshipRevisionId,
     )

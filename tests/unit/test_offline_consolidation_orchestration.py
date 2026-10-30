@@ -24,6 +24,7 @@ from memory.models import (
     MemoryTrace,
     MentionId,
 )
+from social import RelationshipId
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipActivationState,
@@ -31,7 +32,6 @@ from social.relationships import (
     RelationshipDimension,
     RelationshipDimensionState,
     RelationshipEvidenceItem,
-    RelationshipId,
     RelationshipPolicyRef,
     RelationshipRevisionId,
 )
@@ -130,7 +130,7 @@ def _goal(*, goal_id: str, belief_ref: str, deadline_tick: int | None = None) ->
 def _snapshot(
     *,
     memories: tuple[MemoryTrace, ...] = (),
-    relationships: tuple[object, ...] = (),
+    relationships: tuple[DirectedRelationshipProfile, ...] = (),
     goals: tuple[Goal, ...] = (),
 ) -> SubjectiveSnapshot:
     return SubjectiveSnapshot(
@@ -193,7 +193,7 @@ def test_merge_revises_forward_relationship_and_suspends_goal() -> None:
         assert request.source_id == AgentId("agent-1")
         assert request.target_id == AgentId("agent-2")
     assert plan.goal_intents[0].to_status is GoalStatus.SUSPENDED
-    assert plan.goal_intents[0].to_status is not GoalStatus.COMPLETED
+    assert GoalStatus(plan.goal_intents[0].to_status) is not GoalStatus.COMPLETED
     assert plan.self_model_belief_ids
 
 

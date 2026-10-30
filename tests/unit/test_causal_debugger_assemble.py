@@ -23,7 +23,9 @@ from simulation import (
 )
 
 
-def _full_stage_summaries(*, command_kind: str = "attack") -> list:
+def _full_stage_summaries(
+    *, command_kind: str = "attack"
+) -> list[CognitionTraceStageSummary]:
     summaries: list[CognitionTraceStageSummary] = []
     for ordinal, kind in enumerate(SCIENTIFIC_TRACE_STAGE_SEQUENCE):
         if kind is CognitionTraceStageKind.THEORY_OF_MIND:

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Mapping
 from pathlib import Path
+from typing import TypedDict
+
+import pytest
 
 from agents.models import AgentId
 from analysis.collective_project_metrics import assemble_collective_project_metrics
@@ -17,15 +21,17 @@ from experiments.catalog import (
     note_collective_project_arm,
 )
 from experiments.matrix_schema import finalize_matrix_cell_config
+from experiments.models import ExperimentDefinition
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from simulation.models import SimulationRunConfig
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V41,
     RUNNER_SCHEMA_VERSION_V42,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import (
@@ -37,22 +43,30 @@ from tests.simulation_helpers import (
 )
 from world._skills import (
     ObjectiveSkillLedger,
+    ObjectiveSkillPolicy,
     SkillDomain,
     default_objective_skill_policy,
 )
 from world.actions import (
+    AgentCommand,
     ContributeCollectiveProject,
     Harvest,
     StartCollectiveProject,
     Wait,
 )
-from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import non_lethal_physical_rules
-from world.production import RecipeId, StructureKind, example_production_catalog
+from world.identifiers import EntityId, RecipeId, WorldId, WorldRevision
+from world.models import AgentBody, Item, Resource, non_lethal_physical_rules
+from world.production import StructureKind, example_production_catalog
 from world.values import ItemKind, ResourceKind
 
 
-def _base():
+class _SkillArguments(TypedDict, total=False):
+    skill_policy: ObjectiveSkillPolicy
+    skill_entity_ids: tuple[EntityId, ...]
+    skill_ledger: ObjectiveSkillLedger
+
+
+def _base() -> SimulationRunnerConfig:
     alice = alive_body("body-a", carry_capacity=10)
     bob = alive_body("body-b", carry_capacity=10)
     return base_runner_config_from_scenario(
@@ -82,11 +96,11 @@ def _base():
     )
 
 
-def _definition():
+def _definition() -> ExperimentDefinition:
     return experiment_aw_collective_projects(_base())
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     return next(
         item.runner_config
         for item in _definition().conditions
@@ -94,7 +108,7 @@ def _arm(arm_id: str):
     )
 
 
-def _skilled(*entity_ids: str):
+def _skilled(*entity_ids: str) -> _SkillArguments:
     ids = tuple(EntityId(item) for item in entity_ids)
     ledger = ObjectiveSkillLedger.bootstrap(ids).apply_summed_deltas(
         {entity_id: {SkillDomain.BUILDING: 1.0} for entity_id in ids}
@@ -107,15 +121,15 @@ def _skilled(*entity_ids: str):
 
 
 def _engine(
-    bodies: tuple[object, ...],
+    bodies: tuple[AgentBody, ...],
     registrations: tuple[AgentRegistration, ...],
     *,
-    items: tuple[object, ...] = (),
-    resources: tuple[object, ...] = (),
+    items: tuple[Item, ...] = (),
+    resources: tuple[Resource, ...] = (),
     active: bool = True,
     idle_ticks: int = 4,
     catalog: object | None = None,
-    skill: dict[str, object] | None = None,
+    skill: _SkillArguments | None = None,
 ) -> WorldEngine:
     return WorldEngine(
         config=SimulationRunConfig(seed=20, physical_rules=non_lethal_physical_rules()),
@@ -136,7 +150,7 @@ def _engine(
     )
 
 
-def _wood(entity_id: str, holder: str):
+def _wood(entity_id: str, holder: str) -> Item:
     return make_item(
         entity_id,
         name="wood",
@@ -146,7 +160,7 @@ def _wood(entity_id: str, holder: str):
     )
 
 
-def _step(engine: WorldEngine, commands: dict[str, object]):
+def _step(engine: WorldEngine, commands: Mapping[str, AgentCommand]) -> TickResult:
     batch = engine.observe()
     submissions = []
     for observation in batch.observations:
@@ -164,7 +178,7 @@ def _names(engine: WorldEngine) -> str:
     return hashlib.sha256("|".join(labels).encode()).hexdigest()
 
 
-def test_aw_is_off_the_v1_gate(caplog) -> None:
+def test_aw_is_off_the_v1_gate(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger="experiments.catalog")
     gate = Path("tests/unit/test_v1_regression_gate.py").read_text(encoding="utf-8")
     definition = _definition()
@@ -186,13 +200,15 @@ def test_aw_is_off_the_v1_gate(caplog) -> None:
     assert off.collective_projects is None
     single = _arm("aw-single-contributor")
     assert single.schema_version == RUNNER_SCHEMA_VERSION_V42
-    assert single.agents[0].initial_goals[0].outcome.outcome_code == (
-        "collective_project:start:shared_shelter"
-    )
+    outcome = single.agents[0].initial_goals[0].outcome
+    assert outcome is not None
+    assert outcome.outcome_code == "collective_project:start:shared_shelter"
     assert finalize_matrix_cell_config(single).schema_version == (
         RUNNER_SCHEMA_VERSION_V42
     )
-    assert _arm("aw-abandoned").collective_projects.idle_ticks == 1
+    collective_projects = _arm("aw-abandoned").collective_projects
+    assert collective_projects is not None
+    assert collective_projects.idle_ticks == 1
 
 
 def test_channel_off_harvest_matches_the_v3_19_scene() -> None:
@@ -234,7 +250,7 @@ def test_channel_off_harvest_matches_the_v3_19_scene() -> None:
 
 
 def test_single_contributor_completes_without_a_draw(
-    caplog,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     first = _wood("wood-1", "body-a")
     second = _wood("wood-2", "body-a")
@@ -316,7 +332,9 @@ def test_two_contributors_share_one_storage_tail() -> None:
     note_collective_project_arm("aw-two-contributors", (project,))
 
 
-def test_shortage_stays_open_and_skips_the_draw(caplog) -> None:
+def test_shortage_stays_open_and_skips_the_draw(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     alice = alive_body("body-a")
     engine = _engine(
         (alice,),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from typing import TypedDict
 
 import pytest
 
@@ -13,13 +14,21 @@ from simulation.lifecycle import ActionSubmission
 from tests.physical_helpers import physical_config, two_location_fixture
 from tests.simulation_helpers import alive_body, make_location
 from world._skills import SkillDomain, default_objective_skill_policy
-from world._teaching import default_teaching_interaction_policy
-from world.actions import Move, Search, Talk
+from world._teaching import (
+    TeachingInteractionPolicy,
+    default_teaching_interaction_policy,
+)
+from world.actions import AgentCommand, Move, Search, Talk
 from world.communications import CommunicationRelation, origin_utterance
 from world.identifiers import EntityId
 from world.models import PhysicalRules
 
 pytestmark = pytest.mark.unit
+
+
+class _TeachingArguments(TypedDict, total=False):
+    teaching_policy: TeachingInteractionPolicy
+    teaching_entity_ids: tuple[EntityId, ...]
 
 
 def _quantize(value: float) -> float:
@@ -59,7 +68,7 @@ def _engine(
         registrations=fixture.registrations,
         revision=fixture.revision,
     )
-    kwargs: dict[str, object] = {}
+    kwargs: _TeachingArguments = {}
     if teaching is not None:
         kwargs["teaching_policy"] = replace(
             default_teaching_interaction_policy(),
@@ -75,12 +84,12 @@ def _engine(
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object) -> None:
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> None:
     batch = engine.observe()
     engine.resolve_tick((ActionSubmission(batch.token, AgentId(agent), command),))
 
 
-def _both(engine: WorldEngine, first: object, second: object) -> None:
+def _both(engine: WorldEngine, first: AgentCommand, second: AgentCommand) -> None:
     batch = engine.observe()
     engine.resolve_tick(
         (
@@ -207,6 +216,7 @@ def test_success_consumes_the_offer_and_a_miss_does_not() -> None:
     from world._teaching import fold_teaching_opportunities
     from world.events import Searched
 
+    assert missed._teaching_policy is not None
     later = fold_teaching_opportunities(
         missed._skill_ledger,
         start_ledger=missed._skill_ledger,

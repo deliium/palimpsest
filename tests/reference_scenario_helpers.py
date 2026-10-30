@@ -16,6 +16,7 @@ from experiments.reference_scenario import (
     AGENT_SOREN,
     REFERENCE_DEATH_TICK,
     REFERENCE_DEFAULT_OVERRIDE_BUDGET,
+    REFERENCE_DEFAULT_SEED,
     REFERENCE_MAX_TICKS,
     REFERENCE_SCENARIO_ID,
     REFERENCE_SCENARIO_VERSION,
@@ -31,7 +32,7 @@ from simulation.runner_models import SimulationRunnerResult
 from simulation.runner_serialization import build_runner_result_document
 from social.relationships import DirectedRelationshipProfile
 from social.service import InMemoryRelationshipService
-from world.models import DayPhase
+from world.values import DayPhase
 
 REFERENCE_AGENT_IDS: tuple[str, ...] = (
     AGENT_MIRA,
@@ -164,15 +165,9 @@ async def run_reference_scenario(
         bundle = build_reference_scenario()
     else:
         bundle = build_reference_scenario(
-            **{
-                key: value
-                for key, value in {
-                    "seed": seed,
-                    "max_ticks": max_ticks,
-                    "death_tick": death_tick,
-                }.items()
-                if value is not None
-            }
+            seed=REFERENCE_DEFAULT_SEED if seed is None else seed,
+            max_ticks=REFERENCE_MAX_TICKS if max_ticks is None else max_ticks,
+            death_tick=REFERENCE_DEATH_TICK if death_tick is None else death_tick,
         )
     capture = SubjectiveEvidenceCapture()
     death = bundle.death_tick

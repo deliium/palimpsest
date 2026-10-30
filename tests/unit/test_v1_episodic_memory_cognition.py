@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
+from agents.cognition.contracts import Planner
 from agents.cognition.defaults import (
     DirectSelfStateProjector,
     DirectSituationModeler,
@@ -255,7 +258,7 @@ async def test_runtime_applies_service_batch_after_successful_cognition() -> Non
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
-        planner=WaitFallbackPlanner(),
+        planner=cast(Planner, WaitFallbackPlanner()),
         memory_updates=WriteHook(),
     )
     memories = MemoryStore(AgentId("agent-1"))
@@ -289,13 +292,13 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
             intention: SelectedIntention,
             futures: PossibleFutures,
             memory: RetrievedMemoryContext | None = None,
-            goal_board=None,
-            emotional_state=None,
-            causal_world_model=None,
-            theory_of_mind=None,
-            self_model=None,
-            strategy_mode=None,
-            strategy_policy=None,
+            goal_board: object | None = None,
+            emotional_state: object | None = None,
+            causal_world_model: object | None = None,
+            theory_of_mind: object | None = None,
+            self_model: object | None = None,
+            strategy_mode: object | None = None,
+            strategy_policy: object | None = None,
         ) -> ActionPlan:
             _ = loop_input, intention, futures, memory, goal_board, emotional_state
             raise RuntimeError("planner boom")
@@ -313,7 +316,7 @@ async def test_failed_cognition_does_not_mutate_memory_service() -> None:
         futures=PlaceholderFutureImagination(),
         motivation=StableMotivationEvaluator(),
         intention=StableIntentionSelector(),
-        planner=BoomPlanner(),
+        planner=cast(Planner, BoomPlanner()),
         memory_updates=EmptyMemoryUpdateHook(),
     )
     memories = MemoryStore(AgentId("agent-1"))

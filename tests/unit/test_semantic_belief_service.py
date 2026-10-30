@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 import pytest
 
@@ -110,7 +111,8 @@ async def test_revise_is_idempotent_for_same_operation_id() -> None:
 @pytest.mark.asyncio
 async def test_conflicting_operation_id_reuse_fails() -> None:
     service = InMemorySemanticBeliefService(_scope(), policy=_policy())
-    base = dict(
+    base = BeliefRevisionRequest(
+        claim=_claim("food"),
         owner_id=AgentId("agent-1"),
         operation_id="op-conflict",
         logical_tick=1,
@@ -128,9 +130,9 @@ async def test_conflicting_operation_id_reuse_fails() -> None:
         ),
         policy=_policy().as_ref(),
     )
-    await service.revise(BeliefRevisionRequest(claim=_claim("food"), **base))
+    await service.revise(base)
     with pytest.raises(BeliefServiceError) as excinfo:
-        await service.revise(BeliefRevisionRequest(claim=_claim("water"), **base))
+        await service.revise(replace(base, claim=_claim("water")))
     assert excinfo.value.code is BeliefServiceErrorCode.IDEMPOTENCY_CONFLICT
 
 

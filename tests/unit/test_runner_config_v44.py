@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import TypedDict, Unpack
 
 import pytest
 
 from experiments.matrix_schema import finalize_matrix_cell_config
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V44,
+    CollectiveProjectsSpec,
+    PossessionSuccessionSpec,
+    PublicGoodsSpec,
+    ResourceExchangeProfileSpec,
+    SimulationRunnerConfig,
+    StructuredCommitmentsSpec,
+    SubjectiveValuationSpec,
     V3CapabilityFlags,
     example_possession_succession_spec,
     example_resource_exchange_profile_spec,
@@ -45,8 +53,20 @@ def _regions() -> RegionsMigrationSpec:
     )
 
 
-def _v44(**kwargs):
-    values = {
+class _V44Overrides(TypedDict, total=False):
+    schema_version: str
+    v3_capability_flags: V3CapabilityFlags
+    regions_migration: RegionsMigrationSpec
+    collective_projects: CollectiveProjectsSpec | None
+    public_goods: PublicGoodsSpec | None
+    subjective_valuation: SubjectiveValuationSpec | None
+    resource_exchange_profile: ResourceExchangeProfileSpec | None
+    structured_commitments: StructuredCommitmentsSpec | None
+    possession_succession: PossessionSuccessionSpec | None
+
+
+def _v44(**kwargs: Unpack[_V44Overrides]) -> SimulationRunnerConfig:
+    values: _V44Overrides = {
         "schema_version": RUNNER_SCHEMA_VERSION_V44,
         "v3_capability_flags": V3CapabilityFlags(multi_polity_migration=True),
         "regions_migration": _regions(),

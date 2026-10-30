@@ -15,8 +15,9 @@ from experiments import (
 )
 from experiments.catalog import base_runner_config_from_scenario
 from experiments.matrix_schema import finalize_matrix_cell_config
+from experiments.models import ExperimentDefinition
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V31,
@@ -24,6 +25,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V33,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -32,7 +34,13 @@ from simulation.runner_models import (
 )
 from tests.physical_helpers import physical_config, two_location_fixture
 from tests.simulation_helpers import alive_body, make_location, make_weather
-from world.actions import AnnotateRecord, CopyRecord, DamageRecord, Inscribe
+from world.actions import (
+    AgentCommand,
+    AnnotateRecord,
+    CopyRecord,
+    DamageRecord,
+    Inscribe,
+)
 from world.artifacts import (
     ArtifactContent,
     ArtifactKind,
@@ -40,6 +48,7 @@ from world.artifacts import (
     RecordIntegrity,
 )
 from world.identifiers import WorldId, WorldRevision
+from world.kinship import KinshipGraph
 from world.models import non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.experiment_an_durable_records")
@@ -58,7 +67,7 @@ _AN_ARM_IDS = (
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -88,7 +97,7 @@ def _base():
     )
 
 
-def _arm(definition, arm_id: str):
+def _arm(definition: ExperimentDefinition, arm_id: str) -> SimulationRunnerConfig:
     return next(
         item for item in definition.conditions if item.condition_id == arm_id
     ).runner_config
@@ -113,6 +122,7 @@ def test_an_catalog_arms_and_profile(caplog: pytest.LogCaptureFixture) -> None:
     assert perfect.durable_records.copy_fidelity_policy.default_fidelity == "perfect"
 
     imperfect = _arm(definition, "an-imperfect-copy")
+    assert imperfect.durable_records is not None
     assert (
         imperfect.durable_records.copy_fidelity_policy.default_fidelity
         == "deterministic_mutation"
@@ -147,7 +157,7 @@ def _engine(*, default_fidelity: str = "perfect") -> WorldEngine:
     )
 
 
-def _act(engine: WorldEngine, command: object):
+def _act(engine: WorldEngine, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
         (ActionSubmission(batch.token, AgentId("agent-1"), command),)
@@ -280,6 +290,7 @@ def test_arm_genealogy_genre_does_not_write_kinship() -> None:
         ),
     )
     assert created.resolutions[0].status is ActionResolutionStatus.APPLIED, arm_id
+    assert isinstance(engine.kinship_graph, KinshipGraph)
     assert engine.kinship_graph.edges == (), (
         f"{arm_id}: genealogy genre must not write kinship edges"
     )

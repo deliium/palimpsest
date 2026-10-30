@@ -10,10 +10,12 @@ import pytest
 from experiments.generational_artifacts import (
     GenerationalArtifactError,
     GenerationalUsageStore,
+    HistoricalBoundaryReference,
     decode_recording_usage_row,
     encode_recording_usage_row,
 )
 from simulation.generational_control import RecordingUsageEvidence
+from simulation.generational_models import GenerationalBoundary
 
 
 def _evidence(*, tick: int = 1, request_id: str = "req-1") -> RecordingUsageEvidence:
@@ -248,7 +250,9 @@ def test_manifest_rejects_unknown_and_incomplete_identity() -> None:
             payload, schema_version="generational-run-manifest-v1"
         )
     payload = _manifest_payload()
-    source = dict(payload["source_identity"])  # type: ignore[arg-type]
+    source_identity = payload["source_identity"]
+    assert isinstance(source_identity, dict)
+    source = dict(source_identity)
     source["source_clean"] = False
     payload["source_identity"] = source
     with pytest.raises(
@@ -292,7 +296,7 @@ def test_store_writes_failure_and_rejects_conflicting_history(
         store.write_history(1, conflicting)
 
 
-def _boundary(tick: int = 4, generation: int = 1):
+def _boundary(tick: int = 4, generation: int = 1) -> GenerationalBoundary:
     from simulation.generational_models import (
         CohortPopulationRow,
         GenerationalBoundary,
@@ -344,7 +348,9 @@ class _Reader:
     def __init__(self, next_tick: int) -> None:
         self.next_tick = next_tick
 
-    async def reference(self, run_id: str, boundary_tick: int):
+    async def reference(
+        self, run_id: str, boundary_tick: int
+    ) -> HistoricalBoundaryReference:
         from experiments.generational_artifacts import (
             HistoricalBoundaryReference,
             SnapshotReference,

@@ -337,7 +337,7 @@ def test_forbidden_world_state_and_metric_rejected() -> None:
     class WorldState:
         pass
 
-    class MetricDocument(dict):
+    class MetricDocument(dict[str, object]):
         pass
 
     with pytest.raises(TypeError, match="forbidden_input"):

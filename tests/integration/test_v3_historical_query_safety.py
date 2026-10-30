@@ -38,7 +38,7 @@ from simulation.runner_models import (
     RunnerPersistenceSpec,
     SimulationRunnerConfig,
 )
-from world.events import Died
+from world.events import Died, WorldEvent
 
 pytestmark = pytest.mark.integration
 
@@ -106,17 +106,15 @@ async def test_generational_history_survives_runner_teardown(
     # Runner is torn down here: every remaining assertion is historical only.
     history_refs = session.store.history_refs()
     assert history_refs
-    boundaries = sorted(
-        {
-            int(
-                decode_generational_document(
-                    (tmp_path / ref["path"]).read_bytes(),
-                    schema_version="generational-history-v1",
-                )["boundary_tick"]
-            )
-            for ref in history_refs
-        }
-    )
+    retained_boundaries: set[int] = set()
+    for ref in history_refs:
+        boundary_tick = decode_generational_document(
+            (tmp_path / ref["path"]).read_bytes(),
+            schema_version="generational-history-v1",
+        )["boundary_tick"]
+        assert isinstance(boundary_tick, int)
+        retained_boundaries.add(boundary_tick)
+    boundaries = sorted(retained_boundaries)
     assert any(boundary >= _LIFESPAN_TICKS for boundary in boundaries)
 
     replay = ReplayService(runs, journal, snapshots)
@@ -160,16 +158,18 @@ async def test_generational_history_survives_runner_teardown(
     objective_cursor: tuple[int, int] | None = None
     analysis_ids: list[str] = []
     while True:
-        page = await analysis.load_objective_event_page(
+        analysis_page = await analysis.load_objective_event_page(
             run_id=run_id.value,
             after_tick=None if objective_cursor is None else objective_cursor[0],
             after_sequence=(None if objective_cursor is None else objective_cursor[1]),
             limit=250,
         )
-        analysis_ids.extend(event.event_id.value for event in page.events)
-        if page.next_tick is None or page.next_sequence is None:
+        for retained_event in analysis_page.events:
+            assert isinstance(retained_event, WorldEvent)
+            analysis_ids.append(retained_event.event_id.value)
+        if analysis_page.next_tick is None or analysis_page.next_sequence is None:
             break
-        objective_cursor = (page.next_tick, page.next_sequence)
+        objective_cursor = (analysis_page.next_tick, analysis_page.next_sequence)
     assert analysis_ids == collected
 
     body_to_owner = {

@@ -142,8 +142,8 @@ def test_bh_baseline_trajectory_is_pinned() -> None:
     import asyncio
 
     from experiments.collective_decisions_scenario import collective_decisions_scenario
-    from experiments.collectors import build_runner_result_document
     from experiments.coordinator import ExperimentCoordinator
+    from simulation.runner_serialization import build_runner_result_document
 
     async def run() -> str:
         definition = collective_decisions_scenario(max_ticks=8)
@@ -193,7 +193,7 @@ def test_bh_component_chain_delivery_action_effect_metric() -> None:
         _observation,
         _talk,
     )
-    from world.actions import StartCollectiveProject
+    from world.actions import StartCollectiveProject, Talk
 
     received = _ledger_with_proposal()
     proposal = received.proposals[0]
@@ -206,6 +206,7 @@ def test_bh_component_chain_delivery_action_effect_metric() -> None:
         ledger=received,
         mode=_Mode.DETERMINISTIC,
     )
+    assert isinstance(stamped, Talk)
     delivered = _message(
         tick=3,
         speaker="body-ada",

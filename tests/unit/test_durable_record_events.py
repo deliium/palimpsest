@@ -15,7 +15,9 @@ from world.events import (
     ArtifactDamaged,
     ArtifactDestroyed,
     ArtifactPartiallyLost,
+    EventDetails,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import (
@@ -36,7 +38,7 @@ def _cause() -> ActionCause:
     )
 
 
-def _event(details: object, *, schema_version: int):
+def _event(details: EventDetails, *, schema_version: int) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-1"),
         run_id="run-1",
@@ -45,7 +47,7 @@ def _event(details: object, *, schema_version: int):
         sequence=0,
         cause=_cause(),
         resulting_revision=WorldRevision(1),
-        details=details,  # type: ignore[arg-type]
+        details=details,
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
         schema_version=schema_version,
     )
@@ -79,7 +81,8 @@ def test_tombstone_destroy_requires_v13() -> None:
     with pytest.raises(ValueError):
         _event(details, schema_version=EVENT_SCHEMA_REPLAY_V8)
     ok = _event(details, schema_version=EVENT_SCHEMA_REPLAY_V13)
-    assert ok.details.tombstone is True  # type: ignore[attr-defined]
+    assert isinstance(ok.details, ArtifactDestroyed)
+    assert ok.details.tombstone is True
 
 
 def test_durable_detail_round_trip() -> None:
@@ -107,5 +110,5 @@ def test_durable_detail_round_trip() -> None:
         encoded = encode_domain(event)
         decoded = decode_domain(encoded)
         assert type(decoded) is type(event)
-        assert type(decoded.details) is type(details)  # type: ignore[union-attr]
-        assert decoded.schema_version == EVENT_SCHEMA_REPLAY_V13  # type: ignore[union-attr]
+        assert type(decoded.details) is type(details)
+        assert decoded.schema_version == EVENT_SCHEMA_REPLAY_V13

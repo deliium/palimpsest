@@ -19,6 +19,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -42,7 +43,7 @@ def isolate_cultural_loop_bind(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -74,7 +75,7 @@ def _plain_base():
     )
 
 
-def _genealogy_config(**extra):
+def _genealogy_config() -> SimulationRunnerConfig:
     base = _plain_base()
     return replace(
         base,
@@ -84,7 +85,6 @@ def _genealogy_config(**extra):
         v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
         cultural_feature_provenance=example_cultural_feature_provenance_spec(),
         knowledge_genealogy=example_knowledge_genealogy_spec(),
-        **extra,
     )
 
 

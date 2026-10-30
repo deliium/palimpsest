@@ -94,6 +94,7 @@ def test_design_rejects_inherited_stops_and_misaligned_windows() -> None:
     spec = build_fork_benchmark_spec(
         scenario_id, seed=23, profile=V3BenchmarkProfile.SMOKE
     )
+    assert spec.base.generational_run is not None
     stopped = replace(
         spec,
         base=replace(

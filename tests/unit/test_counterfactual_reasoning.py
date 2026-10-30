@@ -12,6 +12,7 @@ from agents.cognition.counterfactual import (
     COUNTERFACTUAL_POLICY_VERSION,
     CounterfactualAffect,
     CounterfactualAffectCode,
+    CounterfactualAudit,
     CounterfactualPolicy,
     CounterfactualProvenanceKind,
     CounterfactualScenario,
@@ -27,12 +28,12 @@ from agents.cognition.counterfactual import (
     direct_observation_memory_id,
     scenario_id_for,
 )
-from agents.cognition.models import ActionDirection
+from agents.cognition.models import ActionDirection, CognitiveLoopInput
 from agents.cognition.reflection import DecisionOutcomeCode
 from agents.models import AgentId
-from memory.models import MemorySourceKind
+from memory.models import MemorySourceKind, MemoryTrace
 from world.models import PhysicalRules
-from world.observations import ObservationSourceKind
+from world.observations import ObservationSourceKind, VisibleExit
 
 _SOURCE = Path("src/agents/cognition/counterfactual.py")
 _OWNER = AgentId("agent-owner")
@@ -251,6 +252,7 @@ async def test_finalize_appends_one_remembered_decision(
 ) -> None:
     from agents.cognition.configuration import CognitionCounterfactualMode
     from agents.cognition.counterfactual import CounterfactualPolicy
+    from simulation.agent_runtime import PreparedObservation
     from simulation.run_control import AgentRuntimeCheckpoint
     from tests.unit.test_agent_runtime import _runtime, _self, _token
     from world.actions import Help
@@ -261,6 +263,7 @@ async def test_finalize_appends_one_remembered_decision(
     runtime._loop._counterfactual_mode = CognitionCounterfactualMode.DETERMINISTIC
     runtime._loop._counterfactual_policy = CounterfactualPolicy(max_decisions=1)
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(
         prepared, effective_command=Help(target_id=EntityId("bob"))
     )
@@ -298,6 +301,7 @@ async def test_finalize_appends_one_remembered_decision(
     assert all("bob" not in line and "success=" not in line for line in info)
 
     again = await runtime.prepare_observation(_self(tick=1), token=_token(1))
+    assert isinstance(again, PreparedObservation)
     second = await runtime.bind_effective_command(
         again, effective_command=Help(target_id=EntityId("bob"))
     )
@@ -315,6 +319,7 @@ async def test_finalize_appends_one_remembered_decision(
     quiet, _, _ = _runtime()
     quiet.start()
     quiet_prepared = await quiet.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(quiet_prepared, PreparedObservation)
     quiet_pending = await quiet.bind_effective_command(quiet_prepared)
     caplog.clear()
     with caplog.at_level(logging.WARNING, logger="simulation.agent_runtime"):
@@ -333,7 +338,9 @@ async def test_finalize_appends_one_remembered_decision(
     assert sum("remembered_decision_skipped" in line for line in warnings) == 1
 
 
-def _input(*, tick: int = 3, exits: tuple[object, ...] = ()):
+def _input(
+    *, tick: int = 3, exits: tuple[VisibleExit, ...] = ()
+) -> CognitiveLoopInput:
     from dataclasses import replace
 
     from agents.cognition.models import CognitiveLoopInput, InternalAgentState
@@ -447,13 +454,13 @@ def test_search_without_progress_moves_toward_another_exit() -> None:
 
 
 def test_wait_with_stored_counterpart_imagines_communication() -> None:
+    from social.models import RelationshipId
     from social.relationships import (
         DirectedRelationshipProfile,
         RelationshipActivationState,
         RelationshipConfidence,
         RelationshipDimension,
         RelationshipDimensionState,
-        RelationshipId,
         RelationshipPolicyRef,
         RelationshipRevisionId,
     )
@@ -577,13 +584,15 @@ async def test_disabled_prepare_keeps_the_same_command() -> None:
     assert disabled.last_counterfactual_scenarios() == ()
     kept = enabled.last_counterfactual_scenarios()
     assert len(kept) == 1
-    assert kept[0].scenario_id not in repr(loud.futures)
-    assert kept[0].scenario_id not in repr(quiet.futures)
+    kept_scenario = kept[0]
+    assert isinstance(kept_scenario, CounterfactualScenario)
+    assert kept_scenario.scenario_id not in repr(loud.futures)
+    assert kept_scenario.scenario_id not in repr(quiet.futures)
     assert type(quiet.proposed_command) is type(loud.proposed_command)
     assert quiet.proposed_command == loud.proposed_command
 
 
-def _help_scenario(*, memory_id: str | None = "memory-help"):
+def _help_scenario(*, memory_id: str | None = "memory-help") -> CounterfactualScenario:
     decision = _decision(memory_id=memory_id, counterpart_id="bob")
     scenarios = consider_counterfactuals(
         _input(), (decision,), policy=default_counterfactual_policy()
@@ -597,6 +606,7 @@ def test_conclusions_revise_belief_without_an_alternative_trace(
 ) -> None:
     from agents.cognition.counterfactual import counterfactual_belief_requests
     from memory.belief_formation import extract_evidence_candidates
+    from memory.beliefs import BeliefRevisionRequest
 
     scenario = _help_scenario()
     with caplog.at_level(logging.DEBUG, logger="agents.cognition.counterfactual"):
@@ -607,11 +617,13 @@ def test_conclusions_revise_belief_without_an_alternative_trace(
             tick=3,
         )
     assert len(requests) == 1
-    claim = requests[0].claim
+    request = requests[0]
+    assert isinstance(request, BeliefRevisionRequest)
+    claim = request.claim
     assert claim.predicate == "counterfactual_alternative"
     assert claim.subject.concept == scenario.decision.decision_id
     assert claim.value.text_value == "wait"
-    assert requests[0].evidence.supporting[0].memory_id.value == "memory-help"
+    assert request.evidence.supporting[0].memory_id.value == "memory-help"
     assert any(
         "counterfactual_effect" in line
         and "effect_code=belief" in line
@@ -695,6 +707,7 @@ def test_relationship_revision_lowers_trust_without_help_given(
     from agents.cognition.counterfactual import counterfactual_relationship_requests
     from social.relationships import (
         RelationshipDimension,
+        RelationshipRevisionRequest,
         RelationshipSignalKind,
         signals_to_dimension_deltas,
     )
@@ -716,14 +729,16 @@ def test_relationship_revision_lowers_trust_without_help_given(
             resolve_counterpart=resolve,
         )
     assert len(requests) == 1
-    signal = requests[0].signals[0]
+    request = requests[0]
+    assert isinstance(request, RelationshipRevisionRequest)
+    signal = request.signals[0]
     assert signal.kind is RelationshipSignalKind.COUNTERFACTUAL_TRUST_DOWN
     assert signal.strength == scenario.confidence
     assert signal.memory_ref == "memory-help"
-    deltas = signals_to_dimension_deltas(requests[0].signals)
+    deltas = signals_to_dimension_deltas(request.signals)
     assert deltas[RelationshipDimension.TRUST][0] == pytest.approx(-0.075)
     assert RelationshipSignalKind.HELP_GIVEN not in {
-        item.kind for item in requests[0].signals
+        item.kind for item in request.signals
     }
     messages = [
         record.getMessage()
@@ -756,6 +771,7 @@ async def test_loop_identity_mode_gates_the_self_belief() -> None:
         CognitionLoopConfig,
         build_cognitive_loop,
     )
+    from memory.beliefs import BeliefRevisionRequest
     from world.actions import Wait
 
     decision = _decision()
@@ -788,13 +804,13 @@ async def test_loop_identity_mode_gates_the_self_belief() -> None:
     belief_predicates = [
         intent.belief_revision.claim.predicate
         for intent in loud.memory_update_intents
-        if getattr(intent, "belief_revision", None) is not None
+        if isinstance(intent.belief_revision, BeliefRevisionRequest)
     ]
     assert "counterfactual_alternative" in belief_predicates
     concepts = [
         concept.concept
         for intent in loud.memory_update_intents
-        if getattr(intent, "memory", None) is not None
+        if isinstance(intent.memory, MemoryTrace)
         for concept in intent.memory.concepts
     ]
     assert "wait" not in concepts
@@ -1001,11 +1017,13 @@ async def test_provider_ranks_known_ids_and_falls_back(
 @pytest.mark.asyncio
 async def test_disabled_audits_stay_empty() -> None:
     from agents.cognition.counterfactual import CounterfactualProvenanceKind
+    from simulation.agent_runtime import PreparedObservation
     from tests.unit.test_agent_runtime import _runtime, _self, _token
 
     quiet, _, _ = _runtime()
     quiet.start()
     prepared = await quiet.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await quiet.bind_effective_command(prepared)
     await quiet.finalize_pending(pending)
     assert quiet.export_counterfactual_audits() == ()
@@ -1015,11 +1033,14 @@ async def test_disabled_audits_stay_empty() -> None:
     runtime._loop._counterfactual_mode = CognitionCounterfactualMode.DETERMINISTIC
     runtime._loop._counterfactual_policy = default_counterfactual_policy()
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     await runtime.finalize_pending(pending)
     audits = runtime.export_counterfactual_audits()
     assert len(audits) == 1
+    audit = audits[0]
+    assert isinstance(audit, CounterfactualAudit)
     provenance = CounterfactualProvenanceKind.IMAGINED_ALTERNATIVE.value
-    assert audits[0].provenance_code == provenance
-    assert audits[0].fallback_used is False
-    assert audits[0].llm_call_count == 0
+    assert audit.provenance_code == provenance
+    assert audit.fallback_used is False
+    assert audit.llm_call_count == 0

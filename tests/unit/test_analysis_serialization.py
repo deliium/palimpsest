@@ -78,5 +78,5 @@ def test_metric_document_rejects_non_finite_values() -> None:
 def test_encode_rejects_non_finite_document_values() -> None:
     with pytest.raises((ValueError, MetricSerializationError)):
         encode_metric_document(
-            _document(values={"gini": float("inf")})  # type: ignore[arg-type]
+            _document(values={"gini": float("inf")})
         )

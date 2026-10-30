@@ -21,11 +21,11 @@ from world.actions import (
 )
 from world.events import PublicGoodBenefit
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.models import non_lethal_physical_rules
+from world.models import Item, non_lethal_physical_rules
 from world.values import ItemKind, Thirst
 
 
-def _stone(entity_id: str, holder: str):
+def _stone(entity_id: str, holder: str) -> Item:
     return make_item(
         entity_id,
         name="stone",

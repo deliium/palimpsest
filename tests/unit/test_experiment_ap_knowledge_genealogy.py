@@ -13,12 +13,14 @@ from experiments import (
     knowledge_genealogy_profile,
 )
 from experiments.catalog import base_runner_config_from_scenario
+from experiments.models import ExperimentDefinition
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V34,
     RUNNER_SCHEMA_VERSION_V35,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
     example_knowledge_genealogy_spec,
@@ -46,7 +48,7 @@ _AP_ARM_IDS = (
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -76,7 +78,7 @@ def _base():
     )
 
 
-def _arm(definition, arm_id: str):
+def _arm(definition: ExperimentDefinition, arm_id: str) -> SimulationRunnerConfig:
     return next(
         item for item in definition.conditions if item.condition_id == arm_id
     ).runner_config
@@ -108,9 +110,11 @@ def test_ap_catalog_arms_and_profile(caplog: pytest.LogCaptureFixture) -> None:
     assert flags_off.v3_capability_flags.enabled_names() == ()
 
     teaching = _arm(definition, "ap-teaching-lineage")
+    assert teaching.knowledge_genealogy is not None
     assert teaching.knowledge_genealogy.uptake_compose.teaching is True
     written = _arm(definition, "ap-written-record")
     assert written.durable_records is not None
+    assert written.knowledge_genealogy is not None
     assert written.knowledge_genealogy.uptake_compose.written_record is True
     lifecycle = _arm(definition, "ap-lifecycle-survival")
     assert lifecycle.population_lifecycle is not None
@@ -188,7 +192,9 @@ def test_arm_independent_discovery_holders_and_hop_zero() -> None:
         (audit,), run_id="run-ap", input_revision="rev-1", as_of_tick=2
     )
     assert doc.availability is MetricAvailability.PRESENT, arm_id
-    assert int(doc.values["active_entry_count"]) > 0, arm_id
+    count = doc.values["active_entry_count"]
+    assert isinstance(count, int)
+    assert int(count) > 0, arm_id
 
 
 def test_arm_teaching_lineage_who_taught() -> None:
@@ -207,6 +213,7 @@ def test_arm_teaching_lineage_who_taught() -> None:
 
     arm_id = "ap-teaching-lineage"
     config = _arm(experiment_ap_knowledge_genealogy(_base()), arm_id)
+    assert config.knowledge_genealogy is not None
     assert config.knowledge_genealogy.uptake_compose.teaching is True, arm_id
     key = practical_knowledge_content_key("foraging")
     teacher = AgentId("agent-a")
@@ -291,7 +298,9 @@ def test_arm_multi_parent_dag_direct_ledger() -> None:
     doc = compute_knowledge_genealogy_lineage(
         audits, run_id="run-ap", input_revision="rev-1", as_of_tick=2
     )
-    assert float(doc.values["multi_parent_share"]) > 0.0, arm_id
+    share = doc.values["multi_parent_share"]
+    assert isinstance(share, (int, float))
+    assert float(share) > 0.0, arm_id
 
 
 def test_arm_mutation_hop_direct_ledger() -> None:
@@ -347,7 +356,9 @@ def test_arm_mutation_hop_direct_ledger() -> None:
     doc = compute_knowledge_genealogy_mutation(
         audits, run_id="run-ap", input_revision="rev-1"
     )
-    assert int(doc.values["mutated_count"]) > 0, arm_id
+    count = doc.values["mutated_count"]
+    assert isinstance(count, int)
+    assert int(count) > 0, arm_id
 
 
 def test_arm_dual_emergence_count() -> None:

@@ -7,6 +7,7 @@ import pytest
 from agents.cognition.structured_commitments import (
     MAX_OPEN_INTERPRETATIONS_LIMIT,
     CommitmentInterpretation,
+    StructuredCommitmentLedger,
     empty_structured_commitments,
     replace_interpretation,
 )
@@ -79,6 +80,10 @@ def test_v13_has_no_field_and_v14_keeps_divergent_terms() -> None:
         )
     current = structured_commitments_checkpoint_payload(ledgers, codec="v14")
     restored = decode_structured_commitments_checkpoint(current, codec="v14")
-    assert restored["owner-a"].interpretations[0].item_kind == "material"
-    assert restored["owner-b"].interpretations[0].item_kind == "tool"
-    assert restored["owner-a"].interpretations[0].source_event_ids == ("evt-1",)
+    owner_a = restored["owner-a"]
+    owner_b = restored["owner-b"]
+    assert isinstance(owner_a, StructuredCommitmentLedger)
+    assert isinstance(owner_b, StructuredCommitmentLedger)
+    assert owner_a.interpretations[0].item_kind == "material"
+    assert owner_b.interpretations[0].item_kind == "tool"
+    assert owner_a.interpretations[0].source_event_ids == ("evt-1",)

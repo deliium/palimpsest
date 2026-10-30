@@ -128,6 +128,8 @@ Optional Research UI: `pnpm --dir clients/research-ui build` then set `PALIMPSES
 
 The database image stays digest-pinned. The API image is `PALIMPSEST_API_IMAGE` or `ghcr.io/deliium/palimpsest:0.1.0`. Application install uses `uv sync --frozen --no-dev --no-editable`. Contributor builds set `network: host` so `uv` can resolve PyPI when the Docker bridge DNS is unavailable. Manual image builds on the same hosts may need `docker build --network=host`.
 
+Release builds carry source attestations. `docker build` accepts `PALIMPSEST_REVISION` plus at most one of `PALIMPSEST_SOURCE_CLEAN=true` or `PALIMPSEST_SOURCE_ARTIFACT_DIGEST=<sha256>`. The build fails when both are supplied, when an attestation has no non-`unknown` revision, or when the digest is not 64 lowercase hex characters; omitting both still builds, but the image is explicitly unattested (`source-clean=false`, empty digest). The values become the `org.opencontainers.image.revision`, `io.palimpsest.source-clean` and `io.palimpsest.source-artifact-digest` labels, which the benchmark producer forwards as `--code-revision` and `--source-artifact-digest`. A revision string alone is never proof of clean source.
+
 Development passwords in `compose.yaml` are **non-production**. Expanded `docker compose config` output is **not secret-safe**. Production extension-privilege design is deferred.
 
 ```bash
@@ -255,8 +257,57 @@ uv run pytest -m integration tests/integration/test_v3_historical_query_safety.p
 uv run pytest tests/unit/test_v3_scale_support.py
 ```
 
-A `timed_out` or `failed` worker is a recorded result, not a pass. Dense 100k
-completion is not claimed.
+A `timed_out` or `failed` worker is a recorded result, not a pass. Dense
+evidence-rich 100k completion is not claimed; the generational 100k lane can
+complete ticks with an extinct final population, which is a throughput result
+only.
+
+## V3 generational civilization benchmark
+
+The thirty-case suite and its qualification harness are documented in
+[V3 benchmark suite](v3-benchmark-suite.md).
+
+```bash
+uv run --frozen --python 3.12.14 pytest -q   tests/unit/test_v3_benchmark_comparison.py
+
+PALIMPSEST_V3_SOURCE_REVISION=<revision> \
+PALIMPSEST_V3_SOURCE_ARTIFACT_DIGEST=<sha256> \
+PALIMPSEST_V3_BENCHMARK_ROOT=/tmp/palimpsest/benchmark \
+uv run --frozen --python 3.12.14 pytest -m 'integration and scale' \
+  tests/benchmarks/test_v3_civilization_benchmark.py -q
+```
+
+Synthetic test identities are labeled; a real run requires exactly one explicit
+source assertion. Mechanism suites can be verified with `--require-complete`;
+research suites verify integrity while retaining legal nulls.
+
+Published-image acceptance has two modes. Optional local runs skip a missing
+Docker CLI, Playwright or `PALIMPSEST_API_IMAGE` with an explicit reason. Set
+`PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1` to make those prerequisites failures
+instead, which is how the release gate is run:
+
+```bash
+PALIMPSEST_API_IMAGE=<source-matched-image> \
+PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1 \
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term -m compose -q
+```
+
+Two bounded stress probes are opt-in and are skipped by the default collection
+(`PALIMPSEST_V3_PUBLICATION_SCALE_FRAMES`, `PALIMPSEST_V3_INCREMENTAL_SCALE_BOUNDARIES`):
+
+```bash
+PALIMPSEST_V3_PUBLICATION_SCALE_FRAMES=20000 \
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term \
+  tests/benchmarks/test_cultural_publication_rss.py -q
+
+PALIMPSEST_V3_INCREMENTAL_SCALE_BOUNDARIES=5000 \
+uv run --frozen --python 3.12.14 pytest --cov --cov-report=term \
+  tests/benchmarks/test_incremental_trait_analysis.py -q
+```
+
+Both are synthetic measurement lanes. They are reported separately and are
+never counted as required-gate passes or as 10k/100k scientific-scale
+certification.
 
 ## See also
 
@@ -264,6 +315,7 @@ completion is not claimed.
 
 - [Architecture](architecture.md)
 - [V2 benchmark suite](v2-benchmark-suite.md)
+- [V3 benchmark suite](v3-benchmark-suite.md)
 - [Cognition and agent runtime](cognition-runtime.md)
 - [Memory reconstruction](memory-reconstruction.md)
 - [LLM providers](llm-providers.md)

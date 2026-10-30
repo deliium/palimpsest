@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -13,18 +14,14 @@ from experiments.catalog import base_runner_config_from_scenario
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine, _bind_subjective_valuation_channel
 from simulation.models import SimulationRunConfig
-from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V16,
-    EVENT_SCHEMA_REPLAY_V17,
-    EVENT_SCHEMA_REPLAY_V18,
-    checkpoint_schema_for_production,
-)
+from simulation.persistence import checkpoint_schema_for_production
 from simulation.runner import _subjective_valuation_loop_kwargs
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V39,
     RUNNER_SCHEMA_VERSION_V40,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_structured_commitments_spec,
     example_subjective_valuation_spec,
@@ -36,11 +33,16 @@ from simulation.serialization import (
     structured_commitments_checkpoint_payload,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V16,
+    EVENT_SCHEMA_REPLAY_V17,
+    EVENT_SCHEMA_REPLAY_V18,
+)
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     agent_a = AgentId("agent-a")
     return base_runner_config_from_scenario(
@@ -176,7 +178,9 @@ def test_engine_init_and_restore_keep_horizon() -> None:
     assert engine._subjective_valuation_max_bundle == 4
 
     class _Restored:
-        pass
+        _subjective_valuation_active: bool = False
+        _subjective_valuation_horizon: int = 0
+        _subjective_valuation_max_bundle: int = 0
 
     restored = _Restored()
     spec = replace(example_subjective_valuation_spec(), horizon_ticks=9, max_bundle=3)
@@ -184,7 +188,7 @@ def test_engine_init_and_restore_keep_horizon() -> None:
     class _Config:
         subjective_valuation = spec
 
-    _bind_subjective_valuation_channel(restored, _Config())
+    _bind_subjective_valuation_channel(cast(WorldEngine, restored), _Config())
     assert restored._subjective_valuation_active is True
     assert restored._subjective_valuation_horizon == 9
     assert restored._subjective_valuation_max_bundle == 3

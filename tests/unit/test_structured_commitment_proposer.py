@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from types import SimpleNamespace
 
 from agents.cognition.structured_commitments import propose_commitment_command
@@ -16,7 +17,9 @@ from world.observations import (
 from world.values import ItemKind
 
 
-def _occurrence(kind: str, actor: str, other: str, facts: dict):
+def _occurrence(
+    kind: str, actor: str, other: str, facts: dict[str, str | int | float | bool | None]
+) -> ObservedOccurrence:
     return ObservedOccurrence(
         provenance=ObservationProvenance(
             source_kind=ObservationSourceKind.OCCURRENCE,
@@ -31,7 +34,7 @@ def _occurrence(kind: str, actor: str, other: str, facts: dict):
     )
 
 
-def _obs(occurrences, tick: int = 2):
+def _obs(occurrences: Sequence[ObservedOccurrence], tick: int = 2) -> SimpleNamespace:
     return SimpleNamespace(
         occurrences=occurrences,
         tick=tick,
@@ -62,8 +65,8 @@ def test_post_give_proposal_and_accept_copy_perception() -> None:
     assert proposed.now_item_kind is ItemKind.FOOD
     assert proposed.item_kind is ItemKind.MATERIAL
     assert proposed.due_tick == 10
-    assert type(proposed) is not Give
-    assert type(proposed) is not Attack
+    assert not isinstance(proposed, Give)
+    assert not isinstance(proposed, Attack)
     heard = propose_commitment_command(
         Wait(),
         _obs(
@@ -94,7 +97,7 @@ def test_post_give_proposal_and_accept_copy_perception() -> None:
     assert heard.act == "accept"
     assert heard.commitment_kind == "promise"
     assert heard.item_kind is ItemKind.MATERIAL
-    assert type(heard) is not Give
+    assert not isinstance(heard, Give)
 
 
 def test_channel_off_keeps_the_ranked_command() -> None:

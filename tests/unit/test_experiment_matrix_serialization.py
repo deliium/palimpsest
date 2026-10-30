@@ -34,6 +34,7 @@ from experiments.models import ExperimentSeedMatrix
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -41,7 +42,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _base_config():
+def _base_config() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

@@ -19,6 +19,7 @@ from experiments import (
     build_v3_benchmark_base,
     build_v3_benchmark_scenario,
 )
+from experiments.civilization_benchmark_base import V3BenchmarkBase
 from experiments.civilization_benchmark_suite import (
     FAST_COHORT_SCHEDULE_ID,
     RESEARCH_SCHEDULE_ID,
@@ -36,7 +37,7 @@ from simulation.runner_serialization import encode_runner_config
 from world.lifecycle import LifecycleStageId
 
 
-def _base(profile: V3BenchmarkProfile = V3BenchmarkProfile.SMOKE):
+def _base(profile: V3BenchmarkProfile = V3BenchmarkProfile.SMOKE) -> V3BenchmarkBase:
     return build_v3_benchmark_base(
         seed=None,
         profile=profile,

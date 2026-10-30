@@ -8,6 +8,7 @@ from simulation.branch_compare import JournalBranchCompare, compare_branch_timel
 from simulation.branching import BranchTimelineCompareRequest
 from simulation.clock import Tick
 from simulation.models import RunId
+from simulation.persistence import TickAppendRequest, TickCommit
 from world.events import Waited, WorldEvent, make_replayable_event
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
@@ -38,6 +39,17 @@ def _event(
 class _FakeJournal:
     def __init__(self, events: dict[str, tuple[WorldEvent, ...]]) -> None:
         self._events = events
+
+    async def append_tick(self, request: TickAppendRequest) -> TickCommit:
+        raise NotImplementedError("Comparison journal is read-only")
+
+    async def get_tick_commit(self, run_id: RunId, tick: Tick) -> TickCommit | None:
+        raise NotImplementedError("Comparison fixture only supplies events")
+
+    async def list_tick_commits(
+        self, run_id: RunId, *, from_tick: Tick, to_tick: Tick | None
+    ) -> tuple[TickCommit, ...]:
+        raise NotImplementedError("Comparison fixture only supplies events")
 
     async def list_events(
         self,

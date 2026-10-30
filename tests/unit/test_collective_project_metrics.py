@@ -11,12 +11,14 @@ from analysis.specifications import METRIC_FAMILY_COUNT, MetricFamilyId
 from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V19,
+    EventDetails,
     OccurrenceContext,
     ProjectAbandoned,
     ProjectCompleted,
     ProjectContributed,
     ProjectCreated,
     ProjectShortage,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
@@ -152,7 +154,7 @@ def test_sums_contributors_and_outcomes() -> None:
     assert outcome["outcome_den"] == 2
 
 
-def _event(details: object, tick: int):
+def _event(details: EventDetails, tick: int) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(f"evt-{tick}-1"),
         run_id="run-1",
@@ -164,7 +166,7 @@ def _event(details: object, tick: int):
             actor_id=EntityId("body-a"),
         ),
         resulting_revision=WorldRevision(tick),
-        details=details,  # type: ignore[arg-type]
+        details=details,
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
         schema_version=EVENT_SCHEMA_REPLAY_V19,
     )

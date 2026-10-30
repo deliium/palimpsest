@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from agents.cognition.trace import (
@@ -11,6 +13,7 @@ from agents.cognition.trace import (
 )
 from agents.models import AgentId
 from simulation.cognition_trace import (
+    CognitionTraceInvocation,
     InMemoryCognitionTraceRepository,
     build_cognition_trace_invocation,
     export_cognition_trace_invocations,
@@ -19,7 +22,7 @@ from simulation.cognition_trace import (
 from simulation.models import RunId
 
 
-def _invocation(invocation_id: str, tick: int = 0):
+def _invocation(invocation_id: str, tick: int = 0) -> CognitionTraceInvocation:
     stage = CognitionTraceStageSummary(
         stage_kind=CognitionTraceStageKind.OBSERVATION,
         status=CognitionTraceStageStatus.COMPLETED,
@@ -101,7 +104,7 @@ async def test_trace_export_iterator_rejects_nonadvancing_cursor() -> None:
         iter_cognition_trace_invocations,
     )
 
-    class _Stuck:
+    class _Stuck(InMemoryCognitionTraceRepository):
         async def list_invocations(self, **_kwargs: object) -> CognitionTracePage:
             return CognitionTracePage(
                 items=(_invocation("inv-stuck"),), next_cursor="stuck-cursor"
@@ -110,13 +113,13 @@ async def test_trace_export_iterator_rejects_nonadvancing_cursor() -> None:
     with pytest.raises(ValueError, match="cognition_trace_cursor_nonadvancing"):
         async for _item in iter_cognition_trace_invocations(
             _Stuck(),
-            run_id=RunId("run-soft"),  # type: ignore[arg-type]
+            run_id=RunId("run-soft"),
         ):
             pass
 
 
 @pytest.mark.asyncio
-async def test_trace_auxiliary_export_is_read_only(tmp_path) -> None:
+async def test_trace_auxiliary_export_is_read_only(tmp_path: Path) -> None:
     from research_runner.history_archive_composition import (
         export_cognition_trace_auxiliary,
     )

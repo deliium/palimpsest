@@ -15,7 +15,9 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V30,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    DevelopmentalLearningSpec,
     MentorshipSpec,
+    SimulationRunnerConfig,
     SkillLearningMode,
     TeachingInteractionMode,
     V3CapabilityFlags,
@@ -30,7 +32,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -62,7 +64,7 @@ def _plain_base():
     )
 
 
-def _with_teaching(agents):
+def _with_teaching(agents: tuple[AgentRunnerSpec, ...]) -> tuple[AgentRunnerSpec, ...]:
     return tuple(
         replace(
             agent,
@@ -76,18 +78,20 @@ def _with_teaching(agents):
     )
 
 
-def _mentorship_config(**extra):
+def _mentorship_config(
+    *, developmental_learning: DevelopmentalLearningSpec | None = None
+) -> SimulationRunnerConfig:
     base = _plain_base()
-    payload = {
-        "schema_version": RUNNER_SCHEMA_VERSION_V30,
-        "agents": _with_teaching(base.agents),
-        "v3_capability_flags": V3CapabilityFlags(generational_population=True),
-        "population_lifecycle": example_population_lifecycle_spec(),
-        "new_agent_initialization": default_new_agent_initialization_spec(),
-        "mentorship": example_mentorship_spec(),
-    }
-    payload.update(extra)
-    return replace(base, **payload)
+    return replace(
+        base,
+        schema_version=RUNNER_SCHEMA_VERSION_V30,
+        agents=_with_teaching(base.agents),
+        v3_capability_flags=V3CapabilityFlags(generational_population=True),
+        population_lifecycle=example_population_lifecycle_spec(),
+        new_agent_initialization=default_new_agent_initialization_spec(),
+        mentorship=example_mentorship_spec(),
+        developmental_learning=developmental_learning,
+    )
 
 
 def test_mentorship_v30_round_trip() -> None:

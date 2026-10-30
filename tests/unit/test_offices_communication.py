@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from agents.cognition.models import CounterpartBinding, OwnerSafeSocialIdentity
 from agents.cognition.offices import (
+    OfficeConceptLedger,
     OfficeConceptStatus,
     apply_office_concept_update,
     office_communicate_utterance,
@@ -147,7 +148,7 @@ def _message(
     )
 
 
-def _recognized_sender() -> tuple[object, str, _Mode]:
+def _recognized_sender() -> tuple[OfficeConceptLedger, str, _Mode]:
     context = _context(_observation(tick=2))
     ledger = None
     for tick in range(1, 6):
@@ -206,6 +207,7 @@ def test_office_speech_stamps_existing_talk_and_receiver_forms_fresh_evidence() 
     ]
     assert "office_role" in predicates
 
+    assert isinstance(stamped, Talk)
     incoming = ObservedCommunication(
         provenance=ObservationProvenance(
             source_kind=ObservationSourceKind.COMMUNICATION,
@@ -292,6 +294,7 @@ def test_receiver_trust_gates_uptake() -> None:
         ledger=sender_ledger,
         mode=mode,
     )
+    assert isinstance(stamped, Talk)
     incoming = ObservedCommunication(
         provenance=ObservationProvenance(
             source_kind=ObservationSourceKind.COMMUNICATION,
@@ -395,8 +398,9 @@ def test_office_precedence_survives_prior_narrative_relations() -> None:
         ledger=sender_ledger,
         mode=mode,
     )
+    assert isinstance(stamped, Talk)
     predicates = {
         relation.predicate
-        for relation in stamped.utterance.content.relations  # type: ignore[union-attr]
+        for relation in stamped.utterance.content.relations
     }
     assert "office_role" in predicates

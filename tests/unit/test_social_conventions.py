@@ -755,6 +755,7 @@ def test_habitual_exchange_promotes_and_links_competing_variant() -> None:
             identity,
             talk_ledger,
         )
+    assert talk_ledger is not None
     wait_belief = _belief(talk_ledger, ConventionSituation.COLOCATED_MEETING, "wait")
     talk_belief = _belief(talk_ledger, ConventionSituation.COLOCATED_MEETING, "talk")
     assert talk_belief.belief_id in wait_belief.competing_variant_ids

@@ -569,12 +569,11 @@ def evaluate_knowledge_genealogy(
             denominator=0,
         )
     if require_transmission:
-        living = probe.living_owner_ids()
         transmitted = [
             audit
             for audit in audits
             if _origin_token(getattr(audit, "origin", None)) in _TRANSMISSION_ORIGINS
-            and getattr(getattr(audit, "owner_id", None), "value", None) in living
+            and getattr(audit, "hop_index", 0) >= 1
         ]
         if not transmitted:
             return V3BenchmarkCheck(

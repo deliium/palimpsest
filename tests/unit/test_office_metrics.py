@@ -100,6 +100,7 @@ def test_ambiguous_alignment_is_excluded_from_dispute_denominator() -> None:
         rows, alignments, run_id="run", input_revision="rev"
     )
     assert document.values["ambiguous_alignment_count"] == 1
+    assert isinstance(document.values["excluded_alignment_count"], int)
     assert document.values["excluded_alignment_count"] >= 1
     assert document.availability is MetricAvailability.PARTIAL
 

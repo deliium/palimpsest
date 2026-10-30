@@ -140,6 +140,7 @@ class OwnerStoreSnapshot:
     mentorship_audits: int = 0
     cultural_audits: int = 0
     artifact_interpretations: int = 0
+    institutional_memory_entries: int = 0
 
     def count(self, store: str) -> int | None:
         for name, value in self.counts:
@@ -204,6 +205,9 @@ def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapsh
         cultural_audits=content_count(getattr(runtime, "cultural_feature_audits", ())),
         artifact_interpretations=content_count(
             getattr(runtime, "artifact_interpretations", ())
+        ),
+        institutional_memory_entries=content_count(
+            getattr(runtime, "institutional_memory", None)
         ),
     )
 
@@ -918,12 +922,73 @@ def evaluate_required_actions(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ObservedOwnerStore:
+    """One owner's measured non-empty store content at a finalized boundary."""
+
+    boundary_tick: int
+    owner_id: str
+    count: int
+
+
+def observed_store_counts(
+    probe: object, store: str
+) -> tuple[ObservedOwnerStore, ...]:
+    """Return measured non-empty owner counts for one store over the window.
+
+    This complements final-boundary exports: a transmission, hypothesis, claim
+    or memory entry that occurred while its owner was alive remains measured
+    evidence even if that owner died before the run finished.
+    """
+    observations = getattr(probe, "observations", ())
+    rows: list[ObservedOwnerStore] = []
+    for observation in observations:
+        for owner in getattr(observation, "owners", ()):
+            counter = getattr(owner, "count", None)
+            if not callable(counter):
+                continue
+            try:
+                value = counter(store)
+            except (KeyError, TypeError):
+                continue
+            if value:
+                rows.append(
+                    ObservedOwnerStore(
+                        boundary_tick=observation.boundary_tick,
+                        owner_id=owner.owner_id,
+                        count=value,
+                    )
+                )
+    return tuple(rows)
+
+
+def observed_institutional_memory(
+    probe: object,
+) -> tuple[ObservedOwnerStore, ...]:
+    """Return non-empty institutional-memory entries measured at boundaries."""
+    observations = getattr(probe, "observations", ())
+    rows: list[ObservedOwnerStore] = []
+    for observation in observations:
+        for owner in getattr(observation, "owners", ()):
+            value = getattr(owner, "institutional_memory_entries", 0)
+            if value:
+                rows.append(
+                    ObservedOwnerStore(
+                        boundary_tick=observation.boundary_tick,
+                        owner_id=owner.owner_id,
+                        count=int(value),
+                    )
+                )
+    return tuple(rows)
+
+
 __all__ = [
     "GENERATIONAL_INVARIANT_IDS",
     "NOT_PERSISTED_STORES",
     "STORE_PROBE_PATHS",
     "BenchmarkBoundaryProbe",
     "BoundaryObservation",
+    "ObservedOwnerStore",
     "OwnerStoreSnapshot",
     "blank_slate_check",
     "content_count",
@@ -936,4 +1001,6 @@ __all__ = [
     "evaluate_historical_memory",
     "evaluate_population_lifecycle",
     "evaluate_required_actions",
+    "observed_institutional_memory",
+    "observed_store_counts",
 ]

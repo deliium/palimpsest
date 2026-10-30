@@ -62,9 +62,6 @@ def _record(*, artifact_id: str = "art-record-1") -> InformationArtifact:
 
 def _seeded_engine(*, seed: int = 1, dynamics: object | None = None) -> WorldEngine:
     fixture = two_location_fixture()
-    kwargs: dict[str, object] = {}
-    if dynamics is not None:
-        kwargs["environmental_dynamics"] = dynamics
     return WorldEngine(
         config=physical_config(seed),
         bootstrap=WorldBootstrap(
@@ -78,7 +75,7 @@ def _seeded_engine(*, seed: int = 1, dynamics: object | None = None) -> WorldEng
             registrations=fixture.registrations,
             artifacts=(_record(),),
         ),
-        **kwargs,
+        environmental_dynamics=dynamics,
     )
 
 

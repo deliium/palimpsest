@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
+from typing import cast
 
 import pytest
 
@@ -59,6 +60,7 @@ from world.communications import (
 from world.identifiers import EntityId, EventId
 from world.models import AgentBody, PhysicalRules
 from world.observations import (
+    Observation,
     ObservationProvenance,
     ObservationSourceKind,
     ObservedCommunication,
@@ -385,13 +387,19 @@ def test_updater_rejects_foreign_types_and_owner_mismatch(
     policy = default_epistemic_policy()
     seen = _watch(tick=2)
     with pytest.raises(TypeError):
-        update_epistemic_state(model, object.__new__(WorldState), (), policy)
+        update_epistemic_state(
+            model, cast(Observation, object.__new__(WorldState)), (), policy
+        )
     with pytest.raises(TypeError):
-        update_epistemic_state(model, object.__new__(PhysicalRules), (), policy)
+        update_epistemic_state(
+            model, cast(Observation, object.__new__(PhysicalRules)), (), policy
+        )
     with pytest.raises(TypeError):
-        update_epistemic_state(model, object.__new__(AgentBody), (), policy)
+        update_epistemic_state(
+            model, cast(Observation, object.__new__(AgentBody)), (), policy
+        )
     with pytest.raises(TypeError):
-        update_epistemic_state(model, seen, object(), policy)  # type: ignore[arg-type]
+        update_epistemic_state(model, cast(Observation, object()), (), policy)
     with pytest.raises(ValueError, match="owner_mismatch"):
         update_epistemic_state(
             model,

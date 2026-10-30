@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from experiments.coordinator import ExperimentCoordinator
@@ -46,6 +48,7 @@ def test_bl_conditions_are_v55_and_real_regions() -> None:
         conditions["bl-single-cohort"].population_lifecycle.demographic_policy_id
         == "disabled"
     )
+    assert conditions["bl-generational-unassisted"].population_lifecycle is not None
     assert (
         conditions[
             "bl-generational-unassisted"
@@ -79,7 +82,7 @@ def test_only_contact_installs_the_versioned_intervention() -> None:
 
 @pytest.mark.asyncio
 async def test_bl_runs_produce_multiple_generations_and_movement(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     from experiments.generational_execution import (
         PLAIN_RECIPE_ID,

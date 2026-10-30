@@ -35,7 +35,7 @@ from tests.simulation_helpers import (
 )
 from world.actions import Feed, Transport
 from world.dependency_care import DependencyNeedRegister
-from world.events import EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12
+from world.events import EVENT_SCHEMA_REPLAY_V11, EVENT_SCHEMA_REPLAY_V12, Fed
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.lifecycle import DependencyStatus, LifecycleStageId
 from world.models import Item, non_lethal_physical_rules
@@ -272,6 +272,7 @@ def test_codec_v9_round_trips_dependency_need_registers() -> None:
     )
     encoded = encode_persistence(snap)
     decoded = decode_persistence(encoded, WorldSnapshot)
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.persistence_codec_version == "v9"
     assert len(decoded.dependency_need_registers) == 1
     register = decoded.dependency_need_registers[0]
@@ -297,5 +298,6 @@ def test_feed_event_uses_replay_v12_schema() -> None:
     ]
     assert len(feed_events) == 1
     assert feed_events[0].schema_version == EVENT_SCHEMA_REPLAY_V12
+    assert isinstance(feed_events[0].details, Fed)
     assert feed_events[0].details.item_kind == "food"
     assert feed_events[0].details.hunger_delta is not None

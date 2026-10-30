@@ -13,10 +13,9 @@ from tests.simulation_helpers import (
 )
 from world._replay import project_event_prefix
 from world._state import WorldState
-from world.effects import ActionCause, SystemCause, SystemEffectFamily
+from world.effects import ActionCause, DeathCause, SystemCause, SystemEffectFamily
 from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
-    DeathCause,
     Died,
     JourneyArrived,
     JourneyEnded,
@@ -71,9 +70,12 @@ def _journey() -> Journey:
 
 
 def _event(
-    details, *, event_id: str, tick: int, origin, destination=None, sequence: int = 0
-):
+    details: JourneyStarted | JourneyArrived | JourneyEnded | Died,
+    *, event_id: str, tick: int, origin: EntityId | None,
+    destination: EntityId | None = None, sequence: int = 0
+) -> WorldEvent:
     journey = _journey()
+    cause: ActionCause | SystemCause
     if isinstance(details, JourneyStarted):
         cause = ActionCause(RequestId(f"req-{event_id}"), journey.actor_body_id)
     elif isinstance(details, Died):

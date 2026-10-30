@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -114,6 +115,7 @@ def test_config_enforced_requires_or_defaults_policy() -> None:
         cognitive_budget_mode=CognitionBudgetMode.ENFORCED,
         cognitive_budget_policy=high_cost_budget_limits(),
     )
+    assert explicit.cognitive_budget_policy is not None
     assert explicit.cognitive_budget_policy.max_llm_calls_per_tick == 4
 
 
@@ -220,8 +222,11 @@ def test_policy_from_limits_maps_flat_keys() -> None:
 def test_exhausted_reason_enum_type_distinct_from_prospective() -> None:
     from agents.cognition.prospective import ProspectivePruneReason
 
-    assert BudgetExhaustedReason is not ProspectivePruneReason
-    assert BudgetExhaustedReason.BUDGET_LLM is not ProspectivePruneReason.BUDGET_LLM
+    assert cast(object, BudgetExhaustedReason) is not ProspectivePruneReason
+    assert (
+        cast(object, BudgetExhaustedReason.BUDGET_LLM)
+        is not ProspectivePruneReason.BUDGET_LLM
+    )
     assert BudgetExhaustedReason.BUDGET_LLM.value == "budget_llm"
 
 
@@ -522,6 +527,7 @@ def test_branch_depth_memory_tom_caps_and_epistemic_untouched() -> None:
     fresh = TickBudgetLedger(owner_id=_owner(), tick=1, policy=budget)
     effective = loop._effective_prospective_policy(fresh)
     assert effective is not None
+    assert isinstance(effective, ProspectivePolicy)
     assert effective.max_branches == 2
     assert effective.max_depth == 1
     assert effective.horizon == 1
@@ -559,6 +565,7 @@ def test_reflection_interval_floor_and_skip_mark() -> None:
 def test_runtime_export_cognitive_budget_audits() -> None:
     from types import SimpleNamespace
 
+    from agents.cognition.loop import CognitiveLoop
     from simulation.runner_models import SimulationRunnerResult
     from tests.unit.test_agent_runtime import _runtime
 
@@ -567,7 +574,9 @@ def test_runtime_export_cognitive_budget_audits() -> None:
     audit = TickBudgetLedger(
         owner_id=AgentId("agent-1"), tick=0, policy=low_cost_budget_limits()
     ).snapshot()
-    runtime._loop = SimpleNamespace(last_cognitive_budget_audit=lambda: audit)
+    runtime._loop = cast(
+        CognitiveLoop, SimpleNamespace(last_cognitive_budget_audit=lambda: audit)
+    )
     runtime._commit_cognitive_budget_audit(0)
     exported = runtime.export_cognitive_budget_audits()
     assert exported == (audit,)
@@ -592,7 +601,9 @@ def test_budget_summary_trace_projection() -> None:
     stages = project_cognition_trace_stages(budget_audit=audit)
     assert stages[-1].stage_kind is CognitionTraceStageKind.BUDGET_SUMMARY
     assert stages[-1].status is CognitionTraceStageStatus.COMPLETED
-    assert "llm_calls_used" in stages[-1].counts
+    counts = stages[-1].counts
+    assert counts is not None
+    assert "llm_calls_used" in counts
 
 
 def test_compute_cognitive_budget_metrics_low_vs_high() -> None:

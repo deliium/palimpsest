@@ -23,6 +23,7 @@ from agents.cognition.experimentation import (
 )
 from agents.cognition.memory import build_direct_observation_memory_trace
 from agents.cognition.practical_knowledge import (
+    PracticalKnowledgeLedger,
     apply_practical_knowledge_from_independent_discovery,
     empty_practical_knowledge_ledger,
 )
@@ -39,6 +40,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V36,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
     example_knowledge_genealogy_spec,
@@ -46,7 +48,7 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from tests.unit.test_experiment_resolution import _apply, _details, _state
 from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS
-from world._experiment_laws import catalog_from_rows
+from world._experiment_laws import ExperimentLawCatalog, catalog_from_rows
 from world.actions import Experiment
 from world.experimentation import ExperimentOperator, ExperimentProcessToken
 from world.identifiers import EntityId, EventId, WorldId, WorldRevision
@@ -75,7 +77,7 @@ _ARM_IDS = (
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(
@@ -105,14 +107,15 @@ def _base():
     )
 
 
-def _arm(arm_id: str):
+def _arm(arm_id: str) -> SimulationRunnerConfig:
     definition = experiment_aq_bounded_experimentation(_base(), max_ticks=2)
     return next(
         item for item in definition.conditions if item.condition_id == arm_id
     ).runner_config
 
 
-def _catalog(config):
+def _catalog(config: SimulationRunnerConfig) -> ExperimentLawCatalog:
+    assert config.bounded_experimentation is not None
     return catalog_from_rows(
         config.bounded_experimentation.laws, example_production_catalog()
     )
@@ -154,6 +157,7 @@ def test_aq_failure_unlisted_adds_no_item() -> None:
 def test_aq_success_is_not_knowledge() -> None:
     config = _arm("aq-success-not-knowledge")
     assert config.knowledge_genealogy is None
+    assert config.bounded_experimentation is not None
     assert config.bounded_experimentation.learn_into_genealogy is False
     applied = _apply(_state(), catalog=_catalog(config))
     details = _details(applied)
@@ -190,6 +194,7 @@ def test_aq_success_is_not_knowledge() -> None:
 def test_aq_repeat_then_learn_uses_the_gate() -> None:
     config = _arm("aq-repeat-then-learn")
     assert config.schema_version == RUNNER_SCHEMA_VERSION_V36
+    assert config.bounded_experimentation is not None
     assert config.bounded_experimentation.learn_into_genealogy is True
     assert config.knowledge_genealogy is not None
     owner = AgentId("agent-a")
@@ -237,6 +242,7 @@ def test_aq_repeat_then_learn_uses_the_gate() -> None:
         enabled_kinds=("crafting_process",),
         tick=1,
     )
+    assert isinstance(below, PracticalKnowledgeLedger)
     assert below.entries == ()
     ledger = record_trial(
         ledger,
@@ -255,6 +261,7 @@ def test_aq_repeat_then_learn_uses_the_gate() -> None:
         enabled_kinds=("crafting_process",),
         tick=2,
     )
+    assert isinstance(learned, PracticalKnowledgeLedger)
     assert len(learned.entries) == 1
     assert "evt:evt-1" in learned.entries[0].evidence_refs
     skipped, _audits = apply_practical_knowledge_from_independent_discovery(
@@ -340,11 +347,13 @@ def test_aq_unexpected_without_matching_prediction_is_accidental() -> None:
         enabled_kinds=("crafting_process",),
         tick=1,
     )
+    assert isinstance(knowledge, PracticalKnowledgeLedger)
     assert knowledge.entries == ()
 
 
 def test_aq_llm_cannot_invent_physics() -> None:
     config = _arm("aq-llm-cannot-invent")
+    assert config.bounded_experimentation is not None
     assert config.bounded_experimentation.allow_provider is True
     draft, reason = parse_experiment_draft(
         {

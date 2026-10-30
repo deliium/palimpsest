@@ -10,7 +10,9 @@ from agents.cognition import (
     CulturalFeatureKindId,
     CulturalTransmissionChannelId,
     NarrativeLedger,
+    PracticalKnowledgeLedger,
     SubjectiveCulturalBelief,
+    SubjectivePracticalKnowledge,
     TerminologyLedger,
     empty_cultural_feature_ledger,
     empty_practical_knowledge_ledger,
@@ -20,6 +22,7 @@ from analysis.cultural_evolution_evidence import (
     CULTURAL_EVOLUTION_POLICY_VERSION,
     CULTURAL_FEATURE_DIMENSIONS,
     CulturalAnalysisWindow,
+    CulturalEvolutionInputs,
     TraitPresence,
 )
 from analysis.models import MetricAvailability
@@ -109,7 +112,7 @@ def _practical_entry(
     fingerprint: tuple[str, ...],
     acquired_tick: int,
     source: AgentId | None = None,
-) -> object:
+) -> SubjectivePracticalKnowledge:
     from agents.cognition.practical_knowledge import (
         KnowledgeTransmissionOrigin,
         PracticalKnowledgeKind,
@@ -140,9 +143,9 @@ def _practical_entry(
     )
 
 
-def _practical_ledger(owner: AgentId, entries: tuple[object, ...]) -> object:
-    from agents.cognition.practical_knowledge import PracticalKnowledgeLedger
-
+def _practical_ledger(
+    owner: AgentId, entries: tuple[SubjectivePracticalKnowledge, ...]
+) -> PracticalKnowledgeLedger:
     return PracticalKnowledgeLedger(owner_id=owner, entries=entries)
 
 
@@ -195,7 +198,7 @@ def _frames() -> tuple[CulturalBoundaryExport, ...]:
     return (boundary_0, boundary_1)
 
 
-def _inputs():
+def _inputs() -> CulturalEvolutionInputs:
     return cultural_evolution_inputs_from_capture(
         _frames(),
         run_id="run-normalize",

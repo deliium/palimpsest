@@ -11,7 +11,9 @@ measurements produced against base revision `1c5c18c`.
 
 > **No universal maximum is claimed.** The verified envelope stops at the
 > workloads and horizons that actually completed with exact correctness. The
-> 100k dense lanes did not complete under the configured budget.
+> latest 100k evidence-rich and flags-off lanes did not complete under the
+> configured budget; the generational 100k lane completed ticks but ended with
+> zero living owners, which is a throughput result, not sustained capacity.
 
 ## Verified Envelope
 
@@ -20,17 +22,25 @@ measurements produced against base revision `1c5c18c`.
 | Generational | 10k | `verified` | 4 | 10,000 | 9,999 |
 | Evidence-rich | 10k | `verified` | 4 | 10,000 | 9,999 |
 | Flags-off control | 10k | `tested_incomplete` | 0 | 2,225 | 2,224 |
-| Generational | 100k | `tested_incomplete` | 0 | 22,769 | 22,768 |
-| Evidence-rich | 100k | `tested_incomplete` | 0 | 15,825 | 15,824 |
-| Flags-off control | 100k | `tested_incomplete` | 0 | 2,229 | 2,228 |
+| Generational | 100k | `completed_ticks_population_extinct` | 0 | 100,000 | 99,999 |
+| Evidence-rich | 100k | `tested_incomplete` | 0 | 90,765 | 90,764 |
+| Flags-off control | 100k | `tested_incomplete` | 0 | 8,158 | 8,157 |
 
-The 10k generational repetitions used the identical scientific run ID
+The latest 2026-10-30 V3-44 re-run retained generational/evidence-rich 10k
+completion and a truthfully incomplete flags-off 10k control at 2,189 ticks.
+The generational 100k lane completed 100,000 ticks in 1,196.68 s with 5
+cohorts, 9 births, 9 deaths and 0 living owners at the final boundary; do not
+read that as long-term survival or dense 100k support. Evidence-rich stopped at
+90,765 ticks and the flags-off control at 8,158. Historical-query measurements
+passed separately.
+
+The earlier 10k generational repetitions used the identical scientific run ID
 `v3-43-generational-ticks-10000-seed-23` in separate disposable databases.
 Observed wall times were 130.8–146.3 s; evidence-rich was 166.0–182.1 s.
 Completed 10k artifacts report 5 cohorts, 9 births, 9 deaths, 5,241/5,243
 events, 71,838 SQL calls, 40,204 SQL rows and **0 cognitive invocations after
-death**. Every 100k lane reached its 300 s budget; no dense-100k support,
-throughput promise or population capacity follows from these runs.
+death**. The earlier 100k attempts reached their 300 s budget; no dense-100k support,
+throughput promise or population capacity follows from any 100k run.
 
 Two additional repetitions per 10k lane failed before execution with
 `worker_error_RunnerConstructionError` (four failed artifacts total). They are
@@ -90,7 +100,9 @@ scenario, not a universal tuning rule.
 
 ## Historical Query Measurements
 
-Traceable JSON artifacts live under `/tmp/opencode/v3-43-scale/task19-historical/`.
+Traceable JSON artifacts are written beneath the caller's
+`PALIMPSEST_SCALE_BENCH_OUTPUT` root (see the commands below) and are not
+committed; regenerate them by re-running the lanes.
 
 | Lane | Workload | Result |
 | --- | --- | --- |
@@ -226,8 +238,11 @@ deleted to satisfy a benchmark.
 
 ## Analytical Views and Incremental Metrics
 
-Rebuildable `v3-analytical-view-v1` checkpoints are disposable sidecars, not
-authoritative tables or cognition inputs. Only population comparison and
+Rebuildable `v3-analytical-view-v2` checkpoints are disposable sidecars, not
+authoritative tables or cognition inputs. A sealed checkpoint stores the boundary
+state plus the exact digest of the derived rows; final rows are recomputed and
+verified on resume instead of being stored twice. Legacy `v1` checkpoints remain
+readable. Only population comparison and
 cultural trait dynamics have exact incremental paths; the other cultural
 families remain exact batch/global calculators with separate limits. Trait rows
 are finalized only after the complete window's trait union is known, so late

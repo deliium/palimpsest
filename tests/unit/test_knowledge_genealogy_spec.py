@@ -85,12 +85,14 @@ def test_canonical_payload_exact_keys() -> None:
         "rng_namespace",
         "uptake_compose",
     }
+    assert isinstance(payload["lineage_policy"], dict)
     assert set(payload["lineage_policy"]) == {
         "allow_multi_parent",
         "max_entries_per_owner",
         "max_hop_depth",
         "max_parent_ids",
     }
+    assert isinstance(payload["mutation_policy"], dict)
     assert set(payload["mutation_policy"]) == {
         "allow_combination",
         "allow_mutation",
@@ -100,6 +102,7 @@ def test_canonical_payload_exact_keys() -> None:
         "mutation_requires_evidence",
         "require_combination_distinct_roots",
     }
+    assert isinstance(payload["uptake_compose"], dict)
     assert set(payload["uptake_compose"]) == {
         "developmental",
         "imitation",
@@ -108,6 +111,7 @@ def test_canonical_payload_exact_keys() -> None:
         "teaching",
         "written_record",
     }
+    assert isinstance(payload["query_policy"], dict)
     assert set(payload["query_policy"]) == {
         "include_dead_holders",
         "independent_root_match",

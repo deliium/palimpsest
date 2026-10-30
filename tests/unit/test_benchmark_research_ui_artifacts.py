@@ -8,6 +8,7 @@ import shutil
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import cast
 
 import httpx
 import pytest
@@ -45,7 +46,7 @@ def logging_sandbox() -> Iterator[None]:
 
 
 def _factory(_settings: Settings) -> DatabaseResourcesLike:
-    return FakeResources(engine=FakeEngine())
+    return cast(DatabaseResourcesLike, FakeResources(engine=FakeEngine()))
 
 
 def _settings(**overrides: object) -> Settings:

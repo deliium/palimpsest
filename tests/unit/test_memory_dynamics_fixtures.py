@@ -258,6 +258,7 @@ async def test_source_confusion_and_metrics_assembly() -> None:
     assert report.metric_version == MEMORY_DYNAMICS_METRIC_VERSION
     doc = compute_memory_dynamics(report, input_revision="rev-fixture-1")
     assert doc.availability is MetricAvailability.PRESENT
+    assert isinstance(doc.values["source_confusion"], (int, float))
     assert doc.values["source_confusion"] > 0.0
     for key in (
         "recall_accuracy",

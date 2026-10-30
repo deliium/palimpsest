@@ -11,6 +11,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
+from tests.integration.api_helpers import seed_api_run
 
 from api.app import create_app
 from api.simulation_manager import SimulationManager, TickExecutionResult
@@ -23,6 +24,7 @@ pytestmark = pytest.mark.integration
 _PAYLOAD = b'{"schema_version":"runner-config-v2","agents":[]}'
 _FINGERPRINT = hashlib.sha256(_PAYLOAD).hexdigest()
 _B64 = base64.b64encode(_PAYLOAD).decode("ascii")
+_DEBUG_CREDENTIAL = "research-debug-secret-value-for-integration"
 
 
 def _unique(prefix: str) -> str:
@@ -36,6 +38,7 @@ async def test_api_debug_routes_disabled_by_default(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     run_id = _unique("api-debug")
+    await seed_api_run(database_resources, run_id)
     settings = load_settings(
         env_file=False,
         database_url=migrated_test_database.database_dsn(),
@@ -89,12 +92,13 @@ async def test_api_debug_routes_require_explicit_credential(
     migrated_test_database: Settings,
 ) -> None:
     run_id = _unique("api-debug-on")
+    await seed_api_run(database_resources, run_id)
     settings = load_settings(
         env_file=False,
         database_url=migrated_test_database.database_dsn(),
         test_database_url=migrated_test_database.database_dsn(),
         api_debug_enabled=True,
-        api_debug_credential=SecretStr("research-debug-secret-value"),
+        api_debug_credential=SecretStr(_DEBUG_CREDENTIAL),
     )
     run_control = create_run_control_repository(database_resources.session_factory)
 
@@ -132,6 +136,6 @@ async def test_api_debug_routes_require_explicit_credential(
             assert missing.status_code == 401
             query = await client.get(
                 f"/v1/simulations/{run_id}/owners/agent-1/memories"
-                "?debug_secret=research-debug-secret-value"
+                f"?debug_secret={_DEBUG_CREDENTIAL}"
             )
             assert query.status_code == 401

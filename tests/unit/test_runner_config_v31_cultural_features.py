@@ -9,13 +9,18 @@ import pytest
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
 from experiments.matrix_schema import finalize_matrix_cell_config
-from simulation.new_agent_initialization import default_new_agent_initialization_spec
+from simulation.new_agent_initialization import (
+    NewAgentInitializationSpec,
+    default_new_agent_initialization_spec,
+)
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V23,
     RUNNER_SCHEMA_VERSION_V31,
     AgentCognitionSpec,
     AgentRunnerSpec,
     CulturalFeatureProvenanceSpec,
+    PopulationLifecycleSpec,
+    SimulationRunnerConfig,
     SkillLearningMode,
     TeachingInteractionMode,
     V3CapabilityFlags,
@@ -31,7 +36,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -63,7 +68,7 @@ def _plain_base():
     )
 
 
-def _with_teaching(agents):
+def _with_teaching(agents: tuple[AgentRunnerSpec, ...]) -> tuple[AgentRunnerSpec, ...]:
     return tuple(
         replace(
             agent,
@@ -77,14 +82,19 @@ def _with_teaching(agents):
     )
 
 
-def _cultural_only_config(**extra):
+def _cultural_only_config(
+    *,
+    population_lifecycle: PopulationLifecycleSpec | None = None,
+    new_agent_initialization: NewAgentInitializationSpec | None = None,
+) -> SimulationRunnerConfig:
     base = _plain_base()
     return replace(
         base,
         schema_version=RUNNER_SCHEMA_VERSION_V31,
         v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
         cultural_feature_provenance=example_cultural_feature_provenance_spec(),
-        **extra,
+        population_lifecycle=population_lifecycle,
+        new_agent_initialization=new_agent_initialization,
     )
 
 

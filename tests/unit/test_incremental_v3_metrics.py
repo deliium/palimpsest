@@ -22,8 +22,12 @@ from analysis.cultural_trait_dynamics import (
     trait_sort_key,
 )
 from analysis.incremental_cultural_traits import (
+    LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION,
     AnalyticalViewMismatch,
     TraitDynamicsAccumulator,
+    _digest,
+    _legacy_checkpoint_payload,
+    _measurement_digest,
     compute_cultural_trait_dynamics_incremental,
     read_checkpoint,
     resume_checkpoint,
@@ -597,6 +601,115 @@ def test_trait_incremental_handles_cycle_and_missing_baseline() -> None:
     assert compute_cultural_trait_dynamics_incremental(
         missing
     ) == compute_cultural_trait_dynamics(missing)
+
+
+def test_trait_checkpoint_compact_v2_stores_rows_only_as_digest(
+    tmp_path: Path,
+) -> None:
+    inputs = _inputs(_late_trait_frames())
+    accumulator = TraitDynamicsAccumulator.from_inputs(inputs)
+    for boundary in inputs.boundaries:
+        accumulator.apply(boundary)
+    accumulator.seal()
+    identity = accumulator.identity(
+        config_fingerprint=_FINGERPRINT,
+        manifest_identity=_MANIFEST,
+    )
+    checkpoint = accumulator.checkpoint(
+        config_fingerprint=_FINGERPRINT,
+        manifest_identity=_MANIFEST,
+    )
+    path = tmp_path / "view.json"
+    write_checkpoint(path, checkpoint)
+    document = json.loads(path.read_bytes())
+    assert set(document) == {
+        "schema_version",
+        "identity",
+        "states",
+        "evidence",
+        "output_digest",
+        "digest",
+    }
+    assert document["schema_version"] == "v3-analytical-view-v2"
+    assert document["output_digest"] == _measurement_digest(checkpoint.measurements)
+    assert len(document["output_digest"]) == 64
+
+    resumed = resume_checkpoint(read_checkpoint(path), expected=identity)
+    assert resumed.measurements() == compute_cultural_trait_dynamics(inputs)
+
+    prefix = TraitDynamicsAccumulator.from_inputs(inputs)
+    prefix.apply(inputs.boundaries[0])
+    prefix_path = tmp_path / "prefix.json"
+    write_checkpoint(
+        prefix_path,
+        prefix.checkpoint(
+            config_fingerprint=_FINGERPRINT,
+            manifest_identity=_MANIFEST,
+        ),
+    )
+    prefix_document = json.loads(prefix_path.read_bytes())
+    assert prefix_document["output_digest"] is None
+    assert "measurements" not in prefix_document
+
+
+def test_trait_checkpoint_legacy_v1_payload_still_reads_and_resumes(
+    tmp_path: Path,
+) -> None:
+    inputs = _inputs(_late_trait_frames())
+    accumulator = TraitDynamicsAccumulator.from_inputs(inputs)
+    for boundary in inputs.boundaries:
+        accumulator.apply(boundary)
+    accumulator.seal()
+    identity = accumulator.identity(
+        config_fingerprint=_FINGERPRINT,
+        manifest_identity=_MANIFEST,
+    )
+    checkpoint = accumulator.checkpoint(
+        config_fingerprint=_FINGERPRINT,
+        manifest_identity=_MANIFEST,
+    )
+    legacy_checkpoint = replace(
+        checkpoint,
+        identity=replace(
+            checkpoint.identity,
+            schema_version=LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION,
+        ),
+    )
+    legacy_payload = _legacy_checkpoint_payload(legacy_checkpoint)
+    legacy_digest = _digest(legacy_payload)
+    legacy_payload["digest"] = legacy_digest
+    legacy_checkpoint = replace(legacy_checkpoint, digest=legacy_digest)
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps(legacy_payload))
+
+    legacy = read_checkpoint(path)
+    assert legacy == legacy_checkpoint
+    resumed = resume_checkpoint(legacy, expected=identity)
+    assert resumed.measurements() == checkpoint.measurements
+
+
+def test_trait_checkpoint_rejects_inconsistent_output_digest(
+    tmp_path: Path,
+) -> None:
+    inputs = _inputs(_late_trait_frames())
+    accumulator = TraitDynamicsAccumulator.from_inputs(inputs)
+    for boundary in inputs.boundaries:
+        accumulator.apply(boundary)
+    accumulator.seal()
+    checkpoint = accumulator.checkpoint(
+        config_fingerprint=_FINGERPRINT,
+        manifest_identity=_MANIFEST,
+    )
+    path = tmp_path / "view.json"
+    write_checkpoint(path, checkpoint)
+    document = json.loads(path.read_bytes())
+    document["output_digest"] = "0" * 64
+    document["digest"] = _digest(
+        {key: value for key, value in document.items() if key != "digest"}
+    )
+    path.write_text(json.dumps(document))
+    with pytest.raises(AnalyticalViewMismatch, match="view_output_digest_mismatch"):
+        read_checkpoint(path)
 
 
 def test_trait_incremental_handles_baseline_death() -> None:

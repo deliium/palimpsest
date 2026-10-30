@@ -58,16 +58,16 @@ def _engine(
             registrations=fixture.registrations,
             revision=fixture.revision,
         )
-    kwargs: dict[str, object] = {}
-    if policy is not None:
-        kwargs["skill_policy"] = policy
-        kwargs["skill_entity_ids"] = tuple(EntityId(entity) for entity in enabled)
-        if ledger is not None:
-            kwargs["skill_ledger"] = ledger
     return WorldEngine(
         config=physical_config(seed),
         bootstrap=fixture.as_bootstrap(),
-        **kwargs,
+        skill_policy=policy,
+        skill_entity_ids=(
+            tuple(EntityId(entity) for entity in enabled)
+            if policy is not None
+            else None
+        ),
+        skill_ledger=ledger if policy is not None else None,
     )
 
 
@@ -150,6 +150,7 @@ def test_navigation_and_healing_match_across_seeds_and_zero_is_identity() -> Non
         assert moved.resolutions[0].status is ActionResolutionStatus.APPLIED
         actor = seed_engine._snapshot.world.state.bodies[EntityId("body-1")]
         fatigue = actor.fatigue.value
+        assert health_delta is not None
         return fatigue, health_delta
 
     left = run(

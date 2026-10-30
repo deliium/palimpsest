@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 
 from agents.models import AgentId
-from observer.contracts import ScreenPoint
+from observer.contracts import ObserverFrame, ScreenPoint
 from observer.layout import LocationVisualSpec, ObserverLayoutCatalog
 from observer.project import project_frame
 from observer.version import OBSERVER_LAYOUT_SCHEMA_VERSION
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
 from simulation.models import RunId, SimulationRunConfig
-from simulation.observer_facts import scene_from_facts
+from simulation.observer_facts import ObjectiveScene, scene_from_facts
 from tests.simulation_helpers import make_item, make_location, weather_for_locations
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import AgentBody, LifeStatus
@@ -28,7 +28,7 @@ from world.values import (
 pytestmark = pytest.mark.unit
 
 
-def _scene():
+def _scene() -> ObjectiveScene:
     locations = (
         make_location("loc-1", name="Camp", adjacent=("loc-2",)),
         make_location("loc-2", name="Ridge", adjacent=("loc-1",)),
@@ -112,7 +112,7 @@ def _catalog(x: float) -> ObserverLayoutCatalog:
     )
 
 
-def _objective(frame) -> tuple[object, ...]:
+def _objective(frame: ObserverFrame) -> tuple[object, ...]:
     world = frame.world
     return (
         tuple(item.location_id for item in world.locations),

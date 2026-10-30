@@ -9,10 +9,14 @@ import pytest
 from agents.models import AgentId
 from simulation.engine import WorldEngine
 from simulation.lifecycle import ActionSubmission
-from tests.physical_helpers import physical_config, two_location_fixture
+from tests.physical_helpers import (
+    PhysicalWorldFixture,
+    physical_config,
+    two_location_fixture,
+)
 from tests.simulation_helpers import alive_body, make_location
 from world._skills import SkillDomain, default_objective_skill_policy
-from world.actions import Attack, Help, Move, Search, Talk
+from world.actions import AgentCommand, Attack, Help, Move, Search, Talk
 from world.communications import CommunicationRelation, origin_utterance
 from world.identifiers import EntityId
 from world.models import PhysicalRules
@@ -24,7 +28,9 @@ def _quantize(value: float) -> float:
     return round(value / 1e-6) * 1e-6
 
 
-def _fixture(*, visibility: float = 1.0, bystander: bool = False):
+def _fixture(
+    *, visibility: float = 1.0, bystander: bool = False
+) -> PhysicalWorldFixture:
     fixture = two_location_fixture(item_on_ground=False)
     locations = (
         make_location(
@@ -67,7 +73,7 @@ def _engine(
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object) -> None:
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> None:
     batch = engine.observe()
     engine.resolve_tick((ActionSubmission(batch.token, AgentId(agent), command),))
 

@@ -9,12 +9,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from api.app import DisposableEngine, create_app
+from api.app import DatabaseResourcesLike, DisposableEngine, create_app
 from api.observer_service import ObserverReadService
 from api.simulation_manager import SimulationManager
 from infrastructure.settings import load_settings
@@ -33,6 +34,10 @@ class FakeEngine:
 class FakeResources:
     def __init__(self) -> None:
         self.engine: DisposableEngine = FakeEngine()
+
+
+def _database_factory(_settings: object) -> DatabaseResourcesLike:
+    return cast(DatabaseResourcesLike, FakeResources())
 
 
 @pytest.fixture(autouse=True)
@@ -138,10 +143,6 @@ async def test_labels_route_requires_debug_and_uses_live_checkpoint(
         api_debug_enabled=True,
         api_debug_credential=secret,
     )
-    manager = SimulationManager(
-        settings=settings,
-        run_control=InMemoryRunControlRepository(),
-    )
     binding = _Binding(
         label_token="place_a1b2c3d4",
         referent_kind="location",
@@ -154,12 +155,20 @@ async def test_labels_route_requires_debug_and_uses_live_checkpoint(
         last_observation_key=(7, 0),
         semantic_naming=SimpleNamespace(bindings=(binding,)),
     )
-    manager.owner_runtime_checkpoint = (  # type: ignore[method-assign]
-        lambda _run_id, _owner_id: checkpoint
+
+    class _CheckpointManager(SimulationManager):
+        def owner_runtime_checkpoint(
+            self, run_id: str, owner_id: str
+        ) -> object | None:
+            return checkpoint
+
+    manager = _CheckpointManager(
+        settings=settings,
+        run_control=InMemoryRunControlRepository(),
     )
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=_database_factory,
         simulation_manager=manager,
         attach_default_manager=False,
     )
@@ -168,7 +177,7 @@ async def test_labels_route_requires_debug_and_uses_live_checkpoint(
     closed = load_settings(env_file=False)
     closed_app = create_app(
         settings=closed,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=_database_factory,
         simulation_manager=SimulationManager(
             settings=closed,
             run_control=InMemoryRunControlRepository(),

@@ -36,6 +36,7 @@ from simulation.persistence import (
     SimulationRunRepository,
     SnapshotRepository,
     StreamRepository,
+    SubjectiveClonePort,
     TickJournalRepository,
 )
 from simulation.replay import ReplayService
@@ -165,8 +166,9 @@ def get_branch_api_service(request: Request) -> BranchApiService:
         journal=journal,
         snapshots=snapshots,
         lineage=lineage,
-        subjective_clone=create_empty_boundary_subjective_clone(
-            resources.session_factory
+        subjective_clone=cast(
+            SubjectiveClonePort,
+            create_empty_boundary_subjective_clone(resources.session_factory),
         ),
         run_control=run_control,
     )

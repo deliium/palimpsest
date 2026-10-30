@@ -210,7 +210,9 @@ def test_cross_group_accuracy_denominator_excludes_coverage_gaps() -> None:
     document = compute_cross_group_translation_metric(
         result, run_id="run-1", input_revision="rev-1"
     )
-    ratios = dict(item.split(":") for item in document.values["ratios"].split(";"))
+    ratio_text = document.values["ratios"]
+    assert isinstance(ratio_text, str)
+    ratios = dict(item.split(":") for item in ratio_text.split(";"))
     assert float(ratios["exact_rate"]) == 0.5
     assert float(ratios["wrong_rate"]) == 0.5
 

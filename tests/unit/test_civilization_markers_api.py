@@ -24,11 +24,10 @@ from simulation.civilization_ports import CivilizationBoundaryPublication
 from tests.unit.test_civilization_overlay_api import (
     _DEBUG,
     _INSPECT,
-    _RUN,
-    _WORLD,
     _app,
     _headers,
 )
+from tests.unit.test_civilization_publication import _RUN, _WORLD
 from tests.unit.test_observer_demographic_api import _client
 
 pytestmark = pytest.mark.unit
@@ -38,7 +37,9 @@ def _markers_url(run_id: str = _RUN) -> str:
     return f"/v1/simulations/{run_id}/observer/civilization/markers"
 
 
-def _marker_boundary(tick: int, count: int, *, future: bool = False):
+def _marker_boundary(
+    tick: int, count: int, *, future: bool = False
+) -> CivilizationBoundaryPublication:
     scope = CivilizationScope(
         CivilizationLayer.TECHNOLOGY,
         CivilizationEvidenceClass.SUBJECTIVE,
@@ -90,7 +91,9 @@ def _tree(root: Path) -> dict[str, str]:
     }
 
 
-async def test_marker_window_bounds_missing_bands_and_authorization(tmp_path: Path):
+async def test_marker_window_bounds_missing_bands_and_authorization(
+    tmp_path: Path,
+) -> None:
     await _publish(tmp_path)
     before = _tree(tmp_path)
     async with _client(_app(tmp_path)) as client:
@@ -153,10 +156,12 @@ async def test_marker_window_bounds_missing_bands_and_authorization(tmp_path: Pa
     assert _tree(tmp_path) == before
 
 
-async def test_more_than_200_markers_continue_without_duplicates(tmp_path: Path):
+async def test_more_than_200_markers_continue_without_duplicates(
+    tmp_path: Path,
+) -> None:
     await _publish(tmp_path)
     async with _client(_app(tmp_path)) as client:
-        params = {
+        params: dict[str, str | int] = {
             "evidence_class": "SUBJECTIVE",
             "owner_id": "agent-a",
             "from_tick": 4,
@@ -177,7 +182,7 @@ async def test_more_than_200_markers_continue_without_duplicates(tmp_path: Path)
     assert second["next_cursor"] is None
 
 
-async def test_marker_publication_pin_and_cursor_expiry(tmp_path: Path):
+async def test_marker_publication_pin_and_cursor_expiry(tmp_path: Path) -> None:
     await _publish(tmp_path)
     clock = [1000]
     codec = CivilizationCursorCodec(b"m" * 32, now=lambda: clock[0])

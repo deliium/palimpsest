@@ -650,6 +650,8 @@ def test_agent_and_goal_round_trip_with_model_version() -> None:
 def test_legacy_agent_and_goal_decode_intentionally() -> None:
     from agents.models import (
         REQUIRED_DRIVE_KINDS,
+        Agent,
+        Goal,
         GoalOutcomeKind,
         GoalStatus,
     )
@@ -660,6 +662,9 @@ def test_legacy_agent_and_goal_decode_intentionally() -> None:
         b'"schema_version":1,"type":"goal"}'
     )
     decoded_goal = decode_domain(legacy_goal)
+    assert isinstance(decoded_goal, Goal)
+    assert decoded_goal.outcome is not None
+    assert decoded_goal.progress is not None
     assert decoded_goal.status is GoalStatus.ACTIVE
     assert decoded_goal.outcome.kind is GoalOutcomeKind.PRESERVE_LIFE
     assert decoded_goal.progress.estimate == 0.0
@@ -678,6 +683,8 @@ def test_legacy_agent_and_goal_decode_intentionally() -> None:
         b'"schema_version":1,"type":"goal"}'
     )
     decoded_v2 = decode_domain(v2_goal)
+    assert isinstance(decoded_v2, Goal)
+    assert decoded_v2.progress is not None
     assert decoded_v2.horizon.value == "medium_term"
     assert decoded_v2.confidence == 0.8
     assert decoded_v2.progress.estimate == 0.3
@@ -690,6 +697,7 @@ def test_legacy_agent_and_goal_decode_intentionally() -> None:
         b'"schema_version":1,"type":"agent"}'
     )
     decoded_agent = decode_domain(legacy_agent)
+    assert isinstance(decoded_agent, Agent)
     assert decoded_agent.agent_id.value == "agent-1"
     assert decoded_agent.drives is not None
     assert len(decoded_agent.drives.dispositions) == len(REQUIRED_DRIVE_KINDS)

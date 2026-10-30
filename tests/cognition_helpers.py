@@ -75,13 +75,13 @@ from memory.models import (
     ReconstructedMemory,
     ReconstructionId,
 )
+from social.models import RelationshipId
 from social.relationships import (
     DirectedRelationshipProfile,
     RelationshipActivationState,
     RelationshipConfidence,
     RelationshipDimension,
     RelationshipDimensionState,
-    RelationshipId,
     RelationshipPolicyRef,
     RelationshipRevisionId,
 )
@@ -219,7 +219,7 @@ def build_observation(
     exit_id: str = "loc-2",
     threat_id: str = "body-2",
 ) -> Observation:
-    resources = ()
+    resources: tuple[ObservedResource, ...] = ()
     if with_water:
         resources = (
             ObservedResource(
@@ -230,10 +230,10 @@ def build_observation(
                 unit="L",
             ),
         )
-    exits = ()
+    exits: tuple[VisibleExit, ...] = ()
     if with_exit:
         exits = (VisibleExit(destination_id=EntityId(exit_id), name="path"),)
-    bodies = ()
+    bodies: tuple[VisibleBody, ...] = ()
     if with_threat:
         bodies = (
             VisibleBody(
@@ -553,7 +553,7 @@ async def run_deliberation(
     """Run imagination → motivation → intention → planning with production policies."""
     mem = memory
     if mem is None:
-        beliefs = ()
+        beliefs: tuple[SemanticBelief, ...] = ()
         if loop_input.snapshot is not None:
             beliefs = loop_input.snapshot.semantic_beliefs
         mem = memory_context(owner=loop_input.agent_id.value, beliefs=beliefs)

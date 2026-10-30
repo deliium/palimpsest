@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from agents.cognition.offices import OfficeConceptLedger
 from experiments.institutionalization_scenario import institutionalization_scenario
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
@@ -13,10 +14,11 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V50,
     InstitutionConceptMode,
     OfficeSuccessionMode,
+    SimulationRunnerConfig,
 )
 
 
-def _config(max_ticks: int = 6):
+def _config(max_ticks: int = 6) -> SimulationRunnerConfig:
     definition = institutionalization_scenario(seed=23, max_ticks=max_ticks)
     base = next(
         condition.runner_config
@@ -40,7 +42,7 @@ def _config(max_ticks: int = 6):
     )
 
 
-def _owner_ids(config) -> list[str]:
+def _owner_ids(config: SimulationRunnerConfig) -> list[str]:
     return [agent.agent_id.value for agent in config.agents]
 
 
@@ -62,7 +64,11 @@ async def test_runtime_checkpoint_preserves_office_state() -> None:
         after_restore = restored.export_office_concept_ledgers()
 
     assert after_restore == before
-    assert [ledger.owner_id.value for ledger in after_restore] == _owner_ids(config)
+    assert [
+        ledger.owner_id.value
+        for ledger in after_restore
+        if isinstance(ledger, OfficeConceptLedger)
+    ] == _owner_ids(config)
     assert all(state.office_concepts is not None for state in checkpoint.runtime_states)
 
 

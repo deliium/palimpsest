@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
+from agents.cognition.contracts import Planner
 from agents.cognition.defaults import (
     DirectSelfStateProjector,
     DirectSituationModeler,
@@ -32,6 +35,9 @@ from agents.cognition.models import (
     MotivationEvaluation,
     MotivationScore,
     PerceptionClaimCode,
+    PossibleFutures,
+    RetrievedMemoryContext,
+    SelectedIntention,
     SituationClaimCode,
     SituationModel,
 )
@@ -208,18 +214,21 @@ async def test_defaults_replaceable_planner() -> None:
     class AlwaysWait(WaitFallbackPlanner):
         async def plan(
             self,
-            loop_input,
-            intention,
-            futures,
-            memory=None,
-            goal_board=None,
-            emotional_state=None,
-            causal_world_model=None,
-            theory_of_mind=None,
-            self_model=None,
-            strategy_mode=None,
-            strategy_policy=None,
-        ):  # type: ignore[no-untyped-def]
+            loop_input: CognitiveLoopInput,
+            intention: SelectedIntention,
+            futures: PossibleFutures,
+            memory: RetrievedMemoryContext | None = None,
+            goal_board: object | None = None,
+            emotional_state: object | None = None,
+            causal_world_model: object | None = None,
+            theory_of_mind: object | None = None,
+            self_model: object | None = None,
+            strategy_mode: object | None = None,
+            strategy_policy: object | None = None,
+            reputation: object | None = None,
+            reputation_mode: object | None = None,
+            reputation_policy: object | None = None,
+        ) -> ActionPlan:
             plan = await super().plan(loop_input, intention, futures)
             assert type(plan.command) is Wait
             return plan
@@ -314,7 +323,7 @@ async def test_fake_planner_in_loop_and_exhausted_script() -> None:
         futures=ScriptedFutureImagination(),
         motivation=ScriptedMotivationEvaluator(),
         intention=ScriptedIntentionSelector(),
-        planner=planner,
+        planner=cast(Planner, planner),
         memory_updates=updates,
     )
     with invocation_context("inv-plan"):

@@ -12,7 +12,7 @@ from experiments.catalog import (
     base_runner_config_from_scenario,
     v3_scaffolding_profile,
 )
-from observer.contracts import SEMANTIC_EVENT_TYPES
+from observer.version import SEMANTIC_EVENT_TYPES
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
@@ -22,6 +22,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -39,7 +40,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.v3_cultural_features_regression")
 
 
-def _base(*, max_ticks: int = 3, agents: int = 2):
+def _base(*, max_ticks: int = 3, agents: int = 2) -> SimulationRunnerConfig:
     bodies = tuple(alive_body(f"body-{index}") for index in range(agents))
     specs = tuple(
         AgentRunnerSpec(

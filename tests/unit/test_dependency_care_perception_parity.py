@@ -21,7 +21,7 @@ from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.lifecycle import DependencyStatus, LifecycleStageId
 from world.models import non_lethal_physical_rules
-from world.observations import ObservedDependencyNeeds
+from world.observations import Observation, ObservedDependencyNeeds
 from world.values import Hunger
 
 _LOG = logging.getLogger("tests.dependency_care_perception_parity")
@@ -99,6 +99,8 @@ def test_perception_self_and_colocated_exposes_need_summaries(
     # Live/restored observation encode parity for dependency needs.
     encoded = encode_domain(dep_obs)
     restored = decode_domain(encoded)
+    assert isinstance(restored, Observation)
+    assert restored.self_body is not None
     assert restored.self_body.dependency_needs is not None
     assert restored.self_body.dependency_needs.needs[0].need_id in need_ids
     _LOG.debug("perception_parity ok need_ids=%s", sorted(need_ids))

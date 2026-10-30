@@ -141,6 +141,7 @@ def test_incomplete_run_fails_the_passing_gate() -> None:
     incomplete = _document(passing=False)
     assert run_passes(incomplete) is False
     decoded = decode_document(encode_document(incomplete), schema_id=RUN_SCHEMA_ID)
+    assert isinstance(decoded["outcome"], dict)
     assert decoded["outcome"]["evidence"] == "partial"
 
 

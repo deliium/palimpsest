@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from starlette.types import Scope
@@ -21,6 +21,7 @@ from api.routes.observer_stream import (
 from api.simulation_manager import SimulationManager
 from infrastructure.settings import Settings, load_settings
 from observer.adapt import adapt_event
+from observer.contracts import ObserverEvent
 from simulation.memory_run_control import InMemoryRunControlRepository
 from simulation.models import RunId
 from tests.unit.test_observer_replay import RUN_ID, observer_replay_service
@@ -36,6 +37,7 @@ class FakeEngine:
 class FakeResources:
     def __init__(self) -> None:
         self.engine: DisposableEngine = FakeEngine()
+        self.session_factory: object = object()
 
 
 def _settings(**overrides: object) -> Settings:
@@ -78,7 +80,8 @@ class _Session:
                 self.close_code = int(message.get("code", 1000))
                 raise RuntimeError("websocket_closed")
             if message["type"] == "websocket.send":
-                return json.loads(message["text"])
+                payload: dict[str, Any] = json.loads(message["text"])
+                return payload
 
 
 async def _open(
@@ -161,7 +164,9 @@ async def test_journal_tail_is_exclusive_and_ordered() -> None:
         head_tick=1,
     )
     with capture_logs() as logs:
-        envelopes = [item async for item in session.subscribe(config)]
+        envelopes: list[dict[str, Any]] = [
+            item async for item in session.subscribe(config)
+        ]
     kinds = [item["kind"] for item in envelopes]
     assert kinds[0] == "hello"
     assert kinds[-1] == "completion"
@@ -182,10 +187,13 @@ async def test_journal_tail_is_exclusive_and_ordered() -> None:
     )
     again = [item async for item in session.subscribe(resumed)]
     assert [item["kind"] for item in again] == ["hello", "completion"]
-    gap = events_strictly_after(
-        tuple(adapt_event(event) for event in events),
-        after_tick=0,
-        after_sequence=0,
+    gap = cast(
+        "tuple[ObserverEvent, ...]",
+        events_strictly_after(
+            tuple(adapt_event(event) for event in events),
+            after_tick=0,
+            after_sequence=0,
+        ),
     )
     assert [item.event_id for item in gap] == ["evt-wait"]
     assert "observer_stream_open" in {row["event"] for row in logs}
@@ -242,7 +250,7 @@ async def test_slow_consumer_disconnects_without_waiting() -> None:
 @pytest.mark.asyncio
 async def test_slow_observer_does_not_block_sibling_subscriber() -> None:
     """One slow queue disconnects; a healthy sibling still drains to completion."""
-    shared: list[dict[str, object]] = [
+    shared: list[dict[str, Any]] = [
         {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
         for index in range(20)
     ]

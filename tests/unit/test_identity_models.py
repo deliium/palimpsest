@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 import pytest
 
 from agents.cognition import (
@@ -23,11 +25,27 @@ from agents.cognition import (
     derive_identity_stability,
 )
 from agents.models import AgentId
-from memory.beliefs import BeliefActivationState, BeliefValueKind, ClaimValue
+from memory.beliefs import (
+    BeliefActivationState,
+    BeliefValueKind,
+    ClaimValue,
+    SemanticClaim,
+)
 from memory.models import BeliefId, MemoryId
 
 
-def _claim(owner: AgentId, predicate: str) -> object:
+class _IdentityViewArguments(TypedDict):
+    belief_id: BeliefId
+    claim: SemanticClaim
+    confidence: float
+    supporting_memory_ids: tuple[MemoryId, ...]
+    contradicting_memory_ids: tuple[MemoryId, ...]
+    activation: BeliefActivationState
+    revision_points: tuple[IdentityRevisionPoint, ...]
+    revision_summaries: tuple[IdentityRevisionSummary, ...]
+
+
+def _claim(owner: AgentId, predicate: str) -> SemanticClaim:
     return build_identity_claim(
         owner,
         predicate,
@@ -167,7 +185,7 @@ def test_same_chain_yields_the_same_view_and_repr_hides_claim_text() -> None:
         _summary(0, 2),
         _summary(1, 6, BeliefActivationState.ACTIVE),
     )
-    kwargs = {
+    kwargs: _IdentityViewArguments = {
         "belief_id": BeliefId("belief-ability-1"),
         "claim": claim,
         "confidence": 0.45,

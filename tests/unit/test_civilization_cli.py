@@ -8,7 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from experiments.civilization_capture import CivilizationEvidenceRecorder
+from experiments.civilization_capture import (
+    CivilizationEvidenceRecorder,
+    CivilizationPublicationReceipt,
+)
 from research_runner.civilization_composition import (
     CivilizationProducerOptions,
     finalize_civilization_capture,
@@ -28,7 +31,7 @@ class _Arm:
     runner_result: _Result
 
 
-def _recorder():
+def _recorder() -> CivilizationEvidenceRecorder:
     from tests.unit.test_civilization_publication import (
         _frame,
         _inventory,
@@ -41,7 +44,7 @@ def _recorder():
     return recorder
 
 
-def _arm(run_id: str):
+def _arm(run_id: str) -> _Arm:
     class _RunId:
         value = run_id
 
@@ -49,7 +52,7 @@ def _arm(run_id: str):
 
 
 @pytest.mark.asyncio
-async def test_finalizer_publishes_and_writes_separate_status(tmp_path: Path):
+async def test_finalizer_publishes_and_writes_separate_status(tmp_path: Path) -> None:
     from simulation.models import RunId
 
     recorder = _recorder()
@@ -72,7 +75,9 @@ async def test_finalizer_publishes_and_writes_separate_status(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_publication_failure_never_claims_scientific_failure(tmp_path: Path):
+async def test_publication_failure_never_claims_scientific_failure(
+    tmp_path: Path,
+) -> None:
     from simulation.models import RunId
 
     recorder = _recorder()
@@ -94,7 +99,7 @@ async def test_publication_failure_never_claims_scientific_failure(tmp_path: Pat
     assert payload["publication_status"] == "failed"
 
 
-def test_cli_civilization_flags_require_root_and_respect_bounds():
+def test_cli_civilization_flags_require_root_and_respect_bounds() -> None:
     from research_runner.cli import _civilization_options_from_args, build_parser
 
     parser = build_parser()
@@ -129,7 +134,7 @@ def test_cli_civilization_flags_require_root_and_respect_bounds():
         _civilization_options_from_args(invalid)
 
 
-def test_cli_civilization_spool_option_is_explicit_and_lazy(tmp_path: Path):
+def test_cli_civilization_spool_option_is_explicit_and_lazy(tmp_path: Path) -> None:
     from research_runner.cli import _civilization_options_from_args, build_parser
 
     parser = build_parser()
@@ -165,7 +170,7 @@ def test_cli_civilization_spool_option_is_explicit_and_lazy(tmp_path: Path):
         _civilization_options_from_args(missing_root)
 
 
-def test_matrix_adoption_requires_a_committed_publication():
+def test_matrix_adoption_requires_a_committed_publication() -> None:
     from experiments.matrix_runner import (
         MatrixBatchDependencies,
         _civilization_ready,
@@ -188,7 +193,9 @@ def test_matrix_adoption_requires_a_committed_publication():
 
 
 @pytest.mark.asyncio
-async def test_run_one_assignment_round_trip_publishes_with_hooks(tmp_path: Path):
+async def test_run_one_assignment_round_trip_publishes_with_hooks(
+    tmp_path: Path,
+) -> None:
     from experiments.coordinator import ExperimentAssignment
     from experiments.matrix_factors import matrix_reference_fixture_base
     from experiments.matrix_runner import run_one_assignment
@@ -215,7 +222,8 @@ async def test_run_one_assignment_round_trip_publishes_with_hooks(tmp_path: Path
         status_root=tmp_path / "status",
     )
 
-    async def _finalize(arm, session):
+    async def _finalize(arm: object, session: object) -> CivilizationPublicationReceipt:
+        assert isinstance(session, CivilizationEvidenceRecorder)
         return await finalize_civilization_capture(arm, session, options)
 
     arm = await run_one_assignment(

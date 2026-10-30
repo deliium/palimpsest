@@ -2,9 +2,16 @@
 
 The reducer is intentionally narrow: only ``cultural_trait_dynamics@1`` gains an
 incremental path. Every other cultural family keeps its existing exact batch
-calculator. The checkpoint is a rebuildable ``v3-analytical-view-v1`` sidecar
+calculator. The checkpoint is a rebuildable ``v3-analytical-view-v2`` sidecar
 bound to the source, window, algorithm, library identity and pass; it is never
 scientific history, cognition input or a stop selector.
+
+``v3-analytical-view-v2`` stores the sealed-window state plus the exact digest of
+the derived final rows instead of the rows themselves. Final rows are a pure
+function of the restored states, window and gaps, so a resume recomputes them and
+fails closed unless they reproduce that digest exactly. Legacy ``v1`` checkpoints
+remain readable and verify their embedded rows; a resumed ``v1`` view keeps its
+recorded schema identity and is not rewritten in place.
 """
 
 from __future__ import annotations
@@ -14,7 +21,7 @@ import json
 import logging
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -37,7 +44,11 @@ from analysis.numerical import library_versions
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.incremental_cultural_traits")
 
-ANALYTICAL_VIEW_SCHEMA_VERSION: Final[str] = "v3-analytical-view-v1"
+ANALYTICAL_VIEW_SCHEMA_VERSION: Final[str] = "v3-analytical-view-v2"
+LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION: Final[str] = "v3-analytical-view-v1"
+_SUPPORTED_VIEW_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
+    {ANALYTICAL_VIEW_SCHEMA_VERSION, LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION}
+)
 MAX_CHECKPOINT_BYTES: Final[int] = 64 * 1024 * 1024
 MAX_CHECKPOINT_DEPTH: Final[int] = 32
 _FIRST_PASS: Final[str] = "first_pass"
@@ -45,6 +56,7 @@ _FINAL_ROWS: Final[str] = "final_rows"
 
 __all__ = [
     "ANALYTICAL_VIEW_SCHEMA_VERSION",
+    "LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION",
     "AnalyticalViewIdentity",
     "AnalyticalViewMismatch",
     "TraitDynamicsAccumulator",
@@ -188,7 +200,7 @@ class AnalyticalViewIdentity:
     gaps_digest: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != ANALYTICAL_VIEW_SCHEMA_VERSION:
+        if self.schema_version not in _SUPPORTED_VIEW_SCHEMA_VERSIONS:
             raise AnalyticalViewMismatch("unsupported_view_schema")
         for name in (
             "run_id",
@@ -452,16 +464,23 @@ class TraitDynamicsAccumulator:
             config_fingerprint=config_fingerprint,
             manifest_identity=manifest_identity,
         )
-        payload = {
-            "schema_version": ANALYTICAL_VIEW_SCHEMA_VERSION,
-            "identity": identity.payload(),
-            "states": _states_payload(tuple(self._states)),
-            "evidence": _evidence_payload(self._evidence),
-            "measurements": [row.to_payload() for row in measurements],
-        }
+        states = tuple(self._states)
+        payload = _compact_checkpoint_payload(
+            identity=identity,
+            states=states,
+            evidence=self._evidence,
+            measurements=measurements,
+        )
+        _LOG.debug(
+            "analytical_view_checkpoint stage=%s boundaries=%s rows=%s schema=%s",
+            identity.stage,
+            len(states),
+            len(measurements),
+            identity.schema_version,
+        )
         return TraitDynamicsCheckpoint(
             identity=identity,
-            states=tuple(self._states),
+            states=states,
             evidence=self._evidence,
             measurements=measurements,
             digest=_digest(payload),
@@ -493,7 +512,14 @@ def resume_checkpoint(
     identity = checkpoint.identity
     _verify_checkpoint_digest(checkpoint)
     if identity.stage == _FINAL_ROWS:
-        if identity != expected:
+        # A legacy v1 view carries the same anchors under the older container
+        # version; normalize only that field before the exact identity check.
+        comparable = (
+            identity
+            if identity.schema_version == expected.schema_version
+            else replace(identity, schema_version=expected.schema_version)
+        )
+        if comparable != expected:
             raise AnalyticalViewMismatch("view_identity_mismatch")
     else:
         if not allow_prefix:
@@ -582,14 +608,63 @@ def _evidence_from_payload(value: object) -> TraitEvidenceIndex:
     return TraitEvidenceIndex(entry_ids=entry_ids, roster_ids=roster_ids)
 
 
-def _checkpoint_payload(checkpoint: TraitDynamicsCheckpoint) -> dict[str, object]:
+def _compact_checkpoint_payload(
+    *,
+    identity: AnalyticalViewIdentity,
+    states: tuple[BoundaryTraitState, ...],
+    evidence: TraitEvidenceIndex,
+    measurements: tuple[CulturalMeasurement, ...],
+) -> dict[str, object]:
+    """Exact durable payload without the redundant derived final rows."""
     return {
-        "schema_version": ANALYTICAL_VIEW_SCHEMA_VERSION,
+        "schema_version": identity.schema_version,
+        "identity": identity.payload(),
+        "states": _states_payload(states),
+        "evidence": _evidence_payload(evidence),
+        "output_digest": _measurement_digest(measurements) if measurements else None,
+    }
+
+
+def _legacy_checkpoint_payload(
+    checkpoint: TraitDynamicsCheckpoint,
+) -> dict[str, object]:
+    """Pre-compaction payload, retained only to verify legacy ``v1`` files."""
+    return {
+        "schema_version": LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION,
         "identity": checkpoint.identity.payload(),
         "states": _states_payload(checkpoint.states),
         "evidence": _evidence_payload(checkpoint.evidence),
         "measurements": [row.to_payload() for row in checkpoint.measurements],
     }
+
+
+def _checkpoint_payload(checkpoint: TraitDynamicsCheckpoint) -> dict[str, object]:
+    if (
+        checkpoint.identity.schema_version
+        == LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION
+    ):
+        return _legacy_checkpoint_payload(checkpoint)
+    return _compact_checkpoint_payload(
+        identity=checkpoint.identity,
+        states=checkpoint.states,
+        evidence=checkpoint.evidence,
+        measurements=checkpoint.measurements,
+    )
+
+
+def _measurements_from_identity(
+    identity: AnalyticalViewIdentity,
+    states: tuple[BoundaryTraitState, ...],
+) -> tuple[CulturalMeasurement, ...]:
+    """Recompute the exact derived rows for a sealed checkpoint."""
+    return compute_cultural_trait_dynamics_from_states(
+        states,
+        window=CulturalAnalysisWindow(
+            baseline_boundary=identity.window_baseline,
+            end_boundary=identity.window_end,
+        ),
+        gaps=identity.gaps,
+    )
 
 
 def _verify_checkpoint_digest(checkpoint: TraitDynamicsCheckpoint) -> None:
@@ -651,6 +726,95 @@ def read_checkpoint(path: Path) -> TraitDynamicsCheckpoint:
         raise AnalyticalViewMismatch("checkpoint_invalid_json") from exc
     if not isinstance(payload, Mapping):
         raise AnalyticalViewMismatch("checkpoint_invalid")
+    if payload.get("schema_version") == ANALYTICAL_VIEW_SCHEMA_VERSION:
+        checkpoint = _checkpoint_from_compact_payload(payload)
+    elif payload.get("schema_version") == LEGACY_ANALYTICAL_VIEW_SCHEMA_VERSION:
+        checkpoint = _checkpoint_from_legacy_payload(payload)
+        _LOG.info(
+            "analytical_view_legacy_read family=%s stage=%s boundaries=%s",
+            checkpoint.identity.metric_family,
+            checkpoint.identity.stage,
+            len(checkpoint.states),
+        )
+    else:
+        raise AnalyticalViewMismatch("unsupported_view_schema")
+    _verify_checkpoint_digest(checkpoint)
+    return checkpoint
+
+
+def _identity_from_payload(value: object) -> AnalyticalViewIdentity:
+    if not isinstance(value, Mapping):
+        raise AnalyticalViewMismatch("invalid_identity")
+    if set(value) != set(AnalyticalViewIdentity.__dataclass_fields__):
+        raise AnalyticalViewMismatch("invalid_identity")
+    return AnalyticalViewIdentity(
+        schema_version=value["schema_version"],
+        run_id=value["run_id"],
+        source_revision=value["source_revision"],
+        config_fingerprint=value["config_fingerprint"],
+        manifest_identity=value["manifest_identity"],
+        input_high_water=value["input_high_water"],
+        window_baseline=value["window_baseline"],
+        window_end=value["window_end"],
+        metric_family=value["metric_family"],
+        algorithm_version=value["algorithm_version"],
+        library_versions_digest=value["library_versions_digest"],
+        stage=value["stage"],
+        source_prefix_digest=value["source_prefix_digest"],
+        sealed_source_digest=value["sealed_source_digest"],
+        coverage_observed=value["coverage_observed"],
+        coverage_expected=value["coverage_expected"],
+        gaps=tuple(value["gaps"]),
+        gaps_digest=value["gaps_digest"],
+    )
+
+
+def _checkpoint_from_compact_payload(
+    payload: Mapping[str, object],
+) -> TraitDynamicsCheckpoint:
+    expected_keys = {
+        "schema_version",
+        "identity",
+        "states",
+        "evidence",
+        "output_digest",
+        "digest",
+    }
+    if set(payload) != expected_keys:
+        raise AnalyticalViewMismatch("checkpoint_key_set_mismatch")
+    identity = _identity_from_payload(payload["identity"])
+    states_raw = payload["states"]
+    if not isinstance(states_raw, list):
+        raise AnalyticalViewMismatch("checkpoint_invalid")
+    states = tuple(_state_from_payload(item) for item in states_raw)
+    evidence = _evidence_from_payload(payload["evidence"])
+    raw_output_digest = payload["output_digest"]
+    if identity.stage == _FINAL_ROWS:
+        output_digest = _require_digest("output_digest", raw_output_digest)
+        measurements = _measurements_from_identity(identity, states)
+        if _measurement_digest(measurements) != output_digest:
+            raise AnalyticalViewMismatch("view_output_digest_mismatch")
+        _LOG.debug(
+            "analytical_view_rows_recomputed boundaries=%s rows=%s",
+            len(states),
+            len(measurements),
+        )
+    else:
+        if raw_output_digest is not None:
+            raise AnalyticalViewMismatch("first_pass_has_final_rows")
+        measurements = ()
+    return TraitDynamicsCheckpoint(
+        identity=identity,
+        states=states,
+        evidence=evidence,
+        measurements=measurements,
+        digest=_require_digest("digest", payload["digest"]),
+    )
+
+
+def _checkpoint_from_legacy_payload(
+    payload: Mapping[str, object],
+) -> TraitDynamicsCheckpoint:
     expected_keys = {
         "schema_version",
         "identity",
@@ -661,34 +825,7 @@ def read_checkpoint(path: Path) -> TraitDynamicsCheckpoint:
     }
     if set(payload) != expected_keys:
         raise AnalyticalViewMismatch("checkpoint_key_set_mismatch")
-    if payload["schema_version"] != ANALYTICAL_VIEW_SCHEMA_VERSION:
-        raise AnalyticalViewMismatch("unsupported_view_schema")
-    identity_payload = payload["identity"]
-    if not isinstance(identity_payload, Mapping):
-        raise AnalyticalViewMismatch("invalid_identity")
-    identity_fields = set(AnalyticalViewIdentity.__dataclass_fields__)
-    if set(identity_payload) != identity_fields:
-        raise AnalyticalViewMismatch("invalid_identity")
-    identity = AnalyticalViewIdentity(
-        schema_version=identity_payload["schema_version"],
-        run_id=identity_payload["run_id"],
-        source_revision=identity_payload["source_revision"],
-        config_fingerprint=identity_payload["config_fingerprint"],
-        manifest_identity=identity_payload["manifest_identity"],
-        input_high_water=identity_payload["input_high_water"],
-        window_baseline=identity_payload["window_baseline"],
-        window_end=identity_payload["window_end"],
-        metric_family=identity_payload["metric_family"],
-        algorithm_version=identity_payload["algorithm_version"],
-        library_versions_digest=identity_payload["library_versions_digest"],
-        stage=identity_payload["stage"],
-        source_prefix_digest=identity_payload["source_prefix_digest"],
-        sealed_source_digest=identity_payload["sealed_source_digest"],
-        coverage_observed=identity_payload["coverage_observed"],
-        coverage_expected=identity_payload["coverage_expected"],
-        gaps=tuple(identity_payload["gaps"]),
-        gaps_digest=identity_payload["gaps_digest"],
-    )
+    identity = _identity_from_payload(payload["identity"])
     states_raw = payload["states"]
     measurements_raw = payload["measurements"]
     if not isinstance(states_raw, list) or not isinstance(measurements_raw, list):
@@ -696,15 +833,13 @@ def read_checkpoint(path: Path) -> TraitDynamicsCheckpoint:
     states = tuple(_state_from_payload(item) for item in states_raw)
     evidence = _evidence_from_payload(payload["evidence"])
     measurements = tuple(_measurement_from_payload(item) for item in measurements_raw)
-    checkpoint = TraitDynamicsCheckpoint(
+    return TraitDynamicsCheckpoint(
         identity=identity,
         states=states,
         evidence=evidence,
         measurements=measurements,
-        digest=payload["digest"],
+        digest=_require_digest("digest", payload["digest"]),
     )
-    _verify_checkpoint_digest(checkpoint)
-    return checkpoint
 
 
 def _measurement_from_payload(value: object) -> CulturalMeasurement:

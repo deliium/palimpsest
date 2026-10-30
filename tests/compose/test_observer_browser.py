@@ -9,13 +9,19 @@ import shutil
 import socket
 import subprocess
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
 
+if TYPE_CHECKING:
+    from playwright.sync_api import ConsoleMessage, Playwright, WebSocket
+
 from infrastructure.settings import redact_secrets
+from tests.compose.acceptance import require_prerequisite
 from tests.compose.start_reference import start_reference
 
 pytestmark = pytest.mark.compose
@@ -29,15 +35,15 @@ _NONTRIVIAL_WASM = 4096
 def _docker() -> str:
     docker = shutil.which("docker")
     if docker is None:
-        pytest.skip("docker CLI is not available")
+        require_prerequisite("docker CLI is not available")
     return docker
 
 
-def _playwright():
+def _playwright() -> Callable[[], AbstractContextManager[Playwright]]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        pytest.skip("playwright is not installed")
+        require_prerequisite("playwright is not installed")
     return sync_playwright
 
 
@@ -78,7 +84,7 @@ def _run(
 def published_stack() -> Iterator[tuple[str, str, dict[str, str]]]:
     image = os.environ.get("PALIMPSEST_API_IMAGE", "").strip()
     if not image:
-        pytest.skip("PALIMPSEST_API_IMAGE is not set")
+        require_prerequisite("PALIMPSEST_API_IMAGE is not set")
     docker = _docker()
     _playwright()
     project = f"palimpsest-browser-{secrets.token_hex(4)}"
@@ -161,8 +167,8 @@ def test_published_observer_page_reaches_camp(
     sync_playwright = _playwright()
     project, port, env = published_stack
     base = f"http://127.0.0.1:{port}"
-    page = _expect_asset(f"{base}/", "text/html")
-    assert b"<html" in page.lower() or b"<!doctype html" in page.lower()
+    html = _expect_asset(f"{base}/", "text/html")
+    assert b"<html" in html.lower() or b"<!doctype html" in html.lower()
     _expect_asset(f"{base}/index.js", "text/javascript")
     _expect_asset(
         f"{base}/index.wasm",
@@ -194,14 +200,14 @@ def test_published_observer_page_reaches_camp(
             )
             page = browser.new_page()
 
-            def _console(message) -> None:
+            def _console(message: ConsoleMessage) -> None:
                 console.append(message.text)
 
-            def _socket(ws) -> None:
+            def _socket(ws: WebSocket) -> None:
                 if "/observer/stream" not in ws.url:
                     return
 
-                def _frame(payload) -> None:
+                def _frame(payload: str | bytes) -> None:
                     text = payload if isinstance(payload, str) else payload.decode()
                     if '"kind"' in text and "hello" in text:
                         hello["seen"] = True

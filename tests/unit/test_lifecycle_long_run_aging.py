@@ -9,7 +9,7 @@ import pytest
 
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
-from simulation.models import RunId
+from simulation.models import RunId, StochasticIdentity
 from simulation.new_agent_initialization import default_new_agent_initialization_spec
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
@@ -18,6 +18,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_developmental_lifecycle_spec,
@@ -27,6 +28,7 @@ from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.effects import DeathCause
 from world.events import Died, LifecycleStageChanged
 from world.identifiers import WorldId, WorldRevision
+from world.lifecycle import AgentLifecycleRecord
 from world.lifecycle_effects import interpolate_continuous_factors, resolve_stage_effect
 from world.models import LifeStatus, non_lethal_physical_rules
 
@@ -40,7 +42,7 @@ def _config(
     intra_stage_interpolation: bool,
     lifespan_ticks: int = 20,
     min_assigned_ticks: int = 16,
-):
+) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return replace(
@@ -96,7 +98,9 @@ async def test_long_run_crosses_all_stages_and_assigned_eol() -> None:
     ) as runner:
         await runner.run()
         stages = _stage_sequence(runner)
-        assigned = runner.engine.lifecycle_records[0].assigned_lifespan_ticks
+        record = runner.engine.lifecycle_records[0]
+        assert isinstance(record, AgentLifecycleRecord)
+        assigned = record.assigned_lifespan_ticks
         deaths = [
             event.details
             for event in runner.engine._snapshot.event_history
@@ -127,7 +131,7 @@ async def test_twin_runs_share_hashes_different_seeds_diverge_assigned() -> None
         config = replace(
             config_a,
             seed=seed,
-            stochastic_identity=f"cmp-long-aging-{seed}",
+            stochastic_identity=StochasticIdentity(f"cmp-long-aging-{seed}"),
             scenario=replace(
                 config_a.scenario, world_id=WorldId(f"world-long-aging-{seed}")
             ),
@@ -137,9 +141,9 @@ async def test_twin_runs_share_hashes_different_seeds_diverge_assigned() -> None
             result = await runner.run()
             doc = build_runner_result_document(result=result, config=config)
             hashes.append(doc.exact_trajectory_hash)
-            assigned_by_seed[seed] = runner.engine.lifecycle_records[
-                0
-            ].assigned_lifespan_ticks
+            record = runner.engine.lifecycle_records[0]
+            assert isinstance(record, AgentLifecycleRecord)
+            assigned_by_seed[seed] = record.assigned_lifespan_ticks
     assert hashes[0] == hashes[1]
     _LOG.debug(
         "case_id=twin_and_seed_diverge assigned=%s",

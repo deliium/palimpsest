@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -49,11 +50,12 @@ from simulation.runner_models import (
     PopulationLifecycleSpec,
     RunnerAttemptReceipt,
     RunnerStopReasonCode,
+    SimulationRunnerConfig,
 )
 from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
 
-def _config(max_ticks: int = 3):
+def _config(max_ticks: int = 3) -> SimulationRunnerConfig:
     base = build_v3_benchmark_base(
         seed=None,
         profile=V3BenchmarkProfile.SMOKE,
@@ -150,6 +152,7 @@ async def test_terminal_research_export_is_available_and_detached() -> None:
     async with await SimulationRunner.from_config(config) as runner:
         result = await runner.run()
         boundary = await runner.export_finalized_research_boundary()
+        assert isinstance(boundary, FinalizedResearchBoundary)
     assert isinstance(boundary, FinalizedResearchBoundary)
     assert boundary.boundary_tick.value == result.ticks_committed == 2
     assert boundary.run_id == result.run_id
@@ -189,9 +192,11 @@ async def test_nonterminal_research_export_matches_finalized_boundary() -> None:
     async with await SimulationRunner.from_config(config) as runner:
         await runner.initialize_finalized_boundary()
         boundary = await runner.export_finalized_research_boundary()
+        assert isinstance(boundary, FinalizedResearchBoundary)
         assert boundary.boundary_tick.value == 0
         await runner.run_tick()
         later = await runner.export_finalized_research_boundary()
+        assert isinstance(later, FinalizedResearchBoundary)
         assert later.boundary_tick.value == 1
         checkpoint = await runner.capture_fork_checkpoint()
         assert checkpoint.boundary_tick.value == 1
@@ -254,7 +259,9 @@ def test_synthetic_nonzero_owner_fails_the_blank_slate_gate() -> None:
     assert check.denominator == 1
 
 
-def _assignment(config, run_id: str = "run-benchmark-dispatch") -> ExperimentAssignment:
+def _assignment(
+    config: SimulationRunnerConfig, run_id: str = "run-benchmark-dispatch"
+) -> ExperimentAssignment:
     return ExperimentAssignment(
         experiment_id="v3-benchmark-test",
         condition_id="v3-bench-01-blank-slate",
@@ -267,7 +274,7 @@ def _assignment(config, run_id: str = "run-benchmark-dispatch") -> ExperimentAss
     )
 
 
-def _execution_context(tmp_path) -> GenerationalExecutionContext:
+def _execution_context(tmp_path: Path) -> GenerationalExecutionContext:
     return GenerationalExecutionContext(
         artifact_root=tmp_path,
         source_identity={
@@ -283,7 +290,9 @@ def _execution_context(tmp_path) -> GenerationalExecutionContext:
 
 
 @pytest.mark.asyncio
-async def test_independent_dispatch_reports_honest_partial_evidence(tmp_path) -> None:
+async def test_independent_dispatch_reports_honest_partial_evidence(
+    tmp_path: Path,
+) -> None:
     config = _config(max_ticks=2)
     probe = BenchmarkBoundaryProbe()
     recipe = CivilizationBenchmarkRecipe(
@@ -371,7 +380,7 @@ def _benchmark_recipe_params(command_plan: bool = False) -> dict[str, object]:
     }
 
 
-def test_persisted_benchmark_recipe_is_closed_and_validated(tmp_path) -> None:
+def test_persisted_benchmark_recipe_is_closed_and_validated(tmp_path: Path) -> None:
     from experiments.generational_execution import (
         BENCHMARK_RECIPE_ID,
         GenerationalExecutionError,
@@ -501,7 +510,7 @@ async def test_generation_stop_parity_between_normal_and_stepped() -> None:
 
 @pytest.mark.asyncio
 async def test_capture_toggle_preserves_objective_scientific_results(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     from experiments.cultural_metric_artifacts import CulturalCaptureOptions
     from experiments.generational_execution import execute_generational_assignment

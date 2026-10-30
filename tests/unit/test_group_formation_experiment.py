@@ -13,7 +13,7 @@ from analysis.group_formation_metrics import (
     compute_emergent_group_candidates,
     compute_group_persistence,
 )
-from analysis.models import MetricAvailability, RelationshipEdgeRow
+from analysis.models import MetricAvailability, MetricDocument, RelationshipEdgeRow
 from analysis.specifications import MetricFamilyId, metric_specification
 from experiments.catalog import experiment_w_emergent_groups
 from experiments.group_formation_scenario import emergent_group_scenario
@@ -89,7 +89,7 @@ def _full_rows() -> dict[str, object]:
     }
 
 
-def _candidates(**overrides: object):
+def _candidates(**overrides: object) -> MetricDocument:
     payload = _full_rows()
     payload.update(overrides)
     return compute_emergent_group_candidates(

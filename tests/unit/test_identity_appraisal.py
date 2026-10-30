@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TypedDict
 
 import pytest
 
@@ -41,6 +42,18 @@ from world.observations import (
     ObservationSourceKind,
     ObservedOccurrence,
 )
+
+
+class _AppraisalInputs(TypedDict):
+    owner_id: AgentId
+    tick: int
+    memories: tuple[MemoryTrace, ...]
+    occurrences: tuple[ObservedOccurrence, ...]
+    goals: tuple[()]
+    relationships: tuple[()]
+    futures: None
+    beliefs: tuple[()]
+    self_model: SelfModel
 
 
 def _self(owner: AgentId) -> SelfModel:
@@ -113,7 +126,7 @@ def test_no_memory_emits_nothing(caplog: pytest.LogCaptureFixture) -> None:
 def test_success_emits_bool_true_claims_and_stable_ids() -> None:
     owner = AgentId("agent-1")
     memory = _memory(owner, "mem-1", tick=2, concept="trail")
-    kwargs = dict(
+    kwargs: _AppraisalInputs = dict(
         owner_id=owner,
         tick=2,
         memories=(memory,),

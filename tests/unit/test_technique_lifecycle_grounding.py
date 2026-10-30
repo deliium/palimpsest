@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from analysis.models import AppliedActionRow
-from analysis.technique_lifecycle import ground_technique_lifecycle
+from analysis.technique_lifecycle import TechniqueGrounding, ground_technique_lifecycle
 
 
 def _audit(**overrides: object) -> SimpleNamespace:
@@ -29,7 +29,7 @@ def _audit(**overrides: object) -> SimpleNamespace:
     return SimpleNamespace(**payload)
 
 
-def _global():
+def _global() -> TechniqueGrounding:
     rows = ground_technique_lifecycle(
         (_audit(),),
         as_of_tick=2,

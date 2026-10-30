@@ -29,13 +29,15 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V15,
     EVENT_SCHEMA_REPLAY_V16,
     CorpseCustodyOpened,
+    EventDetails,
     OccurrenceContext,
     PossessionClaimAsserted,
     TakenFromCorpse,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.models import LifeStatus, copy_body
+from world.models import AgentBody, Item, LifeStatus, copy_body
 from world.values import Health
 
 _RUN = "run-1"
@@ -43,7 +45,7 @@ _WORLD = WorldId("world-1")
 _OCCURRENCE = OccurrenceContext(origin_location_id=EntityId("loc-1"))
 
 
-def _state_with_corpse():
+def _state_with_corpse() -> tuple[WorldState, Item, AgentBody, AgentBody]:
     item = make_item("item-1", location_id=None, holder_id="body-dead")
     corpse = copy_body(
         alive_body("body-dead", inventory=(item.entity_id,)),
@@ -65,7 +67,9 @@ def _state_with_corpse():
     )
 
 
-def _system_event(event_id: str, details, *, revision: int, sequence: int = 0):
+def _system_event(
+    event_id: str, details: EventDetails, *, revision: int, sequence: int = 0
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(event_id),
         run_id=_RUN,

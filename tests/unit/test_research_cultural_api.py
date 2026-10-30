@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -33,6 +33,11 @@ class FakeEngine:
 class FakeResources:
     def __init__(self, engine: DisposableEngine) -> None:
         self.engine = engine
+
+    @property
+    def session_factory(self) -> object:
+        """Keep persistence unavailable in this artifact-only API fake."""
+        raise AttributeError("engine-only resources have no session factory")
 
 
 @pytest.fixture
@@ -332,7 +337,7 @@ async def test_cell_listing_uses_runtime_declarations_and_excludes_sidecars(
     ],
 )
 async def test_comparison_structural_failures(
-    tmp_path: Path, name: str, writer, code: str
+    tmp_path: Path, name: str, writer: Callable[[Path], object], code: str
 ) -> None:
     del name
     root = tmp_path / "matrices"

@@ -13,11 +13,11 @@ from simulation.generational_models import (
 )
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
-    LifecycleStageId,
-    LifecycleStageThreshold,
     RunnerStopReasonCode,
+    SimulationRunnerConfig,
 )
 from tests.unit.test_generational_population_runner import _v55_config
+from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
 
 def _config(
@@ -26,7 +26,7 @@ def _config(
     max_ticks: int = 6,
     lifespan_ticks: int = 30,
     entries_per_interval: int = 1,
-):
+) -> SimulationRunnerConfig:
     config = _v55_config()
     lifecycle = config.population_lifecycle
     assert lifecycle is not None
@@ -72,10 +72,12 @@ async def test_generation_horizon_stops_after_real_admission_and_latches() -> No
             RunnerStopReasonCode.GENERATION_HORIZON,
         ]
         tick_before = runner._engine.tick.value
+        assert runner._engine.last_tick_result is not None
         events_before = len(runner._engine.last_tick_result.events)
         repeated = await runner.run_tick()
         assert repeated == receipts[-1]
         assert runner._engine.tick.value == tick_before
+        assert runner._engine.last_tick_result is not None
         assert len(runner._engine.last_tick_result.events) == events_before
         assert runner._stop_evidence is not None
         assert (

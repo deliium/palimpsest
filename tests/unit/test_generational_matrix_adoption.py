@@ -16,11 +16,14 @@ from experiments.matrix_manifest import FilesystemMatrixManifestStore
 from experiments.matrix_runner import MatrixBatchDependencies, MatrixBatchRunner
 from research_runner.generational_composition import open_generational_archive
 from simulation.runner import SimulationRunner
+from simulation.runner_models import SimulationRunnerConfig
 from tests.unit.test_generational_matrix_schema import _base, _matrix
 
 
 class _Reader:
-    async def reference(self, run_id: str, boundary_tick: int):
+    async def reference(
+        self, run_id: str, boundary_tick: int
+    ) -> HistoricalBoundaryReference:
         return HistoricalBoundaryReference(
             revision=boundary_tick,
             objective_commit_hash=f"{boundary_tick:064d}",
@@ -32,7 +35,9 @@ class _Reader:
         )
 
 
-async def _write_archive(root: Path, config, run_id: str) -> None:
+async def _write_archive(
+    root: Path, config: SimulationRunnerConfig, run_id: str
+) -> None:
     session = open_generational_archive(
         config=config,
         run_id=__import__("simulation.models", fromlist=["RunId"]).RunId(run_id),

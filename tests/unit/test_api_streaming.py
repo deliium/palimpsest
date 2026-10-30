@@ -6,12 +6,12 @@ import asyncio
 import logging
 import os
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from starlette.types import Scope
 
-from api.app import DisposableEngine, create_app
+from api.app import DatabaseResourcesLike, DisposableEngine, create_app
 from api.schemas import StreamFrameKind
 from api.simulation_manager import SimulationManager
 from api.streaming import StreamFanout, StreamSessionConfig, stream_record_to_envelope
@@ -41,6 +41,7 @@ class FakeEngine:
 
 
 class FakeResources:
+    # Deliberately no ``session_factory``: this harness never attaches persistence.
     def __init__(self) -> None:
         self.engine: DisposableEngine = FakeEngine()
 
@@ -121,7 +122,9 @@ class _AsgiWebSocketSession:
             if message["type"] == "websocket.send":
                 import json
 
-                return json.loads(message["text"])
+                payload = json.loads(message["text"])
+                assert isinstance(payload, dict)
+                return payload
 
 
 async def _run_websocket(
@@ -218,7 +221,7 @@ async def test_websocket_route_with_asgi_harness(logging_sandbox: None) -> None:
 
     app = create_app(
         settings=settings,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=lambda _s: cast(DatabaseResourcesLike, FakeResources()),
         simulation_manager=SimulationManager(
             settings=settings,
             run_control=InMemoryRunControlRepository(),
@@ -261,11 +264,5 @@ def test_stream_record_envelope_mapping() -> None:
     assert envelope.payload_b64 is not None
 
 
-@pytest.mark.integration
-async def test_api_stream_resume_integration_stub() -> None:
-    pytest.skip("integration stub reserved for Task 21")
-
-
-@pytest.mark.integration
-async def test_api_stream_backpressure_integration_stub() -> None:
-    pytest.skip("integration stub reserved for Task 21")
+# PostgreSQL replacements: tests/integration/test_api_stream_resume.py and
+# tests/integration/test_api_stream_backpressure.py.

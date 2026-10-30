@@ -102,7 +102,9 @@ def test_reader_and_publisher_capabilities_are_distinct(tmp_path: Path) -> None:
 
     publisher = create_civilization_publisher(tmp_path)
     reader = create_civilization_reader(tmp_path)
-    assert type(publisher) is not type(reader)
+    publisher_type: type[object] = type(publisher)
+    reader_type: type[object] = type(reader)
+    assert publisher_type is not reader_type
     assert hasattr(publisher, "publish_boundary")
     assert hasattr(publisher, "seal_catalogue")
     assert not hasattr(reader, "publish_boundary")

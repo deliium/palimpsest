@@ -12,7 +12,6 @@ from experiments.matrix_factors import clone_runner_config
 from experiments.matrix_models import (
     EXPERIMENT_MATRIX_SCHEMA_VERSION,
     ExperimentMatrixSpec,
-    ExperimentSeedMatrix,
     GroupRole,
     MatrixEmbeddedBase,
     MatrixFactor,
@@ -20,6 +19,7 @@ from experiments.matrix_models import (
     MatrixFactorLevel,
     MatrixValidationError,
 )
+from experiments.models import ExperimentSeedMatrix
 from simulation.generational_models import GenerationalRunSpec
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V55,

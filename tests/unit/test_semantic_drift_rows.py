@@ -18,7 +18,9 @@ def _kind(value: str) -> SimpleNamespace:
     return SimpleNamespace(value=value)
 
 
-def _record(kind: str, referent: str, tick: int, trigger: str = "promoted"):
+def _record(
+    kind: str, referent: str, tick: int, trigger: str = "promoted"
+) -> SimpleNamespace:
     return SimpleNamespace(
         ordinal=tick,
         tick=tick,

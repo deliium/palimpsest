@@ -672,7 +672,9 @@ def test_prospective_mode_requires_v7_and_round_trips() -> None:
     assert decode_runner_config(encode_runner_config(shallow)) == shallow
 
 
-def test_cognition_config_for_builds_prospective_policy_from_mode(caplog) -> None:
+def test_cognition_config_for_builds_prospective_policy_from_mode(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     import logging
 
     from simulation.runner import _cognition_config_for

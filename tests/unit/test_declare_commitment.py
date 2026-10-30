@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TypedDict, Unpack, get_args
+
 import pytest
 
 from simulation.serialization import decode_domain, encode_domain
@@ -10,6 +12,7 @@ from world._operations import (
     OperationAccepted,
     OperationRejected,
     RejectionCode,
+    ValidatedWorldOperation,
     validate_action_request,
 )
 from world._rules import (
@@ -29,7 +32,7 @@ from world.actions import (
 from world.events import CommitmentDeclared
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
 from world.lifecycle_effects import require_lifecycle_denied_command_kinds
-from world.models import LifeStatus, copy_body
+from world.models import Item, LifeStatus, copy_body
 from world.structured_commitments import StructuredCommitmentsRuleContext
 from world.values import Health, ItemKind
 
@@ -38,7 +41,7 @@ def _context(horizon: int = 8) -> StructuredCommitmentsRuleContext:
     return StructuredCommitmentsRuleContext(allow_declare=True, horizon_ticks=horizon)
 
 
-def _state():
+def _state() -> tuple[WorldState, Item, Item]:
     food = make_item("food-1", location_id=None, holder_id="body-a", kind=ItemKind.FOOD)
     material = make_item(
         "mat-1", location_id=None, holder_id="body-b", kind=ItemKind.MATERIAL
@@ -55,7 +58,9 @@ def _state():
     return state, food, material
 
 
-def _request(command, *, actor: str = "body-a", request_id: str = "r-1"):
+def _request(
+    command: AgentCommand, *, actor: str = "body-a", request_id: str = "r-1"
+) -> ActionRequest:
     return ActionRequest(
         request_id=RequestId(request_id),
         proposal_id=ProposalId(f"p-{request_id}"),
@@ -66,8 +71,21 @@ def _request(command, *, actor: str = "body-a", request_id: str = "r-1"):
     )
 
 
-def _declare(**overrides):
-    fields = {
+class _DeclarationFields(TypedDict, total=False):
+    counterparty_id: EntityId
+    commitment_kind: str
+    act: str
+    owed_by: str
+    service: str
+    quantity: int
+    due_kind: str
+    item_kind: ItemKind | None
+    due_tick: int | None
+    now_item_kind: ItemKind | None
+
+
+def _declare(**overrides: Unpack[_DeclarationFields]) -> DeclareCommitment:
+    fields: _DeclarationFields = {
         "counterparty_id": EntityId("body-b"),
         "commitment_kind": "future_exchange",
         "act": "propose",
@@ -83,7 +101,9 @@ def _declare(**overrides):
     return DeclareCommitment(**fields)
 
 
-def _accepted(state: WorldState, command, *, actor: str = "body-a"):
+def _accepted(
+    state: WorldState, command: AgentCommand, *, actor: str = "body-a"
+) -> ValidatedWorldOperation:
     outcome = validate_action_request(
         world_id=WorldId("world-1"),
         state=state,
@@ -191,7 +211,7 @@ def test_channel_off_dead_actor_horizon_and_service_item() -> None:
 def test_command_round_trip_registry_and_ledger_type_error() -> None:
     command = _declare()
     assert decode_domain(encode_domain(command)) == command
-    command_types = AgentCommand.__args__  # type: ignore[attr-defined]
+    command_types = get_args(AgentCommand)
     assert sum(1 for kind in command_types if kind is DeclareCommitment) == 1
     with pytest.raises(ValueError, match="lifecycle_denied_command_kind_unknown"):
         require_lifecycle_denied_command_kinds(("declare_commitment",))

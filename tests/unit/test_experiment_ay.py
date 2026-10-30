@@ -10,6 +10,7 @@ from experiments.catalog import (
     OFF_GATE_MATRIX_EXPERIMENT_IDS,
     experiment_ay_regional_migration,
 )
+from experiments.collectors import CollectorMetricDocument
 from experiments.coordinator import ExperimentCoordinator
 from experiments.matrix_schema import finalize_matrix_cell_config
 from experiments.regional_migration_scenario import regional_migration_scenario
@@ -19,6 +20,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V44,
     CommunicationStrategyMode,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
 )
 from simulation.runner_serialization import (
@@ -26,11 +28,12 @@ from simulation.runner_serialization import (
     decode_runner_config,
     encode_runner_config,
 )
+from world.events import WorldEvent
 from world.identifiers import EntityId
 from world.regions import CognitionMode
 
 
-def _conditions():
+def _conditions() -> dict[str, SimulationRunnerConfig]:
     definition = regional_migration_scenario(seed=17, max_ticks=5)
     return {
         condition.condition_id: condition.runner_config
@@ -56,6 +59,9 @@ def test_experiment_ay_is_off_gate_and_has_separate_regional_treatments() -> Non
     assert conditions["ay-channel-off"].schema_version == RUNNER_SCHEMA_VERSION_V4
     assert conditions["ay-channel-off"].regions_migration is None
     assert conditions["ay-physics-only"].schema_version == RUNNER_SCHEMA_VERSION_V44
+    assert conditions["ay-physics-only"].regions_migration is not None
+    assert conditions["ay-accurate-evidence"].regions_migration is not None
+    assert conditions["ay-blocked-arrival"].regions_migration is not None
     assert (
         conditions["ay-physics-only"].regions_migration.cognition_mode
         is CognitionMode.DISABLED
@@ -173,7 +179,11 @@ async def test_coordinator_exports_detached_evidence_and_collects_families() -> 
     enabled = arms["ay-accurate-evidence"]
     assert enabled.committed_events is not None
     assert enabled.regional_destination_evidence is not None
-    catalog = next(item for item in enabled.metrics if item.family == "catalog_metrics")
+    catalog = next(
+        item for item in enabled.metrics
+        if isinstance(item, CollectorMetricDocument)
+        and item.family == "catalog_metrics"
+    )
     fields = dict(catalog.fields)
     assert fields["regional_population_availability"] in {"present", "partial"}
     assert fields["regional_migration_availability"] in {"present", "partial"}
@@ -195,7 +205,11 @@ async def test_coordinator_collects_regional_families_after_cognition() -> None:
     assert enabled.runner_result.cognition_counters.cognition_invocations > 0
     assert enabled.regional_destination_evidence is not None
     assert len(enabled.regional_destination_evidence) > 0
-    catalog = next(item for item in enabled.metrics if item.family == "catalog_metrics")
+    catalog = next(
+        item for item in enabled.metrics
+        if isinstance(item, CollectorMetricDocument)
+        and item.family == "catalog_metrics"
+    )
     fields = dict(catalog.fields)
     assert fields["regional_population_availability"] in {"present", "partial"}
     assert fields["regional_migration_availability"] in {"present", "partial"}
@@ -221,22 +235,31 @@ async def test_diagnostic_arms_produce_visits_timeouts_and_delivered_testimony()
         for item in await ExperimentCoordinator(definition).run_all()
     }
     blocked = arms["ay-blocked-arrival"]
+    assert blocked.committed_events is not None
+    assert all(isinstance(event, WorldEvent) for event in blocked.committed_events)
     endings = [
         event.details
         for event in blocked.committed_events
-        if isinstance(event.details, JourneyEnded)
+        if isinstance(event, WorldEvent) and isinstance(event.details, JourneyEnded)
     ]
     assert len(endings) == 1
     assert endings[0].reason == "arrival_timeout"
     visit = arms["ay-visit-return"]
+    assert visit.committed_events is not None
+    assert all(isinstance(event, WorldEvent) for event in visit.committed_events)
     arrivals = [
         event.details
         for event in visit.committed_events
-        if isinstance(event.details, JourneyArrived)
+        if isinstance(event, WorldEvent) and isinstance(event.details, JourneyArrived)
     ]
     assert len(arrivals) == 5
     testimony = arms["ay-false-stale-testimony"]
-    assert any(isinstance(event.details, Told) for event in testimony.committed_events)
+    assert testimony.committed_events is not None
+    assert all(isinstance(event, WorldEvent) for event in testimony.committed_events)
+    assert any(
+        isinstance(event, WorldEvent) and isinstance(event.details, Told)
+        for event in testimony.committed_events
+    )
     accurate = arms["ay-accurate-evidence"]
     assert (
         regional_migration_arbiter(

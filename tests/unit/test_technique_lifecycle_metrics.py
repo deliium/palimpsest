@@ -55,6 +55,7 @@ def test_discovered_metrics_and_empty_roots_without_rediscovery() -> None:
     )
     state = docs[0]
     assert state.availability is MetricAvailability.PRESENT
+    assert isinstance(state.values["discovered_count"], int)
     assert state.values["discovered_count"] >= 1
     assert state.values["known_by_n_histogram"] == "1:2"
     diffusion = docs[2]

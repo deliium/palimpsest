@@ -377,7 +377,7 @@ def test_trait_presence_detaches_and_hides_digest_in_repr() -> None:
         lineage_key="lineage-1",
         acquisition_tick=2,
         parent_refs=tuple(parents),
-        source_refs=["source-1"],
+        source_refs=["source-1"],  # type: ignore[arg-type]  # Mutable input tests detachment.
     )
     parents.append("parent-3")
     assert presence.parent_refs == ("parent-1", "parent-2")
@@ -452,7 +452,7 @@ def test_negative_and_boolean_ticks_are_rejected() -> None:
     with pytest.raises(ValueError):
         _boundary(-1)
     with pytest.raises(ValueError):
-        _boundary(True)  # type: ignore[arg-type]
+        _boundary(True)
 
 
 def test_measurement_rejects_nonfinite_values_and_bool_counts() -> None:

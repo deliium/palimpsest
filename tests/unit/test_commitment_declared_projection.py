@@ -30,12 +30,13 @@ from world.events import (
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.models import AgentBody, Item
 
 _RUN = "run-commitment"
 _WORLD = WorldId("world-commitment")
 
 
-def _state():
+def _state() -> tuple[WorldState, Item, AgentBody, AgentBody]:
     item = make_item("food-1", location_id=None, holder_id="body-a")
     giver = alive_body("body-a", inventory=(item.entity_id,))
     other = alive_body("body-b")

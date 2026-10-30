@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import fields, is_dataclass
+
 from analysis.exchange_functions import FORBIDDEN_KEYS, classify_exchange_functions
 from simulation.runner_models import example_resource_exchange_profile_spec
+from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V18,
-    ActionCause,
     ExchangeCompleted,
     OccurrenceContext,
     WorldEvent,
@@ -103,4 +105,5 @@ def test_later_trade_and_quote_counts() -> None:
         *views.acquisition_fate,
         *views.quote_homogeneity,
     ):
-        assert not (set(row.__dataclass_fields__) & FORBIDDEN_KEYS)
+        assert is_dataclass(row) and not isinstance(row, type)
+        assert not ({field.name for field in fields(row)} & FORBIDDEN_KEYS)

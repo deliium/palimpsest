@@ -15,12 +15,20 @@ from world.events import (
     OccurrenceContext,
     PossessionClaimAsserted,
     TakenFromCorpse,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def _event(details: object, *, tick: int, sequence: int, actor: str | None):
+def _event(
+    details: CorpseCustodyOpened | PossessionClaimAsserted | TakenFromCorpse,
+    *,
+    tick: int,
+    sequence: int,
+    actor: str | None,
+) -> WorldEvent:
+    cause: ActionCause | SystemCause
     if actor is None:
         cause = SystemCause(
             cause_id=RequestId(f"sys-{sequence}"),
@@ -41,7 +49,7 @@ def _event(details: object, *, tick: int, sequence: int, actor: str | None):
         sequence=sequence,
         cause=cause,
         resulting_revision=WorldRevision(1),
-        details=details,  # type: ignore[arg-type]
+        details=details,
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
         schema_version=EVENT_SCHEMA_REPLAY_V16,
     )

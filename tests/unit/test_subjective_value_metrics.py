@@ -20,6 +20,7 @@ from world.events import (
     ExchangeCompleted,
     ExchangeProposed,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
@@ -100,7 +101,7 @@ def _completed() -> ExchangeCompleted:
     )
 
 
-def _event(details: object, tick: int):
+def _event(details: object, tick: int) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(f"evt-{tick}-1"),
         run_id="run-1",

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import TypedDict, Unpack
 
 import pytest
 
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V15,
-    EVENT_SCHEMA_REPLAY_V16,
     checkpoint_schema_for_production,
 )
 from simulation.runner_models import (
@@ -19,6 +18,13 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V38,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    BoundedExperimentationSpec,
+    CulturalFeatureProvenanceSpec,
+    KinshipSpec,
+    KnowledgeGenealogySpec,
+    PossessionSuccessionSpec,
+    SimulationRunnerConfig,
+    TechniqueLifecycleSpec,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_bounded_experimentation_spec,
@@ -38,12 +44,13 @@ from simulation.serialization import (
     _decode_event_details,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
+from world.events import EVENT_SCHEMA_REPLAY_V15, EVENT_SCHEMA_REPLAY_V16
 from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 from world.production import example_production_catalog
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -75,7 +82,7 @@ def _plain_base():
     )
 
 
-def _with_catalog(config):
+def _with_catalog(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
     catalog = example_production_catalog()
     agents = tuple(
         replace(
@@ -87,8 +94,19 @@ def _with_catalog(config):
     return replace(config, agents=agents)
 
 
-def _v38(**extra):
-    fields = {
+class _ConfigOverrides(TypedDict, total=False):
+    schema_version: str
+    possession_succession: PossessionSuccessionSpec | None
+    v3_capability_flags: V3CapabilityFlags
+    kinship: KinshipSpec | None
+    cultural_feature_provenance: CulturalFeatureProvenanceSpec | None
+    knowledge_genealogy: KnowledgeGenealogySpec | None
+    technique_lifecycle: TechniqueLifecycleSpec | None
+    bounded_experimentation: BoundedExperimentationSpec | None
+
+
+def _v38(**extra: Unpack[_ConfigOverrides]) -> SimulationRunnerConfig:
+    fields: _ConfigOverrides = {
         "schema_version": RUNNER_SCHEMA_VERSION_V38,
         "possession_succession": example_possession_succession_spec(),
     }

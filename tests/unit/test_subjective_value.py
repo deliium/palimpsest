@@ -42,6 +42,6 @@ def test_reference_kind_ignores_acceptance() -> None:
 
 def test_acceptance_rejects_bool_and_out_of_range() -> None:
     with pytest.raises(ValueError, match="observed_acceptance"):
-        appraise_reservation(item_kind=ItemKind.GENERIC, observed_acceptance=True)  # type: ignore[arg-type]
+        appraise_reservation(item_kind=ItemKind.GENERIC, observed_acceptance=True)
     with pytest.raises(ValueError, match="observed_acceptance"):
         appraise_reservation(item_kind=ItemKind.GENERIC, observed_acceptance=65)

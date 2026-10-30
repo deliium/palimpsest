@@ -287,7 +287,7 @@ class SqlAlchemyMetricSetRepository:
         _LOGGER.info(
             "metric_set_transitioned",
             **fields,
-            version=result.lifecycle_version,
+            resulting_version=result.lifecycle_version,
         )
         return result
 

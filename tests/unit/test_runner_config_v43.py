@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import TypedDict, Unpack
 
 import pytest
 
@@ -15,7 +16,12 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     CollectiveProjectsSpec,
+    PossessionSuccessionSpec,
     PublicGoodsSpec,
+    ResourceExchangeProfileSpec,
+    SimulationRunnerConfig,
+    StructuredCommitmentsSpec,
+    SubjectiveValuationSpec,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_collective_projects_spec,
@@ -35,7 +41,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -67,8 +73,19 @@ def _plain_base():
     )
 
 
-def _v43(**extra):
-    fields = {
+class _ConfigOverrides(TypedDict, total=False):
+    schema_version: str
+    collective_projects: CollectiveProjectsSpec | None
+    public_goods: PublicGoodsSpec | None
+    v3_capability_flags: V3CapabilityFlags
+    subjective_valuation: SubjectiveValuationSpec | None
+    resource_exchange_profile: ResourceExchangeProfileSpec | None
+    possession_succession: PossessionSuccessionSpec | None
+    structured_commitments: StructuredCommitmentsSpec | None
+
+
+def _v43(**extra: Unpack[_ConfigOverrides]) -> SimulationRunnerConfig:
+    fields: _ConfigOverrides = {
         "schema_version": RUNNER_SCHEMA_VERSION_V43,
         "collective_projects": example_collective_projects_spec(),
         "public_goods": example_public_goods_spec(),
@@ -77,8 +94,8 @@ def _v43(**extra):
     return replace(_plain_base(), **fields)
 
 
-def _v42(**extra):
-    fields = {
+def _v42(**extra: Unpack[_ConfigOverrides]) -> SimulationRunnerConfig:
+    fields: _ConfigOverrides = {
         "schema_version": RUNNER_SCHEMA_VERSION_V42,
         "collective_projects": example_collective_projects_spec(),
     }

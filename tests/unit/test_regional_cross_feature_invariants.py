@@ -14,7 +14,7 @@ from agents.models import AgentId
 from experiments.persistence import regional_context_from_snapshot
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.engine import WorldEngine
-from simulation.lifecycle import ActionSubmission
+from simulation.lifecycle import ActionSubmission, TickResult
 from simulation.models import SimulationRunConfig
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
 from tests.unit.test_experiment_ax import _skilled
@@ -111,7 +111,9 @@ def test_arrival_gets_local_public_benefit_and_every_prefix_replays(
     )
     initial = engine._snapshot.world.state
 
-    def step(*, travel: AgentCommand | None = None, build: AgentCommand | None = None):
+    def step(
+        *, travel: AgentCommand | None = None, build: AgentCommand | None = None
+    ) -> TickResult:
         batch = engine.observe()
         return engine.resolve_tick(
             (
@@ -145,14 +147,14 @@ def test_arrival_gets_local_public_benefit_and_every_prefix_replays(
     assert not any(event.details.kind == "move" for event in events)
     completed = initial
     for _, tick_events in groupby(events, key=lambda event: event.tick):
-        tick_events = tuple(tick_events)
-        for end in range(1, len(tick_events) + 1):
+        tick_batch = tuple(tick_events)
+        for end in range(1, len(tick_batch) + 1):
             projected = project_event_prefix(
                 completed,
-                tick_events[:end],
+                tick_batch[:end],
                 expected_run_id=engine.run_id.value,
                 expected_world_id=engine.world_id,
-                includes_last_event=end == len(tick_events),
+                includes_last_event=end == len(tick_batch),
             )
         completed = projected
     assert completed.bodies == engine._snapshot.world.state.bodies

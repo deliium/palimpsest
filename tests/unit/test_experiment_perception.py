@@ -17,6 +17,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V15,
     ExperimentResolved,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
@@ -25,7 +26,7 @@ from world.observations import ObservationAudienceRole
 pytestmark = pytest.mark.unit
 
 
-def _event(outcome: str) -> object:
+def _event(outcome: str) -> WorldEvent:
     details = ExperimentResolved(
         operator="combine",
         operand_a_id=EntityId("item-1"),
@@ -91,19 +92,19 @@ def test_distant_agent_receives_no_occurrence(
             observer_id=EntityId("body-1"),
             location_id=EntityId("loc-1"),
             content_visible=True,
-            prior_events=(event,),  # type: ignore[arg-type]
+            prior_events=(event,),
         )
         bystander_rows, _ = _project_event_window(
             observer_id=EntityId("body-2"),
             location_id=EntityId("loc-1"),
             content_visible=True,
-            prior_events=(event,),  # type: ignore[arg-type]
+            prior_events=(event,),
         )
         distant_rows, _ = _project_event_window(
             observer_id=EntityId("body-3"),
             location_id=EntityId("loc-2"),
             content_visible=True,
-            prior_events=(event,),  # type: ignore[arg-type]
+            prior_events=(event,),
         )
     assert actor_rows[0].audience_role is ObservationAudienceRole.ACTOR
     assert "operator" in actor_rows[0].public_facts

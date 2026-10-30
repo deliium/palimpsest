@@ -9,11 +9,12 @@ from experiments import experiment_g_reflection, map_reflection_audits_to_report
 from experiments.composition import map_reflection_audits_to_report as mapped
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
+from simulation.runner_models import SimulationRunnerResult
 from tests.unit.test_experiment_definitions import _base
 from world.identifiers import require_stable_id
 
 
-async def _run(condition_id: str, run_id: str):
+async def _run(condition_id: str, run_id: str) -> SimulationRunnerResult:
     definition = experiment_g_reflection(_base())
     config = next(
         item.runner_config
@@ -26,8 +27,8 @@ async def _run(condition_id: str, run_id: str):
         return await runner.run()
 
 
-def _hash_through(result: object, tick: int) -> tuple[str, ...]:
-    hashes = []
+def _hash_through(result: SimulationRunnerResult, tick: int) -> tuple[str, ...]:
+    hashes: list[str] = []
     for receipt in result.finalized_tick_receipts:
         if receipt.tick > tick:
             break
@@ -40,9 +41,13 @@ async def test_deterministic_arm_audits_without_rewriting_the_reflection_tick() 
     disabled = await _run("g-disabled", "run-g-disabled")
     deterministic = await _run("g-deterministic", "run-g-deterministic")
     repeated = await _run("g-deterministic", "run-g-deterministic-repeat")
+    from agents.cognition.reflection import ReflectionAudit
+
     assert disabled.reflection_audits == ()
     assert deterministic.reflection_audits
-    reflection_tick = deterministic.reflection_audits[0].tick
+    audit = deterministic.reflection_audits[0]
+    assert isinstance(audit, ReflectionAudit)
+    reflection_tick = audit.tick
     assert _hash_through(disabled, reflection_tick) == _hash_through(
         deterministic, reflection_tick
     )
@@ -56,5 +61,7 @@ async def test_deterministic_arm_audits_without_rewriting_the_reflection_tick() 
     revision = require_stable_id("rev", "rev-g")
     document = compute_reflection(report, input_revision=revision)
     assert document.metric_family == "reflection"
-    assert document.values["reflection_invocations"] >= 1
+    invocations = document.values["reflection_invocations"]
+    assert isinstance(invocations, (int, float))
+    assert invocations >= 1
     assert map_reflection_audits_to_report is mapped

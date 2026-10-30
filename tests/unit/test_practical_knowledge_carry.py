@@ -14,6 +14,7 @@ from agents.cognition.practical_knowledge import (
     KnowledgeTransmissionOrigin,
     PracticalKnowledgeAudit,
     PracticalKnowledgeKind,
+    PracticalKnowledgeLedger,
     empty_practical_knowledge_ledger,
     entry_to_audit,
     form_or_reinforce_practical_knowledge,
@@ -29,7 +30,7 @@ _LOG = logging.getLogger("tests.practical_knowledge_carry")
 _KINDS = ("foraging_method",)
 
 
-def _filled_ledger(owner: AgentId):
+def _filled_ledger(owner: AgentId) -> PracticalKnowledgeLedger:
     return form_or_reinforce_practical_knowledge(
         empty_practical_knowledge_ledger(owner),
         kind=PracticalKnowledgeKind.FORAGING_METHOD,
@@ -112,6 +113,7 @@ def test_prepare_channel_on_empty_synthesize() -> None:
     )
     prepared = loop._prepare_practical_knowledge(loop_input)
     assert prepared is not None
+    assert isinstance(prepared, PracticalKnowledgeLedger)
     assert prepared.owner_id == owner
     assert prepared.entries == ()
     assert prepared.max_entries == spec.lineage_policy.max_entries_per_owner

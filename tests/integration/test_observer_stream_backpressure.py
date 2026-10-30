@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TypedDict
 
 import pytest
 
 from api.routes.observer_stream import ObserverStreamConfig, ObserverStreamSession
 
 pytestmark = pytest.mark.integration
+
+
+class _JournalEvent(TypedDict):
+    tick: int
+    sequence: int
+    event_id: str
 
 
 @pytest.mark.asyncio
@@ -22,7 +29,7 @@ async def test_observer_stream_slow_consumer_isolates_from_sibling(
     under the integration + disposable-DB gate.
     """
     del database_resources
-    journal = [
+    journal: list[_JournalEvent] = [
         {"tick": index, "sequence": 0, "event_id": f"evt-{index}"}
         for index in range(24)
     ]

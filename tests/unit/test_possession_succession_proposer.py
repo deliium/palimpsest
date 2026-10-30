@@ -136,5 +136,6 @@ def test_proposal_is_not_attack() -> None:
         empty_possession_legitimacy(owner),
         channel_on=True,
     )
-    assert type(command) is not Attack
+    command_type: type[object] = type(command)
+    assert command_type is not Attack
     assert not hasattr(legitimacy, "Attack")

@@ -23,6 +23,7 @@ from agents.cognition.models import (
 from agents.cognition.prospective import (
     PROSPECTIVE_POLICY_VERSION,
     ImaginedTransition,
+    ProspectiveAudit,
     ProspectivePolicy,
     ProspectivePruneReason,
     ProspectiveRollout,
@@ -213,7 +214,9 @@ def test_mode_defaults_disabled_and_policy_keeps_provider_off() -> None:
     assert assisted.allow_provider is True
 
 
-def test_policy_rejects_horizon_above_depth_and_bad_caps(caplog) -> None:
+def test_policy_rejects_horizon_above_depth_and_bad_caps(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.ERROR, logger="agents.cognition.prospective")
     with pytest.raises(ValueError, match="horizon_exceeds_max_depth"):
         ProspectivePolicy(horizon=4, max_depth=3)
@@ -420,7 +423,7 @@ async def test_imagine_keeps_one_step_search_and_collapses_deeper_move() -> None
     assert type(deep_plan.command) is Move
     assert deep_plan.command.destination_id == EntityId("D")
     audit = engine.last_prospective_audit()
-    assert audit is not None
+    assert isinstance(audit, ProspectiveAudit)
     assert audit.direction_code == "move"
 
     atoms = (CausalAtom(slot=CausalSlot.LOCATION, value="D"),)
@@ -502,7 +505,9 @@ def test_source_keeps_provider_import_in_selection_module() -> None:
     assert "search_base_probability" not in rollout
 
 
-def test_rollout_debug_names_direction_without_objective_terms(caplog) -> None:
+def test_rollout_debug_names_direction_without_objective_terms(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="agents.cognition.prospective")
     rollout = _rollout(horizon=2, max_depth=2, max_branches=1)
     assert type(rollout) is ProspectiveRollout
@@ -514,7 +519,9 @@ def test_rollout_debug_names_direction_without_objective_terms(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_each_budget_still_yields_one_command(caplog) -> None:
+async def test_each_budget_still_yields_one_command(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from agents.cognition.deliberation import (
         CommandPlanner,
         MultiCriteriaIntentionSelector,
@@ -532,7 +539,7 @@ async def test_each_budget_still_yields_one_command(caplog) -> None:
 
     async def one_command(
         policy: ProspectivePolicy,
-    ) -> tuple[type[object], object]:
+    ) -> tuple[type[object], ProspectiveAudit]:
         engine = ImaginationEngine()
         futures = await engine.imagine(
             loop_input,
@@ -555,7 +562,7 @@ async def test_each_budget_still_yields_one_command(caplog) -> None:
         plan = await CommandPlanner().plan(loop_input, choice, futures, memory, board)
         assert type(plan.command) in {Move, Search, Wait}
         audit = engine.last_prospective_audit()
-        assert audit is not None
+        assert isinstance(audit, ProspectiveAudit)
         return type(plan.command), audit
 
     samples = iter((0.0, 1.0))
@@ -628,7 +635,9 @@ async def test_each_budget_still_yields_one_command(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_provider_ranks_known_ids_and_rejects_foreign_ids(caplog) -> None:
+async def test_provider_ranks_known_ids_and_rejects_foreign_ids(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from agents.cognition.imagination import ImaginationEngine
     from agents.cognition.prospective_selection import ProspectiveSelectionOutput
     from tests.fakes.llm import FakeLLMProvider, ScriptedSuccess
@@ -683,7 +692,7 @@ async def test_provider_ranks_known_ids_and_rejects_foreign_ids(caplog) -> None:
     )
     assert chosen.futures[0].direction is ActionDirection.WAIT
     audit = assisted.last_prospective_audit()
-    assert audit is not None
+    assert isinstance(audit, ProspectiveAudit)
     assert audit.fallback_used is False
     assert audit.llm_call_count == 1
     selected_logs = [
@@ -716,7 +725,7 @@ async def test_provider_ranks_known_ids_and_rejects_foreign_ids(caplog) -> None:
     )
     assert fallback.futures[0].direction is ActionDirection.MOVE
     fallback_audit = kept.last_prospective_audit()
-    assert fallback_audit is not None
+    assert isinstance(fallback_audit, ProspectiveAudit)
     assert fallback_audit.fallback_used is True
     warnings = [
         record.getMessage()

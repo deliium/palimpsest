@@ -15,14 +15,16 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V18,
     ExchangeProposed,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.observations import ObservationContext
+from world.models import Item
+from world.observations import Observation, ObservationContext
 from world.values import ItemKind
 
 
-def _scene():
+def _scene() -> tuple[WorldState, WorldEvent, Item, Item]:
     tool = make_item(
         "tool-1", name="Axe", kind=ItemKind.TOOL, location_id=None, holder_id="body-a"
     )
@@ -64,7 +66,9 @@ def _scene():
     return state, event, tool, food
 
 
-def _observe(state, event, *, active: bool):
+def _observe(
+    state: WorldState, event: WorldEvent, *, active: bool
+) -> tuple[Observation, ...]:
     return project_observations(
         world_id=WorldId("world-1"),
         state=state,

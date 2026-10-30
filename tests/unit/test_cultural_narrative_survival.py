@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
 
 from analysis.cultural_evolution_evidence import (
     CULTURAL_DIMENSIONS,
     CulturalAnalysisWindow,
     CulturalEvolutionInputs,
+    CulturalMeasurement,
     InventoryBoundary,
     TraitPresence,
 )
@@ -85,7 +88,9 @@ def _inputs(
     )
 
 
-def _row(rows, measurement_id, *, end=None):
+def _row(
+    rows: Sequence[CulturalMeasurement], measurement_id: str, *, end: int | None = None
+) -> CulturalMeasurement:
     matches = [
         row
         for row in rows

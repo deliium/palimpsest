@@ -17,7 +17,10 @@ from experiments.civilization_publication import (
     CivilizationCapturedHistory,
     compose_civilization_boundary,
 )
-from simulation.civilization_boundaries import project_civilization_boundary
+from simulation.civilization_boundaries import (
+    CivilizationBoundaryInput,
+    project_civilization_boundary,
+)
 from simulation.civilization_capture import (
     CivilizationInventoryChannel,
     CivilizationInventoryCoverage,
@@ -100,7 +103,7 @@ def _frame(
     *,
     inventories: tuple[CivilizationOwnerInventory, ...] = (),
     structures: tuple[Structure, ...] = (),
-):
+) -> CivilizationBoundaryInput:
     from tests.unit.test_observer_civilization import _physical_scene
 
     scene = replace(
@@ -120,7 +123,7 @@ def _structure(location: str = "loc-1") -> Structure:
     )
 
 
-def test_settlements_need_four_complete_boundaries_and_intact_infrastructure():
+def test_settlements_need_four_complete_boundaries_and_intact_infrastructure() -> None:
     inventories = (_inventory("not-the-body-id"),)
     active = tuple(
         _frame(tick, inventories=inventories, structures=(_structure(),))
@@ -169,7 +172,7 @@ def _knowledge(
     )
 
 
-def test_technology_attribution_distinguishes_teaching_rediscovery_and_future():
+def test_technology_attribution_distinguishes_teaching_rediscovery_and_future() -> None:
     inventories = (
         _inventory(
             "agent-a",
@@ -205,7 +208,7 @@ def test_technology_attribution_distinguishes_teaching_rediscovery_and_future():
     assert "technology:agent-a:knowledge-future" not in rows
 
 
-def test_culture_uses_exact_representation_identity_and_unknown_denominators():
+def test_culture_uses_exact_representation_identity_and_unknown_denominators() -> None:
     trait = CivilizationOwnerTrait("trait-a", "fingerprint-1", 0, 1)
     duplicate = CivilizationOwnerTrait("trait-b", "fingerprint-1", 1, 2)
     first = _inventory("agent-a", cultural=(trait, duplicate))
@@ -238,7 +241,7 @@ def test_culture_uses_exact_representation_identity_and_unknown_denominators():
     assert shared.proportion is None
 
 
-def test_trade_counts_only_completed_exchanges_and_keeps_event_time_location():
+def test_trade_counts_only_completed_exchanges_and_keeps_event_time_location() -> None:
     from tests.unit.test_civilization_capture import _event, _exchange
 
     batches = (
@@ -259,7 +262,9 @@ def test_trade_counts_only_completed_exchanges_and_keeps_event_time_location():
     ]
 
 
-def _decay(owner: str, tick: int, *, strength: float = 0.9, pruned: bool = False):
+def _decay(
+    owner: str, tick: int, *, strength: float = 0.9, pruned: bool = False
+) -> CivilizationOwnerDecaySample:
     return CivilizationOwnerDecaySample(
         local_pattern_id="pattern-1",
         group_key="group-1",
@@ -287,7 +292,7 @@ def _decay(owner: str, tick: int, *, strength: float = 0.9, pruned: bool = False
     )
 
 
-def test_cumulative_decay_samples_are_deduplicated_and_never_duplicated_rows():
+def test_cumulative_decay_samples_are_deduplicated_and_never_duplicated_rows() -> None:
     samples = tuple(_decay("agent-a", tick) for tick in range(8))
     inventories = (_inventory("agent-a", decay=samples),)
     frame = _frame(8, inventories=inventories)
@@ -302,7 +307,8 @@ def test_cumulative_decay_samples_are_deduplicated_and_never_duplicated_rows():
     )
 
 
-def test_censored_episode_lifecycle_publishes_as_censored_instead_of_rejecting():
+def test_censored_episode_lifecycle_publishes_as_censored_instead_of_rejecting(
+) -> None:
     # A single decay sample cannot form a complete four-tick window, so the
     # lifecycle state is `unknown`; the presentation row must still compose.
     inventories = (_inventory("agent-a", decay=(_decay("agent-a", 1),)),)
@@ -312,7 +318,8 @@ def test_censored_episode_lifecycle_publishes_as_censored_instead_of_rejecting()
     assert episodes[0].status == "censored"
 
 
-def test_publication_requires_an_exact_boundary_and_keeps_owner_scope_separate():
+def test_publication_requires_an_exact_boundary_and_keeps_owner_scope_separate(
+) -> None:
     frame = _frame(0, inventories=(_inventory("agent-a"),))
     history = CivilizationCapturedHistory(_RUN, _WORLD, (frame,), ())
     publication = compose_civilization_boundary(history, 0)
@@ -339,7 +346,7 @@ def test_publication_requires_an_exact_boundary_and_keeps_owner_scope_separate()
     )
 
 
-def test_analytical_groups_use_residence_without_inventing_trust():
+def test_analytical_groups_use_residence_without_inventing_trust() -> None:
     from agents.models import AgentId
     from analysis.civilization_overlays import compose_group_rows
     from simulation.registrations import AgentRegistration
@@ -368,7 +375,7 @@ def test_analytical_groups_use_residence_without_inventing_trust():
     assert all(row.missing_lanes == ("interaction", "trust") for row in analytical)
 
 
-def test_grounded_concept_keeps_evidence_site_anchor_and_unplaced_rows_do_not():
+def test_grounded_concept_keeps_evidence_site_anchor_and_unplaced_rows_do_not() -> None:
     evidence = CivilizationOwnerConceptEvidence(
         "evidence-1",
         3,
@@ -417,7 +424,7 @@ def test_grounded_concept_keeps_evidence_site_anchor_and_unplaced_rows_do_not():
     assert unplaced.context.anchors == ()
 
 
-def test_publication_layer_contracts_use_expected_scopes():
+def test_publication_layer_contracts_use_expected_scopes() -> None:
     frame = _frame(
         0,
         inventories=(
@@ -434,7 +441,7 @@ def test_publication_layer_contracts_use_expected_scopes():
     assert CivilizationLayer.CULTURE in layers
 
 
-def test_boundary_markers_are_pinned_to_the_committed_boundary():
+def test_boundary_markers_are_pinned_to_the_committed_boundary() -> None:
     from simulation.civilization_models import CivilizationMarkerType
 
     inventories = (_inventory("not-the-body-id"),)

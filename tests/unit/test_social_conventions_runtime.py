@@ -25,6 +25,7 @@ from agents.cognition.social_conventions import (
 from agents.models import Agent, AgentId
 from simulation.agent_runtime import AgentRuntime
 from simulation.bootstrap import registration_translator
+from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 from tests.unit.test_agent_runtime import _bootstrap
 from tests.unit.test_group_formation import _body, _north_identity, _observe
@@ -84,15 +85,9 @@ def _runtime(loop: object, owner: str = "agent-1") -> AgentRuntime:
 def test_runtime_slot_defaults_absent_and_owner_check_is_closed() -> None:
     assert "_social_conventions" in AgentRuntime.__slots__
     owner = AgentId("ada")
-    assert (
-        require_owner_social_conventions(None, owner, field_name="social_conventions")
-        is None
-    )
+    require_owner_social_conventions(None, owner, field_name="social_conventions")
     ledger = empty_convention_ledger(owner)
-    assert (
-        require_owner_social_conventions(ledger, owner, field_name="social_conventions")
-        is None
-    )
+    require_owner_social_conventions(ledger, owner, field_name="social_conventions")
     with pytest.raises(ValueError, match="owner_id mismatch"):
         require_owner_social_conventions(
             ledger, AgentId("ben"), field_name="social_conventions"
@@ -200,5 +195,6 @@ def test_foreign_ledger_is_rejected_on_snapshot_and_checkpoint() -> None:
         _snapshot(owner, ledger=foreign)
     runtime = _runtime(default_cognitive_loop())
     exported = runtime.export_runtime_checkpoint()
+    assert isinstance(exported, AgentRuntimeCheckpoint)
     with pytest.raises(ValueError, match="owner_id mismatch"):
         replace(exported, social_conventions=foreign)

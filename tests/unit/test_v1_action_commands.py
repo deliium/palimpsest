@@ -42,7 +42,9 @@ from world.identifiers import (
 )
 
 
-def _utt(text: str, *, speaker: str = "body-1", cid: str = "comm-1"):
+def _utt(
+    text: str, *, speaker: str = "body-1", cid: str = "comm-1"
+) -> StructuredUtterance:
     return origin_utterance(
         text=text, speaker_id=EntityId(speaker), communication_id=cid
     )

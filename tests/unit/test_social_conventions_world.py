@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from tests.unit.test_world_rules import _accept, _state
-from world._operations import OperationAccepted, validate_action_request
+from world._operations import (
+    OperationAccepted,
+    ValidatedWorldOperation,
+    validate_action_request,
+)
 from world._rules import RuleDisposition, apply_operation
 from world.actions import (
     ActionRequest,
@@ -23,7 +27,7 @@ def _accept_on(
     *,
     actor: str = "body-1",
     request_id: str = "r-1",
-) -> object:
+) -> ValidatedWorldOperation:
     outcome = validate_action_request(
         world_id=WorldId("world-1"),
         state=state,  # type: ignore[arg-type]

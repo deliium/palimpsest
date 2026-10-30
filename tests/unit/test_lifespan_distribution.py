@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TypedDict
 
 import pytest
 
@@ -14,11 +15,21 @@ from simulation.models import (
 )
 from simulation.runner_models import (
     LifespanDistributionSpec,
+    PopulationLifecycleSpec,
     example_population_lifecycle_spec,
 )
 from world.models import default_physical_rules
 
 _LOG = logging.getLogger("tests.lifespan_distribution")
+
+
+class _LifespanArguments(TypedDict):
+    spec: PopulationLifecycleSpec
+    run_config: SimulationRunConfig
+    run_id: str
+    world_id: str
+    agent_id: str
+    entry_tick: int
 
 
 def _run_config(seed: int = 7) -> SimulationRunConfig:
@@ -49,7 +60,7 @@ def test_uniform_int_draw_is_deterministic() -> None:
             params={"min_ticks": 10, "max_ticks": 20},
         ),
     )
-    kwargs = {
+    kwargs: _LifespanArguments = {
         "spec": spec,
         "run_config": _run_config(11),
         "run_id": "run-1",
@@ -61,7 +72,8 @@ def test_uniform_int_draw_is_deterministic() -> None:
     second = assign_lifespan_ticks(**kwargs)
     assert first == second
     assert 10 <= first <= 20
-    other = assign_lifespan_ticks(**{**kwargs, "run_config": _run_config(99)})
+    other_kwargs: _LifespanArguments = {**kwargs, "run_config": _run_config(99)}
+    other = assign_lifespan_ticks(**other_kwargs)
     # Different seed may diverge; allow equal by chance but prefer divergence proof
     # via stream identity when seeds differ enough.
     _LOG.debug("assigned_seed11=%s assigned_seed99=%s", first, other)

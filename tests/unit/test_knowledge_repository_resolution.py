@@ -12,6 +12,7 @@ from simulation.lifecycle import (
     ActionResolutionReason,
     ActionResolutionStatus,
     ActionSubmission,
+    TickResult,
 )
 from simulation.runner_models import (
     example_durable_records_spec,
@@ -23,6 +24,7 @@ from tests.physical_helpers import (
     two_location_fixture,
 )
 from world.actions import (
+    AgentCommand,
     DepositRecord,
     EstablishRepository,
     IndexRepository,
@@ -64,10 +66,10 @@ def _engine(
     )
 
 
-def _act(engine: WorldEngine, agent: str, command: object):
+def _act(engine: WorldEngine, agent: str, command: AgentCommand) -> TickResult:
     batch = engine.observe()
     return engine.resolve_tick(
-        (ActionSubmission(batch.token, AgentId(agent), command),)  # type: ignore[arg-type]
+        (ActionSubmission(batch.token, AgentId(agent), command),)
     )
 
 

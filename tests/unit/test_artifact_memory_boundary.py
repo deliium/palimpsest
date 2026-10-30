@@ -23,6 +23,7 @@ from agents.cognition.models import (
     IntentionCode,
     InternalAgentState,
     InterpretedPerception,
+    MemoryUpdateIntent,
     MotivationCode,
     PerceptionClaimCode,
     RetrievedMemoryContext,
@@ -232,6 +233,7 @@ def test_interpretation_hook_emits_prefixed_readings() -> None:
         )
     )
     assert len(intents) == 1
+    assert isinstance(intents[0], MemoryUpdateIntent)
     trace = intents[0].memory
     assert trace is not None
     concepts = _concepts(trace)

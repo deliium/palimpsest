@@ -178,6 +178,8 @@ def test_harvest_attaches_rows_when_repository_enabled(
             events=events,
         )
     assert payload is not None
+    assert isinstance(payload["repository_objective_rows"], tuple)
+    assert isinstance(payload["repository_event_rows"], tuple)
     assert len(payload["repository_objective_rows"]) == 1
     assert len(payload["repository_event_rows"]) == 1
     assert "knowledge_repository_harvest_built" in caplog.text

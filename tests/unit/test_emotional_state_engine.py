@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TypedDict, cast
 
 import pytest
 
@@ -45,7 +46,7 @@ from memory.models import (
     quantize_score,
 )
 from social.models import CommunicationEnvelope, EnvelopeId
-from social.relationships import RelationshipDimension
+from social.relationships import DirectedRelationshipProfile, RelationshipDimension
 from tests.cognition_helpers import build_relationship
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import LifeStatus
@@ -165,7 +166,7 @@ def _board(
 
 def _snapshot(
     *,
-    relationships: tuple[object, ...] = (),
+    relationships: tuple[DirectedRelationshipProfile, ...] = (),
     inbox: tuple[CommunicationEnvelope, ...] = (),
 ) -> SubjectiveSnapshot:
     return SubjectiveSnapshot(
@@ -348,7 +349,15 @@ async def test_decay_toward_baseline_over_ticks() -> None:
 @pytest.mark.asyncio
 async def test_identical_inputs_are_deterministic() -> None:
     engine = EmotionalStateEngine()
-    kwargs = dict(
+    class AppraisalInputs(TypedDict):
+        loop_input: CognitiveLoopInput
+        perception: InterpretedPerception
+        situation: SituationModel
+        memory: RetrievedMemoryContext
+        self_state: SelfModel
+        goal_board: GoalBoard
+
+    kwargs = AppraisalInputs(
         loop_input=_loop_input(),
         perception=_perception(),
         situation=_situation(SituationClaimCode.THREAT_SIGNAL),
@@ -404,7 +413,7 @@ async def test_relationship_fear_distinct_from_emotion_kind(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """RelationshipDimension.FEAR feeds emotion fear without type conflation."""
-    assert EmotionKind.FEAR is not RelationshipDimension.FEAR
+    assert cast(object, EmotionKind.FEAR) is not RelationshipDimension.FEAR
     engine = EmotionalStateEngine()
     with caplog.at_level(logging.DEBUG, logger="agents.cognition.emotion"):
         evaluation = await engine.appraise(
@@ -523,7 +532,7 @@ async def test_inbox_social_interaction_raises_attachment() -> None:
 
 @pytest.mark.asyncio
 async def test_relationship_dimension_fear_drives_emotion_fear() -> None:
-    assert EmotionKind.FEAR is not RelationshipDimension.FEAR
+    assert cast(object, EmotionKind.FEAR) is not RelationshipDimension.FEAR
     engine = EmotionalStateEngine()
     profile = build_relationship(source="agent-1", target="agent-2", fear=0.8)
     evaluation = await engine.appraise(

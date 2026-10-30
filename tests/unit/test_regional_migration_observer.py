@@ -1,19 +1,27 @@
 """Regional presentation is detached and agrees across live/restore/seek facts."""
 
 from dataclasses import replace
+from typing import Literal
 
 from api.observer_service import _frame_out
 from observer.adapt import adapt_event
+from observer.contracts import ObserverFrame
 from observer.layout import ObserverLayoutCatalog
 from observer.project import project_frame
 from observer.version import OBSERVER_LAYOUT_SCHEMA_VERSION, SEMANTIC_EVENT_TYPES
 from simulation.engine import WorldEngine
-from simulation.observer_facts import scene_from_facts, scene_from_snapshot
+from simulation.observer_facts import (
+    ObjectiveScene,
+    scene_from_facts,
+    scene_from_snapshot,
+)
 from tests.unit.test_regional_travel_checkpoint import _snapshot
 from tests.unit.test_regional_travel_lifecycle import _engine, _move
 
 
-def _frame(scene, mode="replay"):
+def _frame(
+    scene: ObjectiveScene, mode: Literal["live", "replay"] = "replay"
+) -> ObserverFrame:
     return project_frame(
         scene,
         ObserverLayoutCatalog(
@@ -32,10 +40,12 @@ def test_pending_snapshot_and_live_frames_match_and_keep_origin_placement() -> N
     frame = _frame(scene_from_facts(facts))
     assert frame == _frame(scene_from_snapshot(snapshot))
     agent = frame.world.agents[0]
+    assert agent.journey is not None
     assert agent.location_id == agent.journey.origin_location_id == "loc-1"
     assert agent.journey.phase == "preparing"
     assert frame.world.locations[0].region_label == "North"
     waiting = _frame(scene_from_facts(replace(facts, tick=3)))
+    assert waiting.world.agents[0].journey is not None
     assert waiting.world.agents[0].journey.phase == "capacity_wait"
     assert waiting.world.agents[0].location_id == "loc-1"
     # Screen/layout choices never mutate the detached authority or its snapshot.
@@ -48,6 +58,7 @@ def test_pending_snapshot_and_live_frames_match_and_keep_origin_placement() -> N
 def test_live_start_arrival_and_timeout_adapt_once_and_frames_replace_journey() -> None:
     engine = _engine(destination_capacity=2, blocker=False)
     started = _move(engine)
+    assert started is not None
     start = next(
         row.event
         for row in started.events

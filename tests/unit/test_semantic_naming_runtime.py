@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -25,6 +27,7 @@ from agents.cognition.semantic_naming import (
 from agents.models import Agent, AgentId
 from simulation.agent_runtime import AgentRuntime
 from simulation.bootstrap import registration_translator
+from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 from tests.unit.test_agent_runtime import _bootstrap
 from tests.unit.test_group_formation import _body, _north_identity, _observe
@@ -84,14 +87,10 @@ def _runtime(loop: object, owner: str = "agent-1") -> AgentRuntime:
 def test_runtime_slot_defaults_absent_and_owner_check_is_closed() -> None:
     assert "_semantic_naming" in AgentRuntime.__slots__
     owner = AgentId("ada")
-    assert (
-        require_owner_semantic_naming(None, owner, field_name="semantic_naming") is None
-    )
+    check_naming = cast(Callable[..., object], require_owner_semantic_naming)
+    assert check_naming(None, owner, field_name="semantic_naming") is None
     ledger = empty_terminology_ledger(owner)
-    assert (
-        require_owner_semantic_naming(ledger, owner, field_name="semantic_naming")
-        is None
-    )
+    assert check_naming(ledger, owner, field_name="semantic_naming") is None
     with pytest.raises(ValueError, match="owner_id mismatch"):
         require_owner_semantic_naming(
             ledger, AgentId("ben"), field_name="semantic_naming"
@@ -174,6 +173,6 @@ def test_foreign_ledger_is_rejected_on_snapshot_and_checkpoint() -> None:
     with pytest.raises(ValueError, match="owner_id mismatch"):
         _snapshot(owner, ledger=foreign)
     runtime = _runtime(default_cognitive_loop())
-    exported = runtime.export_runtime_checkpoint()
+    exported = cast(AgentRuntimeCheckpoint, runtime.export_runtime_checkpoint())
     with pytest.raises(ValueError, match="owner_id mismatch"):
         replace(exported, semantic_naming=foreign)

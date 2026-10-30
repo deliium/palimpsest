@@ -15,6 +15,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V34,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -28,7 +29,7 @@ from world.models import non_lethal_physical_rules
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-a")
     return base_runner_config_from_scenario(
         seed=340,

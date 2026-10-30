@@ -16,6 +16,7 @@ from agents.models import AgentId
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
+    SimulationRunnerConfig,
     SimulationRunnerResultDocument,
     TeachingAudit,
     TeachingAuditStore,
@@ -98,7 +99,7 @@ async def test_export_copies_explain_belief_and_objective(
     assert "tick=1" in messages
 
 
-def _teaching_config():
+def _teaching_config() -> SimulationRunnerConfig:
     from dataclasses import replace
 
     from simulation.runner_models import (

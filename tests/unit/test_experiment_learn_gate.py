@@ -72,7 +72,7 @@ def _experiment_ledger(
     return ledger, hypothesis_id
 
 
-def _learn(ledger: object, *, genealogy: bool = True):
+def _learn(ledger: object, *, genealogy: bool = True) -> PracticalKnowledgeLedger:
     knowledge = empty_practical_knowledge_ledger(_OWNER)
     _kept, updated = commit_experiment_learning(
         ledger,  # type: ignore[arg-type]

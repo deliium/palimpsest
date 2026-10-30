@@ -34,15 +34,18 @@ from experiments.composition import (
     regional_population_rows_from_events,
 )
 from experiments.persistence import PersistedAnalysisSnapshot
+from simulation.evidence import EvidenceManifest
 from tests.simulation_helpers import alive_body
 from world.effects import ActionCause, SystemCause, SystemEffectFamily
 from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
+    EventDetails,
     Fled,
     JourneyArrived,
     JourneyEnded,
     Moved,
     Transported,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
@@ -336,10 +339,10 @@ def _event(
     tick: int,
     sequence: int,
     actor: str,
-    details: object,
+    details: EventDetails,
     origin: str,
     dest: str | None,
-):
+) -> WorldEvent:
     request_id = RequestId(f"request-{tick}-{sequence}")
     cause = (
         SystemCause(
@@ -578,7 +581,14 @@ async def test_population_composition_keeps_bootstrap_and_owner_evidence_detache
     assert expected_owners == 2
 
     class Reader:
-        async def load(self, *, run_id, owner_id, experiment_id=None, manifest=None):
+        async def load(
+            self,
+            *,
+            run_id: str,
+            owner_id: str,
+            experiment_id: str | None = None,
+            manifest: EvidenceManifest | None = None,
+        ) -> PersistedAnalysisSnapshot:
             assert run_id == persisted.run_id
             return {"agent-1": owner_one, "agent-2": owner_two}[owner_id]
 

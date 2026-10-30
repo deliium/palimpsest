@@ -11,11 +11,13 @@ authority, or replay readers.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from collections.abc import Sequence
 from typing import Any, Final, cast
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -323,6 +325,31 @@ class SqlAlchemyMemoryService:
         """Apply a mutation batch using an external session (optional commit)."""
         if type(batch) is not MemoryMutationBatch:
             raise MemoryServiceError(MemoryServiceErrorCode.INVALID_BATCH)
+        if batch.reconstructions:
+            # Serialize the read/validate/insert sequence before taking any
+            # snapshots. Row locks alone cannot protect not-yet-inserted IDs.
+            identity = json.dumps(
+                (
+                    "memory_reconstruction",
+                    self._scope.run_id.value,
+                    self._scope.owner_id.value,
+                ),
+                separators=(",", ":"),
+            ).encode("utf-8")
+            lock_key = int.from_bytes(
+                hashlib.sha256(identity).digest()[:8], "big", signed=True
+            )
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key}
+            )
+            _LOG.debug(
+                "memory_reconstruction_lock_acquired",
+                extra={
+                    "run_id": self._scope.run_id.value,
+                    "owner_id": self._scope.owner_id.value,
+                    "reconstruction_count": len(batch.reconstructions),
+                },
+            )
         referenced_ids = {write.memory_id for write in batch.writes} | {
             access.memory_id for access in batch.accesses
         }

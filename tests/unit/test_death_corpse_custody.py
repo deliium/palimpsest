@@ -14,7 +14,7 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
 from world._experiment_apply import _set_health
 from world._operations import OperationAccepted, validate_action_request
-from world._physical import apply_autonomous_physical_step
+from world._physical import PendingSystemStep, apply_autonomous_physical_step
 from world._rules import apply_operation
 from world._state import WorldState
 from world.actions import ActionRequest, Attack, Wait, require_agent_command
@@ -59,7 +59,7 @@ def _needs_body(*, inventory: tuple[EntityId, ...] = ()) -> AgentBody:
     )
 
 
-def _opened(step) -> tuple[CorpseCustodyOpened, ...]:
+def _opened(step: PendingSystemStep) -> tuple[CorpseCustodyOpened, ...]:
     return tuple(
         detail.details
         for detail in step.pending_details

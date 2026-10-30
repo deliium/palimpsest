@@ -162,8 +162,8 @@ async def test_max_bytes_truncates_with_reason_code(
     )
     assert loaded is not None
     assert len(loaded.stages) < len(stages) or any(
-        s.status is CognitionTraceStageStatus.TRUNCATED
-        or s.reason_code == "max_bytes_per_invocation"
+        s.summary.status is CognitionTraceStageStatus.TRUNCATED
+        or s.summary.reason_code == "max_bytes_per_invocation"
         for s in loaded.stages
     )
     assert any(

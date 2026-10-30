@@ -219,11 +219,18 @@ async def test_live_bootstrap_and_checkpoint_replay_agree(
     assert head.result.snapshot_id == mid.snapshot_id
     # Checkpoint restore folds only subsequent events; objective cursor must match.
     assert _objective_fingerprint(head.engine) == _objective_fingerprint(engine)
-    assert head.result.events_applied == 2
-    live_events = _event_fingerprint(engine)
+    expected_events = tuple(
+        event
+        for event in engine.export_events().events
+        if mid.next_tick.value <= event.tick < engine.tick.value
+    )
+    assert {event.tick for event in expected_events} == {3, 4}
+    assert head.result.events_applied == len(expected_events)
     assert _event_fingerprint(head.engine) == (
-        live_events[0][-2:],
-        live_events[1][-2:],
+        tuple(event.event_id.value for event in expected_events),
+        tuple(
+            (event.tick, event.sequence, event.event_type) for event in expected_events
+        ),
     )
 
     loaded_bootstrap = await snapshots.get_snapshot(bootstrap.snapshot_id)
@@ -249,10 +256,8 @@ async def test_live_bootstrap_and_checkpoint_replay_agree(
     assert historical.result.mode is ReplayMode.READONLY
     assert historical.engine is not None
     assert historical.engine.tick == Tick(3)
-    assert _objective_fingerprint(historical.engine) == (
-        3,
-        engine.revision.value,
-        project_world_state(engine._snapshot.world.state),
+    assert _objective_fingerprint(historical.engine) == _objective_fingerprint(
+        WorldEngine.restore_from_snapshot(mid)
     )
     with pytest.raises(RuntimeError, match="read-only"):
         replay.open_durable(historical, journal)

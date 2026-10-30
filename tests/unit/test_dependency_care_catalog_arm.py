@@ -17,6 +17,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V28,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -26,7 +27,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.dependency_care_catalog_arm")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     body_c = alive_body("body-c")

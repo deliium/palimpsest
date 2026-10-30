@@ -29,6 +29,7 @@ from simulation.inspection import (
     DetachedInspectionProjector,
     subjective_claims_document,
 )
+from simulation.run_control import AgentRuntimeCheckpoint
 from tests.unit.test_identity_runtime import _runtime
 from tests.unit.test_territorial_claims import _claim, _entity
 
@@ -98,7 +99,8 @@ def _frame() -> ObserverFrame:
 def test_leak_keys_cannot_sit_on_the_objective_world() -> None:
     for key in _LEAK_KEYS:
         with pytest.raises(ObserverContractError) as constructed:
-            ObserverWorldState(tick=0, revision=0, **{key: "x"})
+            # Deliberately inject a forbidden field to exercise leak rejection.
+            ObserverWorldState(tick=0, revision=0, **{key: "x"})  # type: ignore[arg-type]
         assert constructed.value.reason_code == "objective_leak"
         assert constructed.value.field == key
         with pytest.raises(ObserverContractError) as parsed:
@@ -122,6 +124,7 @@ def test_physical_control_lists_presence_without_claim_ids() -> None:
 def test_subjective_claims_are_one_owner_and_empty_without_a_runtime() -> None:
     runtime, _reader = _runtime()
     exported = runtime.export_runtime_checkpoint()
+    assert isinstance(exported, AgentRuntimeCheckpoint)
     owner = runtime.agent_id
     ledger = TerritorialClaimLedger(
         owner_id=owner,

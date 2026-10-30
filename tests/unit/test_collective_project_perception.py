@@ -22,10 +22,11 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V19,
     OccurrenceContext,
     ProjectCreated,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.observations import ObservationContext
+from world.observations import Observation, ObservationContext
 
 pytestmark = pytest.mark.unit
 
@@ -78,7 +79,7 @@ def _state(*, visibility: float = 1.0) -> WorldState:
     )
 
 
-def _event():
+def _event() -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-open"),
         run_id="run-projects",
@@ -100,7 +101,7 @@ def _event():
     )
 
 
-def _observe(state, *, active: bool):
+def _observe(state: WorldState, *, active: bool) -> tuple[Observation, ...]:
     return project_observations(
         world_id=WorldId("world-1"),
         state=state,
@@ -151,4 +152,5 @@ def test_channel_off_encode_omits_the_key(caplog: pytest.LogCaptureFixture) -> N
     assert "collective_projects" not in encoded["data"]
     assert "collective_projects_observation_omitted reason=empty" in caplog.text
     restored = decode_domain(encode_domain(local))
+    assert isinstance(restored, Observation)
     assert restored.collective_projects == ()

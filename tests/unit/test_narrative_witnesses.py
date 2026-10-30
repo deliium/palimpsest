@@ -24,6 +24,7 @@ from agents.models import AgentId
 from tests.unit.test_cultural_narratives import _identity, _observation
 from world.identifiers import EntityId, EventId
 from world.observations import (
+    Observation,
     ObservationAudienceRole,
     ObservationProvenance,
     ObservationSourceKind,
@@ -77,7 +78,7 @@ def _first_hand(agent: str, *, death: int | None = None) -> NarrativeWitness:
     )
 
 
-def _update(previous: NarrativeLedger, observation):
+def _update(previous: NarrativeLedger, observation: Observation) -> NarrativeLedger:
     return apply_narrative_update(
         observation=observation,
         identity=_identity(),

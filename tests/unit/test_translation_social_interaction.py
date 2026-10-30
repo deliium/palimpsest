@@ -282,5 +282,6 @@ def test_usage_update_records_talk_command_kind() -> None:
             "agents.cognition.configuration", fromlist=["CognitionTranslationMode"]
         ).CognitionTranslationMode.DETERMINISTIC,
     )
+    assert isinstance(updated, TranslationLedger)
     application = updated.mappings[0].applications[0]
     assert application.command_kind == "talk"

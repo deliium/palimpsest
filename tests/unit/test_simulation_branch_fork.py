@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from agents.models import AgentId
@@ -359,4 +361,11 @@ async def test_objective_prefix_rematerialized_without_parent_mutation() -> None
     )
     assert len(child_events) == 1
     assert child_events[0].run_id == "child-run"
-    assert child_events[0].event_id == event.event_id
+    expected_id = EventId(
+        hashlib.sha256(b"research-fork-event\x00child-run\x00evt-1").hexdigest()
+    )
+    assert child_events[0].event_id == expected_id
+    assert child_events[0].event_id != event.event_id
+    assert event.event_id == EventId("evt-1")
+    assert event.run_id == "parent-run"
+    assert child_events[0].details == event.details

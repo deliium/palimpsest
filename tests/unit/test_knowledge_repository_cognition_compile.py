@@ -133,8 +133,10 @@ def test_uptake_compose_repositories_key_round_trip() -> None:
         uptake_compose=compose,
     )
     encoded = provenance.canonical_payload()
-    assert encoded["uptake_compose"]["repositories"] is True
-    assert set(encoded["uptake_compose"]) == {
+    uptake = encoded["uptake_compose"]
+    assert isinstance(uptake, dict)
+    assert uptake["repositories"] is True
+    assert set(uptake) == {
         "naming",
         "narrative",
         "norms",

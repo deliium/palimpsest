@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import fields, replace
+from dataclasses import fields, is_dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -33,13 +33,13 @@ def _relationship(
     source: str, target: str, *, trust: float, resentment: float, fear: float
 ) -> object:
     from agents.models import AgentId
+    from social.models import RelationshipId
     from social.relationships import (
         DirectedRelationshipProfile,
         RelationshipActivationState,
         RelationshipConfidence,
         RelationshipDimension,
         RelationshipDimensionState,
-        RelationshipId,
         RelationshipPolicyRef,
         RelationshipRevisionId,
     )
@@ -108,6 +108,7 @@ def test_arms_share_identity_and_log_without_the_seed(
             *config.scenario.bodies,
             *config.scenario.resources,
         ):
+            assert is_dataclass(entity)
             assert "territory_owner" not in {item.name for item in fields(entity)}
             assert "owner" not in {item.name for item in fields(entity)}
     assert all(

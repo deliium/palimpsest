@@ -22,6 +22,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     PopulationLifecycleSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
@@ -40,7 +41,7 @@ from world.models import default_physical_rules
 _LOG = logging.getLogger("tests.runner_config_v24_population_lifecycle")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

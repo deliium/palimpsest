@@ -204,17 +204,33 @@ class GenerationalExecutionContext:
 
 
 class _BoundaryReader:
+    """Non-durable boundary reference bound to the live engine revision.
+
+    Non-durable benchmark fixtures still publish detached history sidecars. The
+    authoritative objective revision is not the tick number once events commit,
+    so the reader is bound to the live runner before stepping and reports the
+    revision the runner just committed.
+    """
+
     def __init__(self) -> None:
         self._last = 0
+        self._runner: object | None = None
+
+    def bind(self, runner: object) -> None:
+        self._runner = runner
 
     async def reference(
         self, run_id: str, boundary_tick: int
     ) -> HistoricalBoundaryReference:
         from experiments.generational_artifacts import SnapshotReference
 
+        revision = boundary_tick
+        engine = getattr(self._runner, "engine", None)
+        if engine is not None:
+            revision = int(engine.revision.value)
         return HistoricalBoundaryReference(
-            revision=boundary_tick,
-            objective_commit_hash=f"{boundary_tick:064d}",
+            revision=revision,
+            objective_commit_hash=f"{revision:064d}",
             snapshot_ref=SnapshotReference(
                 snapshot_id=f"snapshot-{boundary_tick}",
                 integrity_hash=f"{boundary_tick:064d}",
@@ -266,6 +282,8 @@ async def execute_generational_assignment(
         async with await SimulationRunner.from_config(
             config, run_id=assignment.run_id, factories=factories
         ) as runner:
+            if isinstance(reader, _BoundaryReader):
+                reader.bind(runner)
             from experiments.cultural_evidence import (
                 install_cultural_recorder,
                 kinship_parent_child_edges,

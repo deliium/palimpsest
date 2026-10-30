@@ -19,6 +19,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V25,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -30,7 +31,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.new_agent_bootstrap_catalog_arm")
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(

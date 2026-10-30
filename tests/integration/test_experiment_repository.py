@@ -13,7 +13,7 @@ from experiments.persistence import (
     ExperimentDefinitionRecord,
     ExperimentResultRecord,
 )
-from infrastructure.database import DatabaseResources
+from infrastructure.database import DatabaseResources, SQLAlchemySessionFactory
 from persistence import (
     create_experiment_record_repository,
     create_run_repository,
@@ -114,7 +114,9 @@ def _bootstrap(*, run_id: str, seed: int) -> WorldSnapshot:
     )
 
 
-async def _create_run(factory, *, run_id: str, seed: int) -> None:
+async def _create_run(
+    factory: SQLAlchemySessionFactory, *, run_id: str, seed: int
+) -> None:
     runs = create_run_repository(factory)
     bootstrap = _bootstrap(run_id=run_id, seed=seed)
     await runs.create_run(

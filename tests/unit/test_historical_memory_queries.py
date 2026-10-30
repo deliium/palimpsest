@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 
 from analysis.historical_memory import (
     HistoricalMemoryLayerId,
     HistoricalMemoryQueryId,
+    HistoricalProvenanceGraph,
     HistoricalSourceRef,
     answer_historical_memory_queries,
     build_historical_provenance_graph,
 )
 
 
-def _graph(**kwargs):
-    defaults = {
-        "as_of_tick": kwargs.pop("as_of_tick", 5),
-        "sources": (HistoricalSourceRef(source_event_id="evt-1"),),
-    }
-    defaults.update(kwargs)
-    return build_historical_provenance_graph(**defaults)
+def _graph(
+    *, as_of_tick: int = 5,
+    sources: Sequence[object] = (HistoricalSourceRef(source_event_id="evt-1"),),
+    witness_rows: Sequence[object] = (),
+    communication_edges: Sequence[object] = (),
+    death_ticks: Mapping[str, int] | None = None,
+    artifact_rows: Sequence[object] | None = None,
+    include_artifact_edges: bool | None = None,
+) -> HistoricalProvenanceGraph:
+    return build_historical_provenance_graph(
+        as_of_tick=as_of_tick, sources=sources, witness_rows=witness_rows,
+        communication_edges=communication_edges, death_ticks=death_ticks,
+        artifact_rows=artifact_rows, include_artifact_edges=include_artifact_edges,
+    )
 
 
 def test_any_direct_witnesses_alive_true() -> None:

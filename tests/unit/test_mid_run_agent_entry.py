@@ -18,7 +18,7 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.events import AgentCreated, AgentEnteredWorld
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.lifecycle import OriginProvenance
+from world.lifecycle import AgentLifecycleRecord, OriginProvenance
 
 _LOG = logging.getLogger("tests.mid_run_agent_entry")
 
@@ -88,6 +88,7 @@ def test_admit_appends_body_registration_lifecycle_and_events() -> None:
     assert admission.body_id in engine._snapshot.world.state.bodies
     assert len(engine.lifecycle_records) == 2
     record = engine.lifecycle_records[-1]
+    assert isinstance(record, AgentLifecycleRecord)
     assert record.entry_tick == 0
     assert record.cohort_id == "cohort-0000"
     assert len(admission.events) == 2

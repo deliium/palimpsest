@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from experiments.matrix_expand import expand_matrix
@@ -15,6 +17,7 @@ from experiments.matrix_models import (
     EXPERIMENT_MATRIX_SCHEMA_VERSION,
     ExperimentMatrixSpec,
     GroupRole,
+    MatrixCell,
     MatrixCellState,
     MatrixEmbeddedBase,
     MatrixFactor,
@@ -28,7 +31,14 @@ from experiments.models import ExperimentSeedMatrix
 from simulation.runner_models import RunnerStopReasonCode
 
 
-def _expand(tmp_path):
+def _expand(
+    tmp_path: Path,
+) -> tuple[
+    ExperimentMatrixSpec,
+    tuple[MatrixCell, ...],
+    str,
+    FilesystemMatrixManifestStore,
+]:
     spec = ExperimentMatrixSpec(
         matrix_id="matrix-manifest-demo",
         schema_version=EXPERIMENT_MATRIX_SCHEMA_VERSION,
@@ -72,7 +82,7 @@ def _expand(tmp_path):
     return spec, cells, fingerprint, store
 
 
-def test_create_open_and_crash_reset(tmp_path) -> None:
+def test_create_open_and_crash_reset(tmp_path: Path) -> None:
     _spec, cells, fingerprint, store = _expand(tmp_path)
     header = store.open()
     assert header.matrix_fingerprint == fingerprint
@@ -86,7 +96,7 @@ def test_create_open_and_crash_reset(tmp_path) -> None:
     assert store2.get_cell(cell.cell_id).last_error_code == "crash_reset"
 
 
-def test_valid_completion_and_divergent_rewrite(tmp_path) -> None:
+def test_valid_completion_and_divergent_rewrite(tmp_path: Path) -> None:
     spec, cells, fingerprint, store = _expand(tmp_path)
     cell = cells[0]
     identity = RunVersionIdentity(

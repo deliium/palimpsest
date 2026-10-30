@@ -9,6 +9,7 @@ import pytest
 
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
+from simulation.engine import WorldEngine
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
 from simulation.runner_models import (
@@ -18,18 +19,19 @@ from simulation.runner_models import (
     KinshipBootstrapEdgeSpec,
     KinshipSpec,
     MortalityMode,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import WorldId, WorldRevision
-from world.kinship import parents_of, siblings_of
+from world.kinship import KinshipGraph, parents_of, siblings_of
 from world.models import non_lethal_physical_rules
 
 _LOG = logging.getLogger("tests.kinship_replay_determinism")
 
 
-def _config(*, seed: int):
+def _config(*, seed: int) -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     body_c = alive_body("body-c")
@@ -82,8 +84,16 @@ def _config(*, seed: int):
     )
 
 
-def _graph_fingerprint(engine) -> tuple:
+def _graph_fingerprint(
+    engine: WorldEngine,
+) -> tuple[
+    tuple[AgentId, ...],
+    tuple[AgentId, ...],
+    tuple[AgentId, ...],
+    tuple[str, ...],
+]:
     graph = engine.kinship_graph
+    assert isinstance(graph, KinshipGraph)
     return (
         parents_of(graph, AgentId("agent-b")),
         parents_of(graph, AgentId("agent-c")),
@@ -96,7 +106,14 @@ def _graph_fingerprint(engine) -> tuple:
 async def test_same_seed_twin_runs_share_kinship_graph() -> None:
     _LOG.debug("case_id=kinship_twin_determinism")
     config = _config(seed=88)
-    fingerprints: list[tuple] = []
+    fingerprints: list[
+        tuple[
+            tuple[AgentId, ...],
+            tuple[AgentId, ...],
+            tuple[AgentId, ...],
+            tuple[str, ...],
+        ]
+    ] = []
     for index in range(2):
         runner = await SimulationRunner.from_config(
             config, run_id=RunId(f"run-kinship-twin-{index}")

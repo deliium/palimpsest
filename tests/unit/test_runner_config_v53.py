@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -238,7 +239,9 @@ def test_enum_confusion_is_rejected() -> None:
     with pytest.raises(TypeError):
         replace(
             agent.cognition,
-            institutional_memory_mode=MediationMode.DETERMINISTIC,
+            institutional_memory_mode=cast(
+                InstitutionalMemoryMode, MediationMode.DETERMINISTIC
+            ),
         )
 
 
@@ -296,7 +299,10 @@ def test_direct_cognition_config_and_fingerprint_parity() -> None:
 
     with pytest.raises(TypeError):
         CognitionLoopConfig(
-            institutional_memory_mode=InstitutionalMemoryMode.DETERMINISTIC  # type: ignore[arg-type]
+            institutional_memory_mode=cast(
+                CognitionInstitutionalMemoryMode,
+                InstitutionalMemoryMode.DETERMINISTIC,
+            )
         )
 
 
@@ -319,6 +325,7 @@ def test_cognitive_loop_constructor_forwards_mode_and_policy() -> None:
         loop._institutional_memory_mode
         is CognitionInstitutionalMemoryMode.DETERMINISTIC
     )
+    assert loop._institutional_memory_policy is not None
     assert (
         loop._institutional_memory_policy.version
         == default_institutional_memory_policy().version
@@ -356,6 +363,7 @@ def test_institutional_memory_profile_rejects_v52() -> None:
     )
 
     config = _v52()
+    assert config.new_agent_initialization is not None
     initialization = replace(
         config.new_agent_initialization,
         species_defaults_id=SPECIES_DEFAULT_INSTITUTIONAL_MEMORY_V1,

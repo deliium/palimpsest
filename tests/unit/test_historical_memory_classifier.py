@@ -3,25 +3,42 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 
 import pytest
 
 from analysis.historical_memory import (
     HistoricalMemoryLayerId,
+    HistoricalProvenanceGraph,
     HistoricalSourceRef,
     build_historical_provenance_graph,
     classify_historical_memory_layer,
 )
 
 
-def _graph(**kwargs):
-    defaults = {
-        "as_of_tick": kwargs.pop("as_of_tick", 5),
-        "sources": (HistoricalSourceRef(source_event_id="evt-1"),),
-    }
-    defaults.update(kwargs)
-    return build_historical_provenance_graph(**defaults)
+def _graph(
+    *,
+    as_of_tick: int = 5,
+    witness_rows: Sequence[object] = (),
+    communication_edges: Sequence[object] = (),
+    teaching_edges: Sequence[object] = (),
+    artifact_rows: Sequence[object] | None = None,
+    death_ticks: Mapping[str, int] | None = None,
+    include_artifact_edges: bool | None = None,
+    include_teaching_edges: bool | None = None,
+) -> HistoricalProvenanceGraph:
+    return build_historical_provenance_graph(
+        as_of_tick=as_of_tick,
+        sources=(HistoricalSourceRef(source_event_id="evt-1"),),
+        witness_rows=witness_rows,
+        communication_edges=communication_edges,
+        teaching_edges=teaching_edges,
+        artifact_rows=artifact_rows,
+        death_ticks=death_ticks,
+        include_artifact_edges=include_artifact_edges,
+        include_teaching_edges=include_teaching_edges,
+    )
 
 
 def test_living_when_direct_witness_alive() -> None:

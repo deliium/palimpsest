@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -17,14 +19,17 @@ from agents.cognition.defaults import default_cognitive_loop
 from agents.cognition.group_formation import GroupLedger, empty_group_ledger
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import (
+    ActionPlan,
     CognitiveLoopInput,
     InternalAgentState,
+    SelectedIntention,
     SubjectiveSnapshot,
 )
 from agents.models import Agent, AgentId
 from memory.models import BeliefStore, MemoryStore
 from simulation.agent_runtime import AgentRuntime
 from simulation.bootstrap import registration_translator
+from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.subjective_serialization import SUBJECTIVE_SCHEMA_VERSION
 from tests.typecheck.cognitive_loop import (
     ScriptedIntentionSelector,
@@ -170,26 +175,32 @@ async def test_deliberation_does_not_receive_the_ledger() -> None:
     loop_input, _snapshot_value = _snapshot(owner)
     intention = ScriptedIntentionSelector()
     planner = ScriptedPlanner()
-    seen: dict[str, object] = {}
+    seen: dict[str, dict[str, object]] = {}
 
-    def _accepted(method: object, kwargs: dict[str, object]) -> dict[str, object]:
-        parameters = inspect.signature(method).parameters  # type: ignore[arg-type]
+    def _accepted(
+        method: Callable[..., object], kwargs: dict[str, object]
+    ) -> dict[str, object]:
+        parameters = inspect.signature(method).parameters
         return {key: value for key, value in kwargs.items() if key in parameters}
 
     class RecordingIntention(ScriptedIntentionSelector):
-        async def select(self, *args: object, **kwargs: object) -> object:
+        async def select(self, *args: object, **kwargs: object) -> SelectedIntention:
             seen["intention"] = kwargs
-            return await intention.select(
+            forward = cast(
+                Callable[..., Awaitable[SelectedIntention]], intention.select
+            )
+            return await forward(
                 *args,
-                **_accepted(intention.select, kwargs),  # type: ignore[arg-type]
+                **_accepted(intention.select, kwargs),
             )
 
     class RecordingPlanner(ScriptedPlanner):
-        async def plan(self, *args: object, **kwargs: object) -> object:
+        async def plan(self, *args: object, **kwargs: object) -> ActionPlan:
             seen["planner"] = kwargs
-            return await planner.plan(
+            forward = cast(Callable[..., Awaitable[ActionPlan]], planner.plan)
+            return await forward(
                 *args,
-                **_accepted(planner.plan, kwargs),  # type: ignore[arg-type]
+                **_accepted(planner.plan, kwargs),
             )
 
     loop = _loop(
@@ -252,6 +263,6 @@ def test_foreign_ledger_is_rejected_on_snapshot_and_checkpoint() -> None:
     with pytest.raises(ValueError, match="owner_id mismatch"):
         _snapshot(owner, ledger=foreign)
     runtime = _runtime(default_cognitive_loop())
-    exported = runtime.export_runtime_checkpoint()
+    exported = cast(AgentRuntimeCheckpoint, runtime.export_runtime_checkpoint())
     with pytest.raises(ValueError, match="owner_id mismatch"):
         replace(exported, group_formation=foreign)

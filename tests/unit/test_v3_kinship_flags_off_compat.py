@@ -19,6 +19,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     MortalityMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_kinship_spec,
@@ -31,7 +32,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.v3_kinship_flags_off_compat")
 
 
-def _base(*, max_ticks: int = 3):
+def _base(*, max_ticks: int = 3) -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     return base_runner_config_from_scenario(

@@ -92,7 +92,10 @@ def _observation_with_occurrence(
     )
 
 
-def _loop_pieces(observation: Observation):
+def _loop_pieces(observation: Observation) -> tuple[
+    CognitiveLoopInput, InterpretedPerception, ActionPlan, SelectedIntention,
+    RetrievedMemoryContext,
+]:
     loop_input = CognitiveLoopInput(
         agent_id=AgentId("agent-1"),
         observation=observation,

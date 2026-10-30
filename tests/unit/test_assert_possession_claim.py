@@ -10,6 +10,7 @@ from world._operations import (
     OperationAccepted,
     OperationRejected,
     RejectionCode,
+    ValidatedWorldOperation,
     validate_action_request,
 )
 from world._rules import (
@@ -28,7 +29,7 @@ from world.actions import (
 from world.events import PossessionClaimAsserted
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
 from world.lifecycle_effects import require_lifecycle_denied_command_kinds
-from world.models import LifeStatus, copy_body
+from world.models import Item, LifeStatus, copy_body
 from world.possession_succession import PossessionSuccessionRuleContext
 from world.values import Health
 
@@ -37,7 +38,7 @@ def _context() -> PossessionSuccessionRuleContext:
     return PossessionSuccessionRuleContext(allow_corpse_take=True, allow_claim=True)
 
 
-def _state():
+def _state() -> tuple[WorldState, Item]:
     item = make_item("item-1", location_id=None, holder_id="body-dead")
     corpse = copy_body(
         alive_body("body-dead", inventory=(item.entity_id,)),
@@ -56,7 +57,9 @@ def _state():
     return state, item
 
 
-def _claim(state: WorldState, doctrine: str, item_id: EntityId | None = None):
+def _claim(
+    state: WorldState, doctrine: str, item_id: EntityId | None = None
+) -> ValidatedWorldOperation:
     command = AssertPossessionClaim(EntityId("body-dead"), doctrine, item_id)
     outcome = validate_action_request(
         world_id=WorldId("world-1"),
@@ -149,7 +152,7 @@ def test_command_round_trip_and_dependent_stage_can_select_it() -> None:
     )
     assert decode_domain(encode_domain(whole)) == whole
     assert decode_domain(encode_domain(scoped)) == scoped
-    command_types = AgentCommand.__args__  # type: ignore[attr-defined]
+    command_types = AgentCommand.__args__
     assert sum(1 for kind in command_types if kind is AssertPossessionClaim) == 1
     with pytest.raises(ValueError, match="lifecycle_denied_command_kind_unknown"):
         require_lifecycle_denied_command_kinds(("assert_possession_claim",))

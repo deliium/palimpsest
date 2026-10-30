@@ -19,16 +19,16 @@ from simulation.persistence import (
 )
 from simulation.runner_models import example_kinship_spec
 from tests.simulation_helpers import alive_body, make_location, make_weather
-from world.actions import Attack, Wait
+from world.actions import AgentCommand, Attack, Wait
 from world.events import EVENT_SCHEMA_REPLAY_V11, Died
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.kinship import ancestors_of, parents_of
-from world.models import LifeStatus, default_physical_rules
+from world.kinship import KinshipGraph, ancestors_of, parents_of
+from world.models import LifeStatus, PhysicalRules, default_physical_rules
 
 _LOG = logging.getLogger("tests.kinship_death_persistence")
 
 
-def _lethal_rules():
+def _lethal_rules() -> PhysicalRules:
     return replace(
         default_physical_rules(),
         attack_hit_probability=1.0,
@@ -62,7 +62,7 @@ def _engine() -> WorldEngine:
     )
 
 
-def _act(engine: WorldEngine, agent_id: str, command: object) -> None:
+def _act(engine: WorldEngine, agent_id: str, command: AgentCommand) -> None:
     batch = engine.observe()
     submissions = []
     for observation in batch.observations:
@@ -77,14 +77,18 @@ def _act(engine: WorldEngine, agent_id: str, command: object) -> None:
 def test_edges_survive_parent_death() -> None:
     _LOG.debug("case_id=edges_survive_died")
     engine = _engine()
-    assert parents_of(engine.kinship_graph, AgentId("agent-b")) == (AgentId("agent-a"),)
+    graph = engine.kinship_graph
+    assert isinstance(graph, KinshipGraph)
+    assert parents_of(graph, AgentId("agent-b")) == (AgentId("agent-a"),)
     parent_body_id = EntityId("body-a")
     _act(engine, "agent-b", Attack(parent_body_id))
     body = engine._snapshot.world.state.bodies[parent_body_id]
     assert body.life_status is LifeStatus.DEAD
-    assert parents_of(engine.kinship_graph, AgentId("agent-b")) == (AgentId("agent-a"),)
+    graph = engine.kinship_graph
+    assert isinstance(graph, KinshipGraph)
+    assert parents_of(graph, AgentId("agent-b")) == (AgentId("agent-a"),)
     assert ancestors_of(
-        engine.kinship_graph,
+        graph,
         AgentId("agent-b"),
         max_depth=4,
         config_max_depth=8,
@@ -109,6 +113,7 @@ def test_restore_preserves_edges_involving_dead() -> None:
         child_agent_id="agent-b",
     )
     graph = engine.kinship_graph
+    assert isinstance(graph, KinshipGraph)
     draft = WorldSnapshot(
         snapshot_id=SnapshotId("snap-kinship-death"),
         run_id=engine.run_id,
@@ -129,7 +134,7 @@ def test_restore_preserves_edges_involving_dead() -> None:
         derivation_version="derivation-v3",
         integrity_hash=PayloadHash("a" * 64),
         predecessor_commit_hash=None,
-        kinship_edges=graph.edges,  # type: ignore[attr-defined]
+        kinship_edges=graph.edges,
     )
     snap = WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -156,7 +161,9 @@ def test_restore_preserves_edges_involving_dead() -> None:
     encode_persistence(snap)
     restored = WorldEngine.restore_from_snapshot(snap, kinship_spec=kinship)
     assert restored.kinship_channel_active is True
-    assert parents_of(restored.kinship_graph, AgentId("agent-b")) == (
+    restored_graph = restored.kinship_graph
+    assert isinstance(restored_graph, KinshipGraph)
+    assert parents_of(restored_graph, AgentId("agent-b")) == (
         AgentId("agent-a"),
     )
     assert (

@@ -19,8 +19,8 @@ from agents.cognition.models import DecisionMetadata, RetrievedMemoryContext
 from agents.cognition.theory_of_mind import TheoryOfMind
 from agents.models import AgentId
 from memory import BeliefActivationState, BeliefId
-from tests.unit.test_epistemic_model import _belief, _level1, _speech, _watch
-from tests.unit.test_theory_of_mind import _occurrence
+from tests.unit.test_epistemic_model import _belief, _level1, _speech
+from tests.unit.test_theory_of_mind import _occurrence, _watch
 from world.actions import Ask, Talk, Tell
 from world.communications import CommunicationSourceBasis
 from world.identifiers import EntityId
@@ -53,7 +53,9 @@ def _choose(mind: TheoryOfMind, belief: object, observation: object) -> object:
     )
 
 
-def _ledger(belief: object, observation: object, *, prior: TheoryOfMind | None = None):
+def _ledger(
+    belief: object, observation: object, *, prior: TheoryOfMind | None = None
+) -> TheoryOfMind:
     model = prior if prior is not None else TheoryOfMind(owner_id=_OWNER)
     return update_epistemic_state(
         model,

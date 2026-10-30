@@ -17,6 +17,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     MortalityMode,
+    SimulationRunnerConfig,
     SkillLearningMode,
     TeachingInteractionMode,
     V2CapabilityFlags,
@@ -30,7 +31,7 @@ def _with_modes(
     *,
     skill: SkillLearningMode,
     teaching: TeachingInteractionMode,
-) -> object:
+) -> SimulationRunnerConfig:
     base = _config()
     agent = base.agents[0]
     spec = replace(

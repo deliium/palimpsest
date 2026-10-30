@@ -18,6 +18,7 @@ from agents.cognition.models import (
 from agents.cognition.reflection import (
     LLMReflectionSelector,
     ReflectionContext,
+    ReflectionPlan,
     ReflectionPolicy,
     ReflectionSelectionOutput,
     ReflectionTriggerKind,
@@ -207,8 +208,10 @@ async def test_unbound_provider_falls_back_and_keeps_the_command(
     )
     assert type(assisted_result.command) is type(deterministic_result.command)
     assert assisted_result.reflection is not None
+    assert isinstance(assisted_result.reflection, ReflectionPlan)
     assert assisted_result.reflection.audit.fallback_used is True
     assert deterministic_result.reflection is not None
+    assert isinstance(deterministic_result.reflection, ReflectionPlan)
     assert deterministic_result.reflection.audit.fallback_used is False
     assert counting.calls() == ()
     text = " ".join(

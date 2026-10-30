@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from agents.cognition.defaults import default_cognitive_loop
+from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.subjective_projections import project_generational_narratives
 from tests.unit.test_cultural_narratives_runtime import _runtime
 from tests.unit.test_generational_narrative_runtime_carry import _v2_ledger
@@ -12,8 +13,10 @@ from tests.unit.test_generational_narrative_runtime_carry import _v2_ledger
 
 def test_overlay_round_trips_v2_metadata() -> None:
     runtime = _runtime(default_cognitive_loop())
+    exported = runtime.export_runtime_checkpoint()
+    assert isinstance(exported, AgentRuntimeCheckpoint)
     checkpoint = replace(
-        runtime.export_runtime_checkpoint(),
+        exported,
         cultural_narratives=_v2_ledger(),
     )
     document = project_generational_narratives(
@@ -34,6 +37,7 @@ def test_overlay_round_trips_v2_metadata() -> None:
 def test_overlay_is_empty_when_narratives_are_off() -> None:
     runtime = _runtime(default_cognitive_loop())
     checkpoint = runtime.export_runtime_checkpoint()
+    assert isinstance(checkpoint, AgentRuntimeCheckpoint)
     document = project_generational_narratives(
         checkpoint.agent_id.value, checkpoint
     )

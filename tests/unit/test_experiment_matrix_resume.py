@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from experiments.matrix_expand import expand_matrix
@@ -95,7 +97,7 @@ def test_group_role_overlay_and_treatment_any() -> None:
 
 
 @pytest.mark.asyncio
-async def test_crash_running_resets_and_reruns(tmp_path) -> None:
+async def test_crash_running_resets_and_reruns(tmp_path: Path) -> None:
     spec = _spec()
     definition, cells = expand_matrix(spec)
     fingerprint = matrix_spec_fingerprint(spec)
@@ -142,7 +144,7 @@ async def test_crash_running_resets_and_reruns(tmp_path) -> None:
     )
 
 
-def test_fingerprint_mismatch_fails_closed(tmp_path) -> None:
+def test_fingerprint_mismatch_fails_closed(tmp_path: Path) -> None:
     spec = _spec()
     _definition, cells = expand_matrix(spec)
     fingerprint = matrix_spec_fingerprint(spec)

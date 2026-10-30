@@ -26,6 +26,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     MortalityMode,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_population_lifecycle_spec,
@@ -39,7 +40,7 @@ from world.models import non_lethal_physical_rules
 _LOG = logging.getLogger("tests.new_agent_fork_replay")
 
 
-def _config(*, max_ticks: int = 8):
+def _config(*, max_ticks: int = 8) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return replace(

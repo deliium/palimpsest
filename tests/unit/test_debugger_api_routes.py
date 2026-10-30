@@ -6,12 +6,13 @@ import logging
 import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from api.app import DisposableEngine, create_app
+from api.app import DatabaseResourcesLike, DisposableEngine, create_app
 from api.errors import not_found
 from api.schemas import (
     CausalTraceOut,
@@ -124,7 +125,7 @@ def _app(settings: Settings | None = None) -> FastAPI:
     resolved = settings or _settings()
     app = create_app(
         settings=resolved,
-        database_factory=lambda _s: FakeResources(),
+        database_factory=lambda _s: cast(DatabaseResourcesLike, FakeResources()),
         simulation_manager=SimulationManager(
             settings=resolved,
             run_control=InMemoryRunControlRepository(),

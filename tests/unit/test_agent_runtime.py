@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pytest
 
+from agents.cognition.contracts import Planner
 from agents.cognition.defaults import default_cognitive_loop
 from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.models import (
@@ -16,7 +18,7 @@ from agents.cognition.models import (
     MemoryUpdateKind,
     empty_emotional_state,
 )
-from agents.models import Agent, AgentId
+from agents.models import Agent, AgentId, Goal, GoalStatus
 from memory.models import (
     Belief,
     BeliefId,
@@ -36,6 +38,7 @@ from simulation.agent_runtime import (
     AgentRuntimeError,
     AgentRuntimeErrorCode,
     AgentRuntimeStatus,
+    PreparedObservation,
 )
 from simulation.bootstrap import (
     AgentRegistration,
@@ -260,7 +263,7 @@ async def test_cognition_failure_does_not_mutate_memory() -> None:
             futures=PlaceholderFutureImagination(),
             motivation=BoomMotivation(),
             intention=StableIntentionSelector(),
-            planner=WaitFallbackPlanner(),
+            planner=cast(Planner, WaitFallbackPlanner()),
             memory_updates=EmptyMemoryUpdateHook(),
         ),
         memory_reader=memories,
@@ -366,7 +369,7 @@ async def test_memory_updates_apply_after_success() -> None:
             futures=PlaceholderFutureImagination(),
             motivation=StableMotivationEvaluator(),
             intention=StableIntentionSelector(),
-            planner=WaitFallbackPlanner(),
+            planner=cast(Planner, WaitFallbackPlanner()),
             memory_updates=WriteHook(),
         ),
         memory_reader=memories,
@@ -430,6 +433,7 @@ async def test_prepare_bind_finalize_and_abort() -> None:
     runtime.start()
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
     assert type(prepared).__name__ == "PreparedObservation"
+    assert isinstance(prepared, PreparedObservation)
     assert runtime.internal_state.invocation_count == 0
     assert len(memories.snapshot()) == 0
 
@@ -445,6 +449,7 @@ async def test_prepare_bind_finalize_and_abort() -> None:
     assert runtime._pending is None
 
     prepared2 = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared2, PreparedObservation)
     pending2 = await runtime.bind_effective_command(prepared2)
     result = await runtime.finalize_pending(pending2)
     assert result.submission is not None
@@ -464,18 +469,23 @@ async def test_emotional_state_commits_on_finalize_visible_next_tick() -> None:
     assert runtime.emotional_state is None
 
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
+    assert prepared.proposal.loop_input.snapshot is not None
     assert prepared.proposal.loop_input.snapshot.emotional_state is None
     pending = await runtime.bind_effective_command(prepared)
     assert runtime.emotional_state is None  # not yet committed
     await runtime.finalize_pending(pending)
 
     carried = runtime.emotional_state
+    assert isinstance(carried, AgentEmotionalState)
     assert type(carried) is AgentEmotionalState
     assert carried.owner_id == AgentId("agent-1")
     assert carried.tick == 0
     assert carried.is_neutral()
 
     prepared2 = await runtime.prepare_observation(_self(tick=1), token=_token(1))
+    assert isinstance(prepared2, PreparedObservation)
+    assert prepared2.proposal.loop_input.snapshot is not None
     prior = prepared2.proposal.loop_input.snapshot.emotional_state
     assert prior is not None
     assert prior.owner_id == AgentId("agent-1")
@@ -488,6 +498,7 @@ async def test_abort_pending_does_not_commit_emotional_state() -> None:
     runtime, _memories, _beliefs = _runtime()
     runtime.start()
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     runtime.abort_pending(pending)
     assert runtime.emotional_state is None
@@ -533,9 +544,9 @@ def _goal_for_runtime(
     *,
     goal_id: str = "g-1",
     owner_id: str = "agent-1",
-    status: object | None = None,
+    status: GoalStatus | None = None,
     description: str = "goal",
-) -> object:
+) -> Goal:
     from agents.models import Goal, GoalId, GoalOutcome, GoalOutcomeKind, GoalStatus
 
     return Goal(
@@ -731,7 +742,7 @@ async def test_publish_goal_revisions_appends_when_wired() -> None:
         agent=Agent(
             agent_id=AgentId("agent-1"),
             name="agent-1",
-            goals=(_goal_for_runtime(),),  # type: ignore[arg-type]
+            goals=(_goal_for_runtime(),),
         ),
         translator=registration_translator(bootstrap),
         cognitive_loop=default_cognitive_loop(),

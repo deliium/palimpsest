@@ -9,10 +9,11 @@ from simulation.lifecycle import ActionSubmission
 from simulation.models import SimulationRunConfig
 from tests.simulation_helpers import alive_body, make_item, make_location, make_weather
 from world._collective_projects import abandon_idle_projects
-from world._operations import prepare_action_batch
+from world._operations import PendingBatch, prepare_action_batch
 from world._state import WorldState
 from world.actions import (
     ActionRequest,
+    AgentCommand,
     ContributeCollectiveProject,
     StartCollectiveProject,
     Wait,
@@ -27,7 +28,7 @@ from world.collective_projects import (
 )
 from world.events import ProjectCompleted, ProjectContributed, StructureBuilt
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId, WorldRevision
-from world.models import non_lethal_physical_rules
+from world.models import Item, non_lethal_physical_rules
 from world.production import Structure, StructureKind
 from world.values import ItemKind
 
@@ -35,7 +36,7 @@ _WORLD = WorldId("world-1")
 _CONTEXT = CollectiveProjectsRuleContext(active=True, idle_ticks=4)
 
 
-def _wood(entity_id: str, holder: str):
+def _wood(entity_id: str, holder: str) -> Item:
     return make_item(
         entity_id,
         name="wood",
@@ -45,7 +46,7 @@ def _wood(entity_id: str, holder: str):
     )
 
 
-def _request(command, *, actor: str, request_id: str) -> ActionRequest:
+def _request(command: AgentCommand, *, actor: str, request_id: str) -> ActionRequest:
     return ActionRequest(
         request_id=RequestId(request_id),
         proposal_id=ProposalId(f"p-{request_id}"),
@@ -56,7 +57,14 @@ def _request(command, *, actor: str, request_id: str) -> ActionRequest:
     )
 
 
-def _step(state, command, *, actor: str, request_id: str, tick: int = 1):
+def _step(
+    state: WorldState,
+    command: AgentCommand,
+    *,
+    actor: str,
+    request_id: str,
+    tick: int = 1,
+) -> PendingBatch:
     pending = prepare_action_batch(
         world_id=_WORLD,
         starting_state=state,

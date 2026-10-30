@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -43,7 +44,7 @@ from experiments.generational_execution import (
 from simulation.models import RunId
 from simulation.new_agent_initialization import SPECIES_DEFAULT_DEVELOPMENTAL_V1
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
-from simulation.runner_models import PopulationLifecycleSpec
+from simulation.runner_models import PopulationLifecycleSpec, SimulationRunnerConfig
 from simulation.runner_serialization import (
     decode_runner_config,
     encode_runner_config,
@@ -51,7 +52,9 @@ from simulation.runner_serialization import (
 from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
 
-def _short_config(config, *, max_ticks: int = 3):
+def _short_config(
+    config: SimulationRunnerConfig, *, max_ticks: int = 3
+) -> SimulationRunnerConfig:
     lifecycle = config.population_lifecycle
     assert isinstance(lifecycle, PopulationLifecycleSpec)
     short = replace(
@@ -76,7 +79,7 @@ def _short_config(config, *, max_ticks: int = 3):
     )
 
 
-def _assignment(config, run_id: str) -> ExperimentAssignment:
+def _assignment(config: SimulationRunnerConfig, run_id: str) -> ExperimentAssignment:
     return ExperimentAssignment(
         experiment_id="v3-benchmark-population",
         condition_id="population-case",
@@ -89,7 +92,9 @@ def _assignment(config, run_id: str) -> ExperimentAssignment:
     )
 
 
-def _context(tmp_path, probe: BenchmarkBoundaryProbe) -> GenerationalExecutionContext:
+def _context(
+    tmp_path: Path, probe: BenchmarkBoundaryProbe
+) -> GenerationalExecutionContext:
     return GenerationalExecutionContext(
         artifact_root=tmp_path,
         source_identity={"code_revision": "deadbeef", "source_clean": True},
@@ -120,12 +125,14 @@ def test_all_population_cases_build_exact_owned_specs() -> None:
             if scenario_id == V3_BENCH_03_INTERGENERATIONAL_TEACHING:
                 assert config.developmental_learning is not None
                 assert config.mentorship is not None
+                assert config.new_agent_initialization is not None
                 assert (
                     config.new_agent_initialization.species_defaults_id
                     == SPECIES_DEFAULT_DEVELOPMENTAL_V1
                 )
             if scenario_id == V3_BENCH_04_CULTURAL_MUTATION:
                 assert config.cultural_feature_provenance is not None
+                assert config.new_agent_initialization is not None
                 assert (
                     config.new_agent_initialization.species_defaults_id
                     == SPECIES_DEFAULT_DEVELOPMENTAL_V1
@@ -145,7 +152,7 @@ def test_unknown_population_case_is_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dependent_care_case_measures_real_entrants(tmp_path) -> None:
+async def test_dependent_care_case_measures_real_entrants(tmp_path: Path) -> None:
     build = build_population_benchmark(V3_BENCH_02_DEPENDENT_CARE)
     config = _short_config(build.arms[0].config, max_ticks=3)
     probe = BenchmarkBoundaryProbe()
@@ -164,7 +171,7 @@ async def test_dependent_care_case_measures_real_entrants(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_teaching_case_keeps_unmeasured_selectors_unexecuted(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     build = build_population_benchmark(V3_BENCH_03_INTERGENERATIONAL_TEACHING)
     config = _short_config(build.arms[0].config, max_ticks=2)
@@ -192,13 +199,14 @@ async def test_teaching_case_keeps_unmeasured_selectors_unexecuted(
         check = statuses[selector_id]
         assert check.status is V3BenchmarkCheckStatus.PASS
         assert check.reason_code == "teaching_window_complete"
+        assert check.denominator is not None
         assert check.denominator >= 1
         assert 0 <= (check.numerator or 0) <= check.denominator
 
 
 @pytest.mark.asyncio
 async def test_blank_slate_case_remains_the_only_complete_mechanism(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     build = build_population_benchmark(V3_BENCH_01_BLANK_SLATE)
     config = _short_config(build.arms[0].config, max_ticks=2)
@@ -223,7 +231,7 @@ def test_base_case_has_no_extra_optional_specs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_all_four_cases_reach_complete_evidence(tmp_path) -> None:
+async def test_all_four_cases_reach_complete_evidence(tmp_path: Path) -> None:
     for index, scenario_id in enumerate(POPULATION_BENCHMARK_IDS):
         build = build_population_benchmark(scenario_id)
         config = _short_config(build.arms[0].config, max_ticks=3)
@@ -252,7 +260,7 @@ async def test_all_four_cases_reach_complete_evidence(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_teaching_requires_the_recipient_learner_profile(tmp_path) -> None:
+async def test_teaching_requires_the_recipient_learner_profile(tmp_path: Path) -> None:
     from simulation.new_agent_initialization import (
         SPECIES_DEFAULT_V1,
         default_new_agent_initialization_spec,

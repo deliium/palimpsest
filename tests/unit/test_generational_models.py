@@ -90,7 +90,7 @@ def test_default_spec_is_passthrough_and_frozen() -> None:
 @pytest.mark.parametrize("value", [True, False])
 def test_generation_limit_accepts_only_exact_positive_int(value: bool) -> None:
     with pytest.raises(ValueError, match="positive integer"):
-        GenerationalRunSpec(max_generation_index=value)  # type: ignore[arg-type]
+        GenerationalRunSpec(max_generation_index=value)
 
 
 @pytest.mark.parametrize("value", [0, -1])
@@ -118,7 +118,7 @@ def test_threshold_rejects_boolean_value() -> None:
     with pytest.raises(ValueError, match="non-negative integer"):
         PopulationThresholdSpec(
             comparison=PopulationThresholdComparison.AT_LEAST,
-            value=True,  # type: ignore[arg-type]
+            value=True,
         )
 
 

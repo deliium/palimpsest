@@ -18,7 +18,7 @@ from world._operations import (
     validate_action_request,
 )
 from world._replay import project_events
-from world._rules import RuleDisposition, apply_operation
+from world._rules import RuleApplication, RuleDisposition, apply_operation
 from world._state import WorldState
 from world.actions import ActionRequest, Experiment
 from world.effects import ActionCause
@@ -27,6 +27,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V15,
     ExperimentResolved,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.experimentation import (
@@ -136,7 +137,7 @@ def _apply(
     operand_b: str | None = "res-1",
     operator: ExperimentOperator = ExperimentOperator.COMBINE,
     process: ExperimentProcessToken = ExperimentProcessToken.NONE,
-):
+) -> RuleApplication:
     command = Experiment(
         operator=operator,
         operand_a_id=EntityId(operand_a),
@@ -380,6 +381,7 @@ def test_command_and_event_round_trip() -> None:
         schema_version=EVENT_SCHEMA_REPLAY_V15,
     )
     restored = decode_domain(encode_domain(event))
+    assert isinstance(restored, WorldEvent)
     assert restored.details == event.details
     assert restored.schema_version == EVENT_SCHEMA_REPLAY_V15
 

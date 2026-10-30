@@ -285,6 +285,7 @@ def test_civilization_browser_history_and_assets(
                         + json.dumps(requests[-100:], indent=2)
                     )
                 )
+            assert stack.civilization_root is not None
             page.screenshot(
                 path=str(stack.civilization_root.parent / "civilization.png")
             )

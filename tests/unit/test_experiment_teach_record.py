@@ -15,6 +15,7 @@ from agents.cognition.practical_knowledge import (
     empty_practical_knowledge_ledger,
 )
 from agents.models import AgentId
+from memory.models import MemoryTrace
 from world.actions import Inscribe, Tell
 from world.artifacts import ArtifactContent, ArtifactKind
 from world.communications import origin_utterance
@@ -31,7 +32,7 @@ _PEER = AgentId("peer-1")
 _ROOT = Path(__file__).resolve().parents[2]
 
 
-def _trace(owner: AgentId, event_id: str):
+def _trace(owner: AgentId, event_id: str) -> MemoryTrace:
     occurrence = ObservedOccurrence(
         provenance=ObservationProvenance(
             source_kind=ObservationSourceKind.OCCURRENCE,

@@ -34,7 +34,7 @@ from simulation.replay import ReplayService
 from simulation.runner import _bootstrap_snapshot
 from simulation.service import PersistentSimulationService
 from world.actions import Move
-from world.events import JourneyArrived, JourneyStarted
+from world.events import JourneyArrived, JourneyStarted, WorldEvent
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import non_lethal_physical_rules
 from world.regions import (
@@ -118,6 +118,7 @@ async def test_pending_journey_checkpoint_resume_and_tail_replay(
         ),
         checkpoint_id=SnapshotId(_unique("journey-snapshot")),
     )
+    assert engine._last_tick_result is not None
     assert any(
         isinstance(record.event.details, JourneyStarted)
         for record in engine._last_tick_result.events
@@ -131,6 +132,7 @@ async def test_pending_journey_checkpoint_resume_and_tail_replay(
 
     engine.observe()
     await service.resolve_tick(())
+    assert engine._last_tick_result is not None
     assert any(
         isinstance(record.event.details, JourneyArrived)
         for record in engine._last_tick_result.events
@@ -180,7 +182,10 @@ async def test_pending_journey_checkpoint_resume_and_tail_replay(
         manifest=prefix_manifest,
     )
     assert prefix.objective_complete_through_boundary == 1
-    assert all(event.tick == 0 for event in prefix.events)
+    assert all(isinstance(event, WorldEvent) for event in prefix.events)
+    assert all(
+        isinstance(event, WorldEvent) and event.tick == 0 for event in prefix.events
+    )
     prefix_inputs = regional_population_input_from_snapshot(
         prefix,
         input_revision="regional-prefix",

@@ -291,7 +291,7 @@ def test_context_rejects_world_state_shaped_input() -> None:
         pass
 
     try:
-        _context(memories=(WorldState(),))  # type: ignore[arg-type]
+        _context(memories=(WorldState(),))
     except ValueError as exc:
         assert "forbidden_input" in str(exc)
     else:

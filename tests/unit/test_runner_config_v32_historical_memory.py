@@ -14,6 +14,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V32,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_cultural_feature_provenance_spec,
@@ -30,7 +31,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -62,7 +63,7 @@ def _plain_base():
     )
 
 
-def _layers_only_config(**extra):
+def _layers_only_config() -> SimulationRunnerConfig:
     base = _plain_base()
     return replace(
         base,
@@ -70,7 +71,6 @@ def _layers_only_config(**extra):
         v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
         cultural_feature_provenance=example_cultural_feature_provenance_spec(),
         historical_memory_layers=example_historical_memory_layers_spec(),
-        **extra,
     )
 
 

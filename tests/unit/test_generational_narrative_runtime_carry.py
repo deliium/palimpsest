@@ -98,6 +98,9 @@ def test_runtime_restore_and_export_preserve_v2_provenance() -> None:
     runtime = _runtime(default_cognitive_loop())
     ledger = _v2_ledger()
     checkpoint = runtime.export_runtime_checkpoint()
+    from simulation.run_control import AgentRuntimeCheckpoint
+
+    assert isinstance(checkpoint, AgentRuntimeCheckpoint)
     assert checkpoint.cultural_narratives is None
     from dataclasses import replace
 

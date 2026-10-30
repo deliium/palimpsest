@@ -5,15 +5,18 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from agents.cognition.counterfactual import CounterfactualAudit
 from analysis.counterfactual_metrics import (
     COUNTERFACTUAL_REASONING_METRIC_VERSION,
     compute_counterfactual_reasoning_metrics,
 )
 from analysis.models import MetricAvailability
 from experiments.catalog import experiment_k_counterfactual
+from simulation.agent_runtime import PreparedObservation
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V8,
@@ -26,7 +29,9 @@ from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_experiment_k_shares_identity_and_stays_off_the_v1_gate(caplog) -> None:
+def test_experiment_k_shares_identity_and_stays_off_the_v1_gate(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="experiments.catalog")
     definition = experiment_k_counterfactual(_config())
     ids = {experiment_id for experiment_id, _builder in _CATALOG_BUILDERS}
@@ -66,6 +71,7 @@ async def test_enabled_runtime_audits_a_salient_alternative() -> None:
     quiet, _, _ = _runtime()
     quiet.start()
     prepared = await quiet.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await quiet.bind_effective_command(
         prepared, effective_command=Help(target_id=EntityId("bob"))
     )
@@ -77,21 +83,27 @@ async def test_enabled_runtime_audits_a_salient_alternative() -> None:
     runtime._loop._counterfactual_mode = CognitionCounterfactualMode.DETERMINISTIC
     runtime._loop._counterfactual_policy = CounterfactualPolicy()
     first = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(first, PreparedObservation)
     helping = await runtime.bind_effective_command(
         first, effective_command=Help(target_id=EntityId("bob"))
     )
     await runtime.finalize_pending(helping)
     second = await runtime.prepare_observation(_self(tick=1), token=_token(1))
+    assert isinstance(second, PreparedObservation)
     waiting = await runtime.bind_effective_command(second)
     await runtime.finalize_pending(waiting)
-    audits = runtime.export_counterfactual_audits()
+    audits = cast(
+        "tuple[CounterfactualAudit, ...]", runtime.export_counterfactual_audits()
+    )
     assert any(
         audit.provenance_code == "imagined_alternative" and audit.scenario_count >= 1
         for audit in audits
     )
 
 
-def test_metric_counts_scenarios_without_event_overlap(caplog) -> None:
+def test_metric_counts_scenarios_without_event_overlap(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="analysis.counterfactual_metrics")
     event = _search_event(event_id="ev-1", success=True, sequence=1)
     empty = compute_counterfactual_reasoning_metrics(

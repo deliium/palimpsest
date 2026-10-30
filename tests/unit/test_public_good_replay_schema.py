@@ -13,11 +13,7 @@ from simulation.journal import (
     decode_persistence,
     encode_persistence,
 )
-from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V19,
-    EVENT_SCHEMA_REPLAY_V20,
-    checkpoint_schema_for_production,
-)
+from simulation.persistence import WorldSnapshot, checkpoint_schema_for_production
 from tests.unit.test_collective_project_replay_schema import (
     _engine,
     _open_project,
@@ -28,6 +24,7 @@ from world.collective_projects import (
     PublicGoodActKind,
     PublicGoodActSource,
 )
+from world.events import EVENT_SCHEMA_REPLAY_V19, EVENT_SCHEMA_REPLAY_V20
 from world.identifiers import EntityId
 from world.production import Structure, StructureKind
 
@@ -80,6 +77,7 @@ def test_v18_round_trips_public_acts() -> None:
         projects=(project,),
     )
     decoded = decode_persistence(encode_persistence(snap), type(snap))
+    assert isinstance(decoded, WorldSnapshot)
     assert decoded.persistence_codec_version == "v18"
     restored = decoded.collective_projects[0]
     assert restored.linked_structure_id == linked

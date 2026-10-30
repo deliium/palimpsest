@@ -60,9 +60,9 @@ def test_mid_run_sync_must_not_invoke_forbidden_copy_helpers() -> None:
                     break
     assert sync_fn is not None, "_sync_mid_run_population_entries missing"
     called: set[str] = set()
-    for node in ast.walk(sync_fn):
-        if isinstance(node, ast.Call):
-            func = node.func
+    for descendant in ast.walk(sync_fn):
+        if isinstance(descendant, ast.Call):
+            func = descendant.func
             if isinstance(func, ast.Name):
                 called.add(func.id)
             elif isinstance(func, ast.Attribute):

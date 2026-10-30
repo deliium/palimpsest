@@ -7,13 +7,14 @@ from dataclasses import replace
 
 import pytest
 
+from agents.cognition.defaults import DirectSelfStateProjector
 from simulation.models import RunId
 from simulation.runner import (
     RunnerConstructionError,
     RunnerConstructionErrorCode,
     SimulationRunner,
 )
-from simulation.runner_models import V2CapabilityFlags
+from simulation.runner_models import SimulationRunnerResult, V2CapabilityFlags
 from simulation.runner_serialization import build_runner_result_document
 from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS, _short_base
 
@@ -25,7 +26,7 @@ _PAYLOAD_MARKERS = (
 )
 
 
-def _commands(result: object) -> tuple[tuple[int, str, str, str], ...]:
+def _commands(result: SimulationRunnerResult) -> tuple[tuple[int, str, str, str], ...]:
     return tuple(
         (
             receipt.tick,
@@ -63,7 +64,9 @@ async def test_flags_off_matches_passthrough_trajectory(
     run_id = RunId("run-identity-off")
     with caplog.at_level(logging.DEBUG):
         async with await SimulationRunner.from_config(base, run_id=run_id) as runner:
-            assert runner.runtimes[0]._loop._self_state._identity_mode.value == (
+            projector = runner.runtimes[0]._loop._self_state
+            assert isinstance(projector, DirectSelfStateProjector)
+            assert projector._identity_mode.value == (
                 "passthrough"
             )
             flags_off = await runner.run()
@@ -96,7 +99,9 @@ async def test_extended_self_model_is_owned_and_off_the_v1_gate(
         async with await SimulationRunner.from_config(
             enabled, run_id=RunId("run-identity-on")
         ) as runner:
-            assert runner.runtimes[0]._loop._self_state._identity_mode.value == (
+            projector = runner.runtimes[0]._loop._self_state
+            assert isinstance(projector, DirectSelfStateProjector)
+            assert projector._identity_mode.value == (
                 "enabled"
             )
             result = await runner.run()

@@ -17,7 +17,7 @@ from tests.reference_scenario_helpers import (
     day_night_phases,
     make_reference_bundle,
 )
-from world.models import DayPhase
+from world.values import DayPhase
 
 pytestmark = pytest.mark.unit
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import TypedDict
 
 from analysis.models import RelationshipEdgeRow
 from analysis.society_divergence import SocietyDigestRow
@@ -16,8 +17,18 @@ from experiments.composition import (
 )
 
 
+class _ContextInputs(TypedDict):
+    run_id: str
+    input_revision: str
+    tick: int
+    living_person_ids: tuple[str, ...]
+    residence_rows: tuple[SocietyResidenceRow, ...]
+    interaction_edges: tuple[SocietyEdgeRow, ...]
+    dimension_rows: tuple[SocietyDigestRow, ...]
+
+
 def test_context_composition_is_deterministic() -> None:
-    kwargs = dict(
+    kwargs = _ContextInputs(
         run_id="run-c",
         input_revision="rev-c",
         tick=8,

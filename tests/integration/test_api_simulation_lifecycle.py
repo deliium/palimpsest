@@ -10,8 +10,10 @@ import uuid
 import httpx
 import pytest
 from fastapi import FastAPI
+from tests.integration.api_helpers import seed_api_run
 
 from api.app import create_app
+from api.schemas import LifecycleStateOut, RunControlStatusOut
 from api.simulation_manager import SimulationManager, TickExecutionResult
 from infrastructure.database import DatabaseResources
 from infrastructure.settings import Settings, load_settings
@@ -43,6 +45,7 @@ async def test_api_simulation_lifecycle_against_postgres(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     run_id = _unique("api-life")
+    await seed_api_run(database_resources, run_id)
     settings = _settings(migrated_test_database)
     run_control = create_run_control_repository(database_resources.session_factory)
 
@@ -82,7 +85,8 @@ async def test_api_simulation_lifecycle_against_postgres(
                 assert status.status_code == 200
                 body = status.json()
                 assert body["run_id"] == run_id
-                assert "lifecycle" in body or "status" in body
+                validated = RunControlStatusOut.model_validate(body)
+                assert validated.lifecycle_state in LifecycleStateOut
     for record in caplog.records:
         if record.name.startswith("api"):
             text = record.getMessage()

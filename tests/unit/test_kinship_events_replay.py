@@ -27,6 +27,7 @@ from simulation.runner_models import (
     AgentRunnerSpec,
     KinshipBootstrapEdgeSpec,
     KinshipSpec,
+    SimulationRunnerConfig,
     V3CapabilityFlags,
     WorldScenarioSpec,
     example_kinship_spec,
@@ -40,15 +41,16 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V10,
     EVENT_SCHEMA_REPLAY_V11,
     KinshipEdgeRecorded,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
-from world.kinship import parents_of, siblings_of, stable_kinship_edge_id
+from world.kinship import KinshipGraph, parents_of, siblings_of, stable_kinship_edge_id
 from world.models import default_physical_rules, non_lethal_physical_rules
 
 
-def _two_agent_config():
+def _two_agent_config() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     body_b = alive_body("body-b")
     agent_a = AgentId("agent-a")
@@ -94,7 +96,7 @@ def _kinship_details() -> KinshipEdgeRecorded:
     )
 
 
-def _event(*, schema_version: int):
+def _event(*, schema_version: int) -> WorldEvent:
     details = _kinship_details()
     return make_physical_replayable_event(
         event_id=EventId("evt-kinship-1"),
@@ -142,6 +144,7 @@ def test_kinship_details_require_schema_v11() -> None:
 def test_kinship_edge_recorded_round_trip() -> None:
     event = _event(schema_version=EVENT_SCHEMA_REPLAY_V11)
     decoded = decode_domain(encode_domain(event))
+    assert isinstance(decoded, WorldEvent)
     assert type(decoded.details) is KinshipEdgeRecorded
     assert decoded.details.parent_agent_id == "agent-a"
     assert decoded.details.child_agent_id == "agent-b"
@@ -172,6 +175,7 @@ async def test_bootstrap_kinship_graph_and_queries() -> None:
     engine = runner._engine
     assert engine.kinship_channel_active is True
     graph = engine.kinship_graph
+    assert isinstance(graph, KinshipGraph)
     assert parents_of(graph, AgentId("agent-b")) == (AgentId("agent-a"),)
     assert siblings_of(graph, AgentId("agent-b")) == ()
 
@@ -294,6 +298,8 @@ def test_kinship_snapshot_codec_v8_round_trip_and_restore() -> None:
 
     restored = WorldEngine.restore_from_snapshot(decoded, kinship_spec=kinship)
     assert restored.kinship_channel_active is True
-    assert parents_of(restored.kinship_graph, AgentId("agent-b")) == (
+    graph = restored.kinship_graph
+    assert isinstance(graph, KinshipGraph)
+    assert parents_of(graph, AgentId("agent-b")) == (
         AgentId("agent-a"),
     )

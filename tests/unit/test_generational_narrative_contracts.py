@@ -62,7 +62,9 @@ def _variant(**overrides: object) -> NarrativeVariant:
     return NarrativeVariant(**values)  # type: ignore[arg-type]
 
 
-def _witness(kind: NarrativeWitnessKind, *, agent: AgentId, death: int | None = None):
+def _witness(
+    kind: NarrativeWitnessKind, *, agent: AgentId, death: int | None = None
+) -> NarrativeWitness:
     return NarrativeWitness(
         witness_agent_id=agent,
         kind=kind,
@@ -256,7 +258,7 @@ def test_no_truth_fields_exist() -> None:
 def test_caller_mutation_cannot_alter_frozen_values() -> None:
     themes = [NarrativeTheme.FOUNDERS]
     variant = _variant(
-        themes=themes,  # type: ignore[arg-type]
+        themes=themes,
         theme_basis=NarrativeThemeBasis.OBSERVED_OCCURRENCE_KIND,
     )
     themes.append(NarrativeTheme.MIGRATIONS)

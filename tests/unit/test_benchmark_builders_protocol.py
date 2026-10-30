@@ -21,6 +21,7 @@ from experiments.catalog import base_runner_config_from_scenario
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
@@ -28,7 +29,7 @@ from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _base(*, max_ticks: int = 4):
+def _base(*, max_ticks: int = 4) -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -76,7 +77,8 @@ def test_unknown_builder_registration_fails_closed() -> None:
     with pytest.raises(BenchmarkBuilderError) as exc:
         register_benchmark_builder(
             "bench-99-missing",
-            lambda base, *, seed_matrix=None: None,  # type: ignore[arg-type,return-value]
+            # Registration rejects the unknown ID before invoking this invalid builder.
+            lambda base, *, seed_matrix=None: None,  # type: ignore[arg-type]
         )
     assert exc.value.code == "unknown_scenario_id"
 

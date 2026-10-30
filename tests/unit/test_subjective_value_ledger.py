@@ -12,6 +12,7 @@ from agents.cognition.scarcity_beliefs import (
 )
 from agents.cognition.structured_commitments import empty_structured_commitments
 from agents.cognition.subjective_value import (
+    SubjectiveValuationLedger,
     ValuationComponent,
     ValuationRow,
     empty_subjective_valuations,
@@ -122,6 +123,10 @@ def test_v15_round_trips_two_owners_tool_reservations() -> None:
     payload = subjective_valuation_checkpoint_payload(valuations, scarcity, codec="v15")
     assert "price" not in str(payload)
     restored = decode_subjective_valuation_checkpoint(payload, codec="v15")
-    assert restored["subjective_valuations"][alice.value].kind_rows[0].reservation == 8
-    assert restored["subjective_valuations"][bob.value].kind_rows[0].reservation == 3
+    alice_ledger = restored["subjective_valuations"][alice.value]
+    assert isinstance(alice_ledger, SubjectiveValuationLedger)
+    assert alice_ledger.kind_rows[0].reservation == 8
+    bob_ledger = restored["subjective_valuations"][bob.value]
+    assert isinstance(bob_ledger, SubjectiveValuationLedger)
+    assert bob_ledger.kind_rows[0].reservation == 3
     assert restored["scarcity_beliefs"] == scarcity

@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from infrastructure.settings import redact_secrets
+from tests.compose.acceptance import require_prerequisite
 from tests.compose.source_identity import parse_source_identity_labels
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +35,7 @@ BENCHMARK_MATRIX_FIXTURE = (
 def docker_cli() -> str:
     docker = shutil.which("docker")
     if docker is None:
-        pytest.skip("docker CLI is not available")
+        require_prerequisite("docker CLI is not available")
     return docker
 
 
@@ -42,7 +43,7 @@ def playwright_api() -> Any:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        pytest.skip("playwright is not installed")
+        require_prerequisite("playwright is not installed")
     return sync_playwright
 
 
@@ -94,7 +95,7 @@ def _generational_stack(
 ) -> Generator[GenerationalStack, None, None]:
     image = os.environ.get("PALIMPSEST_API_IMAGE", "").strip()
     if not image:
-        pytest.skip("PALIMPSEST_API_IMAGE is not set")
+        require_prerequisite("PALIMPSEST_API_IMAGE is not set")
     docker = docker_cli()
     playwright_api()
     project = f"palimpsest-gen-{secrets.token_hex(4)}"

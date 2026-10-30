@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from analysis.metric_service import MetricComputationInputs, assemble_metric_documents
-from analysis.models import MetricAvailability
+from analysis.models import MetricAvailability, MetricDocument
 from analysis.spatial_control_metrics import (
     SPATIAL_CONTROL_METRIC_VERSION,
     SpatialControlError,
@@ -43,7 +43,9 @@ def _claim(owner: str, strength: float, *, kind: str = "location") -> SimpleName
     )
 
 
-def _compute(actions: tuple[object, ...], claims: tuple[object, ...] | None):
+def _compute(
+    actions: tuple[object, ...], claims: tuple[object, ...] | None
+) -> MetricDocument:
     return compute_spatial_control(
         actions,
         claims,

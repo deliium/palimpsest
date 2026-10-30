@@ -28,10 +28,11 @@ from world._skills import (
     SkillEfficiencyOverride,
     default_objective_skill_policy,
 )
-from world.actions import ActionRequest, Move, Transport
+from world.actions import ActionRequest, AgentCommand, Move, Transport
 from world.dependency_care import DependencyCareRuleContext
 from world.events import JourneyArrived, JourneyEnded, JourneyStarted
 from world.identifiers import EntityId, ProposalId, RequestId, WorldId
+from world.lifecycle import AgentLifecycleRecord
 from world.models import PhysicalRules, non_lethal_physical_rules
 from world.regions import RouteSpec
 from world.values import round_physical
@@ -59,7 +60,7 @@ def _engine(
         ),
     )
     lifecycle = None
-    records = ()
+    records: tuple[AgentLifecycleRecord, ...] = ()
     if fatigue_factor is not None:
         base = example_developmental_lifecycle_spec(
             lifespan_ticks=24,
@@ -132,7 +133,9 @@ def test_short_move_preserves_another_journey_and_all_live_replay_prefixes(
             )
         engine.resolve_tick(tuple(submissions))
         if tick == short_tick:
-            pending = tuple(engine._snapshot.world.state.journeys.values())
+            state = engine._snapshot.world.state
+            assert state.journeys is not None
+            pending = tuple(state.journeys.values())
             assert len(pending) == 1
             assert pending[0].participant_body_ids == (EntityId("body-1"),)
     state = engine._snapshot.world.state
@@ -170,6 +173,10 @@ def test_short_grouped_transport_preserves_unrelated_journey() -> None:
         allow_feed=False,
         allow_transport=True,
     )
+    commands: tuple[tuple[str, AgentCommand], ...] = (
+        ("body-1", Move(EntityId("loc-2"))),
+        ("body-2", Transport(EntityId("body-3"), EntityId("loc-3"))),
+    )
     requests = tuple(
         ActionRequest(
             request_id=RequestId(f"request-{index}"),
@@ -179,12 +186,7 @@ def test_short_grouped_transport_preserves_unrelated_journey() -> None:
             actor_id=EntityId(actor),
             command=command,
         )
-        for index, (actor, command) in enumerate(
-            (
-                ("body-1", Move(EntityId("loc-2"))),
-                ("body-2", Transport(EntityId("body-3"), EntityId("loc-3"))),
-            )
-        )
+        for index, (actor, command) in enumerate(commands)
     )
     result = prepare_action_batch(
         world_id=WorldId("world-routes"),
@@ -194,6 +196,7 @@ def test_short_grouped_transport_preserves_unrelated_journey() -> None:
         tick=0,
         dependency_care_context=care,
     )
+    assert result.working_state.journeys is not None
     journeys = tuple(result.working_state.journeys.values())
     assert len(journeys) == 1
     assert journeys[0].participant_body_ids == (EntityId("body-1"),)

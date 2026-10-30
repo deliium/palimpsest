@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from analysis.generational_narratives import generational_narrative_inputs_from_harvest
+from analysis.historical_memory import HistoricalMemoryHarvest
 from tests.unit.test_generational_narrative_runtime_carry import _v2_ledger
 
 
@@ -47,7 +48,7 @@ def test_harvest_builds_without_layers_and_metric_service_emits_families() -> No
         cultural_narrative_ledgers=(ledger,),
         generation_index_by_agent={"agent-1": 0},
     )
-    assert harvest is not None
+    assert isinstance(harvest, HistoricalMemoryHarvest)
     assert harvest.layers_spec is None
     assert harvest.cultural_narrative_ledgers == (ledger,)
     bundle = assemble_metric_documents(

@@ -59,6 +59,13 @@ def add_civilization_benchmark_parser(
     run_p = bench.add_parser("run", help="Execute selected scenarios")
     run_p.add_argument("--scenario", action="append", default=None)
     run_p.add_argument(
+        "--seed",
+        action="append",
+        type=int,
+        default=None,
+        help="Restrict execution to a predeclared numeric seed (repeatable)",
+    )
+    run_p.add_argument(
         "--profile",
         choices=("smoke", "research", "visual"),
         default="smoke",
@@ -124,6 +131,8 @@ def _select_items(
             raise BenchmarkCliError("visual_selection_invalid")
         if lane is V3BenchmarkLane.RESEARCH:
             raise BenchmarkCliError("visual_selection_invalid")
+        if args.seed:
+            raise BenchmarkCliError("visual_selection_invalid")
         from experiments.civilization_benchmark_visual import (
             VISUAL_BENCHMARK_RECIPE_ID,
         )
@@ -139,8 +148,17 @@ def _select_items(
                 arm_id="observation",
             )
         ]
-    seeds = V3_BENCHMARK_PROFILE_BUDGETS[profile].seeds
+    budget = V3_BENCHMARK_PROFILE_BUDGETS[profile]
+    seeds = tuple(args.seed) if args.seed else budget.seeds
+    if len(set(seeds)) != len(seeds):
+        raise BenchmarkCliError("duplicate_seed")
+    for seed in seeds:
+        if type(seed) is not int or isinstance(seed, bool):
+            raise BenchmarkCliError("invalid_seed")
+        if seed not in budget.seeds:
+            raise BenchmarkCliError("undeclared_seed")
     selected = args.scenario or list(V3_BENCHMARK_SCENARIO_IDS)
+    items: list[composition.BenchmarkSelectionItem] = []
     for scenario_id in selected:
         spec = next(
             (
@@ -152,20 +170,20 @@ def _select_items(
         )
         if spec is None:
             raise BenchmarkCliError("unknown_scenario")
-        if spec.recipe.arm_count > 1:
-            raise BenchmarkCliError("grouped_case_not_supported")
         if lane not in spec.lanes:
             raise BenchmarkCliError("unsupported_lane")
-    return [
-        composition.BenchmarkSelectionItem(
-            scenario_id=scenario_id,
-            lane=lane,
-            profile=profile,
-            seed=seeds[0],
-            arm_id="observation",
+        arm_id = "grouped" if spec.recipe.arm_count > 1 else "observation"
+        items.extend(
+            composition.BenchmarkSelectionItem(
+                scenario_id=scenario_id,
+                lane=lane,
+                profile=profile,
+                seed=seed,
+                arm_id=arm_id,
+            )
+            for seed in seeds
         )
-        for scenario_id in selected
-    ]
+    return items
 
 
 def _cmd_run(args: argparse.Namespace) -> int:

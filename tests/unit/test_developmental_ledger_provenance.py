@@ -127,6 +127,6 @@ def test_runtime_commit_developmental_knowledge() -> None:
     assert stand._developmental_knowledge is ledger
 
     off = _StandIn()
-    off._loop._developmental_learning_spec = None  # type: ignore[attr-defined]
-    AgentRuntime._commit_developmental_knowledge(off, ledger, 3)  # type: ignore[arg-type]
+    off._loop._developmental_learning_spec = None
+    AgentRuntime._commit_developmental_knowledge(off, ledger, 3)
     assert off._developmental_knowledge is None

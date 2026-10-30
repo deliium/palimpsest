@@ -6,8 +6,9 @@ import asyncio
 from types import SimpleNamespace
 
 from agents.cognition.memory import build_direct_observation_memory_trace
-from agents.cognition.models import MemoryUpdateKind
+from agents.cognition.models import MemoryUpdateIntent, MemoryUpdateKind
 from agents.cognition.structured_commitments import (
+    StructuredCommitmentLedger,
     apply_structured_commitment_update,
     commitment_memory_intents,
     empty_structured_commitments,
@@ -15,7 +16,7 @@ from agents.cognition.structured_commitments import (
     link_structured_commitment_traces,
 )
 from agents.models import AgentId
-from memory.models import MemoryMutationBatch, MemoryRunId, MemoryScope
+from memory.models import MemoryMutationBatch, MemoryRunId, MemoryScope, MemoryTrace
 from memory.service import InMemoryMemoryService
 from world.identifiers import EntityId, EventId, WorldRevision
 from world.observations import (
@@ -26,7 +27,7 @@ from world.observations import (
 )
 
 
-def _speech():
+def _speech() -> ObservedOccurrence:
     return ObservedOccurrence(
         provenance=ObservationProvenance(
             source_kind=ObservationSourceKind.OCCURRENCE,
@@ -51,7 +52,7 @@ def _speech():
     )
 
 
-def _obs(owner: str):
+def _obs(owner: str) -> SimpleNamespace:
     return SimpleNamespace(
         occurrences=(_speech(),),
         visible_bodies=(),
@@ -62,7 +63,7 @@ def _obs(owner: str):
     )
 
 
-def _open(owner: str):
+def _open(owner: str) -> StructuredCommitmentLedger:
     return apply_structured_commitment_update(
         empty_structured_commitments(AgentId(owner)),
         _obs(owner),
@@ -70,7 +71,7 @@ def _open(owner: str):
     )
 
 
-def _trace(owner: str):
+def _trace(owner: str) -> MemoryTrace:
     return build_direct_observation_memory_trace(
         owner_id=AgentId(owner),
         observation_tick=1,
@@ -121,6 +122,7 @@ def test_adopted_speech_requests_one_write_memory() -> None:
     ledger = _open("owner-a")
     intents = commitment_memory_intents(AgentId("owner-a"), _obs("body-a"), ledger)
     assert len(intents) == 1
+    assert isinstance(intents[0], MemoryUpdateIntent)
     assert intents[0].kind is MemoryUpdateKind.WRITE_MEMORY
     assert intents[0].memory is not None
     assert intents[0].memory.owner_id == AgentId("owner-a")

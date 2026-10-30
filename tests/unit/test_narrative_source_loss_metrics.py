@@ -56,7 +56,9 @@ def test_unknown_is_preserved_and_lost_is_counted() -> None:
         input_revision="rev",
     )
     values = document.values
-    assert "unknown:1" in values["state_counts"]
+    state_counts = values["state_counts"]
+    assert isinstance(state_counts, str)
+    assert "unknown:1" in state_counts
     assert values["subjective_source_loss_rate"] == pytest.approx(1 / 3)
     assert values["all_witnesses_dead_count"] == 1
     assert values["record_backed_count"] == 1

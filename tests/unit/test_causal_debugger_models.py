@@ -80,6 +80,7 @@ def test_address_documents_sequence_as_ui_event_n() -> None:
     )
     assert address.sequence == 17
     assert address.event_id == "evt-17"
+    assert DebuggerEventAddress.__doc__ is not None
     assert "event N" in DebuggerEventAddress.__doc__
 
 

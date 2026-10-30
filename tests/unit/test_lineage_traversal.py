@@ -195,6 +195,10 @@ class _FakeSession:
         self._charge()
         return LineageSnapshotCataloguePage(rows=(), declared_count=0)
 
+    async def coverage(self, snapshot: LineageSnapshotRef) -> LineageCoverage:
+        _ = snapshot
+        return LineageCoverage(state=LineageCoverageState.COMPLETE)
+
 
 class _Reader:
     def __init__(self, session: _FakeSession) -> None:

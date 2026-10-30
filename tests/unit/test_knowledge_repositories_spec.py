@@ -72,23 +72,27 @@ def test_canonical_payload_exact_keys() -> None:
         "perception_mode",
         "rng_namespace",
     }
+    assert isinstance(payload["access_policy"], dict)
     assert set(payload["access_policy"]) == {
         "default_access_mode",
         "deposit_requires_colocation",
         "founder_list_survives_death",
         "retrieve_requires_colocation",
     }
+    assert isinstance(payload["capacity_policy"], dict)
     assert set(payload["capacity_policy"]) == {
         "max_index_entries",
         "max_members_per_repository",
         "max_repositories",
     }
+    assert isinstance(payload["maintenance_policy"], dict)
     assert set(payload["maintenance_policy"]) == {
         "allow_destruction",
         "inaccessible_blocks_access",
         "neglect_corrupts_index",
         "neglect_ticks",
     }
+    assert isinstance(payload["index_policy"], dict)
     assert set(payload["index_policy"]) == {
         "allow_corrupt_entries",
         "index_optional",

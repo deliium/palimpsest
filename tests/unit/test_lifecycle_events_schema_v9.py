@@ -15,6 +15,7 @@ from world.events import (
     AgentCreated,
     AgentEnteredWorld,
     LifecycleStageChanged,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
@@ -33,7 +34,7 @@ def _system_cause() -> SystemCause:
     )
 
 
-def _event(details: object, *, schema_version: int):
+def _event(details: object, *, schema_version: int) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-1"),
         run_id="run-1",

@@ -26,12 +26,13 @@ from simulation.runner_models import (
     ArtifactInterpretationMode,
     CulturalNarrativeMode,
     SemanticNamingMode,
+    SimulationRunnerConfig,
     SocialConventionMode,
     SocialNormMode,
 )
 
 
-def _conditions(max_ticks: int = 8):
+def _conditions(max_ticks: int = 8) -> dict[str, SimulationRunnerConfig]:
     definition = multiple_societies_scenario(seed=23, max_ticks=max_ticks)
     return {
         condition.condition_id: condition.runner_config
@@ -129,7 +130,7 @@ async def test_isolated_arm_detects_two_candidate_communities() -> None:
 
 @pytest.mark.asyncio
 async def test_contact_arm_journey_explains_cross_edge() -> None:
-    from world.events import JourneyArrived
+    from world.events import JourneyArrived, WorldEvent
 
     definition = multiple_societies_scenario(seed=23, max_ticks=8)
     results = await ExperimentCoordinator(definition).run_all()
@@ -137,6 +138,7 @@ async def test_contact_arm_journey_explains_cross_edge() -> None:
     events = tuple(arm.committed_events or ())
     journeys: list[SocietyJourneyRow] = []
     for event in events:
+        assert isinstance(event, WorldEvent)
         details = getattr(event, "details", None)
         if type(details) is not JourneyArrived:
             continue

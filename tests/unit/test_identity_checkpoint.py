@@ -12,6 +12,7 @@ from agents.models import AgentId
 from memory.beliefs import BeliefRevisionRequest
 from simulation.agent_runtime import (
     AgentRuntimeStatus,
+    PreparedObservation,
     _extend_identity_revisions,
 )
 from simulation.run_control import AgentRuntimeCheckpoint
@@ -70,6 +71,7 @@ async def test_restore_skips_operation_ids_from_the_last_applied_tick(
 ) -> None:
     runtime, reader = _runtime()
     prepared = await runtime.prepare_observation(_observation(), token=_token(4))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     await runtime.finalize_pending(pending)
     before = tuple(reader.snapshot())
@@ -81,7 +83,7 @@ async def test_restore_skips_operation_ids_from_the_last_applied_tick(
     assert cursor.operation_ids
     assert "identity-ability" not in repr(cursor)
     requests = pending.loop_result.identity_revisions
-    again: list[object] = []
+    again: list[BeliefRevisionRequest] = []
     with caplog.at_level(logging.DEBUG, logger="simulation.agent_runtime"):
         _extend_identity_revisions(
             requests,
@@ -114,7 +116,7 @@ async def test_restore_skips_operation_ids_from_the_last_applied_tick(
     assert restored_log
     assert restored_log[-1].tick == 4  # type: ignore[attr-defined]
     assert restored_log[-1].operation_count == len(cursor.operation_ids)  # type: ignore[attr-defined]
-    replay: list[object] = []
+    replay: list[BeliefRevisionRequest] = []
     _extend_identity_revisions(
         requests,
         agent_id=restored.agent_id,

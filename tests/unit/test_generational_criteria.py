@@ -11,9 +11,14 @@ from simulation.generational_control import (
     GenerationalControlError,
     unsupported_criterion_factory,
 )
-from simulation.generational_models import ExperimentCriterionSpec, GenerationalRunSpec
+from simulation.generational_models import (
+    ExperimentCriterionSpec,
+    GenerationalBoundary,
+    GenerationalRunSpec,
+    StopEvidence,
+)
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
-from simulation.runner_models import RunnerStopReasonCode
+from simulation.runner_models import RunnerStopReasonCode, SimulationRunnerConfig
 from tests.unit.test_generational_population_runner import _v55_config
 
 
@@ -39,7 +44,7 @@ class _Criterion:
     def version(self) -> str:
         return self._version
 
-    async def evaluate(self, boundary):
+    async def evaluate(self, boundary: GenerationalBoundary) -> CriterionDecision:
         self.evaluated.append(boundary.progress.boundary_tick)
         if self._fail:
             raise RuntimeError("boom payload must not leak")
@@ -49,7 +54,10 @@ class _Criterion:
         )
 
 
-def _config(*, criteria=(), max_generation=None, max_ticks=6):
+def _config(
+    *, criteria: tuple[ExperimentCriterionSpec, ...] = (),
+    max_generation: int | None = None, max_ticks: int = 6
+) -> SimulationRunnerConfig:
     config = _v55_config()
     return replace(
         config,
@@ -160,7 +168,9 @@ async def test_observer_failure_is_secondary_to_criterion_match() -> None:
     spec = ExperimentCriterionSpec(criterion_id="match", version="v1")
 
     class _FailingObserver:
-        async def observe(self, boundary, stop_evidence) -> None:
+        async def observe(
+            self, boundary: GenerationalBoundary, stop_evidence: StopEvidence | None
+        ) -> None:
             raise OSError("payload path must not leak")
 
     criterion = _Criterion(spec, match_boundary=1)

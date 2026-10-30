@@ -10,8 +10,6 @@ from agents.cognition.configuration import build_cognitive_loop
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.persistence import (
-    EVENT_SCHEMA_REPLAY_V16,
-    EVENT_SCHEMA_REPLAY_V17,
     checkpoint_schema_for_production,
 )
 from simulation.runner import _structured_commitments_loop_kwargs
@@ -20,18 +18,20 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V39,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
     example_possession_succession_spec,
     example_structured_commitments_spec,
 )
 from simulation.serialization import DomainSerializationError, _decode_event_details
 from tests.simulation_helpers import alive_body, make_location, make_weather
+from world.events import EVENT_SCHEMA_REPLAY_V16, EVENT_SCHEMA_REPLAY_V17
 from world.events import EVENT_SCHEMA_REPLAY_V17 as WORLD_REPLAY_V17
 from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
 
 
-def _plain_base():
+def _plain_base() -> SimulationRunnerConfig:
     body_a = alive_body("body-a")
     agent_a = AgentId("agent-a")
     return base_runner_config_from_scenario(

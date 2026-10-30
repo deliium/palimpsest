@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -26,6 +27,7 @@ from experiments.civilization_benchmark_models import (
     V3BenchmarkExecutionStatus,
     V3BenchmarkLane,
     V3BenchmarkProfile,
+    V3BenchmarkRunResult,
 )
 from experiments.civilization_benchmark_suite import (
     V3_BENCH_05_MEMORY_LAYERS,
@@ -40,7 +42,7 @@ from experiments.generational_execution import (
 )
 from simulation.models import RunId
 from simulation.runner import RunnerDependencyFactories
-from simulation.runner_models import PopulationLifecycleSpec
+from simulation.runner_models import PopulationLifecycleSpec, SimulationRunnerConfig
 from simulation.runner_serialization import (
     decode_runner_config,
     encode_runner_config,
@@ -48,7 +50,9 @@ from simulation.runner_serialization import (
 from world.lifecycle import LifecycleStageId, LifecycleStageThreshold
 
 
-def _short_config(config, *, max_ticks: int, lifespan: int = 6):
+def _short_config(
+    config: SimulationRunnerConfig, *, max_ticks: int, lifespan: int = 6
+) -> SimulationRunnerConfig:
     lifecycle = config.population_lifecycle
     assert isinstance(lifecycle, PopulationLifecycleSpec)
     short = replace(
@@ -75,7 +79,9 @@ def _short_config(config, *, max_ticks: int, lifespan: int = 6):
     )
 
 
-def _context(tmp_path, probe, arbiter=None) -> GenerationalExecutionContext:
+def _context(
+    tmp_path: Path, probe: BenchmarkBoundaryProbe, arbiter: object = None
+) -> GenerationalExecutionContext:
     return GenerationalExecutionContext(
         artifact_root=tmp_path,
         source_identity={"code_revision": "deadbeef", "source_clean": True},
@@ -88,7 +94,7 @@ def _context(tmp_path, probe, arbiter=None) -> GenerationalExecutionContext:
     )
 
 
-def _assignment(config, run_id: str) -> ExperimentAssignment:
+def _assignment(config: SimulationRunnerConfig, run_id: str) -> ExperimentAssignment:
     return ExperimentAssignment(
         experiment_id="v3-benchmark-memory",
         condition_id="memory-case",
@@ -101,7 +107,14 @@ def _assignment(config, run_id: str) -> ExperimentAssignment:
     )
 
 
-async def _dispatch(tmp_path, scenario_id, config, probe, *, arbiter=None):
+async def _dispatch(
+    tmp_path: Path,
+    scenario_id: str,
+    config: SimulationRunnerConfig,
+    probe: BenchmarkBoundaryProbe,
+    *,
+    arbiter: object = None,
+) -> V3BenchmarkRunResult:
     recipe = CivilizationBenchmarkRecipe(
         scenario_id=scenario_id,
         lane=V3BenchmarkLane.RESEARCH,
@@ -127,6 +140,7 @@ def test_all_memory_cases_build_exact_specs() -> None:
             assert config.durable_records is None
         else:
             assert config.durable_records is not None
+            assert config.new_agent_initialization is not None
             assert (
                 config.new_agent_initialization.species_defaults_id
                 == "species_default_developmental_v1"
@@ -142,7 +156,7 @@ def test_non_record_cases_have_no_arbiter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_memory_layers_measure_retained_owner_memory(tmp_path) -> None:
+async def test_memory_layers_measure_retained_owner_memory(tmp_path: Path) -> None:
     build = build_memory_benchmark(V3_BENCH_05_MEMORY_LAYERS)
     config = _short_config(build.arms[0].config, max_ticks=3)
     probe = BenchmarkBoundaryProbe()
@@ -153,11 +167,12 @@ async def test_memory_layers_measure_retained_owner_memory(tmp_path) -> None:
     memory = statuses["historical_memory_evidence"]
     assert memory.status is V3BenchmarkCheckStatus.PASS
     assert memory.reason_code == "memory_window_complete"
+    assert memory.denominator is not None
     assert memory.denominator >= 1
 
 
 @pytest.mark.asyncio
-async def test_accurate_record_survives_its_author(tmp_path) -> None:
+async def test_accurate_record_survives_its_author(tmp_path: Path) -> None:
     build = build_memory_benchmark(V3_BENCH_06_RECORD_AFTER_WITNESSES)
     config = _short_config(build.arms[0].config, max_ticks=8)
     arbiter = memory_benchmark_arbiter(
@@ -188,7 +203,7 @@ async def test_accurate_record_survives_its_author(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_false_record_is_physically_legal(tmp_path) -> None:
+async def test_false_record_is_physically_legal(tmp_path: Path) -> None:
     build = build_memory_benchmark(V3_BENCH_07_FALSE_RECORD)
     config = _short_config(build.arms[0].config, max_ticks=8)
     arbiter = memory_benchmark_arbiter(V3_BENCH_07_FALSE_RECORD, config)
@@ -203,7 +218,7 @@ async def test_false_record_is_physically_legal(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unexercised_record_mechanism_is_not_a_pass(tmp_path) -> None:
+async def test_unexercised_record_mechanism_is_not_a_pass(tmp_path: Path) -> None:
     build = build_memory_benchmark(V3_BENCH_06_RECORD_AFTER_WITNESSES)
     config = _short_config(build.arms[0].config, max_ticks=3)
     probe = BenchmarkBoundaryProbe()
@@ -227,7 +242,9 @@ def test_durable_record_disabled_is_unexecuted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_interpretation_disabled_control_preserves_record_only(tmp_path) -> None:
+async def test_interpretation_disabled_control_preserves_record_only(
+    tmp_path: Path,
+) -> None:
     from simulation.new_agent_initialization import (
         default_new_agent_initialization_spec,
     )
@@ -261,7 +278,7 @@ async def test_interpretation_disabled_control_preserves_record_only(tmp_path) -
 
 
 @pytest.mark.asyncio
-async def test_legal_destruction_removes_physical_record(tmp_path) -> None:
+async def test_legal_destruction_removes_physical_record(tmp_path: Path) -> None:
     from experiments.interventions import (
         MilestoneInterventionArbiter,
         MilestoneOverride,

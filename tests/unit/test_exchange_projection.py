@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 
@@ -25,6 +26,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V17,
     EVENT_SCHEMA_REPLAY_V18,
     EVENT_SCHEMA_REPLAY_V21,
+    EventDetails,
     EventValidationCode,
     ExchangeCompleted,
     ExchangeProposed,
@@ -33,6 +35,7 @@ from world.events import (
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.models import AgentBody, Item
 from world.subjective_value import ExchangeOffer, exchange_party_ids
 from world.values import ItemKind
 
@@ -40,7 +43,7 @@ _RUN = "run-exchange"
 _WORLD = WorldId("world-exchange")
 
 
-def _state():
+def _state() -> tuple[WorldState, Item, Item, AgentBody, AgentBody]:
     tool = make_item(
         "tool-1", name="Axe", kind=ItemKind.TOOL, location_id=None, holder_id="body-a"
     )
@@ -59,7 +62,9 @@ def _state():
     return state, tool, food, alice, bob
 
 
-def _event(details, *, event_id: str, actor: EntityId, schema: int, tick: int = 1):
+def _event(
+    details: EventDetails, *, event_id: str, actor: EntityId, schema: int, tick: int = 1
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(event_id),
         run_id=_RUN,
@@ -137,7 +142,7 @@ def test_replay_v21_exchange_events_decode_and_project() -> None:
         tick=2,
     )
     decoded = tuple(
-        decode_persistence(encode_persistence(event), WorldEvent)
+        cast(WorldEvent, decode_persistence(encode_persistence(event), WorldEvent))
         for event in (proposed, completed)
     )
     after = project_events(

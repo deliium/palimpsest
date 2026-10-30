@@ -183,6 +183,7 @@ def test_shared_observation_creates_candidate_then_promotes() -> None:
             terminology,
         )
         assert previous is not None
+    assert previous is not None
     mapping = previous.mappings[0]
     assert mapping.source_token == "foreign_a"
     assert mapping.source_kind is TranslationSourceKind.LABEL

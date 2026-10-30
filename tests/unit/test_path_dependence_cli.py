@@ -2,14 +2,49 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
 
 from experiments.path_dependence_artifacts import PathDependenceArtifactStore
 from experiments.path_dependence_scenario import historical_contingency_scenario
 from experiments.path_dependence_serialization import encode_path_dependence_spec
 from research_runner.cli import main
+from research_runner.path_dependence_cli import PathDependenceCliError, _execute
+from simulation.runner import RunnerDependencyFactories
 
 DIGEST_A = "a" * 64
+
+
+@pytest.mark.parametrize(
+    ("durable", "code"),
+    [(False, "durable_config_required"), (True, "durable_materializer_required")],
+)
+async def test_database_execution_rejects_incomplete_durability_before_publication(
+    tmp_path: Path, durable: bool, code: str
+) -> None:
+    spec = historical_contingency_scenario(profile="smoke")
+    spec = replace(
+        spec,
+        base=replace(
+            spec.base, persistence=replace(spec.base.persistence, durable=durable)
+        ),
+    )
+    path = tmp_path / "spec.json"
+    path.write_bytes(encode_path_dependence_spec(spec))
+    root = tmp_path / "artifacts"
+    with pytest.raises(PathDependenceCliError) as rejected:
+        await _execute(
+            spec_path=path,
+            root=root,
+            code_revision="unit-revision",
+            source_artifact_digest=DIGEST_A,
+            factories=RunnerDependencyFactories(run_repository=Mock()),
+        )
+    assert rejected.value.code == code
+    assert not list(root.glob("*/ensemble.json"))
 
 
 def _spec_file(tmp_path: Path) -> Path:

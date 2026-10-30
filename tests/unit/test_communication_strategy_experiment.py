@@ -12,9 +12,9 @@ from analysis.communication_strategy_metrics import (
     compute_communication_strategy_metrics,
 )
 from analysis.models import MetricAvailability
+from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
-    ActionCause,
     OccurrenceContext,
     Searched,
     WorldEvent,

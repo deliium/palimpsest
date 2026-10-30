@@ -25,6 +25,7 @@ from world.events import (
     RepositoryMemberDeposited,
     RepositoryMemberRetrieved,
     RepositoryNeglected,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import (
@@ -58,7 +59,7 @@ def _event(
     sequence: int = 0,
     tick: int = 1,
     resulting_revision: int = 1,
-):
+) -> WorldEvent:
     cause: object = _cause()
     if type(details) is RepositoryNeglected:
         cause = SystemCause(
@@ -83,7 +84,7 @@ def _event(
 
 def _base_state(*, with_artifact: bool = False) -> WorldState:
     fixture = two_location_fixture()
-    artifacts = ()
+    artifacts: tuple[InformationArtifact, ...] = ()
     if with_artifact:
         artifacts = (
             InformationArtifact(

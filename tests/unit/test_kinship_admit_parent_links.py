@@ -21,7 +21,7 @@ from simulation.runner_models import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.events import KinshipEdgeRecorded
 from world.identifiers import EntityId, WorldId, WorldRevision
-from world.kinship import parents_of
+from world.kinship import KinshipGraph, parents_of
 from world.lifecycle import OriginProvenance
 from world.models import non_lethal_physical_rules
 
@@ -93,9 +93,12 @@ def test_admit_establishes_parent_edge_when_policy_allows() -> None:
     ]
     assert len(kinship_events) == 1
     details = kinship_events[0].details
+    assert isinstance(details, KinshipEdgeRecorded)
     assert details.parent_agent_id == "agent-1"
     assert details.child_agent_id == "entrant-0000-00"
-    assert parents_of(engine.kinship_graph, AgentId("entrant-0000-00")) == (
+    graph = engine.kinship_graph
+    assert isinstance(graph, KinshipGraph)
+    assert parents_of(graph, AgentId("entrant-0000-00")) == (
         AgentId("agent-1"),
     )
 

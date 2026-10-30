@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
 from dataclasses import replace
+from typing import Any, cast
 
 import pytest
 from pydantic import SecretStr, ValidationError
@@ -12,10 +14,13 @@ from pydantic import SecretStr, ValidationError
 from api.civilization_cursor import CivilizationCursorCodec
 from api.civilization_schemas import CivilizationMapOut
 from api.errors import ApiError, not_found, service_unavailable
+from api.observer_service import ObserverReadService
 from infrastructure.logging import reset_logging_for_tests
 from infrastructure.settings import SettingsError
 from simulation.civilization_models import CivilizationCursor, CivilizationSection
+from simulation.civilization_rows import CivilizationMapRow
 from simulation.observer_facts import ObjectiveScene
+from simulation.replay import FoldedObjectiveHistory
 from tests.unit.test_observer_civilization import _physical_scene
 from tests.unit.test_observer_demographic_api import _app, _client, _reader, _settings
 from tests.unit.test_observer_population_replay import RUN_ID
@@ -26,7 +31,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def isolate(monkeypatch):
+def isolate(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     for key in list(os.environ):
         if key.startswith("PALIMPSEST_"):
             monkeypatch.delenv(key, raising=False)
@@ -39,11 +44,13 @@ def isolate(monkeypatch):
 class _SceneResolver:
     """Constructed presentation scenes are separate from real replay tests."""
 
-    def __init__(self, scene: ObjectiveScene):
+    def __init__(self, scene: ObjectiveScene) -> None:
         self.scene = scene
-        self.calls = []
+        self.calls: list[tuple[str, int | None, int | None]] = []
 
-    async def resolve_objective_history(self, run_id, *, tick, through_sequence):
+    async def resolve_objective_history(
+        self, run_id: str, *, tick: int | None, through_sequence: int | None
+    ) -> FoldedObjectiveHistory:
         self.calls.append((run_id, tick, through_sequence))
         if run_id != self.scene.run_id:
             raise not_found(code="run_not_found")
@@ -53,7 +60,7 @@ class _SceneResolver:
         return replace(history, scene=self.scene)
 
 
-def _repos(count):
+def _repos(count: int) -> ObjectiveScene:
     return replace(
         _physical_scene(),
         repositories=tuple(
@@ -69,12 +76,14 @@ def _repos(count):
     )
 
 
-def _url(run_id=RUN_ID):
+def _url(run_id: str = RUN_ID) -> str:
     return f"/v1/simulations/{run_id}/observer/civilization/map"
 
 
 @pytest.mark.parametrize("section", list(CivilizationSection))
-async def test_actual_http_sections_use_independent_schema_and_nostore(section):
+async def test_actual_http_sections_use_independent_schema_and_nostore(
+    section: CivilizationSection,
+) -> None:
     async with _client(_app()) as client:
         response = await client.get(
             _url(), params={"section": section.value, "tick": 4}
@@ -91,13 +100,15 @@ async def test_actual_http_sections_use_independent_schema_and_nostore(section):
     assert CivilizationMapOut.model_validate_json(response.content).section is section
 
 
-async def test_more_than_450_rows_page_at_an_explicit_pinned_cursor():
+async def test_more_than_450_rows_page_at_an_explicit_pinned_cursor() -> None:
     scene = _repos(451)
     reader = _SceneResolver(scene)
-    app = _app(reader, settings=_settings(api_max_page_size=200))
-    keys = []
+    app = _app(
+        cast(ObserverReadService, reader), settings=_settings(api_max_page_size=200)
+    )
+    keys: list[str] = []
     async with _client(app) as client:
-        params = {"section": "repositories", "limit": 200}
+        params: dict[str, Any] = {"section": "repositories", "limit": 200}
         for expected_count in (200, 200, 51):
             response = await client.get(_url(scene.run_id), params=params)
             assert response.status_code == 200, response.text
@@ -119,20 +130,22 @@ async def test_more_than_450_rows_page_at_an_explicit_pinned_cursor():
     ]
 
 
-async def test_direct_late_entity_does_not_project_preceding_rows(monkeypatch):
+async def test_direct_late_entity_does_not_project_preceding_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from simulation import observer_civilization as projection
 
     scene = _repos(950)
     reader = _SceneResolver(scene)
     original = projection._repository_rows
-    sizes = []
+    sizes: list[int] = []
 
-    def measured(selected_scene):
+    def measured(selected_scene: ObjectiveScene) -> tuple[CivilizationMapRow, ...]:
         sizes.append(len(selected_scene.repositories))
         return original(selected_scene)
 
     monkeypatch.setattr(projection, "_repository_rows", measured)
-    async with _client(_app(reader)) as client:
+    async with _client(_app(cast(ObserverReadService, reader))) as client:
         selected = await client.get(
             _url(scene.run_id),
             params={"section": "repositories", "entity_id": "repo-0949", "tick": 4},
@@ -165,15 +178,18 @@ async def test_direct_late_entity_does_not_project_preceding_rows(monkeypatch):
         {"cursor": "garbage", "tick": 4},
     ],
 )
-async def test_invalid_unknown_duplicate_queries_fail_before_replay(params):
+async def test_invalid_unknown_duplicate_queries_fail_before_replay(
+    params: dict[str, str | int] | list[tuple[str, str | int | float | bool | None]],
+) -> None:
     reader = _SceneResolver(_physical_scene())
-    async with _client(_app(reader)) as client:
+    async with _client(_app(cast(ObserverReadService, reader))) as client:
         response = await client.get(_url(reader.scene.run_id), params=params)
     assert response.status_code == 400
     assert reader.calls == []
 
 
-async def test_independent_inspect_debug_credentials_authorize_before_any_counts():
+async def test_independent_inspect_debug_credentials_authorize_before_any_counts(
+) -> None:
     inspect_secret, debug_secret = "inspect-" + "i" * 32, "debug-" + "d" * 32
     settings = _settings(
         api_inspection_credential=SecretStr(inspect_secret),
@@ -181,7 +197,8 @@ async def test_independent_inspect_debug_credentials_authorize_before_any_counts
         api_debug_enabled=True,
     )
     reader = _SceneResolver(_physical_scene())
-    async with _client(_app(reader, settings=settings)) as client:
+    app = _app(cast(ObserverReadService, reader), settings=settings)
+    async with _client(app) as client:
         missing = await client.get(_url(reader.scene.run_id), params={"section": "bad"})
         debug = await client.get(
             _url(reader.scene.run_id), headers={"x-palimpsest-token": debug_secret}
@@ -205,10 +222,12 @@ async def test_independent_inspect_debug_credentials_authorize_before_any_counts
         {"through_sequence": 0},
     ],
 )
-async def test_continuation_rejects_changed_query_before_replay(changed):
+async def test_continuation_rejects_changed_query_before_replay(
+    changed: dict[str, str | int | None],
+) -> None:
     reader = _SceneResolver(_repos(3))
-    async with _client(_app(reader)) as client:
-        params = {"section": "repositories", "tick": 4, "limit": 2}
+    async with _client(_app(cast(ObserverReadService, reader))) as client:
+        params: dict[str, Any] = {"section": "repositories", "tick": 4, "limit": 2}
         first = (await client.get(_url(reader.scene.run_id), params=params)).json()
         params = {**params, "cursor": first["next_cursor"], **changed}
         params = {key: value for key, value in params.items() if value is not None}
@@ -217,14 +236,14 @@ async def test_continuation_rejects_changed_query_before_replay(changed):
     assert len(reader.calls) == 1
 
 
-async def test_foreign_run_expiry_revision_change_and_gone_context():
+async def test_foreign_run_expiry_revision_change_and_gone_context() -> None:
     reader = _SceneResolver(_repos(3))
     clock = [1000]
-    app = _app(reader)
+    app = _app(cast(ObserverReadService, reader))
     app.state.civilization_cursor_codec = CivilizationCursorCodec(
         b"x" * 32, now=lambda: clock[0]
     )
-    params = {"section": "repositories", "tick": 4, "limit": 2}
+    params: dict[str, Any] = {"section": "repositories", "tick": 4, "limit": 2}
     async with _client(app) as client:
         first = (await client.get(_url(reader.scene.run_id), params=params)).json()
         params["cursor"] = first["next_cursor"]
@@ -241,8 +260,8 @@ async def test_foreign_run_expiry_revision_change_and_gone_context():
 
 
 async def test_real_partial_and_full_event_prefixes_match_the_existing_state_route(
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from api import observer_service
     from observer.layout import ObserverLayoutCatalog
 
@@ -290,17 +309,18 @@ async def test_real_partial_and_full_event_prefixes_match_the_existing_state_rou
     assert after.scene == baseline.scene and after.events == baseline.events
 
 
-async def test_missing_required_replay_context_or_storage_is_not_empty_success():
+async def test_missing_required_replay_context_or_storage_is_not_empty_success(
+) -> None:
     class Unavailable:
-        async def resolve_objective_history(self, *args, **kwargs):
+        async def resolve_objective_history(
+            self, *args: object, **kwargs: object
+        ) -> FoldedObjectiveHistory:
             raise service_unavailable(code="observer_replay_context_unavailable")
 
-    async with _client(_app(Unavailable())) as client:
+    async with _client(_app(cast(ObserverReadService, Unavailable()))) as client:
         response = await client.get(_url())
     assert response.status_code == 503
     assert response.json()["code"] == "observer_replay_context_unavailable"
-
-    from api.observer_service import ObserverReadService
 
     # Real generational replay needs its trusted lifecycle context; omitting it
     # must not turn restoration failure into an empty civilization map.
@@ -309,7 +329,7 @@ async def test_missing_required_replay_context_or_storage_is_not_empty_success()
     assert missing.status_code == 503
 
 
-async def test_strict_nested_http_models_reject_unknown_fields_and_coercions():
+async def test_strict_nested_http_models_reject_unknown_fields_and_coercions() -> None:
     async with _client(_app()) as client:
         response = await client.get(_url(), params={"tick": 4})
     raw = response.content
@@ -324,7 +344,9 @@ async def test_strict_nested_http_models_reject_unknown_fields_and_coercions():
         )
 
 
-def test_cursor_codec_is_purpose_separated_tamper_safe_and_secret_free(caplog):
+def test_cursor_codec_is_purpose_separated_tamper_safe_and_secret_free(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     key = b"secret-canary" + b"x" * 32
     codec = CivilizationCursorCodec(key, now=lambda: 1000)
     cursor = CivilizationCursor("run", "world", 4, None, 4, 5)
@@ -362,7 +384,7 @@ def test_cursor_codec_is_purpose_separated_tamper_safe_and_secret_free(caplog):
     assert token not in caplog.text and key.decode() not in caplog.text
 
 
-def test_cursor_setting_is_optional_secret_and_rejects_short_keys():
+def test_cursor_setting_is_optional_secret_and_rejects_short_keys() -> None:
     with pytest.raises(SettingsError):
         _settings(civilization_cursor_key=SecretStr("short"))
     secret = "civilization-secret-" + "x" * 32
@@ -371,7 +393,7 @@ def test_cursor_setting_is_optional_secret_and_rejects_short_keys():
     assert secret not in str(settings.bootstrap_fields())
 
 
-async def test_actual_response_byte_cap_keeps_pending_row_for_the_next_page():
+async def test_actual_response_byte_cap_keeps_pending_row_for_the_next_page() -> None:
     # Long legal Unicode IDs exercise encoded bytes rather than character count.
     scene = _repos(60)
     members = tuple(
@@ -384,11 +406,12 @@ async def test_actual_response_byte_cap_keeps_pending_row_for_the_next_page():
         ),
     )
     reader = _SceneResolver(scene)
-    keys = []
-    async with _client(
-        _app(reader, settings=_settings(api_max_page_size=200))
-    ) as client:
-        params = {"section": "repositories", "tick": 4, "limit": 200}
+    keys: list[str] = []
+    reader_app = _app(
+        cast(ObserverReadService, reader), settings=_settings(api_max_page_size=200)
+    )
+    async with _client(reader_app) as client:
+        params: dict[str, Any] = {"section": "repositories", "tick": 4, "limit": 200}
         for _ in range(10):
             response = await client.get(_url(scene.run_id), params=params)
             assert response.status_code == 200, response.text
@@ -406,8 +429,8 @@ async def test_actual_response_byte_cap_keeps_pending_row_for_the_next_page():
 
 
 async def test_plain_legacy_state_remains_unchanged_and_no_civilization_fields_added(
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from api import observer_service
     from observer.layout import ObserverLayoutCatalog
 
@@ -432,7 +455,8 @@ async def test_plain_legacy_state_remains_unchanged_and_no_civilization_fields_a
     assert "civilization" not in before.json()["world"]
 
 
-async def test_actual_http_projects_repositories_and_records_never_expose_contents():
+async def test_actual_http_projects_repositories_and_records_never_expose_contents(
+) -> None:
     from world.artifacts import ArtifactContent, ArtifactKind, InformationArtifact
     from world.collective_projects import (
         CollectiveProject,
@@ -463,7 +487,8 @@ async def test_actual_http_projects_repositories_and_records_never_expose_conten
         0,
     )
     scene = replace(scene, artifacts=(record,), collective_projects=(project,))
-    async with _client(_app(_SceneResolver(scene))) as client:
+    resolver = cast(ObserverReadService, _SceneResolver(scene))
+    async with _client(_app(resolver)) as client:
         project_response = await client.get(
             _url(scene.run_id), params={"section": "projects"}
         )
@@ -488,8 +513,8 @@ async def test_actual_http_projects_repositories_and_records_never_expose_conten
     assert mutation.status_code == 405
 
 
-async def test_real_noninitial_checkpoint_does_not_join_later_admission_metadata():
-    from api.observer_service import ObserverReadService
+async def test_real_noninitial_checkpoint_does_not_join_later_admission_metadata(
+) -> None:
     from simulation.models import RunId
     from simulation.runner import SimulationRunner
     from tests.unit.test_observer_demographic_api import _StaticContext

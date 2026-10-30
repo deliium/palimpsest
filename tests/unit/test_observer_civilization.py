@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import FrozenInstanceError, fields, replace
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -57,6 +59,8 @@ from simulation.civilization_rows import (
     CivilizationTechnologyRow,
     CivilizationTradeRow,
 )
+from simulation.observer_civilization import CivilizationMapProjection
+from simulation.observer_facts import ObjectiveScene
 from world.artifacts import ArtifactKind
 from world.collective_projects import CollectiveProjectKind, CollectiveProjectStatus
 from world.identifiers import EntityId
@@ -86,7 +90,21 @@ def _history(layer: CivilizationLayer) -> CivilizationLayerContext:
     )
 
 
-def _row_cases() -> tuple[CivilizationMapRow | CivilizationCapturedRow, ...]:
+def _row_cases() -> tuple[
+    CivilizationRegionRow,
+    CivilizationRouteRow,
+    CivilizationLocationRow,
+    CivilizationProjectRow,
+    CivilizationRepositoryRow,
+    CivilizationRecordRow,
+    CivilizationSettlementRow,
+    CivilizationMigrationRow,
+    CivilizationTradeRow,
+    CivilizationCultureRow,
+    CivilizationTechnologyRow,
+    CivilizationGroupRow,
+    CivilizationInstitutionRow,
+]:
     return (
         CivilizationRegionRow(CONTEXT, "region", 1, ("location",)),
         CivilizationRouteRow(CONTEXT, "route", "a", "b", "r1", "r2", 3, 2.0),
@@ -226,7 +244,9 @@ def _row_cases() -> tuple[CivilizationMapRow | CivilizationCapturedRow, ...]:
 
 
 @pytest.mark.parametrize("row", _row_cases(), ids=lambda row: type(row).__name__)
-def test_every_closed_row_round_trips_without_coordinate_or_payload_fields(row):
+def test_every_closed_row_round_trips_without_coordinate_or_payload_fields(
+    row: CivilizationMapRow | CivilizationCapturedRow,
+) -> None:
     encoded = encode_civilization_value(row)
     assert decode_civilization_value(encoded) == row
     assert encoded.endswith(b"\n") and not encoded.endswith(b"\n\n")
@@ -237,7 +257,11 @@ def test_every_closed_row_round_trips_without_coordinate_or_payload_fields(row):
 @pytest.mark.parametrize("layer", [*CivilizationSection, *CivilizationLayer])
 @pytest.mark.parametrize("evidence", list(CivilizationEvidenceClass))
 @pytest.mark.parametrize("owner", [None, "owner"])
-def test_scope_supported_combinations_are_independent(layer, evidence, owner):
+def test_scope_supported_combinations_are_independent(
+    layer: CivilizationSection | CivilizationLayer,
+    evidence: CivilizationEvidenceClass,
+    owner: str | None,
+) -> None:
     objective = (
         isinstance(layer, CivilizationSection) or layer is CivilizationLayer.MIGRATION
     )
@@ -271,12 +295,12 @@ def test_scope_supported_combinations_are_independent(layer, evidence, owner):
 
 
 @pytest.mark.parametrize("tick", [-1, True, 1.0, "1"])
-def test_cursor_rejects_coercion_and_negative_ticks(tick):
+def test_cursor_rejects_coercion_and_negative_ticks(tick: object) -> None:
     with pytest.raises(CivilizationError):
-        replace(CURSOR, tick=tick)
+        replace(CURSOR, tick=cast(int, tick))
 
 
-def test_prefix_is_not_a_full_boundary_or_a_last_event_resume_pair():
+def test_prefix_is_not_a_full_boundary_or_a_last_event_resume_pair() -> None:
     assert replace(CURSOR, through_sequence=2, boundary_tick=None).boundary_tick is None
     with pytest.raises(CivilizationError):
         replace(CURSOR, through_sequence=2)
@@ -284,7 +308,7 @@ def test_prefix_is_not_a_full_boundary_or_a_last_event_resume_pair():
         replace(CURSOR, boundary_tick=3)
 
 
-def test_complete_empty_disabled_and_missing_denominators_are_distinct():
+def test_complete_empty_disabled_and_missing_denominators_are_distinct() -> None:
     disabled = CivilizationCoverage(CivilizationCoverageState.DISABLED, "capture_off")
     assert disabled != COMPLETE
     assert COMPLETE.observed_count is None
@@ -292,9 +316,9 @@ def test_complete_empty_disabled_and_missing_denominators_are_distinct():
     empty = replace(
         row, carrier_count=0, carrier_ids=(), eligible_owner_count=0, proportion=None
     )
-    assert (
-        decode_civilization_value(encode_civilization_value(empty)).proportion is None
-    )
+    decoded = decode_civilization_value(encode_civilization_value(empty))
+    assert isinstance(decoded, CivilizationCultureRow)
+    assert decoded.proportion is None
     partial = replace(
         row,
         history=replace(
@@ -315,13 +339,14 @@ def test_complete_empty_disabled_and_missing_denominators_are_distinct():
         replace(COMPLETE, expected_count=2, observed_count=1)
 
 
-def test_nested_values_are_frozen_and_input_aliases_detached():
+def test_nested_values_are_frozen_and_input_aliases_detached() -> None:
     ids = ["location"]
-    row = CivilizationRegionRow(CONTEXT, "region", 1, ids)
+    row = CivilizationRegionRow(CONTEXT, "region", 1, cast(tuple[str, ...], ids))
     ids.append("later")
     assert row.location_ids == ("location",)
     with pytest.raises(FrozenInstanceError):
-        row.region_id = "changed"
+        # Deliberately violate the frozen contract to verify runtime enforcement.
+        row.region_id = "changed"  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(
@@ -333,12 +358,14 @@ def test_nested_values_are_frozen_and_input_aliases_detached():
         {"observed_streak": -1},
     ],
 )
-def test_closed_rows_reject_invalid_types_statuses_and_future_boundaries(change):
+def test_closed_rows_reject_invalid_types_statuses_and_future_boundaries(
+    change: dict[str, Any],
+) -> None:
     with pytest.raises(CivilizationError):
         replace(_row_cases()[6], **change)
 
 
-def test_anchors_require_exact_evidence_and_do_not_guess_unplaced_origin():
+def test_anchors_require_exact_evidence_and_do_not_guess_unplaced_origin() -> None:
     assert CivilizationAnchor(CivilizationAnchorKind.NONE).location_id is None
     with pytest.raises(CivilizationError):
         CivilizationAnchor(CivilizationAnchorKind.NONE, "location")
@@ -355,7 +382,9 @@ def test_anchors_require_exact_evidence_and_do_not_guess_unplaced_origin():
 
 
 @pytest.mark.parametrize("marker_type", list(CivilizationMarkerType))
-def test_every_marker_round_trips_and_gaps_are_not_transitions(marker_type):
+def test_every_marker_round_trips_and_gaps_are_not_transitions(
+    marker_type: CivilizationMarkerType,
+) -> None:
     layer = (
         CivilizationLayer.SETTLEMENTS
         if marker_type.value.startswith("settlement")
@@ -402,19 +431,22 @@ def test_every_marker_round_trips_and_gaps_are_not_transitions(marker_type):
         lambda raw: raw.replace(b'"region_id":"region"', b'"region_id":"\\ud800"'),
     ],
 )
-def test_strict_decode_rejects_unknown_duplicate_coerced_and_nonfinite(mutation):
+def test_strict_decode_rejects_unknown_duplicate_coerced_and_nonfinite(
+    mutation: Callable[[bytes], bytes],
+) -> None:
     with pytest.raises(CivilizationError):
         decode_civilization_value(mutation(encode_civilization_value(_row_cases()[0])))
 
 
-def test_float_nan_and_unknown_constructor_fields_fail():
+def test_float_nan_and_unknown_constructor_fields_fail() -> None:
     with pytest.raises(CivilizationError):
         replace(_row_cases()[1], fatigue_cost=float("nan"))
     with pytest.raises(TypeError):
-        CivilizationRegionRow(CONTEXT, "region", 0, (), x=0)
+        unknown_fields: dict[str, Any] = {"x": 0}
+        CivilizationRegionRow(CONTEXT, "region", 0, (), **unknown_fields)
 
 
-def test_inline_caps_scalar_totals_and_duplicate_ids():
+def test_inline_caps_scalar_totals_and_duplicate_ids() -> None:
     row = _row_cases()[0]
     with pytest.raises(CivilizationError):
         replace(row, location_ids=("a", "a"), location_count=2)
@@ -428,7 +460,7 @@ def test_inline_caps_scalar_totals_and_duplicate_ids():
     assert truncated.location_count == 1000 and len(truncated.location_ids) == 1
 
 
-def test_physical_budget_is_reserved_atomically_and_cache_hits_charge_scans():
+def test_physical_budget_is_reserved_atomically_and_cache_hits_charge_scans() -> None:
     budget = CivilizationReadBudget()
     reservation = budget.reserve_file(100, metadata=True)
     with pytest.raises(CivilizationError, match="civilization_storage_corrupt"):
@@ -446,7 +478,7 @@ def test_physical_budget_is_reserved_atomically_and_cache_hits_charge_scans():
     assert (budget.physical_files, budget.physical_bytes) == before
 
 
-def test_physical_byte_metadata_and_row_caps():
+def test_physical_byte_metadata_and_row_caps() -> None:
     budget = CivilizationReadBudget()
     with pytest.raises(CivilizationError):
         budget.reserve_file(65537, metadata=True)
@@ -461,7 +493,7 @@ def test_physical_byte_metadata_and_row_caps():
         CivilizationReadBudget(limit=201)
 
 
-def test_byte_limited_pages_keep_pending_row_and_make_progress():
+def test_byte_limited_pages_keep_pending_row_and_make_progress() -> None:
     row = _row_cases()[0]
     source = tuple(
         replace(row, context=replace(CONTEXT, row_id=f"r{i:04}")) for i in range(4)
@@ -477,7 +509,7 @@ def test_byte_limited_pages_keep_pending_row_and_make_progress():
     assert second.rows == source[2:] and not second.truncated
 
 
-def test_sparse_filter_page_can_be_empty_with_progress():
+def test_sparse_filter_page_can_be_empty_with_progress() -> None:
     row = _row_cases()[0]
     source = tuple(
         replace(row, context=replace(CONTEXT, row_id=f"r{i:04}")) for i in range(2001)
@@ -493,7 +525,7 @@ def test_sparse_filter_page_can_be_empty_with_progress():
     assert second.rows == source[2000:]
 
 
-def test_single_oversized_row_is_rejected_not_an_endless_continuation():
+def test_single_oversized_row_is_rejected_not_an_endless_continuation() -> None:
     refs = tuple(
         CivilizationSourceRef("scene", f"{i}:" + "s" * 500, 4) for i in range(32)
     )
@@ -507,7 +539,7 @@ def test_single_oversized_row_is_rejected_not_an_endless_continuation():
         select_civilization_rows((row,), budget=CivilizationReadBudget())
 
 
-def test_duplicate_publication_rows_and_mixed_boundary_are_rejected():
+def test_duplicate_publication_rows_and_mixed_boundary_are_rejected() -> None:
     row = _row_cases()[6]
     boundary = CivilizationBoundaryPublication(CURSOR, (row.history.scope,), (row,), ())
     with pytest.raises(CivilizationError):
@@ -517,7 +549,7 @@ def test_duplicate_publication_rows_and_mixed_boundary_are_rejected():
     assert not hasattr(CivilizationReadPort, "publish_boundary")
 
 
-def test_complete_empty_page_round_trip_has_no_new_legacy_fields():
+def test_complete_empty_page_round_trip_has_no_new_legacy_fields() -> None:
     scope = CivilizationScope(
         CivilizationSection.REGIONS, CivilizationEvidenceClass.OBJECTIVE
     )
@@ -527,15 +559,20 @@ def test_complete_empty_page_round_trip_has_no_new_legacy_fields():
         replace(page, truncated=True)
 
 
-def test_digest_dag_is_child_first_and_contains_no_self_or_parent_digest():
+def test_digest_dag_is_child_first_and_contains_no_self_or_parent_digest() -> None:
     child = encode_civilization_value(_row_cases()[0])
     assert (
         civilization_digest(b"abc\n")
         == "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb"
     )
-    child_kind = "row_shard"
+    child_kind: Literal[
+        "row_shard", "boundary_manifest", "catalogue_page", "catalogue_index"
+    ] = "row_shard"
     digests = []
-    for kind in ("boundary_manifest", "catalogue_page", "catalogue_index", "commit"):
+    kinds: tuple[
+        Literal["boundary_manifest", "catalogue_page", "catalogue_index", "commit"], ...
+    ] = ("boundary_manifest", "catalogue_page", "catalogue_index", "commit")
+    for kind in kinds:
         digest = civilization_digest(child)
         digests.append(digest)
         ref = CivilizationArtifactRef(
@@ -555,7 +592,8 @@ def test_digest_dag_is_child_first_and_contains_no_self_or_parent_digest():
         child = encode_civilization_value(manifest)
         decoded = json.loads(child)
         assert "digest" not in decoded and "root_digest" not in decoded
-        child_kind = kind
+        if kind != "commit":
+            child_kind = kind
     assert len(set(digests)) == 4
     # Independent fixed result pins the complete child-to-parent canonical DAG.
     assert (
@@ -566,7 +604,9 @@ def test_digest_dag_is_child_first_and_contains_no_self_or_parent_digest():
         replace(manifest, children=(replace(ref, kind="row_shard"),))
 
 
-def _project(scene, section="locations", *, entity_id=None):
+def _project(
+    scene: ObjectiveScene, section: str = "locations", *, entity_id: str | None = None
+) -> CivilizationMapProjection:
     from simulation.observer_civilization import project_civilization_map
 
     cursor = CivilizationCursor(
@@ -577,7 +617,7 @@ def _project(scene, section="locations", *, entity_id=None):
     )
 
 
-def _physical_scene():
+def _physical_scene() -> ObjectiveScene:
     from agents.models import AgentId
     from simulation.observer_facts import ObjectiveScene
     from simulation.registrations import AgentRegistration
@@ -602,9 +642,19 @@ def _physical_scene():
     )
 
 
-def test_physical_population_uses_body_bindings_and_lifecycle_off_is_unknown():
+def _rows[T](
+    scene: ObjectiveScene, row_type: type[T], section: str = "locations"
+) -> tuple[T, ...]:
+    result: list[T] = []
+    for row in _project(scene, section).rows:
+        assert isinstance(row, row_type)
+        result.append(row)
+    return tuple(result)
+
+
+def test_physical_population_uses_body_bindings_and_lifecycle_off_is_unknown() -> None:
     scene = _physical_scene()
-    rows = _project(scene).rows
+    rows = _rows(scene, CivilizationLocationRow)
     assert [
         (r.living_body_count, r.dead_body_count, r.registered_agent_count) for r in rows
     ] == [(1, 1, 1), (1, 0, 0)]
@@ -616,20 +666,21 @@ def test_physical_population_uses_body_bindings_and_lifecycle_off_is_unknown():
     assert _project(scene, "regions").coverage.reason == "channel_absent"
 
 
-def test_lifecycle_counts_use_exact_owner_body_binding_not_equal_ids():
+def test_lifecycle_counts_use_exact_owner_body_binding_not_equal_ids() -> None:
     from tests.unit.test_observer_demographics import _record
 
     scene = _physical_scene()
     scene = replace(scene, lifecycle_records=(_record("body-a", "not-the-body-id"),))
-    assert _project(scene).rows[0].lifecycle_living_count == 1
-    assert _project(scene).rows[0].lifecycle_dead_count == 0
+    assert _rows(scene, CivilizationLocationRow)[0].lifecycle_living_count == 1
+    assert _rows(scene, CivilizationLocationRow)[0].lifecycle_dead_count == 0
     missing = replace(scene, lifecycle_records=())
-    assert _project(missing).rows[0].lifecycle_living_count is None
+    assert _rows(missing, CivilizationLocationRow)[0].lifecycle_living_count is None
     with pytest.raises(CivilizationError):
         _project(replace(scene, lifecycle_records=(_record("body-a", "wrong-owner"),)))
 
 
-def test_region_assignments_do_not_invent_adjacency_or_assign_unassigned_locations():
+def test_region_assignments_do_not_invent_adjacency_or_assign_unassigned_locations(
+) -> None:
     from world.regions import (
         CognitionMode,
         LocationRegion,
@@ -649,15 +700,17 @@ def test_region_assignments_do_not_invent_adjacency_or_assign_unassigned_locatio
         CognitionMode.DISABLED,
     )
     scene = replace(scene, regions_migration=spec)
-    assert [row.region_id for row in _project(scene).rows] == ["region", None]
+    assert [row.region_id for row in _rows(scene, CivilizationLocationRow)] == [
+        "region", None
+    ]
     assert _project(scene, "routes").rows == ()
     assert (
         _project(scene, "routes").coverage.state is CivilizationCoverageState.COMPLETE
     )
-    assert _project(scene, "regions").rows[0].location_ids == ("loc-1",)
+    assert _rows(scene, CivilizationRegionRow, "regions")[0].location_ids == ("loc-1",)
 
 
-def test_physical_scene_cursor_and_duplicate_id_mismatches_fail_closed():
+def test_physical_scene_cursor_and_duplicate_id_mismatches_fail_closed() -> None:
     from simulation.observer_civilization import project_civilization_map
 
     scene = _physical_scene()
@@ -669,7 +722,7 @@ def test_physical_scene_cursor_and_duplicate_id_mismatches_fail_closed():
         _project(scene, "institutions")
 
 
-def test_regional_routes_population_arrival_and_checkpoint_projection_parity():
+def test_regional_routes_population_arrival_and_checkpoint_projection_parity() -> None:
     from simulation.engine import WorldEngine
     from simulation.observer_facts import scene_from_facts, scene_from_snapshot
     from tests.unit.test_regional_travel_checkpoint import _snapshot
@@ -678,25 +731,30 @@ def test_regional_routes_population_arrival_and_checkpoint_projection_parity():
     engine = _engine(destination_capacity=2, blocker=False)
     _move(engine)
     pending = scene_from_facts(engine.detached_objective_facts())
-    assert _project(pending).rows[0].active_journey_count == 1
-    assert [r.living_body_count for r in _project(pending).rows] == [1, 0]
+    assert _rows(pending, CivilizationLocationRow)[0].active_journey_count == 1
+    assert [r.living_body_count for r in _rows(pending, CivilizationLocationRow)] == [
+        1, 0
+    ]
     assert len(_project(pending, "routes").rows) == 1
-    route = _project(pending, "routes").rows[0]
+    route = _rows(pending, CivilizationRouteRow, "routes")[0]
     assert (
         route.endpoint_a,
         route.endpoint_b,
         route.duration_ticks,
         route.fatigue_cost,
     ) == ("loc-1", "loc-2", 2, 3.0)
-    assert {r.region_label for r in _project(pending, "regions").rows} == {
-        "East",
-        "West",
-    }
+    assert {
+        r.region_label for r in _rows(pending, CivilizationRegionRow, "regions")
+    } == {"East", "West"}
     engine.observe()
     engine.resolve_tick(())
     arrived = scene_from_facts(engine.detached_objective_facts())
-    assert [r.living_body_count for r in _project(arrived).rows] == [0, 1]
-    assert all(r.active_journey_count == 0 for r in _project(arrived).rows)
+    assert [r.living_body_count for r in _rows(arrived, CivilizationLocationRow)] == [
+        0, 1
+    ]
+    assert all(
+        r.active_journey_count == 0 for r in _rows(arrived, CivilizationLocationRow)
+    )
     snapshot = _snapshot()
     restored = scene_from_facts(
         WorldEngine.restore_from_snapshot(snapshot).detached_objective_facts()
@@ -707,7 +765,8 @@ def test_regional_routes_population_arrival_and_checkpoint_projection_parity():
         )
 
 
-def test_projects_public_acts_structure_link_and_contribution_facts_are_distinct():
+def test_projects_public_acts_structure_link_and_contribution_facts_are_distinct(
+) -> None:
     from world.collective_projects import (
         CollectiveProject,
         ProjectContribution,
@@ -747,20 +806,25 @@ def test_projects_public_acts_structure_link_and_contribution_facts_are_distinct
             Structure(EntityId("well"), EntityId("loc-1"), StructureKind.WELL, 1.0, 0),
         ),
     )
-    row = _project(scene, "projects").rows[0]
+    row = _rows(scene, CivilizationProjectRow, "projects")[0]
     assert row.accepted_contribution_count == 1
     assert row.linked_structure_kind is StructureKind.WELL
     assert row.public_acts == CivilizationPublicActs(1, 1, 1, 1)
     assert row.labor_progress == row.labor_required == 3
-    assert _project(scene).rows[0].project_count == 1
-    assert _project(scene).rows[0].structure_count == 1
+    assert _rows(scene, CivilizationLocationRow)[0].project_count == 1
+    assert _rows(scene, CivilizationLocationRow)[0].structure_count == 1
     destroyed = replace(scene, structures=())
-    assert _project(destroyed, "projects").rows[0].linked_structure_kind is None
+    assert (
+        _rows(destroyed, CivilizationProjectRow, "projects")[0].linked_structure_kind
+        is None
+    )
     assert _project(scene, "projects", entity_id="project").rows == (row,)
     assert not _project(scene, "projects", entity_id="missing").rows
 
 
-def test_repository_record_placement_custody_and_private_content_do_not_mix(caplog):
+def test_repository_record_placement_custody_and_private_content_do_not_mix(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from world.artifacts import ArtifactContent, InformationArtifact, RecordIntegrity
     from world.repositories import KnowledgeRepository
 
@@ -784,10 +848,10 @@ def test_repository_record_placement_custody_and_private_content_do_not_mix(capl
     )
     scene = replace(scene, artifacts=(record,), repositories=(repository,))
     caplog.set_level("DEBUG")
-    row = _project(scene, "records").rows[0]
+    row = _rows(scene, CivilizationRecordRow, "records")[0]
     assert row.location_id == "loc-2" and row.integrity is RecordIntegrity.DAMAGED
     assert row.custodian_repository_id is None
-    assert _project(scene, "repositories").rows[0].member_count == 1
+    assert _rows(scene, CivilizationRepositoryRow, "repositories")[0].member_count == 1
     assert b"canary_secret" not in encode_civilization_value(row)
     assert "canary_secret" not in caplog.text
     missing_holder = replace(
@@ -795,6 +859,7 @@ def test_repository_record_placement_custody_and_private_content_do_not_mix(capl
     )
     projection = _project(missing_holder, "records")
     assert projection.coverage.reason == "unresolved_anchor"
+    assert isinstance(projection.rows[0], CivilizationRecordRow)
     assert projection.rows[0].location_id is None
     assert projection.rows[0].context.anchors[0].kind is CivilizationAnchorKind.NONE
     deposited = replace(
@@ -803,5 +868,7 @@ def test_repository_record_placement_custody_and_private_content_do_not_mix(capl
         location_id=EntityId("loc-1"),
         custodian_repository_id=EntityId("repo"),
     )
-    row = _project(replace(scene, artifacts=(deposited,)), "records").rows[0]
+    row = _rows(
+        replace(scene, artifacts=(deposited,)), CivilizationRecordRow, "records"
+    )[0]
     assert row.location_id == "loc-1" and row.custodian_repository_id == "repo"

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from tests.simulation_helpers import alive_body, make_location, make_weather
 
@@ -9,6 +11,7 @@ from agents.models import AgentId
 from experiments.catalog import (
     base_runner_config_from_scenario,
     experiment_a_memory,
+    experiment_a_memory_v1_arms,
     experiment_b_imagination,
     experiment_c_mortality,
     experiment_d_drives,
@@ -17,10 +20,15 @@ from experiments.catalog import (
 from experiments.collectors import collect_for_experiment
 from experiments.coordinator import ExperimentCoordinator, materialize_assignments
 from experiments.interventions import make_false_story_intervention
-from experiments.models import ExperimentSeedMatrix, condition_fingerprint
+from experiments.models import (
+    ExperimentDefinition,
+    ExperimentSeedMatrix,
+    condition_fingerprint,
+)
 from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
+    SimulationRunnerConfig,
     WorldScenarioSpec,
 )
 from world.identifiers import WorldId, WorldRevision
@@ -29,7 +37,7 @@ from world.models import default_physical_rules
 pytestmark = pytest.mark.integration
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -64,7 +72,9 @@ def _base():
         experiment_e_false_story,
     ],
 )
-def test_catalog_builders_expand_paired_arms(builder) -> None:
+def test_catalog_builders_expand_paired_arms(
+    builder: Callable[[SimulationRunnerConfig], ExperimentDefinition],
+) -> None:
     definition = builder(_base())
     assert len(definition.conditions) >= 2
     stochastic = {
@@ -80,7 +90,7 @@ def test_catalog_builders_expand_paired_arms(builder) -> None:
 
 @pytest.mark.asyncio
 async def test_coordinator_experiment_a_ordered_and_collected() -> None:
-    definition = experiment_a_memory(
+    definition = experiment_a_memory_v1_arms(
         _base(),
         seed_matrix=ExperimentSeedMatrix(seeds=(3,), replicates_per_seed=1),
     )

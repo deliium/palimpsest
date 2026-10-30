@@ -7,6 +7,7 @@ import pytest
 from agents.cognition.practical_knowledge import (
     KnowledgeTransmissionOrigin,
     PracticalKnowledgeKind,
+    PracticalKnowledgeLedger,
     combine_practical_knowledge,
     empty_practical_knowledge_ledger,
     form_or_reinforce_practical_knowledge,
@@ -19,7 +20,9 @@ from agents.models import AgentId
 _KINDS = ("foraging_method",)
 
 
-def _form_root(ledger, *, token: str = "berry-pick", tick: int = 0):
+def _form_root(
+    ledger: PracticalKnowledgeLedger, *, token: str = "berry-pick", tick: int = 0
+) -> PracticalKnowledgeLedger:
     return form_or_reinforce_practical_knowledge(
         ledger,
         kind=PracticalKnowledgeKind.FORAGING_METHOD,

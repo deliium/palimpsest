@@ -7,6 +7,7 @@ import hashlib
 import pytest
 
 from simulation.runner import SimulationRunner
+from simulation.runner_models import FinalizedTickReceipt
 from simulation.runner_serialization import (
     _canonical_dumps,
     _encode_tick_receipt_for_hash,
@@ -17,7 +18,7 @@ from simulation.runner_serialization import (
 from tests.unit.test_generational_population_runner import _v55_config
 
 
-def _reference_exact(run_id: str, receipts) -> str:
+def _reference_exact(run_id: str, receipts: tuple[FinalizedTickReceipt, ...]) -> str:
     document = {
         "mode": "exact",
         "run_id": run_id,
@@ -29,7 +30,7 @@ def _reference_exact(run_id: str, receipts) -> str:
     return hashlib.sha256(_canonical_dumps(document)).hexdigest()
 
 
-def _reference_replica(receipts) -> str:
+def _reference_replica(receipts: tuple[FinalizedTickReceipt, ...]) -> str:
     document = {
         "mode": "replica",
         "ticks": [

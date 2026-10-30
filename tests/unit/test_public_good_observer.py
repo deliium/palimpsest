@@ -13,6 +13,7 @@ from world.events import (
     PublicGoodBenefit,
     PublicGoodMaintained,
     PublicGoodOpposed,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
@@ -21,8 +22,12 @@ from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevisi
 pytestmark = pytest.mark.unit
 
 
-def _event(details: object, *, event_id: str):
-    actor_id = details.actor_id  # type: ignore[attr-defined]
+def _event(
+    details: PublicGoodBenefit | PublicGoodMaintained | PublicGoodOpposed,
+    *,
+    event_id: str,
+) -> WorldEvent:
+    actor_id = details.actor_id
     cause = ActionCause(RequestId(f"request-{event_id}"), actor_id)
     return make_physical_replayable_event(
         event_id=EventId(event_id),
@@ -32,9 +37,9 @@ def _event(details: object, *, event_id: str):
         sequence=0,
         cause=cause,
         resulting_revision=WorldRevision(1),
-        details=details,  # type: ignore[arg-type]
+        details=details,
         occurrence=build_occurrence_context(
-            details,  # type: ignore[arg-type]
+            details,
             origin_location_id=EntityId("loc-1"),
         ),
         schema_version=EVENT_SCHEMA_REPLAY_V20,
@@ -46,7 +51,9 @@ def test_public_good_semantics_keep_actor_project_and_location(
 ) -> None:
     project_id = EntityId("project-well")
     actor_id = EntityId("body-a")
-    details = (
+    details: tuple[
+        PublicGoodBenefit | PublicGoodMaintained | PublicGoodOpposed, ...
+    ] = (
         PublicGoodBenefit(
             project_id=project_id,
             actor_id=actor_id,

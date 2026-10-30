@@ -35,9 +35,9 @@ from simulation.runner_serialization import build_runner_result_document
 from tests.fakes.llm import FakeLLMProvider, ScriptedSuccess
 from tests.unit.test_simulation_runner_e2e import _config
 from tests.unit.test_v1_regression_gate import _CATALOG_BUILDERS
+from world.effects import ActionCause
 from world.events import (
     EVENT_SCHEMA_REPLAY_V5,
-    ActionCause,
     OccurrenceContext,
     Searched,
     WorldEvent,
@@ -93,7 +93,7 @@ def _search_event(*, event_id: str, success: bool, sequence: int) -> WorldEvent:
     )
 
 
-def test_experiment_i_stays_off_the_v1_gate(caplog) -> None:
+def test_experiment_i_stays_off_the_v1_gate(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger="experiments.catalog")
     definition = experiment_i_causal(_config())
     ids = {experiment_id for experiment_id, _builder in _CATALOG_BUILDERS}
@@ -262,7 +262,9 @@ def test_help_survives_one_mild_counter() -> None:
     assert after.confidence < before.confidence
 
 
-def test_update_debug_names_outcome_and_reason(caplog) -> None:
+def test_update_debug_names_outcome_and_reason(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level(logging.DEBUG, logger="agents.cognition.world_model")
     episode = CausalEpisode(
         owner_id=_OWNER,
@@ -357,7 +359,7 @@ async def test_provider_subset_is_preferred_when_it_matches() -> None:
 
 @pytest.mark.asyncio
 async def test_foreign_id_and_missing_provider_keep_confidence_order(
-    caplog,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.DEBUG, logger="agents.cognition.world_model")
     hypothesis = _hypothesis(

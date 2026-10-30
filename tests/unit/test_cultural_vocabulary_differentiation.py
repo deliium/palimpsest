@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 import pytest
 
@@ -10,6 +11,7 @@ from analysis.cultural_evolution_evidence import (
     CULTURAL_DIMENSIONS,
     CulturalAnalysisWindow,
     CulturalEvolutionInputs,
+    CulturalMeasurement,
     GroupMembership,
     InventoryBoundary,
     TraitPresence,
@@ -75,7 +77,12 @@ def _memberships(
     )
 
 
-def _inputs(boundaries, memberships, *, end: int = 1):
+def _inputs(
+    boundaries: tuple[InventoryBoundary, ...],
+    memberships: tuple[GroupMembership, ...],
+    *,
+    end: int = 1,
+) -> CulturalEvolutionInputs:
     return CulturalEvolutionInputs(
         run_id="run-vocabulary",
         source_revision="rev-vocabulary",
@@ -85,7 +92,13 @@ def _inputs(boundaries, memberships, *, end: int = 1):
     )
 
 
-def _row(rows, measurement_id, *, baseline=None, end=None):
+def _row(
+    rows: Sequence[CulturalMeasurement],
+    measurement_id: str,
+    *,
+    baseline: int | None = None,
+    end: int | None = None,
+) -> CulturalMeasurement:
     matches = [
         row
         for row in rows

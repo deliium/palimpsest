@@ -162,5 +162,5 @@ async def test_replay_schema_digest_mismatch_fails_closed(tmp_path: Path) -> Non
             mode=RecordingMode.REPLAY,
             clock=clock,
             inner=FakeLLMProvider(clock=clock),
-        ).generate(drifted)  # type: ignore[arg-type]
+        ).generate(drifted)
     assert exc_info.value.code is LLMErrorCode.CONFIGURATION

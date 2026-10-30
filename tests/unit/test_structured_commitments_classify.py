@@ -14,12 +14,15 @@ from world.events import (
     CommitmentDeclared,
     Given,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def _event(details: object, *, tick: int, sequence: int, actor: str):
+def _event(
+    details: CommitmentDeclared | Given, *, tick: int, sequence: int, actor: str
+) -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId(f"evt-{tick}-{sequence}"),
         run_id="run-1",
@@ -31,13 +34,13 @@ def _event(details: object, *, tick: int, sequence: int, actor: str):
             actor_id=EntityId(actor),
         ),
         resulting_revision=WorldRevision(0),
-        details=details,  # type: ignore[arg-type]
+        details=details,
         occurrence=OccurrenceContext(origin_location_id=EntityId("loc-1")),
         schema_version=EVENT_SCHEMA_REPLAY_V17,
     )
 
 
-def _speech():
+def _speech() -> CommitmentDeclared:
     return CommitmentDeclared(
         EntityId("body-a"),
         EntityId("body-b"),
@@ -53,7 +56,9 @@ def _speech():
     )
 
 
-def _row(owner: str, *, item_kind: str = "material", status: str = "open"):
+def _row(
+    owner: str, *, item_kind: str = "material", status: str = "open"
+) -> CommitmentLedgerSnapshot:
     return CommitmentLedgerSnapshot(
         owner,
         ("evt-1-1",),

@@ -2775,6 +2775,29 @@ class SimulationRunner:
             raise RunnerConstructionError(
                 RunnerConstructionErrorCode.DURABLE_UNSUPPORTED, stage="persistence"
             )
+        predecessor_commit_hash = None
+        if config.persistence.durable and checkpoint.boundary_tick.value > 0:
+            assert deps.journal is not None
+            prefix_tick = Tick(checkpoint.boundary_tick.value - 1)
+            commits = await deps.journal.list_tick_commits(
+                run_id, from_tick=prefix_tick, to_tick=prefix_tick
+            )
+            if (
+                len(commits) != 1
+                or commits[0].run_id != run_id
+                or commits[0].tick != prefix_tick
+                or commits[0].resulting_tick != checkpoint.boundary_tick
+                or commits[0].resulting_revision != checkpoint.boundary_revision
+            ):
+                raise ForkCheckpointError(
+                    "fork_engine_mismatch", "durable child prefix missing or mismatched"
+                )
+            predecessor_commit_hash = commits[0].commit_hash
+            _LOG.debug(
+                "runner_fork_durable_prefix_bound run_id=%s boundary_tick=%s",
+                run_id.value,
+                checkpoint.boundary_tick.value,
+            )
         provider = deps.create_provider(
             config.provider, deps.resolve_credentials(config.provider)
         )
@@ -2885,7 +2908,11 @@ class SimulationRunner:
                 stochastic_identity=config.stochastic_identity,
             )
             durable_service = (
-                PersistentSimulationService(restored_engine, deps.journal)
+                PersistentSimulationService(
+                    restored_engine,
+                    deps.journal,
+                    predecessor_commit_hash=predecessor_commit_hash,
+                )
                 if config.persistence.durable and deps.journal is not None
                 else None
             )

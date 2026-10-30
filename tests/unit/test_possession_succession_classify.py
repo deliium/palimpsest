@@ -14,12 +14,15 @@ from world.events import (
     OccurrenceContext,
     PossessionClaimAsserted,
     TakenFromCorpse,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def _event(details: object, *, tick: int, sequence: int, actor: str | None):
+def _event(
+    details: object, *, tick: int, sequence: int, actor: str | None
+) -> WorldEvent:
     cause = (
         SystemCause(
             cause_id=RequestId(f"sys-{sequence}"),
@@ -47,7 +50,7 @@ def _event(details: object, *, tick: int, sequence: int, actor: str | None):
     )
 
 
-def _opened(*items: str):
+def _opened(*items: str) -> WorldEvent:
     return _event(
         CorpseCustodyOpened(
             EntityId("body-dead"),

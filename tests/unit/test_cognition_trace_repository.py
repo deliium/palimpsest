@@ -13,6 +13,7 @@ from agents.cognition.trace import (
 from agents.models import AgentId
 from simulation.cognition_trace import (
     CognitionTraceConflictError,
+    CognitionTraceInvocation,
     InMemoryCognitionTraceRepository,
     NullCognitionTraceRepository,
     build_cognition_trace_invocation,
@@ -44,7 +45,7 @@ def _stages() -> tuple[CognitionTraceStageSummary, ...]:
     )
 
 
-def _invocation(*, command_kind: str = "wait"):
+def _invocation(*, command_kind: str = "wait") -> CognitionTraceInvocation:
     stages = _stages()
     base = build_cognition_trace_invocation(
         run_id=RunId("run-1"),

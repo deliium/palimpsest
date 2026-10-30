@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from llm.errors import LLMError
 from llm.models import StructuredOutputMode
+from llm.recording import ReplayConsumption
 from llm.recording.provider import RecordingLLMProvider, RecordingMode
 from llm.recording.store import FilesystemRecordingStore, LookupMode
+from tests.fakes.llm import FakeClock, FakeLLMProvider
 from tests.unit.test_llm_recording_provider import (
-    FakeClock,
-    FakeLLMProvider,
     _request,
     _success,
 )
@@ -22,7 +23,7 @@ def _replay(
     tmp_path: Path,
     *,
     clock: FakeClock,
-    callback,
+    callback: Callable[[ReplayConsumption], None],
 ) -> RecordingLLMProvider:
     return RecordingLLMProvider(
         inner=FakeLLMProvider(clock=clock),
@@ -60,7 +61,7 @@ async def test_successful_replay_emits_payload_free_usage(
     )
     await recorder.generate(_request())
 
-    seen = []
+    seen: list[ReplayConsumption] = []
     replay = _replay(tmp_path, clock=FakeClock(start=10.0), callback=seen.append)
     result = await replay.generate(_request())
     assert result.output.kind == "wait"
@@ -74,7 +75,7 @@ async def test_successful_replay_emits_payload_free_usage(
 
 @pytest.mark.asyncio
 async def test_replay_miss_emits_no_usage(tmp_path: Path) -> None:
-    seen = []
+    seen: list[ReplayConsumption] = []
     replay = _replay(tmp_path, clock=FakeClock(start=10.0), callback=seen.append)
     with pytest.raises(LLMError):
         await replay.generate(_request())

@@ -12,12 +12,13 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V17,
     CommitmentDeclared,
     OccurrenceContext,
+    WorldEvent,
     make_physical_replayable_event,
 )
 from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
 
 
-def _event():
+def _event() -> WorldEvent:
     return make_physical_replayable_event(
         event_id=EventId("evt-1-1"),
         run_id="run-1",

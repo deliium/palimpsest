@@ -17,8 +17,8 @@ pytestmark = pytest.mark.unit
 _LOG = logging.getLogger("tests.knowledge_genealogy_harvest")
 
 
-def _audit(**kwargs) -> SimpleNamespace:
-    base = dict(
+def _audit(**kwargs: object) -> SimpleNamespace:
+    base: dict[str, object] = dict(
         owner_id="alice",
         entry_id="e1",
         kind="foraging_method",
@@ -65,7 +65,9 @@ def test_harvest_derives_death_ticks_from_events(
         )
     assert payload is not None
     assert payload["practical_knowledge_audits"] == audits
+    assert isinstance(payload["death_ticks"], dict)
     assert payload["death_ticks"]["alice"] == 4
+    assert isinstance(payload["origin_counts"], dict)
     assert payload["origin_counts"]["independent_discovery"] == 1
     assert "knowledge_genealogy_harvest_built" in caplog.text
 

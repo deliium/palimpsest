@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from agents.cognition.offices import OfficeConceptLedger
 from experiments.institutionalization_scenario import institutionalization_scenario
 from simulation.models import RunId
 from simulation.runner import SimulationRunner
@@ -14,10 +15,11 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V50,
     InstitutionConceptMode,
     OfficeSuccessionMode,
+    SimulationRunnerConfig,
 )
 
 
-def _config(*, office: bool, max_ticks: int = 4):
+def _config(*, office: bool, max_ticks: int = 4) -> SimulationRunnerConfig:
     definition = institutionalization_scenario(seed=23, max_ticks=max_ticks)
     base = next(
         condition.runner_config
@@ -65,10 +67,14 @@ async def test_enabled_owners_export_one_empty_ledger_each() -> None:
     ) as runner:
         result = await runner.run()
     owners = [agent.agent_id.value for agent in config.agents]
-    assert [ledger.owner_id.value for ledger in result.office_concept_ledgers] == owners
+    ledgers: list[OfficeConceptLedger] = []
+    for ledger in result.office_concept_ledgers:
+        assert isinstance(ledger, OfficeConceptLedger)
+        ledgers.append(ledger)
+    assert [ledger.owner_id.value for ledger in ledgers] == owners
     assert all(
         concept.status.value == "proposed"
-        for ledger in result.office_concept_ledgers
+        for ledger in ledgers
         for concept in ledger.concepts
     )
 

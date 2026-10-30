@@ -15,14 +15,18 @@ from simulation.runner_models import (
 )
 
 
-def _result(**kwargs: object) -> SimulationRunnerResult:
+def _result(
+    *, terminology_ledgers: object = (), symbolic_ledgers: object = (),
+) -> SimulationRunnerResult:
     return SimulationRunnerResult(
         run_id=RunId("run-ledger-export"),
         ticks_committed=1,
         stop_reason=RunnerStopReasonCode.MAX_TICKS,
         attempt_receipts=(),
         cognition_counters=CognitionCounters(),
-        **kwargs,
+        # Deliberately accept malformed ledger shapes to exercise boundary validation.
+        terminology_ledgers=terminology_ledgers,  # type: ignore[arg-type]
+        symbolic_ledgers=symbolic_ledgers,  # type: ignore[arg-type]
     )
 
 

@@ -10,10 +10,16 @@ from simulation.journal import (
     _decode_information_artifact,
     _encode_information_artifact,
 )
-from simulation.lifecycle import ActionResolutionStatus, ActionSubmission
+from simulation.lifecycle import ActionResolutionStatus, ActionSubmission, TickResult
 from simulation.runner_models import example_durable_records_spec
 from tests.physical_helpers import physical_config, two_location_fixture
-from world.actions import AnnotateRecord, CopyRecord, DamageRecord, Inscribe
+from world.actions import (
+    AgentCommand,
+    AnnotateRecord,
+    CopyRecord,
+    DamageRecord,
+    Inscribe,
+)
 from world.artifacts import (
     ArtifactContent,
     ArtifactKind,
@@ -81,10 +87,10 @@ def test_live_durable_mutations_persist_lineage() -> None:
         durable_records_spec=example_durable_records_spec(),
     )
 
-    def act(command: object):
+    def act(command: AgentCommand) -> TickResult:
         batch = engine.observe()
         return engine.resolve_tick(
-            (ActionSubmission(batch.token, AgentId("agent-1"), command),)  # type: ignore[arg-type]
+            (ActionSubmission(batch.token, AgentId("agent-1"), command),)
         )
 
     created = act(

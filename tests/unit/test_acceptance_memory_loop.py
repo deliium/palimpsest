@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 from agents.cognition.acceptance_memory import received_count_for
 from agents.cognition.configuration import build_cognitive_loop
 from agents.models import AgentId
 from world.identifiers import EntityId, EventId
 from world.observations import (
+    Observation,
     ObservationAudienceRole,
     ObservationProvenance,
     ObservationSourceKind,
@@ -38,6 +40,16 @@ def _occurrence(*, tick: int, give: str, take: str) -> ObservedOccurrence:
     )
 
 
+def _observation(
+    *, tick: int, occurrences: tuple[ObservedOccurrence, ...]
+) -> Observation:
+    """Minimal owner-scoped stand-in: the fold reads only tick and occurrences."""
+    return cast(
+        Observation,
+        SimpleNamespace(tick=tick, occurrences=occurrences),
+    )
+
+
 def test_fold_applies_completion_and_skips_repeat() -> None:
     loop = build_cognitive_loop(
         resource_exchange_profile_active=True,
@@ -45,7 +57,7 @@ def test_fold_applies_completion_and_skips_repeat() -> None:
         subjective_valuation_active=True,
     )
     owner = AgentId("agent-a")
-    observation = SimpleNamespace(
+    observation = _observation(
         tick=4,
         occurrences=(_occurrence(tick=4, give="pebble", take="bread"),),
     )
@@ -65,19 +77,20 @@ def test_fold_ignores_events_outside_the_window() -> None:
         resource_exchange_profile_active=True,
         acceptance_window_ticks=2,
     )
-    observation = SimpleNamespace(
+    observation = _observation(
         tick=10,
         occurrences=(_occurrence(tick=1, give="pebble", take="bread"),),
     )
     ledger = loop._fold_acceptance_memory(
         observation, None, owner_id=AgentId("agent-a")
     )
+    assert ledger is not None
     assert ledger.rows == ()
 
 
 def test_channel_off_does_not_fold() -> None:
     loop = build_cognitive_loop(resource_exchange_profile_active=False)
-    observation = SimpleNamespace(
+    observation = _observation(
         tick=4,
         occurrences=(_occurrence(tick=4, give="pebble", take="bread"),),
     )

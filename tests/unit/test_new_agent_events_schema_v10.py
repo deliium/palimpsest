@@ -11,6 +11,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V9,
     EVENT_SCHEMA_REPLAY_V10,
     AgentInitializationRecorded,
+    WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
 )
@@ -31,7 +32,7 @@ _INITIAL = {
 }
 
 
-def _event(*, schema_version: int):
+def _event(*, schema_version: int) -> WorldEvent:
     details = AgentInitializationRecorded(
         body_id=EntityId("body-new"),
         agent_id="agent-new",

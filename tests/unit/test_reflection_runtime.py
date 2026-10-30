@@ -9,6 +9,7 @@ from agents.cognition.consolidation import OfflineConsolidationPlan
 from agents.cognition.reflection import (
     ReflectionContext,
     ReflectionCursor,
+    ReflectionPlan,
     ReflectionPolicy,
     ReflectionTriggerKind,
     ReflectionTriggerResult,
@@ -17,6 +18,7 @@ from agents.cognition.reflection import (
     reflection_operation_ids,
 )
 from agents.models import AgentId, GoalId
+from memory.beliefs import BeliefRevisionRequest
 from memory.models import (
     OFFLINE_CONSOLIDATION_POLICY_VERSION,
     EntityMention,
@@ -33,8 +35,13 @@ from memory.models import (
     RelationEndpoint,
     RelationEndpointKind,
 )
-from simulation.agent_runtime import _extend_reflection_writes
+from simulation.agent_runtime import (
+    AgentRuntime,
+    PreparedObservation,
+    _extend_reflection_writes,
+)
 from simulation.runner_models import ConsolidationMode
+from social.relationships import RelationshipRevisionRequest
 from tests.unit.test_agent_runtime import _runtime, _self, _token
 from world.identifiers import EntityId, WorldRevision
 
@@ -85,7 +92,7 @@ def _help_trace(memory_id: str) -> MemoryTrace:
     )
 
 
-def _plan():
+def _plan() -> ReflectionPlan:
     owner = AgentId("agent-1")
     policy = ReflectionPolicy(interval_ticks=1, min_gap_ticks=1, min_pattern_count=3)
     context = ReflectionContext(
@@ -113,8 +120,8 @@ def _plan():
 def test_repeated_operation_ids_are_not_written_twice() -> None:
     plan = _plan()
     applied: set[str] = set()
-    beliefs: list[object] = []
-    relationships: list[object] = []
+    beliefs: list[BeliefRevisionRequest] = []
+    relationships: list[RelationshipRevisionRequest] = []
     _extend_reflection_writes(
         plan,
         belief_revisions=beliefs,
@@ -124,8 +131,8 @@ def test_repeated_operation_ids_are_not_written_twice() -> None:
     assert beliefs
     assert relationships
     applied.update(reflection_operation_ids(plan))
-    again_beliefs: list[object] = []
-    again_relationships: list[object] = []
+    again_beliefs: list[BeliefRevisionRequest] = []
+    again_relationships: list[RelationshipRevisionRequest] = []
     _extend_reflection_writes(
         plan,
         belief_revisions=again_beliefs,
@@ -187,7 +194,7 @@ def test_consolidation_overlap_drops_the_belief_conclusion() -> None:
     assert filtered.relationship_revisions
 
 
-def _enable(runtime, *, interval: int) -> None:
+def _enable(runtime: AgentRuntime, *, interval: int) -> None:
     runtime._loop._reflection_mode = CognitionReflectionMode.DETERMINISTIC
     runtime._loop._reflection_policy = ReflectionPolicy(
         interval_ticks=interval, min_gap_ticks=interval
@@ -200,6 +207,7 @@ async def test_finalize_applies_one_pass_and_repeat_does_not() -> None:
     reflecting.start()
     _enable(reflecting, interval=1)
     prepared = await reflecting.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await reflecting.bind_effective_command(prepared)
     assert pending.loop_result.reflection is not None
     command_type = type(pending.submission.command)
@@ -209,7 +217,7 @@ async def test_finalize_applies_one_pass_and_repeat_does_not() -> None:
     await reflecting.finalize_pending(pending)
     await reflecting.finalize_pending(pending)
     cursor = reflecting._reflection_cursor
-    assert cursor is not None
+    assert isinstance(cursor, ReflectionCursor)
     assert cursor.last_reflection_tick == 0
     assert len(reflecting.export_reflection_audits()) == 1
     assert reflecting._decision_journal is not None
@@ -220,6 +228,7 @@ async def test_finalize_applies_one_pass_and_repeat_does_not() -> None:
     disabled_prepared = await disabled.prepare_observation(
         _self(tick=0), token=_token(0)
     )
+    assert isinstance(disabled_prepared, PreparedObservation)
     disabled_pending = await disabled.bind_effective_command(disabled_prepared)
     assert disabled_pending.loop_result.reflection is None
     assert type(disabled_pending.submission.command) is command_type
@@ -241,11 +250,12 @@ async def test_quiet_tick_does_not_move_the_reflection_cursor() -> None:
     runtime.start()
     _enable(runtime, interval=100)
     prepared = await runtime.prepare_observation(_self(tick=0), token=_token(0))
+    assert isinstance(prepared, PreparedObservation)
     pending = await runtime.bind_effective_command(prepared)
     assert pending.loop_result.reflection is None
     await runtime.finalize_pending(pending)
     cursor = runtime._reflection_cursor
-    assert cursor is not None
+    assert isinstance(cursor, ReflectionCursor)
     assert cursor.last_reflection_tick is None
     assert runtime._decision_journal is not None
     assert len(runtime._decision_journal) == 1

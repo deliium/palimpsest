@@ -138,7 +138,9 @@ _LINK_CORPUS = (
 
 
 def _corpus() -> dict[str, object]:
-    return json.loads(_LINK_CORPUS.read_text(encoding="utf-8"))
+    document: object = json.loads(_LINK_CORPUS.read_text(encoding="utf-8"))
+    assert isinstance(document, dict)
+    return document
 
 
 def _selection_state(selection: ResearchSelection) -> dict[str, object]:
@@ -177,7 +179,10 @@ def _selection_state(selection: ResearchSelection) -> dict[str, object]:
 
 
 def test_shared_link_corpus_round_trips() -> None:
-    for entry in _corpus()["valid"]:
+    entries = _corpus()["valid"]
+    assert isinstance(entries, list)
+    for entry in entries:
+        assert isinstance(entry, dict)
         selection = parse_research_selection(entry["query"])
         assert _selection_state(selection) == entry["state"], entry["name"]
         assert build_research_selection_query(selection) == entry["canonical_query"], (
@@ -188,14 +193,20 @@ def test_shared_link_corpus_round_trips() -> None:
 
 
 def test_shared_link_corpus_rejects_invalid_links() -> None:
-    for entry in _corpus()["invalid"]:
+    entries = _corpus()["invalid"]
+    assert isinstance(entries, list)
+    for entry in entries:
+        assert isinstance(entry, dict)
         with pytest.raises(ResearchUiStateError) as exc:
             parse_research_selection(entry["query"])
         assert exc.value.code == entry["reason_code"], entry["name"]
 
 
 def test_lineage_fixtures_match_backend_owner_matrix() -> None:
-    for entry in _corpus()["valid"]:
+    entries = _corpus()["valid"]
+    assert isinstance(entries, list)
+    for entry in entries:
+        assert isinstance(entry, dict)
         state = entry["state"]
         focus = state["focus"]
         if focus is None or focus["source"] != "lineage":
