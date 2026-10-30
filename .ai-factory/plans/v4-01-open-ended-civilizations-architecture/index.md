@@ -271,9 +271,9 @@ V3 benchmark 30; `prepare_parallel=False`. `institutional_economy` and
 - [x] Task 3: Add the machine-readable V4 context registry ([details](phase-01-baseline-and-context.md#task-3-add-the-machine-readable-v4-context-registry)) (depends on 2)
 
 ### Phase 2: Capability and Runner Evolution
-- [ ] Task 4: Add closed V4 capability flags ([details](phase-02-capability-and-runner.md#task-4-add-closed-v4-capability-flags)) (depends on 2, 3)
-- [ ] Task 5: Accept runner-config-v56 with an exact keyset ([details](phase-02-capability-and-runner.md#task-5-accept-runner-config-v56-with-an-exact-keyset)) (depends on 4)
-- [ ] Task 6: Add V4 regression profiles and fail-closed gates ([details](phase-02-capability-and-runner.md#task-6-add-v4-regression-profiles-and-fail-closed-gates)) (depends on 4, 5)
+- [x] Task 4: Add closed V4 capability flags ([details](phase-02-capability-and-runner.md#task-4-add-closed-v4-capability-flags)) (depends on 2, 3)
+- [x] Task 5: Accept runner-config-v56 with an exact keyset ([details](phase-02-capability-and-runner.md#task-5-accept-runner-config-v56-with-an-exact-keyset)) (depends on 4)
+- [x] Task 6: Add V4 regression profiles and fail-closed gates ([details](phase-02-capability-and-runner.md#task-6-add-v4-regression-profiles-and-fail-closed-gates)) (depends on 4, 5)
 
 ### Phase 3: Wire and Persistence Evolution
 - [ ] Task 7: Reserve future event and codec write pairs ([details](phase-03-wire-and-persistence.md#task-7-reserve-future-event-and-codec-write-pairs)) (depends on 3, 5)

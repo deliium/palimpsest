@@ -46,10 +46,12 @@ from simulation.runner_models import (
     TeachingInteractionMode,
     V2CapabilityFlags,
     V3CapabilityFlags,
+    V4CapabilityFlags,
     WorldScenarioSpec,
     capability_flags_digest,
     example_population_lifecycle_spec,
     v3_capability_flags_digest,
+    v4_capability_flags_digest,
 )
 from world.collective_projects import CollectiveProject
 from world.values import Fatigue
@@ -1686,6 +1688,50 @@ def v3_scaffolding_profile(config: SimulationRunnerConfig) -> SimulationRunnerCo
             f"(code=v3_scaffolding_flags_enabled flag_count={len(enabled)})"
         )
     return config
+
+
+def v4_scaffolding_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
+    """Require all V4 capability flags off (V4 scaffolding baseline).
+
+    Returns the same config when valid; raises ``ValueError`` with stable code
+    ``v4_scaffolding_flags_enabled`` otherwise. Does not mutate the config.
+    """
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError("v4_scaffolding_profile requires SimulationRunnerConfig")
+    if type(config.v4_capability_flags) is not V4CapabilityFlags:
+        raise TypeError("v4_capability_flags must be V4CapabilityFlags")
+    enabled = config.v4_capability_flags.enabled_names()
+    digest_prefix = v4_capability_flags_digest(config.v4_capability_flags)[:12]
+    _LOG.debug(
+        "v4_scaffolding_profile_check schema_version=%s "
+        "enabled_v4_flag_count=%s v4_capability_flags_digest_prefix=%s",
+        config.schema_version,
+        len(enabled),
+        digest_prefix,
+    )
+    if enabled:
+        raise ValueError(
+            "v4 scaffolding requires all V4 capability flags off "
+            f"(code=v4_scaffolding_flags_enabled flag_count={len(enabled)})"
+        )
+    return config
+
+
+def v3_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
+    """V3 regression under V4 scaffolding: V4 flags off + V2 regression rules.
+
+    Composes ``v4_scaffolding_profile`` then ``v2_regression_profile``. Does not
+    enable or disable any mode.
+    """
+    if type(config) is not SimulationRunnerConfig:
+        raise TypeError("v3_regression_profile requires SimulationRunnerConfig")
+    v4_scaffolding_profile(config)
+    profiled = v2_regression_profile(config)
+    _LOG.debug(
+        "v3_regression_profile_ok schema_version=%s",
+        profiled.schema_version,
+    )
+    return profiled
 
 
 def v2_regression_profile(config: SimulationRunnerConfig) -> SimulationRunnerConfig:

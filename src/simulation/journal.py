@@ -66,7 +66,6 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
-    EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     OccurrenceContext,
     WorldEvent,

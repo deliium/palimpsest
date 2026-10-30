@@ -109,7 +109,9 @@ from experiments.catalog import (
     technique_lifecycle_profile,
     v1_regression_profile,
     v2_regression_profile,
+    v3_regression_profile,
     v3_scaffolding_profile,
+    v4_scaffolding_profile,
 )
 from experiments.civilization_benchmark_base import (
     V3_BENCHMARK_PROFILE_BUDGETS,
@@ -718,7 +720,9 @@ __all__ = [
     "v2_regression_profile",
     "v3_benchmark_scenario_id_for_request",
     "v3_benchmark_suite_registry",
+    "v3_regression_profile",
     "v3_scaffolding_profile",
+    "v4_scaffolding_profile",
     "validate_generational_factor_combination",
     "validate_treatment_design",
     "verify_cultural_pair",

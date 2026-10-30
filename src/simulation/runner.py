@@ -1714,9 +1714,7 @@ class _DetachedBoundaryInputs:
         for state in self.owner_states:
             if state.scope.owner_id == agent_id:
                 return state
-        raise ForkCheckpointError(
-            "fork_roster_mismatch", "owner state is not captured"
-        )
+        raise ForkCheckpointError("fork_roster_mismatch", "owner state is not captured")
 
 
 class SimulationRunner:
@@ -2016,8 +2014,7 @@ class SimulationRunner:
             )
         except Exception as exc:
             _LOG.warning(
-                "runner_retirement_failed run_id=%s agent_id=%s "
-                "reason_code=%s",
+                "runner_retirement_failed run_id=%s agent_id=%s reason_code=%s",
                 self._run_id.value,
                 runtime.agent_id.value,
                 type(exc).__name__,
@@ -2088,13 +2085,16 @@ class SimulationRunner:
             unimplemented_flags = config.capability_flags.unimplemented_enabled_names()
             v3_enabled_flags = config.v3_capability_flags.enabled_names()
             v3_unimplemented = config.v3_capability_flags.unimplemented_enabled_names()
+            v4_enabled_flags = config.v4_capability_flags.enabled_names()
+            v4_unimplemented = config.v4_capability_flags.unimplemented_enabled_names()
             _LOG.debug(
                 "runner_construction_start schema_version=%s agent_count=%s "
                 "mortality_mode=%s durable=%s capability_flag_count=%s "
                 "enabled_flag_count=%s owned_enabled_flag_count=%s "
                 "unimplemented_flag_count=%s owned_enabled_flags=%s "
                 "unimplemented_flags=%s v3_enabled_flag_count=%s "
-                "v3_unimplemented_flag_count=%s",
+                "v3_unimplemented_flag_count=%s v4_enabled_flag_count=%s "
+                "v4_unimplemented_flag_count=%s",
                 config.schema_version,
                 len(config.agents),
                 config.mortality_mode.value,
@@ -2107,6 +2107,8 @@ class SimulationRunner:
                 ",".join(unimplemented_flags) if unimplemented_flags else "",
                 len(v3_enabled_flags),
                 len(v3_unimplemented),
+                len(v4_enabled_flags),
+                len(v4_unimplemented),
             )
             if unimplemented_flags:
                 _LOG.error(
@@ -2135,6 +2137,20 @@ class SimulationRunner:
                 raise RunnerConstructionError(
                     RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
                     stage="v3_capability_flags",
+                )
+            if v4_unimplemented:
+                _LOG.error(
+                    "runner_construction_v4_capability_unimplemented "
+                    "schema_version=%s flag_count=%s unimplemented_flags=%s "
+                    "reason_code=%s",
+                    config.schema_version,
+                    len(v4_unimplemented),
+                    ",".join(v4_unimplemented),
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED.value,
+                )
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
+                    stage="v4_capability_flags",
                 )
 
             stage = "physical_rules"
@@ -3162,9 +3178,7 @@ class SimulationRunner:
                 if ordinal in active:
                     continue
                 observation = self._engine.observation_for(runtime.agent_id)
-                civilization.stage_observation(
-                    runtime.agent_id.value, observation
-                )
+                civilization.stage_observation(runtime.agent_id.value, observation)
 
         try:
             for ordinal in tuple(self._active_ordinals):

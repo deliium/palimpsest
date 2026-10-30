@@ -46,6 +46,7 @@ from simulation.run_control import (
     STREAM_RECORD_SCHEMA_VERSION,
 )
 from simulation.runner_models import (
+    _V4_CAPABILITY_FLAG_NAMES,
     COGNITION_POLICY_VERSION,
     RESULT_SCHEMA_VERSION,
     RESULT_SCHEMA_VERSION_V1,
@@ -99,6 +100,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V53,
     RUNNER_SCHEMA_VERSION_V54,
     RUNNER_SCHEMA_VERSION_V55,
+    RUNNER_SCHEMA_VERSION_V56,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -147,6 +149,10 @@ V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "institutional_economy",
     "cultural_historical_memory",
 )
+V4_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v4_capability_flags"
+# Single source of truth: the closed flag tuple declared on V4CapabilityFlags.
+V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = _V4_CAPABILITY_FLAG_NAMES
+V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset()
 
 __all__ = [
     "ALEMBIC_HEAD_REVISION",
@@ -191,6 +197,9 @@ __all__ = [
     "V3_CAPABILITY_FLAGS_WIRE_KEY",
     "V3_CAPABILITY_FLAG_NAMES",
     "V3_OWNED_CAPABILITY_FLAGS",
+    "V4_CAPABILITY_FLAGS_WIRE_KEY",
+    "V4_CAPABILITY_FLAG_NAMES",
+    "V4_OWNED_CAPABILITY_FLAGS",
     "WS_PROTOCOL_VERSION",
     "CompatibilityEntry",
     "compatibility_entry",
@@ -512,7 +521,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "reputation_mode and restores DISABLED; "
             "v8 omits communication_strategy_mode and reputation_mode and "
             "restores DISABLED; "
-            "v9 omits reputation_mode and restores DISABLED)."
+            "v9 omits reputation_mode and restores DISABLED; "
+            f"{RUNNER_SCHEMA_VERSION_V56} is accepted for V4 scaffolding and "
+            "carries the closed v4_capability_flags sibling; every V4 flag is "
+            "unowned and any enabled flag fails closed at "
+            "SimulationRunner.from_config with capability_unimplemented; "
+            f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
+            f"feature runner remains {RUNNER_SCHEMA_VERSION_V55})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -739,6 +754,23 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "AE/AF/AG hashes unchanged"
         ),
     ),
+    "v4_capability_flags": CompatibilityEntry(
+        entry_id="v4_capability_flags",
+        write_version=V4_CAPABILITY_FLAGS_WIRE_KEY,
+        accepted_restore=_versions(*V4_CAPABILITY_FLAG_NAMES),
+        bump_trigger=(
+            "Closed reserved V4 capability set on SimulationRunnerConfig; wire key "
+            f"{V4_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of capability_flags and "
+            f"{V3_CAPABILITY_FLAGS_WIRE_KEY}; all twelve flags are unowned in V4-01 "
+            "and any enabled flag fails closed at SimulationRunner.from_config with "
+            "capability_unimplemented (stage v4_capability_flags)"
+        ),
+        owner_package="simulation.runner_models / simulation.runner",
+        v1_fixture_impact=(
+            "All twelve flags default off; decode of runner-config-v1..v55 "
+            "synthesizes defaults; V1/V2/V3 identity unchanged when off"
+        ),
+    ),
 }
 
 COMPATIBILITY_MATRIX: Final[Mapping[str, CompatibilityEntry]] = MappingProxyType(
@@ -798,11 +830,13 @@ _LOG.debug(
         "runner_v53": RUNNER_SCHEMA_VERSION_V53,
         "runner_v54": RUNNER_SCHEMA_VERSION_V54,
         "runner_v55": RUNNER_SCHEMA_VERSION_V55,
+        "runner_v56": RUNNER_SCHEMA_VERSION_V56,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,
         "accepted_event_count": len(ACCEPTED_EVENT_SCHEMA_VERSIONS),
         "v3_flag_count": len(V3_CAPABILITY_FLAG_NAMES),
+        "v4_flag_count": len(V4_CAPABILITY_FLAG_NAMES),
     },
 )
 

@@ -49,6 +49,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V51,
     RUNNER_SCHEMA_VERSION_V52,
     RUNNER_SCHEMA_VERSION_V55,
+    RUNNER_SCHEMA_VERSION_V56,
     ArtifactInterpretationMode,
     CognitiveBudgetMode,
     CollectiveDecisionMode,
@@ -149,7 +150,14 @@ def finalize_matrix_cell_config(
         config.population_lifecycle is not None
         and config.population_lifecycle.has_developmental_extensions()
     )
-    if config.generational_run is not None:
+    if config.schema_version == RUNNER_SCHEMA_VERSION_V56:
+        if config.v4_capability_flags.any_enabled():
+            raise MatrixValidationError(
+                "finalize_validation_failed",
+                "explicit_v56_requires_v4_flags_off",
+            )
+        schema_version, rule = RUNNER_SCHEMA_VERSION_V56, "explicit_v56"
+    elif config.generational_run is not None:
         schema_version, rule = (
             RUNNER_SCHEMA_VERSION_V55,
             "generational_run_on",

@@ -38,6 +38,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V55,
+    RUNNER_SCHEMA_VERSION_V56,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
 from world.events import EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22
@@ -45,7 +46,7 @@ from world.events import EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22
 V3_BASELINE: Final[dict[str, object]] = {
     "default_runner_schema": "runner-config-v4",
     "latest_feature_runner_schema": "runner-config-v55",
-    "forbidden_runner_schema": "runner-config-v56",
+    "accepted_scaffolding_runner_schema": "runner-config-v56",
     "default_result_schema": RESULT_SCHEMA_VERSION,
     "generational_result_schema": "runner-result-v3",
     "latest_event_schema": 22,
@@ -61,16 +62,19 @@ V3_BASELINE: Final[dict[str, object]] = {
 }
 
 # Closed-vocabulary compatibility entries are not version identifiers.
-_CLOSED_VOCABULARY_ENTRIES: Final[frozenset[str]] = frozenset({"v3_capability_flags"})
+_CLOSED_VOCABULARY_ENTRIES: Final[frozenset[str]] = frozenset(
+    {"v3_capability_flags", "v4_capability_flags"}
+)
 
 
 def test_v3_baseline_runner_and_result_pins() -> None:
     assert RUNNER_SCHEMA_VERSION == V3_BASELINE["default_runner_schema"]
     assert RUNNER_SCHEMA_VERSION_V4 == V3_BASELINE["default_runner_schema"]
     assert RUNNER_SCHEMA_VERSION_V55 == V3_BASELINE["latest_feature_runner_schema"]
-    assert (
-        V3_BASELINE["forbidden_runner_schema"] not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    )
+    # V4-01 accepts runner-config-v56 for explicit scaffolding identity only:
+    # it is never the default and no feature selects it automatically.
+    assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RESULT_SCHEMA_VERSION_V3 == V3_BASELINE["generational_result_schema"]
 
 

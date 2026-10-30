@@ -30,10 +30,12 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, NoReturn
 
-from simulation.compatibility import V3_CAPABILITY_FLAG_NAMES
+from simulation.compatibility import (
+    V3_CAPABILITY_FLAG_NAMES,
+    V4_CAPABILITY_FLAGS_WIRE_KEY,
+)
 
 V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v1"
-V4_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v4_capability_flags"
 V4_ANALYSIS_CAPTURE_SEAM: Final[str] = "analysis_capture"
 
 _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
@@ -402,7 +404,6 @@ __all__ = [
     "V4_ANALYSIS_CAPTURE_SEAM",
     "V4_ANALYSIS_ONLY_CONTEXTS",
     "V4_CAPABILITY_FLAGS",
-    "V4_CAPABILITY_FLAGS_WIRE_KEY",
     "V4_CONTEXTS",
     "V4_CONTEXT_BY_ID",
     "V4_CONTEXT_MAP_VERSION",

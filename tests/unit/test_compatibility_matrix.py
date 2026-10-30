@@ -78,6 +78,7 @@ def test_matrix_covers_required_taxonomy_ids() -> None:
         "observer_layout",
         "research_ui_mount",
         "v3_capability_flags",
+        "v4_capability_flags",
     }
     assert set(COMPATIBILITY_MATRIX) == required
     assert list_compatibility_ids() == tuple(sorted(required))
