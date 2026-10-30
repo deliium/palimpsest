@@ -276,8 +276,8 @@ V3 benchmark 30; `prepare_parallel=False`. `institutional_economy` and
 - [x] Task 6: Add V4 regression profiles and fail-closed gates ([details](phase-02-capability-and-runner.md#task-6-add-v4-regression-profiles-and-fail-closed-gates)) (depends on 4, 5)
 
 ### Phase 3: Wire and Persistence Evolution
-- [ ] Task 7: Reserve future event and codec write pairs ([details](phase-03-wire-and-persistence.md#task-7-reserve-future-event-and-codec-write-pairs)) (depends on 3, 5)
-- [ ] Task 8: Define the ordered migration sequence ([details](phase-03-wire-and-persistence.md#task-8-define-the-ordered-migration-sequence)) (depends on 3, 7)
+- [x] Task 7: Reserve future event and codec write pairs ([details](phase-03-wire-and-persistence.md#task-7-reserve-future-event-and-codec-write-pairs)) (depends on 3, 5)
+- [x] Task 8: Define the ordered migration sequence ([details](phase-03-wire-and-persistence.md#task-8-define-the-ordered-migration-sequence)) (depends on 3, 7)
 
 ### Phase 4: Observer Protocol and Scale Contracts
 - [ ] Task 9: Add observer protocol negotiation and capabilities ([details](phase-04-observer-and-scale.md#task-9-add-observer-protocol-negotiation-and-capabilities)) (depends on 2, 3)
