@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from agents.cognition import (
+    OrganizationConceptLedger,
     apply_organization_concept_update,
     default_organization_concept_policy,
     empty_organization_concept_ledger,
@@ -30,7 +31,7 @@ pytestmark = pytest.mark.unit
 MODULE = Path(__file__).resolve().parents[2] / "src" / "analysis" / "organizations.py"
 
 
-def _ledger(tick: int = 3, owner: str = "ada"):
+def _ledger(tick: int = 3, owner: str = "ada") -> OrganizationConceptLedger:
     project = ObservedCollectiveProject(
         project_id=EntityId("project-1"),
         location_id=EntityId("clearing"),

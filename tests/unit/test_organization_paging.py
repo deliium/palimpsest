@@ -15,7 +15,7 @@ from tests.unit.organization_artifact_helpers import example_snapshot
 pytestmark = pytest.mark.unit
 
 
-def _rows():
+def _rows() -> tuple[object, ...]:
     snapshot = example_snapshot()
     return tuple(snapshot.candidates) * 3
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -305,8 +306,11 @@ def test_tell_is_decorated_and_other_commands_are_untouched() -> None:
 
 
 def test_dispute_and_leave_predicates_are_selected() -> None:
-    disputed = organization_communicate_utterance(
-        _talk(), _identity(status=OrganizationStatus.DISPUTED)
+    disputed = cast(
+        Talk,
+        organization_communicate_utterance(
+            _talk(), _identity(status=OrganizationStatus.DISPUTED)
+        ),
     )
     dispute_claims = [
         parse_organization_claim_relation(relation)
@@ -315,8 +319,11 @@ def test_dispute_and_leave_predicates_are_selected() -> None:
     assert dispute_claims[0] is not None
     assert dispute_claims[0].predicate == "organization_dispute"
 
-    leaving = organization_communicate_utterance(
-        _talk(), _identity(stance=OrganizationIdentityStance.OUTSIDE)
+    leaving = cast(
+        Talk,
+        organization_communicate_utterance(
+            _talk(), _identity(stance=OrganizationIdentityStance.OUTSIDE)
+        ),
     )
     leave_claims = [
         parse_organization_claim_relation(relation)

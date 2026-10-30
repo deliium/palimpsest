@@ -9,6 +9,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from agents.cognition import (
+    OrganizationConceptLedger,
     OrganizationLineageKind,
     OrganizationStatus,
     apply_organization_concept_update,
@@ -62,7 +63,11 @@ def _observation(
     )
 
 
-def _update(tick: int, projects, prior=None):
+def _update(
+    tick: int,
+    projects: tuple[ObservedCollectiveProject, ...],
+    prior: OrganizationConceptLedger | None = None,
+) -> OrganizationConceptLedger:
     return apply_organization_concept_update(
         owner_id=OWNER,
         tick=tick,
@@ -206,7 +211,9 @@ def test_lineage_is_forward_only_and_acyclic() -> None:
         st.sampled_from(["role:x", "goal:y", "record:z"]), unique=True, min_size=1
     ),
 )
-def test_concept_identity_is_permutation_invariant(members, anchors) -> None:
+def test_concept_identity_is_permutation_invariant(
+    members: list[str], anchors: list[str]
+) -> None:
     expected = organization_concept_id("ada", 7, tuple(members), tuple(anchors))
     for member_order in itertools.islice(itertools.permutations(members), 4):
         for anchor_order in itertools.islice(itertools.permutations(anchors), 2):

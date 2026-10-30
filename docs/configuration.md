@@ -307,7 +307,7 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling, generational siblings remain mandatory only
+closed `v4_capability_flags` sibling; `organizations` is owned by V4-03 and requires the accepted v56 seam, while the other eleven V4 flags stay unowned and fail closed. Generational siblings remain mandatory only
 when a generational run is present, every V4 flag is unowned and fails closed at
 `SimulationRunner.from_config`, default writes remain `runner-config-v4`, the
 latest feature runner remains `runner-config-v55`, and no behavior or migration

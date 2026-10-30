@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -14,14 +16,20 @@ from simulation.organization_codec import (
     compute_organization_publication_id,
     encode_organization_snapshot,
 )
-from simulation.organization_models import OrganizationArtifactError
+from simulation.organization_models import (
+    OrganizationArtifactError,
+    OrganizationCandidateRecord,
+    OrganizationSnapshot,
+)
 from simulation.organization_ports import OrganizationPublication
 from tests.unit.organization_artifact_helpers import example_snapshot
 
 pytestmark = pytest.mark.unit
 
 
-def _publication(snapshot=None) -> OrganizationPublication:
+def _publication(
+    snapshot: OrganizationSnapshot | None = None,
+) -> OrganizationPublication:
     snapshot = example_snapshot() if snapshot is None else snapshot
     publication_id = compute_organization_publication_id(snapshot)
     from dataclasses import replace
@@ -37,7 +45,7 @@ def _publication(snapshot=None) -> OrganizationPublication:
     )
 
 
-def test_publish_and_read_round_trip(tmp_path) -> None:
+def test_publish_and_read_round_trip(tmp_path: Path) -> None:
     publisher = create_organization_publisher(tmp_path)
     reader = create_organization_reader(tmp_path)
     assert publisher is not None and reader is not None
@@ -55,9 +63,13 @@ def test_publish_and_read_round_trip(tmp_path) -> None:
     candidate = reader.candidate(
         publication.run_id,
         publication.publication_id,
-        page.rows[0].organization_id,
+        cast(OrganizationCandidateRecord, page.rows[0]).organization_id,
     )
     assert candidate is not None
+    assert (
+        candidate.organization_id
+        == cast(OrganizationCandidateRecord, page.rows[0]).organization_id
+    )
     lineage = reader.lineage(publication.run_id, publication.publication_id, 0, 10)
     assert len(lineage.rows) == 1
     assert (
@@ -68,7 +80,9 @@ def test_publish_and_read_round_trip(tmp_path) -> None:
     )
 
 
-def test_identical_bytes_are_idempotent_and_conflicts_are_rejected(tmp_path) -> None:
+def test_identical_bytes_are_idempotent_and_conflicts_are_rejected(
+    tmp_path: Path,
+) -> None:
     publisher = create_organization_publisher(tmp_path)
     assert publisher is not None
     publication = _publication()
@@ -83,7 +97,7 @@ def test_identical_bytes_are_idempotent_and_conflicts_are_rejected(tmp_path) -> 
     assert excinfo.value.code == "organization_publication_exists"
 
 
-def test_quota_is_enforced(tmp_path) -> None:
+def test_quota_is_enforced(tmp_path: Path) -> None:
     publisher = create_organization_publisher(
         tmp_path, max_publications=1, max_artifact_bytes=1_000_000
     )
@@ -98,7 +112,7 @@ def test_quota_is_enforced(tmp_path) -> None:
     assert excinfo.value.code == "organization_quota_exceeded"
 
 
-def test_lock_blocks_concurrent_publish(tmp_path) -> None:
+def test_lock_blocks_concurrent_publish(tmp_path: Path) -> None:
     publisher = create_organization_publisher(tmp_path)
     assert publisher is not None
     run_dir = tmp_path / example_snapshot().run_id
@@ -109,14 +123,14 @@ def test_lock_blocks_concurrent_publish(tmp_path) -> None:
     assert excinfo.value.code == "organization_store_locked"
 
 
-def test_missing_publication_returns_none(tmp_path) -> None:
+def test_missing_publication_returns_none(tmp_path: Path) -> None:
     reader = create_organization_reader(tmp_path)
     assert reader is not None
     assert reader.summary("run-missing") is None
     assert not (tmp_path / "run-missing").exists()
 
 
-def test_corrupt_state_is_rejected(tmp_path) -> None:
+def test_corrupt_state_is_rejected(tmp_path: Path) -> None:
     publisher = create_organization_publisher(tmp_path)
     reader = create_organization_reader(tmp_path)
     assert publisher is not None and reader is not None
@@ -128,7 +142,7 @@ def test_corrupt_state_is_rejected(tmp_path) -> None:
         reader.summary(publication.run_id)
 
 
-def test_tampered_snapshot_digest_is_rejected(tmp_path) -> None:
+def test_tampered_snapshot_digest_is_rejected(tmp_path: Path) -> None:
     publisher = create_organization_publisher(tmp_path)
     reader = create_organization_reader(tmp_path)
     assert publisher is not None and reader is not None

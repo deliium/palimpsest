@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from analysis import (
     MetricAvailability,
+    MetricDocument,
+    OrganizationAnalysis,
     OrganizationCandidate,
     OrganizationCandidateStatus,
     OrganizationCoverage,
@@ -70,7 +74,10 @@ def _candidate(
     )
 
 
-def _analysis(candidates, windows=(0,)):
+def _analysis(
+    candidates: tuple[OrganizationCandidate, ...],
+    windows: tuple[int, ...] = (0,),
+) -> OrganizationAnalysis:
     detection = OrganizationDetectionResult(
         windows=tuple(
             OrganizationWindowResult(
@@ -100,7 +107,7 @@ def _analysis(candidates, windows=(0,)):
     return derive_organization_lineage(assign_organization_identities(detection))
 
 
-def _empty_analysis():
+def _empty_analysis() -> OrganizationAnalysis:
     return derive_organization_lineage(
         assign_organization_identities(OrganizationDetectionResult())
     )
@@ -118,7 +125,9 @@ def _empty_analysis():
         (compute_organization_lineage_metric, MetricFamilyId.ORGANIZATION_LINEAGE),
     ),
 )
-def test_empty_analysis_is_absent_with_no_values(compute, family) -> None:
+def test_empty_analysis_is_absent_with_no_values(
+    compute: Callable[..., MetricDocument], family: MetricFamilyId
+) -> None:
     analysis = _empty_analysis()
     document = compute(analysis, run_id="run-1", input_revision="rev-1")
     assert document.metric_family == family.value
@@ -141,7 +150,9 @@ def test_empty_analysis_is_absent_with_no_values(compute, family) -> None:
         (compute_organization_lineage_metric, MetricFamilyId.ORGANIZATION_LINEAGE),
     ),
 )
-def test_partial_coverage_is_partial(compute, family) -> None:
+def test_partial_coverage_is_partial(
+    compute: Callable[..., MetricDocument], family: MetricFamilyId
+) -> None:
     analysis = _analysis((_candidate("c1", 0, ("a", "b", "c")),))
     document = compute(analysis, run_id="run-1", input_revision="rev-1")
     assert document.availability is MetricAvailability.PARTIAL

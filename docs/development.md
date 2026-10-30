@@ -602,3 +602,11 @@ Cultural browser proofs should use the trusted helpers for
 civilization, teaching or institution presentation fixtures prove rendering
 only, not emergent learning or institutions. Unit/mounted tests never write to
 artifact roots; API reads keep filesystem bytes unchanged.
+
+## Organization gates
+
+- `uv run pytest tests/unit/test_organization_*.py -q`
+- `uv run pytest tests/architecture/test_organization_boundaries.py -q`
+- `uv run pytest tests/unit/test_organization_end_to_end.py -q`
+- `uv run pytest tests/unit/test_organization_cli.py -q`
+- `cd clients/research-ui && ./node_modules/.bin/vitest run src/views/OrganizationsPanel.test.ts`

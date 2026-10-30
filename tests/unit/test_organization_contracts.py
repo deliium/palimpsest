@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 
 import pytest
 
@@ -277,7 +278,7 @@ def test_every_aspect_record_accepts_a_representative_value() -> None:
             first_tick=1,
             last_tick=TICK,
         ),
-        lambda: _goal_with_kind("collective_project"),  # type: ignore[arg-type]
+        lambda: _goal_with_kind("collective_project"),
         lambda: OrganizationResourceBelief(
             resource_kind="repository",  # type: ignore[arg-type]
             anchor_id="repository-1",
@@ -319,7 +320,7 @@ def test_every_aspect_record_accepts_a_representative_value() -> None:
         ),
     ),
 )
-def test_aspect_records_reject_string_statuses(factory) -> None:
+def test_aspect_records_reject_string_statuses(factory: Callable[[], object]) -> None:
     with pytest.raises(OrganizationConceptError):
         factory()
 
@@ -363,7 +364,7 @@ def test_ticks_reject_regression_and_bool() -> None:
         OrganizationRevisionRecord(
             revision_id="revision-1",
             kind=OrganizationRevisionKind.CONTINUED,
-            tick=True,  # type: ignore[arg-type]
+            tick=True,
             before_digest=DIGEST,
             after_digest=DIGEST,
             reason_code="observed",

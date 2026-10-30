@@ -213,3 +213,10 @@ evidence class, entity source, native kind, lineage family/node/publication,
 civilization row/publication, and location/institution/narrative/technology IDs.
 Credentials never enter URLs. The Godot embed is same-origin and isolated; its
 explicit new-tab anchor is the fallback when bootstrap fails.
+
+## Organizations panel
+
+Read-only summary, candidate table, candidate detail, and lineage from the four
+`/v1/simulations/{run_id}/organizations` routes (`subjective_debug`). Disabled and
+empty states are explicit; the client performs no candidate detection, identity
+minting, lineage derivation, or write call.

@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 140 (including the V3-36 comparison, six V3-37 cultural families, and four V4-02 macro-society families) |
+| Metric families | 144 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, and four V4-03 organization families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -593,3 +593,35 @@ government, or organization entity or registry exists. `WorldEngine` authority,
 observer protocol, Godot, commands (43), observer semantic types (73), replay
 `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, runner v4/v55/v56, and Alembic `0017`
 are unchanged. No capability flag is claimed.
+
+
+### V4-03 organizations seam
+
+`organizations` is the first owned V4 capability flag and requires the accepted
+`runner-config-v56` seam; there is no v57 and no per-agent runner key.
+`agents.cognition.organization_*` owns a closed owner-scoped ledger of nine
+aspects (perceived members, roles, goals, referenced resources, procedures,
+records, internal commitments, identity concepts, bounded history) under
+`organization-concepts.v1`. Roles reference owner-local offices; goals reference
+collective proposals/projects; resources and records reference objective anchors;
+commitments reference owner interpretations. Membership is never a partition:
+`explicit`, `perceived`, `disputed`, `unknown`, and `former` coexist, overlap is
+legal, and temporary claims expire explicitly. Bounded `org_v1` claims travel
+inside existing `Talk`/`Tell`; no command, event, observer semantic type, or
+write pair is added.
+
+`analysis.organization_*` is detached and read-only: harvest from exported
+ledgers, overlapping candidate detection, stable creation-evidence `org-`
+identities, three strictly separated layers (objective counts, owner claims,
+analytical candidates), forward-only `continued/transformed/split/merge/
+dissolved/emerged` lineage, and four metric families (catalog 140 -> 144).
+`simulation.organization_*` owns the bounded canonical
+`organization-snapshot-v1` and separate read/publication ports;
+`experiments.organization_*` is the only bridge from analysis to artifact;
+`persistence.organization_filesystem` stores publications atomically with locks
+and quotas; four GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte
+client adds a read-only Organizations panel. No organization actor, objective
+roster, treasury, resource pool, global registry, peer-ledger read, or
+independent cognition engine exists. No capability flag beyond `organizations`,
+command, event, observer semantic type, write pair, API version, or migration is
+added; `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.

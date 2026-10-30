@@ -15,6 +15,8 @@ from analysis import (
     OrganizationAnalysisError,
     OrganizationCoverage,
     OrganizationDetectionResult,
+    OrganizationHarvestRows,
+    OrganizationLayerView,
     OrganizationSubjectiveRow,
     OrganizationWindowResult,
     assign_organization_identities,
@@ -35,7 +37,7 @@ from world.observations import (
 pytestmark = pytest.mark.unit
 
 
-def _harvest():
+def _harvest() -> tuple[OrganizationHarvestRows, ...]:
     claim = OrganizationClaim(
         predicate="organization_claim",
         stance=OrganizationIdentityStance.MEMBER,
@@ -107,7 +109,7 @@ def _harvest():
     return harvest_organization_rows((ledger,))
 
 
-def _view():
+def _view() -> tuple[tuple[OrganizationHarvestRows, ...], OrganizationLayerView]:
     harvest = _harvest()
     detection = OrganizationDetectionResult(
         windows=(

@@ -256,6 +256,18 @@ Every later V3 feature plan must satisfy this checklist before merge:
 
 Register roadmap milestones via `/aif-roadmap` (e.g. **M7 — V3 Generational Architecture Scaffolding**) — not from individual feature plans inventing milestone IDs ad hoc. Keep later plan filenames / bundle stems prefixed with `v3-`.
 
+### Downstream V4 organization contract
+
+`organizations` is owner-scoped and enabled only on `runner-config-v56`. Owner
+ledgers carry nine bounded aspects as beliefs; explicit and disputed membership
+uses bounded `org_v1` speech relations. Detached analysis owns overlapping
+candidates, stable `org-` identity, three-layer separation, and forward-only
+lineage. `organization-snapshot-v1` lives in `simulation` and never imports
+analysis; publication is opt-in and post-completion through the research CLI;
+four GET-only `/v1` routes require `SUBJECTIVE_DEBUG` and fail closed with
+`organization_disabled`. No actor, roster, treasury, registry, peer-ledger read,
+command, event, write pair, or migration is added. The metric catalog is 144.
+
 ### Downstream V4 macro-society contract
 
 A plan that extends `macro_society_identity` must keep these invariants:
@@ -274,7 +286,7 @@ A plan that extends `macro_society_identity` must keep these invariants:
 6. **No capacity or prevalence claim** — candidate counts are analytical counts
    under stated coverage.
 7. **Pins stay put** — runner v4/v55/v56, commands 43, observer semantic types
-   73, metric families 140, replay v22, codec v20, Alembic `0017`, `/v1`,
+   73, metric families 144, replay v22, codec v20, Alembic `0017`, `/v1`,
    `observer-protocol-v1`.
 
 ## See also

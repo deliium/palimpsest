@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import replace
+from enum import StrEnum
 from pathlib import Path
 
 import pytest
@@ -159,10 +160,12 @@ def test_policy_version_and_id_prefixes_are_frozen() -> None:
         ),
     ),
 )
-def test_enum_membership_is_closed(enum_type: type[object], expected: set[str]) -> None:
-    assert {member.value for member in enum_type} == expected  # type: ignore[attr-defined]
+def test_enum_membership_is_closed(
+    enum_type: type[StrEnum], expected: set[str]
+) -> None:
+    assert {member.value for member in enum_type} == expected
     for value in expected:
-        assert enum_type(value).value == value  # type: ignore[call-arg]
+        assert enum_type(value).value == value
 
 
 def test_concept_id_is_stable_under_permutation_and_tick_sensitive() -> None:
@@ -189,7 +192,7 @@ def test_concept_id_rejects_invalid_creation_evidence() -> None:
     assert excinfo.value.code == "organization_tick_regression"
 
     with pytest.raises(OrganizationConceptError) as excinfo:
-        organization_concept_id(OWNER, True, MEMBERS, ANCHORS)  # type: ignore[arg-type]
+        organization_concept_id(OWNER, True, MEMBERS, ANCHORS)
     assert excinfo.value.code == "organization_tick_regression"
 
     with pytest.raises(OrganizationConceptError) as excinfo:

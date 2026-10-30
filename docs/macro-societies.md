@@ -161,3 +161,7 @@ and performs no client-side clustering or identity derivation.
 - No capability flag, runner schema, command, event, observer semantic type,
   `/v2` route, observer protocol change, or SQL migration.
 - No capacity, prevalence, emergence-probability, or predictive claim.
+
+## See also
+
+- [Organizations](organizations.md): a macro-society candidate is a large society-like cluster; an organization concept is a narrower recurring collective structure held as an owner-scoped belief.

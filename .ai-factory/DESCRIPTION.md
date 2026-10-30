@@ -221,3 +221,27 @@ v4/v55/v56, result v2/v3, commands 43, observer semantic types 73, metric
 families 140, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic
 `0017` remain the pins. `institutional_economy` and
 `multi_hop_testimony_tracking` remain unowned.
+
+
+V4-03 (general organization model, 2026-10-30) owns the `organizations` V4
+context as the first flagged V4 capability on the accepted `runner-config-v56`
+seam. An organization is an owner-scoped belief about a recurring collective
+structure: perceived members, roles, shared goals, referenced resources,
+procedures, records, internal commitments, identity concepts, and bounded
+history. `agents.cognition.organization_concepts` implements a closed
+`organization-concepts.v1` ledger; explicit and disputed claims travel as bounded
+`org_v1` relations inside existing `Talk`/`Tell` speech. `analysis.organization_*`
+harvests exported ledgers, detects overlapping cross-owner candidates, mints
+stable `org-` identities, projects three layers, derives forward-only lineage, and
+adds four metric families (140 -> 144). `simulation.organization_*` defines the
+bounded canonical `organization-snapshot-v1` and read/publication ports;
+`experiments.organization_*` is the only analysis-to-artifact bridge;
+`persistence.organization_filesystem` stores snapshots atomically with quotas;
+four GET-only `/v1/simulations/{run_id}/organizations` routes require
+`SUBJECTIVE_DEBUG` and return `organization_disabled` when unconfigured; the
+Research UI adds a read-only Organizations panel. No organization actor, roster,
+treasury, resource pool, registry, command, event, observer semantic type, runner
+schema, API version, or SQL migration is added. Pins remain runner v4/v55/v56,
+result v2/v3, commands 43, observer semantic types 73, metric families 144,
+replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017`;
+`institutional_economy` and `multi_hop_testimony_tracking` remain unowned.

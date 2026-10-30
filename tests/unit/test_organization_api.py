@@ -53,7 +53,9 @@ def _seed(root: Path) -> str:
     return publication_id
 
 
-def _client(root: Path | None, *, clock: list[float], enable_debug: bool = True):
+def _client(
+    root: Path | None, *, clock: list[float], enable_debug: bool = True
+) -> httpx.AsyncClient:
     app = FastAPI()
     app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
     app.include_router(router)

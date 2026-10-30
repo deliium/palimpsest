@@ -152,7 +152,7 @@ async def test_published_receipt_is_id_free(tmp_path: Path) -> None:
             assert "agent-" not in value
 
 
-def test_publication_failure_is_receipt_only(tmp_path: Path, monkeypatch) -> None:
+def test_publication_failure_is_receipt_only(tmp_path: Path) -> None:
     blocker = tmp_path / "blocked"
     blocker.write_text("not a directory")
     receipt = publish_organization_harvest(

@@ -55,7 +55,7 @@ The registry revision is `v4-context-map-v2`.
 
 | Context | Capability flag | Authority | Owning packages | Existing mechanism | Event strategy | Measurement |
 | --- | --- | --- | --- | --- | --- | --- |
-| `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship | reuse | deferred to V4-02+ |
+| `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship, institution concepts, offices, institutional memory, collective decisions, structured commitments, group formation | reuse | V4-03 implementation |
 | `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | deferred to V4-02+ |
 | `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation | reuse | deferred to V4-02+ |
 | `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | deferred to V4-02+ |
@@ -275,7 +275,7 @@ reserved but not served, and no semantic type or frame changes in V4-01.
 
 ## Non-goals
 
-- Implementing any V4 social mechanic, including organizations, rules, disputes,
+- V4-01 does not implement organizations, rules, disputes,
   diplomacy, conflict, infrastructure, supply chains, markets, credit, science,
   epidemics, ecological feedback, disasters, or resilience.
 - Adding a command, event, observer semantic type, metric family, API version,

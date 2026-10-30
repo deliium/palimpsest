@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from analysis import (
+    OrganizationAnalysis,
     OrganizationAnalysisError,
     OrganizationCandidate,
     OrganizationCandidateStatus,
@@ -49,7 +50,10 @@ def _candidate(
     )
 
 
-def _analysis(candidates, windows):
+def _analysis(
+    candidates: tuple[OrganizationCandidate, ...],
+    windows: tuple[int, ...],
+) -> OrganizationAnalysis:
     detection = OrganizationDetectionResult(
         windows=tuple(
             OrganizationWindowResult(
@@ -71,7 +75,7 @@ def _analysis(candidates, windows):
     return derive_organization_lineage(assign_organization_identities(detection))
 
 
-def _kinds(analysis) -> set[OrganizationLineageKind]:
+def _kinds(analysis: OrganizationAnalysis) -> set[OrganizationLineageKind]:
     return {edge.kind for edge in analysis.edges}
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -64,7 +65,7 @@ def _config() -> SimulationRunnerConfig:
 
 
 @pytest.mark.asyncio
-async def test_harvest_publish_and_read_round_trip(tmp_path) -> None:
+async def test_harvest_publish_and_read_round_trip(tmp_path: Path) -> None:
     async with await SimulationRunner.from_config(
         _config(), run_id=RunId("run-organization-e2e")
     ) as runner:
@@ -89,9 +90,14 @@ async def test_harvest_publish_and_read_round_trip(tmp_path) -> None:
 
     page = reader.candidates("run-organization-e2e", built.publication_id, 0, 50)
     assert len(page.rows) == len(built.snapshot.candidates)
+    from typing import cast
+
+    from simulation.organization_models import OrganizationCandidateRecord
+
     for candidate in page.rows:
-        assert candidate.organization_id.startswith("org-")
-        assert "orgc-" not in candidate.organization_id
+        typed = cast(OrganizationCandidateRecord, candidate)
+        assert typed.organization_id.startswith("org-")
+        assert "orgc-" not in typed.organization_id
 
     lineage = reader.lineage("run-organization-e2e", built.publication_id, 0, 50)
     assert len(lineage.rows) == len(built.snapshot.edges)

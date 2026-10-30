@@ -6,6 +6,7 @@ import pytest
 
 from agents.cognition import (
     OrganizationClaim,
+    OrganizationConceptLedger,
     OrganizationIdentityStance,
     apply_organization_concept_update,
     default_organization_concept_policy,
@@ -13,8 +14,11 @@ from agents.cognition import (
 )
 from analysis import (
     OrganizationCandidateStatus,
+    OrganizationDetectionResult,
+    OrganizationHarvestRows,
     OrganizationMembershipStatus,
     OrganizationTemporalScope,
+    OrganizationWindowEvidence,
     build_organization_windows,
     detect_organization_candidates,
     harvest_organization_rows,
@@ -43,8 +47,8 @@ def _ledger(
     claim: OrganizationClaim | None = None,
     claim_speaker: str | None = None,
     tick: int = 3,
-):
-    communications = ()
+) -> OrganizationConceptLedger:
+    communications: tuple[ObservedCommunication, ...] = ()
     if claim is not None:
         utterance = origin_utterance(
             text="organization",
@@ -108,7 +112,13 @@ def _ledger(
     )
 
 
-def _detect(ledgers):
+def _detect(
+    ledgers: tuple[object, ...],
+) -> tuple[
+    tuple[OrganizationHarvestRows, ...],
+    tuple[OrganizationWindowEvidence, ...],
+    OrganizationDetectionResult,
+]:
     harvest = harvest_organization_rows(ledgers)
     windows = build_organization_windows(harvest, WINDOW_TICKS)
     return harvest, windows, detect_organization_candidates(windows)
