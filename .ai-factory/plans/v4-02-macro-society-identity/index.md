@@ -246,9 +246,9 @@ fail closed.
 - [x] Task 2: Freeze the closed macro-society analytical contract ([details](phase-01-context-and-contract.md#task-2-freeze-the-closed-macro-society-analytical-contract)) (depends on 1)
 
 ### Phase 2: Evidence and Candidate Detection
-- [ ] Task 3: Normalize detached evidence into analysis windows ([details](phase-02-evidence-and-detection.md#task-3-normalize-detached-evidence-into-analysis-windows)) (depends on 2)
-- [ ] Task 4: Detect per-lane clusters and compose cross-lane candidates ([details](phase-02-evidence-and-detection.md#task-4-detect-per-lane-clusters-and-compose-cross-lane-candidates)) (depends on 3)
-- [ ] Task 5: Project objective, subjective, and analytical layers separately ([details](phase-02-evidence-and-detection.md#task-5-project-objective-subjective-and-analytical-layers-separately)) (depends on 4)
+- [x] Task 3: Normalize detached evidence into analysis windows ([details](phase-02-evidence-and-detection.md#task-3-normalize-detached-evidence-into-analysis-windows)) (depends on 2)
+- [x] Task 4: Detect per-lane clusters and compose cross-lane candidates ([details](phase-02-evidence-and-detection.md#task-4-detect-per-lane-clusters-and-compose-cross-lane-candidates)) (depends on 3)
+- [x] Task 5: Project objective, subjective, and analytical layers separately ([details](phase-02-evidence-and-detection.md#task-5-project-objective-subjective-and-analytical-layers-separately)) (depends on 4)
 
 ### Phase 3: Stable Identity and Split/Merge Lineage
 - [ ] Task 6: Assign stable analytical IDs across windows ([details](phase-03-identity-and-lineage.md#task-6-assign-stable-analytical-ids-across-windows)) (depends on 4)
