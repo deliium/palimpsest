@@ -113,6 +113,55 @@ def _empty_analysis() -> OrganizationAnalysis:
     )
 
 
+def _full_analysis(
+    candidates: tuple[OrganizationCandidate, ...], *, history_truncated: bool = False
+) -> OrganizationAnalysis:
+    detection = OrganizationDetectionResult(
+        windows=(
+            OrganizationWindowResult(
+                window_index=0,
+                start_tick=0,
+                end_tick=9,
+                candidate_keys=tuple(
+                    candidate.candidate_key for candidate in candidates
+                ),
+                lane_presence=tuple(
+                    (family, True)
+                    for family in (
+                        "roles",
+                        "goals",
+                        "resources",
+                        "procedures",
+                        "records",
+                        "commitments",
+                        "identities",
+                    )
+                ),
+            ),
+        ),
+        candidates=candidates,
+        coverage=OrganizationCoverage.of(7, 7),
+    )
+    return derive_organization_lineage(
+        assign_organization_identities(detection),
+        history_truncated=history_truncated,
+    )
+
+
+def test_truncated_history_is_partial() -> None:
+    candidates = (_candidate("c1", 0, ("a", "b", "c")),)
+    present = compute_organization_formation_metric(
+        _full_analysis(candidates), run_id="run-1", input_revision="rev-1"
+    )
+    truncated = compute_organization_formation_metric(
+        _full_analysis(candidates, history_truncated=True),
+        run_id="run-1",
+        input_revision="rev-1",
+    )
+    assert present.availability is MetricAvailability.PRESENT
+    assert truncated.availability is MetricAvailability.PARTIAL
+
+
 @pytest.mark.parametrize(
     ("compute", "family"),
     (

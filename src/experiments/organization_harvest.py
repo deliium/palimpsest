@@ -89,9 +89,13 @@ def build_completed_run_organization_harvest(
     detection = detect_organization_candidates(windows)
     assignment = assign_organization_identities(detection)
     layers = project_organization_layers(assignment, rows)
-    analysis = derive_organization_lineage(assignment, layer_view=layers)
+    truncated_history = any("history_truncated" in row.owner.notices for row in rows)
+    analysis = derive_organization_lineage(
+        assignment,
+        layer_view=layers,
+        history_truncated=truncated_history,
+    )
     anchors = tuple(anchor for window in windows for anchor in window.anchors)
-    truncated_history = any(edge.kind.value == "dissolved" for edge in analysis.edges)
     _LOG.info(
         "organization_harvest_completed_run run_id=%s owners=%s candidates=%s",
         run_id,

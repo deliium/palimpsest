@@ -6,7 +6,12 @@ from dataclasses import replace
 
 import pytest
 
-from agents.cognition import OrganizationConceptLedger, build_cognitive_loop
+from agents.cognition import (
+    OrganizationConceptLedger,
+    Perspective,
+    build_cognitive_loop,
+    empty_organization_concept_ledger,
+)
 from agents.cognition.configuration import (
     CognitionLoopConfig,
     CognitionOrganizationMode,
@@ -24,7 +29,8 @@ from simulation.runner_models import (
     WorldScenarioSpec,
 )
 from tests.simulation_helpers import alive_body, make_location, make_weather
-from world.identifiers import WorldId, WorldRevision
+from world import Observation
+from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import default_physical_rules
 
 pytestmark = pytest.mark.unit
@@ -215,3 +221,69 @@ async def test_result_exports_one_ledger_per_owner() -> None:
         type(ledger) is OrganizationConceptLedger
         for ledger in result.organization_concept_ledgers
     )
+
+
+@pytest.mark.asyncio
+async def test_enabled_owner_starts_without_organization_content() -> None:
+    async with await SimulationRunner.from_config(
+        _config(enabled=True), run_id=RunId("run-organization-empty-start")
+    ) as runner:
+        for runtime in runner._runtimes:
+            assert runtime._organization_concepts is None
+        result = await runner.run()
+
+    assert result.organization_concept_ledgers
+    assert all(
+        ledger.concepts == ()
+        for ledger in result.organization_concept_ledgers
+    )
+
+
+def test_fork_state_carries_prepared_organization_ledger() -> None:
+    config = CognitionLoopConfig(
+        organization_concept_mode=CognitionOrganizationMode.DETERMINISTIC
+    )
+    loop = build_cognitive_loop(config)
+    assert loop._organization_concept_policy is not None
+    ledger = empty_organization_concept_ledger(
+        AgentId("agent-1"), loop._organization_concept_policy
+    )
+    loop._prepared_organization_concepts = ledger
+
+    state = loop.export_fork_state()
+    assert state.prepared_organization_concepts is ledger
+
+    restored = build_cognitive_loop(config)
+    restored.restore_fork_state(state)
+    assert restored._prepared_organization_concepts is ledger
+
+
+def test_v1_fork_state_without_organization_field_restores_none() -> None:
+    config = CognitionLoopConfig(
+        organization_concept_mode=CognitionOrganizationMode.DETERMINISTIC
+    )
+    loop = build_cognitive_loop(config)
+    state = replace(loop.export_fork_state(), prepared_organization_concepts=None)
+
+    restored = build_cognitive_loop(config)
+    restored.restore_fork_state(state)
+    assert restored._prepared_organization_concepts is None
+
+
+def test_perspective_snapshot_preserves_organization_ledger() -> None:
+    ledger = empty_organization_concept_ledger(AgentId("agent-1"))
+    perspective = Perspective(
+        agent_id=AgentId("agent-1"),
+        observation=Observation(
+            world_id=WorldId("world-1"),
+            observer_id=EntityId("ent-1"),
+            revision=WorldRevision(0),
+        ),
+        memories=(),
+        beliefs=(),
+        inbox=(),
+        organization_concepts=ledger,
+    )
+
+    snapshot = perspective.to_snapshot()
+    assert snapshot.organization_concepts is ledger

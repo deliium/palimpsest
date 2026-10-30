@@ -1446,7 +1446,12 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         assignment = assign_organization_identities(detection)
         layers = project_organization_layers(assignment, organization_rows)
         organization_analysis = derive_organization_lineage(
-            assignment, layer_view=layers
+            assignment,
+            layer_view=layers,
+            history_truncated=any(
+                "history_truncated" in row.owner.notices
+                for row in organization_rows
+            ),
         )
         _safe(
             "organization_formation",

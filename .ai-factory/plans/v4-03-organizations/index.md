@@ -5,7 +5,8 @@ Mode: ultra
 Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-30
 Plan identifier: `v4-03-organizations`
-Status: ready for implementation; 22 tasks across 8 phases.
+Status: implemented; 22 tasks across 8 phases. Qualification receipt recorded
+below; certification remains pending the unexecuted required lanes.
 
 ## Original Request
 
@@ -85,7 +86,8 @@ All organization activity ultimately occurs through agents, records, roles and r
   `phase-NN-<slug>.md`, and `index.md` is the canonical entrypoint.
 - Research source: `.ai-factory/RESEARCH.md` and `.ai-factory/research/` do not
   exist; no external research conclusions are invented.
-- Execution: planning only in this invocation.
+- Execution: implemented on `main`; verification and qualification receipt
+  recorded below.
 
 ## Roadmap Linkage
 
@@ -408,3 +410,47 @@ Proposed implementation checkpoints; no commit is made by planning.
 - Documentation states what an organization is, what it is not, how the nine
   aspects are referenced, how membership and identity behave, and how lineage is
   formed, with every count matching the code.
+
+## Verification Receipt
+
+Recorded 2026-10-31 after the V4-03 verification pass and its follow-up fixes.
+Each required lane is reported with one of `executed_passed`,
+`executed_failed`, or `unexecuted` plus a prerequisite; a skipped lane is never
+reported as a pass.
+
+| Lane | State | Evidence / prerequisite |
+| --- | --- | --- |
+| Unit + architecture | `executed_passed` | `uv run --frozen --python 3.12.14 pytest --cov --cov-report=term`; 7,275 passed, 3 skipped, integration/compose excluded by project config; total coverage 78% |
+| Organization suites | `executed_passed` | `tests/unit/test_organization_*.py` + `tests/architecture/test_organization_boundaries.py`; 280 passed |
+| V1–V4 focused gates | `executed_passed` | V1 regression, V2 invariants, runner v4/v56, v4 scaffolding/versioning/migration/scale, organization catalog; 99 passed |
+| Static gates | `executed_passed` | `ruff check src tests`; `mypy src tests` (1,759 files); `lint-imports` (25 kept, 0 broken) |
+| Research UI | `executed_passed` | `vitest run` 49 files / 249 tests; `svelte-check` 0 errors/0 warnings. `pnpm` is not installed; the pinned local `node_modules/.bin` executables were used |
+| Compose config | `executed_passed` | `docker compose config --quiet` |
+| Integration | `unexecuted` | no host-reachable disposable PostgreSQL: the local Docker daemon published no container endpoint/port, so `PALIMPSEST_TEST_DATABASE_URL` could not be served |
+| Compose/browser runtime | `unexecuted` | full zero-install Docker/browser acceptance stack was not started in this session |
+| Browser acceptance | `unexecuted` | Playwright browsers are present, but the Compose-hosted run was not executed |
+| Godot regression | `unexecuted` | `GODOT_BIN` is unset; prerequisite `godot-4.7.2` |
+| Benchmark regression | `unexecuted` | scale lane is opt-in and was not run in this session |
+| Documentation | `executed_passed` | `tests/unit/test_organization_docs.py` plus doc-parity architecture tests |
+
+Follow-up fixes applied after the verification pass:
+
+- `history_truncated` provenance is now derived from owner ledger notices rather
+  than from `dissolved` lineage edges; the analysis carries
+  `history_truncated` and the four metric families report `PARTIAL` when owner
+  history was truncated.
+- Added `tests/unit/test_organization_harvest_completed_run.py` (completed-run
+  harvest provenance/empty/missing-attribute cases), fork-state round-trip and
+  v1-state restore tests, a `Perspective.to_snapshot()` parity test, and a
+  truncated-history metric availability test.
+- Interface notes: the bridge function is named
+  `build_completed_run_organization_harvest` to avoid colliding with the
+  macro-society `build_completed_run_harvest` facade export, and
+  `assign_organization_identities` accepts the detection result rather than a
+  bare window sequence. All call sites and tests use these names.
+
+Certification: `v4-03-organizations certified=false`. The unit, architecture,
+static, Research UI, and Compose-config lanes pass; certification remains
+withheld until integration, Compose/browser, Godot `godot-4.7.2`, and benchmark
+regression lanes are executed and recorded. `.ai-factory/ROADMAP.md` M8 now
+registers V4-03 through the `$aif-roadmap` owner workflow (2026-10-31).

@@ -59,6 +59,8 @@ def _availability(
         return MetricAvailability.ABSENT
     if not require_edges and not window.candidates:
         return MetricAvailability.ABSENT
+    if analysis.history_truncated:
+        return MetricAvailability.PARTIAL
     if any(not present for _, present in window.lane_presence):
         return MetricAvailability.PARTIAL
     if window.coverage.ratio is not None and window.coverage.ratio < 1.0:
