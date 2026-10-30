@@ -251,8 +251,8 @@ fail closed.
 - [x] Task 5: Project objective, subjective, and analytical layers separately ([details](phase-02-evidence-and-detection.md#task-5-project-objective-subjective-and-analytical-layers-separately)) (depends on 4)
 
 ### Phase 3: Stable Identity and Split/Merge Lineage
-- [ ] Task 6: Assign stable analytical IDs across windows ([details](phase-03-identity-and-lineage.md#task-6-assign-stable-analytical-ids-across-windows)) (depends on 4)
-- [ ] Task 7: Derive split/merge lineage with acyclicity validation ([details](phase-03-identity-and-lineage.md#task-7-derive-splitmerge-lineage-with-acyclicity-validation)) (depends on 6)
+- [x] Task 6: Assign stable analytical IDs across windows ([details](phase-03-identity-and-lineage.md#task-6-assign-stable-analytical-ids-across-windows)) (depends on 4)
+- [x] Task 7: Derive split/merge lineage with acyclicity validation ([details](phase-03-identity-and-lineage.md#task-7-derive-splitmerge-lineage-with-acyclicity-validation)) (depends on 6)
 
 ### Phase 4: Metric Families and Catalog Registration
 - [ ] Task 8: Emit the four macro-society metric documents ([details](phase-04-metrics-and-catalog.md#task-8-emit-the-four-macro-society-metric-documents)) (depends on 4, 5, 7)
