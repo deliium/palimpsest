@@ -67,6 +67,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
     EVENT_SCHEMA_REPLAY_V21,
+    EVENT_SCHEMA_REPLAY_V22,
     OccurrenceContext,
     WorldEvent,
     event_is_replayable,
@@ -2546,7 +2547,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         raise PersistenceSerializationError("invalid_object", f"{path}.details")
     try:
         schema_version = _nonneg_int_field(data, "schema_version", path=path)
-        if not EVENT_SCHEMA_REPLAY_V2 <= schema_version <= EVENT_SCHEMA_REPLAY_V21:
+        if not EVENT_SCHEMA_REPLAY_V2 <= schema_version <= EVENT_SCHEMA_REPLAY_V22:
             raise PersistenceSerializationError(
                 "unsupported_version",
                 f"{path}.schema_version",

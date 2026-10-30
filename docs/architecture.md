@@ -258,6 +258,7 @@ Register roadmap milestones via `/aif-roadmap` (e.g. **M7 — V3 Generational Ar
 
 ## See also
 
+- [V4 architecture](v4-architecture.md)
 - [Cognition and agent runtime](cognition-runtime.md)
 - [Memory reconstruction](memory-reconstruction.md)
 - [Social communication](social-communication.md)
