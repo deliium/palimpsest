@@ -78,6 +78,13 @@ from analysis.knowledge_repository_metrics import (
     compute_knowledge_repository_organization,
     compute_knowledge_repository_survival,
 )
+from analysis.macro_society_lineage import MacroSocietyAnalysis
+from analysis.macro_society_metrics import (
+    compute_macro_society_identity_alignment_metric,
+    compute_macro_society_lineage_metric,
+    compute_macro_society_membership_dispute_metric,
+    compute_macro_society_structure_metric,
+)
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
 from analysis.mentorship_metrics import (
@@ -300,6 +307,7 @@ class MetricComputationInputs:
     society_divergence: SocietyDivergenceResult | None = None
     society_isolation: SocietyIsolationResult | None = None
     society_community_count: int = 0
+    macro_society_analysis: MacroSocietyAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1379,6 +1387,41 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 run_id=run_id,
                 input_revision=revision,
                 community_count=community_count,
+            ),
+        )
+
+    if inputs.macro_society_analysis is not None:
+        macro_analysis = inputs.macro_society_analysis
+        _safe(
+            "macro_society_structure",
+            lambda: compute_macro_society_structure_metric(
+                macro_analysis,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "macro_society_identity_alignment",
+            lambda: compute_macro_society_identity_alignment_metric(
+                macro_analysis,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "macro_society_lineage",
+            lambda: compute_macro_society_lineage_metric(
+                macro_analysis,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "macro_society_membership_dispute",
+            lambda: compute_macro_society_membership_dispute_metric(
+                macro_analysis,
+                run_id=run_id,
+                input_revision=revision,
             ),
         )
 

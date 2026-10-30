@@ -255,8 +255,8 @@ fail closed.
 - [x] Task 7: Derive split/merge lineage with acyclicity validation ([details](phase-03-identity-and-lineage.md#task-7-derive-splitmerge-lineage-with-acyclicity-validation)) (depends on 6)
 
 ### Phase 4: Metric Families and Catalog Registration
-- [ ] Task 8: Emit the four macro-society metric documents ([details](phase-04-metrics-and-catalog.md#task-8-emit-the-four-macro-society-metric-documents)) (depends on 4, 5, 7)
-- [ ] Task 9: Register four families and raise the catalog to 140 ([details](phase-04-metrics-and-catalog.md#task-9-register-four-families-and-raise-the-catalog-to-140)) (depends on 8)
+- [x] Task 8: Emit the four macro-society metric documents ([details](phase-04-metrics-and-catalog.md#task-8-emit-the-four-macro-society-metric-documents)) (depends on 4, 5, 7)
+- [x] Task 9: Register four families and raise the catalog to 140 ([details](phase-04-metrics-and-catalog.md#task-9-register-four-families-and-raise-the-catalog-to-140)) (depends on 8)
 
 ### Phase 5: Snapshot Artifact Contract
 - [ ] Task 10: Define snapshot models and the canonical codec ([details](phase-05-artifact-contract.md#task-10-define-snapshot-models-and-the-canonical-codec)) (depends on 7, 8)

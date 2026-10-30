@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 136
+METRIC_FAMILY_COUNT: Final[int] = 140
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -211,6 +211,10 @@ class MetricFamilyId(StrEnum):
     CULTURAL_NARRATIVE_SURVIVAL = "cultural_narrative_survival"
     CULTURAL_VOCABULARY_DIFFERENTIATION = "cultural_vocabulary_differentiation"
     CULTURAL_TECHNOLOGY_CONTINUITY = "cultural_technology_continuity"
+    MACRO_SOCIETY_STRUCTURE = "macro_society_structure"
+    MACRO_SOCIETY_IDENTITY_ALIGNMENT = "macro_society_identity_alignment"
+    MACRO_SOCIETY_LINEAGE = "macro_society_lineage"
+    MACRO_SOCIETY_MEMBERSHIP_DISPUTE = "macro_society_membership_dispute"
 
 
 class DenominatorKind(StrEnum):
@@ -4476,6 +4480,201 @@ def _spec_society_isolation() -> MetricSpecification:
     )
 
 
+def _spec_macro_society_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MACRO_SOCIETY_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="known_persons_with_detached_macro_society_evidence",
+        denominator="known_person_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dead persons remain in the window they were observed",
+        zero_holding_policy=(
+            "no window or no candidates -> availability=absent; no zero inference"
+        ),
+        opportunity_vs_occurrence=(
+            "candidates are overlapping analytical labels, not an objective "
+            "census or an exclusive partition"
+        ),
+        self_edge_policy="self edges are rejected before clustering",
+        censoring_policy=(
+            "persons below candidate size remain explicit fragments, never "
+            "silently merged"
+        ),
+        formulas={
+            "candidate_count": "analytical candidates in the final window",
+            "largest_candidate_share": "largest candidate members / known persons",
+            "covered_person_count": "persons in at least one candidate",
+            "overlap_person_count": "persons in at least two candidates",
+            "fragment_person_count": "persons in no candidate",
+            "mean_candidate_members": "mean candidate size",
+            "lane_presence_count": "evidence lanes present in the final window",
+        },
+        value_keys=(
+            "candidate_count",
+            "covered_person_count",
+            "fragment_person_count",
+            "lane_presence_count",
+            "largest_candidate_share",
+            "mean_candidate_members",
+            "overlap_person_count",
+        ),
+        empty_case="no candidates -> availability=absent",
+        one_case="one candidate is reported without overlap",
+        unknown_case=(
+            "unobservable evidence -> availability=unknown; a missing lane makes "
+            "the document partial, never coerced to absent society or zero "
+            "evidence"
+        ),
+    )
+
+
+def _spec_macro_society_identity_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MACRO_SOCIETY_IDENTITY_ALIGNMENT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="final_window_candidates_with_self_or_territory_evidence",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dead persons remain in the window they were observed",
+        zero_holding_policy="no candidates -> availability=absent",
+        opportunity_vs_occurrence=(
+            "self-identification is optional evidence; a candidate without it is "
+            "still a candidate"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="absent self-identification is reported, not imputed",
+        formulas={
+            "candidates_with_self_identification": (
+                "candidates supported by the self-identification lane"
+            ),
+            "self_identified_member_share": (
+                "members in self-identified candidates / covered members"
+            ),
+            "unrecognized_self_identified_group_count": (
+                "candidates supported only by self-identification"
+            ),
+            "territory_alignment_share": (
+                "territory-supported candidates whose territory evidence covers "
+                "every member / territory-supported candidates"
+            ),
+            "layer_disagreement_count": "contested candidates",
+            "territory_supported_candidate_count": "candidates with territory evidence",
+        },
+        value_keys=(
+            "candidates_with_self_identification",
+            "layer_disagreement_count",
+            "self_identified_member_share",
+            "territory_alignment_share",
+            "territory_supported_candidate_count",
+            "unrecognized_self_identified_group_count",
+        ),
+        empty_case="no candidates -> availability=absent",
+        one_case="one candidate reports its own self-identification support",
+        unknown_case=(
+            "unobservable evidence -> availability=unknown; a missing lane makes "
+            "the document partial, never zero"
+        ),
+    )
+
+
+def _spec_macro_society_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MACRO_SOCIETY_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="analytical_lineage_edges_between_adjacent_windows",
+        denominator="lineage_edge_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="all adjacent-window transitions in one analytical run",
+        deceased_policy="dissolution is an analytical visibility change, not death",
+        zero_holding_policy="one window with no transitions -> absent counts",
+        opportunity_vs_occurrence=(
+            "lineage explains analytical identity changes only; it is not "
+            "objective history"
+        ),
+        self_edge_policy="continuation edges keep one identity and add no graph edge",
+        censoring_policy="a missing successor is reported as dissolution",
+        formulas={
+            "continuation_count": "continued identity transitions",
+            "transform_count": "transformed or absorbed identity transitions",
+            "split_count": "parent-to-child split edges",
+            "merge_count": "parent-to-merged-child edges",
+            "dissolution_count": "identities with no successor",
+            "emergence_count": "identities with no predecessor",
+            "mean_continuation_jaccard": "mean overlap of non-self transitions",
+            "lineage_window_count": "observation windows analysed",
+        },
+        value_keys=(
+            "continuation_count",
+            "dissolution_count",
+            "emergence_count",
+            "lineage_window_count",
+            "mean_continuation_jaccard",
+            "merge_count",
+            "split_count",
+            "transform_count",
+        ),
+        empty_case="no transitions -> availability=absent",
+        one_case="one window reports emergence only",
+        unknown_case=(
+            "missing windows -> availability=unknown; never interpolated"
+        ),
+    )
+
+
+def _spec_macro_society_membership_dispute() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MACRO_SOCIETY_MEMBERSHIP_DISPUTE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_candidate_memberships",
+        denominator="known_person_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dead persons remain in the window they were observed",
+        zero_holding_policy="no candidates -> availability=absent",
+        opportunity_vs_occurrence=(
+            "disagreement between evidence lanes is a finding, not an error to "
+            "resolve by forcing one society"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="unresolved fragments stay explicit and are never dropped",
+        formulas={
+            "disputed_member_count": "members whose self-claim points elsewhere",
+            "disputed_candidate_count": "candidates with at least one disputed member",
+            "overlap_member_count": "persons in at least two candidates",
+            "contested_candidate_count": "candidates classified contested",
+            "unresolved_fragment_count": "persons in no candidate",
+            "contested_share": "disputed members / known persons",
+        },
+        value_keys=(
+            "contested_candidate_count",
+            "contested_share",
+            "disputed_candidate_count",
+            "disputed_member_count",
+            "overlap_member_count",
+            "unresolved_fragment_count",
+        ),
+        empty_case="no candidates -> availability=absent",
+        one_case="one candidate may report zero disputes",
+        unknown_case=(
+            "unobservable self-identification -> availability=unknown; absence is "
+            "not a dispute and not a zero"
+        ),
+    )
+
+
 def _spec_society_contact() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.SOCIETY_CONTACT,
@@ -6137,6 +6336,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cultural_narrative_survival,
     _spec_cultural_vocabulary_differentiation,
     _spec_cultural_technology_continuity,
+    _spec_macro_society_structure,
+    _spec_macro_society_identity_alignment,
+    _spec_macro_society_lineage,
+    _spec_macro_society_membership_dispute,
 )
 
 

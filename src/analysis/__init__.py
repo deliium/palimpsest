@@ -404,6 +404,12 @@ from analysis.macro_society_lineage import (
     derive_macro_society_lineage,
     validate_macro_society_lineage,
 )
+from analysis.macro_society_metrics import (
+    compute_macro_society_identity_alignment_metric,
+    compute_macro_society_lineage_metric,
+    compute_macro_society_membership_dispute_metric,
+    compute_macro_society_structure_metric,
+)
 from analysis.matrix_metric_summary import (
     MATRIX_METRIC_SUMMARY_SCHEMA_VERSION,
     MatrixMetricCellRef,
@@ -1301,6 +1307,10 @@ __all__ = [
     "compute_knowledge_repository_access",
     "compute_knowledge_repository_organization",
     "compute_knowledge_repository_survival",
+    "compute_macro_society_identity_alignment_metric",
+    "compute_macro_society_lineage_metric",
+    "compute_macro_society_membership_dispute_metric",
+    "compute_macro_society_structure_metric",
     "compute_memory_drift",
     "compute_memory_dynamics",
     "compute_mentorship_bonds",
