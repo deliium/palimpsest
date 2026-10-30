@@ -259,8 +259,8 @@ fail closed.
 - [x] Task 9: Register four families and raise the catalog to 140 ([details](phase-04-metrics-and-catalog.md#task-9-register-four-families-and-raise-the-catalog-to-140)) (depends on 8)
 
 ### Phase 5: Snapshot Artifact Contract
-- [ ] Task 10: Define snapshot models and the canonical codec ([details](phase-05-artifact-contract.md#task-10-define-snapshot-models-and-the-canonical-codec)) (depends on 7, 8)
-- [ ] Task 11: Add bounded paging and read/publication ports ([details](phase-05-artifact-contract.md#task-11-add-bounded-paging-and-readpublication-ports)) (depends on 10)
+- [x] Task 10: Define snapshot models and the canonical codec ([details](phase-05-artifact-contract.md#task-10-define-snapshot-models-and-the-canonical-codec)) (depends on 7, 8)
+- [x] Task 11: Add bounded paging and read/publication ports ([details](phase-05-artifact-contract.md#task-11-add-bounded-paging-and-readpublication-ports)) (depends on 10)
 
 ### Phase 6: Composition and Durable Publication
 - [ ] Task 12: Compose completed-run harvests into snapshots ([details](phase-06-composition-and-persistence.md#task-12-compose-completed-run-harvests-into-snapshots)) (depends on 7, 11)
