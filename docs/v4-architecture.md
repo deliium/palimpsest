@@ -47,10 +47,11 @@ agents.
 
 ## Context map
 
-Thirteen bounded contexts. Twelve carry a closed capability flag; one
-(`societal_resilience`) is analysis-only and has no flag. Context identifiers are
-stable ASCII lowercase snake_case and are the same identifiers used by the
-machine-readable registry in `simulation.v4_architecture`.
+Fourteen bounded contexts. Twelve carry a closed capability flag; two
+(`societal_resilience` and `macro_society_identity`) are analysis-only and have no
+flag. Context identifiers are stable ASCII lowercase snake_case and are the same
+identifiers used by the machine-readable registry in `simulation.v4_architecture`.
+The registry revision is `v4-context-map-v2`.
 
 | Context | Capability flag | Authority | Owning packages | Existing mechanism | Event strategy | Measurement |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -67,6 +68,7 @@ machine-readable registry in `simulation.v4_architecture`.
 | `ecological_feedback` | `ecological_feedback` | objective-world | `world`, `simulation` | resource regeneration/depletion | reserve event 25 / codec `v23` | deferred to V4-02+ |
 | `disasters` | `disasters` | objective-world | `world`, `simulation` | environmental hazards | reserve event 26 / codec `v24` | deferred to V4-02+ |
 | `societal_resilience` | — (analysis-only) | detached-analysis | `analysis` | new detached classification | reuse | deferred to V4-02+ |
+| `macro_society_identity` | — (analysis-only) | detached-analysis | `analysis` | candidate-community analysis, cultural/institutional evidence joins, group persistence | reuse | V4-02 implementation |
 
 Reservations are not implementations. A reserved event number or codec version
 carries no semantics and no payload; a later plan must still prove
@@ -162,6 +164,16 @@ Resilience and collapse are retrospective classifications over committed
 evidence. This context owns only `analysis`, has no capability flag, and has no
 mutable world seam. Its findings never feed cognition, memory formation, prompts,
 admission, observations, or stop criteria.
+
+### macro_society_identity
+
+Macro-society identity is a retrospective analytical classification over
+detached evidence. This context owns only `analysis`, has no capability flag, and
+has no mutable world seam. A candidate is an analysis-output label with an
+`msoc-` identifier; it is never a nation, state, polity, civilization, or actor,
+and no global registry exists. Candidates may overlap, be disputed, be
+fragmented, or lack self-identification. Findings never feed cognition, memory
+formation, prompts, admission, observations, or stop criteria.
 
 ## Cross-context contracts
 

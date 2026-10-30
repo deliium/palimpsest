@@ -156,7 +156,9 @@ def test_context_registry_and_capability_ownership() -> None:
     validate_v4_contexts()
     assert set(V4_CONTEXT_BY_ID) == set(V4ContextId)
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset({V4ContextId.SOCIETAL_RESILIENCE})
+    assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset(
+        {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
+    )
     for spec in V4_CONTEXTS:
         if spec.context_id in V4_ANALYSIS_ONLY_CONTEXTS:
             assert spec.capability_flag is None

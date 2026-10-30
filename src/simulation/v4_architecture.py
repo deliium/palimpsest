@@ -35,7 +35,7 @@ from simulation.compatibility import (
     V4_CAPABILITY_FLAGS_WIRE_KEY,
 )
 
-V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v1"
+V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v2"
 V4_ANALYSIS_CAPTURE_SEAM: Final[str] = "analysis_capture"
 
 _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
@@ -53,7 +53,7 @@ _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
         "research_runner",
     }
 )
-_REQUIRED_CONTEXT_COUNT: Final[int] = 13
+_REQUIRED_CONTEXT_COUNT: Final[int] = 14
 _RESERVED_V3_FLAGS: Final[frozenset[str]] = frozenset(V3_CAPABILITY_FLAG_NAMES)
 
 
@@ -73,6 +73,7 @@ class V4ContextId(StrEnum):
     ECOLOGICAL_FEEDBACK = "ecological_feedback"
     DISASTERS = "disasters"
     SOCIETAL_RESILIENCE = "societal_resilience"
+    MACRO_SOCIETY_IDENTITY = "macro_society_identity"
 
 
 class V4Authority(StrEnum):
@@ -287,6 +288,25 @@ V4_CONTEXTS: Final[tuple[V4ContextSpec, ...]] = (
             "no mutable world seam or collapse-triggered world effect",
         ),
     ),
+    V4ContextSpec(
+        context_id=V4ContextId.MACRO_SOCIETY_IDENTITY,
+        capability_flag=None,
+        authority=V4Authority.DETACHED_ANALYSIS,
+        owner_packages=("analysis",),
+        existing_mechanism=(
+            "candidate-community analysis, cultural/institutional evidence joins, "
+            "group persistence"
+        ),
+        required_config_seam=V4_ANALYSIS_CAPTURE_SEAM,
+        uses_existing_events=True,
+        prerequisite_contexts=(),
+        non_goals=(
+            "no objective nation, state, polity, or civilization entity",
+            "no global society registry or WorldEngine identity",
+            "no exclusive partition of persons or forced single membership",
+            "no feedback into cognition, memory, prompts, admission, or stop selectors",
+        ),
+    ),
 )
 
 V4_CONTEXT_BY_ID: Final[Mapping[V4ContextId, V4ContextSpec]] = MappingProxyType(
@@ -294,7 +314,7 @@ V4_CONTEXT_BY_ID: Final[Mapping[V4ContextId, V4ContextSpec]] = MappingProxyType(
 )
 
 V4_ANALYSIS_ONLY_CONTEXTS: Final[frozenset[V4ContextId]] = frozenset(
-    {V4ContextId.SOCIETAL_RESILIENCE}
+    {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
 )
 
 V4_CAPABILITY_FLAGS: Final[tuple[str, ...]] = tuple(
