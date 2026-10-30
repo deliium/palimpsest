@@ -10,6 +10,7 @@ from api.routes.lineage import router as lineage_router
 from api.routes.macro_society import router as macro_society_router
 from api.routes.observer import router as observer_router
 from api.routes.observer_stream import router as observer_stream_router
+from api.routes.organization import router as organization_router
 from api.routes.replay import router as replay_router
 from api.routes.research_matrix import router as research_matrix_router
 from api.routes.simulations import router as simulations_router
@@ -26,6 +27,7 @@ __all__ = [
     "macro_society_router",
     "observer_router",
     "observer_stream_router",
+    "organization_router",
     "replay_router",
     "research_matrix_router",
     "research_router",

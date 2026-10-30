@@ -35,6 +35,7 @@ from api.routes import (
     macro_society_router,
     observer_router,
     observer_stream_router,
+    organization_router,
     replay_router,
     research_matrix_router,
     research_router,
@@ -255,6 +256,26 @@ def _attach_macro_society_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_organization_reader(app: FastAPI) -> None:
+    from api.organization_cursor import OrganizationCursorCodec
+    from persistence.organization_filesystem import create_organization_reader
+
+    settings: Settings = app.state.settings
+    secret = (
+        settings.organization_cursor_key.get_secret_value().encode("utf-8")
+        if settings.organization_cursor_key is not None
+        else None
+    )
+    if settings.organization_root is None or secret is None:
+        app.state.organization_cursor_codec = None
+        app.state.organization_reader = None
+        return
+    app.state.organization_cursor_codec = OrganizationCursorCodec.from_secret(secret)
+    app.state.organization_reader = create_organization_reader(
+        settings.organization_root
+    )
+
+
 def _attach_lineage_service(app: FastAPI) -> None:
     from api.lineage_cursor import LineageCursorCodec
 
@@ -316,6 +337,7 @@ def create_app(
     app.state.settings = resolved
     _attach_lineage_service(app)
     _attach_macro_society_reader(app)
+    _attach_organization_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -341,6 +363,7 @@ def create_app(
     app.include_router(debugger_router)
     app.include_router(lineage_router)
     app.include_router(macro_society_router)
+    app.include_router(organization_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

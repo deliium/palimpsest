@@ -31,6 +31,7 @@ from persistence import (
 from simulation.branch_compare import JournalBranchCompare
 from simulation.branch_service import BranchService
 from simulation.macro_society_ports import MacroSocietyReadPort
+from simulation.organization_ports import OrganizationReadPort
 from simulation.persistence import (
     ExperimentRepository,
     RunControlRepository,
@@ -141,6 +142,14 @@ def get_replay_api_service(request: Request) -> ReplayApiService:
 def get_macro_society_reader(request: Request) -> MacroSocietyReadPort | None:
     """Return the read-only macro-society reader, or ``None`` when disabled."""
     return getattr(request.app.state, "macro_society_reader", None)
+
+
+def get_organization_reader(request: Request) -> OrganizationReadPort | None:
+    """Return the read-only organization reader, or ``None`` when disabled."""
+    reader = getattr(request.app.state, "organization_reader", None)
+    if reader is None:
+        return None
+    return cast(OrganizationReadPort, reader)
 
 
 def get_lineage_service(request: Request) -> LineageApiService | None:

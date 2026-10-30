@@ -306,9 +306,9 @@ fail closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 15: Implement the atomic quota-bounded filesystem store ([details](phase-05-publication.md#task-15-implement-the-atomic-quota-bounded-filesystem-store)) (depends on 13)
 
 ### Phase 6: Read-Only API, CLI, and Research UI
-- [ ] Task 16: Add settings and GET-only API routes ([details](phase-06-surfaces.md#task-16-add-settings-and-get-only-api-routes)) (depends on 15)
-- [ ] Task 17: Compose the producer in research_runner ([details](phase-06-surfaces.md#task-17-compose-the-producer-in-research_runner)) (depends on 14, 15)
-- [ ] Task 18: Add the read-only Research UI panel ([details](phase-06-surfaces.md#task-18-add-the-read-only-research-ui-panel)) (depends on 16)
+- [x] Task 16: Add settings and GET-only API routes ([details](phase-06-surfaces.md#task-16-add-settings-and-get-only-api-routes)) (depends on 15)
+- [x] Task 17: Compose the producer in research_runner ([details](phase-06-surfaces.md#task-17-compose-the-producer-in-research_runner)) (depends on 14, 15)
+- [x] Task 18: Add the read-only Research UI panel ([details](phase-06-surfaces.md#task-18-add-the-read-only-research-ui-panel)) (depends on 16)
 
 ### Phase 7: Invariants and Regression
 - [ ] Task 19: Add the organization boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-19-add-the-organization-boundary-and-determinism-suite)) (depends on 2-18)

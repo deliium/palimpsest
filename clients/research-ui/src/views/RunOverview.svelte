@@ -37,6 +37,7 @@
   import MigrationPanel from './MigrationPanel.svelte'
   import EconomyPanel from './EconomyPanel.svelte'
   import MacroSocietiesPanel from './MacroSocietiesPanel.svelte'
+  import OrganizationsPanel from './OrganizationsPanel.svelte'
   import ProjectsPanel from './ProjectsPanel.svelte'
 
   interface Props {
@@ -96,6 +97,7 @@
           { id: 'institutions', label: 'Institutions' },
           { id: 'societies', label: 'Societies' },
           { id: 'macro-societies', label: 'Macro-societies' },
+          { id: 'organizations', label: 'Organizations' },
           { id: 'contact', label: 'Contact' },
         ],
       },
@@ -307,6 +309,8 @@
     <SocietiesPanel {runId} {selection} />
   {:else if view === 'macro-societies'}
     <MacroSocietiesPanel {runId} {selection} />
+  {:else if view === 'organizations'}
+    <OrganizationsPanel {runId} {selection} />
   {:else if view === 'institutions'}
     <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}

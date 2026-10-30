@@ -951,6 +951,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.organization_composition import (
+                producer_options_from_args as organization_options_from_args,
+            )
+
+            organization_options = organization_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_organization_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1201,8 +1213,7 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             )
             try:
                 receipt_path.write_text(
-                    json.dumps(receipt, sort_keys=True, separators=(",", ":"))
-                    + "\n",
+                    json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n",
                     encoding="utf-8",
                 )
             except OSError:
@@ -1213,10 +1224,38 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"macro_society_publication_status={receipt['status']}")
             print(f"macro_society_publication_reason={receipt['reason_code']}")
             if "publication_id" in receipt:
-                print(
-                    "macro_society_publication_id="
-                    f"{receipt['publication_id']}"
+                print(f"macro_society_publication_id={receipt['publication_id']}")
+        if organization_options.enabled:
+            import json
+
+            from research_runner.organization_composition import (
+                publish_organization_harvest,
+            )
+
+            receipt = publish_organization_harvest(
+                runner_result=arm.runner_result,
+                run_id=assignment.run_id.value,
+                input_revision=arm.config_fingerprint,
+                generated_tick=arm.runner_result.ticks_committed,
+                options=organization_options,
+            )
+            receipt_path = Path(args.artifact_root) / (
+                f"organization-publication-{assignment.run_id.value}.json"
+            )
+            try:
+                receipt_path.write_text(
+                    json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n",
+                    encoding="utf-8",
                 )
+            except OSError:
+                _LOG.warning(
+                    "organization_receipt_write_failed run=%s",
+                    assignment.run_id.value,
+                )
+            print(f"organization_publication_status={receipt['status']}")
+            print(f"organization_publication_reason={receipt['reason_code']}")
+            if "publication_id" in receipt:
+                print(f"organization_publication_id={receipt['publication_id']}")
         if lineage_options is not None:
             import json
 
@@ -1384,6 +1423,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--macro-society-root", default=None)
     gen_p.add_argument("--macro-society-max-publications", type=int, default=16)
     gen_p.add_argument("--macro-society-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--organization-root", default=None)
+    gen_p.add_argument("--organization-max-publications", type=int, default=16)
+    gen_p.add_argument("--organization-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)
