@@ -298,12 +298,12 @@ fail closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 11: Emit four metric families and raise the catalog to 144 ([details](phase-03-detached-analysis.md#task-11-emit-four-metric-families-and-raise-the-catalog-to-144)) (depends on 8, 9, 10)
 
 ### Phase 4: Organization Snapshot Contract
-- [ ] Task 12: Define snapshot models and the canonical codec ([details](phase-04-snapshot-contract.md#task-12-define-snapshot-models-and-the-canonical-codec)) (depends on 10, 11)
-- [ ] Task 13: Add paging, read/publication ports, and cursor DTO ([details](phase-04-snapshot-contract.md#task-13-add-paging-readpublication-ports-and-cursor-dto)) (depends on 12)
+- [x] Task 12: Define snapshot models and the canonical codec ([details](phase-04-snapshot-contract.md#task-12-define-snapshot-models-and-the-canonical-codec)) (depends on 10, 11)
+- [x] Task 13: Add paging, read/publication ports, and cursor DTO ([details](phase-04-snapshot-contract.md#task-13-add-paging-readpublication-ports-and-cursor-dto)) (depends on 12)
 
 ### Phase 5: Composition and Durable Publication
-- [ ] Task 14: Compose completed-run organization snapshots ([details](phase-05-publication.md#task-14-compose-completed-run-organization-snapshots)) (depends on 11, 13)
-- [ ] Task 15: Implement the atomic quota-bounded filesystem store ([details](phase-05-publication.md#task-15-implement-the-atomic-quota-bounded-filesystem-store)) (depends on 13)
+- [x] Task 14: Compose completed-run organization snapshots ([details](phase-05-publication.md#task-14-compose-completed-run-organization-snapshots)) (depends on 11, 13)
+- [x] Task 15: Implement the atomic quota-bounded filesystem store ([details](phase-05-publication.md#task-15-implement-the-atomic-quota-bounded-filesystem-store)) (depends on 13)
 
 ### Phase 6: Read-Only API, CLI, and Research UI
 - [ ] Task 16: Add settings and GET-only API routes ([details](phase-06-surfaces.md#task-16-add-settings-and-get-only-api-routes)) (depends on 15)
