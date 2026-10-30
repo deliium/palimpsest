@@ -215,6 +215,8 @@ class Settings(BaseSettings):
     civilization_root: Path | None = None
     lineage_cursor_key: SecretStr | None = Field(default=None, repr=False)
     civilization_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    macro_society_root: Path | None = None
+    macro_society_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -262,6 +264,7 @@ class Settings(BaseSettings):
         "research_matrix_root",
         "lineage_root",
         "civilization_root",
+        "macro_society_root",
         mode="before",
     )
     @classmethod
@@ -280,6 +283,17 @@ class Settings(BaseSettings):
         raw = value.get_secret_value()
         if len(raw.encode("utf-8")) < 32:
             raise ValueError("lineage cursor key must be at least 32 UTF-8 bytes")
+        return value
+
+    @field_validator("macro_society_cursor_key")
+    @classmethod
+    def validate_macro_society_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "macro_society cursor key must be at least 32 UTF-8 bytes"
+            )
         return value
 
     @field_validator("civilization_cursor_key")
@@ -551,6 +565,8 @@ class Settings(BaseSettings):
             "has_lineage_root": self.lineage_root is not None,
             "has_civilization_root": self.civilization_root is not None,
             "has_lineage_cursor_key": self.lineage_cursor_key is not None,
+            "has_macro_society_root": self.macro_society_root is not None,
+            "has_macro_society_cursor_key": self.macro_society_cursor_key is not None,
             "has_revision": bool(self.revision),
         }
 

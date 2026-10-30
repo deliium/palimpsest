@@ -137,6 +137,11 @@ def get_replay_api_service(request: Request) -> ReplayApiService:
     return cast(ReplayApiService, service)
 
 
+def get_macro_society_reader(request: Request):
+    """Return the read-only macro-society reader, or ``None`` when disabled."""
+    return getattr(request.app.state, "macro_society_reader", None)
+
+
 def get_lineage_service(request: Request) -> LineageApiService | None:
     service = getattr(request.app.state, "lineage_service", None)
     if service is None:

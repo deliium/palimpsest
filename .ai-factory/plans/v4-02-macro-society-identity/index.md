@@ -267,12 +267,12 @@ fail closed.
 - [x] Task 13: Implement the atomic quota-bounded filesystem store ([details](phase-06-composition-and-persistence.md#task-13-implement-the-atomic-quota-bounded-filesystem-store)) (depends on 11)
 
 ### Phase 7: Read-Only API, CLI, and Research UI
-- [ ] Task 14: Add settings and GET-only API routes ([details](phase-07-api-cli-and-ui.md#task-14-add-settings-and-get-only-api-routes)) (depends on 13)
-- [ ] Task 15: Compose the producer in research_runner ([details](phase-07-api-cli-and-ui.md#task-15-compose-the-producer-in-research_runner)) (depends on 12, 13)
-- [ ] Task 16: Add the read-only Research UI panel ([details](phase-07-api-cli-and-ui.md#task-16-add-the-read-only-research-ui-panel)) (depends on 14)
+- [x] Task 14: Add settings and GET-only API routes ([details](phase-07-api-cli-and-ui.md#task-14-add-settings-and-get-only-api-routes)) (depends on 13)
+- [x] Task 15: Compose the producer in research_runner ([details](phase-07-api-cli-and-ui.md#task-15-compose-the-producer-in-research_runner)) (depends on 12, 13)
+- [x] Task 16: Add the read-only Research UI panel ([details](phase-07-api-cli-and-ui.md#task-16-add-the-read-only-research-ui-panel)) (depends on 14)
 
 ### Phase 8: Invariants and Regression
-- [ ] Task 17: Add the macro-society boundary and determinism suite ([details](phase-08-invariants-and-regression.md#task-17-add-the-macro-society-boundary-and-determinism-suite)) (depends on 2-16)
+- [x] Task 17: Add the macro-society boundary and determinism suite ([details](phase-08-invariants-and-regression.md#task-17-add-the-macro-society-boundary-and-determinism-suite)) (depends on 2-16)
 - [ ] Task 18: Execute the full V1-V4 regression and qualification lanes ([details](phase-08-invariants-and-regression.md#task-18-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 17)
 
 ### Phase 9: Documentation and Final Verification

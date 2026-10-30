@@ -7,6 +7,7 @@ from api.routes.health import router as health_router
 from api.routes.inspection import research_router as research_router
 from api.routes.inspection import router as inspection_router
 from api.routes.lineage import router as lineage_router
+from api.routes.macro_society import router as macro_society_router
 from api.routes.observer import router as observer_router
 from api.routes.observer_stream import router as observer_stream_router
 from api.routes.replay import router as replay_router
@@ -22,6 +23,7 @@ __all__ = [
     "health_router",
     "inspection_router",
     "lineage_router",
+    "macro_society_router",
     "observer_router",
     "observer_stream_router",
     "replay_router",

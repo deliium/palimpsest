@@ -939,6 +939,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             raise ValueError("choose --source-clean or --source-artifact-digest")
         if not args.source_clean and not args.source_artifact_digest:
             raise ValueError("source clean assertion or artifact digest required")
+        try:
+            from research_runner.macro_society_composition import (
+                producer_options_from_args,
+            )
+
+            macro_society_options = producer_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_macro_society_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1147,6 +1159,16 @@ def _cmd_generational(args: argparse.Namespace) -> int:
         print(f"run_id={assignment.run_id.value}")
         print(f"stop_reason={arm.runner_result.stop_reason.value}")
         print(f"ticks_committed={arm.runner_result.ticks_committed}")
+        if macro_society_options.enabled:
+            from research_runner.macro_society_composition import (
+                publish_macro_society_harvest,
+            )
+
+            receipt = publish_macro_society_harvest(
+                options=macro_society_options, harvest=None
+            )
+            print(f"macro_society_publication_status={receipt['status']}")
+            print(f"macro_society_publication_reason={receipt['reason_code']}")
         if lineage_options is not None:
             import json
 
@@ -1186,6 +1208,9 @@ def _add_generational_matrix_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Opt in to detached cultural evidence capture",
     )
+    parser.add_argument("--macro-society-root", default=None)
+    parser.add_argument("--macro-society-max-publications", type=int, default=16)
+    parser.add_argument("--macro-society-max-bytes", type=int, default=8_388_608)
     parser.add_argument("--lineage-root", default=None)
     parser.add_argument("--lineage-cadence", type=int, default=1)
     parser.add_argument("--lineage-max-publications", type=int, default=1000)
@@ -1308,6 +1333,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--recording-artifact-id", default=None)
     gen_p.add_argument("--recording-namespace", default=None)
     gen_p.add_argument("--recording-lookup-mode", default=None)
+    gen_p.add_argument("--macro-society-root", default=None)
+    gen_p.add_argument("--macro-society-max-publications", type=int, default=16)
+    gen_p.add_argument("--macro-society-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

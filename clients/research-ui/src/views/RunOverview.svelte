@@ -36,6 +36,7 @@
   import NarrativePanel from './NarrativePanel.svelte'
   import MigrationPanel from './MigrationPanel.svelte'
   import EconomyPanel from './EconomyPanel.svelte'
+  import MacroSocietiesPanel from './MacroSocietiesPanel.svelte'
   import ProjectsPanel from './ProjectsPanel.svelte'
 
   interface Props {
@@ -94,6 +95,7 @@
         tabs: [
           { id: 'institutions', label: 'Institutions' },
           { id: 'societies', label: 'Societies' },
+          { id: 'macro-societies', label: 'Macro-societies' },
           { id: 'contact', label: 'Contact' },
         ],
       },
@@ -303,6 +305,8 @@
     <AnalyticsPanel {runId} agentId={deepLink.agentId} />
   {:else if view === 'societies'}
     <SocietiesPanel {runId} {selection} />
+  {:else if view === 'macro-societies'}
+    <MacroSocietiesPanel {runId} {selection} />
   {:else if view === 'institutions'}
     <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}

@@ -32,6 +32,7 @@ from api.routes import (
     health_router,
     inspection_router,
     lineage_router,
+    macro_society_router,
     observer_router,
     observer_stream_router,
     replay_router,
@@ -238,6 +239,22 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         log_lifecycle("app_stopped")
 
 
+def _attach_macro_society_reader(app: FastAPI) -> None:
+    from api.macro_society_cursor import MacroSocietyCursorCodec
+    from persistence.macro_society_filesystem import create_macro_society_reader
+
+    settings: Settings = app.state.settings
+    secret = (
+        settings.macro_society_cursor_key.get_secret_value().encode("utf-8")
+        if settings.macro_society_cursor_key is not None
+        else None
+    )
+    app.state.macro_society_cursor_codec = MacroSocietyCursorCodec.from_secret(secret)
+    app.state.macro_society_reader = create_macro_society_reader(
+        settings.macro_society_root
+    )
+
+
 def _attach_lineage_service(app: FastAPI) -> None:
     from api.lineage_cursor import LineageCursorCodec
 
@@ -298,6 +315,7 @@ def create_app(
     )
     app.state.settings = resolved
     _attach_lineage_service(app)
+    _attach_macro_society_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -322,6 +340,7 @@ def create_app(
     app.include_router(research_matrix_router)
     app.include_router(debugger_router)
     app.include_router(lineage_router)
+    app.include_router(macro_society_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)
