@@ -290,11 +290,11 @@ V3 benchmark 30; `prepare_parallel=False`. `institutional_economy` and
 
 ### Phase 6: Invariants and Regression
 - [x] Task 14: Add the V4 architecture invariant suite ([details](phase-06-invariants-and-regression.md#task-14-add-the-v4-architecture-invariant-suite)) (depends on 3-13)
-- [ ] Task 15: Execute the V3 regression lanes under V4 flags off ([details](phase-06-invariants-and-regression.md#task-15-execute-the-v3-regression-lanes-under-v4-flags-off)) (depends on 14)
+- [x] Task 15: Execute the V3 regression lanes under V4 flags off ([details](phase-06-invariants-and-regression.md#task-15-execute-the-v3-regression-lanes-under-v4-flags-off)) (depends on 14)
 
 ### Phase 7: Documentation and Verification
 - [x] Task 16: Execute the mandatory documentation checkpoint ([details](phase-07-documentation-and-verification.md#task-16-execute-the-mandatory-documentation-checkpoint)) (depends on 3-15)
-- [ ] Task 17: Perform final V4-01 verification ([details](phase-07-documentation-and-verification.md#task-17-perform-final-v4-01-verification)) (depends on 15, 16)
+- [x] Task 17: Perform final V4-01 verification ([details](phase-07-documentation-and-verification.md#task-17-perform-final-v4-01-verification)) (depends on 15, 16)
 
 ## Commit Plan
 
