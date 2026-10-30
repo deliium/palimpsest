@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 140
+METRIC_FAMILY_COUNT: Final[int] = 144
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -215,6 +215,10 @@ class MetricFamilyId(StrEnum):
     MACRO_SOCIETY_IDENTITY_ALIGNMENT = "macro_society_identity_alignment"
     MACRO_SOCIETY_LINEAGE = "macro_society_lineage"
     MACRO_SOCIETY_MEMBERSHIP_DISPUTE = "macro_society_membership_dispute"
+    ORGANIZATION_FORMATION = "organization_formation"
+    ORGANIZATION_MEMBERSHIP = "organization_membership"
+    ORGANIZATION_STRUCTURE = "organization_structure"
+    ORGANIZATION_LINEAGE = "organization_lineage"
 
 
 class DenominatorKind(StrEnum):
@@ -4622,9 +4626,7 @@ def _spec_macro_society_lineage() -> MetricSpecification:
         ),
         empty_case="no transitions -> availability=absent",
         one_case="one window reports emergence only",
-        unknown_case=(
-            "missing windows -> availability=unknown; never interpolated"
-        ),
+        unknown_case=("missing windows -> availability=unknown; never interpolated"),
     )
 
 
@@ -6199,6 +6201,207 @@ def _spec_cultural_technology_continuity() -> MetricSpecification:
     )
 
 
+def _spec_organization_formation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_FORMATION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="detached_organization_candidates_in_final_window",
+        denominator="analysed_evidence_windows",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dissolved candidates remain visible as dissolved",
+        zero_holding_policy="no candidates -> availability=absent",
+        opportunity_vs_occurrence=(
+            "candidate formation describes detached research evidence only; it is "
+            "not prevalence or capacity"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="missing lanes stay partial and are never zero-filled",
+        formulas={
+            "candidate_count": "analytical candidates in the final window",
+            "recognized_count": "candidates with recognized evidence",
+            "temporary_count": "candidates with temporary membership",
+            "multi_channel_candidate_count": (
+                "candidates with two or more anchor families"
+            ),
+            "mean_structural_channels": "mean anchor families per candidate",
+            "window_count": "observation windows analysed",
+            "coverage_ratio": "observed anchor families / expected families",
+            "as_of_tick": "final window end tick",
+        },
+        value_keys=(
+            "as_of_tick",
+            "candidate_count",
+            "coverage_ratio",
+            "mean_structural_channels",
+            "multi_channel_candidate_count",
+            "recognized_count",
+            "temporary_count",
+            "window_count",
+        ),
+        empty_case="no windows -> availability=absent",
+        one_case="one candidate reports its own counts",
+        unknown_case="missing lanes -> availability=unknown or partial; never zero",
+    )
+
+
+def _spec_organization_membership() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_MEMBERSHIP,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_candidate_memberships",
+        denominator="member_belief_count",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="former members remain counted as former",
+        zero_holding_policy="no candidates -> availability=absent",
+        opportunity_vs_occurrence=(
+            "membership is perceived belief, never a census or partition"
+        ),
+        self_edge_policy="overlap is retained, never collapsed",
+        censoring_policy="unresolved members stay unknown and are never dropped",
+        formulas={
+            "member_belief_count": "member claims across candidates",
+            "explicit_count": "self-identified member claims",
+            "perceived_count": "participation or role claims",
+            "disputed_count": "contradictory member claims",
+            "unknown_count": "anchor-only member references",
+            "former_count": "expired or left member claims",
+            "overlap_member_count": "persons appearing in two or more candidates",
+            "temporary_member_count": "temporary member claims",
+            "unresolved_member_count": "member claims with no direct evidence",
+            "as_of_tick": "final window end tick",
+        },
+        value_keys=(
+            "as_of_tick",
+            "disputed_count",
+            "explicit_count",
+            "former_count",
+            "member_belief_count",
+            "overlap_member_count",
+            "perceived_count",
+            "temporary_member_count",
+            "unknown_count",
+            "unresolved_member_count",
+        ),
+        empty_case="no candidates -> availability=absent",
+        one_case="one candidate reports its own claims",
+        unknown_case="missing lanes -> availability=unknown or partial; never zero",
+    )
+
+
+def _spec_organization_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_STRUCTURE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+            }
+        ),
+        population="final_window_candidate_structural_anchors",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dissolved candidates keep their last observed anchors",
+        zero_holding_policy="no candidates -> availability=absent",
+        opportunity_vs_occurrence=(
+            "anchors are references, never ownership, treasury, or permissions"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="unresolved anchors stay explicit and are never invented",
+        formulas={
+            "role_count": "believed role anchors",
+            "goal_count": "believed shared-goal anchors",
+            "resource_count": "believed resource references",
+            "procedure_count": "believed procedure anchors",
+            "record_count": "believed record references",
+            "commitment_count": "believed internal commitments",
+            "identity_count": "believed identity labels",
+            "candidates_with_roles": "candidates with a role anchor",
+            "candidates_with_goals": "candidates with a goal anchor",
+            "candidates_with_records": "candidates with a record anchor",
+            "mean_structural_channels": "mean anchor families per candidate",
+            "as_of_tick": "final window end tick",
+        },
+        value_keys=(
+            "as_of_tick",
+            "candidates_with_goals",
+            "candidates_with_records",
+            "candidates_with_roles",
+            "commitment_count",
+            "goal_count",
+            "identity_count",
+            "mean_structural_channels",
+            "procedure_count",
+            "record_count",
+            "resource_count",
+            "role_count",
+        ),
+        empty_case="no candidates -> availability=absent",
+        one_case="one candidate reports its own anchors",
+        unknown_case="missing lanes -> availability=unknown or partial; never zero",
+    )
+
+
+def _spec_organization_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="analytical_organization_lineage_edges",
+        denominator="lineage_edge_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="all adjacent-window transitions in one analytical run",
+        deceased_policy="dissolution is an analytical visibility change, not death",
+        zero_holding_policy="one window with no transitions -> absent counts",
+        opportunity_vs_occurrence=(
+            "lineage explains analytical identity changes only; it is not "
+            "objective history"
+        ),
+        self_edge_policy="continuation keeps one identity and adds no graph edge",
+        censoring_policy="a missing successor is reported as dissolution",
+        formulas={
+            "continuation_count": "continued identity transitions",
+            "transform_count": "transformed identity transitions",
+            "split_count": "parent-to-child split edges",
+            "merge_count": "parent-to-merged-child edges",
+            "dissolution_count": "identities with no successor",
+            "emergence_count": "identities with no predecessor",
+            "mean_continuation_jaccard": "mean overlap of continued transitions",
+            "lineage_window_count": "observation windows analysed",
+            "as_of_tick": "final window end tick",
+        },
+        value_keys=(
+            "as_of_tick",
+            "continuation_count",
+            "dissolution_count",
+            "emergence_count",
+            "lineage_window_count",
+            "mean_continuation_jaccard",
+            "merge_count",
+            "split_count",
+            "transform_count",
+        ),
+        empty_case="no transitions -> availability=absent",
+        one_case="one window reports emergence only",
+        unknown_case=(
+            "missing windows -> availability=unknown or partial; never interpolated"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -6340,6 +6543,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_macro_society_identity_alignment,
     _spec_macro_society_lineage,
     _spec_macro_society_membership_dispute,
+    _spec_organization_formation,
+    _spec_organization_membership,
+    _spec_organization_structure,
+    _spec_organization_lineage,
 )
 
 

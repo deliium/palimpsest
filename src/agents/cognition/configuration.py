@@ -71,6 +71,11 @@ from agents.cognition.offices import (
     OfficeConceptPolicy,
     default_office_concept_policy,
 )
+from agents.cognition.organization_concepts import (
+    ORGANIZATION_CONCEPT_POLICY_VERSION,
+    OrganizationConceptPolicy,
+    default_organization_concept_policy,
+)
 from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
@@ -374,6 +379,17 @@ class CognitionOfficeSuccessionMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionOrganizationMode(StrEnum):
+    """Owner-scoped organization concepts. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.organizations``. This is a
+    cognition mode, not a capability flag.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -569,6 +585,10 @@ class CognitionLoopConfig:
         CognitionInstitutionalDecayMode.DISABLED
     )
     institutional_decay_policy: InstitutionDecayPolicy | None = None
+    organization_concept_mode: CognitionOrganizationMode = (
+        CognitionOrganizationMode.DISABLED
+    )
+    organization_concept_policy: OrganizationConceptPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1041,6 +1061,28 @@ class CognitionLoopConfig:
                 "reason_code=translation_requires_semantic_naming"
             )
             raise ValueError("translation_requires_semantic_naming")
+        if type(self.organization_concept_mode) is not CognitionOrganizationMode:
+            _LOG.error(
+                "invalid_enum path=organization_concept_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "organization_concept_mode must be CognitionOrganizationMode"
+            )
+        if self.organization_concept_mode is CognitionOrganizationMode.DISABLED:
+            object.__setattr__(self, "organization_concept_policy", None)
+        elif self.organization_concept_policy is None:
+            object.__setattr__(
+                self,
+                "organization_concept_policy",
+                default_organization_concept_policy(),
+            )
+        elif type(self.organization_concept_policy) is not OrganizationConceptPolicy:
+            _LOG.error(
+                "invalid_enum path=organization_concept_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "organization_concept_policy must be OrganizationConceptPolicy or None"
+            )
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1347,6 +1389,13 @@ class CognitionLoopConfig:
                 if self.institutional_decay_policy is None
                 else self.institutional_decay_policy.version
             )
+        if self.organization_concept_mode is CognitionOrganizationMode.DETERMINISTIC:
+            material["organization_concept_mode"] = self.organization_concept_mode.value
+            material["organization_concept_policy_version"] = (
+                ORGANIZATION_CONCEPT_POLICY_VERSION
+                if self.organization_concept_policy is not None
+                else None
+            )
         return material
 
 
@@ -1611,6 +1660,8 @@ def build_cognitive_loop(
         institutional_memory_policy=resolved.institutional_memory_policy,
         institutional_decay_mode=resolved.institutional_decay_mode,
         institutional_decay_policy=resolved.institutional_decay_policy,
+        organization_concept_mode=resolved.organization_concept_mode,
+        organization_concept_policy=resolved.organization_concept_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

@@ -17,14 +17,21 @@ MACRO_FAMILIES = (
     MetricFamilyId.MACRO_SOCIETY_LINEAGE,
     MetricFamilyId.MACRO_SOCIETY_MEMBERSHIP_DISPUTE,
 )
+ORGANIZATION_FAMILIES = (
+    MetricFamilyId.ORGANIZATION_FORMATION,
+    MetricFamilyId.ORGANIZATION_MEMBERSHIP,
+    MetricFamilyId.ORGANIZATION_STRUCTURE,
+    MetricFamilyId.ORGANIZATION_LINEAGE,
+)
 
 
-def test_catalog_validates_at_140_and_appends_macro_families() -> None:
+def test_catalog_validates_at_144_and_appends_macro_families() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 140
-    assert len(specs) == 140
-    assert tuple(spec.family_id for spec in specs[-4:]) == MACRO_FAMILIES
-    assert len({spec.family_id for spec in all_metric_specifications()}) == 140
+    assert METRIC_FAMILY_COUNT == 144
+    assert len(specs) == 144
+    assert tuple(spec.family_id for spec in specs[-8:-4]) == MACRO_FAMILIES
+    assert tuple(spec.family_id for spec in specs[-4:]) == ORGANIZATION_FAMILIES
+    assert len({spec.family_id for spec in all_metric_specifications()}) == 144
 
 
 def test_macro_specs_declare_their_value_keys() -> None:

@@ -611,6 +611,7 @@ class AgentRuntimeCheckpoint:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    organization_concepts: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -756,6 +757,15 @@ class AgentRuntimeCheckpoint:
             self.office_concepts,
             self.agent_id,
             field_name="office_concepts",
+        )
+        from agents.cognition.organization_concepts import (
+            require_owner_organization_concepts,
+        )
+
+        require_owner_organization_concepts(
+            self.organization_concepts,
+            self.agent_id,
+            field_name="organization_concepts",
         )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
@@ -1103,9 +1113,10 @@ class GenerationalControlState:
             RunnerAttemptReceipt
         ):
             raise TypeError("terminal_receipt must be RunnerAttemptReceipt or None")
-        if self.stop_evidence is not None and type(
-            self.stop_evidence
-        ) is not StopEvidence:
+        if (
+            self.stop_evidence is not None
+            and type(self.stop_evidence) is not StopEvidence
+        ):
             raise TypeError("stop_evidence must be StopEvidence or None")
         receipts = tuple(self.attempt_receipts)
         for receipt in receipts:
@@ -1134,8 +1145,7 @@ class GenerationalControlState:
                     "criterion_decisions entries must be CachedCriterionDecision"
                 )
         identities = {
-            (item.boundary_tick, item.criterion_id, item.version)
-            for item in decisions
+            (item.boundary_tick, item.criterion_id, item.version) for item in decisions
         }
         if len(identities) != len(decisions):
             raise ValueError("criterion_decisions identities must be unique")
@@ -1185,9 +1195,10 @@ class RunnerRuntimeCheckpoint:
         object.__setattr__(self, "runtime_states", states)
         if type(self.cognition_counters) is not CognitionCounters:
             raise TypeError("cognition_counters must be CognitionCounters")
-        if self.generational_control_state is not None and type(
-            self.generational_control_state
-        ) is not GenerationalControlState:
+        if (
+            self.generational_control_state is not None
+            and type(self.generational_control_state) is not GenerationalControlState
+        ):
             raise TypeError(
                 "generational_control_state must be GenerationalControlState or None"
             )

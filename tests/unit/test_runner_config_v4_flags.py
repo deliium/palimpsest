@@ -99,10 +99,14 @@ def test_digest_rejects_other_flag_types() -> None:
         v4_capability_flags_digest(V3CapabilityFlags())  # type: ignore[arg-type]
 
 
-def test_every_enabled_flag_is_unimplemented() -> None:
+def test_every_enabled_flag_is_owned_or_unimplemented() -> None:
     for name in V4_CAPABILITY_FLAG_NAMES:
         flags = V4CapabilityFlags(**{name: True})
         assert flags.any_enabled() is True
         assert flags.enabled_names() == (name,)
-        assert flags.unimplemented_enabled_names() == (name,)
-        assert flags.owned_enabled_names() == ()
+        if name == "organizations":
+            assert flags.owned_enabled_names() == (name,)
+            assert flags.unimplemented_enabled_names() == ()
+        else:
+            assert flags.unimplemented_enabled_names() == (name,)
+            assert flags.owned_enabled_names() == ()

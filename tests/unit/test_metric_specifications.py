@@ -39,10 +39,10 @@ from tests.unit.metric_fixtures import (
 )
 
 
-def test_catalog_has_140_unique_families() -> None:
+def test_catalog_has_144_unique_families() -> None:
     specs = validate_metric_catalog()
-    assert len(specs) == METRIC_FAMILY_COUNT == 140
-    assert len({spec.family_id for spec in specs}) == 140
+    assert len(specs) == METRIC_FAMILY_COUNT == 144
+    assert len({spec.family_id for spec in specs}) == 144
     assert frozenset(spec.family_id for spec in specs) == frozenset(MetricFamilyId)
     assert METRIC_CATALOG_VERSION.startswith("metric-catalog-")
 

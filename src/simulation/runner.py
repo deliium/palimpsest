@@ -1008,6 +1008,7 @@ def _cognition_config_for(
     mortality_mode: MortalityMode,
     capability_flags: V2CapabilityFlags,
     generational_narratives: object | None = None,
+    organizations_enabled: bool = False,
 ) -> CognitionLoopConfig:
     emotional_flag = capability_flags.short_term_emotional_state
     emotional_mode = (
@@ -1312,6 +1313,23 @@ def _cognition_config_for(
     institutional_decay_policy = None
     if institutional_decay_mode is CognitionInstitutionalDecayMode.DETERMINISTIC:
         institutional_decay_policy = default_institutional_decay_policy()
+    from agents.cognition.configuration import CognitionOrganizationMode
+    from agents.cognition.organization_concepts import (
+        default_organization_concept_policy,
+    )
+
+    organization_mode = (
+        CognitionOrganizationMode.DETERMINISTIC
+        if organizations_enabled
+        else CognitionOrganizationMode.DISABLED
+    )
+    organization_policy = (
+        default_organization_concept_policy() if organizations_enabled else None
+    )
+    _LOG.debug(
+        "cognition_config_organization_mode mode=%s",
+        organization_mode.value,
+    )
     _LOG.debug(
         "cognition_config_institutional_decay mode=%s policy_version=%s",
         institutional_decay_mode.value,
@@ -1436,6 +1454,8 @@ def _cognition_config_for(
         institutional_memory_policy=institutional_memory_policy,
         institutional_decay_mode=institutional_decay_mode,
         institutional_decay_policy=institutional_decay_policy,
+        organization_concept_mode=organization_mode,
+        organization_concept_policy=organization_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2562,6 +2582,7 @@ class SimulationRunner:
                     mortality_mode=config.mortality_mode,
                     capability_flags=config.capability_flags,
                     generational_narratives=config.generational_narratives,
+                    organizations_enabled=(config.v4_capability_flags.organizations),
                 )
                 memory_retriever = _memory_retriever_for(
                     agent_spec.cognition.memory_mode,
@@ -4673,6 +4694,28 @@ class SimulationRunner:
                 }
                 if any(binding.group_key not in groups for binding in ledger.bindings):
                     raise ValueError("institutional decay binding group mismatch")
+        from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_concepts import OrganizationConceptLedger
+
+        for state in checkpoint.runtime_states:
+            ledger = getattr(state, "organization_concepts", None)
+            if ledger is None:
+                continue
+            if type(ledger) is not OrganizationConceptLedger:
+                raise TypeError("organization ledger invalid type")
+            if ledger.owner_id != state.agent_id:
+                raise ValueError("organization ledger owner_id mismatch")
+            runtime = next(
+                (item for item in self._runtimes if item.agent_id == state.agent_id),
+                None,
+            )
+            mode = getattr(
+                getattr(runtime, "_loop", None),
+                "_organization_concept_mode",
+                CognitionOrganizationMode.DISABLED,
+            )
+            if mode is not CognitionOrganizationMode.DETERMINISTIC:
+                raise ValueError("organization ledger for disabled owner")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
         if len(by_agent) != len(checkpoint.runtime_states):
             raise ValueError("duplicate runtime state owner")
@@ -4903,6 +4946,7 @@ class SimulationRunner:
             mediation_ledgers=self.export_mediation_ledgers(),
             institutional_memory_ledgers=self.export_institutional_memory_ledgers(),
             institutional_decay_ledgers=self.export_institutional_decay_ledgers(),
+            organization_concept_ledgers=(self.export_organization_concept_ledgers()),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5264,6 +5308,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_office_concept_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_organization_concept_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered organization concept ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "organization_concepts", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_organization_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6099,6 +6158,7 @@ class SimulationRunner:
                 mortality_mode=self._config.mortality_mode,
                 capability_flags=self._config.capability_flags,
                 generational_narratives=self._config.generational_narratives,
+                organizations_enabled=(self._config.v4_capability_flags.organizations),
             )
             memory_retriever = _memory_retriever_for(
                 agent_spec.cognition.memory_mode,
@@ -6470,6 +6530,7 @@ def _construct_agent_bundle(
         mortality_mode=config.mortality_mode,
         capability_flags=config.capability_flags,
         generational_narratives=config.generational_narratives,
+        organizations_enabled=config.v4_capability_flags.organizations,
     )
     memory_retriever = _memory_retriever_for(
         agent_spec.cognition.memory_mode,

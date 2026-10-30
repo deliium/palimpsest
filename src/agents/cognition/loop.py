@@ -351,10 +351,13 @@ class CognitiveLoop:
         "_motivation",
         "_office_concept_policy",
         "_office_succession_mode",
+        "_organization_concept_mode",
+        "_organization_concept_policy",
         "_perception",
         "_planner",
         "_possession_succession_active",
         "_prepared_institutional_decay",
+        "_prepared_organization_concepts",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -477,6 +480,8 @@ class CognitiveLoop:
         institution_concept_policy: object | None = None,
         office_succession_mode: object | None = None,
         office_concept_policy: object | None = None,
+        organization_concept_mode: object | None = None,
+        organization_concept_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -882,6 +887,32 @@ class CognitiveLoop:
             raise TypeError("office_concept_policy must be OfficeConceptPolicy")
         self._office_succession_mode = office_mode
         self._office_concept_policy = office_concept_policy
+        from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_concepts import (
+            OrganizationConceptPolicy,
+            default_organization_concept_policy,
+        )
+
+        organization_mode = (
+            CognitionOrganizationMode.DISABLED
+            if organization_concept_mode is None
+            else organization_concept_mode
+        )
+        if type(organization_mode) is not CognitionOrganizationMode:
+            raise TypeError(
+                "organization_concept_mode must be CognitionOrganizationMode"
+            )
+        if organization_mode is CognitionOrganizationMode.DISABLED:
+            organization_concept_policy = None
+        elif organization_concept_policy is None:
+            organization_concept_policy = default_organization_concept_policy()
+        elif type(organization_concept_policy) is not OrganizationConceptPolicy:
+            raise TypeError(
+                "organization_concept_policy must be OrganizationConceptPolicy"
+            )
+        self._organization_concept_mode = organization_mode
+        self._organization_concept_policy = organization_concept_policy
+        self._prepared_organization_concepts: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1357,6 +1388,7 @@ class CognitiveLoop:
             last_cognitive_budget_audit=self._last_cognitive_budget_audit,
             tick_budget_ledger=tick_budget_state,
             prepared_institutional_decay=self._prepared_institutional_decay,
+            prepared_organization_concepts=self._prepared_organization_concepts,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1377,15 +1409,11 @@ class CognitiveLoop:
                 "fork_state_unsupported", "invalid loop fork state"
             )
         self._counterfactual_state = state.counterfactual_state
-        self._last_counterfactual_scenarios = tuple(
-            state.last_counterfactual_scenarios
-        )
+        self._last_counterfactual_scenarios = tuple(state.last_counterfactual_scenarios)
         self._deferred_dissonance = tuple(state.deferred_dissonance)
         self._last_developmental_audits = tuple(state.last_developmental_audits)
         self._last_mentorship_audits = tuple(state.last_mentorship_audits)
-        self._last_cultural_feature_audits = tuple(
-            state.last_cultural_feature_audits
-        )
+        self._last_cultural_feature_audits = tuple(state.last_cultural_feature_audits)
         self._last_practical_knowledge_audits = tuple(
             state.last_practical_knowledge_audits
         )
@@ -1404,6 +1432,7 @@ class CognitiveLoop:
                 state.tick_budget_ledger, policy=policy
             )
         self._prepared_institutional_decay = state.prepared_institutional_decay
+        self._prepared_organization_concepts = state.prepared_organization_concepts
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2244,6 +2273,65 @@ class CognitiveLoop:
             "institution_concepts_carried owner_id=%s concept_count=%s",
             owner_id,
             0 if updated is None else len(updated.concepts),
+        )
+        return updated
+
+    def _prepare_organization_concepts(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        institution_concepts: object | None,
+        offices: object | None,
+        group_formation: object | None,
+        collective_decisions: object | None,
+        structured_commitments: object | None,
+        social_conventions: object | None,
+    ) -> object | None:
+        """Refresh one owner's organization beliefs from prepared owner inputs."""
+        from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_concepts import (
+            OrganizationConceptLedger,
+            OrganizationConceptPolicy,
+            apply_organization_concept_update,
+        )
+
+        owner_id = loop_input.agent_id.value
+        if (
+            self._organization_concept_mode
+            is not CognitionOrganizationMode.DETERMINISTIC
+        ):
+            self._prepared_organization_concepts = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "organization_concepts", None)
+        )
+        ledger = carried if type(carried) is OrganizationConceptLedger else None
+        policy = self._organization_concept_policy
+        if type(policy) is not OrganizationConceptPolicy:
+            raise TypeError(
+                "organization_concept_policy must be OrganizationConceptPolicy"
+            )
+        updated = apply_organization_concept_update(
+            owner_id=owner_id,
+            tick=loop_input.observation.tick,
+            observation=loop_input.observation,
+            prior=ledger,
+            institution_concepts=institution_concepts,
+            offices=offices,
+            group_formation=group_formation,
+            collective_decisions=collective_decisions,
+            structured_commitments=structured_commitments,
+            social_conventions=social_conventions,
+            policy=policy,
+        )
+        self._prepared_organization_concepts = updated
+        _LOG.debug(
+            "organization_concepts_carried owner_id=%s concept_count=%s",
+            owner_id,
+            len(updated.concepts),
         )
         return updated
 
@@ -4235,6 +4323,15 @@ class CognitiveLoop:
             institution_concepts=institution_concepts,
         )
         collective_decisions = self._prepare_collective_decisions(loop_input, memory)
+        organization_concepts = self._prepare_organization_concepts(
+            loop_input,
+            institution_concepts=institution_concepts,
+            offices=office_concepts,
+            group_formation=group_formation,
+            collective_decisions=collective_decisions,
+            structured_commitments=structured_commitments,
+            social_conventions=social_conventions,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -4600,6 +4697,7 @@ class CognitiveLoop:
             translation=translation,
             institution_concepts=institution_concepts,
             office_concepts=office_concepts,
+            organization_concepts=organization_concepts,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -4940,6 +5038,7 @@ class CognitiveLoop:
             translation=proposal.translation,
             institution_concepts=proposal.institution_concepts,
             office_concepts=proposal.office_concepts,
+            organization_concepts=proposal.organization_concepts,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,
@@ -5954,9 +6053,7 @@ def _build_narrative_cue_summary(
             token = getattr(concept, "concept", None)
             if isinstance(token, str) and _NARRATIVE_TOKEN_RE.fullmatch(token):
                 concepts.append(token)
-            elif isinstance(concept, str) and _NARRATIVE_TOKEN_RE.fullmatch(
-                concept
-            ):
+            elif isinstance(concept, str) and _NARRATIVE_TOKEN_RE.fullmatch(concept):
                 concepts.append(concept)
         relations: list[tuple[str, str, str]] = []
         for rel in getattr(item, "relations", ()) or ():

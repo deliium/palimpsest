@@ -57,6 +57,7 @@ class CognitiveLoopForkState:
     developmental_entity_learning_rates: tuple[tuple[str, float], ...]
     developmental_stage_learning_rates: tuple[tuple[str, float], ...]
     experiment_ledger: object | None
+    prepared_organization_concepts: object | None = None
     state_format_version: str = COGNITIVE_LOOP_FORK_STATE_VERSION
 
     def __post_init__(self) -> None:
@@ -84,9 +85,7 @@ class CognitiveLoopForkState:
             "last_practical_knowledge_audits",
             "symbolic_translation_applications",
         ):
-            object.__setattr__(
-                self, name, _tuple(name, getattr(self, name))
-            )
+            object.__setattr__(self, name, _tuple(name, getattr(self, name)))
         for name in (
             "developmental_entity_learning_rates",
             "developmental_stage_learning_rates",

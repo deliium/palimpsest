@@ -467,6 +467,7 @@ class AgentRuntime:
         "_mind_audits",
         "_office_concepts",
         "_offline_consolidation_audits",
+        "_organization_concepts",
         "_pending",
         "_possession_legitimacy",
         "_practical_knowledge",
@@ -614,6 +615,7 @@ class AgentRuntime:
         self._institution_concepts: object | None = None
         self._institutional_decay: object | None = None
         self._office_concepts: object | None = None
+        self._organization_concepts: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1263,6 +1265,35 @@ class AgentRuntime:
         self._office_concepts = ledger
         _LOG.debug(
             "office_concepts_carried owner_id=%s office_count=%s tick=%s",
+            owner.value,
+            len(ledger.concepts),
+            tick,
+        )
+
+    def _commit_organization_concepts(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_concepts import OrganizationConceptLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_organization_concept_mode",
+            CognitionOrganizationMode.DISABLED,
+        )
+        if mode is not CognitionOrganizationMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionOrganizationMode.DETERMINISTIC:
+                self._organization_concepts = None
+            return
+        if type(ledger) is not OrganizationConceptLedger:
+            raise TypeError("organization_concepts must be OrganizationConceptLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._organization_concepts = ledger
+        _LOG.debug(
+            "organization_concepts_carried owner_id=%s concept_count=%s tick=%s",
             owner.value,
             len(ledger.concepts),
             tick,
@@ -2162,6 +2193,7 @@ class AgentRuntime:
                 institution_concepts=self._institution_concepts,
                 institutional_decay=self._institutional_decay,
                 office_concepts=self._office_concepts,
+                organization_concepts=self._organization_concepts,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2642,6 +2674,9 @@ class AgentRuntime:
         )
         self._commit_office_concepts(
             getattr(pending.loop_result, "office_concepts", None), pending.tick
+        )
+        self._commit_organization_concepts(
+            getattr(pending.loop_result, "organization_concepts", None), pending.tick
         )
         self._commit_collective_decisions(
             getattr(pending.loop_result, "collective_decisions", None), pending.tick
@@ -3192,6 +3227,16 @@ class AgentRuntime:
         self._translation = getattr(checkpoint, "translation", None)
         self._institution_concepts = getattr(checkpoint, "institution_concepts", None)
         self._office_concepts = getattr(checkpoint, "office_concepts", None)
+        self._organization_concepts = getattr(checkpoint, "organization_concepts", None)
+        if (
+            self._organization_concepts is not None
+            and getattr(self._organization_concepts, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._office_concepts is not None
             and getattr(self._office_concepts, "owner_id", None) != self._agent.agent_id
@@ -3291,6 +3336,7 @@ class AgentRuntime:
             causal_world_model=self._causal_world_model,
             theory_of_mind=self._theory_of_mind,
             office_concepts=self._office_concepts,
+            organization_concepts=self._organization_concepts,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,
@@ -3386,9 +3432,7 @@ class AgentRuntime:
         self._memory_service = cast("MemoryService", None)
         self._inbox = cast("InboxSource", None)
         self._invocation_ids = cast("InvocationIdSource", None)
-        self._cognition_trace_repository = cast(
-            "CognitionTraceRepository", None
-        )
+        self._cognition_trace_repository = cast("CognitionTraceRepository", None)
         self._scientific_evidence = cast("ScientificEvidenceRepository", None)
         _LOG.info(
             "runtime_retired",
@@ -3429,9 +3473,7 @@ class AgentRuntime:
             raise ForkCheckpointError("fork_state_unsupported", "custom inbox source")
         loop_export = getattr(self._loop, "export_fork_state", None)
         if not callable(loop_export):
-            raise ForkCheckpointError(
-                "fork_state_unsupported", "custom cognitive loop"
-            )
+            raise ForkCheckpointError("fork_state_unsupported", "custom cognitive loop")
         memory_export = getattr(self._memory_writer, "export_fork_state", None)
         belief_export = getattr(self._belief_writer, "export_fork_state", None)
         if not callable(memory_export) or not callable(belief_export):
@@ -3451,9 +3493,7 @@ class AgentRuntime:
                     self._invocation_ids._counts.items()
                 )
             ),
-            goal_revision_counters=tuple(
-                sorted(self._goal_revision_counters.items())
-            ),
+            goal_revision_counters=tuple(sorted(self._goal_revision_counters.items())),
             applied_identity_operation_ids=frozenset(
                 self._applied_identity_operation_ids
             ),
@@ -3511,9 +3551,7 @@ class AgentRuntime:
         self._processed_invocations = set(state.processed_invocations)
         self._finalized_hashes = set(state.finalized_hashes)
         self._goal_revision_counters = dict(state.goal_revision_counters)
-        self._applied_identity_operation_ids = set(
-            state.applied_identity_operation_ids
-        )
+        self._applied_identity_operation_ids = set(state.applied_identity_operation_ids)
         self._applied_reflection_operation_ids = set(
             state.applied_reflection_operation_ids
         )
@@ -3522,13 +3560,10 @@ class AgentRuntime:
         self._counterfactual_state = state.counterfactual_state
         loop_restore = getattr(self._loop, "restore_fork_state", None)
         if not callable(loop_restore):
-            raise ForkCheckpointError(
-                "fork_state_unsupported", "custom cognitive loop"
-            )
+            raise ForkCheckpointError("fork_state_unsupported", "custom cognitive loop")
         loop_restore(state.loop_state)
         self._invocation_ids._counts = {
-            (agent_id, tick): count
-            for agent_id, tick, count in state.invocation_counts
+            (agent_id, tick): count for agent_id, tick, count in state.invocation_counts
         }
         for name, values in state.audits:
             if name not in AUDIT_FIELD_NAMES:

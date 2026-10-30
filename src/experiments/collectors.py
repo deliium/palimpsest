@@ -776,6 +776,16 @@ def assemble_arm_metric_bundle(
                 )
             ),
         )
+    organization_ledgers = getattr(
+        arm.runner_result, "organization_concept_ledgers", None
+    )
+    if organization_ledgers:
+        from analysis.organizations import harvest_organization_rows
+
+        inputs = replace(
+            inputs,
+            organization_rows=harvest_organization_rows(organization_ledgers),
+        )
     return assemble_metric_documents(inputs)
 
 

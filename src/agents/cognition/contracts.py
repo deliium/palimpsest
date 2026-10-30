@@ -171,6 +171,7 @@ class Perspective:
     translation: object | None = None
     institution_concepts: object | None = None
     office_concepts: object | None = None
+    organization_concepts: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -397,6 +398,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.office_concepts",
         )
+        from agents.cognition.organization_concepts import (
+            require_owner_organization_concepts,
+        )
+
+        require_owner_organization_concepts(
+            self.organization_concepts,
+            self.agent_id,
+            field_name="Perspective.organization_concepts",
+        )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
         )
@@ -564,6 +574,7 @@ class Perspective:
             semantic_naming=self.semantic_naming,
             symbolic_language=self.symbolic_language,
             institution_concepts=self.institution_concepts,
+            organization_concepts=self.organization_concepts,
             collective_decisions=self.collective_decisions,
             mediation=self.mediation,
             institutional_memory=self.institutional_memory,

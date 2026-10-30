@@ -76,11 +76,12 @@ effect-complete details, replay, and a persistence need.
 
 ### organizations
 
-Collective action is objective work plus owner-scoped membership beliefs. An
-organization exists only as far as agents believe in it, talk about it, and act
-through ordinary commands. Objective facts are limited to the physical effects of
-those commands. No organization actor, roster, treasury, automatic resource pool,
-or global registry is created.
+**Owned by V4-03 on `runner-config-v56`.** Collective action is objective work
+plus owner-scoped membership beliefs. An organization exists only as far as agents
+believe in it, talk about it, and act through ordinary commands. Objective facts
+are limited to the physical effects of those commands. The owned seam adds only
+owner-scoped belief ledgers; no organization actor, roster, treasury, automatic
+resource pool, or global registry is created.
 
 ### formal_rules
 

@@ -250,7 +250,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "organizations",
         "formal_rules",
         "legal_disputes",
         "diplomacy",
@@ -281,3 +280,20 @@ async def test_unowned_v4_flag_fails_closed_after_encode_decode(
         )
     assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
     assert excinfo.value.stage == "v4_capability_flags"
+
+
+@pytest.mark.asyncio
+async def test_owned_organizations_flag_constructs_after_encode_decode() -> None:
+    config = replace(
+        _base(),
+        schema_version=RUNNER_SCHEMA_VERSION_V56,
+        v4_capability_flags=V4CapabilityFlags(organizations=True),
+    )
+    decoded = decode_runner_config(encode_runner_config(config))
+    assert decoded.v4_capability_flags.organizations is True
+
+    runner = await SimulationRunner.from_config(
+        config, run_id=RunId("run-v4-gate-organizations")
+    )
+    assert runner.config.v4_capability_flags.owned_enabled_names() == ("organizations",)
+    assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()

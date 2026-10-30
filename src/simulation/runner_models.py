@@ -317,9 +317,10 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "disasters",
 )
 
-# V4-01 owns no V4 flag: every flag fails closed at runtime construction until
-# its behavior plan lands and claims ownership explicitly.
-_V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset()
+# V4-03 owns ``organizations``; the remaining eleven V4 flags stay unowned and
+# fail closed at runtime construction until their behavior plans land and claim
+# ownership explicitly.
+_V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset({"organizations"})
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -1112,7 +1113,7 @@ class V3CapabilityFlags:
 class V4CapabilityFlags:
     """Run-level reserved V4 capability identifiers (configuration only).
 
-    Defaults are all off. V4-01 owns none of these flags: enabling any of them
+    Defaults are all off. V4-03 owns ``organizations``. Enabling an unowned flag
     fails closed at ``SimulationRunner.from_config`` with
     ``capability_unimplemented`` and ``stage="v4_capability_flags"`` until an
     owning plan lands. Wire key ``v4_capability_flags`` is a sibling of
@@ -6370,6 +6371,7 @@ class SimulationRunnerResult:
     mediation_ledgers: tuple[object, ...] = ()
     institutional_memory_ledgers: tuple[object, ...] = ()
     institutional_decay_ledgers: tuple[object, ...] = ()
+    organization_concept_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6639,6 +6641,17 @@ class SimulationRunnerResult:
         object.__setattr__(self, "institutional_memory_ledgers", institutional_ledgers)
         from agents.cognition.institutional_decay import InstitutionDecayLedger
 
+        if isinstance(self.organization_concept_ledgers, (set, frozenset)):
+            raise TypeError("organization_concept_ledgers must be ordered")
+        if isinstance(
+            self.organization_concept_ledgers, (str, bytes)
+        ) or not isinstance(self.organization_concept_ledgers, Sequence):
+            raise TypeError("organization_concept_ledgers must be ordered")
+        object.__setattr__(
+            self,
+            "organization_concept_ledgers",
+            tuple(self.organization_concept_ledgers),
+        )
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

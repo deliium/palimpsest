@@ -106,7 +106,11 @@ V4_CONTEXTS: Final[tuple[V4ContextSpec, ...]] = (
         capability_flag="organizations",
         authority=V4Authority.OWNER_SCOPED,
         owner_packages=("agents.cognition", "social", "simulation"),
-        existing_mechanism="collective_projects, public_goods, mentorship",
+        existing_mechanism=(
+            "collective_projects, public_goods, mentorship, institution_concepts, "
+            "offices, institutional_memory, collective_decisions, "
+            "structured_commitments, group_formation"
+        ),
         required_config_seam="v4_capability_flags.organizations",
         uses_existing_events=True,
         prerequisite_contexts=(),
