@@ -62,6 +62,15 @@ from observer.research_ui_state import (
     parse_research_ui_query,
     resolve_cohort_candidate,
 )
+from observer.scale import (
+    OBSERVER_SCALE_CONTRACT_VERSION,
+    OBSERVER_SCALE_PROFILES,
+    ObserverScaleLevel,
+    ObserverScaleProfile,
+    scale_profile_for,
+    select_scale_level,
+)
+from observer.scale import scale_contract_payload as observer_scale_contract_payload
 from observer.semantic_history import (
     ProjectedSemanticHistory,
     SemanticHistoryRow,
@@ -88,6 +97,8 @@ __all__ = [
     "OBSERVER_CAPABILITIES",
     "OBSERVER_LAYOUT_SCHEMA_VERSION",
     "OBSERVER_PROTOCOL_VERSION",
+    "OBSERVER_SCALE_CONTRACT_VERSION",
+    "OBSERVER_SCALE_PROFILES",
     "RELATIONSHIP_DIMENSION_CODES",
     "RESEARCH_UI_VIEWS",
     "RESERVED_OBSERVER_CAPABILITIES",
@@ -114,6 +125,8 @@ __all__ = [
     "ObserverPresentation",
     "ObserverRelationshipSummary",
     "ObserverResource",
+    "ObserverScaleLevel",
+    "ObserverScaleProfile",
     "ObserverStructure",
     "ObserverWeather",
     "ObserverWorldState",
@@ -140,6 +153,7 @@ __all__ = [
     "epistemic_from_overlay_kind",
     "observer_capability_manifest",
     "observer_capability_payload",
+    "observer_scale_contract_payload",
     "parse_debugger_query",
     "parse_research_selection",
     "parse_research_ui_query",
@@ -148,4 +162,6 @@ __all__ = [
     "project_subjective_label_overlay",
     "project_symbolic_overlay",
     "resolve_cohort_candidate",
+    "scale_profile_for",
+    "select_scale_level",
 ]

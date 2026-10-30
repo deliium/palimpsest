@@ -2,6 +2,7 @@ import {
   type CapabilitySlot,
   credentialFor,
 } from '../auth/credentials'
+import { type VersionPayload, parseVersionPayload } from './versionSchema'
 
 export type ApiErrorBody = {
   code?: string
@@ -99,6 +100,27 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const response = await apiFetchResponse(path, options)
   return (await response.json()) as T
+}
+
+/**
+ * Read the public version report. This endpoint is unauthenticated, so it must
+ * not attach a capability credential or widen `FetchOptions`.
+ */
+export async function getVersion(
+  signal?: AbortSignal,
+): Promise<VersionPayload> {
+  const init: RequestInit = {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  }
+  if (signal !== undefined) {
+    init.signal = signal
+  }
+  const response = await fetch('/version', init)
+  if (!response.ok) {
+    throw new ApiClientError(response.status, `http_${response.status}`)
+  }
+  return parseVersionPayload(await response.json())
 }
 
 export type RunListItem = {

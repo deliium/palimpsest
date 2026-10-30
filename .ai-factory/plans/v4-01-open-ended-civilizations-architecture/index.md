@@ -285,8 +285,8 @@ V3 benchmark 30; `prepare_parallel=False`. `institutional_economy` and
 - [x] Task 11: Add the opt-in V4 scale qualification lane ([details](phase-04-observer-and-scale.md#task-11-add-the-opt-in-v4-scale-qualification-lane)) (depends on 10)
 
 ### Phase 5: Client Scaffolding
-- [ ] Task 12: Add Godot multi-scale and protocol scaffolding ([details](phase-05-client-scaffolding.md#task-12-add-godot-multi-scale-and-protocol-scaffolding)) (depends on 9)
-- [ ] Task 13: Add Research UI version and capability scaffolding ([details](phase-05-client-scaffolding.md#task-13-add-research-ui-version-and-capability-scaffolding)) (depends on 9)
+- [x] Task 12: Add Godot multi-scale and protocol scaffolding ([details](phase-05-client-scaffolding.md#task-12-add-godot-multi-scale-and-protocol-scaffolding)) (depends on 9)
+- [x] Task 13: Add Research UI version and capability scaffolding ([details](phase-05-client-scaffolding.md#task-13-add-research-ui-version-and-capability-scaffolding)) (depends on 9)
 
 ### Phase 6: Invariants and Regression
 - [ ] Task 14: Add the V4 architecture invariant suite ([details](phase-06-invariants-and-regression.md#task-14-add-the-v4-architecture-invariant-suite)) (depends on 3-13)

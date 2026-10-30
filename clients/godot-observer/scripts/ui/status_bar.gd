@@ -33,10 +33,18 @@ func show_versions(
 	revision: String,
 	loaded: bool = true,
 	reason_code: String = "",
+	capability_count: int = 0,
+	reserved_count: int = 0,
+	supported_count: int = 1,
 ) -> void:
-	_versions.text = "application %s\nprotocol %s\nexport %s\nrevision %s" % [
+	var lines := "application %s\nprotocol %s\nexport %s\nrevision %s" % [
 		application, protocol, export_engine, revision,
 	]
+	if loaded and (capability_count > 0 or reserved_count > 0):
+		lines += "\ncapabilities %d (+%d reserved), protocols %d" % [
+			capability_count, reserved_count, supported_count,
+		]
+	_versions.text = lines
 	if loaded:
 		ObserverLog.info(
 			"version",
@@ -44,6 +52,13 @@ func show_versions(
 				application, protocol, export_engine, revision,
 			],
 		)
+		if capability_count > 0:
+			ObserverLog.info(
+				"version",
+				"version_capabilities_unknown capability_count=%d reserved_count=%d" % [
+					capability_count, reserved_count,
+				],
+			)
 	else:
 		ObserverLog.error("version", "version_failed reason_code=%s" % reason_code)
 
@@ -104,6 +119,11 @@ func _load_versions() -> void:
 		str(lines["protocol_version"]),
 		str(lines["export_engine"]),
 		str(lines["revision"]),
+		true,
+		"",
+		_count(lines, "observer_capabilities"),
+		_count(lines, "observer_reserved_capabilities"),
+		_count(lines, "supported_observer_protocols"),
 	)
 
 
@@ -146,7 +166,19 @@ func _on_version(
 		str(lines["protocol_version"]),
 		str(lines["export_engine"]),
 		str(lines["revision"]),
+		true,
+		"",
+		_count(lines, "observer_capabilities"),
+		_count(lines, "observer_reserved_capabilities"),
+		_count(lines, "supported_observer_protocols"),
 	)
+
+
+func _count(lines: Dictionary, key: String) -> int:
+	var value: Variant = lines.get(key, [])
+	if typeof(value) != TYPE_ARRAY:
+		return 0
+	return (value as Array).size()
 
 
 func _show_local(loaded: bool, reason_code: String) -> void:
@@ -158,4 +190,7 @@ func _show_local(loaded: bool, reason_code: String) -> void:
 		str(lines["revision"]),
 		loaded,
 		reason_code,
+		_count(lines, "observer_capabilities"),
+		_count(lines, "observer_reserved_capabilities"),
+		_count(lines, "supported_observer_protocols"),
 	)

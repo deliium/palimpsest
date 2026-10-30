@@ -19,7 +19,24 @@ static func local_lines() -> Dictionary:
 		"protocol_version": Protocol.PROTOCOL_VERSION,
 		"export_engine": EXPORT_ENGINE,
 		"revision": "unknown",
+		"supported_observer_protocols": [Protocol.PROTOCOL_VERSION],
+		"observer_capabilities": [],
+		"observer_reserved_capabilities": [],
+		"observer_layout_version": Protocol.LAYOUT_SCHEMA_VERSION,
 	}
+
+
+static func _string_array(value: Variant, fallback: Array) -> Array:
+	if typeof(value) != TYPE_ARRAY:
+		return fallback.duplicate()
+	var parsed: Array = []
+	for item in value:
+		if typeof(item) != TYPE_STRING:
+			continue
+		var text := str(item).strip_edges()
+		if not text.is_empty() and not parsed.has(text):
+			parsed.append(text)
+	return parsed
 
 
 static func lines_from_body(body: Variant) -> Dictionary:
@@ -38,10 +55,25 @@ static func lines_from_body(body: Variant) -> Dictionary:
 		export_engine = str(fallback["export_engine"])
 	if revision.is_empty():
 		revision = "unknown"
+	var supported := _string_array(
+		body.get("supported_observer_protocols"),
+		[Protocol.PROTOCOL_VERSION],
+	)
+	if supported.is_empty():
+		supported = [Protocol.PROTOCOL_VERSION]
+	var capabilities := _string_array(body.get("observer_capabilities"), [])
+	var reserved := _string_array(body.get("observer_reserved_capabilities"), [])
+	var layout := str(body.get("observer_layout_version", "")).strip_edges()
+	if layout.is_empty():
+		layout = Protocol.LAYOUT_SCHEMA_VERSION
 	return {
 		"ok": true,
 		"application_version": application,
 		"protocol_version": protocol,
 		"export_engine": export_engine,
 		"revision": revision,
+		"supported_observer_protocols": supported,
+		"observer_capabilities": capabilities,
+		"observer_reserved_capabilities": reserved,
+		"observer_layout_version": layout,
 	}

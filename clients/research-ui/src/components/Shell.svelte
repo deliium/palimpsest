@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { ApiClientError, getVersion } from '../api/client'
+  import type { VersionPayload } from '../api/versionSchema'
   import AuthPanel from './AuthPanel.svelte'
+  import ProtocolBadge from './research/ProtocolBadge.svelte'
   import MatrixPanel from '../views/MatrixPanel.svelte'
   import RunList from '../views/RunList.svelte'
   import RunOverview from '../views/RunOverview.svelte'
@@ -8,6 +11,8 @@
   import type { ResearchSelection } from '../research/selection'
 
   let route = $state<Route>(resolveRoute())
+  let version = $state<VersionPayload | null>(null)
+  let versionUnavailableReason = $state<string | null>(null)
 
   function refresh(): void {
     route = resolveRoute()
@@ -31,7 +36,22 @@
   onMount(() => {
     refresh()
     window.addEventListener('popstate', refresh)
-    return () => window.removeEventListener('popstate', refresh)
+    const controller = new AbortController()
+    getVersion(controller.signal)
+      .then((payload) => {
+        version = payload
+        versionUnavailableReason = null
+      })
+      .catch((error: unknown) => {
+        version = null
+        versionUnavailableReason =
+          error instanceof ApiClientError ? error.code : 'version_payload_invalid'
+        console.debug('version_payload_invalid')
+      })
+    return () => {
+      controller.abort()
+      window.removeEventListener('popstate', refresh)
+    }
   })
 </script>
 
@@ -42,6 +62,7 @@
       <a href="/research/">Runs</a>
       <a href="/research/matrix">Matrix</a>
     </nav>
+    <ProtocolBadge version={version} unavailableReason={versionUnavailableReason} />
     <AuthPanel />
   </header>
   <main class="outlet">

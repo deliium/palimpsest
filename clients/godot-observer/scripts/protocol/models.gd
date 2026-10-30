@@ -5,6 +5,8 @@ const ObserverLog := preload("res://scripts/log.gd")
 
 const PROTOCOL_VERSION := "observer-protocol-v1"
 const LAYOUT_SCHEMA_VERSION := "observer-layout-v1"
+const SUPPORTED_PROTOCOLS: Array[String] = [PROTOCOL_VERSION]
+const RESERVED_PROTOCOL_VERSION := "observer-protocol-v2"
 
 const KNOWN_TYPES: Array[String] = [
 	"AGENT_MOVED",
@@ -500,7 +502,7 @@ static func parse_text(kind: String, text: String) -> ParseResult:
 static func _protocol_matches(data: Dictionary) -> bool:
 	if not data.has("protocol_version") or data["protocol_version"] == null:
 		return false
-	return str(data["protocol_version"]) == PROTOCOL_VERSION
+	return SUPPORTED_PROTOCOLS.has(str(data["protocol_version"]))
 
 
 static func _optional_text(data: Dictionary, key: String) -> Variant:
