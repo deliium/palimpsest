@@ -21,6 +21,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceSpec,
+    SimulationRunnerConfig,
     V4CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -47,7 +48,7 @@ V4_FLAG_NAMES = (
 )
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -72,7 +73,7 @@ def _base():
     )
 
 
-def _v56_config() -> object:
+def _v56_config() -> SimulationRunnerConfig:
     return replace(_base(), schema_version=RUNNER_SCHEMA_VERSION_V56)
 
 

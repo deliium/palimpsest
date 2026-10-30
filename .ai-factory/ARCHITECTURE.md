@@ -537,3 +537,38 @@ runner v4/result v2, latest feature runner v55, 43 commands, 73 observer semanti
 types, 136 metric families, replay-v22/codec v20 when selected, Alembic `0017`,
 `/v1` and `observer-protocol-v1`. `institutional_economy` and
 `multi_hop_testimony_tracking` remain unowned.
+
+### V4-01 open-ended civilizations architecture seam
+
+`simulation.v4_architecture`, `simulation.versioning`, `simulation.migration_plan`,
+`simulation.scale`, and `observer.capabilities` publish the V4 vocabulary without
+implementing behavior. Thirteen contexts are declared: twelve closed capability
+flags plus analysis-only `societal_resilience`. Every context names one authority
+(`objective_world`, `owner_scoped`, `detached_analysis`, `presentation_only`),
+owning packages, prerequisites, and non-goals; no context declares an
+organization, market, polity, institution, or civilization actor, and no global
+registry exists.
+
+`V4CapabilityFlags` is closed and unowned: enabling any flag requires
+`runner-config-v56` (the v55 keyset plus one exact `v4_capability_flags` sibling)
+and then fails closed at `SimulationRunner.from_config` with
+`capability_unimplemented` and `stage="v4_capability_flags"`. Default write stays
+`runner-config-v4`, the latest feature runner stays `runner-config-v55`, and
+feature selection never emits v56. Decoding v1–v55 synthesizes all-off V4 flags.
+
+Four write pairs are reserved (events 23–26, codecs `v21`–`v24`) for
+`infrastructure_networks`, `epidemics`, `ecological_feedback`, and `disasters`;
+the other nine contexts must reuse existing events. Six migration stages are
+ordered and evidence-gated; head stays `0017` and no `0018` file exists. Scale
+partitioning is a pure function of a versioned namespace and agent id, with
+declarative budgets and an opt-in measurement lane that makes no capacity claim.
+
+`GET /version` additively advertises supported protocols, layout, and
+advertised/reserved capability **names**; it never exposes capability-flag values
+or configuration payloads, and `observer-protocol-v1` remains the only served
+protocol. Both clients stay read-only.
+
+V4-01 adds no command, event, observer semantic type, metric family, write-pair
+activation, API route, migration, or behavior. Historical "no v56" sentences
+inside the V3 seam sections are scoped to those plans and are not current pins;
+the pin table above is unchanged.

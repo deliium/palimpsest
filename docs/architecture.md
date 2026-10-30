@@ -259,6 +259,9 @@ Register roadmap milestones via `/aif-roadmap` (e.g. **M7 — V3 Generational Ar
 ## See also
 
 - [V4 architecture](v4-architecture.md)
+- [V4 versioning](v4-versioning.md)
+- [V4 migration sequence](v4-migration-sequence.md)
+- [V4 scale contract](v4-scale.md)
 - [Cognition and agent runtime](cognition-runtime.md)
 - [Memory reconstruction](memory-reconstruction.md)
 - [Social communication](social-communication.md)
@@ -453,8 +456,10 @@ semantic, write-pair, migration, API route or capability ownership is added;
 ## V3-36 generational experiments (current baseline)
 
 Experiment BM and the comparison matrix factors compose existing
-`runner-config-v55` fields; there is no v56, new command, event, observer
-semantic, write-pair, API route, migration, or capability flag. Comparisons are
+`runner-config-v55` fields; there is no v56 *in that plan*, new command, event,
+observer semantic, write-pair, API route, migration, or capability flag. V4-01
+later accepts `runner-config-v56` as scaffolding identity; the "no v56" statement
+here is scoped to V3-36 and is not a current pin. Comparisons are
 closed experiment presets, not simulation authority. All paired arms share
 seed, stochastic identity, world, roster, horizon, schedule, and initialization;
 only the declared axis differs. Cohort measurement is detached and analysis-only.

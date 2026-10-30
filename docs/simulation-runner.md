@@ -17,9 +17,15 @@ Derivation version **v3** requires an explicit stochastic identity and fails clo
 ## Configuration
 
 `SimulationRunnerConfig` is frozen and versioned (`runner-config-v4` write default
-when every V2/V3 flag and V3 root is inactive; `runner-config-v1`…`v55` remain
+when every V2/V3/V4 flag and V3 root is inactive; `runner-config-v1`…`v56` remain
 decodable; generational runs use `runner-result-v3`, while legacy result v1/v2
-stay accepted). Strict canonical JSON codecs reject unknown fields, duplicate keys,
+stay accepted).
+
+`runner-config-v56` is accepted-only scaffolding: the v55 keyset plus one closed
+`v4_capability_flags` sibling. `V4CapabilityFlags` defaults to all off, is
+unowned in V4-01, and fails closed at `SimulationRunner.from_config`
+(`capability_unimplemented`, stage `v4_capability_flags`). No feature selects v56
+automatically. See [V4 versioning](v4-versioning.md). Strict canonical JSON codecs reject unknown fields, duplicate keys,
 non-finite numbers, credentials, and unsupported versions. Separate fingerprints
 cover:
 

@@ -86,7 +86,8 @@ def test_level_boundaries_agree_with_gdscript_constants() -> None:
 
 def test_contract_version_and_protocol_constants_are_shared() -> None:
     text = GD_SCALE.read_text(encoding="utf-8")
-    assert f'const SCALE_CONTRACT_VERSION := "{OBSERVER_SCALE_CONTRACT_VERSION}"' in text
+    expected = f'const SCALE_CONTRACT_VERSION := "{OBSERVER_SCALE_CONTRACT_VERSION}"'
+    assert expected in text
 
     models = GD_MODELS.read_text(encoding="utf-8")
     assert "const SUPPORTED_PROTOCOLS: Array[String] = [PROTOCOL_VERSION]" in models

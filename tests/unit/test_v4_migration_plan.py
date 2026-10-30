@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -24,7 +25,7 @@ MODULE = ROOT / "src" / "simulation" / "migration_plan.py"
 pytestmark = pytest.mark.unit
 
 
-def _mutated(index: int, **changes: object) -> tuple[MigrationStage, ...]:
+def _mutated(index: int, **changes: Any) -> tuple[MigrationStage, ...]:
     return tuple(
         replace(stage, **changes) if position == index else stage
         for position, stage in enumerate(V4_MIGRATION_SEQUENCE)

@@ -180,3 +180,24 @@ or institutions is required. The 2026-10-30 qualification measured all thirty
 mechanisms, 150 predeclared research runs, deterministic twins, and truthful
 10k/100k envelope limits (generational 100k completed ticks with an extinct
 final population; evidence-rich 100k incomplete).
+
+V4-01 (V4 scaffolding, 2026-10-30) adds the open-ended-civilization architecture
+seam without mechanics. `simulation.v4_architecture` declares thirteen contexts
+(twelve closed unowned `V4CapabilityFlags` plus analysis-only
+`societal_resilience`) with four authorities, owning packages, prerequisites, and
+non-goals; no organization, market, polity, institution, or civilization actor
+exists. `runner-config-v56` is accepted as the v55 keyset plus one exact
+`v4_capability_flags` sibling, is never emitted automatically, and every enabled
+V4 flag fails closed at `SimulationRunner.from_config`. `simulation.versioning`
+reserves four future write pairs (events 23-26, codecs `v21`-`v24`) for the four
+objective contexts that need new events; `simulation.migration_plan` orders six
+evidence-gated stages while Alembic head stays `0017`. `observer.capabilities`
+lets `GET /version` advertise protocol/layout/capability names additively without
+exposing flag values, and `simulation.scale` plus `observer.scale` define
+deterministic partitioning, declarative budgets, and presentation-only
+multi-scale levels. Both clients consume the additive contract and stay read-only.
+Default runner/result remain v4/v2, latest feature runner v55, commands 43,
+observer semantic types 73, metric families 136, replay-v22/codec v20,
+`/v1`, and `observer-protocol-v1`; `institutional_economy` and
+`multi_hop_testimony_tracking` remain unowned. V4-01 claims no capacity and adds
+no V4 social mechanic.

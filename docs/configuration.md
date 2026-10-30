@@ -305,7 +305,12 @@ replay/codec write pairs remain channel-selected. See
 [Generational runner](generational-runner.md).
 
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
-do not add a runner schema. There is no `runner-config-v56`. The closed axes
+do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
+explicit scaffolding identity only: it is the v55 keyset plus one closed
+`v4_capability_flags` sibling, every V4 flag is unowned and fails closed at
+`SimulationRunner.from_config`, default writes remain `runner-config-v4`, the
+latest feature runner remains `runner-config-v55`, and no behavior or migration
+is added. See [V4 versioning](v4-versioning.md). The closed axes
 (`lifespan`, `learning_model`, `teaching_frequency`, `record_availability`,
 `memory_architecture`, `innovation_rate`, `migration`, `resource_scarcity`,
 `population_size`, `institution_support`, `cognitive_architecture`) are

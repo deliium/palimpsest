@@ -81,7 +81,7 @@ Contributor summary:
 | Derivation v1 / v2 / v3 | Deterministic ID/stream derivation (v2 includes rules fingerprint) |
 | Subjective codec v1 | Semantic beliefs, relationship profiles, mutation receipts (non-authoritative) |
 | Runner config | Write `runner-config-v4` when all V3 flags and roots are off; accept `v1`…`v46` decode; `v44` = regions/migration root; `v45` = v44 root ∪ required `cultural_contact`; `v46` = active v44/v45 root with per-agent `symbolic_language_mode` only (no new root sibling) |
-| Alembic head | Pin **`0017`** — hybrid memory retrieve shortlist readiness (HNSW deferred: untyped `vector` column); prior `0016` event filter indexes and `0015` branch lineage remain; V2/V3 capability flags, lifecycle, and new-agent init stay runner JSON / event+snapshot payloads (no `0018` in v3-03) |
+| Alembic head | Pin **`0017`** (V4-01 adds no migration; see [V4 migration sequence](v4-migration-sequence.md)) — hybrid memory retrieve shortlist readiness (HNSW deferred: untyped `vector` column); prior `0016` event filter indexes and `0015` branch lineage remain; V2/V3 capability flags, lifecycle, and new-agent init stay runner JSON / event+snapshot payloads (no `0018` in v3-03) |
 
 `SimulationRunnerResult` exports owner-ordered `terminology_ledgers`,
 `symbolic_ledgers`, and `initial_lifecycle_records` as detached tuples. These

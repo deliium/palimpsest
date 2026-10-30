@@ -16,6 +16,13 @@ ownership explicitly before a flag can enable behavior.
 V2/V3. V4 does not silently claim them, and they keep failing closed exactly as
 they do today.
 
+Current implementation status: V4-01 scaffolding is implemented — closed flags,
+accepted `runner-config-v56`, reserved write pairs, an ordered migration
+sequence, observer capability negotiation, and the scale contract. No V4 mechanic
+exists. Details: [versioning and compatibility](v4-versioning.md),
+[migration sequence](v4-migration-sequence.md), and
+[scale contract](v4-scale.md).
+
 ## Authority model
 
 Four authorities exist, and every V4 context declares exactly one:

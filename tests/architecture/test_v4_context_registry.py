@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -85,7 +86,7 @@ FORBIDDEN_REGISTRY_IMPORTS = (
 )
 
 
-def _candidate(target: V4ContextId, **changes: object) -> tuple[V4ContextSpec, ...]:
+def _candidate(target: V4ContextId, **changes: Any) -> tuple[V4ContextSpec, ...]:
     """Return the registry with ``target`` replaced by an invalid variant."""
     return tuple(
         replace(spec, **changes) if spec.context_id is target else spec

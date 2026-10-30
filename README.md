@@ -55,10 +55,13 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2/V3 seams + downstream plan contracts |
 | [V4 architecture](docs/v4-architecture.md) | V4 bounded contexts, four authorities, reserved wire/migration posture, scale contract, presentation policy, downstream V4 checklist |
-| [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, V2/V3 capability flags, fingerprint vs trajectory identity |
+| [V4 versioning](docs/v4-versioning.md) | Surface pins, `runner-config-v56`, reserved write pairs, observer negotiation, deprecation |
+| [V4 migration sequence](docs/v4-migration-sequence.md) | Six ordered evidence-gated stages, head `0017`, authority impact |
+| [V4 scale contract](docs/v4-scale.md) | Deterministic partitioning, declarative budgets, opt-in measurement lane, no capacity claim |
+| [Simulation runner](docs/simulation-runner.md) | Config-driven `SimulationRunner`, V2/V3/V4 capability flags, fingerprint vs trajectory identity |
 | [Generational runner](docs/generational-runner.md) | `runner-config-v55`/`runner-result-v3`, cohorts, stop selectors, archives, historical inspection, CLI |
 | [Historical contingency](docs/historical-contingency.md) | Experiment BN forked replay, intervention lineage, seven outcome domains, seed-block statistics |
-| [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile` / `v2_regression_profile` / `v3_scaffolding_profile`, coordinator, generational comparison (BM) axes and matrix factors, persistence (`0010`) |
+| [Experiments](docs/experiments.md) | Trusted A–E catalog, `v1_regression_profile` / `v2_regression_profile` / `v3_scaffolding_profile`, coordinator, generational comparison (BM) axes and matrix factors, persistence (`0017`) |
 | [V2 benchmark suite](docs/v2-benchmark-suite.md) | Sixteen composition scenarios, observer graphical fixture, zero-install + scientific gates (off V1 gate) |
 | [V3 benchmark suite](docs/v3-benchmark-suite.md) | Thirty generational civilization cases, controlled/autonomous lanes, seed-block comparison, qualification matrix, measured envelope |
 | [Analysis metrics](docs/analysis-metrics.md) | V1 metric catalog, populations/denominators, numerical policy, known-answer fixtures |

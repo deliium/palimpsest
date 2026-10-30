@@ -1,8 +1,8 @@
 """Presentation-only observer scale levels and row caps.
 
 No server aggregation and no engine semantics: a level is a client-side view
-choice over the same v1 frames. Thresholds mirror the Godot client exactly and
-are pinned by ``tests/unit/test_observer_scale_mirror.py``.
+choice over the same v1 frames. Thresholds mirror the read-only presentation
+client exactly and are pinned by ``tests/unit/test_observer_scale_mirror.py``.
 """
 
 from __future__ import annotations
@@ -83,7 +83,8 @@ def select_scale_level(population: int) -> ObserverScaleLevel:
     for profile in OBSERVER_SCALE_PROFILES:
         if population < profile.population_floor:
             continue
-        if profile.population_ceiling is None or population <= profile.population_ceiling:
+        ceiling = profile.population_ceiling
+        if ceiling is None or population <= ceiling:
             return profile.level
     raise ValueError("scale_population_unmapped")
 

@@ -35,6 +35,7 @@ from simulation.runner_models import (
     MediationMode,
     OfficeSuccessionMode,
     RunnerStopPolicy,
+    SimulationRunnerConfig,
     V4CapabilityFlags,
     WorldScenarioSpec,
 )
@@ -50,7 +51,7 @@ from world.models import default_physical_rules
 pytestmark = pytest.mark.unit
 
 
-def _base():
+def _base() -> SimulationRunnerConfig:
     body = alive_body("body-1")
     agent_id = AgentId("agent-1")
     return base_runner_config_from_scenario(
@@ -75,7 +76,7 @@ def _base():
     )
 
 
-def _generational_v55():
+def _generational_v55() -> SimulationRunnerConfig:
     """A valid v55 generational config with every institutional mode off."""
     definition = institutionalization_scenario(seed=23, max_ticks=8)
     config = next(

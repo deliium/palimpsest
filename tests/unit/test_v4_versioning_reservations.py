@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -25,7 +26,7 @@ from world.events import EVENT_SCHEMA_REPLAY_V22
 pytestmark = pytest.mark.unit
 
 
-def _mutated(index: int, **changes: object) -> tuple[WritePairReservation, ...]:
+def _mutated(index: int, **changes: Any) -> tuple[WritePairReservation, ...]:
     return tuple(
         replace(item, **changes) if position == index else item
         for position, item in enumerate(V4_WRITE_PAIR_RESERVATIONS)
@@ -77,9 +78,7 @@ def test_duplicate_and_gap_mutations_are_rejected() -> None:
 
 def test_context_and_flag_mutations_are_rejected() -> None:
     with pytest.raises(ValueError, match="v4_pair_unknown_context"):
-        validate_write_pair_reservations(
-            _mutated(0, context_id="not_a_context")  # type: ignore[arg-type]
-        )
+        validate_write_pair_reservations(_mutated(0, context_id="not_a_context"))
     with pytest.raises(ValueError, match="v4_pair_analysis_context"):
         validate_write_pair_reservations(
             _mutated(0, context_id=V4ContextId.SOCIETAL_RESILIENCE)

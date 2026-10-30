@@ -66,7 +66,7 @@ def test_flag_vocabularies_do_not_overlap() -> None:
 def test_non_bool_flag_values_are_rejected() -> None:
     for name in V4_CAPABILITY_FLAG_NAMES:
         with pytest.raises(TypeError, match=f"V4CapabilityFlags.{name} must be bool"):
-            V4CapabilityFlags(**{name: 1})
+            V4CapabilityFlags(**{name: 1})  # type: ignore[arg-type]
 
 
 def test_digest_is_stable_hex_and_changes_with_one_flag() -> None:

@@ -21,7 +21,7 @@ surface; default runner/result writes remain `runner-config-v4` /
 | Fork shape | Bounded static star: one parent boundary per configured `F` |
 | Artifact root | `<root>/<ensemble-id>/...` |
 | Schemas | `path-dependence-{ensemble,prefix,branch,outcomes,comparison}-v1` |
-| Runner pins | Latest `runner-config-v55`; no runner v56 |
+| Runner pins | Latest feature runner `runner-config-v55`; accepted scaffolding `runner-config-v56` |
 | Catalog pins | 43 commands, 73 observer semantic types, 136 metric families, Alembic `0017` |
 
 The path-dependence schemas are research siblings. They do not widen runner

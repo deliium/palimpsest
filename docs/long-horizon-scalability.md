@@ -15,6 +15,13 @@ measurements produced against base revision `1c5c18c`.
 > configured budget; the generational 100k lane completed ticks but ended with
 > zero living owners, which is a throughput result, not sustained capacity.
 
+## V4 scale contract
+
+V4-01 adds a deterministic partition/budget contract in `simulation.scale` and an
+opt-in measurement lane, but **no measured capacity**. Partition mapping only is
+measured; see [V4 scale contract](v4-scale.md). The envelope statements on this
+page remain the only verified throughput evidence.
+
 ## Verified Envelope
 
 | Lane | Horizon | Status | Repetitions | Completed ticks | Verified boundary |
