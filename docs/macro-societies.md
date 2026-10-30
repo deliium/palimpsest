@@ -124,11 +124,14 @@ Publication is opt-in and completed-run only:
 - `persistence.macro_society_filesystem` stores it atomically under
   `<root>/<run_id>/` with one `state.json` commit point and quotas.
 - `research_runner` exposes `--macro-society-root`,
-  `--macro-society-max-publications`, and `--macro-society-max-bytes`. A
-  storage failure changes only the receipt `status`, never the scientific
-  result. When no completed-run harvest producer is wired, the receipt reports
-  `status=unavailable` with `reason_code=macro_society_harvest_unavailable`
-  rather than a false success.
+  `--macro-society-max-publications`, and `--macro-society-max-bytes`. After a
+  successful generational run it projects the committed events into bounded
+  windows, derives communication, interaction, exchange, and migration edges,
+  and leaves the other five lanes explicitly absent. A storage failure changes
+  only the receipt `status`, never the scientific result. When the run has no
+  usable evidence the receipt reports `status=unavailable` with a safe reason
+  code rather than a false success. The receipt is written to
+  `macro-society-publication-<run_id>.json` under the artifact root.
 
 Caps: 512 members per candidate record, 4096 candidates, 16384 edges, 512
 windows, 4096 objective rows, 4 MiB per snapshot.

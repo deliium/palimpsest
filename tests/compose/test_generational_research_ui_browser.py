@@ -36,6 +36,7 @@ PANELS = (
     ("economy", "Economic exchange networks"),
     ("projects", "Collective project history"),
     ("institutions", "Institutions"),
+    ("macro-societies", "Macro-society candidates"),
 )
 
 

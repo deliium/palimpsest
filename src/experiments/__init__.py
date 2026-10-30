@@ -274,6 +274,7 @@ from experiments.interventions import (
     make_false_story_intervention,
     unwrap_arbiter_command,
 )
+from experiments.macro_society_completed_run import build_completed_run_harvest
 from experiments.macro_society_publication import (
     MacroSocietyHarvest,
     MacroSocietyHarvestResult,
@@ -565,6 +566,7 @@ __all__ = [
     "assert_v3_benchmark_build_comparable",
     "benchmark_suite_registry",
     "bounded_experimentation_profile",
+    "build_completed_run_harvest",
     "build_generational_comparison",
     "build_macro_society_harvest_result",
     "build_matrix_aggregate",

@@ -1160,15 +1160,63 @@ def _cmd_generational(args: argparse.Namespace) -> int:
         print(f"stop_reason={arm.runner_result.stop_reason.value}")
         print(f"ticks_committed={arm.runner_result.ticks_committed}")
         if macro_society_options.enabled:
+            import json
+
+            from analysis.macro_society_contract import MacroSocietyError
+            from experiments.macro_society_completed_run import (
+                build_completed_run_harvest,
+            )
             from research_runner.macro_society_composition import (
                 publish_macro_society_harvest,
             )
+            from simulation.runner_models import runner_stop_is_failure
 
-            receipt = publish_macro_society_harvest(
-                options=macro_society_options, harvest=None
+            receipt: dict[str, object]
+            if runner_stop_is_failure(arm.runner_result.stop_reason):
+                receipt = {
+                    "status": "unavailable",
+                    "reason_code": "macro_society_run_incomplete",
+                }
+            else:
+                try:
+                    harvest = build_completed_run_harvest(
+                        run_id=assignment.run_id.value,
+                        input_revision=arm.config_fingerprint,
+                        events=arm.committed_events or (),
+                        generated_tick=arm.runner_result.ticks_committed,
+                    )
+                except (MacroSocietyError, ValueError) as exc:
+                    receipt = {
+                        "status": "unavailable",
+                        "reason_code": getattr(
+                            exc, "reason_code", "macro_society_harvest_unavailable"
+                        ),
+                    }
+                else:
+                    receipt = publish_macro_society_harvest(
+                        options=macro_society_options, harvest=harvest
+                    )
+            receipt_path = Path(args.artifact_root) / (
+                f"macro-society-publication-{assignment.run_id.value}.json"
             )
+            try:
+                receipt_path.write_text(
+                    json.dumps(receipt, sort_keys=True, separators=(",", ":"))
+                    + "\n",
+                    encoding="utf-8",
+                )
+            except OSError:
+                _LOG.warning(
+                    "macro_society_receipt_write_failed run=%s",
+                    assignment.run_id.value,
+                )
             print(f"macro_society_publication_status={receipt['status']}")
             print(f"macro_society_publication_reason={receipt['reason_code']}")
+            if "publication_id" in receipt:
+                print(
+                    "macro_society_publication_id="
+                    f"{receipt['publication_id']}"
+                )
         if lineage_options is not None:
             import json
 

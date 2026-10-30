@@ -89,6 +89,18 @@ def test_receipt_contains_no_member_or_owner_ids() -> None:
     assert document["snapshot_bytes"] == result.snapshot_bytes
 
 
+def test_member_list_truncation_is_disclosed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "experiments.macro_society_publication.MAX_SNAPSHOT_MEMBERS", 3
+    )
+    result = build_macro_society_harvest_result(_harvest())
+    assert result.snapshot.provenance_code == "member_list_truncated"
+    assert len(result.snapshot.candidates) == 1
+    assert len(result.snapshot.candidates[0].member_ids) == 3
+
+
 def test_empty_harvest_is_rejected() -> None:
     with pytest.raises(MacroSocietyError, match="macro_society_empty_window"):
         MacroSocietyHarvest(

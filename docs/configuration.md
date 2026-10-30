@@ -329,6 +329,20 @@ entry rate may differ only for the `population_size` axis.
 - `PALIMPSEST_LINEAGE_CURSOR_KEY`: optional signing key of at least 32 UTF-8 bytes for restart-stable lineage cursors.
 - `palimpsest-matrix generational --lineage-root ... --lineage-cadence ... --lineage-max-publications ... --lineage-max-bytes ...`: trusted capture composition. Non-root flags require the root. See `docs/lineage-explorer.md`.
 
+## Macro-society analytical identity
+
+- `PALIMPSEST_MACRO_SOCIETY_ROOT`: reader-only root for published
+  `macro-society-snapshot-v1` artifacts. Absent disables the four GET routes with
+  `503 macro_society_disabled`; it never starts capture or analysis.
+- `PALIMPSEST_MACRO_SOCIETY_CURSOR_KEY`: optional signing key of at least 32
+  UTF-8 bytes for restart-stable macro-society cursors. When absent, a
+  per-process key is used and cursors do not survive a restart.
+- `palimpsest-matrix generational --macro-society-root ... --macro-society-max-publications ... --macro-society-max-bytes ...`:
+  opt-in completed-run publication. The harvest is derived only from committed
+  objective events (communication, interaction, exchange, migration); the other
+  five lanes stay absent rather than inferred. See
+  `docs/macro-societies.md`.
+
 ## Civilization overlay reader
 
 Optional V3 civilization overlays are read from a finished-run publication. The

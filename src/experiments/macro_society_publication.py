@@ -109,6 +109,13 @@ def _objective_rows(rows: tuple[object, ...]) -> tuple[MacroSocietyObjectiveRow,
     return tuple(converted)
 
 
+def _bounded_members(members: tuple[str, ...]) -> tuple[tuple[str, ...], bool]:
+    """Truncate deterministically at the snapshot member cap."""
+    if len(members) <= MAX_SNAPSHOT_MEMBERS:
+        return members, False
+    return members[:MAX_SNAPSHOT_MEMBERS], True
+
+
 def _candidate_records(
     analysis: MacroSocietyAnalysis,
 ) -> tuple[tuple[MacroSocietyCandidateRecord, ...], bool]:
@@ -117,9 +124,8 @@ def _candidate_records(
     final = analysis.windows[-1]
     overlap = set(final.overlap_person_ids)
     for record in analysis.records:
-        members = record.member_ids
-        if len(members) > MAX_SNAPSHOT_MEMBERS:
-            members = members[:MAX_SNAPSHOT_MEMBERS]
+        members, clipped = _bounded_members(record.member_ids)
+        if clipped:
             truncated = True
         records.append(
             MacroSocietyCandidateRecord(

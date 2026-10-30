@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from analysis.macro_society_contract import MacroSocietyLane
+from analysis.macro_society_contract import MacroSocietyError, MacroSocietyLane
 from analysis.macro_society_evidence import MacroSocietyEdge, MacroSocietyWindowEvidence
+from experiments.macro_society_completed_run import build_completed_run_harvest
 from experiments.macro_society_publication import MacroSocietyHarvest
 from research_runner.macro_society_composition import (
     MacroSocietyProducerOptions,
@@ -100,6 +102,79 @@ def test_storage_failure_becomes_a_failed_receipt(tmp_path: Path) -> None:
     )
     assert receipt["status"] == "failed"
     assert isinstance(receipt["reason_code"], str)
+
+
+def _event(actor: str, kind: str, other: str, tick: int) -> SimpleNamespace:
+    details = SimpleNamespace(kind=kind, recipient_id=other, target_id=other)
+    return SimpleNamespace(actor_id=actor, details=details, tick=tick)
+
+
+def test_completed_run_harvest_derives_four_edge_lanes() -> None:
+    events = [
+        _event(source, "help", target, 0)
+        for index, source in enumerate(PERSONS[:4])
+        for target in PERSONS[:4][index + 1 :]
+    ] + [
+        _event(source, "talk", target, 0)
+        for index, source in enumerate(PERSONS[:4])
+        for target in PERSONS[:4][index + 1 :]
+    ]
+    harvest = build_completed_run_harvest(
+        run_id="run-1",
+        input_revision="rev-1",
+        events=events,
+        generated_tick=9,
+    )
+    assert len(harvest.windows) == 1
+    present = {
+        lane for lane, is_present in harvest.windows[0].lane_presence if is_present
+    }
+    assert present == {"communication", "interaction"}
+    assert harvest.windows[0].person_ids == PERSONS[:4]
+
+
+def test_completed_run_harvest_rejects_no_evidence() -> None:
+    with pytest.raises(MacroSocietyError, match="macro_society_empty_window"):
+        build_completed_run_harvest(
+            run_id="run-1",
+            input_revision="rev-1",
+            events=(),
+            generated_tick=0,
+        )
+
+
+def test_completed_run_harvest_windows_are_dense() -> None:
+    events = [
+        _event("person-1", "talk", "person-2", 0),
+        _event("person-3", "talk", "person-4", 250),
+    ]
+    harvest = build_completed_run_harvest(
+        run_id="run-1",
+        input_revision="rev-1",
+        events=events,
+        generated_tick=300,
+    )
+    assert [window.window_index for window in harvest.windows] == [0, 1]
+
+
+def test_completed_run_harvest_publishes_end_to_end(tmp_path: Path) -> None:
+    events = [
+        _event(source, "help", target, 0)
+        for index, source in enumerate(PERSONS[:4])
+        for target in PERSONS[:4][index + 1 :]
+    ]
+    harvest = build_completed_run_harvest(
+        run_id="run-1",
+        input_revision="rev-1",
+        events=events,
+        generated_tick=9,
+    )
+    receipt = publish_macro_society_harvest(
+        options=MacroSocietyProducerOptions(root=tmp_path), harvest=harvest
+    )
+    assert receipt["status"] == "published"
+    assert receipt["candidate_count"] == 1
+    assert "person-" not in repr(receipt)
 
 
 def test_cli_module_does_not_import_api() -> None:

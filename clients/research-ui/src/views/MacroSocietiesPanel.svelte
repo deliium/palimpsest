@@ -61,7 +61,7 @@
 
 <section class="macro-societies">
   <header>
-    <h2>Macro-society candidates</h2>
+    <h1>Macro-society candidates</h1>
     <p class="note">
       Analytical labels derived from detached evidence. Not nations, states,
       polities, or civilizations; membership may overlap.

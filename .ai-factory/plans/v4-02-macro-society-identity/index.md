@@ -5,8 +5,9 @@ Mode: ultra
 Branch: main (remain on current branch; `git.create_branches: false`)
 Created: 2026-10-30
 Plan identifier: `v4-02-macro-society-identity`
-Status: planning complete; 20 tasks across 9 phases. No task is implemented by
-this planning invocation.
+Status: implemented and verified; 20 tasks across 9 phases. This bundle was
+originally produced by a planning invocation; implementation and verification
+followed on the same branch (`main`).
 
 ## Original Request
 
