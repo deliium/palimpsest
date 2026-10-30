@@ -21,9 +21,11 @@ when every V2/V3/V4 flag and V3 root is inactive; `runner-config-v1`…`v56` rem
 decodable; generational runs use `runner-result-v3`, while legacy result v1/v2
 stay accepted).
 
-`runner-config-v56` is accepted-only scaffolding: the v55 keyset plus one closed
-`v4_capability_flags` sibling. `V4CapabilityFlags` defaults to all off, is
-unowned in V4-01, and fails closed at `SimulationRunner.from_config`
+`runner-config-v56` is accepted-only scaffolding: the active v55 family keyset
+plus one closed `v4_capability_flags` sibling. Generational siblings remain
+mandatory when a generational run is present and absent otherwise; v56 never
+invents a generational run. `V4CapabilityFlags` defaults to all off, is unowned
+in V4-01, and fails closed at `SimulationRunner.from_config`
 (`capability_unimplemented`, stage `v4_capability_flags`). No feature selects v56
 automatically. See [V4 versioning](v4-versioning.md). Strict canonical JSON codecs reject unknown fields, duplicate keys,
 non-finite numbers, credentials, and unsupported versions. Separate fingerprints

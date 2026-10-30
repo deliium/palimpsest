@@ -151,8 +151,9 @@ fail at runtime construction instead of silently doing nothing.
 ### Intent
 
 Give V4 a versioned wire identity without changing the default write or the
-latest feature runner. `runner-config-v56` is the v55 keyset plus one sibling
-`v4_capability_flags` object; no other field is added.
+latest feature runner. `runner-config-v56` is the active v55 family keyset plus
+one sibling `v4_capability_flags` object; generational siblings follow the
+selected family, and no other field is added.
 
 ### Implementation Steps
 
@@ -168,8 +169,11 @@ latest feature runner. `runner-config-v56` is the v55 keyset plus one sibling
      `v4_capability_requires_v56` at ERROR with `schema_version` and
      `flag_count`, then raise
      `ValueError("V4 capability flags require runner-config-v56 (code=v4_capability_requires_v56)")`.
-   - If `schema_version == RUNNER_SCHEMA_VERSION_V56`, require every existing
-     v55 prerequisite validator to remain satisfied; do not relax any of them.
+   - If `schema_version == RUNNER_SCHEMA_VERSION_V56`, preserve every v55
+     prerequisite validator that applies to the selected family; do not relax
+     any of them. A v56 scaffolding config without a generational run does not
+     acquire the generational siblings, and v56 never invents a generational
+     run.
 2. In `src/simulation/runner_serialization.py`:
    - Add `_V4_CAPABILITY_FLAG_KEYS` mirroring `_V3_CAPABILITY_FLAG_KEYS`.
    - Add `_encode_v4_capability_flags` / `_decode_v4_capability_flags` using
@@ -179,10 +183,11 @@ latest feature runner. `runner-config-v56` is the v55 keyset plus one sibling
      `schema_version == RUNNER_SCHEMA_VERSION_V56`. Never emit it for v55 or
      lower.
    - In `decode_runner_config`, add v56 to the accepted branch. For v56 the root
-     keyset is `_v55_family_root_keys(data) | {"v4_capability_flags"}`; the key
-     is mandatory and decoded exactly. For v1-v55, `v4_capability_flags` is an
-     unknown field and must be rejected. For v1-v55 payloads synthesize
-     `V4CapabilityFlags()`.
+     keyset is the active v55 family selection plus mandatory
+     `v4_capability_flags`; generational siblings are required exactly when a
+     generational run is present. The V4 key is mandatory and decoded exactly.
+     For v1-v55, `v4_capability_flags` is an unknown field and must be rejected.
+     For v1-v55 payloads synthesize `V4CapabilityFlags()`.
 3. In `src/simulation/compatibility.py`:
    - Extend the `runner_config` `bump_trigger` with a v56 sentence: accepted v56
      carries the closed `v4_capability_flags` sibling; all flags unowned; no
@@ -232,8 +237,9 @@ latest feature runner. `runner-config-v56` is the v55 keyset plus one sibling
 ### Required Interfaces and Contracts
 
 - `runner-config-v56` is **accepted**, never the default, and never auto-emitted.
-- Wire shape: v55 keyset plus mandatory sibling `v4_capability_flags` with
-  exactly the twelve keys, all booleans.
+- Wire shape: active v55 family keyset plus mandatory sibling
+  `v4_capability_flags` with exactly the twelve keys, all booleans. Generational
+  siblings remain mandatory only when a generational run is present.
 - Legacy synthesis: v1-v55 decode with `V4CapabilityFlags()`.
 - Strictness: unknown, missing, duplicate, or non-bool fields fail closed with
   the existing `RunnerSerializationError` codes.

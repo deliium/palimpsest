@@ -550,7 +550,8 @@ organization, market, polity, institution, or civilization actor, and no global
 registry exists.
 
 `V4CapabilityFlags` is closed and unowned: enabling any flag requires
-`runner-config-v56` (the v55 keyset plus one exact `v4_capability_flags` sibling)
+`runner-config-v56` (the active v55 family keyset plus one exact
+`v4_capability_flags` sibling; generational siblings follow the selected family)
 and then fails closed at `SimulationRunner.from_config` with
 `capability_unimplemented` and `stage="v4_capability_flags"`. Default write stays
 `runner-config-v4`, the latest feature runner stays `runner-config-v55`, and

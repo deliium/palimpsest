@@ -45,9 +45,13 @@ number below is an executable pin in `simulation.compatibility`,
 
 ## `runner-config-v56`
 
-`runner-config-v56` is the v55 root keyset plus exactly one sibling:
-`v4_capability_flags`, an object with the twelve closed booleans declared by
-`V4CapabilityFlags`.
+`runner-config-v56` uses the active v55 family root keyset plus exactly one
+sibling: `v4_capability_flags`, an object with the twelve closed booleans
+declared by `V4CapabilityFlags`. The generational siblings
+(`population_lifecycle`, `new_agent_initialization`, `generational_run`) follow
+the selected family: when a generational run is present, v55's prerequisites
+remain mandatory; when it is absent, they are absent exactly as on the lower
+family. v56 never adds a generational run by itself.
 
 - V4-01 accepts it for explicit scaffolding identity. Feature selection and
   matrix finalization never emit it on their own.

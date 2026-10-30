@@ -205,7 +205,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Event schema | `EVENT_SCHEMA_REPLAY_V22` (22) | `world.events` |
 | Persistence codec | `v20` | `simulation.persistence` |
 | Alembic head | `0017` | `alembic/versions` |
-| Commands | 43 | `world.actions` |
+| Commands | 43 | `world.actions` / `world._rules` |
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
@@ -235,7 +235,7 @@ its prerequisites, the owning context, and the authority impact; a stage without
 a proven persistence or indexed-inspection need is not implemented. Capability
 flags remain runner JSON, not SQL columns.
 
-The ordered V4 stages are declared in `simulation.v4_architecture` and validated
+The ordered V4 stages are declared in `simulation.migration_plan` and validated
 by tests; a stage may not be reordered, duplicated, or referenced without a known
 context or flag.
 

@@ -40,7 +40,7 @@ frame.
 | `clients/research-ui/src/api/versionSchema.ts` | create | Strict `/version` parser. |
 | `clients/research-ui/src/api/client.ts` | modify | `getVersion()` using the parser. |
 | `clients/research-ui/src/components/research/ProtocolBadge.svelte` | create | Read-only protocol/capability display. |
-| `clients/research-ui/src/App.svelte` | modify | Mount the badge in existing chrome. |
+| `clients/research-ui/src/components/Shell.svelte` | modify | Mount the badge in the existing header/chrome (`App.svelte` delegates to `Shell.svelte`). |
 | `clients/research-ui/src/api/versionSchema.test.ts` | create | Parser acceptance/rejection tests. |
 | `clients/research-ui/src/components/research/ProtocolBadge.test.ts` | create | Rendering and unavailable-state tests. |
 
@@ -202,9 +202,9 @@ payloads instead of rendering a misleading green state.
      `version unavailable (<reason>)` when null. No links, no actions.
    - Use existing chrome classes from `components/research`; do not add global
      CSS or a new design system.
-4. Mount the badge in `App.svelte` inside the existing header/chrome region,
-   fetching once on mount and treating failure as an unavailable state rather
-   than an error banner.
+4. Mount the badge in `Shell.svelte` inside the existing header/chrome region
+   (`App.svelte` renders `Shell.svelte`), fetching once on mount and treating
+   failure as an unavailable state rather than an error banner.
 5. Create `clients/research-ui/src/api/versionSchema.test.ts`:
    - Accepts a complete payload and a payload with empty capability arrays.
    - Rejects a missing protocol, duplicate capability, overlap, and a supported
