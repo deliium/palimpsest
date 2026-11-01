@@ -291,11 +291,51 @@ closed. `/version` is unchanged; `organization_rows` remains reserved.
 ### Phase 7: Invariants, End-to-End Evidence, and Regression
 - [x] Task 19: Add the operational boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-19-add-the-operational-boundary-and-determinism-suite)) (depends on 2-18)
 - [x] Task 20: Add the operational end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-20-add-the-operational-end-to-end-scenario)) (depends on 5-18)
-- [ ] Task 21: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-21-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 19, 20)
+- [x] Task 21: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-21-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 19, 20)
 
 ### Phase 8: Documentation and Final Verification
 - [x] Task 22: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-22-execute-the-documentation-checkpoint)) (depends on 2-21)
-- [ ] Task 23: Perform final V4-04 verification ([details](phase-08-docs-and-verification.md#task-23-perform-final-v4-04-verification)) (depends on 21, 22)
+- [x] Task 23: Perform final V4-04 verification ([details](phase-08-docs-and-verification.md#task-23-perform-final-v4-04-verification)) (depends on 21, 22)
+
+## Verification Receipt (Tasks 21 and 23)
+
+Recorded: 2026-11-01. Coverage was enabled on every Python lane below.
+
+| Lane | State | Evidence |
+| --- | --- | --- |
+| Unit + architecture (`tests/unit tests/architecture --cov`) | `executed_passed` | 7,521 passed, 0 failed, 78% coverage (33m47s) |
+| Static `ruff check src tests` | `executed_passed` | no findings |
+| Static `mypy src tests` | `executed_passed` | 1,785 files, no issues |
+| Static `lint-imports` | `executed_passed` | 25 kept, 0 broken |
+| Integration, non-scale, clean `palimpsest_test` pgvector | `executed_passed` | 93 passed (27.5s) |
+| Integration selection including scale tests | `executed_failed` | 115 passed, 1 failed: `tests/benchmarks/test_civilization_playback.py::test_dense_civilization_render_pack_pages_are_bounded` -> `civilization_read_budget`; reproducible in ~5s; no `civilization*` module or benchmark changed since the V4-04 base (`348af5d`), so this is pre-existing and unrelated to V4-04 |
+| `docker compose config --quiet` | `executed_passed` | exit 0 |
+| Compose/browser acceptance | `unexecuted` | prerequisites absent: current-revision `PALIMPSEST_API_IMAGE` and a Python Playwright module (browsers are cached but the module is not installed) |
+| Godot 4.7.2 regression suite | `unexecuted` | prerequisite absent: `GODOT_BIN` / a Godot 4.7.2 binary |
+| Benchmark/scale lane (`-m "integration and scale" tests/benchmarks/`) | `executed_failed` | same pre-existing dense-render-pack case; no benchmark result is reported as a pass |
+| Research UI `vitest run` | `executed_passed` | 251 passed (49 files) |
+| Research UI `svelte-check` (repo `check` script, `tsconfig.app.json`) | `executed_passed` | 0 errors, 0 warnings |
+
+Pins verified directly: 146 metric families with the two operation families last;
+14 contexts / 12 flags / `v4-context-map-v2`; events 22; codec `v20` accepted and
+`v21` not; 43 commands; 73 observer semantic types; Alembic `0017` with no
+`0018_*.py`; no `runner-config-v57`; roadmap untouched.
+
+**Final certification: `v4-04-organization-operations certified=false`.**
+
+Withheld blockers, all outside the V4-04 diff:
+
+1. The pre-existing dense civilization render-pack benchmark exceeds the
+   per-request `civilization_read_budget` (16 physical files / 12 MiB) and fails in
+   the integration selection. It is not weakened or skipped here.
+2. Compose/browser acceptance cannot run without a current-revision image and the
+   Playwright Python module.
+3. The pinned Godot 4.7.2 suite cannot run without a Godot binary.
+
+Every V4-04-specific lane (organization unit/architecture/determinism/isolation/
+E2E/API/UI/metrics/publication) passes; the withheld certification is caused by
+the pre-existing benchmark failure and the two unavailable toolchain
+prerequisites, not by V4-04 behavior.
 
 ## Commit Plan
 
