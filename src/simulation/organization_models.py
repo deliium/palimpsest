@@ -51,6 +51,7 @@ __all__ = [
     "OrganizationStructuralRecord",
     "OrganizationWindowRecord",
     "empty_organization_snapshot",
+    "organization_publication_operation_id",
     "require_operation_id",
     "require_organization_id",
     "require_publication_id",
@@ -306,6 +307,44 @@ def require_organization_id(value: object) -> str:
     if not isinstance(value, str) or not _ORGANIZATION_ID_PATTERN.match(value):
         _fail("organization_invalid_value")
     return value
+
+
+_PUBLICATION_OPERATION_NAMESPACE: Final[str] = (
+    "palimpsest.organization.publication-operation.v1"
+)
+
+
+def organization_publication_operation_id(
+    organization_id: str,
+    domain: str,
+    tick: int,
+    ordinal: int,
+    content_digest: str,
+) -> str:
+    """Mint one deterministic published ``orgop-`` id from visible content.
+
+    This mirrors the owner-side minter in
+    ``agents.cognition.organization_operations`` so publication can stay free of
+    a cognition dependency while producing the same identity.
+    """
+    import hashlib
+
+    if type(tick) is not int or tick < 0:
+        _fail("organization_operation_tick_regression")
+    if type(ordinal) is not int or ordinal < 0:
+        _fail("organization_invalid_value")
+    material = (
+        _PUBLICATION_OPERATION_NAMESPACE,
+        _string("organization_id", organization_id),
+        _string("domain", domain),
+        str(tick),
+        str(ordinal),
+        _string("content_digest", content_digest),
+    )
+    body = hashlib.sha256("\x1f".join(material).encode("utf-8")).hexdigest()[
+        :_ID_HEX_CHARS
+    ]
+    return f"{OPERATION_ID_PREFIX}{body}"
 
 
 def require_operation_id(value: object) -> str:

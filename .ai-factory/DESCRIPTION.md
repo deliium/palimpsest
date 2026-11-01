@@ -245,3 +245,30 @@ schema, API version, or SQL migration is added. Pins remain runner v4/v55/v56,
 result v2/v3, commands 43, observer semantic types 73, metric families 146,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017`;
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
+
+V4-04 (organization operational state, 2026-11-01) extends the owned
+`organizations` context on `runner-config-v56` with an owner-scoped operation
+sidecar keyed by existing `orgc-` concept ids under locked policy
+`organization-operations.v1`. Eight domains are recorded as owner beliefs:
+resource control, storage, record keeping, membership admission, membership
+departure, role assignment, procedure action, and internal commitment.
+Objective possession stays `holder_id`/`location_id`/
+`custodian_repository_id`/`stored_quantity`; no objective ownership field is
+added. No organization object can teleport a resource or execute an action: all
+physical effects remain ordinary agent commands. Admission, departure, and role
+assignment are claims with provenance, never permissions; disagreement stays
+`disputed` with `contest_count` and never blocks the organization. Owner-local
+`orgd-` decisions and `orga-` actions publish as deterministic `orgop-` records.
+Detached analysis adds `organization_operations@1` and
+`organization_operation_authority@1` (144 -> 146) and joins operations to
+existing `org-` candidates without creating, splitting, merging, or dissolving
+one. `simulation.organization_*` adds canonical `organization-snapshot-v2`
+while keeping v1 decodable and byte-verifiable; `experiments.organization_*`
+composes v2 after completion; `persistence.organization_filesystem` serves
+v1/v2; five GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Research UI
+adds a read-only operations view. No new flag, runner schema, command, event,
+observer semantic type, write pair, `/v2` route, or migration is added. Pins:
+runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
+metric families 146, replay-v22/codec v20, `/v1`, `observer-protocol-v1`,
+Alembic `0017`; `institutional_economy` and `multi_hop_testimony_tracking`
+remain unowned.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from agents.cognition import (
@@ -357,7 +359,9 @@ def test_selector_prefers_disputed_then_unresolved() -> None:
     assert organization_operation_communicate_utterance(command, disputed) is command
 
     unresolved = _ledger(admissions=(_admission(),))
-    decorated = organization_operation_communicate_utterance(_talk(), unresolved)
+    decorated = cast(
+        Talk, organization_operation_communicate_utterance(_talk(), unresolved)
+    )
     claim = parse_organization_operation_claim_relation(
         decorated.utterance.content.relations[-1]
     )

@@ -33,6 +33,10 @@ from analysis import (
     OrganizationCandidateStatus,
     OrganizationCoverage,
     OrganizationDetectionResult,
+    OrganizationHarvestRows,
+    OrganizationLayerView,
+    OrganizationOperationHarvestRows,
+    OrganizationOperationSummary,
     OrganizationWindowResult,
     assign_organization_identities,
     harvest_organization_operation_rows,
@@ -256,7 +260,9 @@ def _concept(
     )
 
 
-def _rows(*ledgers: OrganizationOperationLedger):
+def _rows(
+    *ledgers: OrganizationOperationLedger,
+) -> tuple[OrganizationOperationHarvestRows, ...]:
     return harvest_organization_operation_rows(ledgers)
 
 
@@ -277,7 +283,10 @@ def _ledger(*, owner: AgentId = OWNER) -> OrganizationOperationLedger:
     )
 
 
-def _summary(rows, candidates: tuple[OrganizationCandidate, ...]):
+def _summary(
+    rows: tuple[OrganizationOperationHarvestRows, ...],
+    candidates: tuple[OrganizationCandidate, ...],
+) -> OrganizationOperationSummary | None:
     assignment = assign_organization_identities(_detection(candidates))
     return summarize_organization_operations(rows, assignment)
 
@@ -328,7 +337,14 @@ def test_two_owners_map_deterministically() -> None:
 def test_unmatched_operations_are_orphaned() -> None:
     summary = _summary(
         _rows(_ledger()),
-        (_candidate("w0", members=("agent-9",), resources=("other",)),),
+        (
+            _candidate(
+                "w0",
+                members=("agent-9",),
+                resources=("other",),
+                owners=("agent-9",),
+            ),
+        ),
     )
     assert summary is not None
     assert summary.orphaned_count == 1
@@ -443,7 +459,7 @@ def _owner_rows(
     organization_id: str = ORG_A,
     owner_id: str = "agent-1",
     last_tick: int = 20,
-):
+) -> OrganizationHarvestRows:
     from analysis import (
         OrganizationConceptRow,
         OrganizationHarvestRows,
@@ -477,7 +493,9 @@ def _owner_rows(
     )
 
 
-def _layers(*, with_operations: bool = True):
+def _layers(
+    *, with_operations: bool = True
+) -> tuple[OrganizationLayerView, OrganizationOperationSummary | None]:
     from analysis import project_organization_layers
 
     assignment = assign_organization_identities(_detection((_candidate("w0"),)))
@@ -515,7 +533,7 @@ def test_analytical_summary_uses_only_analytical_ids() -> None:
     view, summary = _layers()
     assert view.operations is summary
     assert summary is not None
-    for candidate in view.operations.candidates:
+    for candidate in summary.candidates:
         assert candidate.organization_id.startswith("org-")
         assert not candidate.organization_id.startswith("orgc-")
 

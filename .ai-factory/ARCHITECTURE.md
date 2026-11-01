@@ -625,3 +625,33 @@ roster, treasury, resource pool, global registry, peer-ledger read, or
 independent cognition engine exists. No capability flag beyond `organizations`,
 command, event, observer semantic type, write pair, API version, or migration is
 added; `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
+
+### V4-04 organizations operations seam
+
+V4-04 deepens the single owned V4 flag `organizations`; it adds no flag, runner
+schema, root field, or per-agent mode. `agents.cognition.organization_operations`
+owns a second owner-scoped ledger keyed by existing `orgc-` concept ids under
+`organization-operations.v1`. Eight domains — resource control, storage, record
+keeping, membership admission, membership departure, role assignment, procedure
+action, and internal commitment — are beliefs with provenance, never objective
+state or permissions. Objective custody and storage remain `holder_id`,
+`location_id`, `custodian_repository_id`, and `stored_quantity`.
+
+No operation helper returns, constructs, submits, or resolves an `AgentCommand`;
+every physical effect is an ordinary command admitted by `WorldEngine`. Owner
+disagreement about membership, authority, resource legitimacy, or procedures is
+retained as `disputed` with `contest_count`; no consensus gate exists.
+Owner-local `orgd-` decisions and `orga-` actions carry authority basis,
+evidence refs, and closed provenance codes; publication mints `orgop-` records
+from publication-visible content only.
+
+`analysis.organization_*` harvests operation rows, joins them to existing `org-`
+candidates without creating or changing identity/lineage, keeps objective
+counts, owner claims, and analytical summaries in three separated types, and
+adds two families (catalog 144 -> 146). `simulation.organization_*` adds
+canonical `organization-snapshot-v2` while v1 stays decodable and
+byte-verifiable; `experiments.organization_*` upgrades and composes v2;
+`persistence.organization_filesystem` serves v1/v2; five GET-only `/v1` routes
+require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only operations view.
+No command, event, observer semantic type, write pair, `/v2` route, or migration
+is added.

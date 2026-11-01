@@ -289,12 +289,12 @@ closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 18: Add the read-only Research UI operations view ([details](phase-06-read-only-surfaces.md#task-18-add-the-read-only-research-ui-operations-view)) (depends on 17)
 
 ### Phase 7: Invariants, End-to-End Evidence, and Regression
-- [ ] Task 19: Add the operational boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-19-add-the-operational-boundary-and-determinism-suite)) (depends on 2-18)
-- [ ] Task 20: Add the operational end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-20-add-the-operational-end-to-end-scenario)) (depends on 5-18)
+- [x] Task 19: Add the operational boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-19-add-the-operational-boundary-and-determinism-suite)) (depends on 2-18)
+- [x] Task 20: Add the operational end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-20-add-the-operational-end-to-end-scenario)) (depends on 5-18)
 - [ ] Task 21: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-21-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 19, 20)
 
 ### Phase 8: Documentation and Final Verification
-- [ ] Task 22: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-22-execute-the-documentation-checkpoint)) (depends on 2-21)
+- [x] Task 22: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-22-execute-the-documentation-checkpoint)) (depends on 2-21)
 - [ ] Task 23: Perform final V4-04 verification ([details](phase-08-docs-and-verification.md#task-23-perform-final-v4-04-verification)) (depends on 21, 22)
 
 ## Commit Plan

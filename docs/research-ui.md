@@ -216,7 +216,10 @@ explicit new-tab anchor is the fallback when bootstrap fails.
 
 ## Organizations panel
 
-Read-only summary, candidate table, candidate detail, and lineage from the four
-`/v1/simulations/{run_id}/organizations` routes (`subjective_debug`). Disabled and
-empty states are explicit; the client performs no candidate detection, identity
-minting, lineage derivation, or write call.
+Read-only summary, candidate table, candidate detail, lineage, and an operations
+table from the five `/v1/simulations/{run_id}/organizations` routes
+(`subjective_debug`). The operations view shows operation id, domain, act,
+stance, authority basis, provenance code, tick, anchor kind, support, and
+contest, with a domain filter and a `contested` badge. Disabled and empty states
+are explicit; the client performs no candidate detection, identity minting,
+lineage derivation, operation classification, or write call.

@@ -267,8 +267,8 @@ def test_harvest_preserves_every_record_family() -> None:
     assert harvest.controls[0].organization_id == ORG_A
     assert harvest.controls[0].span == 3
     assert harvest.actions[0].command_kind == "give"
-    assert harvest.decisions[0].decision_id.startswith("orgd-")
-    assert harvest.actions[0].action_id.startswith("orga-")
+    assert str(harvest.decisions[0].decision_id).startswith("orgd-")
+    assert str(harvest.actions[0].action_id).startswith("orga-")
 
 
 def test_harvest_orders_owners_and_records_deterministically() -> None:

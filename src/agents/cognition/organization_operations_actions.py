@@ -18,6 +18,7 @@ from agents.cognition.organization_operations import (
     OrganizationCommitmentStance,
     OrganizationControlStance,
     OrganizationDepartureStance,
+    OrganizationOperationalConcept,
     OrganizationOperationDomain,
     OrganizationOperationLedger,
 )
@@ -168,7 +169,7 @@ def _counterpart(command: object) -> str | None:
     for name in ("recipient_id", "target_id", "item_id", "project_id", "repository_id"):
         value = getattr(command, name, None)
         if value is not None and hasattr(value, "value"):
-            return value.value
+            return str(value.value)
     return None
 
 
@@ -176,12 +177,12 @@ def _control_anchor(command: object) -> str | None:
     for name in ("item_id", "target_id", "artifact_id", "repository_id"):
         value = getattr(command, name, None)
         if value is not None and hasattr(value, "value"):
-            return value.value
+            return str(value.value)
     return None
 
 
 def _domain_is_active(
-    concept: object,
+    concept: OrganizationOperationalConcept,
     domain: OrganizationOperationDomain,
     *,
     owner_value: str,
@@ -255,6 +256,7 @@ def organization_commitment_follow_through(
 
     if type(ledger) is not OrganizationOperationLedger:
         return None
+    allowed_commands: type[object]
     if type(command) is Give:
         target = command.recipient_id.value
         allowed_commands = Give

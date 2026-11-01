@@ -428,3 +428,39 @@ runs omit it; missing progress is not a fabricated zero.
 
 Cross-arm summaries remain descriptive (`matrix-metric-summary-v1`). The family
 never feeds cognition and does not provide paired significance or effect sizes.
+
+## Organization operations (catalog 146)
+
+V4-04 appends two detached families after the four V4-03 organization families.
+
+`organization_operations@1` summarizes socially recognized operation beliefs by
+candidate under stated coverage:
+
+- Population: `final_window_candidate_operation_records`.
+- Denominator: `candidate_count`.
+- Value keys: `as_of_tick`, `control_count`, `storage_count`,
+  `record_keeping_count`, `admission_count`, `departure_count`,
+  `assignment_count`, `procedure_action_count`, `commitment_count`,
+  `decision_count`, `action_count`, `contested_operation_count`,
+  `orphaned_operation_count`, `provenance_known_count`, and
+  `operation_coverage_ratio`.
+- `control_count` covers `resource_control` only; storage and record keeping have
+  their own keys.
+
+`organization_operation_authority@1` reports authority basis and disagreement:
+
+- Population: `final_window_candidate_operation_authority_claims`.
+- Denominator: `operation_record_count`.
+- Value keys: `as_of_tick`, `authority_self_authored_count`,
+  `authority_role_count`, `authority_decision_count`,
+  `authority_procedure_count`, `authority_observation_count`,
+  `authority_unknown_count`, `resource_contest_count`,
+  `membership_contest_count`, `authority_contest_count`,
+  `procedure_contest_count`, `orphaned_count`, and `mean_owner_support`.
+
+Availability: both are `ABSENT` when there is no operation summary, no final
+window candidate, or no operation row; `PARTIAL` when history is truncated, any
+candidate lacks operation evidence, coverage is below one, or operations are
+orphaned; `PRESENT` otherwise. `mean_owner_support` is a mean of owner-local
+support counts, never a consensus statistic. Neither family is a capacity,
+prevalence, probability, prediction, or composite score.

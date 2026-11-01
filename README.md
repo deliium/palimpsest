@@ -83,7 +83,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Physical simulation](docs/physical-simulation.md) | Topology, capacities, actions, physiology, death, schema-v4, tests |
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations (head `0017`), local and Docker workflows, exact commands |
-| [Organizations](docs/organizations.md) | Owner-scoped organization beliefs, nine aspects, membership and identity rules, forward-only lineage, `organization-snapshot-v1`, four GET-only routes and the Research UI panel |
+| [Organizations](docs/organizations.md) | Owner-scoped organization beliefs, nine aspects, operational state across eight domains, membership and identity rules, forward-only lineage, `organization-snapshot-v2`, five GET-only routes and the Research UI panel |
 | [Macro-societies](docs/macro-societies.md) | Analysis-only overlapping macro-society candidates, stable `msoc-` ids, split/merge lineage, snapshot artifact, read-only routes and Research UI |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |

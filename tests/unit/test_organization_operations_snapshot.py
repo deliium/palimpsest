@@ -52,7 +52,9 @@ def _operation(index: int, *, tick: int = 3) -> OrganizationOperationRecord:
     )
 
 
-def _v2_snapshot(*, operations: tuple[OrganizationOperationRecord, ...] = ()):
+def _v2_snapshot(
+    *, operations: tuple[OrganizationOperationRecord, ...] = ()
+) -> OrganizationSnapshot:
     snapshot = example_snapshot()
     candidate = replace(snapshot.candidates[0], operations=operations)
     return replace(
@@ -62,7 +64,7 @@ def _v2_snapshot(*, operations: tuple[OrganizationOperationRecord, ...] = ()):
     )
 
 
-def _v1_snapshot():
+def _v1_snapshot() -> OrganizationSnapshot:
     return replace(
         example_snapshot(), schema_version=ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1
     )

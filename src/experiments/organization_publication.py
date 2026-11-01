@@ -14,7 +14,6 @@ import logging
 from dataclasses import dataclass
 from typing import Final
 
-from agents.cognition import organization_publication_operation_id
 from analysis.organization_detection import OrganizationCandidate
 from analysis.organization_identity import OrganizationRecord
 from analysis.organization_operations import organization_operation_sources
@@ -41,6 +40,7 @@ from simulation.organization_models import (
     OrganizationSnapshot,
     OrganizationStructuralRecord,
     OrganizationWindowRecord,
+    organization_publication_operation_id,
     upgrade_organization_snapshot,
 )
 from simulation.organization_ports import (

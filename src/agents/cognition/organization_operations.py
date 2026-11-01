@@ -22,7 +22,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final, NoReturn
+from typing import TYPE_CHECKING, Any, Final, NoReturn, TypedDict
 
 from agents.cognition.organization_concepts import (
     FORBIDDEN_ORGANIZATION_FIELD_NAMES,
@@ -31,6 +31,12 @@ from agents.cognition.organization_concepts import (
     OrganizationTemporalScope,
 )
 from agents.models import AgentId
+
+if TYPE_CHECKING:
+    from agents.cognition.organization_concepts import OrganizationConcept
+    from agents.cognition.organization_operations_communication import (
+        OrganizationOperationClaim,
+    )
 
 _LOG: Final[logging.Logger] = logging.getLogger(
     "agents.cognition.organization_operations"
@@ -1396,9 +1402,8 @@ class OrganizationOperationalConcept:
             *self.procedures,
             *self.commitments,
         ):
-            if record.decision_ref is not None and record.decision_ref not in (
-                decision_ids
-            ):
+            decision_ref = getattr(record, "decision_ref", None)
+            if decision_ref is not None and decision_ref not in decision_ids:
                 _fail("organization_operation_unknown_decision")
         for action in self.actions:
             if action.decision_id is not None and action.decision_id not in (
@@ -1716,6 +1721,16 @@ class _EvidenceBundle:
     notices: tuple[str, ...] = ()
 
 
+class _CommonBeliefValues(TypedDict):
+    authority_basis: OrganizationAuthorityBasis
+    decision_ref: str
+    first_tick: int
+    last_tick: int
+    owner_support_count: int
+    contest_count: int
+    evidence_refs: tuple[str, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class _OperationEvidence:
     owner_id: AgentId
@@ -1814,11 +1829,13 @@ def _role_authority_match(
     for concept in offices.concepts:
         if concept.status not in (
             OfficeConceptStatus.RECOGNIZED,
-            OfficeConceptStatus.CONTESTED,
+            OfficeConceptStatus.DISPUTED,
         ):
             continue
         signature = office_role_signature(
-            concept.function, concept.context_key, concept.duty_kinds
+            concept.function,
+            concept.context_key,
+            tuple(duty.kind for duty in concept.duties),
         )
         if organization_operation_ref(signature, namespace="role_signature") != (
             authority_ref
@@ -1838,13 +1855,21 @@ def _decision_authority_match(
         return False
     from agents.cognition.collective_decisions import (
         CollectiveDecisionLedger,
+        CollectivePositionStance,
         CollectiveProposalStatus,
     )
 
     if type(collective_decisions) is not CollectiveDecisionLedger:
         return False
+    supported = {
+        (position.proposal_ref, position.revision)
+        for position in collective_decisions.positions
+        if position.active and position.stance is CollectivePositionStance.SUPPORT
+    }
     for proposal in collective_decisions.proposals:
-        if proposal.status is not CollectiveProposalStatus.SUPPORTED:
+        if proposal.status is not CollectiveProposalStatus.ACTIVE:
+            continue
+        if (proposal.proposal_ref, proposal.revision) not in supported:
             continue
         material = "|".join(
             (
@@ -1898,14 +1923,14 @@ def _claim_provenance(
 
 
 def _claim_beliefs(
-    claim: object,
+    claim: OrganizationOperationClaim,
     *,
     organization_id: str,
     owner_id: AgentId,
     tick: int,
     authority: OrganizationAuthorityBasis,
     decision_ref: str,
-) -> dict[str, tuple[object, ...]]:
+) -> dict[str, tuple[Any, ...]]:
     act = claim.act
     stance = claim.stance
     target = claim.target_ref or "unknown"
@@ -1920,7 +1945,7 @@ def _claim_beliefs(
         0,
         "|".join((act.value, stance, target, anchor_ref)),
     )
-    common = {
+    common: _CommonBeliefValues = {
         "authority_basis": authority,
         "decision_ref": decision_ref,
         "first_tick": tick,
@@ -1935,7 +1960,7 @@ def _claim_beliefs(
             if claim.expires_tick is not None
             else OrganizationTemporalScope.ONGOING
         )
-        record = OrganizationAdmissionBelief(
+        admission = OrganizationAdmissionBelief(
             member_id=target,
             stance=OrganizationAdmissionStance(stance),
             role_ref=None,
@@ -1943,30 +1968,30 @@ def _claim_beliefs(
             expires_tick=claim.expires_tick,
             **common,
         )
-        return {"admissions": (record,)}
+        return {"admissions": (admission,)}
     if act is OrganizationOperationAct.DEPART:
-        record = OrganizationDepartureBelief(
+        departure = OrganizationDepartureBelief(
             member_id=target,
             stance=OrganizationDepartureStance(stance),
             **common,
         )
-        return {"departures": (record,)}
+        return {"departures": (departure,)}
     if act in (
         OrganizationOperationAct.ASSIGN,
         OrganizationOperationAct.REMOVE,
     ):
-        record = OrganizationAssignmentBelief(
+        assignment = OrganizationAssignmentBelief(
             office_id=claim.authority_ref or "unknown",
             occupant_id=target,
             stance=OrganizationAssignmentStance(stance),
             **common,
         )
-        return {"assignments": (record,)}
+        return {"assignments": (assignment,)}
     if act in (
         OrganizationOperationAct.AUTHORIZE_CONTROL,
         OrganizationOperationAct.REVOKE_CONTROL,
     ):
-        record = OrganizationControlBelief(
+        control = OrganizationControlBelief(
             domain=_claim_domain(act, anchor_kind),
             anchor_kind=anchor_kind,
             anchor_id=anchor_ref,
@@ -1975,9 +2000,9 @@ def _claim_beliefs(
             role_ref=claim.authority_ref,
             **common,
         )
-        return {"controls": (record,)}
+        return {"controls": (control,)}
     if act is OrganizationOperationAct.INVOKE_PROCEDURE:
-        record = OrganizationProcedureActionBelief(
+        procedure = OrganizationProcedureActionBelief(
             procedure_ref=anchor_ref,
             command_kind="invoke_procedure",
             actor_id=target,
@@ -1988,12 +2013,12 @@ def _claim_beliefs(
             ),
             **common,
         )
-        return {"procedures": (record,)}
+        return {"procedures": (procedure,)}
     if act in (
         OrganizationOperationAct.DECLARE_COMMITMENT,
         OrganizationOperationAct.FULFILL_COMMITMENT,
     ):
-        record = OrganizationCommitmentOperationBelief(
+        commitment = OrganizationCommitmentOperationBelief(
             commitment_id=claim.authority_ref or target,
             role=OrganizationCommitmentRole.DEBTOR,
             counterpart_id=target,
@@ -2001,7 +2026,7 @@ def _claim_beliefs(
             due_tick=None,
             **common,
         )
-        return {"commitments": (record,)}
+        return {"commitments": (commitment,)}
     return {}
 
 
@@ -2066,7 +2091,7 @@ def _occurrence_anchor(
 
 
 def _concept_matches_occurrence(
-    concept: object,
+    concept: OrganizationConcept,
     occurrence: object,
     anchor: tuple[str, str],
 ) -> bool:
@@ -2185,7 +2210,7 @@ def _occurrence_records(
 
 
 def _concept_commitment_records(
-    concept: object,
+    concept: OrganizationConcept,
     *,
     owner_id: AgentId,
     tick: int,
@@ -2261,7 +2286,7 @@ def _collect_operation_evidence(
     owner_entity_value = (
         owner.value if owner_entity is None else owner_entity.value
     )
-    bundles: dict[str, dict[str, list[object]]] = {}
+    bundles: dict[str, dict[str, list[Any]]] = {}
     notices: set[str] = set()
 
     for concept in sorted(
@@ -2527,12 +2552,12 @@ def _record_stance(record: object) -> str:
 
 
 def _merge_family(
-    existing: tuple[object, ...],
-    incoming: tuple[object, ...],
+    existing: tuple[Any, ...],
+    incoming: tuple[Any, ...],
     *,
     key_fields: tuple[str, ...],
-) -> list[object]:
-    merged: dict[tuple[str, ...], object] = {}
+) -> list[Any]:
+    merged: dict[tuple[str, ...], Any] = {}
     order: list[tuple[str, ...]] = []
     for record in (*existing, *incoming):
         key = _record_key(record, key_fields)
@@ -2583,9 +2608,9 @@ def _merge_family(
     return [merged[key] for key in order]
 
 
-def _dedupe(records: tuple[object, ...], id_field: str) -> list[object]:
+def _dedupe(records: tuple[Any, ...], id_field: str) -> list[Any]:
     seen: set[str] = set()
-    result: list[object] = []
+    result: list[Any] = []
     for record in records:
         identifier = getattr(record, id_field)
         if identifier in seen:
@@ -2596,12 +2621,12 @@ def _dedupe(records: tuple[object, ...], id_field: str) -> list[object]:
 
 
 def _trim_family(
-    records: list[object],
+    records: list[Any],
     cap: int,
     *,
     tick_field: str,
     key_fields: tuple[str, ...],
-) -> tuple[list[object], bool]:
+) -> tuple[list[Any], bool]:
     if len(records) <= cap:
         return records, False
     ordered = sorted(
@@ -2612,9 +2637,9 @@ def _trim_family(
 
 
 def _apply_admission_expiry(
-    admissions: list[object], tick: int, notices: set[str]
-) -> list[object]:
-    result: list[object] = []
+    admissions: list[Any], tick: int, notices: set[str]
+) -> list[Any]:
+    result: list[Any] = []
     for record in admissions:
         if (
             getattr(record, "temporal_scope", None)
@@ -2636,11 +2661,11 @@ def _apply_admission_expiry(
 
 
 def _trim_total(
-    families: Mapping[str, list[object]],
+    families: Mapping[str, list[Any]],
     *,
     organization_id: str,
     notices: set[str],
-) -> dict[str, list[object]]:
+) -> dict[str, list[Any]]:
     total = sum(len(values) for values in families.values())
     policy = _DEFAULT_OPERATION_POLICY
     if total <= policy.max_total_records:
@@ -2672,7 +2697,7 @@ def _trim_total(
     return trimmed
 
 
-def _family_record_key(family: str, record: object) -> tuple[str, ...]:
+def _family_record_key(family: str, record: Any) -> tuple[str, ...]:
     if family == "decisions":
         return (record.decision_id,)
     if family == "actions":
@@ -2751,7 +2776,7 @@ def apply_organization_operation_update(
     for organization_id in sorted(set(prior_concepts) | set(evidence_by_id)):
         previous = prior_concepts.get(organization_id)
         bundle = evidence_by_id.get(organization_id, _EvidenceBundle())
-        families: dict[str, list[object]] = {
+        families: dict[str, list[Any]] = {
             family: [] for family in _BUNDLE_FAMILIES
         }
         if previous is not None:
@@ -2808,10 +2833,10 @@ def apply_organization_operation_update(
                 ledger_notices.add("operations_truncated")
 
         if families["controls"]:
-            per_domain: dict[str, list[object]] = {}
+            per_domain: dict[str, list[Any]] = {}
             for record in families["controls"]:
                 per_domain.setdefault(record.domain.value, []).append(record)
-            trimmed_controls: list[object] = []
+            trimmed_controls: list[Any] = []
             for domain in sorted(per_domain):
                 values, truncated = _trim_family(
                     per_domain[domain],
@@ -2852,7 +2877,7 @@ def apply_organization_operation_update(
                 else record
                 for record in families[family]
             ]
-        rewritten_actions: list[object] = []
+        rewritten_actions: list[Any] = []
         for action in families["actions"]:
             if (
                 action.decision_id is not None

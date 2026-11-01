@@ -1021,8 +1021,6 @@ def _match_candidate(
         score = len(set(candidate.member_ids) & member_ids) + len(
             set(candidate.anchor_signature) & anchors
         )
-        if score <= 0:
-            continue
         if best is None or score > best_score:
             best = candidate
             best_score = score

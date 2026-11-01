@@ -196,7 +196,7 @@ describe('organization panel', () => {
     await settle()
     const rows = view.target.querySelectorAll('table.operations tbody tr')
     expect(rows.length).toBe(1)
-    expect(rows[0].textContent ?? '').toContain('orgop-0000000000000002')
+    expect(rows[0]?.textContent ?? '').toContain('orgop-0000000000000002')
   })
 
   it('renders candidate detail operations after selection', async () => {

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from agents.cognition import (
@@ -369,7 +371,7 @@ def test_deliberation_seam_attaches_both_frames() -> None:
         ),
     )
     operation_ledger = _ledger(admissions=(_admission(),))
-    command = _talk()
+    command: Any = _talk()
     command = organization_communicate_utterance(command, concept_ledger)
     command = organization_operation_communicate_utterance(command, operation_ledger)
     assert type(command) is Talk

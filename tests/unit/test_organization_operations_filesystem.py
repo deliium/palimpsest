@@ -77,7 +77,9 @@ def _candidate(
     )
 
 
-def _snapshot(schema_version: str = ORGANIZATION_SNAPSHOT_SCHEMA_VERSION):
+def _snapshot(
+    schema_version: str = ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
+) -> OrganizationSnapshot:
     return OrganizationSnapshot(
         schema_version=schema_version,
         policy_version="organization-analysis.v1",
@@ -126,7 +128,9 @@ def test_v2_publication_round_trips_with_operation_counts(tmp_path: Path) -> Non
     page = reader.operations(
         RUN, publication.publication_id, 0, 10, domain="storage"
     )
-    assert [row.operation_id for row in page.rows] == ["orgop-0000000000000002"]
+    assert [row.operation_id for row in page.rows] == [
+        "orgop-0000000000000002"
+    ]
 
 
 def test_v1_publication_remains_readable_with_zero_operations(

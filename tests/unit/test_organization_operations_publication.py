@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from analysis import (
     OrganizationCandidateStatus,
     OrganizationCoverage,
     OrganizationDetectionResult,
+    OrganizationIdentityAssignment,
     OrganizationTemporalScope,
     OrganizationWindowResult,
     assign_organization_identities,
@@ -64,7 +66,7 @@ def _candidate() -> OrganizationCandidate:
     )
 
 
-def _assignment():
+def _assignment() -> OrganizationIdentityAssignment:
     detection = OrganizationDetectionResult(
         windows=(
             OrganizationWindowResult(
@@ -81,9 +83,9 @@ def _assignment():
     return assign_organization_identities(detection)
 
 
-def _owner_row(*, admissions: tuple[OrganizationAdmissionRow, ...] = ()) -> (
-    OrganizationOperationHarvestRows
-):
+def _owner_row(
+    *, admissions: tuple[OrganizationAdmissionRow, ...] = ()
+) -> OrganizationOperationHarvestRows:
     return OrganizationOperationHarvestRows(
         owner=OrganizationOperationOwnerRow(
             owner_id=OWNER,
@@ -281,7 +283,7 @@ def test_operation_ids_do_not_collapse_on_anchor_only_difference() -> None:
     assert len({operation.operation_id for operation in operations}) == 2
 
 
-def test_incomplete_run_stays_unavailable(tmp_path) -> None:
+def test_incomplete_run_stays_unavailable(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
     from research_runner.organization_composition import (
@@ -301,7 +303,7 @@ def test_incomplete_run_stays_unavailable(tmp_path) -> None:
     assert not (tmp_path / RUN).exists()
 
 
-def test_storage_failure_changes_only_the_receipt(tmp_path) -> None:
+def test_storage_failure_changes_only_the_receipt(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
     from research_runner.organization_composition import (
@@ -322,7 +324,7 @@ def test_storage_failure_changes_only_the_receipt(tmp_path) -> None:
     assert set(receipt) == {"status", "reason_code"}
 
 
-def test_empty_completed_run_publishes_v2_receipt(tmp_path) -> None:
+def test_empty_completed_run_publishes_v2_receipt(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
     from research_runner.organization_composition import (

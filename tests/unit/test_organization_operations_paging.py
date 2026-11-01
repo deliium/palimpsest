@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -92,7 +93,9 @@ def _snapshot() -> OrganizationSnapshot:
     )
 
 
-def _published(tmp_path):
+def _published(
+    tmp_path: Path,
+) -> tuple[FilesystemOrganizationReader, str]:
     snapshot = _snapshot()
     publication_id = compute_organization_publication_id(snapshot)
     payload = encode_organization_snapshot(
@@ -111,7 +114,9 @@ def _published(tmp_path):
     return FilesystemOrganizationReader(tmp_path), publication_id
 
 
-def test_operations_page_filters_by_domain_and_organization(tmp_path) -> None:
+def test_operations_page_filters_by_domain_and_organization(
+    tmp_path: Path,
+) -> None:
     reader, publication_id = _published(tmp_path)
     page = reader.operations(RUN, publication_id, 0, 10)
     assert [row.operation_id for row in page.rows] == [
@@ -134,7 +139,7 @@ def test_operations_page_filters_by_domain_and_organization(tmp_path) -> None:
     assert empty.rows == ()
 
 
-def test_summary_includes_operation_count(tmp_path) -> None:
+def test_summary_includes_operation_count(tmp_path: Path) -> None:
     reader, _ = _published(tmp_path)
     summary = reader.summary(RUN)
     assert summary is not None

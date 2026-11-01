@@ -606,7 +606,10 @@ artifact roots; API reads keep filesystem bytes unchanged.
 ## Organization gates
 
 - `uv run pytest tests/unit/test_organization_*.py -q`
-- `uv run pytest tests/architecture/test_organization_boundaries.py -q`
-- `uv run pytest tests/unit/test_organization_end_to_end.py -q`
-- `uv run pytest tests/unit/test_organization_cli.py -q`
+- `uv run pytest tests/architecture/test_organization_boundaries.py tests/architecture/test_organization_operations_boundaries.py -q`
+- `uv run pytest tests/unit/test_organization_end_to_end.py tests/unit/test_organization_operations_end_to_end.py -q`
+- `uv run pytest tests/unit/test_organization_cli.py tests/unit/test_organization_operations_publication.py -q`
+- `uv run pytest tests/unit/test_organization_operations_{determinism,isolation,metrics,catalog}.py -q`
+- `uv run pytest tests/unit/test_organization_operations_api.py tests/unit/test_organization_api.py -q`
 - `cd clients/research-ui && ./node_modules/.bin/vitest run src/views/OrganizationsPanel.test.ts`
+- `cd clients/research-ui && ./node_modules/.bin/svelte-check --tsconfig ./tsconfig.app.json`

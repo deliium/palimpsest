@@ -55,7 +55,7 @@ The registry revision is `v4-context-map-v2`.
 
 | Context | Capability flag | Authority | Owning packages | Existing mechanism | Event strategy | Measurement |
 | --- | --- | --- | --- | --- | --- | --- |
-| `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship, institution concepts, offices, institutional memory, collective decisions, structured commitments, group formation | reuse | V4-03 implementation |
+| `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship, institution concepts, offices, institutional memory, collective decisions, structured commitments, group formation, possession legitimacy | reuse | V4-03/V4-04 implementation |
 | `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | deferred to V4-02+ |
 | `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation | reuse | deferred to V4-02+ |
 | `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | deferred to V4-02+ |
@@ -76,12 +76,15 @@ effect-complete details, replay, and a persistence need.
 
 ### organizations
 
-**Owned by V4-03 on `runner-config-v56`.** Collective action is objective work
-plus owner-scoped membership beliefs. An organization exists only as far as agents
-believe in it, talk about it, and act through ordinary commands. Objective facts
-are limited to the physical effects of those commands. The owned seam adds only
-owner-scoped belief ledgers; no organization actor, roster, treasury, automatic
-resource pool, or global registry is created.
+**Owned by V4-03/V4-04 on `runner-config-v56`.** Collective action is objective
+work plus owner-scoped membership and operation beliefs. An organization exists
+only as far as agents believe in it, talk about it, and act through ordinary
+commands. Objective facts are limited to the physical effects of those commands.
+V4-04 adds an operation sidecar across eight domains (resource control, storage,
+record keeping, admission, departure, role assignment, procedure action, internal
+commitment) with provenance and retained disagreement. Objective possession stays
+separate and unchanged; no organization actor, roster, treasury, automatic
+resource pool, teleport helper, command executor, or global registry is created.
 
 ### formal_rules
 

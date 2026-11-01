@@ -502,3 +502,29 @@ The current metric catalog is **130** families after adding
 count. Default runner write `runner-config-v4`, default result
 `runner-result-v2`, commands **43**, observer semantic types **73**, replay
 `EVENT_SCHEMA_REPLAY_V22` / codec `v20`, and Alembic `0017` remain unchanged.
+
+### Downstream V4 organization operations contract
+
+A plan that extends organization operational state must keep these invariants:
+
+1. **Sidecar authority** — operations are owner beliefs keyed by `orgc-`; they
+   never become objective organization state, a roster, treasury, or pool.
+2. **Objective possession is separate** — `holder_id`, `location_id`,
+   `custodian_repository_id`, and `stored_quantity` remain the only custody and
+   storage fields; no objective `owner_id`/`ownership` is added.
+3. **No teleport or executor** — operation helpers classify existing commands;
+   they never construct, submit, or resolve one. Physical effects stay
+   agent-mediated.
+4. **Claims, not permissions** — admission, departure, and role assignment carry
+   provenance and never change world admission rules.
+5. **Disagreement is data** — `disputed`/`contest_count` retains both sides and
+   never blocks an operation.
+6. **Provenance is closed** — `orgd-`/`orga-` stay owner-local; `orgop-` records
+   publish only publication-visible content.
+7. **Artifact evolution** — `organization-snapshot-v2` is additive; v1 stays
+   decodable and byte-verifiable.
+8. **Read-only surfaces** — five GET-only `/v1` routes require
+   `SUBJECTIVE_DEBUG`; no write route or `/v2` exists.
+9. **Pins stay put** — runner v4/v55/v56, commands 43, observer semantic types
+   73, metric families 146, replay v22, codec v20, Alembic `0017`, `/v1`,
+   `observer-protocol-v1`.

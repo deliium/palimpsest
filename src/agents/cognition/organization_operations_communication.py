@@ -465,18 +465,18 @@ def _select_operation_claim(
         tuple[int, str, int, OrganizationOperationClaim]
     ] = []
     for concept in ledger.concepts:
-        for record in concept.controls:
-            candidates.append(_claim_for_control(record))
-        for record in concept.admissions:
-            candidates.append(_claim_for_admission(record))
-        for record in concept.departures:
-            candidates.append(_claim_for_departure(record))
-        for record in concept.assignments:
-            candidates.append(_claim_for_assignment(record))
-        for record in concept.procedures:
-            candidates.append(_claim_for_procedure(record))
-        for record in concept.commitments:
-            candidates.append(_claim_for_commitment(record))
+        for control in concept.controls:
+            candidates.append(_claim_for_control(control))
+        for admission in concept.admissions:
+            candidates.append(_claim_for_admission(admission))
+        for departure in concept.departures:
+            candidates.append(_claim_for_departure(departure))
+        for assignment in concept.assignments:
+            candidates.append(_claim_for_assignment(assignment))
+        for procedure in concept.procedures:
+            candidates.append(_claim_for_procedure(procedure))
+        for commitment in concept.commitments:
+            candidates.append(_claim_for_commitment(commitment))
     if not candidates:
         return None
     candidates.sort(key=lambda item: (item[0], item[1], item[2]))
