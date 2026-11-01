@@ -28,6 +28,12 @@ from analysis.organization_lineage import (
     OrganizationAnalysis,
     derive_organization_lineage,
 )
+from analysis.organization_operations import (
+    OrganizationOperationHarvestRows,
+    OrganizationOperationSummary,
+    harvest_organization_operation_rows,
+    summarize_organization_operations,
+)
 from analysis.organizations import (
     OrganizationHarvestRows,
     harvest_organization_rows,
@@ -49,10 +55,12 @@ class OrganizationHarvest:
     input_revision: str
     generated_tick: int
     owner_rows: tuple[OrganizationHarvestRows, ...]
+    operation_rows: tuple[OrganizationOperationHarvestRows, ...] = ()
     objective_rows: tuple[OrganizationObjectiveAnchorRow, ...] = ()
     window_ticks: int = 100
     assignment: OrganizationIdentityAssignment | None = None
     layer_view: OrganizationLayerView | None = None
+    operation_summary: OrganizationOperationSummary | None = None
     analysis: OrganizationAnalysis | None = None
     provenance_code: str = "ok"
     truncated_history: bool = False
@@ -77,22 +85,34 @@ def build_completed_run_organization_harvest(
 
     ledgers = getattr(runner_result, "organization_concept_ledgers", ()) or ()
     rows = harvest_organization_rows(ledgers)
+    operation_ledgers = (
+        getattr(runner_result, "organization_operation_ledgers", ()) or ()
+    )
+    operation_rows = harvest_organization_operation_rows(operation_ledgers)
     if not rows:
         return OrganizationHarvest(
             run_id=run_id,
             input_revision=input_revision,
             generated_tick=generated_tick,
             owner_rows=(),
+            operation_rows=operation_rows,
             window_ticks=window_ticks,
         )
     windows = build_organization_windows(rows, window_ticks)
     detection = detect_organization_candidates(windows)
     assignment = assign_organization_identities(detection)
-    layers = project_organization_layers(assignment, rows)
+    operation_summary = summarize_organization_operations(operation_rows, assignment)
+    layers = project_organization_layers(
+        assignment,
+        rows,
+        operation_rows=operation_rows,
+        operation_summary=operation_summary,
+    )
     truncated_history = any("history_truncated" in row.owner.notices for row in rows)
     analysis = derive_organization_lineage(
         assignment,
         layer_view=layers,
+        operation_summary=operation_summary,
         history_truncated=truncated_history,
     )
     anchors = tuple(anchor for window in windows for anchor in window.anchors)
@@ -107,10 +127,12 @@ def build_completed_run_organization_harvest(
         input_revision=input_revision,
         generated_tick=generated_tick,
         owner_rows=rows,
+        operation_rows=operation_rows,
         objective_rows=anchors,
         window_ticks=window_ticks,
         assignment=assignment,
         layer_view=layers,
+        operation_summary=operation_summary,
         analysis=analysis,
         provenance_code="history_truncated" if truncated_history else "ok",
         truncated_history=truncated_history,

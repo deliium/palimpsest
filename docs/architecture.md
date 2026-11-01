@@ -266,7 +266,7 @@ lineage. `organization-snapshot-v1` lives in `simulation` and never imports
 analysis; publication is opt-in and post-completion through the research CLI;
 four GET-only `/v1` routes require `SUBJECTIVE_DEBUG` and fail closed with
 `organization_disabled`. No actor, roster, treasury, registry, peer-ledger read,
-command, event, write pair, or migration is added. The metric catalog is 144.
+command, event, write pair, or migration is added. The metric catalog is 146.
 
 ### Downstream V4 macro-society contract
 
@@ -286,7 +286,7 @@ A plan that extends `macro_society_identity` must keep these invariants:
 6. **No capacity or prevalence claim** — candidate counts are analytical counts
    under stated coverage.
 7. **Pins stay put** — runner v4/v55/v56, commands 43, observer semantic types
-   73, metric families 144, replay v22, codec v20, Alembic `0017`, `/v1`,
+   73, metric families 146, replay v22, codec v20, Alembic `0017`, `/v1`,
    `observer-protocol-v1`.
 
 ## See also

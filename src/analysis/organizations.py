@@ -11,22 +11,49 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from analysis.organization_contract import OrganizationAnalysisError
+from analysis.organization_contract import (
+    OrganizationAnalysisError,
+)
+from analysis.organization_operations import (
+    OrganizationActionRow,
+    OrganizationAdmissionRow,
+    OrganizationAssignmentRow,
+    OrganizationCommitmentOperationRow,
+    OrganizationControlRow,
+    OrganizationDecisionRow,
+    OrganizationDepartureRow,
+    OrganizationOperationHarvestRows,
+    OrganizationOperationOwnerRow,
+    OrganizationProcedureActionRow,
+)
 from world.identifiers import require_exact_nonneg_int, require_stable_id
+
+if TYPE_CHECKING:
+    pass
 
 __all__ = [
     "MAX_HARVEST_CONCEPTS",
+    "OrganizationActionRow",
+    "OrganizationAdmissionRow",
     "OrganizationAnalysisError",
+    "OrganizationAssignmentRow",
+    "OrganizationCommitmentOperationRow",
     "OrganizationCommitmentRow",
     "OrganizationConceptRow",
+    "OrganizationControlRow",
+    "OrganizationDecisionRow",
+    "OrganizationDepartureRow",
     "OrganizationGoalRow",
     "OrganizationHarvestRows",
     "OrganizationIdentityRow",
     "OrganizationLineageRow",
     "OrganizationMemberRow",
+    "OrganizationOperationHarvestRows",
+    "OrganizationOperationOwnerRow",
     "OrganizationOwnerRow",
+    "OrganizationProcedureActionRow",
     "OrganizationProcedureRow",
     "OrganizationRecordRow",
     "OrganizationResourceRow",

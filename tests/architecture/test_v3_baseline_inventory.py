@@ -53,7 +53,7 @@ V3_BASELINE: Final[dict[str, object]] = {
     "previous_event_schema": 21,
     "latest_codec": "v20",
     "next_codec": "v21",
-    "metric_family_count": 144,
+    "metric_family_count": 146,
     "observer_semantic_type_count": 73,
     "observer_protocol": "observer-protocol-v1",
     "alembic_head": "0017",

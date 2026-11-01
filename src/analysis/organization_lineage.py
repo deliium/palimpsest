@@ -28,6 +28,7 @@ from analysis.organization_layers import (
     OrganizationLayerView,
     project_organization_layers,
 )
+from analysis.organization_operations import OrganizationOperationSummary
 from analysis.organizations import OrganizationHarvestRows
 from world.identifiers import require_exact_nonneg_int
 
@@ -76,6 +77,7 @@ class OrganizationAnalysis:
     edges: tuple[OrganizationLineageEdge, ...]
     coverage: OrganizationCoverage
     layer_view: OrganizationLayerView | None = None
+    operation_summary: OrganizationOperationSummary | None = None
     history_truncated: bool = False
     determinism_digest: str = ""
 
@@ -147,6 +149,7 @@ def derive_organization_lineage(
     assignment: OrganizationIdentityAssignment,
     *,
     layer_view: OrganizationLayerView | None = None,
+    operation_summary: OrganizationOperationSummary | None = None,
     history_truncated: bool = False,
 ) -> OrganizationAnalysis:
     """Derive continued/transformed/split/merge/dissolved/emerged edges."""
@@ -264,6 +267,7 @@ def derive_organization_lineage(
         edges=ordered,
         coverage=assignment.coverage,
         layer_view=layer_view,
+        operation_summary=operation_summary,
         history_truncated=bool(history_truncated),
     )
 
@@ -316,6 +320,7 @@ def build_organization_analysis(
     *,
     owner_rows: Sequence[OrganizationHarvestRows] = (),
     layer_view: OrganizationLayerView | None = None,
+    operation_summary: OrganizationOperationSummary | None = None,
     history_truncated: bool = False,
 ) -> OrganizationAnalysis:
     """Build the digest-bearing analysis, projecting layers when possible."""
@@ -325,5 +330,6 @@ def build_organization_analysis(
     return derive_organization_lineage(
         assignment,
         layer_view=layer_view,
+        operation_summary=operation_summary,
         history_truncated=history_truncated,
     )

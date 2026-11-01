@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 144
+METRIC_FAMILY_COUNT: Final[int] = 146
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -219,6 +219,8 @@ class MetricFamilyId(StrEnum):
     ORGANIZATION_MEMBERSHIP = "organization_membership"
     ORGANIZATION_STRUCTURE = "organization_structure"
     ORGANIZATION_LINEAGE = "organization_lineage"
+    ORGANIZATION_OPERATIONS = "organization_operations"
+    ORGANIZATION_OPERATION_AUTHORITY = "organization_operation_authority"
 
 
 class DenominatorKind(StrEnum):
@@ -6402,6 +6404,139 @@ def _spec_organization_lineage() -> MetricSpecification:
     )
 
 
+def _spec_organization_operations() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_OPERATIONS,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_candidate_operation_records",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dissolved concepts retain recorded operations as former",
+        zero_holding_policy=(
+            "no operation rows -> availability=absent; never zero-filled"
+        ),
+        opportunity_vs_occurrence=(
+            "operations are socially recognized acts believed by owners; not "
+            "capacity, custody, throughput, or permissions"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="unresolved anchors stay explicit and are never inferred",
+        formulas={
+            "as_of_tick": "final window end tick",
+            "control_count": "believed resource-control relations only",
+            "storage_count": "believed storage relations",
+            "record_keeping_count": "believed record-keeping relations",
+            "admission_count": "believed membership admissions",
+            "departure_count": "believed membership departures",
+            "assignment_count": "believed role assignments",
+            "procedure_action_count": "believed recognized procedure acts",
+            "commitment_count": "believed internal commitments",
+            "decision_count": "owner-local decision records",
+            "action_count": "owner-local observed action records",
+            "contested_operation_count": (
+                "records with disputed stance or contest count"
+            ),
+            "orphaned_operation_count": "operation concepts without a candidate",
+            "provenance_known_count": "records with a known provenance code",
+            "operation_coverage_ratio": "candidates with operations / candidates",
+        },
+        value_keys=(
+            "action_count",
+            "admission_count",
+            "as_of_tick",
+            "assignment_count",
+            "commitment_count",
+            "contested_operation_count",
+            "control_count",
+            "decision_count",
+            "departure_count",
+            "operation_coverage_ratio",
+            "orphaned_operation_count",
+            "procedure_action_count",
+            "provenance_known_count",
+            "record_keeping_count",
+            "storage_count",
+        ),
+        empty_case="no operation rows or no candidates -> availability=absent",
+        one_case="one candidate reports its own operation counts",
+        unknown_case=(
+            "missing or unknown evidence stays partial or absent; never zero-filled"
+        ),
+    )
+
+
+def _spec_organization_operation_authority() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_candidate_operation_authority_claims",
+        denominator="operation_record_count",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy=(
+            "dissolved concepts retain their last recorded authority basis"
+        ),
+        zero_holding_policy=(
+            "no operation rows -> availability=absent; never zero-filled"
+        ),
+        opportunity_vs_occurrence=(
+            "authority is owner belief, never a permission, role right, or world rule"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="unknown authority is retained and never forced to a value",
+        formulas={
+            "as_of_tick": "final window end tick",
+            "authority_self_authored_count": "records with a self-authored basis",
+            "authority_role_count": "records with a role-belief basis",
+            "authority_decision_count": "records with a decision-belief basis",
+            "authority_procedure_count": "records with a procedure-belief basis",
+            "authority_observation_count": "records with an observation basis",
+            "authority_unknown_count": "records with no resolved authority basis",
+            "resource_contest_count": "contested resource-control records",
+            "membership_contest_count": (
+                "contested admission/departure/assignment records"
+            ),
+            "authority_contest_count": "decisions with unknown or contested authority",
+            "procedure_contest_count": "contested procedure records",
+            "orphaned_count": "operation concepts without a candidate",
+            "mean_owner_support": "mean owner-local support count",
+        },
+        value_keys=(
+            "as_of_tick",
+            "authority_contest_count",
+            "authority_decision_count",
+            "authority_observation_count",
+            "authority_procedure_count",
+            "authority_role_count",
+            "authority_self_authored_count",
+            "authority_unknown_count",
+            "mean_owner_support",
+            "membership_contest_count",
+            "orphaned_count",
+            "procedure_contest_count",
+            "resource_contest_count",
+        ),
+        empty_case="no operation rows or no candidates -> availability=absent",
+        one_case="one candidate reports its own authority claims",
+        unknown_case=(
+            "unknown authority is retained and never coerced to a basis"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -6547,6 +6682,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_organization_membership,
     _spec_organization_structure,
     _spec_organization_lineage,
+    _spec_organization_operations,
+    _spec_organization_operation_authority,
 )
 
 

@@ -15,6 +15,11 @@ from analysis.organization_detection import (
     OrganizationDetectionResult,
 )
 from analysis.organization_identity import OrganizationIdentityAssignment
+from analysis.organization_operations import (
+    OrganizationOperationSummary,
+    operation_action_ticks,
+    operation_concept_counts,
+)
 from analysis.organizations import OrganizationHarvestRows
 from world.identifiers import require_exact_nonneg_int
 
@@ -46,6 +51,7 @@ class OrganizationObjectiveRow:
     identity_count: int
     resolved_anchor_count: int
     unresolved_anchor_count: int
+    operation_action_count: int = 0
 
     def __post_init__(self) -> None:
         for name in (
@@ -61,6 +67,7 @@ class OrganizationObjectiveRow:
             "identity_count",
             "resolved_anchor_count",
             "unresolved_anchor_count",
+            "operation_action_count",
         ):
             require_exact_nonneg_int(name, getattr(self, name))
 
@@ -75,11 +82,17 @@ class OrganizationSubjectiveRow:
     status: str
     temporal_scope: str
     self_identified: bool
+    operation_count: int = 0
+    contested_operation_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.organization_id.startswith(_CONCEPT_PREFIX):
             raise OrganizationAnalysisError("organization_layer_leak")
         require_exact_nonneg_int("member_count", self.member_count)
+        require_exact_nonneg_int("operation_count", self.operation_count)
+        require_exact_nonneg_int(
+            "contested_operation_count", self.contested_operation_count
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,11 +101,14 @@ class OrganizationLayerView:
     subjective: tuple[OrganizationSubjectiveRow, ...]
     analytical: tuple[OrganizationCandidate, ...]
     coverage: OrganizationCoverage
+    operations: OrganizationOperationSummary | None = None
 
 
 def project_organization_layers(
     detection: OrganizationDetectionResult | OrganizationIdentityAssignment,
     owner_rows: Sequence[OrganizationHarvestRows],
+    operation_rows: Sequence[object] | None = None,
+    operation_summary: OrganizationOperationSummary | None = None,
 ) -> OrganizationLayerView:
     """Project objective counts, owner claims, and analytical candidates."""
 
@@ -110,6 +126,19 @@ def project_organization_layers(
     else:
         raise OrganizationAnalysisError("organization_layer_leak")
 
+    action_ticks = (
+        operation_action_ticks(operation_rows)  # type: ignore[arg-type]
+        if operation_rows
+        else ()
+    )
+    concept_counts = {
+        (owner_id, organization_id): (count, contested)
+        for owner_id, organization_id, count, contested in (
+            operation_concept_counts(operation_rows)  # type: ignore[arg-type]
+            if operation_rows
+            else ()
+        )
+    }
     objective: list[OrganizationObjectiveRow] = []
     for window in windows:
         role_count = 0
@@ -186,6 +215,11 @@ def project_organization_layers(
                 identity_count=identity_count,
                 resolved_anchor_count=resolved,
                 unresolved_anchor_count=0,
+                operation_action_count=sum(
+                    1
+                    for tick in action_ticks
+                    if window.start_tick <= tick <= window.end_tick
+                ),
             )
         )
 
@@ -196,6 +230,9 @@ def project_organization_layers(
                 identity.organization_id == concept.organization_id
                 and identity.stance in {"member", "affiliated"}
                 for identity in owner.identities
+            )
+            operation_count, contested_count = concept_counts.get(
+                (owner.owner.owner_id, concept.organization_id), (0, 0)
             )
             subjective.append(
                 OrganizationSubjectiveRow(
@@ -209,6 +246,8 @@ def project_organization_layers(
                     status=concept.status,
                     temporal_scope=concept.temporal_scope,
                     self_identified=self_identified,
+                    operation_count=operation_count,
+                    contested_operation_count=contested_count,
                 )
             )
     view = OrganizationLayerView(
@@ -218,6 +257,7 @@ def project_organization_layers(
         ),
         analytical=tuple(sorted(candidates, key=lambda item: item.candidate_key)),
         coverage=coverage,
+        operations=operation_summary,
     )
     assert_organization_layer_separation(view)
     return view
@@ -246,3 +286,18 @@ def assert_organization_layer_separation(view: OrganizationLayerView) -> None:
             raise OrganizationAnalysisError("organization_layer_leak")
         if candidate.candidate_key.startswith(_ANALYTICAL_PREFIX):
             raise OrganizationAnalysisError("organization_layer_leak")
+    summary = view.operations
+    if summary is not None:
+        if type(summary) is not OrganizationOperationSummary:
+            raise OrganizationAnalysisError("organization_layer_leak")
+        for operation_candidate in summary.candidates:
+            if not operation_candidate.organization_id.startswith(_ANALYTICAL_PREFIX):
+                raise OrganizationAnalysisError("organization_layer_leak")
+            for name in operation_candidate.__dataclass_fields__:
+                value = getattr(operation_candidate, name)
+                if isinstance(value, str) and (
+                    value.startswith(_CONCEPT_PREFIX)
+                    or value.startswith("orgd-")
+                    or value.startswith("orga-")
+                ):
+                    raise OrganizationAnalysisError("organization_layer_leak")

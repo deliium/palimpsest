@@ -242,6 +242,6 @@ four GET-only `/v1/simulations/{run_id}/organizations` routes require
 Research UI adds a read-only Organizations panel. No organization actor, roster,
 treasury, resource pool, registry, command, event, observer semantic type, runner
 schema, API version, or SQL migration is added. Pins remain runner v4/v55/v56,
-result v2/v3, commands 43, observer semantic types 73, metric families 144,
+result v2/v3, commands 43, observer semantic types 73, metric families 146,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017`;
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
