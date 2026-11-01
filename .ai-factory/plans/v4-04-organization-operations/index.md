@@ -5,7 +5,8 @@ Mode: ultra
 Branch: main
 Created: 2026-10-31
 Plan identifier: `v4-04-organization-operations`
-Status: planned; no task is implemented. The bundle is the implementation
+Status: implemented 2026-11-01; certification withheld pending the unexecuted
+Compose/browser and Godot 4.7.2 lanes. The bundle remains the implementation
 contract for `$aif-implement`.
 
 ## Original Request
@@ -299,43 +300,55 @@ closed. `/version` is unchanged; `organization_rows` remains reserved.
 
 ## Verification Receipt (Tasks 21 and 23)
 
-Recorded: 2026-11-01. Coverage was enabled on every Python lane below.
+Recorded: 2026-11-01; re-verified 2026-11-02 after the static-typing and
+paged-read fixes. Coverage was enabled on every Python lane below.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Unit + architecture (`tests/unit tests/architecture --cov`) | `executed_passed` | 7,521 passed, 0 failed, 78% coverage (33m47s) |
-| Static `ruff check src tests` | `executed_passed` | no findings |
-| Static `mypy src tests` | `executed_passed` | 1,785 files, no issues |
-| Static `lint-imports` | `executed_passed` | 25 kept, 0 broken |
-| Integration, non-scale, clean `palimpsest_test` pgvector | `executed_passed` | 93 passed (27.5s) |
-| Integration selection including scale tests | `executed_failed` | 115 passed, 1 failed: `tests/benchmarks/test_civilization_playback.py::test_dense_civilization_render_pack_pages_are_bounded` -> `civilization_read_budget`; reproducible in ~5s; no `civilization*` module or benchmark changed since the V4-04 base (`348af5d`), so this is pre-existing and unrelated to V4-04 |
-| `docker compose config --quiet` | `executed_passed` | exit 0 |
+| Unit + architecture (`tests/unit tests/architecture --cov`) | `executed_passed` | 7,522 passed, 0 failed, 78% coverage (33m29s; re-run 2026-11-02) |
+| Static `ruff check src tests` | `executed_passed` | no findings (2026-11-02) |
+| Static `mypy src tests` | `executed_passed` | 1,785 files, no issues (2026-11-02) |
+| Static `lint-imports` | `executed_passed` | 25 kept, 0 broken (2026-11-02) |
+| Integration, non-scale, clean `palimpsest_test` pgvector | `executed_passed` | 93 passed (27.5s; 2026-11-01); not re-run 2026-11-02 — no host-reachable pgvector instance, and the changed persistence reader has no DB integration surface |
+| Integration selection including scale tests | `unexecuted` | prerequisite absent 2026-11-02: disposable `palimpsest_test` pgvector. The 2026-11-01 run recorded 115 passed / 1 failed; that failure is now fixed (see below) |
+| `docker compose config --quiet` | `executed_passed` | exit 0 (2026-11-02) |
 | Compose/browser acceptance | `unexecuted` | prerequisites absent: current-revision `PALIMPSEST_API_IMAGE` and a Python Playwright module (browsers are cached but the module is not installed) |
 | Godot 4.7.2 regression suite | `unexecuted` | prerequisite absent: `GODOT_BIN` / a Godot 4.7.2 binary |
-| Benchmark/scale lane (`-m "integration and scale" tests/benchmarks/`) | `executed_failed` | same pre-existing dense-render-pack case; no benchmark result is reported as a pass |
-| Research UI `vitest run` | `executed_passed` | 251 passed (49 files) |
-| Research UI `svelte-check` (repo `check` script, `tsconfig.app.json`) | `executed_passed` | 0 errors, 0 warnings |
+| Benchmark/scale file (`tests/benchmarks/test_civilization_playback.py -m "integration and scale"`) | `executed_passed` | 2 passed (2026-11-02) |
+| Benchmark/scale lane, full selection (`-m "integration and scale" tests/benchmarks/`) | `unexecuted` | prerequisite absent 2026-11-02: disposable `palimpsest_test` pgvector |
+| Research UI `vitest run` | `executed_passed` | 251 passed (49 files; 2026-11-02) |
+| Research UI `svelte-check` (repo `check` script, `tsconfig.app.json`) + `tsc -p tsconfig.node.json` | `executed_passed` | 0 errors, 0 warnings; tsc exit 0 (2026-11-02) |
 
 Pins verified directly: 146 metric families with the two operation families last;
 14 contexts / 12 flags / `v4-context-map-v2`; events 22; codec `v20` accepted and
 `v21` not; 43 commands; 73 observer semantic types; Alembic `0017` with no
-`0018_*.py`; no `runner-config-v57`; roadmap untouched.
+`0018_*.py`; no `runner-config-v57`; roadmap untouched by this plan.
+
+**Fixed in the 2026-11-02 pass (outside the V4-04 feature diff):**
+
+1. `mypy src tests` reported 8 `[attr-defined]` errors at HEAD (7 introduced by
+   V4-04 test files, 1 pre-existing). The shared `tuple[object, ...]`
+   reader/runner contracts are now narrowed at the test boundary, so the static
+   gate is genuinely green. Patch: `patches/2026-11-01-23.13.md`.
+2. `test_dense_civilization_render_pack_pages_are_bounded` failed with
+   `civilization_read_budget`. Root cause: paged reads re-read every earlier
+   shard, exhausting the 16-file per-request allowance by replay. The reader now
+   skips exhausted shards from published `row-bounds.json` (advisory, bounded
+   fallback), and a 2,000-row / 10-shard unit regression pins
+   `physical_files <= 12`. The read budget itself was not weakened. Patch:
+   `patches/2026-11-01-23.40.md`.
 
 **Final certification: `v4-04-organization-operations certified=false`.**
 
-Withheld blockers, all outside the V4-04 diff:
+Withheld blockers:
 
-1. The pre-existing dense civilization render-pack benchmark exceeds the
-   per-request `civilization_read_budget` (16 physical files / 12 MiB) and fails in
-   the integration selection. It is not weakened or skipped here.
-2. Compose/browser acceptance cannot run without a current-revision image and the
+1. Compose/browser acceptance cannot run without a current-revision image and the
    Playwright Python module.
-3. The pinned Godot 4.7.2 suite cannot run without a Godot binary.
+2. The pinned Godot 4.7.2 suite cannot run without a Godot binary.
 
-Every V4-04-specific lane (organization unit/architecture/determinism/isolation/
-E2E/API/UI/metrics/publication) passes; the withheld certification is caused by
-the pre-existing benchmark failure and the two unavailable toolchain
-prerequisites, not by V4-04 behavior.
+The previously withheld dense render-pack benchmark blocker is resolved. Every
+V4-04-specific lane (organization unit/architecture/determinism/isolation/E2E/
+API/UI/metrics/publication) passes, and the filesystem benchmark lane passes.
 
 ## Commit Plan
 
