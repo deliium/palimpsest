@@ -4711,6 +4711,7 @@ class SimulationRunner:
                     raise ValueError("institutional decay binding group mismatch")
         from agents.cognition.configuration import CognitionOrganizationMode
         from agents.cognition.organization_concepts import OrganizationConceptLedger
+        from agents.cognition.organization_operations import OrganizationOperationLedger
 
         for state in checkpoint.runtime_states:
             ledger = getattr(state, "organization_concepts", None)
@@ -4729,6 +4730,12 @@ class SimulationRunner:
                 "_organization_concept_mode",
                 CognitionOrganizationMode.DISABLED,
             )
+            operation_ledger = getattr(state, "organization_operations", None)
+            if operation_ledger is not None:
+                if type(operation_ledger) is not OrganizationOperationLedger:
+                    raise TypeError("organization operation ledger invalid type")
+                if operation_ledger.owner_id != state.agent_id:
+                    raise ValueError("organization operation ledger owner_id mismatch")
             if mode is not CognitionOrganizationMode.DETERMINISTIC:
                 raise ValueError("organization ledger for disabled owner")
         by_agent = {state.agent_id: state for state in checkpoint.runtime_states}
@@ -4962,6 +4969,9 @@ class SimulationRunner:
             institutional_memory_ledgers=self.export_institutional_memory_ledgers(),
             institutional_decay_ledgers=self.export_institutional_decay_ledgers(),
             organization_concept_ledgers=(self.export_organization_concept_ledgers()),
+            organization_operation_ledgers=(
+                self.export_organization_operation_ledgers()
+            ),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5338,6 +5348,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_organization_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_organization_operation_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered organization operation ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "organization_operations", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_organization_operation_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)

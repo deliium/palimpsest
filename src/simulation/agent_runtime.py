@@ -468,6 +468,7 @@ class AgentRuntime:
         "_office_concepts",
         "_offline_consolidation_audits",
         "_organization_concepts",
+        "_organization_operations",
         "_pending",
         "_possession_legitimacy",
         "_practical_knowledge",
@@ -616,6 +617,7 @@ class AgentRuntime:
         self._institutional_decay: object | None = None
         self._office_concepts: object | None = None
         self._organization_concepts: object | None = None
+        self._organization_operations: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1294,6 +1296,39 @@ class AgentRuntime:
         self._organization_concepts = ledger
         _LOG.debug(
             "organization_concepts_carried owner_id=%s concept_count=%s tick=%s",
+            owner.value,
+            len(ledger.concepts),
+            tick,
+        )
+
+    def _commit_organization_operations(
+        self, ledger: object | None, tick: int
+    ) -> None:
+        from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_operations import OrganizationOperationLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_organization_concept_mode",
+            CognitionOrganizationMode.DISABLED,
+        )
+        if mode is not CognitionOrganizationMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionOrganizationMode.DETERMINISTIC:
+                self._organization_operations = None
+            return
+        if type(ledger) is not OrganizationOperationLedger:
+            raise TypeError(
+                "organization_operations must be OrganizationOperationLedger"
+            )
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._organization_operations = ledger
+        _LOG.debug(
+            "organization_operations_carried owner_id=%s concepts=%s tick=%s",
             owner.value,
             len(ledger.concepts),
             tick,
@@ -2194,6 +2229,7 @@ class AgentRuntime:
                 institutional_decay=self._institutional_decay,
                 office_concepts=self._office_concepts,
                 organization_concepts=self._organization_concepts,
+                organization_operations=self._organization_operations,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2677,6 +2713,10 @@ class AgentRuntime:
         )
         self._commit_organization_concepts(
             getattr(pending.loop_result, "organization_concepts", None), pending.tick
+        )
+        self._commit_organization_operations(
+            getattr(pending.loop_result, "organization_operations", None),
+            pending.tick,
         )
         self._commit_collective_decisions(
             getattr(pending.loop_result, "collective_decisions", None), pending.tick
@@ -3228,6 +3268,18 @@ class AgentRuntime:
         self._institution_concepts = getattr(checkpoint, "institution_concepts", None)
         self._office_concepts = getattr(checkpoint, "office_concepts", None)
         self._organization_concepts = getattr(checkpoint, "organization_concepts", None)
+        self._organization_operations = getattr(
+            checkpoint, "organization_operations", None
+        )
+        if (
+            self._organization_operations is not None
+            and getattr(self._organization_operations, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._organization_concepts is not None
             and getattr(self._organization_concepts, "owner_id", None)
@@ -3337,6 +3389,7 @@ class AgentRuntime:
             theory_of_mind=self._theory_of_mind,
             office_concepts=self._office_concepts,
             organization_concepts=self._organization_concepts,
+            organization_operations=self._organization_operations,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

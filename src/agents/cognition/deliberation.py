@@ -1259,6 +1259,30 @@ class CommandPlanner:
             ledger=prepared_decisions,
             mode=collective_decision_mode,
         )
+        from agents.cognition.organization_communication import (
+            organization_communicate_utterance,
+        )
+
+        prepared_organizations = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "organization_concepts", None)
+        )
+        command = organization_communicate_utterance(
+            command, prepared_organizations
+        )
+        from agents.cognition.organization_operations_communication import (
+            organization_operation_communicate_utterance,
+        )
+
+        prepared_operations = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "organization_operations", None)
+        )
+        command = organization_operation_communicate_utterance(
+            command, prepared_operations
+        )
         from agents.cognition.mediation_communication import (
             mediation_communicate_utterance,
         )

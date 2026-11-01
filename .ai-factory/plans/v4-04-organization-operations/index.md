@@ -263,12 +263,12 @@ closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 2: Add the policy seam without a runner schema change ([details](phase-01-contract-and-seam.md#task-2-add-the-policy-seam-without-a-runner-schema-change)) (depends on 1)
 
 ### Phase 2: Owner-Scoped Operational Beliefs
-- [ ] Task 3: Define operational records and ledger invariants ([details](phase-02-operational-beliefs.md#task-3-define-operational-records-and-ledger-invariants)) (depends on 2)
-- [ ] Task 4: Add bounded `org_op_v1` operational speech frames ([details](phase-02-operational-beliefs.md#task-4-add-bounded-org_op_v1-operational-speech-frames)) (depends on 3)
-- [ ] Task 5: Collect operational evidence and derive decision/action provenance ([details](phase-02-operational-beliefs.md#task-5-collect-operational-evidence-and-derive-decisionaction-provenance)) (depends on 3, 4)
-- [ ] Task 6: Materialize the operation ledger and enforce caps ([details](phase-02-operational-beliefs.md#task-6-materialize-the-operation-ledger-and-enforce-caps)) (depends on 5)
-- [ ] Task 7: Carry the operation ledger through cognition, runtime, checkpoints, and the runner ([details](phase-02-operational-beliefs.md#task-7-carry-the-operation-ledger-through-cognition-runtime-checkpoints-and-the-runner)) (depends on 6)
-- [ ] Task 8: Wire claims and operational classification into existing deliberation ([details](phase-02-operational-beliefs.md#task-8-wire-claims-and-operational-classification-into-existing-deliberation)) (depends on 5, 6, 7)
+- [x] Task 3: Define operational records and ledger invariants ([details](phase-02-operational-beliefs.md#task-3-define-operational-records-and-ledger-invariants)) (depends on 2)
+- [x] Task 4: Add bounded `org_op_v1` operational speech frames ([details](phase-02-operational-beliefs.md#task-4-add-bounded-org_op_v1-operational-speech-frames)) (depends on 3)
+- [x] Task 5: Collect operational evidence and derive decision/action provenance ([details](phase-02-operational-beliefs.md#task-5-collect-operational-evidence-and-derive-decisionaction-provenance)) (depends on 3, 4)
+- [x] Task 6: Materialize the operation ledger and enforce caps ([details](phase-02-operational-beliefs.md#task-6-materialize-the-operation-ledger-and-enforce-caps)) (depends on 5)
+- [x] Task 7: Carry the operation ledger through cognition, runtime, checkpoints, and the runner ([details](phase-02-operational-beliefs.md#task-7-carry-the-operation-ledger-through-cognition-runtime-checkpoints-and-the-runner)) (depends on 6)
+- [x] Task 8: Wire claims and operational classification into existing deliberation ([details](phase-02-operational-beliefs.md#task-8-wire-claims-and-operational-classification-into-existing-deliberation)) (depends on 5, 6, 7)
 
 ### Phase 3: Detached Analysis, Disagreement, and Metrics
 - [ ] Task 9: Harvest owner operation ledgers into detached rows ([details](phase-03-detached-analysis.md#task-9-harvest-owner-operation-ledgers-into-detached-rows)) (depends on 7)

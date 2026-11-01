@@ -58,6 +58,7 @@ class CognitiveLoopForkState:
     developmental_stage_learning_rates: tuple[tuple[str, float], ...]
     experiment_ledger: object | None
     prepared_organization_concepts: object | None = None
+    prepared_organization_operations: object | None = None
     state_format_version: str = COGNITIVE_LOOP_FORK_STATE_VERSION
 
     def __post_init__(self) -> None:

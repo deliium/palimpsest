@@ -359,6 +359,7 @@ class CognitiveLoop:
         "_possession_succession_active",
         "_prepared_institutional_decay",
         "_prepared_organization_concepts",
+        "_prepared_organization_operations",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -934,6 +935,7 @@ class CognitiveLoop:
         self._organization_concept_policy = organization_concept_policy
         self._organization_operation_policy = organization_operation_policy
         self._prepared_organization_concepts: object | None = None
+        self._prepared_organization_operations: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1410,6 +1412,7 @@ class CognitiveLoop:
             tick_budget_ledger=tick_budget_state,
             prepared_institutional_decay=self._prepared_institutional_decay,
             prepared_organization_concepts=self._prepared_organization_concepts,
+            prepared_organization_operations=self._prepared_organization_operations,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1454,6 +1457,7 @@ class CognitiveLoop:
             )
         self._prepared_institutional_decay = state.prepared_institutional_decay
         self._prepared_organization_concepts = state.prepared_organization_concepts
+        self._prepared_organization_operations = state.prepared_organization_operations
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2353,6 +2357,64 @@ class CognitiveLoop:
             "organization_concepts_carried owner_id=%s concept_count=%s",
             owner_id,
             len(updated.concepts),
+        )
+        return updated
+
+    def _prepare_organization_operations(
+        self,
+        loop_input: CognitiveLoopInput,
+        organization_concepts: object | None,
+        offices: object | None,
+        collective_decisions: object | None,
+        structured_commitments: object | None,
+        possession_legitimacy: object | None,
+    ) -> object | None:
+        """Refresh one owner's operational sidecar after concept preparation."""
+        from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_operations import (
+            OrganizationOperationLedger,
+            OrganizationOperationPolicy,
+            apply_organization_operation_update,
+        )
+
+        if (
+            self._organization_concept_mode
+            is not CognitionOrganizationMode.DETERMINISTIC
+        ):
+            self._prepared_organization_operations = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "organization_operations", None)
+        )
+        ledger = carried if type(carried) is OrganizationOperationLedger else None
+        policy = self._organization_operation_policy
+        if type(policy) is not OrganizationOperationPolicy:
+            raise TypeError(
+                "organization_operation_policy must be OrganizationOperationPolicy"
+            )
+        updated = apply_organization_operation_update(
+            owner_id=loop_input.agent_id,
+            tick=loop_input.observation.tick,
+            observation=loop_input.observation,
+            prior=ledger,
+            organization_concepts=organization_concepts,
+            offices=offices,
+            collective_decisions=collective_decisions,
+            structured_commitments=structured_commitments,
+            possession_legitimacy=possession_legitimacy,
+            policy=policy,
+        )
+        self._prepared_organization_operations = updated
+        _LOG.debug(
+            "organization_operations_carried owner_id=%s concepts=%s decisions=%s "
+            "actions=%s",
+            loop_input.agent_id.value,
+            len(updated.concepts),
+            sum(len(item.decisions) for item in updated.concepts),
+            sum(len(item.actions) for item in updated.concepts),
         )
         return updated
 
@@ -4353,6 +4415,14 @@ class CognitiveLoop:
             structured_commitments=structured_commitments,
             social_conventions=social_conventions,
         )
+        organization_operations = self._prepare_organization_operations(
+            loop_input,
+            organization_concepts,
+            office_concepts,
+            collective_decisions,
+            structured_commitments,
+            possession_legitimacy,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -4719,6 +4789,7 @@ class CognitiveLoop:
             institution_concepts=institution_concepts,
             office_concepts=office_concepts,
             organization_concepts=organization_concepts,
+            organization_operations=organization_operations,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5060,6 +5131,7 @@ class CognitiveLoop:
             institution_concepts=proposal.institution_concepts,
             office_concepts=proposal.office_concepts,
             organization_concepts=proposal.organization_concepts,
+            organization_operations=proposal.organization_operations,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

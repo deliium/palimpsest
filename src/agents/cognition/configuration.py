@@ -1097,7 +1097,10 @@ class CognitionLoopConfig:
                 "organization_operation_policy",
                 default_organization_operation_policy(),
             )
-        elif type(self.organization_operation_policy) is not OrganizationOperationPolicy:
+        elif (
+            type(self.organization_operation_policy)
+            is not OrganizationOperationPolicy
+        ):
             _LOG.error(
                 "invalid_enum path=organization_operation_policy "
                 "reason_code=invalid_type"

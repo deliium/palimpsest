@@ -6372,6 +6372,7 @@ class SimulationRunnerResult:
     institutional_memory_ledgers: tuple[object, ...] = ()
     institutional_decay_ledgers: tuple[object, ...] = ()
     organization_concept_ledgers: tuple[object, ...] = ()
+    organization_operation_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6651,6 +6652,17 @@ class SimulationRunnerResult:
             self,
             "organization_concept_ledgers",
             tuple(self.organization_concept_ledgers),
+        )
+        if isinstance(self.organization_operation_ledgers, (set, frozenset)):
+            raise TypeError("organization_operation_ledgers must be ordered")
+        if isinstance(
+            self.organization_operation_ledgers, (str, bytes)
+        ) or not isinstance(self.organization_operation_ledgers, Sequence):
+            raise TypeError("organization_operation_ledgers must be ordered")
+        object.__setattr__(
+            self,
+            "organization_operation_ledgers",
+            tuple(self.organization_operation_ledgers),
         )
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")

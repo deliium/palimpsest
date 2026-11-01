@@ -612,6 +612,7 @@ class AgentRuntimeCheckpoint:
     institution_concepts: object | None = None
     office_concepts: object | None = None
     organization_concepts: object | None = None
+    organization_operations: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -766,6 +767,15 @@ class AgentRuntimeCheckpoint:
             self.organization_concepts,
             self.agent_id,
             field_name="organization_concepts",
+        )
+        from agents.cognition.organization_operations import (
+            require_owner_organization_operations,
+        )
+
+        require_owner_organization_operations(
+            self.organization_operations,
+            self.agent_id,
+            field_name="organization_operations",
         )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
