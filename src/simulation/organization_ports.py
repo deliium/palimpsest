@@ -10,7 +10,7 @@ from typing import Final, Protocol
 
 from simulation.organization_models import (
     MAX_RESPONSE_BYTES,
-    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
+    SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS,
     OrganizationArtifactError,
     OrganizationCandidateRecord,
     OrganizationCoverage,
@@ -38,6 +38,7 @@ ORGANIZATION_CURSOR_PURPOSES: Final[tuple[str, ...]] = (
     "organization_candidates",
     "organization_candidate",
     "organization_lineage",
+    "organization_operations",
 )
 
 
@@ -66,6 +67,16 @@ class OrganizationReadPort(Protocol):
         offset: int,
         limit: int,
         kind: str | None = None,
+    ) -> OrganizationRowSelection: ...
+
+    def operations(
+        self,
+        run_id: str,
+        publication_id: str,
+        offset: int,
+        limit: int,
+        domain: str | None = None,
+        organization_id: str | None = None,
     ) -> OrganizationRowSelection: ...
 
 
@@ -105,16 +116,18 @@ class OrganizationSummary:
     window_count: int
     coverage: OrganizationCoverage
     provenance_code: str
+    operation_count: int = 0
 
     def __post_init__(self) -> None:
         require_publication_id(self.publication_id)
-        if self.schema_version != ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS:
             raise OrganizationArtifactError("organization_invalid_value")
         for name in (
             "generated_tick",
             "candidate_count",
             "edge_count",
             "window_count",
+            "operation_count",
         ):
             value = getattr(self, name)
             if type(value) is not int or value < 0:

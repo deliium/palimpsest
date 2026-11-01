@@ -86,7 +86,7 @@ async def test_harvest_publish_and_read_round_trip(tmp_path: Path) -> None:
     summary = reader.summary("run-organization-e2e")
     assert summary is not None
     assert summary.publication_id == built.publication_id
-    assert summary.schema_version == "organization-snapshot-v1"
+    assert summary.schema_version == "organization-snapshot-v2"
 
     page = reader.candidates("run-organization-e2e", built.publication_id, 0, 50)
     assert len(page.rows) == len(built.snapshot.candidates)

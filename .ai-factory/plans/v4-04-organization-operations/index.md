@@ -271,18 +271,18 @@ closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 8: Wire claims and operational classification into existing deliberation ([details](phase-02-operational-beliefs.md#task-8-wire-claims-and-operational-classification-into-existing-deliberation)) (depends on 5, 6, 7)
 
 ### Phase 3: Detached Analysis, Disagreement, and Metrics
-- [ ] Task 9: Harvest owner operation ledgers into detached rows ([details](phase-03-detached-analysis.md#task-9-harvest-owner-operation-ledgers-into-detached-rows)) (depends on 7)
-- [ ] Task 10: Summarize operations and disagreement per candidate ([details](phase-03-detached-analysis.md#task-10-summarize-operations-and-disagreement-per-candidate)) (depends on 9)
-- [ ] Task 11: Project operations into the three layers without leakage ([details](phase-03-detached-analysis.md#task-11-project-operations-into-the-three-layers-without-leakage)) (depends on 9, 10)
-- [ ] Task 12: Add two metric families and raise the catalog to 146 ([details](phase-03-detached-analysis.md#task-12-add-two-metric-families-and-raise-the-catalog-to-146)) (depends on 10, 11)
+- [x] Task 9: Harvest owner operation ledgers into detached rows ([details](phase-03-detached-analysis.md#task-9-harvest-owner-operation-ledgers-into-detached-rows)) (depends on 7)
+- [x] Task 10: Summarize operations and disagreement per candidate ([details](phase-03-detached-analysis.md#task-10-summarize-operations-and-disagreement-per-candidate)) (depends on 9)
+- [x] Task 11: Project operations into the three layers without leakage ([details](phase-03-detached-analysis.md#task-11-project-operations-into-the-three-layers-without-leakage)) (depends on 9, 10)
+- [x] Task 12: Add two metric families and raise the catalog to 146 ([details](phase-03-detached-analysis.md#task-12-add-two-metric-families-and-raise-the-catalog-to-146)) (depends on 10, 11)
 
 ### Phase 4: Organization Snapshot v2
-- [ ] Task 13: Define snapshot v2 models and the canonical codec ([details](phase-04-snapshot-v2.md#task-13-define-snapshot-v2-models-and-the-canonical-codec)) (depends on 11, 12)
-- [ ] Task 14: Add operation paging, read port, and cursor support ([details](phase-04-snapshot-v2.md#task-14-add-operation-paging-read-port-and-cursor-support)) (depends on 13)
+- [x] Task 13: Define snapshot v2 models and the canonical codec ([details](phase-04-snapshot-v2.md#task-13-define-snapshot-v2-models-and-the-canonical-codec)) (depends on 11, 12)
+- [x] Task 14: Add operation paging, read port, and cursor support ([details](phase-04-snapshot-v2.md#task-14-add-operation-paging-read-port-and-cursor-support)) (depends on 13)
 
 ### Phase 5: Composition and Durable Publication
-- [ ] Task 15: Compose completed-run v2 snapshots and receipts ([details](phase-05-composition-publication.md#task-15-compose-completed-run-v2-snapshots-and-receipts)) (depends on 12, 14)
-- [ ] Task 16: Extend the atomic filesystem store for v1/v2 ([details](phase-05-composition-publication.md#task-16-extend-the-atomic-filesystem-store-for-v1v2)) (depends on 13, 14)
+- [x] Task 15: Compose completed-run v2 snapshots and receipts ([details](phase-05-composition-publication.md#task-15-compose-completed-run-v2-snapshots-and-receipts)) (depends on 12, 14)
+- [x] Task 16: Extend the atomic filesystem store for v1/v2 ([details](phase-05-composition-publication.md#task-16-extend-the-atomic-filesystem-store-for-v1v2)) (depends on 13, 14)
 
 ### Phase 6: Read-Only API and Research UI
 - [ ] Task 17: Add the fifth GET route and additive response fields ([details](phase-06-read-only-surfaces.md#task-17-add-the-fifth-get-route-and-additive-response-fields)) (depends on 16)

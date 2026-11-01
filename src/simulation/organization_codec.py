@@ -1,4 +1,4 @@
-"""Canonical encoding for ``organization-snapshot-v1`` artifacts."""
+"""Canonical encoding for ``organization-snapshot-v1``/``v2`` artifacts."""
 
 from __future__ import annotations
 
@@ -11,12 +11,15 @@ from simulation.organization_models import (
     MAX_SNAPSHOT_BYTES,
     ORGANIZATION_SNAPSHOT_POLICY_VERSION,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+    SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS,
     OrganizationArtifactError,
     OrganizationCandidateRecord,
     OrganizationCoverage,
     OrganizationLineageEdgeRecord,
     OrganizationMemberRecord,
     OrganizationObjectiveRow,
+    OrganizationOperationRecord,
     OrganizationSnapshot,
     OrganizationStructuralRecord,
     OrganizationWindowRecord,
@@ -33,7 +36,7 @@ __all__ = [
     "validate_organization_value",
 ]
 
-_SNAPSHOT_KEYS: Final[frozenset[str]] = frozenset(
+_SNAPSHOT_KEYS_V1: Final[frozenset[str]] = frozenset(
     {
         "schema_version",
         "policy_version",
@@ -49,7 +52,8 @@ _SNAPSHOT_KEYS: Final[frozenset[str]] = frozenset(
         "provenance_code",
     }
 )
-_WINDOW_KEYS: Final[frozenset[str]] = frozenset(
+_SNAPSHOT_KEYS_V2: Final[frozenset[str]] = _SNAPSHOT_KEYS_V1
+_WINDOW_KEYS_V1: Final[frozenset[str]] = frozenset(
     {
         "window_index",
         "start_tick",
@@ -60,7 +64,10 @@ _WINDOW_KEYS: Final[frozenset[str]] = frozenset(
         "lane_presence",
     }
 )
-_CANDIDATE_KEYS: Final[frozenset[str]] = frozenset(
+_WINDOW_KEYS_V2: Final[frozenset[str]] = _WINDOW_KEYS_V1 | frozenset(
+    {"operation_count", "contested_operation_count"}
+)
+_CANDIDATE_KEYS_V1: Final[frozenset[str]] = frozenset(
     {
         "organization_id",
         "creation_tick",
@@ -73,6 +80,9 @@ _CANDIDATE_KEYS: Final[frozenset[str]] = frozenset(
         "structure",
         "window_indexes",
     }
+)
+_CANDIDATE_KEYS_V2: Final[frozenset[str]] = _CANDIDATE_KEYS_V1 | frozenset(
+    {"operations"}
 )
 _MEMBER_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -93,7 +103,7 @@ _STRUCTURAL_KEYS: Final[frozenset[str]] = frozenset(
 _EDGE_KEYS: Final[frozenset[str]] = frozenset(
     {"kind", "tick", "from_id", "to_id", "jaccard", "containment"}
 )
-_OBJECTIVE_KEYS: Final[frozenset[str]] = frozenset(
+_OBJECTIVE_KEYS_V1: Final[frozenset[str]] = frozenset(
     {
         "window_index",
         "tick",
@@ -107,6 +117,30 @@ _OBJECTIVE_KEYS: Final[frozenset[str]] = frozenset(
         "identity_count",
         "resolved_anchor_count",
         "unresolved_anchor_count",
+    }
+)
+_OBJECTIVE_KEYS_V2: Final[frozenset[str]] = _OBJECTIVE_KEYS_V1 | frozenset(
+    {"operation_action_count"}
+)
+_OPERATION_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "operation_id",
+        "domain",
+        "act",
+        "stance",
+        "authority_basis",
+        "provenance_code",
+        "outcome",
+        "command_kind",
+        "target_kind",
+        "anchor_kind",
+        "anchor_id",
+        "tick",
+        "first_tick",
+        "last_tick",
+        "support_count",
+        "contest_count",
+        "resolved",
     }
 )
 _COVERAGE_KEYS: Final[frozenset[str]] = frozenset({"observed", "expected", "ratio"})
@@ -231,7 +265,52 @@ def _lane_pair(value: object) -> tuple[str, bool]:
     return _string(pair[0]), _bool(pair[1])
 
 
-def _snapshot_to_value(snapshot: OrganizationSnapshot) -> dict[str, object]:
+def _operation_to_value(operation: OrganizationOperationRecord) -> dict[str, object]:
+    return {
+        "operation_id": operation.operation_id,
+        "domain": operation.domain,
+        "act": operation.act,
+        "stance": operation.stance,
+        "authority_basis": operation.authority_basis,
+        "provenance_code": operation.provenance_code,
+        "outcome": operation.outcome,
+        "command_kind": operation.command_kind,
+        "target_kind": operation.target_kind,
+        "anchor_kind": operation.anchor_kind,
+        "anchor_id": operation.anchor_id,
+        "tick": operation.tick,
+        "first_tick": operation.first_tick,
+        "last_tick": operation.last_tick,
+        "support_count": operation.support_count,
+        "contest_count": operation.contest_count,
+        "resolved": operation.resolved,
+    }
+
+
+def _operation_from_value(raw: object) -> OrganizationOperationRecord:
+    item = _require_keys(raw, _OPERATION_KEYS)
+    return OrganizationOperationRecord(
+        operation_id=_string(item["operation_id"]),
+        domain=_string(item["domain"]),
+        act=_string(item["act"]),
+        stance=_string(item["stance"]),
+        authority_basis=_string(item["authority_basis"]),
+        provenance_code=_string(item["provenance_code"]),
+        outcome=_string(item["outcome"]),
+        command_kind=_string(item["command_kind"]),
+        target_kind=_string(item["target_kind"]),
+        anchor_kind=_string(item["anchor_kind"]),
+        anchor_id=_optional_string(item["anchor_id"]),
+        tick=_int(item["tick"]),
+        first_tick=_int(item["first_tick"]),
+        last_tick=_int(item["last_tick"]),
+        support_count=_int(item["support_count"]),
+        contest_count=_int(item["contest_count"]),
+        resolved=_bool(item["resolved"]),
+    )
+
+
+def _snapshot_to_value_v1(snapshot: OrganizationSnapshot) -> dict[str, object]:
     return {
         "schema_version": snapshot.schema_version,
         "policy_version": snapshot.policy_version,
@@ -328,9 +407,41 @@ def _snapshot_to_value(snapshot: OrganizationSnapshot) -> dict[str, object]:
     }
 
 
+def _snapshot_to_value_v2(snapshot: OrganizationSnapshot) -> dict[str, object]:
+    value = _snapshot_to_value_v1(snapshot)
+    for encoded, window in zip(
+        _list(value["windows"]), snapshot.windows, strict=True
+    ):
+        _dict(encoded).update(
+            {
+                "operation_count": window.operation_count,
+                "contested_operation_count": window.contested_operation_count,
+            }
+        )
+    for encoded, candidate in zip(
+        _list(value["candidates"]), snapshot.candidates, strict=True
+    ):
+        _dict(encoded)["operations"] = [
+            _operation_to_value(operation) for operation in candidate.operations
+        ]
+    for encoded, row in zip(
+        _list(value["objective_rows"]), snapshot.objective_rows, strict=True
+    ):
+        _dict(encoded)["operation_action_count"] = row.operation_action_count
+    return value
+
+
+def _snapshot_to_value(snapshot: OrganizationSnapshot) -> dict[str, object]:
+    if snapshot.schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1:
+        return _snapshot_to_value_v1(snapshot)
+    return _snapshot_to_value_v2(snapshot)
+
+
 def encode_organization_snapshot(snapshot: OrganizationSnapshot) -> bytes:
     """Encode one snapshot canonically and enforce the byte cap."""
     if type(snapshot) is not OrganizationSnapshot:
+        raise OrganizationArtifactError("organization_invalid_value")
+    if snapshot.schema_version not in SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS:
         raise OrganizationArtifactError("organization_invalid_value")
     payload = encode_organization_value(_snapshot_to_value(snapshot))
     if len(payload) > MAX_SNAPSHOT_BYTES:
@@ -338,76 +449,145 @@ def encode_organization_snapshot(snapshot: OrganizationSnapshot) -> bytes:
     return payload
 
 
+def _decode_windows(
+    data: dict[str, object], keys: frozenset[str], *, v1: bool
+) -> tuple[OrganizationWindowRecord, ...]:
+    windows: list[OrganizationWindowRecord] = []
+    for raw in _list(data["windows"]):
+        item = _require_keys(raw, keys)
+        windows.append(
+            OrganizationWindowRecord(
+                window_index=_int(item["window_index"]),
+                start_tick=_int(item["start_tick"]),
+                end_tick=_int(item["end_tick"]),
+                candidate_ids=_string_list(item["candidate_ids"]),
+                member_count=_int(item["member_count"]),
+                overlap_member_count=_int(item["overlap_member_count"]),
+                lane_presence=tuple(
+                    _lane_pair(pair) for pair in _list(item["lane_presence"])
+                ),
+                operation_count=0 if v1 else _int(item["operation_count"]),
+                contested_operation_count=(
+                    0 if v1 else _int(item["contested_operation_count"])
+                ),
+            )
+        )
+    return tuple(windows)
+
+
+def _decode_candidates(
+    data: dict[str, object], keys: frozenset[str], *, v1: bool
+) -> tuple[OrganizationCandidateRecord, ...]:
+    candidates: list[OrganizationCandidateRecord] = []
+    for raw in _list(data["candidates"]):
+        item = _require_keys(raw, keys)
+        candidates.append(
+            OrganizationCandidateRecord(
+                organization_id=_string(item["organization_id"]),
+                creation_tick=_int(item["creation_tick"]),
+                first_tick=_int(item["first_tick"]),
+                last_tick=_int(item["last_tick"]),
+                status=_string(item["status"]),
+                temporal_scope=_string(item["temporal_scope"]),
+                self_identified=_bool(item["self_identified"]),
+                members=tuple(
+                    OrganizationMemberRecord(
+                        member_id=_string(entry["member_id"]),
+                        status=_string(entry["status"]),
+                        basis=_string(entry["basis"]),
+                        temporal_scope=_string(entry["temporal_scope"]),
+                        first_tick=_int(entry["first_tick"]),
+                        last_tick=_int(entry["last_tick"]),
+                        expires_tick=(
+                            None
+                            if entry["expires_tick"] is None
+                            else _int(entry["expires_tick"])
+                        ),
+                        strength=_float(entry["strength"]),
+                        owner_support_count=_int(entry["owner_support_count"]),
+                    )
+                    for entry in (
+                        _require_keys(raw_member, _MEMBER_KEYS)
+                        for raw_member in _list(item["members"])
+                    )
+                ),
+                structure=tuple(
+                    OrganizationStructuralRecord(
+                        kind=_string(entry["kind"]),
+                        anchor_id=_string(entry["anchor_id"]),
+                        status=_string(entry["status"]),
+                        first_tick=_int(entry["first_tick"]),
+                        last_tick=_int(entry["last_tick"]),
+                        resolved=_bool(entry["resolved"]),
+                    )
+                    for entry in (
+                        _require_keys(raw_item, _STRUCTURAL_KEYS)
+                        for raw_item in _list(item["structure"])
+                    )
+                ),
+                window_indexes=tuple(
+                    _int(entry) for entry in _list(item["window_indexes"])
+                ),
+                operations=(
+                    ()
+                    if v1
+                    else tuple(
+                        _operation_from_value(entry)
+                        for entry in _list(item["operations"])
+                    )
+                ),
+            )
+        )
+    return tuple(candidates)
+
+
+def _decode_objective_rows(
+    data: dict[str, object], keys: frozenset[str], *, v1: bool
+) -> tuple[OrganizationObjectiveRow, ...]:
+    rows: list[OrganizationObjectiveRow] = []
+    for raw in _list(data["objective_rows"]):
+        item = _require_keys(raw, keys)
+        rows.append(
+            OrganizationObjectiveRow(
+                window_index=_int(item["window_index"]),
+                tick=_int(item["tick"]),
+                member_count=_int(item["member_count"]),
+                role_count=_int(item["role_count"]),
+                goal_count=_int(item["goal_count"]),
+                resource_count=_int(item["resource_count"]),
+                procedure_count=_int(item["procedure_count"]),
+                record_count=_int(item["record_count"]),
+                commitment_count=_int(item["commitment_count"]),
+                identity_count=_int(item["identity_count"]),
+                resolved_anchor_count=_int(item["resolved_anchor_count"]),
+                unresolved_anchor_count=_int(item["unresolved_anchor_count"]),
+                operation_action_count=(
+                    0 if v1 else _int(item["operation_action_count"])
+                ),
+            )
+        )
+    return tuple(rows)
+
+
 def decode_organization_snapshot(payload: bytes) -> OrganizationSnapshot:
-    """Strictly decode one snapshot with exact key sets and byte equality."""
-    data = _require_keys(decode_organization_value(payload), _SNAPSHOT_KEYS)
+    """Strictly decode v1 or v2 with exact key sets and byte equality."""
+    decoded = decode_organization_value(payload)
+    schema_version = _string(_dict(decoded).get("schema_version"))
+    if schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1:
+        data = _require_keys(decoded, _SNAPSHOT_KEYS_V1)
+        window_keys = _WINDOW_KEYS_V1
+        candidate_keys = _CANDIDATE_KEYS_V1
+        objective_keys = _OBJECTIVE_KEYS_V1
+        v1 = True
+    elif schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+        data = _require_keys(decoded, _SNAPSHOT_KEYS_V2)
+        window_keys = _WINDOW_KEYS_V2
+        candidate_keys = _CANDIDATE_KEYS_V2
+        objective_keys = _OBJECTIVE_KEYS_V2
+        v1 = False
+    else:
+        raise OrganizationArtifactError("organization_invalid_value")
     coverage = _require_keys(data["coverage"], _COVERAGE_KEYS)
-    windows = tuple(
-        OrganizationWindowRecord(
-            window_index=_int(item["window_index"]),
-            start_tick=_int(item["start_tick"]),
-            end_tick=_int(item["end_tick"]),
-            candidate_ids=_string_list(item["candidate_ids"]),
-            member_count=_int(item["member_count"]),
-            overlap_member_count=_int(item["overlap_member_count"]),
-            lane_presence=tuple(
-                _lane_pair(pair) for pair in _list(item["lane_presence"])
-            ),
-        )
-        for item in (_require_keys(raw, _WINDOW_KEYS) for raw in _list(data["windows"]))
-    )
-    candidates = tuple(
-        OrganizationCandidateRecord(
-            organization_id=_string(item["organization_id"]),
-            creation_tick=_int(item["creation_tick"]),
-            first_tick=_int(item["first_tick"]),
-            last_tick=_int(item["last_tick"]),
-            status=_string(item["status"]),
-            temporal_scope=_string(item["temporal_scope"]),
-            self_identified=_bool(item["self_identified"]),
-            members=tuple(
-                OrganizationMemberRecord(
-                    member_id=_string(raw["member_id"]),
-                    status=_string(raw["status"]),
-                    basis=_string(raw["basis"]),
-                    temporal_scope=_string(raw["temporal_scope"]),
-                    first_tick=_int(raw["first_tick"]),
-                    last_tick=_int(raw["last_tick"]),
-                    expires_tick=(
-                        None
-                        if raw["expires_tick"] is None
-                        else _int(raw["expires_tick"])
-                    ),
-                    strength=_float(raw["strength"]),
-                    owner_support_count=_int(raw["owner_support_count"]),
-                )
-                for raw in (
-                    _require_keys(entry, _MEMBER_KEYS)
-                    for entry in _list(item["members"])
-                )
-            ),
-            structure=tuple(
-                OrganizationStructuralRecord(
-                    kind=_string(raw["kind"]),
-                    anchor_id=_string(raw["anchor_id"]),
-                    status=_string(raw["status"]),
-                    first_tick=_int(raw["first_tick"]),
-                    last_tick=_int(raw["last_tick"]),
-                    resolved=_bool(raw["resolved"]),
-                )
-                for raw in (
-                    _require_keys(entry, _STRUCTURAL_KEYS)
-                    for entry in _list(item["structure"])
-                )
-            ),
-            window_indexes=tuple(
-                _int(entry) for entry in _list(item["window_indexes"])
-            ),
-        )
-        for item in (
-            _require_keys(raw, _CANDIDATE_KEYS) for raw in _list(data["candidates"])
-        )
-    )
     edges = tuple(
         OrganizationLineageEdgeRecord(
             kind=_string(item["kind"]),
@@ -421,27 +601,8 @@ def decode_organization_snapshot(payload: bytes) -> OrganizationSnapshot:
         )
         for item in (_require_keys(raw, _EDGE_KEYS) for raw in _list(data["edges"]))
     )
-    objective_rows = tuple(
-        OrganizationObjectiveRow(
-            window_index=_int(item["window_index"]),
-            tick=_int(item["tick"]),
-            member_count=_int(item["member_count"]),
-            role_count=_int(item["role_count"]),
-            goal_count=_int(item["goal_count"]),
-            resource_count=_int(item["resource_count"]),
-            procedure_count=_int(item["procedure_count"]),
-            record_count=_int(item["record_count"]),
-            commitment_count=_int(item["commitment_count"]),
-            identity_count=_int(item["identity_count"]),
-            resolved_anchor_count=_int(item["resolved_anchor_count"]),
-            unresolved_anchor_count=_int(item["unresolved_anchor_count"]),
-        )
-        for item in (
-            _require_keys(raw, _OBJECTIVE_KEYS) for raw in _list(data["objective_rows"])
-        )
-    )
     snapshot = OrganizationSnapshot(
-        schema_version=_string(data["schema_version"]),
+        schema_version=schema_version,
         policy_version=_string(data["policy_version"]),
         run_id=_string(data["run_id"]),
         input_revision=_string(data["input_revision"]),
@@ -454,14 +615,12 @@ def decode_organization_snapshot(payload: bytes) -> OrganizationSnapshot:
             expected=_int(coverage["expected"]),
             ratio=None if coverage["ratio"] is None else _float(coverage["ratio"]),
         ),
-        windows=windows,
-        candidates=candidates,
+        windows=_decode_windows(data, window_keys, v1=v1),
+        candidates=_decode_candidates(data, candidate_keys, v1=v1),
         edges=edges,
-        objective_rows=objective_rows,
+        objective_rows=_decode_objective_rows(data, objective_keys, v1=v1),
         provenance_code=_string(data["provenance_code"]),
     )
-    if snapshot.schema_version != ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
-        raise OrganizationArtifactError("organization_invalid_value")
     if snapshot.policy_version != ORGANIZATION_SNAPSHOT_POLICY_VERSION:
         raise OrganizationArtifactError("organization_invalid_value")
     if encode_organization_snapshot(snapshot) != bytes(payload):

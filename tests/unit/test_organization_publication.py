@@ -265,4 +265,4 @@ def test_changing_a_member_changes_the_digest() -> None:
 
 def test_example_snapshot_is_a_valid_artifact() -> None:
     snapshot = example_snapshot()
-    assert snapshot.schema_version == "organization-snapshot-v1"
+    assert snapshot.schema_version == "organization-snapshot-v2"

@@ -85,7 +85,7 @@ async def test_summary_route_returns_published_metadata(tmp_path: Path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["candidate_count"] == 2
-    assert body["schema_version"] == "organization-snapshot-v1"
+    assert body["schema_version"] == "organization-snapshot-v2"
     assert body["coverage"]["observed"] == 4
 
 

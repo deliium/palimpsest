@@ -108,8 +108,10 @@ def publish_organization_harvest(
         return {"status": "failed", "reason_code": "organization_publication_failed"}
     receipt = organization_publication_document(built)
     _LOG.info(
-        "organization_publication_published run_id=%s publication_id=%s",
+        "organization_operation_publication_published run_id=%s "
+        "publication_id=%s operations=%s",
         run_id,
         built.publication_id,
+        built.operation_count,
     )
     return receipt

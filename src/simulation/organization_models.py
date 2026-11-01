@@ -1,4 +1,4 @@
-"""Bounded canonical ``organization-snapshot-v1`` artifact.
+"""Bounded canonical ``organization-snapshot-v2`` artifact.
 
 ``simulation`` owns this schema and never imports ``analysis``. The artifact
 publishes objective aggregate rows plus analytical candidates; owner-scoped claim
@@ -17,6 +17,7 @@ from typing import Final, NoReturn, cast
 from world.identifiers import require_exact_nonneg_int
 
 __all__ = [
+    "MAX_CANDIDATE_OPERATIONS",
     "MAX_PAGE_ROWS",
     "MAX_RESPONSE_BYTES",
     "MAX_SNAPSHOT_BYTES",
@@ -24,28 +25,46 @@ __all__ = [
     "MAX_SNAPSHOT_EDGES",
     "MAX_SNAPSHOT_MEMBERS",
     "MAX_SNAPSHOT_OBJECTIVE_ROWS",
+    "MAX_SNAPSHOT_OPERATIONS",
     "MAX_SNAPSHOT_WINDOWS",
+    "ORGANIZATION_OPERATION_ACTS",
+    "ORGANIZATION_OPERATION_ANCHOR_KINDS",
+    "ORGANIZATION_OPERATION_AUTHORITY_BASES",
+    "ORGANIZATION_OPERATION_DOMAINS",
+    "ORGANIZATION_OPERATION_OUTCOMES",
+    "ORGANIZATION_OPERATION_PROVENANCE_CODES",
+    "ORGANIZATION_OPERATION_TARGET_KINDS",
     "ORGANIZATION_SNAPSHOT_POLICY_VERSION",
     "ORGANIZATION_SNAPSHOT_SCHEMA_VERSION",
+    "ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1",
+    "SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS",
     "OrganizationArtifactError",
     "OrganizationCandidateRecord",
     "OrganizationCoverage",
     "OrganizationLineageEdgeRecord",
     "OrganizationMemberRecord",
     "OrganizationObjectiveRow",
+    "OrganizationOperationRecord",
     "OrganizationSnapshot",
     "OrganizationSnapshotRef",
     "OrganizationStructuralKind",
     "OrganizationStructuralRecord",
     "OrganizationWindowRecord",
     "empty_organization_snapshot",
+    "require_operation_id",
     "require_organization_id",
     "require_publication_id",
+    "upgrade_organization_snapshot",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.organization_models")
 
-ORGANIZATION_SNAPSHOT_SCHEMA_VERSION: Final[str] = "organization-snapshot-v1"
+ORGANIZATION_SNAPSHOT_SCHEMA_VERSION: Final[str] = "organization-snapshot-v2"
+ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1: Final[str] = "organization-snapshot-v1"
+SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS: Final[tuple[str, ...]] = (
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
+)
 ORGANIZATION_SNAPSHOT_POLICY_VERSION: Final[str] = "organization-analysis.v1"
 
 MAX_SNAPSHOT_BYTES: Final[int] = 4 * 1024 * 1024
@@ -54,11 +73,14 @@ MAX_SNAPSHOT_MEMBERS: Final[int] = 512
 MAX_SNAPSHOT_EDGES: Final[int] = 16384
 MAX_SNAPSHOT_WINDOWS: Final[int] = 512
 MAX_SNAPSHOT_OBJECTIVE_ROWS: Final[int] = 4096
+MAX_CANDIDATE_OPERATIONS: Final[int] = 64
+MAX_SNAPSHOT_OPERATIONS: Final[int] = 4096
 MAX_RESPONSE_BYTES: Final[int] = 2 * 1024 * 1024
 MAX_PAGE_ROWS: Final[int] = 500
 
 ORGANIZATION_ID_PREFIX: Final[str] = "org-"
 PUBLICATION_ID_PREFIX: Final[str] = "org-edge-"
+OPERATION_ID_PREFIX: Final[str] = "orgop-"
 _ID_HEX_CHARS: Final[int] = 16
 
 _ORGANIZATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -67,10 +89,21 @@ _ORGANIZATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
 _PUBLICATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
     rf"^org-edge-[0-9a-f]{{{_ID_HEX_CHARS}}}$"
 )
+_OPERATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"^orgop-[0-9a-f]{{{_ID_HEX_CHARS}}}$"
+)
 _SAFE_TOKEN_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 PROVENANCE_CODES: Final[frozenset[str]] = frozenset(
-    {"ok", "member_list_truncated", "history_truncated", "lane_absent"}
+    {
+        "ok",
+        "member_list_truncated",
+        "history_truncated",
+        "lane_absent",
+        "operations_truncated",
+        "operation_anchor_unresolved",
+        "operation_expired",
+    }
 )
 CANDIDATE_STATUSES: Final[frozenset[str]] = frozenset(
     {"recognized", "partial", "disputed", "fragmented", "temporary", "dissolved"}
@@ -81,6 +114,128 @@ MEMBERSHIP_STATUSES: Final[frozenset[str]] = frozenset(
 TEMPORAL_SCOPES: Final[frozenset[str]] = frozenset({"ongoing", "temporary", "unknown"})
 LINEAGE_KINDS: Final[frozenset[str]] = frozenset(
     {"continued", "transformed", "split", "merge", "dissolved", "emerged"}
+)
+
+ORGANIZATION_OPERATION_DOMAINS: Final[frozenset[str]] = frozenset(
+    {
+        "resource_control",
+        "storage",
+        "record_keeping",
+        "membership_admission",
+        "membership_departure",
+        "role_assignment",
+        "procedure_action",
+        "internal_commitment",
+    }
+)
+ORGANIZATION_OPERATION_ACTS: Final[frozenset[str]] = frozenset(
+    {
+        "admit",
+        "depart",
+        "assign",
+        "remove",
+        "authorize_control",
+        "revoke_control",
+        "invoke_procedure",
+        "declare_commitment",
+        "fulfill_commitment",
+        "record_decision",
+    }
+)
+ORGANIZATION_OPERATION_AUTHORITY_BASES: Final[frozenset[str]] = frozenset(
+    {
+        "self_authored",
+        "role_belief",
+        "decision_belief",
+        "procedure_belief",
+        "record_reference",
+        "observation",
+        "unknown",
+    }
+)
+ORGANIZATION_OPERATION_PROVENANCE_CODES: Final[frozenset[str]] = frozenset(
+    {
+        "self_authored",
+        "role_authorized",
+        "decision_supported",
+        "procedure_recognized",
+        "observed_effect",
+        "unknown_authority",
+        "contested",
+        "expired",
+        "orphaned",
+    }
+)
+ORGANIZATION_OPERATION_OUTCOMES: Final[frozenset[str]] = frozenset(
+    {"observed", "attempted", "completed", "blocked", "unknown"}
+)
+ORGANIZATION_OPERATION_TARGET_KINDS: Final[frozenset[str]] = frozenset(
+    {"member", "office", "anchor", "none"}
+)
+ORGANIZATION_OPERATION_ANCHOR_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "item",
+        "resource",
+        "artifact",
+        "structure",
+        "repository",
+        "collective_project",
+        "commitment",
+        "owner_local",
+        "unknown",
+    }
+)
+_CONTROL_STANCES: Final[frozenset[str]] = frozenset(
+    {"claimed", "recognized", "shared", "disputed", "former", "unknown"}
+)
+_ADMISSION_STANCES: Final[frozenset[str]] = frozenset(
+    {"admitted", "claimed", "self_joined", "denied", "disputed", "former", "unknown"}
+)
+_DEPARTURE_STANCES: Final[frozenset[str]] = frozenset(
+    {"resigned", "expelled", "departed", "disputed", "unknown"}
+)
+_ASSIGNMENT_STANCES: Final[frozenset[str]] = frozenset(
+    {"assigned", "claimed", "disputed", "removed", "vacant", "unknown"}
+)
+_COMMITMENT_STANCES: Final[frozenset[str]] = frozenset(
+    {
+        "declared",
+        "accepted",
+        "fulfilled",
+        "violated",
+        "disputed",
+        "forgotten",
+        "unknown",
+    }
+)
+_PROCEDURE_STANCES: Final[frozenset[str]] = frozenset(
+    {"claimed", "disputed", "unknown"}
+)
+_DECISION_STANCES: Final[frozenset[str]] = frozenset(
+    {"supported", "contested", "unknown"}
+)
+_OPERATION_STANCES_BY_ACT: Final[dict[str, frozenset[str]]] = {
+    "admit": _ADMISSION_STANCES,
+    "depart": _DEPARTURE_STANCES,
+    "assign": _ASSIGNMENT_STANCES,
+    "remove": _ASSIGNMENT_STANCES,
+    "authorize_control": _CONTROL_STANCES,
+    "revoke_control": _CONTROL_STANCES,
+    "invoke_procedure": _PROCEDURE_STANCES,
+    "declare_commitment": _COMMITMENT_STANCES,
+    "fulfill_commitment": _COMMITMENT_STANCES,
+    "record_decision": _DECISION_STANCES,
+}
+_OBJECTIVE_ANCHOR_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "item",
+        "resource",
+        "artifact",
+        "structure",
+        "repository",
+        "collective_project",
+        "commitment",
+    }
 )
 
 
@@ -153,6 +308,13 @@ def require_organization_id(value: object) -> str:
     return value
 
 
+def require_operation_id(value: object) -> str:
+    """Validate an exact ``orgop-`` plus 16 lowercase hex characters id."""
+    if not isinstance(value, str) or not _OPERATION_ID_PATTERN.match(value):
+        _fail("organization_invalid_value")
+    return value
+
+
 def require_publication_id(value: object) -> str:
     """Validate an exact ``org-edge-`` plus 16 lowercase hex characters id."""
     if not isinstance(value, str) or not _PUBLICATION_ID_PATTERN.match(value):
@@ -184,7 +346,7 @@ class OrganizationSnapshotRef:
         object.__setattr__(
             self, "snapshot_digest", require_snapshot_digest(self.snapshot_digest)
         )
-        if self.schema_version != ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS:
             _fail("organization_invalid_value")
         object.__setattr__(self, "run_id", _safe_token("run_id", self.run_id))
         object.__setattr__(
@@ -254,6 +416,80 @@ class OrganizationStructuralRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationOperationRecord:
+    """One published operation belief with provenance and no owner-local ids."""
+
+    operation_id: str
+    domain: str
+    act: str
+    stance: str
+    authority_basis: str
+    provenance_code: str
+    outcome: str
+    command_kind: str
+    target_kind: str
+    anchor_kind: str
+    anchor_id: str | None
+    tick: int
+    first_tick: int
+    last_tick: int
+    support_count: int
+    contest_count: int
+    resolved: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "operation_id", require_operation_id(self.operation_id)
+        )
+        if self.domain not in ORGANIZATION_OPERATION_DOMAINS:
+            _fail("organization_invalid_value")
+        if self.act not in ORGANIZATION_OPERATION_ACTS:
+            _fail("organization_invalid_value")
+        stances = _OPERATION_STANCES_BY_ACT[self.act]
+        if self.stance not in stances:
+            _fail("organization_invalid_value")
+        if self.authority_basis not in ORGANIZATION_OPERATION_AUTHORITY_BASES:
+            _fail("organization_invalid_value")
+        if self.provenance_code not in ORGANIZATION_OPERATION_PROVENANCE_CODES:
+            _fail("organization_invalid_value")
+        if self.outcome not in ORGANIZATION_OPERATION_OUTCOMES:
+            _fail("organization_invalid_value")
+        command_kind = _safe_token("command_kind", self.command_kind)
+        object.__setattr__(self, "command_kind", command_kind)
+        if self.target_kind not in ORGANIZATION_OPERATION_TARGET_KINDS:
+            _fail("organization_invalid_value")
+        if self.anchor_kind not in ORGANIZATION_OPERATION_ANCHOR_KINDS:
+            _fail("organization_invalid_value")
+        if self.anchor_kind in _OBJECTIVE_ANCHOR_KINDS:
+            object.__setattr__(
+                self, "anchor_id", _string("anchor_id", self.anchor_id)
+            )
+        elif self.anchor_id is not None:
+            _fail("organization_invalid_value")
+        first = _tick("first_tick", self.first_tick)
+        last = _tick("last_tick", self.last_tick)
+        if last < first:
+            _fail("organization_invalid_value")
+        tick = _tick("tick", self.tick)
+        if tick < first or tick > last:
+            _fail("organization_invalid_value")
+        object.__setattr__(
+            self, "support_count", _tick("support_count", self.support_count)
+        )
+        object.__setattr__(
+            self, "contest_count", _tick("contest_count", self.contest_count)
+        )
+        if type(self.resolved) is not bool:
+            _fail("organization_invalid_value")
+        if self.resolved is (self.anchor_kind == "unknown"):
+            _fail("organization_invalid_value")
+
+    @property
+    def contested(self) -> bool:
+        return self.stance == "disputed" or self.contest_count > 0
+
+
+@dataclass(frozen=True, slots=True)
 class OrganizationCandidateRecord:
     organization_id: str
     creation_tick: int
@@ -265,6 +501,7 @@ class OrganizationCandidateRecord:
     members: tuple[OrganizationMemberRecord, ...] = ()
     structure: tuple[OrganizationStructuralRecord, ...] = ()
     window_indexes: tuple[int, ...] = ()
+    operations: tuple[OrganizationOperationRecord, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -314,6 +551,26 @@ class OrganizationCandidateRecord:
         if indexes != tuple(sorted(set(indexes))):
             _fail("organization_invalid_value")
         object.__setattr__(self, "window_indexes", indexes)
+        operations = tuple(self.operations)
+        if len(operations) > MAX_CANDIDATE_OPERATIONS:
+            _fail("organization_size_limit")
+        seen_operations: set[str] = set()
+        for operation in operations:
+            if type(operation) is not OrganizationOperationRecord:
+                _fail("organization_invalid_value")
+            if operation.operation_id in seen_operations:
+                _fail("organization_duplicate_operation")
+            seen_operations.add(operation.operation_id)
+        object.__setattr__(
+            self,
+            "operations",
+            tuple(
+                sorted(
+                    operations,
+                    key=lambda item: (item.tick, item.domain, item.operation_id),
+                )
+            ),
+        )
 
     @property
     def member_count(self) -> int:
@@ -326,6 +583,14 @@ class OrganizationCandidateRecord:
     def structural_channel_count(self) -> int:
         return len({item.kind for item in self.structure})
 
+    @property
+    def operation_count(self) -> int:
+        return len(self.operations)
+
+    @property
+    def contested_operation_count(self) -> int:
+        return sum(1 for operation in self.operations if operation.contested)
+
 
 @dataclass(frozen=True, slots=True)
 class OrganizationWindowRecord:
@@ -336,6 +601,8 @@ class OrganizationWindowRecord:
     member_count: int
     overlap_member_count: int
     lane_presence: tuple[tuple[str, bool], ...] = ()
+    operation_count: int = 0
+    contested_operation_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -363,6 +630,14 @@ class OrganizationWindowRecord:
             if type(value) is not bool:
                 _fail("organization_invalid_value")
         object.__setattr__(self, "lane_presence", tuple(sorted(lanes)))
+        object.__setattr__(
+            self, "operation_count", _tick("operation_count", self.operation_count)
+        )
+        object.__setattr__(
+            self,
+            "contested_operation_count",
+            _tick("contested_operation_count", self.contested_operation_count),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,6 +682,7 @@ class OrganizationObjectiveRow:
     identity_count: int
     resolved_anchor_count: int
     unresolved_anchor_count: int
+    operation_action_count: int = 0
 
     def __post_init__(self) -> None:
         for name in (
@@ -422,6 +698,7 @@ class OrganizationObjectiveRow:
             "identity_count",
             "resolved_anchor_count",
             "unresolved_anchor_count",
+            "operation_action_count",
         ):
             _tick(name, getattr(self, name))
 
@@ -466,7 +743,7 @@ class OrganizationSnapshot:
     provenance_code: str = "ok"
 
     def __post_init__(self) -> None:
-        if self.schema_version != ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS:
             _fail("organization_invalid_value")
         if self.policy_version != ORGANIZATION_SNAPSHOT_POLICY_VERSION:
             _fail("organization_invalid_value")
@@ -496,6 +773,16 @@ class OrganizationSnapshot:
             "candidates",
             tuple(sorted(candidates, key=lambda item: item.organization_id)),
         )
+        operation_ids: set[str] = set()
+        total_operations = 0
+        for candidate in candidates:
+            for operation in candidate.operations:
+                if operation.operation_id in operation_ids:
+                    _fail("organization_duplicate_operation")
+                operation_ids.add(operation.operation_id)
+            total_operations += len(candidate.operations)
+        if total_operations > MAX_SNAPSHOT_OPERATIONS:
+            _fail("organization_size_limit")
         windows = tuple(self.windows)
         if len(windows) > MAX_SNAPSHOT_WINDOWS:
             _fail("organization_size_limit")
@@ -527,6 +814,21 @@ class OrganizationSnapshot:
         object.__setattr__(self, "objective_rows", rows)
         if self.provenance_code not in PROVENANCE_CODES:
             _fail("organization_invalid_value")
+
+
+def upgrade_organization_snapshot(
+    snapshot: OrganizationSnapshot,
+) -> OrganizationSnapshot:
+    """Lift a v1 snapshot to v2 without mutating the input."""
+    from dataclasses import replace
+
+    if type(snapshot) is not OrganizationSnapshot:
+        _fail("organization_invalid_value")
+    if snapshot.schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+        return snapshot
+    if snapshot.schema_version != ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1:
+        _fail("organization_invalid_value")
+    return replace(snapshot, schema_version=ORGANIZATION_SNAPSHOT_SCHEMA_VERSION)
 
 
 def empty_organization_snapshot(

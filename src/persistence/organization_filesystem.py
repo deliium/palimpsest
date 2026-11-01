@@ -14,10 +14,12 @@ from typing import Final
 from simulation.organization_codec import decode_organization_snapshot
 from simulation.organization_models import (
     MAX_RESPONSE_BYTES,
+    SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS,
     OrganizationArtifactError,
     OrganizationCandidateRecord,
     OrganizationCoverage,
     OrganizationSnapshot,
+    require_organization_id,
     require_publication_id,
 )
 from simulation.organization_paging import (
@@ -40,7 +42,9 @@ __all__ = [
 
 _LOG: Final[logging.Logger] = logging.getLogger("persistence.organization_filesystem")
 
-_SNAPSHOT_SCHEMA: Final[str] = "organization-snapshot-v1"
+_SUPPORTED_SNAPSHOT_SCHEMAS: Final[tuple[str, ...]] = (
+    SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS
+)
 _STORE_SCHEMA: Final[str] = "organization-store-v1"
 _STATE_MAX_BYTES: Final[int] = 4096
 _MANIFEST_MAX_BYTES: Final[int] = 16384
@@ -242,10 +246,18 @@ class FilesystemOrganizationReader(OrganizationReadPort):
             raise OrganizationArtifactError("organization_publication_missing")
         payload = snapshot_path.read_bytes()
         snapshot = decode_organization_snapshot(payload)
+        if snapshot.schema_version not in _SUPPORTED_SNAPSHOT_SCHEMAS:
+            raise OrganizationArtifactError("organization_store_corrupt")
         if snapshot.publication_id != committed:
             raise OrganizationArtifactError("organization_store_corrupt")
         if hashlib.sha256(payload).hexdigest() != digest:
             raise OrganizationArtifactError("organization_digest_mismatch")
+        _LOG.info(
+            "organization_loaded run_id=%s schema=%s operations=%s",
+            run_id,
+            snapshot.schema_version,
+            sum(len(candidate.operations) for candidate in snapshot.candidates),
+        )
         return snapshot
 
     def summary(self, run_id: str) -> OrganizationSummary | None:
@@ -269,6 +281,9 @@ class FilesystemOrganizationReader(OrganizationReadPort):
                 ratio=snapshot.coverage.ratio,
             ),
             provenance_code=snapshot.provenance_code,
+            operation_count=sum(
+                len(candidate.operations) for candidate in snapshot.candidates
+            ),
         )
 
     def candidates(
@@ -315,6 +330,37 @@ class FilesystemOrganizationReader(OrganizationReadPort):
             raise OrganizationArtifactError("organization_publication_missing")
         rows = tuple(
             edge for edge in snapshot.edges if kind is None or edge.kind == kind
+        )
+        return select_organization_rows(
+            rows, offset=offset, limit=limit, max_bytes=MAX_RESPONSE_BYTES
+        )
+
+    def operations(
+        self,
+        run_id: str,
+        publication_id: str,
+        offset: int,
+        limit: int,
+        domain: str | None = None,
+        organization_id: str | None = None,
+    ) -> OrganizationRowSelection:
+        snapshot = self._load(run_id)
+        if publication_id and snapshot.publication_id != publication_id:
+            raise OrganizationArtifactError("organization_publication_missing")
+        if organization_id is not None:
+            require_organization_id(organization_id)
+        rows = tuple(
+            sorted(
+                (
+                    operation
+                    for candidate in snapshot.candidates
+                    if organization_id is None
+                    or candidate.organization_id == organization_id
+                    for operation in candidate.operations
+                    if domain is None or operation.domain == domain
+                ),
+                key=lambda item: (item.tick, item.domain, item.operation_id),
+            )
         )
         return select_organization_rows(
             rows, offset=offset, limit=limit, max_bytes=MAX_RESPONSE_BYTES
