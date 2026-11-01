@@ -773,6 +773,49 @@ class FilesystemCivilizationReader:
         content = _read_budgeted(path, budget, metadata=True)
         return decode_civilization_store_root(content)
 
+    def _row_bounds(
+        self,
+        publication_root: Path,
+        boundary: int,
+        budget: CivilizationReadBudget,
+    ) -> dict[str, tuple[str, str]]:
+        """Load published shard row-key bounds for bounded page skipping.
+
+        Bounds are advisory publisher metadata: they let one page skip shards
+        whose last row key is at or before the requested cursor instead of
+        re-reading every earlier shard. Row values are still digest-verified
+        when a shard is read.
+        """
+        path = _safe_path(
+            publication_root, "boundaries", f"{boundary:08d}", "row-bounds.json"
+        )
+        if not path.is_file():
+            return {}
+        if path.stat().st_size > CIVILIZATION_MAX_SHARD_BYTES:
+            _LOG.warning(
+                "civilization_row_bounds_skipped reason=too_large byte_count=%s",
+                path.stat().st_size,
+            )
+            return {}
+        content = _read_budgeted(path, budget)
+        value = _decode_state(content)
+        raw = value.get("bounds", {})
+        if type(raw) is not dict:
+            return {}
+        prefix = f"boundaries/{boundary:08d}/"
+        bounds: dict[str, tuple[str, str]] = {}
+        for relative, pair in raw.items():
+            if (
+                type(relative) is not str
+                or not isinstance(pair, list)
+                or len(pair) != 2
+                or not all(type(item) is str for item in pair)
+            ):
+                continue
+            first, last = cast(list[str], pair)
+            bounds[f"{prefix}{relative}"] = (first, last)
+        return bounds
+
     def _index_page(
         self,
         publication_root: Path,
@@ -1153,7 +1196,16 @@ class FilesystemCivilizationReader:
         next_key: str | None = None
         truncated = False
         last_scanned = after_key
+        bounds = (
+            self._row_bounds(publication_root, boundary, budget)
+            if after_key is not None
+            else {}
+        )
         for candidate_path, candidate_digest in candidates:
+            if after_key is not None:
+                bound = bounds.get(candidate_path)
+                if bound is not None and bound[1] <= after_key:
+                    continue
             try:
                 content = _read_budgeted(
                     _safe_path(publication_root, *candidate_path.split("/")),

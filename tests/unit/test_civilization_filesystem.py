@@ -140,6 +140,54 @@ async def test_dense_scope_pages_skip_prior_shards_within_budget(
 
 
 @pytest.mark.asyncio
+async def test_many_shard_pages_stay_within_the_per_request_file_budget(
+    tmp_path: Path,
+) -> None:
+    from tests.unit.test_civilization_publication import (
+        _inventory,
+    )
+
+    traits = tuple(
+        CivilizationOwnerTrait(f"trait-{index:04d}", f"fp-{index:04d}", 0, 4)
+        for index in range(2_000)
+    )
+    inventory = _inventory("owner-many-shards", cultural=traits)
+    history = _history_with_inventory(inventory)
+    publication = compose_civilization_boundary(history, 4)
+    publisher = create_civilization_publisher(tmp_path)
+    await publisher.publish_boundary("pub-many-shards", publication)
+    sealed = await publisher.seal_catalogue(history.run_id, "pub-many-shards")
+    reader = create_civilization_reader(tmp_path)
+    cursor = CivilizationCursor(history.run_id, history.world_id, 4, None, 4, 4)
+    scope = CivilizationScope(
+        CivilizationLayer.CULTURE, CivilizationEvidenceClass.ANALYTICAL
+    )
+    after: str | None = None
+    pages = 0
+    rows = 0
+    while True:
+        budget = CivilizationReadBudget(limit=200)
+        page = await reader.rows(
+            cursor,
+            scope,
+            publication=sealed,
+            after_key=after,
+            entity_id=None,
+            budget=budget,
+        )
+        pages += 1
+        rows += len(page.rows)
+        assert budget.physical_files <= 12
+        assert budget.scanned_rows <= 260
+        if page.next_cursor is None:
+            break
+        after = page.next_cursor
+        assert pages <= 10
+    assert rows == 2_000
+    assert pages == 10
+
+
+@pytest.mark.asyncio
 async def test_long_row_keys_keep_distinct_bounded_index_ranges(tmp_path: Path) -> None:
     """Multi-shard scopes with long row ids stay readable.
 
