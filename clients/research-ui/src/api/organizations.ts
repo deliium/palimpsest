@@ -18,6 +18,7 @@ export type OrganizationSummary = {
   window_count: number
   coverage: OrganizationCoverage
   provenance_code: string
+  operation_count: number
 }
 
 export type OrganizationMember = {
@@ -59,11 +60,34 @@ export type OrganizationCandidate = {
   identity_count: number
   structural_channel_count: number
   window_indexes: number[]
+  operation_count: number
+  contested_operation_count: number
+}
+
+export type OrganizationOperation = {
+  operation_id: string
+  domain: string
+  act: string
+  stance: string
+  authority_basis: string
+  provenance_code: string
+  outcome: string
+  command_kind: string
+  target_kind: string
+  anchor_kind: string
+  anchor_id: string | null
+  tick: number
+  first_tick: number
+  last_tick: number
+  support_count: number
+  contest_count: number
+  resolved: boolean
 }
 
 export type OrganizationCandidateDetail = OrganizationCandidate & {
   members: OrganizationMember[]
   structure: OrganizationStructural[]
+  operations: OrganizationOperation[]
 }
 
 export type OrganizationCandidatePage = {
@@ -85,6 +109,13 @@ export type OrganizationLineageEdge = {
 export type OrganizationLineagePage = {
   publication_id: string
   items: OrganizationLineageEdge[]
+  next_cursor: string | null
+  truncated: boolean
+}
+
+export type OrganizationOperationPage = {
+  publication_id: string
+  items: OrganizationOperation[]
   next_cursor: string | null
   truncated: boolean
 }
@@ -130,5 +161,25 @@ export function getOrganizationLineage(
   return apiFetch<OrganizationLineagePage>(`${base(runId)}/lineage`, {
     capability: CAPABILITY,
     query: { kind: options.kind, limit: options.limit, cursor: options.cursor },
+  })
+}
+
+export function getOrganizationOperations(
+  runId: string,
+  options: {
+    domain?: string
+    organizationId?: string
+    limit?: number
+    cursor?: string
+  } = {},
+): Promise<OrganizationOperationPage> {
+  return apiFetch<OrganizationOperationPage>(`${base(runId)}/operations`, {
+    capability: CAPABILITY,
+    query: {
+      domain: options.domain,
+      organization_id: options.organizationId,
+      limit: options.limit,
+      cursor: options.cursor,
+    },
   })
 }

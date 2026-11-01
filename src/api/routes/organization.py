@@ -16,6 +16,8 @@ from api.organization_schemas import (
     OrganizationCoverageOut,
     OrganizationLineageEdgeOut,
     OrganizationMemberOut,
+    OrganizationOperationListOut,
+    OrganizationOperationOut,
     OrganizationStructuralOut,
     OrganizationSummaryOut,
 )
@@ -28,6 +30,7 @@ from simulation.organization_models import (
     OrganizationArtifactError,
     OrganizationCandidateRecord,
     OrganizationLineageEdgeRecord,
+    OrganizationOperationRecord,
     OrganizationStructuralKind,
 )
 from simulation.organization_ports import (
@@ -43,6 +46,7 @@ _PURPOSE_SUMMARY = "organization_summary"
 _PURPOSE_CANDIDATES = "organization_candidates"
 _PURPOSE_CANDIDATE = "organization_candidate"
 _PURPOSE_LINEAGE = "organization_lineage"
+_PURPOSE_OPERATIONS = "organization_operations"
 
 _STATUS_VALUES = (
     "recognized",
@@ -132,6 +136,32 @@ def _candidate_out(candidate: OrganizationCandidateRecord) -> OrganizationCandid
         identity_count=candidate.count(OrganizationStructuralKind.IDENTITY),
         structural_channel_count=candidate.structural_channel_count,
         window_indexes=candidate.window_indexes,
+        operation_count=candidate.operation_count,
+        contested_operation_count=candidate.contested_operation_count,
+    )
+
+
+def _operation_out(
+    operation: OrganizationOperationRecord,
+) -> OrganizationOperationOut:
+    return OrganizationOperationOut(
+        operation_id=operation.operation_id,
+        domain=operation.domain,
+        act=operation.act,
+        stance=operation.stance,
+        authority_basis=operation.authority_basis,
+        provenance_code=operation.provenance_code,
+        outcome=operation.outcome,
+        command_kind=operation.command_kind,
+        target_kind=operation.target_kind,
+        anchor_kind=operation.anchor_kind,
+        anchor_id=operation.anchor_id,
+        tick=operation.tick,
+        first_tick=operation.first_tick,
+        last_tick=operation.last_tick,
+        support_count=operation.support_count,
+        contest_count=operation.contest_count,
+        resolved=operation.resolved,
     )
 
 
@@ -162,6 +192,7 @@ async def organization_summary(
             ratio=summary.coverage.ratio,
         ),
         provenance_code=summary.provenance_code,
+        operation_count=summary.operation_count,
     ).model_dump()
     _charge(payload)
     _LOGGER.debug("organization_api_request route=summary run_id=%s", run_id)
@@ -285,6 +316,9 @@ async def organization_candidate(
             )
             for item in candidate.structure
         ),
+        operations=tuple(
+            _operation_out(operation) for operation in candidate.operations
+        ),
     ).model_dump()
     _charge(detail)
     _LOGGER.debug("organization_api_request route=candidate run_id=%s", run_id)
@@ -362,5 +396,90 @@ async def organization_lineage(
         "organization_api_request route=lineage run_id=%s rows=%s",
         run_id,
         len(items),
+    )
+    return payload
+
+@router.get("/{run_id}/organizations/operations")
+async def organization_operations(
+    run_id: str,
+    request: Request,
+    response: Response,
+    domain: Literal[
+        "resource_control",
+        "storage",
+        "record_keeping",
+        "membership_admission",
+        "membership_departure",
+        "role_assignment",
+        "procedure_action",
+        "internal_commitment",
+    ]
+    | None = Query(default=None),
+    organization_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1),
+    cursor: str | None = Query(default=None),
+    publication: str = Query(default=""),
+    settings: Settings = Depends(get_settings),
+    reader: OrganizationReadPort | None = Depends(get_organization_reader),
+) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
+    _authorize(request, settings)
+    codec = _codec(request)
+    summary = _reader(reader).summary(run_id)
+    if summary is None:
+        raise not_found(code="organization_publication_missing")
+    publication_id = publication or summary.publication_id
+    fingerprint = organization_query_fingerprint(
+        run_id,
+        publication_id,
+        _PURPOSE_OPERATIONS,
+        {"domain": domain, "organization_id": organization_id},
+    )
+    offset = 0
+    if cursor:
+        offset = _decode_cursor(
+            codec,
+            cursor,
+            purpose=_PURPOSE_OPERATIONS,
+            run_id=run_id,
+            publication_id=publication_id,
+            fingerprint=fingerprint,
+        ).offset
+    page = _reader(reader).operations(
+        run_id,
+        publication_id,
+        offset,
+        min(limit, MAX_PAGE_ROWS),
+        domain,
+        organization_id,
+    )
+    items = tuple(
+        _operation_out(operation)
+        for operation in page.rows
+        if isinstance(operation, OrganizationOperationRecord)
+    )
+    next_cursor = (
+        codec.encode(
+            purpose=_PURPOSE_OPERATIONS,
+            run_id=run_id,
+            publication_id=publication_id,
+            snapshot_digest="",
+            offset=page.next_offset,
+            query_fingerprint=fingerprint,
+        )
+        if page.truncated
+        else None
+    )
+    payload = OrganizationOperationListOut(
+        publication_id=publication_id,
+        items=items,
+        next_cursor=next_cursor,
+        truncated=page.truncated,
+    ).model_dump()
+    _charge(payload)
+    _LOGGER.debug(
+        "organization_api_request route=operations run_id=%s domain=%s",
+        run_id,
+        domain or "all",
     )
     return payload

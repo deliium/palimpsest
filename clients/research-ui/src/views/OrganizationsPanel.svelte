@@ -4,10 +4,12 @@
     getOrganizationCandidate,
     getOrganizationCandidates,
     getOrganizationLineage,
+    getOrganizationOperations,
     getOrganizationSummary,
     type OrganizationCandidate,
     type OrganizationCandidateDetail,
     type OrganizationLineageEdge,
+    type OrganizationOperation,
     type OrganizationSummary,
   } from '../api/organizations'
   import type { ResearchSelection } from '../research/selection'
@@ -26,8 +28,10 @@
   let summary = $state<OrganizationSummary | null>(null)
   let candidates = $state<OrganizationCandidate[]>([])
   let lineage = $state<OrganizationLineageEdge[]>([])
+  let operations = $state<OrganizationOperation[]>([])
   let detail = $state<OrganizationCandidateDetail | null>(null)
   let statusFilter = $state<string>('')
+  let operationDomain = $state<string>('')
 
   async function load(): Promise<void> {
     status = 'loading'
@@ -39,6 +43,8 @@
       candidates = page.items
       const edges = await getOrganizationLineage(runId, { limit: 200 })
       lineage = edges.items
+      const operationPage = await getOrganizationOperations(runId, { limit: 200 })
+      operations = operationPage.items
       status = candidates.length === 0 ? 'empty' : 'available'
     } catch (error) {
       if (error instanceof ApiClientError) {
@@ -65,6 +71,12 @@
       ? candidates
       : candidates.filter((item) => item.status === statusFilter),
   )
+
+  const filteredOperations = $derived(
+    operationDomain === ''
+      ? operations
+      : operations.filter((item) => item.domain === operationDomain),
+  )
 </script>
 
 <section class="organizations">
@@ -90,6 +102,7 @@
       <div><dt>Windows</dt><dd>{summary.window_count}</dd></div>
       <div><dt>Candidates</dt><dd>{summary.candidate_count}</dd></div>
       <div><dt>Lineage edges</dt><dd>{summary.edge_count}</dd></div>
+      <div><dt>Operations</dt><dd>{summary.operation_count}</dd></div>
       <div><dt>Coverage</dt><dd>{summary.coverage.observed}/{summary.coverage.expected}</dd></div>
       {#if summary.provenance_code !== 'ok'}
         <div><dt>Provenance</dt><dd>{summary.provenance_code}</dd></div>
@@ -98,7 +111,7 @@
 
     <label class="filter">
       Status
-      <select bind:value={statusFilter}>
+      <select class="status-filter" bind:value={statusFilter}>
         <option value="">all</option>
         <option value="recognized">recognized</option>
         <option value="partial">partial</option>
@@ -119,6 +132,7 @@
           <th>Roles</th>
           <th>Goals</th>
           <th>Records</th>
+          <th>Operations</th>
         </tr>
       </thead>
       <tbody>
@@ -135,6 +149,12 @@
             <td>{candidate.role_count}</td>
             <td>{candidate.goal_count}</td>
             <td>{candidate.record_count}</td>
+            <td>
+              {candidate.operation_count}
+              {#if candidate.contested_operation_count > 0}
+                <span class="contested">contested</span>
+              {/if}
+            </td>
           </tr>
         {/each}
       </tbody>
@@ -153,8 +173,78 @@
             <li>{item.kind}: {item.anchor_id} ({item.status})</li>
           {/each}
         </ul>
+        <h4>Operations</h4>
+        <ul class="detail-operations">
+          {#each detail.operations as operation (operation.operation_id)}
+            <li>
+              <code>{operation.operation_id}</code>
+              {operation.domain} / {operation.act} / {operation.stance} /
+              {operation.authority_basis} / {operation.provenance_code}
+              {#if operation.stance === 'disputed' || operation.contest_count > 0}
+                <span class="contested">contested</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
       </article>
     {/if}
+
+    <h3>Operations</h3>
+    <label class="filter">
+      Domain
+      <select
+        class="operation-domain"
+        value={operationDomain}
+        onchange={(event) => (operationDomain = event.currentTarget.value)}
+      >
+        <option value="">all</option>
+        <option value="resource_control">resource_control</option>
+        <option value="storage">storage</option>
+        <option value="record_keeping">record_keeping</option>
+        <option value="membership_admission">membership_admission</option>
+        <option value="membership_departure">membership_departure</option>
+        <option value="role_assignment">role_assignment</option>
+        <option value="procedure_action">procedure_action</option>
+        <option value="internal_commitment">internal_commitment</option>
+      </select>
+    </label>
+    <table class="operations">
+      <thead>
+        <tr>
+          <th>Operation</th>
+          <th>Domain</th>
+          <th>Act</th>
+          <th>Stance</th>
+          <th>Authority</th>
+          <th>Provenance</th>
+          <th>Tick</th>
+          <th>Anchor</th>
+          <th>Support</th>
+          <th>Contest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each filteredOperations as operation (operation.operation_id)}
+          <tr>
+            <td><code>{operation.operation_id}</code></td>
+            <td>{operation.domain}</td>
+            <td>{operation.act}</td>
+            <td>
+              {operation.stance}
+              {#if operation.stance === 'disputed' || operation.contest_count > 0}
+                <span class="contested">contested</span>
+              {/if}
+            </td>
+            <td>{operation.authority_basis}</td>
+            <td>{operation.provenance_code}</td>
+            <td>{operation.tick}</td>
+            <td>{operation.anchor_kind}</td>
+            <td>{operation.support_count}</td>
+            <td>{operation.contest_count}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
 
     <h3>Lineage</h3>
     <ul class="lineage">
@@ -207,5 +297,12 @@
   }
   .error {
     color: #a40000;
+  }
+  .contested {
+    background: #fdecea;
+    color: #a40000;
+    border-radius: 0.25rem;
+    padding: 0 0.25rem;
+    font-size: 0.8rem;
   }
 </style>

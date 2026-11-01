@@ -25,6 +25,7 @@ class OrganizationSummaryOut(_Strict):
     window_count: int
     coverage: OrganizationCoverageOut
     provenance_code: str
+    operation_count: int = 0
 
 
 class OrganizationMemberOut(_Strict):
@@ -76,11 +77,34 @@ class OrganizationCandidateOut(_Strict):
     identity_count: int
     structural_channel_count: int
     window_indexes: tuple[int, ...]
+    operation_count: int = 0
+    contested_operation_count: int = 0
+
+
+class OrganizationOperationOut(_Strict):
+    operation_id: str
+    domain: str
+    act: str
+    stance: str
+    authority_basis: str
+    provenance_code: str
+    outcome: str
+    command_kind: str
+    target_kind: str
+    anchor_kind: str
+    anchor_id: str | None
+    tick: int
+    first_tick: int
+    last_tick: int
+    support_count: int
+    contest_count: int
+    resolved: bool
 
 
 class OrganizationCandidateDetailOut(OrganizationCandidateOut):
     members: tuple[OrganizationMemberOut, ...]
     structure: tuple[OrganizationStructuralOut, ...]
+    operations: tuple[OrganizationOperationOut, ...] = ()
 
 
 class OrganizationLineageEdgeOut(_Strict):
@@ -102,6 +126,13 @@ class OrganizationCandidateListOut(_Strict):
 class OrganizationLineageListOut(_Strict):
     publication_id: str
     items: tuple[OrganizationLineageEdgeOut, ...]
+    next_cursor: str | None
+    truncated: bool
+
+
+class OrganizationOperationListOut(_Strict):
+    publication_id: str
+    items: tuple[OrganizationOperationOut, ...]
     next_cursor: str | None
     truncated: bool
 

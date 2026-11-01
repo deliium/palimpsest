@@ -285,8 +285,8 @@ closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 16: Extend the atomic filesystem store for v1/v2 ([details](phase-05-composition-publication.md#task-16-extend-the-atomic-filesystem-store-for-v1v2)) (depends on 13, 14)
 
 ### Phase 6: Read-Only API and Research UI
-- [ ] Task 17: Add the fifth GET route and additive response fields ([details](phase-06-read-only-surfaces.md#task-17-add-the-fifth-get-route-and-additive-response-fields)) (depends on 16)
-- [ ] Task 18: Add the read-only Research UI operations view ([details](phase-06-read-only-surfaces.md#task-18-add-the-read-only-research-ui-operations-view)) (depends on 17)
+- [x] Task 17: Add the fifth GET route and additive response fields ([details](phase-06-read-only-surfaces.md#task-17-add-the-fifth-get-route-and-additive-response-fields)) (depends on 16)
+- [x] Task 18: Add the read-only Research UI operations view ([details](phase-06-read-only-surfaces.md#task-18-add-the-read-only-research-ui-operations-view)) (depends on 17)
 
 ### Phase 7: Invariants, End-to-End Evidence, and Regression
 - [ ] Task 19: Add the operational boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-19-add-the-operational-boundary-and-determinism-suite)) (depends on 2-18)

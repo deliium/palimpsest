@@ -20,13 +20,14 @@ async function settle(): Promise<void> {
 const summary = {
   run_id: 'run-1',
   publication_id: 'org-edge-0123456789abcdef',
-  schema_version: 'organization-snapshot-v1',
+  schema_version: 'organization-snapshot-v2',
   generated_tick: 9,
   candidate_count: 1,
   edge_count: 1,
   window_count: 2,
   coverage: { observed: 4, expected: 7, ratio: 0.57 },
   provenance_code: 'ok',
+  operation_count: 2,
 }
 
 const candidates = {
@@ -50,10 +51,66 @@ const candidates = {
       identity_count: 1,
       structural_channel_count: 4,
       window_indexes: [0],
+      operation_count: 2,
+      contested_operation_count: 1,
     },
   ],
   next_cursor: null,
   truncated: false,
+}
+
+
+const operations = {
+  publication_id: 'org-edge-0123456789abcdef',
+  items: [
+    {
+      operation_id: 'orgop-0000000000000001',
+      domain: 'resource_control',
+      act: 'authorize_control',
+      stance: 'recognized',
+      authority_basis: 'role_belief',
+      provenance_code: 'role_authorized',
+      outcome: 'observed',
+      command_kind: 'give',
+      target_kind: 'anchor',
+      anchor_kind: 'item',
+      anchor_id: 'item-1',
+      tick: 3,
+      first_tick: 1,
+      last_tick: 9,
+      support_count: 1,
+      contest_count: 0,
+      resolved: true,
+    },
+    {
+      operation_id: 'orgop-0000000000000002',
+      domain: 'storage',
+      act: 'authorize_control',
+      stance: 'disputed',
+      authority_basis: 'unknown',
+      provenance_code: 'contested',
+      outcome: 'observed',
+      command_kind: 'none',
+      target_kind: 'anchor',
+      anchor_kind: 'repository',
+      anchor_id: 'repository-beta',
+      tick: 4,
+      first_tick: 2,
+      last_tick: 9,
+      support_count: 2,
+      contest_count: 1,
+      resolved: true,
+    },
+  ],
+  next_cursor: null,
+  truncated: false,
+}
+
+const candidateDetail = {
+  ...candidates.items[0],
+  members: [],
+  structure: [],
+  operations: operations.items,
 }
 
 const lineage = {
@@ -84,8 +141,14 @@ function stubFetch(handler?: (url: string) => Response | null): void {
       if (url.includes('/organizations/lineage')) {
         return json(lineage)
       }
+      if (url.includes('/organizations/candidates/')) {
+        return json(candidateDetail)
+      }
       if (url.includes('/organizations/candidates')) {
         return json(candidates)
+      }
+      if (url.includes('/organizations/operations')) {
+        return json(operations)
       }
       if (url.includes('/organizations')) {
         return json(summary)
@@ -111,6 +174,44 @@ describe('organization panel', () => {
     expect(text).toContain('org-0123456789abcdef')
     expect(text).toContain('recognized')
     expect(text).toContain('emerged')
+    expect(text).toContain('orgop-0000000000000001')
+    expect(text).toContain('resource_control')
+    expect(text).toContain('storage')
+    expect(text).toContain('contested')
+  })
+
+  it('narrows the operation table by domain', async () => {
+    stubFetch()
+    const view = render(OrganizationsPanel as never, {
+      runId: 'run-1',
+      selection: emptyResearchSelection(),
+    })
+    await settle()
+    const select = view.target.querySelector(
+      'select.operation-domain',
+    ) as HTMLSelectElement | null
+    expect(select).not.toBeNull()
+    select!.value = 'storage'
+    select!.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+    const rows = view.target.querySelectorAll('table.operations tbody tr')
+    expect(rows.length).toBe(1)
+    expect(rows[0].textContent ?? '').toContain('orgop-0000000000000002')
+  })
+
+  it('renders candidate detail operations after selection', async () => {
+    stubFetch()
+    const view = render(OrganizationsPanel as never, {
+      runId: 'run-1',
+      selection: emptyResearchSelection(),
+    })
+    await settle()
+    const button = view.target.querySelector('tbody button') as HTMLButtonElement
+    button.click()
+    await settle()
+    const text = view.target.textContent ?? ''
+    expect(text).toContain('Operations')
+    expect(text).toContain('orgop-0000000000000001')
   })
 
   it('shows the disabled state without inventing data', async () => {
@@ -133,6 +234,9 @@ describe('organization panel', () => {
   it('shows an explicit empty state', async () => {
     stubFetch((url) => {
       if (url.includes('/organizations/candidates')) {
+        return json({ publication_id: 'x', items: [], next_cursor: null, truncated: false })
+      }
+      if (url.includes('/organizations/operations')) {
         return json({ publication_id: 'x', items: [], next_cursor: null, truncated: false })
       }
       if (url.includes('/organizations/lineage')) {
