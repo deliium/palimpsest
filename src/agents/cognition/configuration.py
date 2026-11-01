@@ -76,6 +76,11 @@ from agents.cognition.organization_concepts import (
     OrganizationConceptPolicy,
     default_organization_concept_policy,
 )
+from agents.cognition.organization_operations import (
+    ORGANIZATION_OPERATION_POLICY_VERSION,
+    OrganizationOperationPolicy,
+    default_organization_operation_policy,
+)
 from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
@@ -589,6 +594,7 @@ class CognitionLoopConfig:
         CognitionOrganizationMode.DISABLED
     )
     organization_concept_policy: OrganizationConceptPolicy | None = None
+    organization_operation_policy: OrganizationOperationPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1083,6 +1089,23 @@ class CognitionLoopConfig:
             raise TypeError(
                 "organization_concept_policy must be OrganizationConceptPolicy or None"
             )
+        if self.organization_concept_mode is CognitionOrganizationMode.DISABLED:
+            object.__setattr__(self, "organization_operation_policy", None)
+        elif self.organization_operation_policy is None:
+            object.__setattr__(
+                self,
+                "organization_operation_policy",
+                default_organization_operation_policy(),
+            )
+        elif type(self.organization_operation_policy) is not OrganizationOperationPolicy:
+            _LOG.error(
+                "invalid_enum path=organization_operation_policy "
+                "reason_code=invalid_type"
+            )
+            raise TypeError(
+                "organization_operation_policy must be "
+                "OrganizationOperationPolicy or None"
+            )
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1396,6 +1419,11 @@ class CognitionLoopConfig:
                 if self.organization_concept_policy is not None
                 else None
             )
+            material["organization_operation_policy_version"] = (
+                ORGANIZATION_OPERATION_POLICY_VERSION
+                if self.organization_operation_policy is not None
+                else None
+            )
         return material
 
 
@@ -1662,6 +1690,7 @@ def build_cognitive_loop(
         institutional_decay_policy=resolved.institutional_decay_policy,
         organization_concept_mode=resolved.organization_concept_mode,
         organization_concept_policy=resolved.organization_concept_policy,
+        organization_operation_policy=resolved.organization_operation_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

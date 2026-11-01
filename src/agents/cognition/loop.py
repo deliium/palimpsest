@@ -353,6 +353,7 @@ class CognitiveLoop:
         "_office_succession_mode",
         "_organization_concept_mode",
         "_organization_concept_policy",
+        "_organization_operation_policy",
         "_perception",
         "_planner",
         "_possession_succession_active",
@@ -482,6 +483,7 @@ class CognitiveLoop:
         office_concept_policy: object | None = None,
         organization_concept_mode: object | None = None,
         organization_concept_policy: object | None = None,
+        organization_operation_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -892,6 +894,10 @@ class CognitiveLoop:
             OrganizationConceptPolicy,
             default_organization_concept_policy,
         )
+        from agents.cognition.organization_operations import (
+            OrganizationOperationPolicy,
+            default_organization_operation_policy,
+        )
 
         organization_mode = (
             CognitionOrganizationMode.DISABLED
@@ -904,14 +910,29 @@ class CognitiveLoop:
             )
         if organization_mode is CognitionOrganizationMode.DISABLED:
             organization_concept_policy = None
-        elif organization_concept_policy is None:
-            organization_concept_policy = default_organization_concept_policy()
-        elif type(organization_concept_policy) is not OrganizationConceptPolicy:
-            raise TypeError(
-                "organization_concept_policy must be OrganizationConceptPolicy"
-            )
+            organization_operation_policy = None
+        else:
+            if organization_concept_policy is None:
+                organization_concept_policy = default_organization_concept_policy()
+            elif type(organization_concept_policy) is not OrganizationConceptPolicy:
+                raise TypeError(
+                    "organization_concept_policy must be OrganizationConceptPolicy"
+                )
+            if organization_operation_policy is None:
+                organization_operation_policy = (
+                    default_organization_operation_policy()
+                )
+            elif (
+                type(organization_operation_policy)
+                is not OrganizationOperationPolicy
+            ):
+                raise TypeError(
+                    "organization_operation_policy must be "
+                    "OrganizationOperationPolicy"
+                )
         self._organization_concept_mode = organization_mode
         self._organization_concept_policy = organization_concept_policy
+        self._organization_operation_policy = organization_operation_policy
         self._prepared_organization_concepts: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode

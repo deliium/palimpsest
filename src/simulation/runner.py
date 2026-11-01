@@ -1317,6 +1317,10 @@ def _cognition_config_for(
     from agents.cognition.organization_concepts import (
         default_organization_concept_policy,
     )
+    from agents.cognition.organization_operations import (
+        ORGANIZATION_OPERATION_POLICY_VERSION,
+        default_organization_operation_policy,
+    )
 
     organization_mode = (
         CognitionOrganizationMode.DETERMINISTIC
@@ -1326,9 +1330,19 @@ def _cognition_config_for(
     organization_policy = (
         default_organization_concept_policy() if organizations_enabled else None
     )
+    organization_operation_policy = (
+        default_organization_operation_policy() if organizations_enabled else None
+    )
     _LOG.debug(
         "cognition_config_organization_mode mode=%s",
         organization_mode.value,
+    )
+    _LOG.debug(
+        "cognition_config_organization_operation mode=%s policy_version=%s",
+        organization_mode.value,
+        ORGANIZATION_OPERATION_POLICY_VERSION
+        if organization_operation_policy is not None
+        else None,
     )
     _LOG.debug(
         "cognition_config_institutional_decay mode=%s policy_version=%s",
@@ -1456,6 +1470,7 @@ def _cognition_config_for(
         institutional_decay_policy=institutional_decay_policy,
         organization_concept_mode=organization_mode,
         organization_concept_policy=organization_policy,
+        organization_operation_policy=organization_operation_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
