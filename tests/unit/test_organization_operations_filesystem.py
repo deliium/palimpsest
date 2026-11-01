@@ -6,6 +6,7 @@ import ast
 import hashlib
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -128,7 +129,8 @@ def test_v2_publication_round_trips_with_operation_counts(tmp_path: Path) -> Non
     page = reader.operations(
         RUN, publication.publication_id, 0, 10, domain="storage"
     )
-    assert [row.operation_id for row in page.rows] == [
+    rows = cast(tuple[OrganizationOperationRecord, ...], page.rows)
+    assert [row.operation_id for row in rows] == [
         "orgop-0000000000000002"
     ]
 

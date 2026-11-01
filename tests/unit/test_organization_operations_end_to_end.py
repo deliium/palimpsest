@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -50,6 +50,7 @@ from research_runner.organization_composition import (
 )
 from simulation.organization_models import (
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
+    OrganizationOperationRecord,
 )
 from simulation.runner_models import RunnerStopReasonCode
 from world import Observation
@@ -280,7 +281,8 @@ def test_operational_snapshot_publishes_and_reads(tmp_path: Path) -> None:
         domain="membership_admission",
     )
     assert owned.rows
-    assert all(row.domain == "membership_admission" for row in owned.rows)
+    owned_rows = cast(tuple[OrganizationOperationRecord, ...], owned.rows)
+    assert all(row.domain == "membership_admission" for row in owned_rows)
 
 
 def test_disagreement_is_published_without_dropping_a_side() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -141,10 +142,11 @@ async def test_enabled_runner_prepares_and_exports_operation_ledgers() -> None:
         exported = runner.export_organization_operation_ledgers()
 
     assert len(exported) == 1
-    assert type(exported[0]) is OrganizationOperationLedger
-    assert exported[0].owner_id == AgentId("agent-1")
+    ledgers = cast(tuple[OrganizationOperationLedger, ...], exported)
+    assert type(ledgers[0]) is OrganizationOperationLedger
+    assert ledgers[0].owner_id == AgentId("agent-1")
     assert result.organization_operation_ledgers == exported
-    assert len({ledger.owner_id for ledger in exported}) == 1
+    assert len({ledger.owner_id for ledger in ledgers}) == 1
 
 
 @pytest.mark.asyncio
@@ -158,7 +160,8 @@ async def test_checkpoint_round_trip_preserves_operation_ledgers() -> None:
         exported = runner.export_organization_operation_ledgers()
 
     assert len(exported) == 1
-    assert exported[0].owner_id == AgentId("agent-1")
+    ledgers = cast(tuple[OrganizationOperationLedger, ...], exported)
+    assert ledgers[0].owner_id == AgentId("agent-1")
 
     async with await SimulationRunner.from_config(
         config, run_id=RunId("run-organization-op-checkpoint")

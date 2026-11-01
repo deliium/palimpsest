@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -233,10 +234,11 @@ async def test_enabled_owner_starts_without_organization_content() -> None:
         result = await runner.run()
 
     assert result.organization_concept_ledgers
-    assert all(
-        ledger.concepts == ()
-        for ledger in result.organization_concept_ledgers
+    concept_ledgers = cast(
+        tuple[OrganizationConceptLedger, ...],
+        result.organization_concept_ledgers,
     )
+    assert all(ledger.concepts == () for ledger in concept_ledgers)
 
 
 def test_fork_state_carries_prepared_organization_ledger() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -119,15 +120,17 @@ def test_operations_page_filters_by_domain_and_organization(
 ) -> None:
     reader, publication_id = _published(tmp_path)
     page = reader.operations(RUN, publication_id, 0, 10)
-    assert [row.operation_id for row in page.rows] == [
+    rows = cast(tuple[OrganizationOperationRecord, ...], page.rows)
+    assert [row.operation_id for row in rows] == [
         "orgop-0000000000000001",
         "orgop-0000000000000003",
         "orgop-0000000000000002",
     ]
-    assert all(type(row) is OrganizationOperationRecord for row in page.rows)
+    assert all(type(row) is OrganizationOperationRecord for row in rows)
 
     storage = reader.operations(RUN, publication_id, 0, 10, domain="storage")
-    assert [row.operation_id for row in storage.rows] == [
+    storage_rows = cast(tuple[OrganizationOperationRecord, ...], storage.rows)
+    assert [row.operation_id for row in storage_rows] == [
         "orgop-0000000000000003"
     ]
 

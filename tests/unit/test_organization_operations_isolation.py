@@ -122,8 +122,9 @@ def test_another_owners_records_never_appear_in_harvest() -> None:
     by_owner = {row.owner.owner_id: row for row in rows}
     assert set(by_owner) == {OWNER.value, OTHER.value}
     for row in rows:
-        for record in (*row.controls, *row.admissions, *row.commitments):
-            assert record.organization_id in {ORG, other_org}
+        for records in (row.controls, row.admissions, row.commitments):
+            for record in records:
+                assert record.organization_id in {ORG, other_org}
     assert all(
         record.organization_id == ORG for record in by_owner[OWNER.value].admissions
     )
