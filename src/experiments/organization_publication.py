@@ -18,6 +18,11 @@ from analysis.organization_detection import OrganizationCandidate
 from analysis.organization_identity import OrganizationRecord
 from analysis.organization_operations import organization_operation_sources
 from experiments.organization_harvest import OrganizationHarvest
+from simulation.organization_agency_ids import (
+    organization_agency_ref,
+    organization_publication_decision_id,
+    organization_publication_implementation_id,
+)
 from simulation.organization_codec import (
     compute_organization_publication_id,
     decode_organization_snapshot,
@@ -25,14 +30,19 @@ from simulation.organization_codec import (
     organization_digest,
 )
 from simulation.organization_models import (
+    MAX_CANDIDATE_COLLECTIVE_DECISIONS,
     MAX_CANDIDATE_OPERATIONS,
+    MAX_DECISION_IMPLEMENTATIONS,
+    MAX_SNAPSHOT_COLLECTIVE_DECISIONS,
     MAX_SNAPSHOT_MEMBERS,
     MAX_SNAPSHOT_OPERATIONS,
     ORGANIZATION_SNAPSHOT_POLICY_VERSION,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
     OrganizationArtifactError,
     OrganizationCandidateRecord,
+    OrganizationCollectiveDecisionRecord,
     OrganizationCoverage,
+    OrganizationImplementationRecord,
     OrganizationLineageEdgeRecord,
     OrganizationMemberRecord,
     OrganizationObjectiveRow,
@@ -113,6 +123,13 @@ class OrganizationHarvestResult:
     schema_version: str = ORGANIZATION_SNAPSHOT_SCHEMA_VERSION
     operation_count: int = 0
     contested_operation_count: int = 0
+    agency_rows: tuple[object, ...] = ()
+    agency_summary: object | None = None
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
+    unimplemented_decision_count: int = 0
+    contested_decision_count: int = 0
+    sabotage_attribution_count: int = 0
 
     @property
     def snapshot_digest(self) -> str:
@@ -182,9 +199,11 @@ def _row_domain(family: str, row: object) -> str:
 
 
 def _row_contested(row: object) -> bool:
-    return getattr(row, "stance", None) == "disputed" or (
-        getattr(row, "contest_count", None) or 0
-    ) > 0 or (getattr(row, "oppose_count", None) or 0) > 0
+    return (
+        getattr(row, "stance", None) == "disputed"
+        or (getattr(row, "contest_count", None) or 0) > 0
+        or (getattr(row, "oppose_count", None) or 0) > 0
+    )
 
 
 def _row_authority(row: object) -> str:
@@ -227,8 +246,10 @@ def _stance_token(act: str, *, disputed: bool, unknown_authority: bool) -> str:
 
 def _act_for(family: str, row: object) -> str:
     if family == "controls":
-        return "revoke_control" if getattr(row, "stance", None) == "former" else (
-            "authorize_control"
+        return (
+            "revoke_control"
+            if getattr(row, "stance", None) == "former"
+            else ("authorize_control")
         )
     if family == "admissions":
         return "admit"
@@ -297,9 +318,7 @@ def _ticks(family: str, row: object) -> tuple[int, int, int]:
     first = getattr(row, "first_tick", None)
     last = getattr(row, "last_tick", None)
     first_tick = first if isinstance(first, int) and first >= 0 else 0
-    last_tick = (
-        last if isinstance(last, int) and last >= first_tick else first_tick
-    )
+    last_tick = last if isinstance(last, int) and last >= first_tick else first_tick
     return last_tick, first_tick, last_tick
 
 
@@ -316,8 +335,10 @@ def _draft_operation(
         stance = "disputed" if contested else "claimed"
     elif family == "commitments":
         stance_value = getattr(row, "stance", None)
-        stance = stance_value if isinstance(stance_value, str) and stance_value else (
-            "disputed" if contested else "declared"
+        stance = (
+            stance_value
+            if isinstance(stance_value, str) and stance_value
+            else ("disputed" if contested else "declared")
         )
     elif family in ("decisions", "actions"):
         if act == "record_decision":
@@ -335,9 +356,13 @@ def _draft_operation(
             )
     else:
         stored = getattr(row, "stance", None)
-        stance = stored if isinstance(stored, str) and stored else (
-            "disputed" if contested else _stance_token(
-                act, disputed=contested, unknown_authority=False
+        stance = (
+            stored
+            if isinstance(stored, str) and stored
+            else (
+                "disputed"
+                if contested
+                else _stance_token(act, disputed=contested, unknown_authority=False)
             )
         )
     support = getattr(row, "owner_support_count", None)
@@ -361,9 +386,7 @@ def _draft_operation(
         "provenance_code": _provenance_for(family, row, contested=contested),
         "outcome": _outcome_for(family, row),
         "command_kind": (
-            command_kind
-            if isinstance(command_kind, str) and command_kind
-            else "none"
+            command_kind if isinstance(command_kind, str) and command_kind else "none"
         ),
         "target_kind": _target_for(act, anchor_id),
         "anchor_kind": anchor_kind,
@@ -438,9 +461,7 @@ def _operation_records(
                 command_kind=_draft_str(draft, "command_kind"),
                 target_kind=_draft_str(draft, "target_kind"),
                 anchor_kind=_draft_str(draft, "anchor_kind"),
-                anchor_id=(
-                    None if anchor_value is None else str(anchor_value)
-                ),
+                anchor_id=(None if anchor_value is None else str(anchor_value)),
                 tick=_draft_int(draft, "tick"),
                 first_tick=_draft_int(draft, "first_tick"),
                 last_tick=_draft_int(draft, "last_tick"),
@@ -460,10 +481,214 @@ def _operation_records(
     )
 
 
+def _agency_content_digest(value: dict[str, object]) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _draft_implementation(
+    organization_id: str,
+    decision_id: str,
+    row: object,
+    ordinal: int,
+) -> OrganizationImplementationRecord:
+    actor_id = getattr(row, "actor_id", "")
+    actor_ref = organization_agency_ref(str(actor_id), namespace="actor")
+    observed_tick = getattr(row, "observed_tick", 0) or 0
+    draft = {
+        "organization_id": organization_id,
+        "decision_id": decision_id,
+        "actor_ref": actor_ref,
+        "status": getattr(row, "status", "unknown"),
+        "effect": getattr(row, "effect", None) or "none",
+        "observed_tick": observed_tick,
+    }
+    digest = _agency_content_digest(draft)
+    return OrganizationImplementationRecord(
+        implementation_id=organization_publication_implementation_id(
+            organization_id,
+            decision_id,
+            actor_ref,
+            observed_tick,
+            ordinal,
+            digest,
+        ),
+        decision_id=decision_id,
+        actor_ref=actor_ref,
+        status=str(draft["status"]),
+        effect=str(draft["effect"]),
+        observed_tick=observed_tick,
+        provenance_code=getattr(row, "provenance_code", None) or "unknown",
+        resolved=bool(getattr(row, "resolved", False)),
+    )
+
+
+def _draft_decision(
+    organization_id: str,
+    row: object,
+    implementations: tuple[OrganizationImplementationRecord, ...],
+    proposal_ref: str,
+) -> OrganizationCollectiveDecisionRecord:
+    revision = int(getattr(row, "revision", 1) or 1)
+    decided_tick = int(getattr(row, "decided_tick", 0) or 0)
+    draft = {
+        "organization_id": organization_id,
+        "proposal_ref": proposal_ref,
+        "revision": revision,
+        "recognition": getattr(row, "recognition", None) or "unknown",
+        "decided_tick": decided_tick,
+        "implementations": [item.implementation_id for item in implementations],
+    }
+    digest = _agency_content_digest(draft)
+    decision_id = organization_publication_decision_id(
+        organization_id, proposal_ref, revision, decided_tick, digest
+    )
+    target_kind = str(getattr(row, "target_kind", None) or "unknown")
+    return OrganizationCollectiveDecisionRecord(
+        decision_id=decision_id,
+        organization_id=organization_id,
+        proposal_ref=proposal_ref,
+        revision=revision,
+        procedure_ref=getattr(row, "procedure_ref", None),
+        recognition=str(getattr(row, "recognition", None) or "unknown"),
+        authority_basis=str(getattr(row, "authority_basis", None) or "unknown"),
+        support_count=int(getattr(row, "support_count", None) or 0),
+        oppose_count=int(getattr(row, "oppose_count", None) or 0),
+        abstain_count=int(getattr(row, "abstain_count", None) or 0),
+        contest_count=int(getattr(row, "contest_count", None) or 0),
+        implementation_mode=str(
+            getattr(row, "implementation_mode", None) or "testimonial"
+        ),
+        effect=str(getattr(row, "effect", None) or "none"),
+        target_kind=target_kind,
+        target_ref=getattr(row, "target_ref", None),
+        decided_tick=decided_tick,
+        window_end_tick=int(
+            getattr(row, "window_end_tick", decided_tick) or decided_tick
+        ),
+        implementation_status=str(
+            getattr(row, "implementation_status", None) or "unknown"
+        ),
+        provenance_code=str(getattr(row, "provenance_code", None) or "unknown"),
+        resolved=target_kind != "unknown",
+        implementations=implementations,
+    )
+
+
+def _agency_decisions(
+    harvest: OrganizationHarvest,
+) -> tuple[dict[str, tuple[OrganizationCollectiveDecisionRecord, ...]], bool]:
+    summary = harvest.agency_summary
+    if summary is None or not harvest.agency_rows:
+        return {}, False
+    mapping = {
+        (owner_id, concept_id): organization_id
+        for owner_id, concept_id, organization_id in getattr(
+            summary, "candidate_map", ()
+        )
+    }
+    proposal_refs: dict[tuple[str, str, str], str] = {}
+    for owner_row in harvest.agency_rows:
+        for proposal_row in owner_row.proposals:
+            proposal_refs[
+                (
+                    owner_row.owner.owner_id,
+                    proposal_row.organization_id,
+                    proposal_row.proposal_id,
+                )
+            ] = str(proposal_row.proposal_ref or "")
+    implementations: dict[tuple[str, str], list[object]] = {}
+    for owner_row in harvest.agency_rows:
+        owner_id = owner_row.owner.owner_id
+        for implementation_row in owner_row.implementations:
+            organization_id = mapping.get(
+                (owner_id, implementation_row.organization_id)
+            )
+            if organization_id is None:
+                continue
+            implementations.setdefault(
+                (organization_id, implementation_row.decision_id), []
+            ).append(implementation_row)
+    grouped: dict[str, list[OrganizationCollectiveDecisionRecord]] = {}
+    truncated = False
+    from dataclasses import replace as _replace
+
+    for owner_row in harvest.agency_rows:
+        owner_id = owner_row.owner.owner_id
+        for decision_row in owner_row.decisions:
+            organization_id = mapping.get((owner_id, decision_row.organization_id))
+            if organization_id is None:
+                continue
+            proposal_ref = proposal_refs.get(
+                (owner_id, decision_row.organization_id, decision_row.proposal_id), ""
+            )
+            base_decision = _draft_decision(
+                organization_id, decision_row, (), proposal_ref
+            )
+            built_implementations = tuple(
+                _draft_implementation(
+                    organization_id,
+                    base_decision.decision_id,
+                    implementation,
+                    ordinal,
+                )
+                for ordinal, implementation in enumerate(
+                    sorted(
+                        implementations.get(
+                            (organization_id, decision_row.decision_id), []
+                        ),
+                        key=lambda item: (
+                            getattr(item, "observed_tick", 0) or 0,
+                            str(getattr(item, "actor_id", "")),
+                        ),
+                    )[:MAX_DECISION_IMPLEMENTATIONS]
+                )
+            )
+            if (
+                len(
+                    implementations.get((organization_id, decision_row.decision_id), [])
+                )
+                > MAX_DECISION_IMPLEMENTATIONS
+            ):
+                truncated = True
+            grouped.setdefault(organization_id, []).append(
+                _replace(base_decision, implementations=built_implementations)
+            )
+    result: dict[str, tuple[OrganizationCollectiveDecisionRecord, ...]] = {}
+    total = 0
+    for organization_id in sorted(grouped):
+        decisions = sorted(
+            grouped[organization_id],
+            key=lambda item: (item.decided_tick, item.decision_id),
+        )
+        if len(decisions) > MAX_CANDIDATE_COLLECTIVE_DECISIONS:
+            decisions = decisions[-MAX_CANDIDATE_COLLECTIVE_DECISIONS:]
+            truncated = True
+        remaining = MAX_SNAPSHOT_COLLECTIVE_DECISIONS - total
+        decisions = decisions[: max(0, remaining)]
+        total += len(decisions)
+        result[organization_id] = tuple(decisions)
+    if total > MAX_SNAPSHOT_COLLECTIVE_DECISIONS:
+        truncated = True
+    return result, truncated
+
+
 def _candidate_record(
     candidate: OrganizationCandidate,
     record: OrganizationRecord,
     operations: tuple[OrganizationOperationRecord, ...] = (),
+    agency: tuple[OrganizationCollectiveDecisionRecord, ...] = (),
+    agency_counts: tuple[int, int, int, int, int, int, int, int, int] = (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ),
 ) -> tuple[OrganizationCandidateRecord, bool]:
     members, truncated = _member_records(candidate)
     return (
@@ -479,6 +704,22 @@ def _candidate_record(
             structure=_structural_rows(candidate),
             window_indexes=record.window_indexes,
             operations=operations,
+            collective_decisions=agency,
+            collective_proposal_count=agency_counts[0],
+            collective_amendment_count=agency_counts[1],
+            collective_support_count=agency_counts[2],
+            collective_oppose_count=agency_counts[3],
+            collective_abstain_count=agency_counts[4],
+            collective_decision_count=len(agency),
+            collective_implementation_count=sum(
+                len(item.implementations) for item in agency
+            ),
+            unimplemented_decision_count=sum(
+                1 for item in agency if item.implementation_status == "unimplemented"
+            ),
+            contested_decision_count=sum(
+                1 for item in agency if item.recognition == "contested"
+            ),
         ),
         truncated,
     )
@@ -487,6 +728,7 @@ def _candidate_record(
 def _dissolved_record(
     record: OrganizationRecord,
     operations: tuple[OrganizationOperationRecord, ...] = (),
+    agency: tuple[OrganizationCollectiveDecisionRecord, ...] = (),
 ) -> OrganizationCandidateRecord:
     return OrganizationCandidateRecord(
         organization_id=record.organization_id,
@@ -511,6 +753,17 @@ def _dissolved_record(
         ),
         window_indexes=record.window_indexes,
         operations=operations,
+        collective_decisions=agency,
+        collective_decision_count=len(agency),
+        collective_implementation_count=sum(
+            len(item.implementations) for item in agency
+        ),
+        unimplemented_decision_count=sum(
+            1 for item in agency if item.implementation_status == "unimplemented"
+        ),
+        contested_decision_count=sum(
+            1 for item in agency if item.recognition == "contested"
+        ),
     )
 
 
@@ -570,9 +823,16 @@ def build_organization_harvest_result(
             organization_id = mapping.get(candidate.candidate_key)
             if organization_id is not None:
                 latest[organization_id] = candidate
-    sources = dict(
-        organization_operation_sources(harvest.operation_rows, assignment)
-    )
+    sources = dict(organization_operation_sources(harvest.operation_rows, assignment))
+    agency_by_candidate, agency_truncated = _agency_decisions(harvest)
+    summary_candidates = {
+        candidate.organization_id: candidate
+        for candidate in (
+            getattr(harvest.agency_summary, "candidates", ())
+            if harvest.agency_summary is not None
+            else ()
+        )
+    }
     records: list[OrganizationCandidateRecord] = []
     truncated = False
     operations_truncated = False
@@ -585,8 +845,26 @@ def build_organization_harvest_result(
             organization_id, sources.get(organization_id, ())
         )
         operations_truncated = operations_truncated or cut
+        agency_counts = (0, 0, 0, 0, 0, 0, 0, 0, 0)
+        summary_candidate = summary_candidates.get(organization_id)
+        if summary_candidate is not None:
+            agency_counts = (
+                summary_candidate.proposal_count,
+                summary_candidate.amendment_count,
+                summary_candidate.support_count,
+                summary_candidate.oppose_count,
+                summary_candidate.abstain_count,
+                summary_candidate.recognized_decision_count,
+                summary_candidate.contested_decision_count,
+                summary_candidate.unrecognized_decision_count,
+                summary_candidate.expired_proposal_count,
+            )
         candidate_record, member_cut = _candidate_record(
-            latest[organization_id], record, operations
+            latest[organization_id],
+            record,
+            operations,
+            agency_by_candidate.get(organization_id, ()),
+            agency_counts,
         )
         records.append(candidate_record)
         truncated = truncated or member_cut
@@ -598,7 +876,13 @@ def build_organization_harvest_result(
             record.organization_id, sources.get(record.organization_id, ())
         )
         operations_truncated = operations_truncated or cut
-        records.append(_dissolved_record(record, operations))
+        records.append(
+            _dissolved_record(
+                record,
+                operations,
+                agency_by_candidate.get(record.organization_id, ()),
+            )
+        )
         seen_ids.add(record.organization_id)
     trimmed_records, global_cut = _trim_snapshot_operations(records)
 
@@ -631,6 +915,28 @@ def build_organization_harvest_result(
                 for operation in record.operations
                 if window.start_tick <= operation.tick <= window.end_tick
             ),
+            collective_decision_count=sum(
+                1
+                for record in trimmed_records
+                if record.organization_id
+                in {
+                    mapping[candidate.candidate_key]
+                    for candidate in window.candidates
+                    if candidate.candidate_key in mapping
+                }
+                for decision in record.collective_decisions
+                if window.start_tick <= decision.decided_tick <= window.end_tick
+            ),
+            collective_implementation_count=sum(
+                len(record.collective_decisions)
+                for record in trimmed_records
+                if record.organization_id
+                in {
+                    mapping[candidate.candidate_key]
+                    for candidate in window.candidates
+                    if candidate.candidate_key in mapping
+                }
+            ),
             contested_operation_count=sum(
                 1
                 for record in trimmed_records
@@ -642,9 +948,7 @@ def build_organization_harvest_result(
                 }
                 for operation in record.operations
                 if window.start_tick <= operation.tick <= window.end_tick
-                and (
-                    operation.stance == "disputed" or operation.contest_count > 0
-                )
+                and (operation.stance == "disputed" or operation.contest_count > 0)
             ),
         )
         for window in analysis.windows
@@ -677,6 +981,8 @@ def build_organization_harvest_result(
                 resolved_anchor_count=row.resolved_anchor_count,
                 unresolved_anchor_count=row.unresolved_anchor_count,
                 operation_action_count=row.operation_action_count,
+                collective_decision_count=row.collective_decision_count,
+                collective_implementation_count=(row.collective_implementation_count),
             )
             for row in analysis.layer_view.objective
         )
@@ -688,6 +994,8 @@ def build_organization_harvest_result(
     provenance = "member_list_truncated" if truncated else harvest.provenance_code
     if operations_truncated or global_cut:
         provenance = "operations_truncated"
+    if agency_truncated:
+        provenance = "collective_agency_truncated"
     snapshot = OrganizationSnapshot(
         schema_version=ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
         policy_version=ORGANIZATION_SNAPSHOT_POLICY_VERSION,
@@ -721,6 +1029,25 @@ def _finalize(
     contested_count = sum(
         candidate.contested_operation_count for candidate in published.candidates
     )
+    collective_decisions = sum(
+        candidate.collective_decision_count for candidate in published.candidates
+    )
+    collective_implementations = sum(
+        candidate.collective_implementation_count for candidate in published.candidates
+    )
+    unimplemented = sum(
+        candidate.unimplemented_decision_count for candidate in published.candidates
+    )
+    contested_decisions = sum(
+        candidate.contested_decision_count for candidate in published.candidates
+    )
+    sabotage = sum(
+        1
+        for candidate in published.candidates
+        for decision in candidate.collective_decisions
+        for implementation in decision.implementations
+        if implementation.status == "sabotaged"
+    )
     if published.provenance_code != "ok":
         _LOG.warning(
             "organization_publication_partial run_id=%s reason=%s",
@@ -746,6 +1073,13 @@ def _finalize(
         schema_version=published.schema_version,
         operation_count=operation_count,
         contested_operation_count=contested_count,
+        agency_rows=harvest.agency_rows,
+        agency_summary=harvest.agency_summary,
+        collective_decision_count=collective_decisions,
+        collective_implementation_count=collective_implementations,
+        unimplemented_decision_count=unimplemented,
+        contested_decision_count=contested_decisions,
+        sabotage_attribution_count=sabotage,
     )
 
 
@@ -783,6 +1117,14 @@ def organization_publication_document(
         "edge_count": len(result.snapshot.edges),
         "operation_count": result.operation_count,
         "contested_operation_count": result.contested_operation_count,
+        "collective_decision_count": result.collective_decision_count,
+        "collective_implementation_count": result.collective_implementation_count,
+        "unimplemented_decision_count": result.unimplemented_decision_count,
+        "contested_decision_count": result.contested_decision_count,
+        "sabotage_attribution_count": result.sabotage_attribution_count,
+        "collective_agency_truncated": (
+            result.provenance_code == "collective_agency_truncated"
+        ),
         "coverage_observed": coverage.observed,
         "coverage_expected": coverage.expected,
         "coverage_ratio": coverage.ratio,

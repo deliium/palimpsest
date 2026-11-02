@@ -13,6 +13,9 @@ from api.organization_cursor import OrganizationCursorCodec, OrganizationCursorE
 from api.organization_schemas import (
     OrganizationCandidateDetailOut,
     OrganizationCandidateOut,
+    OrganizationCollectiveAgencyListOut,
+    OrganizationCollectiveDecisionOut,
+    OrganizationCollectiveImplementationOut,
     OrganizationCoverageOut,
     OrganizationLineageEdgeOut,
     OrganizationMemberOut,
@@ -29,6 +32,8 @@ from simulation.organization_models import (
     MAX_RESPONSE_BYTES,
     OrganizationArtifactError,
     OrganizationCandidateRecord,
+    OrganizationCollectiveDecisionRecord,
+    OrganizationImplementationRecord,
     OrganizationLineageEdgeRecord,
     OrganizationOperationRecord,
     OrganizationStructuralKind,
@@ -47,6 +52,7 @@ _PURPOSE_CANDIDATES = "organization_candidates"
 _PURPOSE_CANDIDATE = "organization_candidate"
 _PURPOSE_LINEAGE = "organization_lineage"
 _PURPOSE_OPERATIONS = "organization_operations"
+_PURPOSE_COLLECTIVE_AGENCY = "organization_collective_agency"
 
 _STATUS_VALUES = (
     "recognized",
@@ -92,6 +98,7 @@ def _decode_cursor(
     purpose: str,
     run_id: str,
     publication_id: str,
+    snapshot_digest: str,
     fingerprint: str,
 ) -> OrganizationCursor:
     try:
@@ -104,6 +111,7 @@ def _decode_cursor(
         cursor.run_id != run_id
         or cursor.publication_id != publication_id
         or cursor.query_fingerprint != fingerprint
+        or cursor.snapshot_digest != snapshot_digest
     ):
         raise bad_request(code="organization_cursor_invalid")
     return cursor
@@ -138,6 +146,15 @@ def _candidate_out(candidate: OrganizationCandidateRecord) -> OrganizationCandid
         window_indexes=candidate.window_indexes,
         operation_count=candidate.operation_count,
         contested_operation_count=candidate.contested_operation_count,
+        collective_proposal_count=candidate.collective_proposal_count,
+        collective_amendment_count=candidate.collective_amendment_count,
+        collective_support_count=candidate.collective_support_count,
+        collective_oppose_count=candidate.collective_oppose_count,
+        collective_abstain_count=candidate.collective_abstain_count,
+        collective_decision_count=candidate.collective_decision_count,
+        collective_implementation_count=(candidate.collective_implementation_count),
+        unimplemented_decision_count=candidate.unimplemented_decision_count,
+        contested_decision_count=candidate.contested_decision_count,
     )
 
 
@@ -162,6 +179,50 @@ def _operation_out(
         support_count=operation.support_count,
         contest_count=operation.contest_count,
         resolved=operation.resolved,
+    )
+
+
+def _implementation_out(
+    implementation: OrganizationImplementationRecord,
+) -> OrganizationCollectiveImplementationOut:
+    return OrganizationCollectiveImplementationOut(
+        implementation_id=implementation.implementation_id,
+        actor_ref=implementation.actor_ref,
+        status=implementation.status,
+        effect=implementation.effect,
+        observed_tick=implementation.observed_tick,
+        provenance_code=implementation.provenance_code,
+        resolved=implementation.resolved,
+    )
+
+
+def _collective_decision_out(
+    decision: OrganizationCollectiveDecisionRecord,
+) -> OrganizationCollectiveDecisionOut:
+    return OrganizationCollectiveDecisionOut(
+        decision_id=decision.decision_id,
+        organization_id=decision.organization_id,
+        proposal_ref=decision.proposal_ref,
+        revision=decision.revision,
+        procedure_ref=decision.procedure_ref,
+        recognition=decision.recognition,
+        authority_basis=decision.authority_basis,
+        support_count=decision.support_count,
+        oppose_count=decision.oppose_count,
+        abstain_count=decision.abstain_count,
+        contest_count=decision.contest_count,
+        implementation_mode=decision.implementation_mode,
+        effect=decision.effect,
+        target_kind=decision.target_kind,
+        target_ref=decision.target_ref,
+        decided_tick=decision.decided_tick,
+        window_end_tick=decision.window_end_tick,
+        implementation_status=decision.implementation_status,
+        provenance_code=decision.provenance_code,
+        resolved=decision.resolved,
+        implementations=tuple(
+            _implementation_out(item) for item in decision.implementations
+        ),
     )
 
 
@@ -192,7 +253,16 @@ async def organization_summary(
             ratio=summary.coverage.ratio,
         ),
         provenance_code=summary.provenance_code,
+        snapshot_digest=summary.snapshot_digest,
         operation_count=summary.operation_count,
+        collective_proposal_count=summary.collective_proposal_count,
+        collective_amendment_count=summary.collective_amendment_count,
+        collective_support_count=summary.collective_support_count,
+        collective_oppose_count=summary.collective_oppose_count,
+        collective_abstain_count=summary.collective_abstain_count,
+        collective_decision_count=summary.collective_decision_count,
+        collective_implementation_count=summary.collective_implementation_count,
+        unimplemented_decision_count=summary.unimplemented_decision_count,
     ).model_dump()
     _charge(payload)
     _LOGGER.debug("organization_api_request route=summary run_id=%s", run_id)
@@ -232,6 +302,7 @@ async def organization_candidates(
             purpose=_PURPOSE_CANDIDATES,
             run_id=run_id,
             publication_id=publication_id,
+            snapshot_digest=summary.snapshot_digest,
             fingerprint=fingerprint,
         ).offset
     page = _reader(reader).candidates(
@@ -247,7 +318,7 @@ async def organization_candidates(
             purpose=_PURPOSE_CANDIDATES,
             run_id=run_id,
             publication_id=publication_id,
-            snapshot_digest="",
+            snapshot_digest=summary.snapshot_digest,
             offset=page.next_offset,
             query_fingerprint=fingerprint,
         )
@@ -319,6 +390,9 @@ async def organization_candidate(
         operations=tuple(
             _operation_out(operation) for operation in candidate.operations
         ),
+        collective_decisions=tuple(
+            _collective_decision_out(item) for item in candidate.collective_decisions
+        ),
     ).model_dump()
     _charge(detail)
     _LOGGER.debug("organization_api_request route=candidate run_id=%s", run_id)
@@ -356,6 +430,7 @@ async def organization_lineage(
             purpose=_PURPOSE_LINEAGE,
             run_id=run_id,
             publication_id=publication_id,
+            snapshot_digest=summary.snapshot_digest,
             fingerprint=fingerprint,
         ).offset
     page = _reader(reader).lineage(
@@ -378,7 +453,7 @@ async def organization_lineage(
             purpose=_PURPOSE_LINEAGE,
             run_id=run_id,
             publication_id=publication_id,
-            snapshot_digest="",
+            snapshot_digest=summary.snapshot_digest,
             offset=page.next_offset,
             query_fingerprint=fingerprint,
         )
@@ -398,6 +473,7 @@ async def organization_lineage(
         len(items),
     )
     return payload
+
 
 @router.get("/{run_id}/organizations/operations")
 async def organization_operations(
@@ -443,6 +519,7 @@ async def organization_operations(
             purpose=_PURPOSE_OPERATIONS,
             run_id=run_id,
             publication_id=publication_id,
+            snapshot_digest=summary.snapshot_digest,
             fingerprint=fingerprint,
         ).offset
     page = _reader(reader).operations(
@@ -463,7 +540,7 @@ async def organization_operations(
             purpose=_PURPOSE_OPERATIONS,
             run_id=run_id,
             publication_id=publication_id,
-            snapshot_digest="",
+            snapshot_digest=summary.snapshot_digest,
             offset=page.next_offset,
             query_fingerprint=fingerprint,
         )
@@ -481,5 +558,88 @@ async def organization_operations(
         "organization_api_request route=operations run_id=%s domain=%s",
         run_id,
         domain or "all",
+    )
+    return payload
+
+
+@router.get("/{run_id}/organizations/collective-agency")
+async def organization_collective_agency(
+    run_id: str,
+    request: Request,
+    response: Response,
+    recognition: Literal[
+        "recognized", "contested", "unrecognized", "expired", "unknown"
+    ]
+    | None = Query(default=None),
+    organization_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1),
+    cursor: str | None = Query(default=None),
+    publication: str = Query(default=""),
+    settings: Settings = Depends(get_settings),
+    reader: OrganizationReadPort | None = Depends(get_organization_reader),
+) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
+    _authorize(request, settings)
+    codec = _codec(request)
+    summary = _reader(reader).summary(run_id)
+    if summary is None:
+        raise not_found(code="organization_publication_missing")
+    publication_id = publication or summary.publication_id
+    fingerprint = organization_query_fingerprint(
+        run_id,
+        publication_id,
+        _PURPOSE_COLLECTIVE_AGENCY,
+        {"recognition": recognition, "organization_id": organization_id},
+    )
+    offset = 0
+    if cursor:
+        offset = _decode_cursor(
+            codec,
+            cursor,
+            purpose=_PURPOSE_COLLECTIVE_AGENCY,
+            run_id=run_id,
+            publication_id=publication_id,
+            snapshot_digest=summary.snapshot_digest,
+            fingerprint=fingerprint,
+        ).offset
+    page = _reader(reader).collective_agency(
+        run_id,
+        publication_id,
+        offset,
+        min(limit, MAX_PAGE_ROWS),
+        recognition,
+        organization_id,
+    )
+    items = tuple(
+        _collective_decision_out(decision)
+        for decision in page.rows
+        if isinstance(decision, OrganizationCollectiveDecisionRecord)
+    )
+    next_cursor = (
+        codec.encode(
+            purpose=_PURPOSE_COLLECTIVE_AGENCY,
+            run_id=run_id,
+            publication_id=publication_id,
+            snapshot_digest=summary.snapshot_digest,
+            offset=page.next_offset,
+            query_fingerprint=fingerprint,
+        )
+        if page.truncated
+        else None
+    )
+    payload = OrganizationCollectiveAgencyListOut(
+        publication_id=publication_id,
+        items=items,
+        next_cursor=next_cursor,
+        truncated=page.truncated,
+    ).model_dump()
+    _charge(payload)
+    _LOGGER.debug(
+        "organization_api_request route=collective_agency run_id=%s "
+        "recognition=%s candidate=%s rows=%s",
+        run_id,
+        recognition or "all",
+        "present" if organization_id else "all",
+        len(items),
     )
     return payload

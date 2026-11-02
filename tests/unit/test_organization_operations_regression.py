@@ -16,6 +16,7 @@ from analysis.specifications import (
 from simulation.organization_models import (
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
     SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS,
 )
 from simulation.runner_models import SUPPORTED_RUNNER_SCHEMA_VERSIONS
@@ -48,12 +49,16 @@ AUTHORITY_KEYS = {
 }
 
 
-def test_catalog_is_146_with_operation_families_last() -> None:
-    assert METRIC_FAMILY_COUNT == 146
-    assert len(all_metric_specifications()) == 146
-    assert [spec.family_id for spec in all_metric_specifications()[-2:]] == [
+def test_catalog_is_148_with_operation_families_last() -> None:
+    assert METRIC_FAMILY_COUNT == 148
+    assert len(all_metric_specifications()) == 148
+    assert [spec.family_id for spec in all_metric_specifications()[-4:-2]] == [
         MetricFamilyId.ORGANIZATION_OPERATIONS,
         MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY,
+    ]
+    assert [spec.family_id for spec in all_metric_specifications()[-2:]] == [
+        MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
+        MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
     ]
 
 
@@ -63,7 +68,7 @@ def test_authority_family_has_exact_value_keys() -> None:
     assert spec.version_identifier == "organization_operation_authority@1"
 
 
-def test_operation_route_is_get_only_with_five_routes() -> None:
+def test_operation_route_is_get_only_with_six_routes() -> None:
     tree = ast.parse(ROUTE_MODULE.read_text(encoding="utf-8"))
     routes = [
         node
@@ -76,19 +81,20 @@ def test_operation_route_is_get_only_with_five_routes() -> None:
             for decorator in node.decorator_list
         )
     ]
-    assert len(routes) == 5
+    assert len(routes) == 6
     source = ROUTE_MODULE.read_text(encoding="utf-8")
     assert "/organizations/operations" in source
     for verb in ("@router.post", "@router.put", "@router.patch", "@router.delete"):
         assert verb not in source
 
 
-def test_snapshot_accepts_v1_and_v2_only() -> None:
+def test_snapshot_accepts_v1_v2_v3() -> None:
     assert SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS == (
         ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+        ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
         ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
     )
-    assert ORGANIZATION_SNAPSHOT_SCHEMA_VERSION == "organization-snapshot-v2"
+    assert ORGANIZATION_SNAPSHOT_SCHEMA_VERSION == "organization-snapshot-v3"
 
 
 def test_no_v57_runner_schema_exists() -> None:

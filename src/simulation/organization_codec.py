@@ -1,4 +1,4 @@
-"""Canonical encoding for ``organization-snapshot-v1``/``v2`` artifacts."""
+"""Canonical encoding for ``organization-snapshot-v1``/``v2``/``v3`` artifacts."""
 
 from __future__ import annotations
 
@@ -12,10 +12,13 @@ from simulation.organization_models import (
     ORGANIZATION_SNAPSHOT_POLICY_VERSION,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
     SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS,
     OrganizationArtifactError,
     OrganizationCandidateRecord,
+    OrganizationCollectiveDecisionRecord,
     OrganizationCoverage,
+    OrganizationImplementationRecord,
     OrganizationLineageEdgeRecord,
     OrganizationMemberRecord,
     OrganizationObjectiveRow,
@@ -53,6 +56,7 @@ _SNAPSHOT_KEYS_V1: Final[frozenset[str]] = frozenset(
     }
 )
 _SNAPSHOT_KEYS_V2: Final[frozenset[str]] = _SNAPSHOT_KEYS_V1
+_SNAPSHOT_KEYS_V3: Final[frozenset[str]] = _SNAPSHOT_KEYS_V2
 _WINDOW_KEYS_V1: Final[frozenset[str]] = frozenset(
     {
         "window_index",
@@ -66,6 +70,9 @@ _WINDOW_KEYS_V1: Final[frozenset[str]] = frozenset(
 )
 _WINDOW_KEYS_V2: Final[frozenset[str]] = _WINDOW_KEYS_V1 | frozenset(
     {"operation_count", "contested_operation_count"}
+)
+_WINDOW_KEYS_V3: Final[frozenset[str]] = _WINDOW_KEYS_V2 | frozenset(
+    {"collective_decision_count", "collective_implementation_count"}
 )
 _CANDIDATE_KEYS_V1: Final[frozenset[str]] = frozenset(
     {
@@ -83,6 +90,20 @@ _CANDIDATE_KEYS_V1: Final[frozenset[str]] = frozenset(
 )
 _CANDIDATE_KEYS_V2: Final[frozenset[str]] = _CANDIDATE_KEYS_V1 | frozenset(
     {"operations"}
+)
+_CANDIDATE_KEYS_V3: Final[frozenset[str]] = _CANDIDATE_KEYS_V2 | frozenset(
+    {
+        "collective_decisions",
+        "collective_proposal_count",
+        "collective_amendment_count",
+        "collective_support_count",
+        "collective_oppose_count",
+        "collective_abstain_count",
+        "collective_decision_count",
+        "collective_implementation_count",
+        "unimplemented_decision_count",
+        "contested_decision_count",
+    }
 )
 _MEMBER_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -121,6 +142,46 @@ _OBJECTIVE_KEYS_V1: Final[frozenset[str]] = frozenset(
 )
 _OBJECTIVE_KEYS_V2: Final[frozenset[str]] = _OBJECTIVE_KEYS_V1 | frozenset(
     {"operation_action_count"}
+)
+_OBJECTIVE_KEYS_V3: Final[frozenset[str]] = _OBJECTIVE_KEYS_V2 | frozenset(
+    {"collective_decision_count", "collective_implementation_count"}
+)
+_COLLECTIVE_IMPLEMENTATION_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "implementation_id",
+        "decision_id",
+        "actor_ref",
+        "status",
+        "effect",
+        "observed_tick",
+        "provenance_code",
+        "resolved",
+    }
+)
+_COLLECTIVE_DECISION_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "decision_id",
+        "organization_id",
+        "proposal_ref",
+        "revision",
+        "procedure_ref",
+        "recognition",
+        "authority_basis",
+        "support_count",
+        "oppose_count",
+        "abstain_count",
+        "contest_count",
+        "implementation_mode",
+        "effect",
+        "target_kind",
+        "target_ref",
+        "decided_tick",
+        "window_end_tick",
+        "implementation_status",
+        "provenance_code",
+        "resolved",
+        "implementations",
+    }
 )
 _OPERATION_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -310,6 +371,97 @@ def _operation_from_value(raw: object) -> OrganizationOperationRecord:
     )
 
 
+def _implementation_to_value(
+    implementation: OrganizationImplementationRecord,
+) -> dict[str, object]:
+    return {
+        "implementation_id": implementation.implementation_id,
+        "decision_id": implementation.decision_id,
+        "actor_ref": implementation.actor_ref,
+        "status": implementation.status,
+        "effect": implementation.effect,
+        "observed_tick": implementation.observed_tick,
+        "provenance_code": implementation.provenance_code,
+        "resolved": implementation.resolved,
+    }
+
+
+def _implementation_from_value(raw: object) -> OrganizationImplementationRecord:
+    item = _require_keys(raw, _COLLECTIVE_IMPLEMENTATION_KEYS)
+    return OrganizationImplementationRecord(
+        implementation_id=_string(item["implementation_id"]),
+        decision_id=_string(item["decision_id"]),
+        actor_ref=_string(item["actor_ref"]),
+        status=_string(item["status"]),
+        effect=_string(item["effect"]),
+        observed_tick=_int(item["observed_tick"]),
+        provenance_code=_string(item["provenance_code"]),
+        resolved=_bool(item["resolved"]),
+    )
+
+
+def _collective_decision_to_value(
+    decision: OrganizationCollectiveDecisionRecord,
+) -> dict[str, object]:
+    return {
+        "decision_id": decision.decision_id,
+        "organization_id": decision.organization_id,
+        "proposal_ref": decision.proposal_ref,
+        "revision": decision.revision,
+        "procedure_ref": decision.procedure_ref,
+        "recognition": decision.recognition,
+        "authority_basis": decision.authority_basis,
+        "support_count": decision.support_count,
+        "oppose_count": decision.oppose_count,
+        "abstain_count": decision.abstain_count,
+        "contest_count": decision.contest_count,
+        "implementation_mode": decision.implementation_mode,
+        "effect": decision.effect,
+        "target_kind": decision.target_kind,
+        "target_ref": decision.target_ref,
+        "decided_tick": decision.decided_tick,
+        "window_end_tick": decision.window_end_tick,
+        "implementation_status": decision.implementation_status,
+        "provenance_code": decision.provenance_code,
+        "resolved": decision.resolved,
+        "implementations": [
+            _implementation_to_value(item) for item in decision.implementations
+        ],
+    }
+
+
+def _collective_decision_from_value(
+    raw: object,
+) -> OrganizationCollectiveDecisionRecord:
+    item = _require_keys(raw, _COLLECTIVE_DECISION_KEYS)
+    return OrganizationCollectiveDecisionRecord(
+        decision_id=_string(item["decision_id"]),
+        organization_id=_string(item["organization_id"]),
+        proposal_ref=_string(item["proposal_ref"]),
+        revision=_int(item["revision"]),
+        procedure_ref=_optional_string(item["procedure_ref"]),
+        recognition=_string(item["recognition"]),
+        authority_basis=_string(item["authority_basis"]),
+        support_count=_int(item["support_count"]),
+        oppose_count=_int(item["oppose_count"]),
+        abstain_count=_int(item["abstain_count"]),
+        contest_count=_int(item["contest_count"]),
+        implementation_mode=_string(item["implementation_mode"]),
+        effect=_string(item["effect"]),
+        target_kind=_string(item["target_kind"]),
+        target_ref=_optional_string(item["target_ref"]),
+        decided_tick=_int(item["decided_tick"]),
+        window_end_tick=_int(item["window_end_tick"]),
+        implementation_status=_string(item["implementation_status"]),
+        provenance_code=_string(item["provenance_code"]),
+        resolved=_bool(item["resolved"]),
+        implementations=tuple(
+            _implementation_from_value(entry)
+            for entry in _list(item["implementations"])
+        ),
+    )
+
+
 def _snapshot_to_value_v1(snapshot: OrganizationSnapshot) -> dict[str, object]:
     return {
         "schema_version": snapshot.schema_version,
@@ -409,9 +561,7 @@ def _snapshot_to_value_v1(snapshot: OrganizationSnapshot) -> dict[str, object]:
 
 def _snapshot_to_value_v2(snapshot: OrganizationSnapshot) -> dict[str, object]:
     value = _snapshot_to_value_v1(snapshot)
-    for encoded, window in zip(
-        _list(value["windows"]), snapshot.windows, strict=True
-    ):
+    for encoded, window in zip(_list(value["windows"]), snapshot.windows, strict=True):
         _dict(encoded).update(
             {
                 "operation_count": window.operation_count,
@@ -431,10 +581,61 @@ def _snapshot_to_value_v2(snapshot: OrganizationSnapshot) -> dict[str, object]:
     return value
 
 
+def _snapshot_to_value_v3(snapshot: OrganizationSnapshot) -> dict[str, object]:
+    value = _snapshot_to_value_v2(snapshot)
+    for encoded, window in zip(_list(value["windows"]), snapshot.windows, strict=True):
+        _dict(encoded).update(
+            {
+                "collective_decision_count": window.collective_decision_count,
+                "collective_implementation_count": (
+                    window.collective_implementation_count
+                ),
+            }
+        )
+    for encoded, candidate in zip(
+        _list(value["candidates"]), snapshot.candidates, strict=True
+    ):
+        _dict(encoded).update(
+            {
+                "collective_decisions": [
+                    _collective_decision_to_value(item)
+                    for item in candidate.collective_decisions
+                ],
+                "collective_proposal_count": candidate.collective_proposal_count,
+                "collective_amendment_count": candidate.collective_amendment_count,
+                "collective_support_count": candidate.collective_support_count,
+                "collective_oppose_count": candidate.collective_oppose_count,
+                "collective_abstain_count": candidate.collective_abstain_count,
+                "collective_decision_count": candidate.collective_decision_count,
+                "collective_implementation_count": (
+                    candidate.collective_implementation_count
+                ),
+                "unimplemented_decision_count": (
+                    candidate.unimplemented_decision_count
+                ),
+                "contested_decision_count": candidate.contested_decision_count,
+            }
+        )
+    for encoded, row in zip(
+        _list(value["objective_rows"]), snapshot.objective_rows, strict=True
+    ):
+        _dict(encoded).update(
+            {
+                "collective_decision_count": row.collective_decision_count,
+                "collective_implementation_count": (
+                    row.collective_implementation_count
+                ),
+            }
+        )
+    return value
+
+
 def _snapshot_to_value(snapshot: OrganizationSnapshot) -> dict[str, object]:
     if snapshot.schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1:
         return _snapshot_to_value_v1(snapshot)
-    return _snapshot_to_value_v2(snapshot)
+    if snapshot.schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2:
+        return _snapshot_to_value_v2(snapshot)
+    return _snapshot_to_value_v3(snapshot)
 
 
 def encode_organization_snapshot(snapshot: OrganizationSnapshot) -> bytes:
@@ -450,7 +651,7 @@ def encode_organization_snapshot(snapshot: OrganizationSnapshot) -> bytes:
 
 
 def _decode_windows(
-    data: dict[str, object], keys: frozenset[str], *, v1: bool
+    data: dict[str, object], keys: frozenset[str], *, v1: bool, v3: bool = False
 ) -> tuple[OrganizationWindowRecord, ...]:
     windows: list[OrganizationWindowRecord] = []
     for raw in _list(data["windows"]):
@@ -470,13 +671,19 @@ def _decode_windows(
                 contested_operation_count=(
                     0 if v1 else _int(item["contested_operation_count"])
                 ),
+                collective_decision_count=(
+                    0 if not v3 else _int(item["collective_decision_count"])
+                ),
+                collective_implementation_count=(
+                    0 if not v3 else _int(item["collective_implementation_count"])
+                ),
             )
         )
     return tuple(windows)
 
 
 def _decode_candidates(
-    data: dict[str, object], keys: frozenset[str], *, v1: bool
+    data: dict[str, object], keys: frozenset[str], *, v1: bool, v3: bool = False
 ) -> tuple[OrganizationCandidateRecord, ...]:
     candidates: list[OrganizationCandidateRecord] = []
     for raw in _list(data["candidates"]):
@@ -536,13 +743,48 @@ def _decode_candidates(
                         for entry in _list(item["operations"])
                     )
                 ),
+                collective_decisions=(
+                    ()
+                    if not v3
+                    else tuple(
+                        _collective_decision_from_value(entry)
+                        for entry in _list(item["collective_decisions"])
+                    )
+                ),
+                collective_proposal_count=(
+                    0 if not v3 else _int(item["collective_proposal_count"])
+                ),
+                collective_amendment_count=(
+                    0 if not v3 else _int(item["collective_amendment_count"])
+                ),
+                collective_support_count=(
+                    0 if not v3 else _int(item["collective_support_count"])
+                ),
+                collective_oppose_count=(
+                    0 if not v3 else _int(item["collective_oppose_count"])
+                ),
+                collective_abstain_count=(
+                    0 if not v3 else _int(item["collective_abstain_count"])
+                ),
+                collective_decision_count=(
+                    0 if not v3 else _int(item["collective_decision_count"])
+                ),
+                collective_implementation_count=(
+                    0 if not v3 else _int(item["collective_implementation_count"])
+                ),
+                unimplemented_decision_count=(
+                    0 if not v3 else _int(item["unimplemented_decision_count"])
+                ),
+                contested_decision_count=(
+                    0 if not v3 else _int(item["contested_decision_count"])
+                ),
             )
         )
     return tuple(candidates)
 
 
 def _decode_objective_rows(
-    data: dict[str, object], keys: frozenset[str], *, v1: bool
+    data: dict[str, object], keys: frozenset[str], *, v1: bool, v3: bool = False
 ) -> tuple[OrganizationObjectiveRow, ...]:
     rows: list[OrganizationObjectiveRow] = []
     for raw in _list(data["objective_rows"]):
@@ -564,6 +806,12 @@ def _decode_objective_rows(
                 operation_action_count=(
                     0 if v1 else _int(item["operation_action_count"])
                 ),
+                collective_decision_count=(
+                    0 if not v3 else _int(item["collective_decision_count"])
+                ),
+                collective_implementation_count=(
+                    0 if not v3 else _int(item["collective_implementation_count"])
+                ),
             )
         )
     return tuple(rows)
@@ -579,14 +827,21 @@ def decode_organization_snapshot(payload: bytes) -> OrganizationSnapshot:
         candidate_keys = _CANDIDATE_KEYS_V1
         objective_keys = _OBJECTIVE_KEYS_V1
         v1 = True
-    elif schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+    elif schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2:
         data = _require_keys(decoded, _SNAPSHOT_KEYS_V2)
         window_keys = _WINDOW_KEYS_V2
         candidate_keys = _CANDIDATE_KEYS_V2
         objective_keys = _OBJECTIVE_KEYS_V2
         v1 = False
+    elif schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
+        data = _require_keys(decoded, _SNAPSHOT_KEYS_V3)
+        window_keys = _WINDOW_KEYS_V3
+        candidate_keys = _CANDIDATE_KEYS_V3
+        objective_keys = _OBJECTIVE_KEYS_V3
+        v1 = False
     else:
         raise OrganizationArtifactError("organization_invalid_value")
+    v3 = schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION
     coverage = _require_keys(data["coverage"], _COVERAGE_KEYS)
     edges = tuple(
         OrganizationLineageEdgeRecord(
@@ -615,10 +870,10 @@ def decode_organization_snapshot(payload: bytes) -> OrganizationSnapshot:
             expected=_int(coverage["expected"]),
             ratio=None if coverage["ratio"] is None else _float(coverage["ratio"]),
         ),
-        windows=_decode_windows(data, window_keys, v1=v1),
-        candidates=_decode_candidates(data, candidate_keys, v1=v1),
+        windows=_decode_windows(data, window_keys, v1=v1, v3=v3),
+        candidates=_decode_candidates(data, candidate_keys, v1=v1, v3=v3),
         edges=edges,
-        objective_rows=_decode_objective_rows(data, objective_keys, v1=v1),
+        objective_rows=_decode_objective_rows(data, objective_keys, v1=v1, v3=v3),
         provenance_code=_string(data["provenance_code"]),
     )
     if snapshot.policy_version != ORGANIZATION_SNAPSHOT_POLICY_VERSION:

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 146
+METRIC_FAMILY_COUNT: Final[int] = 148
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -221,6 +221,8 @@ class MetricFamilyId(StrEnum):
     ORGANIZATION_LINEAGE = "organization_lineage"
     ORGANIZATION_OPERATIONS = "organization_operations"
     ORGANIZATION_OPERATION_AUTHORITY = "organization_operation_authority"
+    ORGANIZATION_COLLECTIVE_AGENCY = "organization_collective_agency"
+    ORGANIZATION_COLLECTIVE_IMPLEMENTATION = "organization_collective_implementation"
 
 
 class DenominatorKind(StrEnum):
@@ -6531,8 +6533,137 @@ def _spec_organization_operation_authority() -> MetricSpecification:
         ),
         empty_case="no operation rows or no candidates -> availability=absent",
         one_case="one candidate reports its own authority claims",
+        unknown_case=("unknown authority is retained and never coerced to a basis"),
+    )
+
+
+def _spec_organization_collective_agency() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_candidate_collective_agency_process",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dissolved concepts retain their last recorded agency process",
+        zero_holding_policy=(
+            "no agency rows -> availability=absent; never zero-filled"
+        ),
+        opportunity_vs_occurrence=(
+            "proposals and positions are owner beliefs, not opportunities, quorums, "
+            "or permissions"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "unrecognized and expired proposals stay explicit; never inferred "
+            "as support"
+        ),
+        formulas={
+            "as_of_tick": "final window end tick",
+            "proposal_count": "owner proposals in the final window",
+            "amendment_count": "in-order amendments",
+            "support_count": "latest-revision support positions",
+            "oppose_count": "latest-revision opposition positions",
+            "abstain_count": "latest-revision abstentions",
+            "recognized_decision_count": "recognized collective decisions",
+            "contested_decision_count": "contested collective decisions",
+            "unrecognized_decision_count": "unrecognized decision records",
+            "expired_proposal_count": "proposals that expired without a decision",
+            "procedure_linked_count": "proposals linked to a procedure reference",
+            "decision_coverage_ratio": (
+                "candidates with at least one decision / candidates"
+            ),
+        },
+        value_keys=(
+            "amendment_count",
+            "as_of_tick",
+            "abstain_count",
+            "contested_decision_count",
+            "decision_coverage_ratio",
+            "expired_proposal_count",
+            "oppose_count",
+            "procedure_linked_count",
+            "proposal_count",
+            "recognized_decision_count",
+            "support_count",
+            "unrecognized_decision_count",
+        ),
+        empty_case="no agency rows or no candidates -> availability=absent",
+        one_case="one candidate reports its own proposal and decision process",
         unknown_case=(
-            "unknown authority is retained and never coerced to a basis"
+            "unknown or missing evidence stays partial or absent; never zero-filled"
+        ),
+    )
+
+
+def _spec_organization_collective_implementation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_candidate_collective_implementation",
+        denominator="decision_count",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="final observation window in one analytical run",
+        deceased_policy="dissolved concepts retain recorded implementation outcomes",
+        zero_holding_policy="no decisions -> availability=absent; never zero-filled",
+        opportunity_vs_occurrence=(
+            "implementation is observed agent action or explicit testimony; never "
+            "organization execution"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "unobserved actors stay unknown; silence is never refusal or sabotage"
+        ),
+        formulas={
+            "as_of_tick": "final window end tick",
+            "decision_count": "collective decisions in the final window",
+            "implemented_decision_count": "decisions with all actors implemented",
+            "partial_decision_count": "decisions with partial implementation",
+            "unimplemented_decision_count": "closed decisions with no action",
+            "obstructed_decision_count": (
+                "decisions with refusal, sabotage, or contrary acts"
+            ),
+            "unknown_decision_count": "decisions with censored implementation",
+            "compliance_count": "actor-level implemented records",
+            "refusal_count": "actor-level refused records",
+            "sabotage_count": "actor-level owner-attributed sabotage records",
+            "contrary_count": "actor-level contrary acts without intent evidence",
+            "implementation_coverage_ratio": (
+                "decisions with an implementation record / decisions"
+            ),
+            "censored_actor_count": "actor-level unknown implementation records",
+        },
+        value_keys=(
+            "as_of_tick",
+            "censored_actor_count",
+            "compliance_count",
+            "contrary_count",
+            "decision_count",
+            "implemented_decision_count",
+            "implementation_coverage_ratio",
+            "obstructed_decision_count",
+            "partial_decision_count",
+            "refusal_count",
+            "sabotage_count",
+            "unimplemented_decision_count",
+            "unknown_decision_count",
+        ),
+        empty_case="no decisions -> availability=absent",
+        one_case="one decision reports its own per-actor implementation outcomes",
+        unknown_case=(
+            "unknown implementation stays explicitly censored for unobserved actors"
         ),
     )
 
@@ -6684,6 +6815,8 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_organization_lineage,
     _spec_organization_operations,
     _spec_organization_operation_authority,
+    _spec_organization_collective_agency,
+    _spec_organization_collective_implementation,
 )
 
 

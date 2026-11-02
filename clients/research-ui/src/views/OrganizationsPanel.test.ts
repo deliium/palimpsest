@@ -20,14 +20,23 @@ async function settle(): Promise<void> {
 const summary = {
   run_id: 'run-1',
   publication_id: 'org-edge-0123456789abcdef',
-  schema_version: 'organization-snapshot-v2',
+  schema_version: 'organization-snapshot-v3',
   generated_tick: 9,
   candidate_count: 1,
   edge_count: 1,
   window_count: 2,
   coverage: { observed: 4, expected: 7, ratio: 0.57 },
   provenance_code: 'ok',
+  snapshot_digest: 'a'.repeat(64),
   operation_count: 2,
+  collective_proposal_count: 1,
+  collective_amendment_count: 0,
+  collective_support_count: 1,
+  collective_oppose_count: 0,
+  collective_abstain_count: 0,
+  collective_decision_count: 1,
+  collective_implementation_count: 1,
+  unimplemented_decision_count: 0,
 }
 
 const candidates = {
@@ -53,6 +62,15 @@ const candidates = {
       window_indexes: [0],
       operation_count: 2,
       contested_operation_count: 1,
+      collective_proposal_count: 1,
+      collective_amendment_count: 0,
+      collective_support_count: 1,
+      collective_oppose_count: 0,
+      collective_abstain_count: 0,
+      collective_decision_count: 1,
+      collective_implementation_count: 1,
+      unimplemented_decision_count: 0,
+      contested_decision_count: 1,
     },
   ],
   next_cursor: null,
@@ -106,11 +124,76 @@ const operations = {
   truncated: false,
 }
 
+const collectiveDecisions = {
+  publication_id: 'org-edge-0123456789abcdef',
+  items: [
+    {
+      decision_id: 'orgcpd-0000000000000001',
+      organization_id: 'org-0123456789abcdef',
+      proposal_ref: 'b'.repeat(16),
+      revision: 1,
+      procedure_ref: 'c'.repeat(16),
+      recognition: 'contested',
+      authority_basis: 'procedure_belief',
+      support_count: 1,
+      oppose_count: 1,
+      abstain_count: 0,
+      contest_count: 1,
+      implementation_mode: 'physical',
+      effect: 'give',
+      target_kind: 'none',
+      target_ref: null,
+      decided_tick: 6,
+      window_end_tick: 20,
+      implementation_status: 'implemented',
+      provenance_code: 'observed_effect',
+      resolved: true,
+      implementations: [
+        {
+          implementation_id: 'orgcpi-0000000000000001',
+          actor_ref: 'd'.repeat(16),
+          status: 'implemented',
+          effect: 'give',
+          observed_tick: 7,
+          provenance_code: 'observed_effect',
+          resolved: true,
+        },
+      ],
+    },
+    {
+      decision_id: 'orgcpd-0000000000000002',
+      organization_id: 'org-0123456789abcdef',
+      proposal_ref: 'e'.repeat(16),
+      revision: 1,
+      procedure_ref: null,
+      recognition: 'recognized',
+      authority_basis: 'self_authored',
+      support_count: 1,
+      oppose_count: 0,
+      abstain_count: 0,
+      contest_count: 0,
+      implementation_mode: 'testimonial',
+      effect: 'none',
+      target_kind: 'none',
+      target_ref: null,
+      decided_tick: 8,
+      window_end_tick: 21,
+      implementation_status: 'implemented',
+      provenance_code: 'self_authored',
+      resolved: true,
+      implementations: [],
+    },
+  ],
+  next_cursor: null,
+  truncated: false,
+}
+
 const candidateDetail = {
   ...candidates.items[0],
   members: [],
   structure: [],
   operations: operations.items,
+  collective_decisions: collectiveDecisions.items,
 }
 
 const lineage = {
@@ -137,6 +220,9 @@ function stubFetch(handler?: (url: string) => Response | null): void {
       const handled = handler?.(url)
       if (handled !== undefined && handled !== null) {
         return handled
+      }
+      if (url.includes('/organizations/collective-agency')) {
+        return json(collectiveDecisions)
       }
       if (url.includes('/organizations/lineage')) {
         return json(lineage)
@@ -178,6 +264,27 @@ describe('organization panel', () => {
     expect(text).toContain('resource_control')
     expect(text).toContain('storage')
     expect(text).toContain('contested')
+    expect(text).toContain('Collective agency')
+    expect(text).toContain('orgcpd-0000000000000001')
+    expect(text).toContain('owner attribution')
+  })
+
+  it('narrows the collective decision table by recognition', async () => {
+    stubFetch()
+    const view = render(OrganizationsPanel as never, {
+      runId: 'run-1',
+      selection: emptyResearchSelection(),
+    })
+    await settle()
+    const select = view.target.querySelector(
+      'select.recognition-filter',
+    ) as HTMLSelectElement | null
+    expect(select).not.toBeNull()
+    select!.value = 'recognized'
+    select!.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+    const rows = view.target.querySelectorAll('table.collective-agency tbody tr')
+    expect((rows[0]?.textContent ?? '')).toContain('orgcpd-0000000000000002')
   })
 
   it('narrows the operation table by domain', async () => {
@@ -238,6 +345,9 @@ describe('organization panel', () => {
       }
       if (url.includes('/organizations/operations')) {
         return json({ publication_id: 'x', items: [], next_cursor: null, truncated: false })
+      }
+      if (url.includes('/organizations/collective-agency')) {
+        return json(collectiveDecisions)
       }
       if (url.includes('/organizations/lineage')) {
         return json({ publication_id: 'x', items: [], next_cursor: null, truncated: false })

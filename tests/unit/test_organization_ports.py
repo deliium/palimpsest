@@ -24,6 +24,7 @@ def test_cursor_purposes_are_closed() -> None:
         "organization_candidate",
         "organization_lineage",
         "organization_operations",
+        "organization_collective_agency",
     )
     with pytest.raises(OrganizationArtifactError):
         OrganizationCursor(

@@ -1314,6 +1314,10 @@ def _cognition_config_for(
     if institutional_decay_mode is CognitionInstitutionalDecayMode.DETERMINISTIC:
         institutional_decay_policy = default_institutional_decay_policy()
     from agents.cognition.configuration import CognitionOrganizationMode
+    from agents.cognition.organization_agency import (
+        ORGANIZATION_AGENCY_POLICY_VERSION,
+        default_organization_agency_policy,
+    )
     from agents.cognition.organization_concepts import (
         default_organization_concept_policy,
     )
@@ -1333,6 +1337,9 @@ def _cognition_config_for(
     organization_operation_policy = (
         default_organization_operation_policy() if organizations_enabled else None
     )
+    organization_agency_policy = (
+        default_organization_agency_policy() if organizations_enabled else None
+    )
     _LOG.debug(
         "cognition_config_organization_mode mode=%s",
         organization_mode.value,
@@ -1342,6 +1349,13 @@ def _cognition_config_for(
         organization_mode.value,
         ORGANIZATION_OPERATION_POLICY_VERSION
         if organization_operation_policy is not None
+        else None,
+    )
+    _LOG.debug(
+        "cognition_config_organization_agency mode=%s policy_version=%s",
+        organization_mode.value,
+        ORGANIZATION_AGENCY_POLICY_VERSION
+        if organization_agency_policy is not None
         else None,
     )
     _LOG.debug(
@@ -1471,6 +1485,7 @@ def _cognition_config_for(
         organization_concept_mode=organization_mode,
         organization_concept_policy=organization_policy,
         organization_operation_policy=organization_operation_policy,
+        organization_agency_policy=organization_agency_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -4710,10 +4725,17 @@ class SimulationRunner:
                 if any(binding.group_key not in groups for binding in ledger.bindings):
                     raise ValueError("institutional decay binding group mismatch")
         from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.organization_agency import OrganizationAgencyLedger
         from agents.cognition.organization_concepts import OrganizationConceptLedger
         from agents.cognition.organization_operations import OrganizationOperationLedger
 
         for state in checkpoint.runtime_states:
+            agency_ledger = getattr(state, "organization_agency", None)
+            if agency_ledger is not None:
+                if type(agency_ledger) is not OrganizationAgencyLedger:
+                    raise TypeError("organization agency ledger invalid type")
+                if agency_ledger.owner_id != state.agent_id:
+                    raise ValueError("organization agency ledger owner_id mismatch")
             ledger = getattr(state, "organization_concepts", None)
             if ledger is None:
                 continue
@@ -4972,6 +4994,7 @@ class SimulationRunner:
             organization_operation_ledgers=(
                 self.export_organization_operation_ledgers()
             ),
+            organization_agency_ledgers=(self.export_organization_agency_ledgers()),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5363,6 +5386,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_organization_operation_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_organization_agency_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered organization collective-agency ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "organization_agency", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_organization_agency_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)

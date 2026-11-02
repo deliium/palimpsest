@@ -24,6 +24,7 @@ from simulation.organization_models import (
 )
 from simulation.organization_paging import (
     OrganizationRowSelection,
+    select_organization_collective_decision_rows,
     select_organization_rows,
 )
 from simulation.organization_ports import (
@@ -267,11 +268,15 @@ class FilesystemOrganizationReader(OrganizationReadPort):
             if exc.code == "organization_publication_missing":
                 return None
             raise
+        state = json.loads(
+            (self._root / _safe("run_id", run_id) / "state.json").read_bytes()
+        )
         return OrganizationSummary(
             run_id=snapshot.run_id,
             publication_id=snapshot.publication_id,
             schema_version=snapshot.schema_version,
             generated_tick=snapshot.generated_tick,
+            snapshot_digest=str(state["snapshot_digest"]),
             candidate_count=len(snapshot.candidates),
             edge_count=len(snapshot.edges),
             window_count=len(snapshot.windows),
@@ -283,6 +288,33 @@ class FilesystemOrganizationReader(OrganizationReadPort):
             provenance_code=snapshot.provenance_code,
             operation_count=sum(
                 len(candidate.operations) for candidate in snapshot.candidates
+            ),
+            collective_proposal_count=sum(
+                candidate.collective_proposal_count for candidate in snapshot.candidates
+            ),
+            collective_amendment_count=sum(
+                candidate.collective_amendment_count
+                for candidate in snapshot.candidates
+            ),
+            collective_support_count=sum(
+                candidate.collective_support_count for candidate in snapshot.candidates
+            ),
+            collective_oppose_count=sum(
+                candidate.collective_oppose_count for candidate in snapshot.candidates
+            ),
+            collective_abstain_count=sum(
+                candidate.collective_abstain_count for candidate in snapshot.candidates
+            ),
+            collective_decision_count=sum(
+                candidate.collective_decision_count for candidate in snapshot.candidates
+            ),
+            collective_implementation_count=sum(
+                candidate.collective_implementation_count
+                for candidate in snapshot.candidates
+            ),
+            unimplemented_decision_count=sum(
+                candidate.unimplemented_decision_count
+                for candidate in snapshot.candidates
             ),
         )
 
@@ -363,6 +395,37 @@ class FilesystemOrganizationReader(OrganizationReadPort):
             )
         )
         return select_organization_rows(
+            rows, offset=offset, limit=limit, max_bytes=MAX_RESPONSE_BYTES
+        )
+
+    def collective_agency(
+        self,
+        run_id: str,
+        publication_id: str,
+        offset: int,
+        limit: int,
+        recognition: str | None = None,
+        organization_id: str | None = None,
+    ) -> OrganizationRowSelection:
+        snapshot = self._load(run_id)
+        if publication_id and snapshot.publication_id != publication_id:
+            raise OrganizationArtifactError("organization_publication_missing")
+        if organization_id is not None:
+            require_organization_id(organization_id)
+        rows = tuple(
+            sorted(
+                (
+                    decision
+                    for candidate in snapshot.candidates
+                    if organization_id is None
+                    or candidate.organization_id == organization_id
+                    for decision in candidate.collective_decisions
+                    if recognition is None or decision.recognition == recognition
+                ),
+                key=lambda item: (item.decided_tick, item.decision_id),
+            )
+        )
+        return select_organization_collective_decision_rows(
             rows, offset=offset, limit=limit, max_bytes=MAX_RESPONSE_BYTES
         )
 

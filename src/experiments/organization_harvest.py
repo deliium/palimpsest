@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from analysis.organization_detection import detect_organization_candidates
 from analysis.organization_evidence import (
@@ -46,6 +46,12 @@ __all__ = [
     "build_completed_run_organization_harvest",
 ]
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from analysis.organization_agency import (
+        OrganizationAgencyHarvestRows,
+        OrganizationAgencySummary,
+    )
+
 _LOG: Final[logging.Logger] = logging.getLogger("experiments.organization_harvest")
 
 
@@ -56,6 +62,8 @@ class OrganizationHarvest:
     generated_tick: int
     owner_rows: tuple[OrganizationHarvestRows, ...]
     operation_rows: tuple[OrganizationOperationHarvestRows, ...] = ()
+    agency_rows: tuple[OrganizationAgencyHarvestRows, ...] = ()
+    agency_summary: OrganizationAgencySummary | None = None
     objective_rows: tuple[OrganizationObjectiveAnchorRow, ...] = ()
     window_ticks: int = 100
     assignment: OrganizationIdentityAssignment | None = None
@@ -89,6 +97,10 @@ def build_completed_run_organization_harvest(
         getattr(runner_result, "organization_operation_ledgers", ()) or ()
     )
     operation_rows = harvest_organization_operation_rows(operation_ledgers)
+    agency_ledgers = getattr(runner_result, "organization_agency_ledgers", ()) or ()
+    from analysis.organization_agency import harvest_organization_agency_rows
+
+    agency_rows = harvest_organization_agency_rows(agency_ledgers)
     if not rows:
         return OrganizationHarvest(
             run_id=run_id,
@@ -96,23 +108,32 @@ def build_completed_run_organization_harvest(
             generated_tick=generated_tick,
             owner_rows=(),
             operation_rows=operation_rows,
+            agency_rows=agency_rows,
             window_ticks=window_ticks,
         )
     windows = build_organization_windows(rows, window_ticks)
     detection = detect_organization_candidates(windows)
     assignment = assign_organization_identities(detection)
     operation_summary = summarize_organization_operations(operation_rows, assignment)
+    from analysis.organization_agency import summarize_organization_agency
+
+    agency_summary = summarize_organization_agency(
+        agency_rows, assignment, member_rows=rows
+    )
     layers = project_organization_layers(
         assignment,
         rows,
         operation_rows=operation_rows,
         operation_summary=operation_summary,
+        agency_rows=agency_rows,
+        agency_summary=agency_summary,
     )
     truncated_history = any("history_truncated" in row.owner.notices for row in rows)
     analysis = derive_organization_lineage(
         assignment,
         layer_view=layers,
         operation_summary=operation_summary,
+        agency_summary=agency_summary,
         history_truncated=truncated_history,
     )
     anchors = tuple(anchor for window in windows for anchor in window.anchors)
@@ -128,11 +149,13 @@ def build_completed_run_organization_harvest(
         generated_tick=generated_tick,
         owner_rows=rows,
         operation_rows=operation_rows,
+        agency_rows=agency_rows,
         objective_rows=anchors,
         window_ticks=window_ticks,
         assignment=assignment,
         layer_view=layers,
         operation_summary=operation_summary,
+        agency_summary=agency_summary,
         analysis=analysis,
         provenance_code="history_truncated" if truncated_history else "ok",
         truncated_history=truncated_history,

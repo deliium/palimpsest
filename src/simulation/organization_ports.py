@@ -39,6 +39,7 @@ ORGANIZATION_CURSOR_PURPOSES: Final[tuple[str, ...]] = (
     "organization_candidate",
     "organization_lineage",
     "organization_operations",
+    "organization_collective_agency",
 )
 
 
@@ -79,6 +80,16 @@ class OrganizationReadPort(Protocol):
         organization_id: str | None = None,
     ) -> OrganizationRowSelection: ...
 
+    def collective_agency(
+        self,
+        run_id: str,
+        publication_id: str,
+        offset: int,
+        limit: int,
+        recognition: str | None = None,
+        organization_id: str | None = None,
+    ) -> OrganizationRowSelection: ...
+
 
 class OrganizationPublicationPort(Protocol):
     """Write-only surface for one completed-run publication."""
@@ -116,18 +127,36 @@ class OrganizationSummary:
     window_count: int
     coverage: OrganizationCoverage
     provenance_code: str
+    snapshot_digest: str
     operation_count: int = 0
+    collective_proposal_count: int = 0
+    collective_amendment_count: int = 0
+    collective_support_count: int = 0
+    collective_oppose_count: int = 0
+    collective_abstain_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
+    unimplemented_decision_count: int = 0
 
     def __post_init__(self) -> None:
         require_publication_id(self.publication_id)
         if self.schema_version not in SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS:
             raise OrganizationArtifactError("organization_invalid_value")
+        require_snapshot_digest(self.snapshot_digest)
         for name in (
             "generated_tick",
             "candidate_count",
             "edge_count",
             "window_count",
             "operation_count",
+            "collective_proposal_count",
+            "collective_amendment_count",
+            "collective_support_count",
+            "collective_oppose_count",
+            "collective_abstain_count",
+            "collective_decision_count",
+            "collective_implementation_count",
+            "unimplemented_decision_count",
         ):
             value = getattr(self, name)
             if type(value) is not int or value < 0:
@@ -192,6 +221,27 @@ def organization_query_fingerprint(
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def organization_cursor_matches(
+    cursor: OrganizationCursor,
+    summary: OrganizationSummary,
+    purpose: str,
+    fingerprint: str,
+) -> bool:
+    """Return whether a cursor still binds to the committed publication."""
+
+    if type(cursor) is not OrganizationCursor:
+        return False
+    if type(summary) is not OrganizationSummary:
+        return False
+    return (
+        cursor.purpose == purpose
+        and cursor.run_id == summary.run_id
+        and cursor.publication_id == summary.publication_id
+        and cursor.snapshot_digest == summary.snapshot_digest
+        and cursor.query_fingerprint == fingerprint
+    )
 
 
 def require_known_organization(

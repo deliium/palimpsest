@@ -2,7 +2,9 @@
 
 V4-03 adds a general, emergent organization concept built from existing V3
 institutional primitives; V4-04 extends the same owner-scoped context with
-socially recognized operational state. An organization is never a hard-coded class
+socially recognized operational state; V4-05 adds owner-scoped collective
+agency: proposals, positions, amendments, recognized procedures, collective
+decision records, and per-actor implementation tracking. An organization is never a hard-coded class
 (Government, Church, Corporation, Army, University, Guild, State, Nation,
 Polity, Empire, Tribe, Ministry, Department, Treasury, Bank, Court, Police,
 Party) and never an independent cognition engine.
@@ -118,6 +120,38 @@ or free-text payload.
 Identities are content-addressed; no `hash()`, UUID, wall clock, or mutable
 counter is used.
 
+## Collective agency
+
+V4-05 adds a third owner-scoped sidecar keyed by the existing `orgc-` concept id
+under locked policy `organization-agency.v1`. The pipeline is proposal →
+discussion → support/opposition/abstention → amendment → recognized procedure →
+collective decision record → individual implementation/compliance.
+
+A collective decision is an **owner belief** about a recognized process. It is
+never an organization will, a super-agent, a quorum, a majority, a binding
+resolution, or a permission, and there is no global OrganizationLLM. Proposals,
+positions, refusals, and implementation reports travel as bounded `org_ca_v1`
+claims inside existing `Talk`/`Tell`; no command, event, observer semantic type,
+or free-text payload is added.
+
+Implementation is observed, not dispatched. Each expected actor's status comes
+from real observed effects or explicit testimony:
+
+- `implemented` / `partial` from matching real effects or explicit reports;
+- `refused` only from a refusal claim or report;
+- `sabotaged` only with a contrary effect plus intent evidence; otherwise
+  `contrary`. Sabotage remains an owner attribution, never an objective fact;
+- `unimplemented` after a closed window when the actor was observed but inactive;
+- `unknown` when the actor was never observed. Silence is never refusal or
+  sabotage.
+
+A decision can be `recognized`, `contested`, `unrecognized`, or `expired`;
+disagreement is retained and never blocks a decision. Detached analysis adds
+`organization_collective_agency@1` and
+`organization_collective_implementation@1` (metric families 146 → 148) and
+joins agency rows to existing `org-` candidates without creating or changing
+identity.
+
 ## Lineage
 
 Detached lineage records `continued`, `transformed`, `split`, `merge`,
@@ -128,8 +162,8 @@ mint new ids.
 ## Configuration
 
 Enable `v4_capability_flags.organizations` on `runner-config-v56`. The flag
-enables both concept and operation state. There is no `runner-config-v57`, no
-`organization_operations_mode`, and no per-agent runner key. Existing V3 modes (institution
+enables concept, operation, and collective-agency state. There is no
+`runner-config-v57`, no agency mode, and no per-agent runner key. Existing V3 modes (institution
 concepts, offices, institutional memory, collective decisions, structured
 commitments, group formation, conventions) supply evidence; absent evidence is
 valid and yields an empty typed ledger. The channel is off by default and leaves
@@ -142,14 +176,16 @@ Publication is opt-in and post-completion:
 - CLI (`generational`): `--organization-root`,
   `--organization-max-publications`, `--organization-max-bytes`; a storage or
   composition failure changes only the publication receipt.
-- Artifact: canonical `organization-snapshot-v2` JSON, at most 4 MiB.
-  `organization-snapshot-v1` remains decodable and byte-verifiable; new
-  publications are v2.
-- API: five GET-only `/v1` routes under
+- Artifact: canonical `organization-snapshot-v3` JSON, at most 4 MiB.
+  `organization-snapshot-v1` and `organization-snapshot-v2` remain decodable and
+  byte-verifiable; new publications are v3.
+- API: six GET-only `/v1` routes under
   `/v1/simulations/{run_id}/organizations`, all requiring `SUBJECTIVE_DEBUG`:
-  summary, candidate page, candidate detail, lineage page, and operation page.
-  The operation page filters by `domain` and `organization_id` with
-  purpose-bound cursors.
+  summary, candidate page, candidate detail, lineage page, operation page, and
+  collective-agency page. The operation page filters by `domain` and
+  `organization_id`; the collective-agency page filters by `recognition` and
+  `organization_id`. Every paged route uses purpose-bound cursors bound to the
+  publication digest.
   `PALIMPSEST_ORGANIZATION_ROOT` enables reads; when unset the routes return
   `503 organization_disabled`. `PALIMPSEST_ORGANIZATION_CURSOR_KEY` keeps cursors
   restart-stable.
@@ -168,6 +204,10 @@ Publication is opt-in and post-completion:
 | Lineage edges | 16384 |
 | Operations per candidate | 64 |
 | Operations per snapshot | 4096 |
+| Collective decisions per candidate | 64 |
+| Implementations per decision | 32 |
+| Collective decisions per snapshot | 4096 |
+| Collective implementations per snapshot | 8192 |
 | Operation records per owner ledger | 256 |
 | Rows per page | 500 |
 

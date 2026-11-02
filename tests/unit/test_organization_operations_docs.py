@@ -49,15 +49,15 @@ def test_organizations_doc_covers_operational_state() -> None:
 
 
 def test_counts_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 146
+    assert METRIC_FAMILY_COUNT == 148
     organizations = DOC.read_text()
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     architecture_docs = (ROOT / "docs" / "architecture.md").read_text()
     description = (ROOT / ".ai-factory" / "DESCRIPTION.md").read_text()
-    assert "146" in description
-    assert "metric families 146" in description
-    assert "146" in architecture
-    assert "146" in architecture_docs
+    assert "148" in description
+    assert "metric families 148" in description
+    assert "148" in architecture
+    assert "148" in architecture_docs
     assert "organization-snapshot-v2" in organizations
     assert "organization-snapshot-v1" in organizations
 
@@ -75,10 +75,11 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "Downstream V4 organization operations contract" in architecture_docs
 
 
-def test_api_and_ui_docs_list_the_fifth_route() -> None:
+def test_api_and_ui_docs_list_the_sixth_route() -> None:
     api = (ROOT / "docs" / "research-api.md").read_text()
     assert "/operations" in api
-    assert "organization-snapshot-v2" in api
+    assert "/collective-agency" in api
+    assert "organization-snapshot-v3" in api
     ui = (ROOT / "docs" / "research-ui.md").read_text()
     assert "operations" in ui.lower()
     assert "contested" in ui.lower()

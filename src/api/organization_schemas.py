@@ -25,7 +25,57 @@ class OrganizationSummaryOut(_Strict):
     window_count: int
     coverage: OrganizationCoverageOut
     provenance_code: str
+    snapshot_digest: str
     operation_count: int = 0
+    collective_proposal_count: int = 0
+    collective_amendment_count: int = 0
+    collective_support_count: int = 0
+    collective_oppose_count: int = 0
+    collective_abstain_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
+    unimplemented_decision_count: int = 0
+
+
+class OrganizationCollectiveImplementationOut(_Strict):
+    implementation_id: str
+    actor_ref: str
+    status: str
+    effect: str
+    observed_tick: int
+    provenance_code: str
+    resolved: bool
+
+
+class OrganizationCollectiveDecisionOut(_Strict):
+    decision_id: str
+    organization_id: str
+    proposal_ref: str
+    revision: int
+    procedure_ref: str | None
+    recognition: str
+    authority_basis: str
+    support_count: int
+    oppose_count: int
+    abstain_count: int
+    contest_count: int
+    implementation_mode: str
+    effect: str
+    target_kind: str
+    target_ref: str | None
+    decided_tick: int
+    window_end_tick: int
+    implementation_status: str
+    provenance_code: str
+    resolved: bool
+    implementations: tuple[OrganizationCollectiveImplementationOut, ...] = ()
+
+
+class OrganizationCollectiveAgencyListOut(_Strict):
+    publication_id: str
+    items: tuple[OrganizationCollectiveDecisionOut, ...]
+    next_cursor: str | None
+    truncated: bool
 
 
 class OrganizationMemberOut(_Strict):
@@ -79,6 +129,15 @@ class OrganizationCandidateOut(_Strict):
     window_indexes: tuple[int, ...]
     operation_count: int = 0
     contested_operation_count: int = 0
+    collective_proposal_count: int = 0
+    collective_amendment_count: int = 0
+    collective_support_count: int = 0
+    collective_oppose_count: int = 0
+    collective_abstain_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
+    unimplemented_decision_count: int = 0
+    contested_decision_count: int = 0
 
 
 class OrganizationOperationOut(_Strict):
@@ -105,6 +164,7 @@ class OrganizationCandidateDetailOut(OrganizationCandidateOut):
     members: tuple[OrganizationMemberOut, ...]
     structure: tuple[OrganizationStructuralOut, ...]
     operations: tuple[OrganizationOperationOut, ...] = ()
+    collective_decisions: tuple[OrganizationCollectiveDecisionOut, ...] = ()
 
 
 class OrganizationLineageEdgeOut(_Strict):

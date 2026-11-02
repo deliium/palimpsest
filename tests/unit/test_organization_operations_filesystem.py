@@ -160,7 +160,7 @@ def test_unknown_schema_fails_closed(tmp_path: Path) -> None:
     snapshot = _snapshot()
     publication = _publication(snapshot)
     payload = publication.payload.replace(
-        b'"organization-snapshot-v2"', b'"organization-snapshot-v9"'
+        b'"organization-snapshot-v3"', b'"organization-snapshot-v9"'
     )
     broken = replace(
         publication,

@@ -655,3 +655,26 @@ byte-verifiable; `experiments.organization_*` upgrades and composes v2;
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only operations view.
 No command, event, observer semantic type, write pair, `/v2` route, or migration
 is added.
+
+### V4-05 organization collective-agency seam
+
+V4-05 deepens the single owned V4 flag `organizations`; it adds no flag, runner
+schema, root field, or per-agent mode. `agents.cognition.organization_agency`
+owns a third owner-scoped sidecar keyed by existing `orgc-` concept ids under
+`organization-agency.v1`: proposals, positions, abstention, amendments,
+recognized procedures, collective decision records, and per-actor
+implementation/compliance/refusal/owner-attributed sabotage. A collective
+decision is an owner belief about a recognized process, never an organization
+will, quorum, binding resolution, permission, or global OrganizationLLM.
+Bounded `org_ca_v1` claims travel inside existing `Talk`/`Tell`; no organization
+object constructs, submits, or executes a command, and silence is never refusal
+or sabotage.
+
+`analysis.organization_agency` harvests exported ledgers into detached rows,
+joins them to existing `org-` candidates without creating or changing identity,
+and adds two families (`organization_collective_agency@1`,
+`organization_collective_implementation@1`; metric families 148).
+`simulation.organization_*` adds canonical `organization-snapshot-v3` while v1
+and v2 remain decodable; six GET-only `/v1` routes require `SUBJECTIVE_DEBUG`;
+the Svelte client adds a read-only collective-agency view. No command, event,
+observer semantic type, write pair, `/v2` route, or migration is added.

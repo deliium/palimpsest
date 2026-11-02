@@ -272,3 +272,23 @@ runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
 metric families 146, replay-v22/codec v20, `/v1`, `observer-protocol-v1`,
 Alembic `0017`; `institutional_economy` and `multi_hop_testimony_tracking`
 remain unowned.
+
+V4-05 (organization collective agency, 2026-11-02) deepens the owned
+`organizations` context on `runner-config-v56` with a third owner-scoped sidecar
+keyed by existing `orgc-` concept ids under locked policy
+`organization-agency.v1`. Proposals, positions, abstention, amendments,
+recognized procedures, collective decision records, per-actor implementation,
+compliance, refusal, and owner-attributed sabotage are beliefs about a recognized
+process, never an organization will, super-agent, quorum, binding resolution, or
+permission. Bounded `org_ca_v1` claims travel inside existing `Talk`/`Tell`; no
+global OrganizationLLM and no organization executor exists, and every physical
+effect remains an ordinary agent command. Detached analysis adds
+`organization_collective_agency@1` and `organization_collective_implementation@1`
+(metric families 148) and joins agency rows to existing `org-` candidates without
+creating or changing identity. `simulation.organization_*` adds canonical
+`organization-snapshot-v3` while v1/v2 stay decodable; six GET-only `/v1` routes
+require `SUBJECTIVE_DEBUG`; the Research UI adds a read-only collective-agency
+view. No new flag, runner schema, command, event, observer semantic type, write
+pair, `/v2` route, or migration is added. Pins: runner v4/v55/v56, result v2/v3,
+commands 43, observer semantic types 73, metric families 148, replay-v22/codec
+v20, `/v1`, `observer-protocol-v1`, Alembic `0017`.

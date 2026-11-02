@@ -3,11 +3,13 @@
   import {
     getOrganizationCandidate,
     getOrganizationCandidates,
+    getOrganizationCollectiveAgency,
     getOrganizationLineage,
     getOrganizationOperations,
     getOrganizationSummary,
     type OrganizationCandidate,
     type OrganizationCandidateDetail,
+    type OrganizationCollectiveDecision,
     type OrganizationLineageEdge,
     type OrganizationOperation,
     type OrganizationSummary,
@@ -29,6 +31,8 @@
   let candidates = $state<OrganizationCandidate[]>([])
   let lineage = $state<OrganizationLineageEdge[]>([])
   let operations = $state<OrganizationOperation[]>([])
+  let collectiveDecisions = $state<OrganizationCollectiveDecision[]>([])
+  let collectiveRecognition = $state<string>('')
   let detail = $state<OrganizationCandidateDetail | null>(null)
   let statusFilter = $state<string>('')
   let operationDomain = $state<string>('')
@@ -45,6 +49,10 @@
       lineage = edges.items
       const operationPage = await getOrganizationOperations(runId, { limit: 200 })
       operations = operationPage.items
+      const agencyPage = await getOrganizationCollectiveAgency(runId, {
+        limit: 200,
+      })
+      collectiveDecisions = agencyPage.items
       status = candidates.length === 0 ? 'empty' : 'available'
     } catch (error) {
       if (error instanceof ApiClientError) {
@@ -77,6 +85,14 @@
       ? operations
       : operations.filter((item) => item.domain === operationDomain),
   )
+
+  const filteredDecisions = $derived(
+    collectiveRecognition === ''
+      ? collectiveDecisions
+      : collectiveDecisions.filter(
+          (item) => item.recognition === collectiveRecognition,
+        ),
+  )
 </script>
 
 <section class="organizations">
@@ -103,6 +119,14 @@
       <div><dt>Candidates</dt><dd>{summary.candidate_count}</dd></div>
       <div><dt>Lineage edges</dt><dd>{summary.edge_count}</dd></div>
       <div><dt>Operations</dt><dd>{summary.operation_count}</dd></div>
+      <div><dt>Proposals</dt><dd>{summary.collective_proposal_count}</dd></div>
+      <div><dt>Amendments</dt><dd>{summary.collective_amendment_count}</dd></div>
+      <div><dt>Support</dt><dd>{summary.collective_support_count}</dd></div>
+      <div><dt>Opposition</dt><dd>{summary.collective_oppose_count}</dd></div>
+      <div><dt>Abstention</dt><dd>{summary.collective_abstain_count}</dd></div>
+      <div><dt>Collective decisions</dt><dd>{summary.collective_decision_count}</dd></div>
+      <div><dt>Implementations</dt><dd>{summary.collective_implementation_count}</dd></div>
+      <div><dt>Unimplemented</dt><dd>{summary.unimplemented_decision_count}</dd></div>
       <div><dt>Coverage</dt><dd>{summary.coverage.observed}/{summary.coverage.expected}</dd></div>
       {#if summary.provenance_code !== 'ok'}
         <div><dt>Provenance</dt><dd>{summary.provenance_code}</dd></div>
@@ -241,6 +265,69 @@
             <td>{operation.anchor_kind}</td>
             <td>{operation.support_count}</td>
             <td>{operation.contest_count}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+
+
+    <h3>Collective agency</h3>
+    <p class="note">
+      Collective decisions are owner beliefs about a recognized process. Sabotage
+      is an owner attribution, not an objective fact.
+    </p>
+    <label class="filter">
+      Recognition
+      <select
+        class="recognition-filter"
+        value={collectiveRecognition}
+        onchange={(event) =>
+          (collectiveRecognition = (event.currentTarget as HTMLSelectElement).value)}
+      >
+        <option value="">all</option>
+        <option value="recognized">recognized</option>
+        <option value="contested">contested</option>
+        <option value="unrecognized">unrecognized</option>
+        <option value="expired">expired</option>
+        <option value="unknown">unknown</option>
+      </select>
+    </label>
+    <table class="collective-agency">
+      <thead>
+        <tr>
+          <th>Decision</th>
+          <th>Recognition</th>
+          <th>Support</th>
+          <th>Oppose</th>
+          <th>Abstain</th>
+          <th>Procedure</th>
+          <th>Implementation</th>
+          <th>Tick</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each filteredDecisions as decision (decision.decision_id)}
+          <tr>
+            <td>{decision.decision_id}</td>
+            <td>{decision.recognition}</td>
+            <td>{decision.support_count}</td>
+            <td>{decision.oppose_count}</td>
+            <td>{decision.abstain_count}</td>
+            <td>{decision.procedure_ref ?? '—'}</td>
+            <td>{decision.implementation_status}</td>
+            <td>{decision.decided_tick}</td>
+          </tr>
+          <tr>
+            <td colspan="8">
+              <ul class="implementations">
+                {#each decision.implementations as implementation (implementation.implementation_id)}
+                  <li>
+                    {implementation.actor_ref}: {implementation.status}
+                    ({implementation.provenance_code})
+                  </li>
+                {/each}
+              </ul>
+            </td>
           </tr>
         {/each}
       </tbody>

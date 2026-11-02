@@ -18,6 +18,7 @@ from simulation.organization_models import (
     ORGANIZATION_OPERATION_DOMAINS,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
     SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS,
 )
 from simulation.persistence import (
@@ -151,15 +152,18 @@ def test_analysis_operation_modules_are_detached(path: Path) -> None:
 
 @pytest.mark.parametrize("path", SIMULATION_MODULES)
 def test_simulation_operation_modules_are_detached(path: Path) -> None:
-    assert _import_roots(path) & {
+    forbidden = {
         "analysis",
-        "agents",
         "api",
         "persistence",
         "infrastructure",
         "experiments",
         "observer",
-    } == set()
+    }
+    # The explicit simulation bridge may re-export cognition id helpers.
+    if path.name != "organization_agency_ids.py":
+        forbidden.add("agents")
+    assert _import_roots(path) & forbidden == set()
 
 
 @pytest.mark.parametrize("path", PERSISTENCE_MODULES + API_MODULES)
@@ -243,12 +247,13 @@ def test_objective_custody_fields_remain_the_only_placement() -> None:
         assert "organization_operation" not in path.read_text(encoding="utf-8"), path
 
 
-def test_snapshot_accepts_both_schemas_and_only_two() -> None:
+def test_snapshot_accepts_three_schemas() -> None:
     assert SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS == (
         ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+        ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
         ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
     )
-    assert ORGANIZATION_SNAPSHOT_SCHEMA_VERSION == "organization-snapshot-v2"
+    assert ORGANIZATION_SNAPSHOT_SCHEMA_VERSION == "organization-snapshot-v3"
     assert len(ORGANIZATION_OPERATION_DOMAINS) == 8
     assert len(ORGANIZATION_OPERATION_ACTS) == 10
     assert len(ORGANIZATION_OPERATION_ANCHOR_KINDS) == 9
@@ -261,7 +266,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 146
+    assert METRIC_FAMILY_COUNT == 148
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert next_revision() == "0018"
@@ -299,7 +304,7 @@ def test_organization_routes_are_five_get_only_routes() -> None:
             for decorator in node.decorator_list
         )
     ]
-    assert len(routes) == 5
+    assert len(routes) == 6
     methods = {
         node.attr
         for node in ast.walk(tree)

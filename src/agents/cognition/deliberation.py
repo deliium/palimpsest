@@ -1283,6 +1283,18 @@ class CommandPlanner:
         command = organization_operation_communicate_utterance(
             command, prepared_operations
         )
+        from agents.cognition.organization_agency_communication import (
+            organization_agency_communicate_utterance,
+        )
+
+        prepared_agency = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "organization_agency", None)
+        )
+        command = organization_agency_communicate_utterance(
+            command, prepared_agency
+        )
         from agents.cognition.mediation_communication import (
             mediation_communicate_utterance,
         )

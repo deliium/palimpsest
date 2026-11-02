@@ -37,10 +37,13 @@ __all__ = [
     "ORGANIZATION_SNAPSHOT_POLICY_VERSION",
     "ORGANIZATION_SNAPSHOT_SCHEMA_VERSION",
     "ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1",
+    "ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2",
     "SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS",
     "OrganizationArtifactError",
     "OrganizationCandidateRecord",
+    "OrganizationCollectiveDecisionRecord",
     "OrganizationCoverage",
+    "OrganizationImplementationRecord",
     "OrganizationLineageEdgeRecord",
     "OrganizationMemberRecord",
     "OrganizationObjectiveRow",
@@ -52,6 +55,8 @@ __all__ = [
     "OrganizationWindowRecord",
     "empty_organization_snapshot",
     "organization_publication_operation_id",
+    "require_collective_decision_publication_id",
+    "require_implementation_publication_id",
     "require_operation_id",
     "require_organization_id",
     "require_publication_id",
@@ -60,10 +65,12 @@ __all__ = [
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.organization_models")
 
-ORGANIZATION_SNAPSHOT_SCHEMA_VERSION: Final[str] = "organization-snapshot-v2"
+ORGANIZATION_SNAPSHOT_SCHEMA_VERSION: Final[str] = "organization-snapshot-v3"
 ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1: Final[str] = "organization-snapshot-v1"
+ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2: Final[str] = "organization-snapshot-v2"
 SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS: Final[tuple[str, ...]] = (
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+    ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
     ORGANIZATION_SNAPSHOT_SCHEMA_VERSION,
 )
 ORGANIZATION_SNAPSHOT_POLICY_VERSION: Final[str] = "organization-analysis.v1"
@@ -75,6 +82,10 @@ MAX_SNAPSHOT_EDGES: Final[int] = 16384
 MAX_SNAPSHOT_WINDOWS: Final[int] = 512
 MAX_SNAPSHOT_OBJECTIVE_ROWS: Final[int] = 4096
 MAX_CANDIDATE_OPERATIONS: Final[int] = 64
+MAX_CANDIDATE_COLLECTIVE_DECISIONS: Final[int] = 64
+MAX_DECISION_IMPLEMENTATIONS: Final[int] = 32
+MAX_SNAPSHOT_COLLECTIVE_DECISIONS: Final[int] = 4096
+MAX_SNAPSHOT_COLLECTIVE_IMPLEMENTATIONS: Final[int] = 8192
 MAX_SNAPSHOT_OPERATIONS: Final[int] = 4096
 MAX_RESPONSE_BYTES: Final[int] = 2 * 1024 * 1024
 MAX_PAGE_ROWS: Final[int] = 500
@@ -82,6 +93,8 @@ MAX_PAGE_ROWS: Final[int] = 500
 ORGANIZATION_ID_PREFIX: Final[str] = "org-"
 PUBLICATION_ID_PREFIX: Final[str] = "org-edge-"
 OPERATION_ID_PREFIX: Final[str] = "orgop-"
+COLLECTIVE_DECISION_PUBLICATION_PREFIX: Final[str] = "orgcpd-"
+IMPLEMENTATION_PUBLICATION_PREFIX: Final[str] = "orgcpi-"
 _ID_HEX_CHARS: Final[int] = 16
 
 _ORGANIZATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -93,6 +106,13 @@ _PUBLICATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
 _OPERATION_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
     rf"^orgop-[0-9a-f]{{{_ID_HEX_CHARS}}}$"
 )
+_COLLECTIVE_DECISION_PUBLICATION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"^orgcpd-[0-9a-f]{{{_ID_HEX_CHARS}}}$"
+)
+_IMPLEMENTATION_PUBLICATION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"^orgcpi-[0-9a-f]{{{_ID_HEX_CHARS}}}$"
+)
+_ACTOR_REF_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{16}$")
 _SAFE_TOKEN_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 PROVENANCE_CODES: Final[frozenset[str]] = frozenset(
@@ -104,6 +124,11 @@ PROVENANCE_CODES: Final[frozenset[str]] = frozenset(
         "operations_truncated",
         "operation_anchor_unresolved",
         "operation_expired",
+        "collective_agency_truncated",
+        "collective_decision_unrecognized",
+        "collective_implementation_incomplete",
+        "collective_implementation_expired",
+        "collective_sabotage_attributed",
     }
 )
 CANDIDATE_STATUSES: Final[frozenset[str]] = frozenset(
@@ -169,6 +194,41 @@ ORGANIZATION_OPERATION_PROVENANCE_CODES: Final[frozenset[str]] = frozenset(
 )
 ORGANIZATION_OPERATION_OUTCOMES: Final[frozenset[str]] = frozenset(
     {"observed", "attempted", "completed", "blocked", "unknown"}
+)
+ORGANIZATION_AGENCY_RECOGNITIONS: Final[frozenset[str]] = frozenset(
+    {"recognized", "contested", "unrecognized", "expired", "unknown"}
+)
+ORGANIZATION_AGENCY_IMPLEMENTATION_STATUSES: Final[frozenset[str]] = frozenset(
+    {
+        "pending",
+        "implemented",
+        "partial",
+        "unimplemented",
+        "obstructed",
+        "refused",
+        "sabotaged",
+        "contrary",
+        "unknown",
+        "expired",
+    }
+)
+ORGANIZATION_AGENCY_MODES: Final[frozenset[str]] = frozenset(
+    {"physical", "testimonial"}
+)
+ORGANIZATION_AGENCY_TARGET_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        "item",
+        "resource",
+        "artifact",
+        "structure",
+        "repository",
+        "collective_project",
+        "commitment",
+        "location",
+        "agent",
+        "none",
+        "unknown",
+    }
 )
 ORGANIZATION_OPERATION_TARGET_KINDS: Final[frozenset[str]] = frozenset(
     {"member", "office", "anchor", "none"}
@@ -296,7 +356,7 @@ def _safe_token(name: str, value: object) -> str:
 def _sorted_ids(name: str, values: object) -> tuple[str, ...]:
     if isinstance(values, (str, bytes)) or not isinstance(values, (list, tuple)):
         _fail("organization_invalid_value")
-    items = tuple(_string(name, value) for value in cast('list[object]', values))
+    items = tuple(_string(name, value) for value in cast("list[object]", values))
     if len(set(items)) != len(items) or items != tuple(sorted(items)):
         _fail("organization_invalid_value")
     return items
@@ -345,6 +405,24 @@ def organization_publication_operation_id(
         :_ID_HEX_CHARS
     ]
     return f"{OPERATION_ID_PREFIX}{body}"
+
+
+def require_collective_decision_publication_id(value: object) -> str:
+    if (
+        type(value) is not str
+        or _COLLECTIVE_DECISION_PUBLICATION_PATTERN.match(value) is None
+    ):
+        _fail("organization_invalid_value")
+    return value
+
+
+def require_implementation_publication_id(value: object) -> str:
+    if (
+        type(value) is not str
+        or _IMPLEMENTATION_PUBLICATION_PATTERN.match(value) is None
+    ):
+        _fail("organization_invalid_value")
+    return value
 
 
 def require_operation_id(value: object) -> str:
@@ -500,9 +578,7 @@ class OrganizationOperationRecord:
         if self.anchor_kind not in ORGANIZATION_OPERATION_ANCHOR_KINDS:
             _fail("organization_invalid_value")
         if self.anchor_kind in _OBJECTIVE_ANCHOR_KINDS:
-            object.__setattr__(
-                self, "anchor_id", _string("anchor_id", self.anchor_id)
-            )
+            object.__setattr__(self, "anchor_id", _string("anchor_id", self.anchor_id))
         elif self.anchor_id is not None:
             _fail("organization_invalid_value")
         first = _tick("first_tick", self.first_tick)
@@ -529,6 +605,156 @@ class OrganizationOperationRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationImplementationRecord:
+    """One published per-actor implementation belief; never a raw agent id."""
+
+    implementation_id: str
+    decision_id: str
+    actor_ref: str
+    status: str
+    effect: str
+    observed_tick: int
+    provenance_code: str
+    resolved: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "implementation_id",
+            require_implementation_publication_id(self.implementation_id),
+        )
+        object.__setattr__(
+            self,
+            "decision_id",
+            require_collective_decision_publication_id(self.decision_id),
+        )
+        if (
+            type(self.actor_ref) is not str
+            or _ACTOR_REF_PATTERN.match(self.actor_ref) is None
+        ):
+            _fail("organization_invalid_value")
+        if self.status not in ORGANIZATION_AGENCY_IMPLEMENTATION_STATUSES:
+            _fail("organization_invalid_value")
+        object.__setattr__(self, "effect", _safe_token("effect", self.effect))
+        object.__setattr__(
+            self, "observed_tick", _tick("observed_tick", self.observed_tick)
+        )
+        if self.provenance_code not in ORGANIZATION_OPERATION_PROVENANCE_CODES:
+            _fail("organization_invalid_value")
+        if type(self.resolved) is not bool:
+            _fail("organization_invalid_value")
+
+
+@dataclass(frozen=True, slots=True)
+class OrganizationCollectiveDecisionRecord:
+    """One published collective decision belief with per-actor implementations."""
+
+    decision_id: str
+    organization_id: str
+    proposal_ref: str
+    revision: int
+    procedure_ref: str | None
+    recognition: str
+    authority_basis: str
+    support_count: int
+    oppose_count: int
+    abstain_count: int
+    contest_count: int
+    implementation_mode: str
+    effect: str
+    target_kind: str
+    target_ref: str | None
+    decided_tick: int
+    window_end_tick: int
+    implementation_status: str
+    provenance_code: str
+    resolved: bool
+    implementations: tuple[OrganizationImplementationRecord, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "decision_id",
+            require_collective_decision_publication_id(self.decision_id),
+        )
+        object.__setattr__(
+            self, "organization_id", require_organization_id(self.organization_id)
+        )
+        if _ACTOR_REF_PATTERN.match(_string("proposal_ref", self.proposal_ref)) is None:
+            _fail("organization_invalid_value")
+        object.__setattr__(self, "revision", _tick("revision", self.revision))
+        if self.procedure_ref is not None and (
+            _ACTOR_REF_PATTERN.match(_string("procedure_ref", self.procedure_ref))
+            is None
+        ):
+            _fail("organization_invalid_value")
+        if self.recognition not in ORGANIZATION_AGENCY_RECOGNITIONS:
+            _fail("organization_invalid_value")
+        if self.authority_basis not in ORGANIZATION_OPERATION_AUTHORITY_BASES:
+            _fail("organization_invalid_value")
+        for name in (
+            "support_count",
+            "oppose_count",
+            "abstain_count",
+            "contest_count",
+        ):
+            object.__setattr__(self, name, _tick(name, getattr(self, name)))
+        if self.implementation_mode not in ORGANIZATION_AGENCY_MODES:
+            _fail("organization_invalid_value")
+        object.__setattr__(self, "effect", _safe_token("effect", self.effect))
+        if self.target_kind not in ORGANIZATION_AGENCY_TARGET_KINDS:
+            _fail("organization_invalid_value")
+        if self.target_kind in ("none", "unknown"):
+            if self.target_ref is not None:
+                _fail("organization_invalid_value")
+        elif _ACTOR_REF_PATTERN.match(_string("target_ref", self.target_ref)) is None:
+            _fail("organization_invalid_value")
+        decided = _tick("decided_tick", self.decided_tick)
+        window_end = _tick("window_end_tick", self.window_end_tick)
+        if window_end < decided:
+            _fail("organization_invalid_value")
+        if (
+            self.implementation_status
+            not in ORGANIZATION_AGENCY_IMPLEMENTATION_STATUSES
+        ):
+            _fail("organization_invalid_value")
+        if self.provenance_code not in (
+            ORGANIZATION_OPERATION_PROVENANCE_CODES | PROVENANCE_CODES
+        ):
+            _fail("organization_invalid_value")
+        if type(self.resolved) is not bool:
+            _fail("organization_invalid_value")
+        if self.resolved is (self.target_kind == "unknown"):
+            _fail("organization_invalid_value")
+        implementations = tuple(self.implementations)
+        if len(implementations) > MAX_DECISION_IMPLEMENTATIONS:
+            _fail("organization_size_limit")
+        seen: set[str] = set()
+        for implementation in implementations:
+            if type(implementation) is not OrganizationImplementationRecord:
+                _fail("organization_invalid_value")
+            if implementation.decision_id != self.decision_id:
+                _fail("organization_invalid_value")
+            if implementation.implementation_id in seen:
+                _fail("organization_duplicate_operation")
+            seen.add(implementation.implementation_id)
+        object.__setattr__(
+            self,
+            "implementations",
+            tuple(
+                sorted(
+                    implementations,
+                    key=lambda item: (
+                        item.observed_tick,
+                        item.actor_ref,
+                        item.implementation_id,
+                    ),
+                )
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class OrganizationCandidateRecord:
     organization_id: str
     creation_tick: int
@@ -541,6 +767,16 @@ class OrganizationCandidateRecord:
     structure: tuple[OrganizationStructuralRecord, ...] = ()
     window_indexes: tuple[int, ...] = ()
     operations: tuple[OrganizationOperationRecord, ...] = ()
+    collective_decisions: tuple[OrganizationCollectiveDecisionRecord, ...] = ()
+    collective_proposal_count: int = 0
+    collective_amendment_count: int = 0
+    collective_support_count: int = 0
+    collective_oppose_count: int = 0
+    collective_abstain_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
+    unimplemented_decision_count: int = 0
+    contested_decision_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -610,6 +846,54 @@ class OrganizationCandidateRecord:
                 )
             ),
         )
+        decisions = tuple(self.collective_decisions)
+        if len(decisions) > MAX_CANDIDATE_COLLECTIVE_DECISIONS:
+            _fail("organization_size_limit")
+        seen_decisions: set[str] = set()
+        for decision in decisions:
+            if type(decision) is not OrganizationCollectiveDecisionRecord:
+                _fail("organization_invalid_value")
+            if decision.organization_id != self.organization_id:
+                _fail("organization_invalid_value")
+            if decision.decision_id in seen_decisions:
+                _fail("organization_duplicate_operation")
+            seen_decisions.add(decision.decision_id)
+        object.__setattr__(
+            self,
+            "collective_decisions",
+            tuple(
+                sorted(
+                    decisions,
+                    key=lambda item: (item.decided_tick, item.decision_id),
+                )
+            ),
+        )
+        for name in (
+            "collective_proposal_count",
+            "collective_amendment_count",
+            "collective_support_count",
+            "collective_oppose_count",
+            "collective_abstain_count",
+            "collective_decision_count",
+            "collective_implementation_count",
+            "unimplemented_decision_count",
+            "contested_decision_count",
+        ):
+            _tick(name, getattr(self, name))
+        if self.collective_decision_count != len(decisions):
+            _fail("organization_invalid_value")
+        if self.collective_implementation_count != sum(
+            len(item.implementations) for item in decisions
+        ):
+            _fail("organization_invalid_value")
+        if self.contested_decision_count != sum(
+            1 for item in decisions if item.recognition == "contested"
+        ):
+            _fail("organization_invalid_value")
+        if self.unimplemented_decision_count != sum(
+            1 for item in decisions if item.implementation_status == "unimplemented"
+        ):
+            _fail("organization_invalid_value")
 
     @property
     def member_count(self) -> int:
@@ -642,6 +926,8 @@ class OrganizationWindowRecord:
     lane_presence: tuple[tuple[str, bool], ...] = ()
     operation_count: int = 0
     contested_operation_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -676,6 +962,19 @@ class OrganizationWindowRecord:
             self,
             "contested_operation_count",
             _tick("contested_operation_count", self.contested_operation_count),
+        )
+        object.__setattr__(
+            self,
+            "collective_decision_count",
+            _tick("collective_decision_count", self.collective_decision_count),
+        )
+        object.__setattr__(
+            self,
+            "collective_implementation_count",
+            _tick(
+                "collective_implementation_count",
+                self.collective_implementation_count,
+            ),
         )
 
 
@@ -722,6 +1021,8 @@ class OrganizationObjectiveRow:
     resolved_anchor_count: int
     unresolved_anchor_count: int
     operation_action_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
 
     def __post_init__(self) -> None:
         for name in (
@@ -738,6 +1039,8 @@ class OrganizationObjectiveRow:
             "resolved_anchor_count",
             "unresolved_anchor_count",
             "operation_action_count",
+            "collective_decision_count",
+            "collective_implementation_count",
         ):
             _tick(name, getattr(self, name))
 
@@ -814,13 +1117,31 @@ class OrganizationSnapshot:
         )
         operation_ids: set[str] = set()
         total_operations = 0
+        decision_ids: set[str] = set()
+        implementation_ids: set[str] = set()
+        total_decisions = 0
+        total_implementations = 0
         for candidate in candidates:
             for operation in candidate.operations:
                 if operation.operation_id in operation_ids:
                     _fail("organization_duplicate_operation")
                 operation_ids.add(operation.operation_id)
             total_operations += len(candidate.operations)
+            for decision in candidate.collective_decisions:
+                if decision.decision_id in decision_ids:
+                    _fail("organization_duplicate_operation")
+                decision_ids.add(decision.decision_id)
+                for implementation in decision.implementations:
+                    if implementation.implementation_id in implementation_ids:
+                        _fail("organization_duplicate_operation")
+                    implementation_ids.add(implementation.implementation_id)
+                total_implementations += len(decision.implementations)
+            total_decisions += len(candidate.collective_decisions)
         if total_operations > MAX_SNAPSHOT_OPERATIONS:
+            _fail("organization_size_limit")
+        if total_decisions > MAX_SNAPSHOT_COLLECTIVE_DECISIONS:
+            _fail("organization_size_limit")
+        if total_implementations > MAX_SNAPSHOT_COLLECTIVE_IMPLEMENTATIONS:
             _fail("organization_size_limit")
         windows = tuple(self.windows)
         if len(windows) > MAX_SNAPSHOT_WINDOWS:
@@ -858,14 +1179,17 @@ class OrganizationSnapshot:
 def upgrade_organization_snapshot(
     snapshot: OrganizationSnapshot,
 ) -> OrganizationSnapshot:
-    """Lift a v1 snapshot to v2 without mutating the input."""
+    """Lift a v1 or v2 snapshot to v3 without mutating the input."""
     from dataclasses import replace
 
     if type(snapshot) is not OrganizationSnapshot:
         _fail("organization_invalid_value")
     if snapshot.schema_version == ORGANIZATION_SNAPSHOT_SCHEMA_VERSION:
         return snapshot
-    if snapshot.schema_version != ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1:
+    if snapshot.schema_version not in (
+        ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V1,
+        ORGANIZATION_SNAPSHOT_SCHEMA_VERSION_V2,
+    ):
         _fail("organization_invalid_value")
     return replace(snapshot, schema_version=ORGANIZATION_SNAPSHOT_SCHEMA_VERSION)
 

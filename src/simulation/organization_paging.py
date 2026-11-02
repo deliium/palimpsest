@@ -13,7 +13,12 @@ from simulation.organization_models import (
     OrganizationArtifactError,
 )
 
-__all__ = ["OrganizationRowSelection", "row_encoded_bytes", "select_organization_rows"]
+__all__ = [
+    "OrganizationRowSelection",
+    "row_encoded_bytes",
+    "select_organization_collective_decision_rows",
+    "select_organization_rows",
+]
 
 MAX_PAGE_BYTES_GUARD: Final[int] = 4 * 1024 * 1024
 
@@ -94,4 +99,18 @@ def select_organization_rows(
         next_offset=offset + len(selected),
         truncated=truncated or (offset + len(selected) < len(ordered)),
         encoded_bytes=used,
+    )
+
+
+def select_organization_collective_decision_rows(
+    rows: Sequence[object],
+    *,
+    offset: int,
+    limit: int,
+    max_bytes: int,
+) -> OrganizationRowSelection:
+    """Select whole decision rows with their nested implementations."""
+
+    return select_organization_rows(
+        rows, offset=offset, limit=limit, max_bytes=max_bytes
     )

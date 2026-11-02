@@ -23,22 +23,26 @@ V4_03_FAMILIES = (
 )
 
 
-def test_catalog_is_exactly_146() -> None:
-    assert METRIC_FAMILY_COUNT == 146
+def test_catalog_is_exactly_148() -> None:
+    assert METRIC_FAMILY_COUNT == 148
     specs = all_metric_specifications()
-    assert len(specs) == 146
-    assert len(validate_metric_catalog()) == 146
+    assert len(specs) == 148
+    assert len(validate_metric_catalog()) == 148
 
 
 def test_new_families_are_appended_last() -> None:
     specs = all_metric_specifications()
-    assert [spec.family_id.value for spec in specs[-6:]] == [
+    assert [spec.family_id.value for spec in specs[-8:]] == [
         *V4_03_FAMILIES,
         "organization_operations",
         "organization_operation_authority",
+        "organization_collective_agency",
+        "organization_collective_implementation",
     ]
-    assert specs[-1].family_id is MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY
-    assert specs[-2].family_id is MetricFamilyId.ORGANIZATION_OPERATIONS
+    assert specs[-1].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
+    assert specs[-2].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY
+    assert specs[-3].family_id is MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY
+    assert specs[-4].family_id is MetricFamilyId.ORGANIZATION_OPERATIONS
 
 
 def test_existing_families_keep_identity_and_order() -> None:

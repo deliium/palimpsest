@@ -18,7 +18,16 @@ export type OrganizationSummary = {
   window_count: number
   coverage: OrganizationCoverage
   provenance_code: string
+  snapshot_digest: string
   operation_count: number
+  collective_proposal_count: number
+  collective_amendment_count: number
+  collective_support_count: number
+  collective_oppose_count: number
+  collective_abstain_count: number
+  collective_decision_count: number
+  collective_implementation_count: number
+  unimplemented_decision_count: number
 }
 
 export type OrganizationMember = {
@@ -62,6 +71,15 @@ export type OrganizationCandidate = {
   window_indexes: number[]
   operation_count: number
   contested_operation_count: number
+  collective_proposal_count: number
+  collective_amendment_count: number
+  collective_support_count: number
+  collective_oppose_count: number
+  collective_abstain_count: number
+  collective_decision_count: number
+  collective_implementation_count: number
+  unimplemented_decision_count: number
+  contested_decision_count: number
 }
 
 export type OrganizationOperation = {
@@ -84,10 +102,52 @@ export type OrganizationOperation = {
   resolved: boolean
 }
 
+export type OrganizationCollectiveImplementation = {
+  implementation_id: string
+  actor_ref: string
+  status: string
+  effect: string
+  observed_tick: number
+  provenance_code: string
+  resolved: boolean
+}
+
+export type OrganizationCollectiveDecision = {
+  decision_id: string
+  organization_id: string
+  proposal_ref: string
+  revision: number
+  procedure_ref: string | null
+  recognition: string
+  authority_basis: string
+  support_count: number
+  oppose_count: number
+  abstain_count: number
+  contest_count: number
+  implementation_mode: string
+  effect: string
+  target_kind: string
+  target_ref: string | null
+  decided_tick: number
+  window_end_tick: number
+  implementation_status: string
+  provenance_code: string
+  resolved: boolean
+  implementations: OrganizationCollectiveImplementation[]
+}
+
+export type OrganizationCollectiveAgencyPage = {
+  publication_id: string
+  items: OrganizationCollectiveDecision[]
+  next_cursor: string | null
+  truncated: boolean
+}
+
 export type OrganizationCandidateDetail = OrganizationCandidate & {
   members: OrganizationMember[]
   structure: OrganizationStructural[]
   operations: OrganizationOperation[]
+  collective_decisions: OrganizationCollectiveDecision[]
 }
 
 export type OrganizationCandidatePage = {
@@ -182,4 +242,27 @@ export function getOrganizationOperations(
       cursor: options.cursor,
     },
   })
+}
+
+export function getOrganizationCollectiveAgency(
+  runId: string,
+  options: {
+    recognition?: string
+    organizationId?: string
+    limit?: number
+    cursor?: string
+  } = {},
+): Promise<OrganizationCollectiveAgencyPage> {
+  return apiFetch<OrganizationCollectiveAgencyPage>(
+    `${base(runId)}/collective-agency`,
+    {
+      capability: CAPABILITY,
+      query: {
+        recognition: options.recognition,
+        organization_id: options.organizationId,
+        limit: options.limit,
+        cursor: options.cursor,
+      },
+    },
+  )
 }

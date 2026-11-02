@@ -13,6 +13,7 @@ from analysis.models import (
     MetricProvenance,
 )
 from analysis.numerical import library_versions, quantize_float
+from analysis.organization_agency import OrganizationAgencySummary
 from analysis.organization_contract import (
     OrganizationAnalysisError,
     OrganizationCandidateStatus,
@@ -27,6 +28,8 @@ from analysis.specifications import MetricFamilyId, metric_specification
 from world.identifiers import require_exact_nonneg_int, require_stable_id
 
 __all__ = [
+    "compute_organization_collective_agency_metric",
+    "compute_organization_collective_implementation_metric",
     "compute_organization_formation_metric",
     "compute_organization_lineage_metric",
     "compute_organization_membership_metric",
@@ -135,6 +138,181 @@ def _operation_availability(
     if any(candidate.operation_count == 0 for candidate in summary.candidates):
         return MetricAvailability.PARTIAL
     return MetricAvailability.PRESENT
+
+
+def _agency_availability(
+    summary: OrganizationAgencySummary | None, *, implementation: bool
+) -> MetricAvailability:
+    if summary is None or not summary.candidates:
+        return MetricAvailability.ABSENT
+    if implementation:
+        if summary.decision_count == 0:
+            return MetricAvailability.ABSENT
+    elif summary.proposal_count == 0 and summary.decision_count == 0:
+        return MetricAvailability.ABSENT
+    if summary.history_truncated or summary.orphaned_count > 0:
+        return MetricAvailability.PARTIAL
+    if summary.coverage_ratio is not None and summary.coverage_ratio < 1.0:
+        return MetricAvailability.PARTIAL
+    if any(candidate.unknown_decision_count > 0 for candidate in summary.candidates):
+        return MetricAvailability.PARTIAL
+    return MetricAvailability.PRESENT
+
+
+def _agency_document(
+    summary: OrganizationAgencySummary,
+    family: MetricFamilyId,
+    *,
+    run_id: str,
+    input_revision: str,
+    availability: MetricAvailability,
+    values: dict[str, object],
+    notes_code: str,
+) -> MetricDocument:
+    spec = metric_specification(family)
+    return MetricDocument(
+        schema_version=METRIC_DOCUMENT_SCHEMA_VERSION,
+        metric_family=spec.family_id.value,
+        algorithm_version=spec.algorithm_version,
+        library_versions=library_versions(),
+        run_id=run_id,
+        input_revision=input_revision,
+        evidence_stages=frozenset(spec.evidence_inputs),
+        population=spec.population,
+        denominator=spec.denominator,
+        coverage=MetricCoverage(
+            observed=summary.candidates_with_agency,
+            expected=summary.candidate_count,
+            ratio=summary.coverage_ratio,
+        ),
+        availability=availability,
+        values={} if availability is MetricAvailability.ABSENT else values,
+        provenance=MetricProvenance(
+            source_kind="organization_agency_analysis",
+            source_ids=(run_id,),
+            notes_code=notes_code,
+        ),
+    )
+
+
+def compute_organization_collective_agency_metric(
+    analysis: OrganizationAnalysis,
+    *,
+    run_id: str,
+    input_revision: str,
+    tick: int = 0,
+) -> MetricDocument:
+    """Detached collective proposal and decision-process counts."""
+
+    analysis = _validate(analysis, run_id, input_revision)
+    summary = analysis.agency_summary or OrganizationAgencySummary()
+    window = _final_window(analysis)
+    availability = _agency_availability(summary, implementation=False)
+    decision_count = summary.decision_count
+    candidates_with_decisions = sum(
+        1
+        for candidate in summary.candidates
+        if candidate.recognized_decision_count
+        + candidate.contested_decision_count
+        + candidate.unrecognized_decision_count
+        > 0
+    )
+    values: dict[str, object] = {
+        "as_of_tick": window.end_tick if window is not None else tick,
+        "proposal_count": summary.proposal_count,
+        "amendment_count": summary.amendment_count,
+        "support_count": summary.support_count,
+        "oppose_count": summary.oppose_count,
+        "abstain_count": summary.abstain_count,
+        "recognized_decision_count": sum(
+            item.recognized_decision_count for item in summary.candidates
+        ),
+        "contested_decision_count": sum(
+            item.contested_decision_count for item in summary.candidates
+        ),
+        "unrecognized_decision_count": sum(
+            item.unrecognized_decision_count for item in summary.candidates
+        ),
+        "expired_proposal_count": sum(
+            item.expired_proposal_count for item in summary.candidates
+        ),
+        "procedure_linked_count": sum(
+            item.proposal_count for item in summary.candidates
+        ),
+        "decision_coverage_ratio": (
+            quantize_float(candidates_with_decisions / summary.candidate_count)
+            if summary.candidate_count
+            else None
+        ),
+    }
+    assert decision_count >= 0
+    return _agency_document(
+        summary,
+        MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
+        run_id=run_id,
+        input_revision=input_revision,
+        availability=availability,
+        values=values,
+        notes_code="organization_collective_agency_detached",
+    )
+
+
+def compute_organization_collective_implementation_metric(
+    analysis: OrganizationAnalysis,
+    *,
+    run_id: str,
+    input_revision: str,
+    tick: int = 0,
+) -> MetricDocument:
+    """Detached per-actor implementation, compliance, refusal, and sabotage."""
+
+    analysis = _validate(analysis, run_id, input_revision)
+    summary = analysis.agency_summary or OrganizationAgencySummary()
+    window = _final_window(analysis)
+    availability = _agency_availability(summary, implementation=True)
+    ratios = [
+        candidate.coverage_ratio
+        for candidate in summary.candidates
+        if candidate.coverage_ratio is not None
+    ]
+    values: dict[str, object] = {
+        "as_of_tick": window.end_tick if window is not None else tick,
+        "decision_count": summary.decision_count,
+        "implemented_decision_count": sum(
+            item.implemented_decision_count for item in summary.candidates
+        ),
+        "partial_decision_count": sum(
+            item.partial_decision_count for item in summary.candidates
+        ),
+        "unimplemented_decision_count": sum(
+            item.unimplemented_decision_count for item in summary.candidates
+        ),
+        "obstructed_decision_count": sum(
+            item.obstructed_decision_count for item in summary.candidates
+        ),
+        "unknown_decision_count": sum(
+            item.unknown_decision_count for item in summary.candidates
+        ),
+        "compliance_count": sum(item.compliance_count for item in summary.candidates),
+        "refusal_count": sum(item.refusal_count for item in summary.candidates),
+        "sabotage_count": sum(item.sabotage_count for item in summary.candidates),
+        "contrary_count": sum(item.contrary_count for item in summary.candidates),
+        "implementation_coverage_ratio": (
+            quantize_float(sum(ratios) / len(ratios)) if ratios else None
+        ),
+        "censored_actor_count": sum(
+            item.unknown_decision_count for item in summary.candidates
+        ),
+    }
+    return _agency_document(
+        summary,
+        MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
+        run_id=run_id,
+        input_revision=input_revision,
+        availability=availability,
+        values=values,
+        notes_code="organization_collective_implementation_detached",
+    )
 
 
 def _operation_document(
@@ -372,6 +550,7 @@ def compute_organization_lineage_metric(
         values=values,
         notes_code="organization_lineage_forward_only",
     )
+
 
 def compute_organization_operations_metric(
     summary: OrganizationOperationSummary | None,

@@ -310,6 +310,7 @@ class MetricComputationInputs:
     macro_society_analysis: MacroSocietyAnalysis | None = None
     organization_rows: Sequence[object] | None = None
     organization_operation_rows: Sequence[object] | None = None
+    organization_agency_rows: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1428,12 +1429,18 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         )
 
     if inputs.organization_rows:
+        from analysis.organization_agency import (
+            harvest_organization_agency_rows,
+            summarize_organization_agency,
+        )
         from analysis.organization_detection import detect_organization_candidates
         from analysis.organization_evidence import build_organization_windows
         from analysis.organization_identity import assign_organization_identities
         from analysis.organization_layers import project_organization_layers
         from analysis.organization_lineage import derive_organization_lineage
         from analysis.organization_metrics import (
+            compute_organization_collective_agency_metric,
+            compute_organization_collective_implementation_metric,
             compute_organization_formation_metric,
             compute_organization_lineage_metric,
             compute_organization_membership_metric,
@@ -1457,19 +1464,25 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         operation_summary = summarize_organization_operations(
             operation_rows, assignment
         )
+        agency_rows = harvest_organization_agency_rows(inputs.organization_agency_rows)
+        agency_summary = summarize_organization_agency(
+            agency_rows, assignment, member_rows=organization_rows
+        )
         layers = project_organization_layers(
             assignment,
             organization_rows,
             operation_rows=operation_rows,
             operation_summary=operation_summary,
+            agency_rows=agency_rows,
+            agency_summary=agency_summary,
         )
         organization_analysis = derive_organization_lineage(
             assignment,
             layer_view=layers,
             operation_summary=operation_summary,
+            agency_summary=agency_summary,
             history_truncated=any(
-                "history_truncated" in row.owner.notices
-                for row in organization_rows
+                "history_truncated" in row.owner.notices for row in organization_rows
             ),
         )
         _safe(
@@ -1520,6 +1533,24 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             "organization_operation_authority",
             lambda: compute_organization_operation_authority_metric(
                 operation_summary,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+        _safe(
+            "organization_collective_agency",
+            lambda: compute_organization_collective_agency_metric(
+                organization_analysis,
+                run_id=run_id,
+                input_revision=revision,
+                tick=window_end,
+            ),
+        )
+        _safe(
+            "organization_collective_implementation",
+            lambda: compute_organization_collective_implementation_metric(
+                organization_analysis,
                 run_id=run_id,
                 input_revision=revision,
                 tick=window_end,

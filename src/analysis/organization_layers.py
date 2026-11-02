@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from analysis.organization_agency import OrganizationAgencySummary
 from analysis.organization_contract import (
     OrganizationAnalysisError,
     OrganizationCoverage,
@@ -52,6 +53,9 @@ class OrganizationObjectiveRow:
     resolved_anchor_count: int
     unresolved_anchor_count: int
     operation_action_count: int = 0
+    collective_decision_count: int = 0
+    collective_implementation_count: int = 0
+    collective_unimplemented_count: int = 0
 
     def __post_init__(self) -> None:
         for name in (
@@ -68,6 +72,9 @@ class OrganizationObjectiveRow:
             "resolved_anchor_count",
             "unresolved_anchor_count",
             "operation_action_count",
+            "collective_decision_count",
+            "collective_implementation_count",
+            "collective_unimplemented_count",
         ):
             require_exact_nonneg_int(name, getattr(self, name))
 
@@ -84,6 +91,10 @@ class OrganizationSubjectiveRow:
     self_identified: bool
     operation_count: int = 0
     contested_operation_count: int = 0
+    proposal_count: int = 0
+    decision_count: int = 0
+    implementation_count: int = 0
+    unimplemented_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.organization_id.startswith(_CONCEPT_PREFIX):
@@ -93,6 +104,13 @@ class OrganizationSubjectiveRow:
         require_exact_nonneg_int(
             "contested_operation_count", self.contested_operation_count
         )
+        for name in (
+            "proposal_count",
+            "decision_count",
+            "implementation_count",
+            "unimplemented_count",
+        ):
+            require_exact_nonneg_int(name, getattr(self, name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +120,7 @@ class OrganizationLayerView:
     analytical: tuple[OrganizationCandidate, ...]
     coverage: OrganizationCoverage
     operations: OrganizationOperationSummary | None = None
+    agency: OrganizationAgencySummary | None = None
 
 
 def project_organization_layers(
@@ -109,6 +128,8 @@ def project_organization_layers(
     owner_rows: Sequence[OrganizationHarvestRows],
     operation_rows: Sequence[object] | None = None,
     operation_summary: OrganizationOperationSummary | None = None,
+    agency_rows: Sequence[object] | None = None,
+    agency_summary: OrganizationAgencySummary | None = None,
 ) -> OrganizationLayerView:
     """Project objective counts, owner claims, and analytical candidates."""
 
@@ -138,6 +159,23 @@ def project_organization_layers(
             if operation_rows
             else ()
         )
+    }
+    from analysis.organization_agency import (
+        organization_agency_concept_counts,
+        organization_agency_decision_ticks,
+    )
+
+    agency_ticks = organization_agency_decision_ticks(agency_rows)  # type: ignore[arg-type]
+    agency_counts = {
+        (owner_id, organization_id): (proposals, decisions, implementations, open_count)
+        for (
+            owner_id,
+            organization_id,
+            proposals,
+            decisions,
+            implementations,
+            open_count,
+        ) in organization_agency_concept_counts(agency_rows)  # type: ignore[arg-type]
     }
     objective: list[OrganizationObjectiveRow] = []
     for window in windows:
@@ -220,6 +258,18 @@ def project_organization_layers(
                     for tick in action_ticks
                     if window.start_tick <= tick <= window.end_tick
                 ),
+                collective_decision_count=sum(
+                    1
+                    for tick in agency_ticks
+                    if window.start_tick <= tick <= window.end_tick
+                ),
+                collective_implementation_count=sum(
+                    implementations
+                    for _, _, implementations, _ in agency_counts.values()
+                ),
+                collective_unimplemented_count=sum(
+                    open_count for _, _, _, open_count in agency_counts.values()
+                ),
             )
         )
 
@@ -233,6 +283,11 @@ def project_organization_layers(
             )
             operation_count, contested_count = concept_counts.get(
                 (owner.owner.owner_id, concept.organization_id), (0, 0)
+            )
+            agency_proposals, agency_decisions, agency_implementations, open_count = (
+                agency_counts.get(
+                    (owner.owner.owner_id, concept.organization_id), (0, 0, 0, 0)
+                )
             )
             subjective.append(
                 OrganizationSubjectiveRow(
@@ -248,6 +303,10 @@ def project_organization_layers(
                     self_identified=self_identified,
                     operation_count=operation_count,
                     contested_operation_count=contested_count,
+                    proposal_count=agency_proposals,
+                    decision_count=agency_decisions,
+                    implementation_count=agency_implementations,
+                    unimplemented_count=open_count,
                 )
             )
     view = OrganizationLayerView(
@@ -258,6 +317,7 @@ def project_organization_layers(
         analytical=tuple(sorted(candidates, key=lambda item: item.candidate_key)),
         coverage=coverage,
         operations=operation_summary,
+        agency=agency_summary,
     )
     assert_organization_layer_separation(view)
     return view
@@ -274,6 +334,17 @@ def assert_organization_layer_separation(view: OrganizationLayerView) -> None:
             if isinstance(value, str) and (
                 value.startswith(_CONCEPT_PREFIX)
                 or value.startswith(_ANALYTICAL_PREFIX)
+                or value.startswith(
+                    (
+                        "orgp-",
+                        "orgpm-",
+                        "orgcd-",
+                        "orgci-",
+                        "orgcev-",
+                        "orgcpd-",
+                        "orgcpi-",
+                    )
+                )
             ):
                 raise OrganizationAnalysisError("organization_layer_leak")
     for subjective in view.subjective:
@@ -286,6 +357,13 @@ def assert_organization_layer_separation(view: OrganizationLayerView) -> None:
             raise OrganizationAnalysisError("organization_layer_leak")
         if candidate.candidate_key.startswith(_ANALYTICAL_PREFIX):
             raise OrganizationAnalysisError("organization_layer_leak")
+    if view.agency is not None:
+        agency_summary = view.agency
+        if type(agency_summary) is not OrganizationAgencySummary:
+            raise OrganizationAnalysisError("organization_layer_leak")
+        for agency_candidate in agency_summary.candidates:
+            if not agency_candidate.organization_id.startswith(_ANALYTICAL_PREFIX):
+                raise OrganizationAnalysisError("organization_layer_leak")
     summary = view.operations
     if summary is not None:
         if type(summary) is not OrganizationOperationSummary:

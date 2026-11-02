@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from analysis.organization_agency import OrganizationAgencySummary
 from analysis.organization_contract import (
     ABSORPTION_CONTAINMENT,
     CONTINUATION_JACCARD,
@@ -78,10 +79,17 @@ class OrganizationAnalysis:
     coverage: OrganizationCoverage
     layer_view: OrganizationLayerView | None = None
     operation_summary: OrganizationOperationSummary | None = None
+    agency_summary: OrganizationAgencySummary | None = None
     history_truncated: bool = False
     determinism_digest: str = ""
 
     def __post_init__(self) -> None:
+        
+
+        if self.agency_summary is not None and type(self.agency_summary) is not (
+            OrganizationAgencySummary
+        ):
+            raise OrganizationAnalysisError("organization_lineage_invalid")
         digest = _analysis_digest(self)
         object.__setattr__(self, "determinism_digest", digest)
 
@@ -130,7 +138,18 @@ def _content(analysis: OrganizationAnalysis) -> dict[str, object]:
             }
             for edge in analysis.edges
         ],
+        "agency": _agency_content(analysis.agency_summary),
     }
+
+
+def _agency_content(
+    summary: OrganizationAgencySummary | None,
+) -> dict[str, object] | None:
+    if summary is None:
+        return None
+    from dataclasses import asdict
+
+    return asdict(summary)
 
 
 def _analysis_digest(analysis: OrganizationAnalysis) -> str:
@@ -150,6 +169,7 @@ def derive_organization_lineage(
     *,
     layer_view: OrganizationLayerView | None = None,
     operation_summary: OrganizationOperationSummary | None = None,
+    agency_summary: OrganizationAgencySummary | None = None,
     history_truncated: bool = False,
 ) -> OrganizationAnalysis:
     """Derive continued/transformed/split/merge/dissolved/emerged edges."""
@@ -194,8 +214,7 @@ def derive_organization_lineage(
                 kind = OrganizationLineageKind.SPLIT
                 containment = SPLIT_CONTAINMENT
             elif (
-                transition.anchor_shared
-                and transition.jaccard >= CONTINUATION_JACCARD
+                transition.anchor_shared and transition.jaccard >= CONTINUATION_JACCARD
             ):
                 kind = OrganizationLineageKind.CONTINUED
                 containment = None
@@ -268,6 +287,7 @@ def derive_organization_lineage(
         coverage=assignment.coverage,
         layer_view=layer_view,
         operation_summary=operation_summary,
+        agency_summary=agency_summary,
         history_truncated=bool(history_truncated),
     )
 
@@ -321,6 +341,7 @@ def build_organization_analysis(
     owner_rows: Sequence[OrganizationHarvestRows] = (),
     layer_view: OrganizationLayerView | None = None,
     operation_summary: OrganizationOperationSummary | None = None,
+    agency_summary: OrganizationAgencySummary | None = None,
     history_truncated: bool = False,
 ) -> OrganizationAnalysis:
     """Build the digest-bearing analysis, projecting layers when possible."""

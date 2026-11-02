@@ -528,3 +528,20 @@ A plan that extends organization operational state must keep these invariants:
 9. **Pins stay put** — runner v4/v55/v56, commands 43, observer semantic types
    73, metric families 146, replay v22, codec v20, Alembic `0017`, `/v1`,
    `observer-protocol-v1`.
+
+## V4-05 organization collective-agency contract
+
+The owned `organizations` context gains a third owner-scoped sidecar keyed by
+existing `orgc-` concept ids under `organization-agency.v1`. Proposal, position,
+amendment, recognition, collective decision, per-actor implementation,
+compliance, refusal, and sabotage are beliefs; they never authorize a command or
+create an organization actor, roster, treasury, resource pool, registry, or
+global OrganizationLLM. Bounded `org_ca_v1` claims travel inside existing
+`Talk`/`Tell`; physical effects remain ordinary agent commands.
+
+Detached analysis joins agency rows to existing `org-` candidates without
+creating, splitting, merging, dissolving, or re-identifying one, and appends
+`organization_collective_agency@1` and
+`organization_collective_implementation@1`, raising the metric catalog to 148.
+`organization-snapshot-v3` is canonical and bounded while v1/v2 remain
+decodable. Six GET-only `/v1` routes require `SUBJECTIVE_DEBUG`.
