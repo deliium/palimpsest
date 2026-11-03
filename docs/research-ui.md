@@ -227,3 +227,19 @@ lineage derivation, operation classification, or write call.
 ## Formal rules panel
 
 The **Formal rules** tab renders the six read-only routes: summary counts and coverage, competing candidates, rule stage/constraint/authority/recognition, written representation status, expected sanctions, exceptions, versions with revision kind and supersedes, lineage edges, and declared response counts. The response section is explicitly labelled as declared responses, not objective compliance. `formal_rule_disabled` renders as a normal unavailable state; no client-side rule inference or write action exists.
+
+## Disputes panel
+
+The **Disputes** tab renders the six read-only
+`/v1/simulations/{run_id}/disputes` routes (`subjective_debug`). The view has
+explicit `loading`, `unavailable` (`dispute_disabled`), `empty`, `available`,
+and `error` states, and shows summary counts and coverage, competing candidates,
+claims, testimony, evidence and rule references, authority and mediation links,
+resolution status, per-party declared responses, and lineage.
+
+The panel presents owner beliefs only: claimed, reported, and declared
+positions. Resolutions are labelled as proposals, and `apparently accepted`
+requires every named party's active declaration. The client never derives or
+displays a verdict, guilt, liability, winner, true owner, or binding
+settlement, and it performs no candidate detection, identity minting, lineage
+derivation, alignment classification, or write call.

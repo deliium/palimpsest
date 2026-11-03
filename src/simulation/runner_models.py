@@ -317,11 +317,11 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "disasters",
 )
 
-# V4-03 owns ``organizations`` and V4-06 owns ``formal_rules``; the remaining
-# ten V4 flags stay unowned and fail closed at runtime construction until their
-# behavior plans land and claim ownership explicitly.
+# V4-03 owns ``organizations``, V4-06 owns ``formal_rules``, and V4-07 owns
+# ``legal_disputes``; the remaining nine V4 flags stay unowned and fail closed
+# at runtime construction until their behavior plans land and claim ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"organizations", "formal_rules"}
+    {"organizations", "formal_rules", "legal_disputes"}
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -6378,6 +6378,7 @@ class SimulationRunnerResult:
     organization_operation_ledgers: tuple[object, ...] = ()
     organization_agency_ledgers: tuple[object, ...] = ()
     formal_rule_ledgers: tuple[object, ...] = ()
+    dispute_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6693,6 +6694,19 @@ class SimulationRunnerResult:
             if type(ledger) is not FormalRuleLedger:
                 raise TypeError("formal_rule_ledgers: invalid_item")
         object.__setattr__(self, "formal_rule_ledgers", formal_rule_ledgers)
+        if isinstance(self.dispute_ledgers, (set, frozenset)):
+            raise TypeError("dispute_ledgers must be ordered")
+        if isinstance(self.dispute_ledgers, (str, bytes)) or not isinstance(
+            self.dispute_ledgers, Sequence
+        ):
+            raise TypeError("dispute_ledgers must be ordered")
+        from agents.cognition.legal_disputes import DisputeLedger
+
+        dispute_ledgers = tuple(self.dispute_ledgers)
+        for ledger in dispute_ledgers:
+            if type(ledger) is not DisputeLedger:
+                raise TypeError("dispute_ledgers: invalid_item")
+        object.__setattr__(self, "dispute_ledgers", dispute_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

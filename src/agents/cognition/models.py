@@ -760,6 +760,7 @@ class SubjectiveSnapshot:
     subjective_valuations: SubjectiveValuationLedger | None = None
     scarcity_beliefs: ScarcityBeliefLedger | None = None
     acceptance_memories: AcceptanceMemoryLedger | None = None
+    disputes: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -964,6 +965,13 @@ class SubjectiveSnapshot:
             self.acceptance_memories,
             self.owner_id,
             field_name="SubjectiveSnapshot.acceptance_memories",
+        )
+        from agents.cognition.legal_disputes import require_owner_disputes
+
+        require_owner_disputes(
+            self.disputes,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.disputes",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -3962,6 +3970,7 @@ class CognitiveLoopProposal:
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
     acceptance_memories: object | None = None
+    disputes: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4287,6 +4296,7 @@ class CognitiveLoopResult:
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
     acceptance_memories: object | None = None
+    disputes: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(

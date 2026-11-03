@@ -1,4 +1,4 @@
-"""V4-06 metric catalog append: 151 families with an unchanged first 148."""
+"""V4-06 metric catalog append: 154 families with an unchanged first 151."""
 
 from __future__ import annotations
 
@@ -55,27 +55,29 @@ EXPECTED_KEYS = {
 }
 
 
-def test_catalog_validates_at_151() -> None:
+def test_catalog_validates_at_154() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 151
-    assert len(specs) == 151
-    assert len({spec.family_id for spec in specs}) == 151
+    assert METRIC_FAMILY_COUNT == 154
+    assert len(specs) == 154
+    assert len({spec.family_id for spec in specs}) == 154
 
 
-def test_first_148_families_are_unchanged() -> None:
+def test_first_151_families_are_unchanged() -> None:
     specs = all_metric_specifications()
-    assert len(specs[:148]) == 148
-    assert specs[147].family_id is (
-        MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
+    assert len(specs[:151]) == 151
+    assert specs[150].family_id is MetricFamilyId.FORMAL_RULE_RESPONSE
+    assert (
+        specs[147].family_id
+        is MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
     )
     assert not any(
-        spec.family_id in NEW_FAMILIES for spec in specs[:148]
+        spec.family_id.value.startswith("dispute_") for spec in specs[:151]
     )
 
 
-def test_three_formal_rule_families_are_last() -> None:
+def test_three_formal_rule_families_precede_the_dispute_families() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-3:]) == NEW_FAMILIES
+    assert tuple(spec.family_id for spec in specs[-6:-3]) == NEW_FAMILIES
 
 
 def test_each_family_has_exact_value_keys() -> None:
@@ -87,12 +89,15 @@ def test_each_family_has_exact_value_keys() -> None:
 
 
 def test_version_identifiers_are_id_at_1() -> None:
-    assert metric_specification(
-        MetricFamilyId.FORMAL_RULE_DEVELOPMENT
-    ).version_identifier == "formal_rule_development@1"
-    assert metric_specification(
-        MetricFamilyId.FORMAL_RULE_AUTHORITY
-    ).version_identifier == "formal_rule_authority@1"
-    assert metric_specification(
-        MetricFamilyId.FORMAL_RULE_RESPONSE
-    ).version_identifier == "formal_rule_response@1"
+    assert (
+        metric_specification(MetricFamilyId.FORMAL_RULE_DEVELOPMENT).version_identifier
+        == "formal_rule_development@1"
+    )
+    assert (
+        metric_specification(MetricFamilyId.FORMAL_RULE_AUTHORITY).version_identifier
+        == "formal_rule_authority@1"
+    )
+    assert (
+        metric_specification(MetricFamilyId.FORMAL_RULE_RESPONSE).version_identifier
+        == "formal_rule_response@1"
+    )

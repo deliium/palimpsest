@@ -55,14 +55,12 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "docs/formal-rules.md" in (ROOT / "README.md").read_text()
     description = (ROOT / ".ai-factory" / "DESCRIPTION.md").read_text()
     assert "V4-06" in description
-    assert "metric families 151" in description
+    assert "metric families 154" in description
 
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     assert "V4-06 formal rules seam" in architecture
-    assert (
-        "151 metric families" in architecture
-        or "metric families 151" in architecture
-    )
+    assert "V4-07 dispute resolution seam" in architecture
+    assert "154 metric families" in architecture
     assert "Owned V4 flags" in architecture
     assert "`formal_rules`" in architecture
 
@@ -72,12 +70,12 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "six GET-only" in docs_architecture
 
 
-def test_configuration_documents_two_owned_and_ten_unowned_flags() -> None:
+def test_configuration_documents_three_owned_and_nine_unowned_flags() -> None:
     text = (ROOT / "docs" / "configuration.md").read_text()
-    assert "Two V4 flags are owned" in text
+    assert "Three V4 flags are owned" in text
     assert "`organizations`" in text
     assert "`formal_rules`" in text
-    assert "other ten V4 flags remain unowned" in text
+    assert "other nine V4 flags remain unowned" in text
     assert "PALIMPSEST_FORMAL_RULE_ROOT" in text
     assert "PALIMPSEST_FORMAL_RULE_CURSOR_KEY" in text
     assert "--formal-rule-root" in text
@@ -85,10 +83,10 @@ def test_configuration_documents_two_owned_and_ten_unowned_flags() -> None:
     assert "other eleven V4 flags" not in text
 
 
-def test_current_v4_docs_state_the_two_owned_flags() -> None:
+def test_current_v4_docs_state_the_three_owned_flags() -> None:
     research_api = (ROOT / "docs" / "research-api.md").read_text()
     assert "all V4 flags are unowned" not in research_api
-    assert "other ten remain unowned" in research_api
+    assert "other nine remain unowned" in research_api
     assert "`organizations`" in research_api
     assert "`formal_rules`" in research_api
 
@@ -96,7 +94,7 @@ def test_current_v4_docs_state_the_two_owned_flags() -> None:
         (ROOT / "docs" / "v4-architecture.md").read_text().split()
     )
     assert "Every V4 capability flag is closed, unowned" not in v4_doc
-    assert "the other ten remain unowned" in v4_doc
+    assert "the other nine remain unowned" in v4_doc
     assert "`organizations`" in v4_doc
     assert "`formal_rules`" in v4_doc
 

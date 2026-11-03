@@ -192,6 +192,7 @@ class Perspective:
     subjective_valuations: object | None = None
     scarcity_beliefs: object | None = None
     acceptance_memories: object | None = None
+    disputes: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -598,6 +599,7 @@ class Perspective:
             organization_concepts=self.organization_concepts,
             organization_operations=self.organization_operations,
             organization_agency=self.organization_agency,
+            formal_rules=self.formal_rules,
             collective_decisions=self.collective_decisions,
             mediation=self.mediation,
             institutional_memory=self.institutional_memory,
@@ -619,6 +621,7 @@ class Perspective:
             acceptance_memories=cast(
                 "AcceptanceMemoryLedger | None", self.acceptance_memories
             ),
+            disputes=self.disputes,
         )
 
     def __repr__(self) -> str:

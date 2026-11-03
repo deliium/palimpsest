@@ -29,6 +29,7 @@ from api.routes import (
     branches_router,
     civilization_router,
     debugger_router,
+    dispute_router,
     formal_rule_router,
     health_router,
     inspection_router,
@@ -297,6 +298,29 @@ def _attach_formal_rule_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_dispute_reader(app: FastAPI) -> None:
+    from api.dispute_cursor import DisputeCursorCodec
+    from persistence.dispute_filesystem import create_dispute_reader
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.dispute_cursor_codec = None
+        app.state.dispute_reader = None
+        _LOGGER.debug("dispute_reader_skipped", reason_code="settings_unavailable")
+        return
+    secret = (
+        settings.dispute_cursor_key.get_secret_value().encode("utf-8")
+        if settings.dispute_cursor_key is not None
+        else None
+    )
+    if settings.dispute_root is None or secret is None:
+        app.state.dispute_cursor_codec = None
+        app.state.dispute_reader = None
+        return
+    app.state.dispute_cursor_codec = DisputeCursorCodec.from_secret(secret)
+    app.state.dispute_reader = create_dispute_reader(settings.dispute_root)
+
+
 def _attach_lineage_service(app: FastAPI) -> None:
     from api.lineage_cursor import LineageCursorCodec
 
@@ -360,6 +384,7 @@ def create_app(
     _attach_macro_society_reader(app)
     _attach_organization_reader(app)
     _attach_formal_rule_reader(app)
+    _attach_dispute_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -387,6 +412,7 @@ def create_app(
     app.include_router(macro_society_router)
     app.include_router(organization_router)
     app.include_router(formal_rule_router)
+    app.include_router(dispute_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

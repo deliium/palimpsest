@@ -163,9 +163,7 @@ def test_provenance_separates_observed_and_declared_edges() -> None:
                 content_revision=0,
             ),
         ),
-        identity_rows=(
-            InstitutionalIdentityRow("alice", "record-author-body", 0),
-        ),
+        identity_rows=(InstitutionalIdentityRow("alice", "record-author-body", 0),),
     )
     assert document.values["entry_count"] == 2
     assert document.values["observed_carrier_edge_count"] == 1
@@ -186,7 +184,7 @@ def test_none_and_empty_inputs_are_absent() -> None:
 
 
 def test_specifications_are_registered_exactly() -> None:
-    assert METRIC_FAMILY_COUNT == 151
+    assert METRIC_FAMILY_COUNT == 154
     continuity = metric_specification(MetricFamilyId.INSTITUTIONAL_MEMORY_CONTINUITY)
     provenance = metric_specification(MetricFamilyId.INSTITUTIONAL_MEMORY_PROVENANCE)
     assert len(continuity.value_keys) == 15

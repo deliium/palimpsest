@@ -10,10 +10,10 @@ implements no V4 social mechanic.
 Every V4 capability flag is closed. V4-01 declared all of them unowned and
 fail-closed at runtime construction (`capability_unimplemented`, stage
 `v4_capability_flags`); a later V4 plan must claim ownership explicitly before a
-flag can enable behavior. Today two flags are owned — `organizations`
-(V4-03/V4-04/V4-05) and `formal_rules` (V4-06) — and the other ten remain
-unowned and fail closed. Enabling an unowned flag is an error, not an
-experiment.
+flag can enable behavior. Today three flags are owned — `organizations`
+(V4-03/V4-04/V4-05), `formal_rules` (V4-06), and `legal_disputes` (V4-07) — and
+the other nine remain unowned and fail closed. Enabling an unowned flag is an
+error, not an experiment.
 
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned from
 V2/V3. V4 does not silently claim them, and they keep failing closed exactly as
@@ -60,7 +60,7 @@ The registry revision is `v4-context-map-v2`.
 | --- | --- | --- | --- | --- | --- | --- |
 | `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship, institution concepts, offices, institutional memory, collective decisions, structured commitments, group formation, possession legitimacy | reuse | V4-03/V4-04 implementation |
 | `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | V4-06 implementation |
-| `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation | reuse | deferred to V4-02+ |
+| `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation, formal rules, offices, organizations | reuse | V4-07 implementation |
 | `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | deferred to V4-02+ |
 | `organized_conflict` | `organized_conflict` | objective-world | `world`, `simulation`, `agents.cognition` | physical harm/attack commands | reuse | deferred to V4-02+ |
 | `infrastructure_networks` | `infrastructure_networks` | objective-world | `world`, `simulation` | new physical network graph | reserve event 23 / codec `v21` | deferred to V4-02+ |
@@ -108,10 +108,27 @@ ledger.
 
 ### legal_disputes
 
-Disputes, accounts, recommendations, and outcomes stay owner-scoped. The only
-objective facts are the physical effects of voluntarily selected commands such as
-a supported `Give`. No court, verdict, binding settlement, forced transfer, or
-global dispute registry is created.
+V4-07 owns `legal_disputes` on the accepted `runner-config-v56` seam. A dispute
+is one owner's belief about attributed claims, counterclaims, testimony,
+evidence references, rule interpretations, mediation links, authority
+references, and proposed or declared resolutions. Claims stay separate and
+attributed; agents may sincerely disagree because remembered evidence differs.
+Rule references resolve only against the owner's formal-rule ledger
+(`resolved`, `orphaned`, `version_mismatch`, `contested`, `retired`); mediation
+links only cite the owner's mediation ledger.
+
+Resolutions are proposals. Per-party `accept`/`reject` declarations never bind
+anyone, and `apparently_accepted` requires every named party's active
+declaration observed after a prior committed tick. The only supported
+undertaking path delegates to `compile_mediation_undertaking`; every physical
+effect remains an ordinary admitted command. `WorldEngine` never reads a dispute
+ledger, a socially disputed but physically possible command is still admitted,
+and a physically impossible command is still rejected by existing world rules.
+Detached analysis may classify researcher-only objective alignment
+(`supported`, `unresolved`, `inconsistent`, `not_applicable`) and publishes
+`dispute-resolution-snapshot-v1`; six GET-only routes serve it under
+`SUBJECTIVE_DEBUG`. No court, judge, verdict, binding settlement, forced
+transfer, or global dispute registry exists.
 
 ### diplomacy
 

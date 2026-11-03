@@ -557,3 +557,23 @@ mode before mutating runtime state or runner cursors; disabled owners reject
 non-`None` mediation state. Pruned evidence remains non-actionable history, and
 restore never recomputes acceptance or role support. Durable SQL restart is not
 provided.
+
+## Dispute carry and restart limits
+
+`legal_disputes` is an opt-in owner mode on `runner-config-v56` under the locked
+`dispute-resolution.v1` policy. When enabled, `_prepare_disputes` refreshes one
+owner's `DisputeLedger` from the current observation and prepared owner beliefs,
+derives rule, mediation, and authority references, and expires resolution
+windows. `Perspective.disputes` carries the prepared ledger into cognition, and
+`SubjectiveSnapshot.disputes`, `CognitiveLoopResult.disputes`, and
+`SimulationRunnerResult.dispute_ledgers` carry it through observation,
+checkpoints, and detached analysis. `AgentRuntime` commits a ledger only when
+its owner matches the agent, and restore rejects a mismatched type or owner
+before mutating runtime state or runner cursors.
+
+Disabled mode is a strict passthrough: `_prepare_disputes` returns `None`, no
+ledger is allocated, and snapshots, proposals, results, and checkpoints carry
+`None` or empty values without changing commands, bytes, or RNG use. The
+ledger stays owner-scoped and is never read by `WorldEngine`, admission,
+perception, prompts, observer semantics, or stop selectors. Durable SQL restart
+is not provided.

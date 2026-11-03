@@ -49,15 +49,17 @@ def test_organizations_doc_covers_operational_state() -> None:
 
 
 def test_counts_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 151
+    assert METRIC_FAMILY_COUNT == 154
     organizations = DOC.read_text()
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     architecture_docs = (ROOT / "docs" / "architecture.md").read_text()
     description = (ROOT / ".ai-factory" / "DESCRIPTION.md").read_text()
-    assert "151" in description
-    assert "metric families 151" in description
-    assert "151" in architecture
-    assert "151" in architecture_docs
+    assert "154" in description
+    assert "metric families 154" in description
+    assert "154" in architecture
+    assert "154 metric families" in architecture
+    assert "154" in architecture_docs
+    assert "154 metric families" in architecture_docs
     assert "organization-snapshot-v2" in organizations
     assert "organization-snapshot-v1" in organizations
 

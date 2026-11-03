@@ -826,6 +826,27 @@ def assemble_arm_metric_bundle(
                 formal_rule_ledgers, window_ticks=100
             ),
         )
+    dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
+    if dispute_ledgers:
+        from analysis.dispute_evidence import (
+            dispute_objective_anchor_rows_from_events,
+        )
+        from analysis.disputes import harvest_dispute_rows
+
+        entity_to_agent = {
+            agent.entity_id.value: agent.agent_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        inputs = replace(
+            inputs,
+            dispute_rows=harvest_dispute_rows(
+                dispute_ledgers, window_ticks=100
+            ),
+            dispute_objective_rows=dispute_objective_anchor_rows_from_events(
+                events or (),
+                entity_to_agent=entity_to_agent,
+            ),
+        )
     return assemble_metric_documents(inputs)
 
 

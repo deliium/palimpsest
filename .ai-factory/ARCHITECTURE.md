@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-06
+### Current baseline through V4-07
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 151 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, and three V4-06 formal-rule families) |
+| Metric families | 154 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, and three V4-07 dispute families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -201,8 +201,9 @@ those as current pins or silently drop their legacy accepted versions.
 - Owned V3 flags: `generational_population`, `kinship_inheritance`,
   `cultural_historical_memory`, `multi_polity_migration`.
   `institutional_economy` remains unowned and fails closed.
-- Owned V4 flags: `organizations` (V4-03/V4-04/V4-05) and `formal_rules`
-  (V4-06). The other ten V4 flags remain unowned and fail closed.
+- Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
+  (V4-06), and `legal_disputes` (V4-07). The other nine V4 flags remain unowned
+  and fail closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -715,7 +716,55 @@ publications atomically with quotas; six GET-only `/v1` formal-rule routes
 require `SUBJECTIVE_DEBUG` and return `formal_rule_disabled` when unconfigured;
 the Svelte client adds a read-only formal-rules view.
 
+Pins at V4-06 remained runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
+semantic types, 151 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`. At that point two V4 flags were owned
+(`organizations`, `formal_rules`).
+
+### V4-07 dispute resolution seam
+
+V4-07 owns the third V4 capability flag, `legal_disputes`, on the accepted
+`runner-config-v56` seam. It adds no `runner-config-v57`, root field, per-agent
+runner key, command, event, observer semantic type, write pair, `/v2` route, or
+migration. A dispute is one owner's belief about attributed claims,
+counterclaims, testimony, evidence references, rule references, mediation and
+authority references, and proposed or declared resolutions. It is never a shared
+case file, objective truth, court, judge, jury, verdict, judgment, or binding
+settlement; no objective justice oracle or global dispute registry exists.
+`WorldEngine`, perception, admission, stop selectors, memory, prompts, and
+observer semantics never read a dispute ledger. A socially disputed but
+physically possible command is still admitted, and a physically impossible
+command is still rejected by existing world rules.
+
+Claims and counterclaims stay separately attributed; opposing claims and
+conflicting remembered evidence coexist without reconciliation. Direct and
+communicated testimony are distinct, and shared roots are never independent
+corroboration. Rule references resolve only against the owner's own formal-rule
+ledger: missing or mismatched rules stay `orphaned` or `version_mismatch`, and
+`legal_disputes` may run without `formal_rules`. Mediation cases,
+recommendations, responses, and outcomes are linked as owner beliefs; the only
+undertaking path reuses the existing mediation compiler, and every physical
+effect remains an ordinary admitted command. Resolutions are proposals with
+`proposed`, `partially_accepted`, `apparently_accepted`, `contested`,
+`withdrawn`, `expired`, and `superseded` states. `apparently_accepted` requires
+every named party's active declaration and still binds nobody; acceptance
+requires a proposal observed in a prior committed tick.
+
+`analysis.dispute_*` harvests exported ledgers, detects overlapping candidates
+with stable `disp-` analytical ids, derives forward-only lineage, and appends
+`dispute_claim_structure@1`, `dispute_testimony_independence@1`, and
+`dispute_resolution_alignment@1` (metric families 151 -> 154). Researcher-only
+objective alignment classifies claims as `supported`, `unresolved`,
+`inconsistent`, or `not_applicable`; it never reaches cognition, prompts,
+memory, world state, observer semantics, or stop selectors. `simulation` owns
+canonical `dispute-resolution-snapshot-v1`; `experiments` is the composition
+bridge; `persistence.dispute_filesystem` stores `dispute-resolution-store-v1`
+atomically with quotas; six GET-only `/v1` dispute routes require
+`SUBJECTIVE_DEBUG` and return `dispute_disabled` when unconfigured; the Svelte
+client adds a read-only disputes view.
+
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 151 metric families, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, and Alembic `0017`. Two V4 flags are owned
-(`organizations`, `formal_rules`) and ten remain unowned.
+types, 154 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
+are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
+unowned.

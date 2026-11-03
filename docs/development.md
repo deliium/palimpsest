@@ -613,3 +613,21 @@ artifact roots; API reads keep filesystem bytes unchanged.
 - `uv run pytest tests/unit/test_organization_operations_api.py tests/unit/test_organization_api.py -q`
 - `cd clients/research-ui && ./node_modules/.bin/vitest run src/views/OrganizationsPanel.test.ts`
 - `cd clients/research-ui && ./node_modules/.bin/svelte-check --tsconfig ./tsconfig.app.json`
+
+## Dispute-resolution gates (V4-07)
+
+| Command | Covers |
+| --- | --- |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/test_dispute_*.py tests/architecture/test_dispute_boundaries.py -q` | Focused contracts, records, speech, analysis, snapshot, publication, API, CLI, runtime, determinism, and boundary selection |
+| `uv run --frozen --python 3.12.14 pytest tests/unit/test_dispute_docs.py -q` | Documentation parity for this feature |
+| `uv run --frozen --python 3.12.14 pytest --cov --cov-report=term tests/unit tests/architecture -q` | Full unit + architecture suite with coverage |
+| `uv run --frozen --python 3.12.14 pytest -k "organization or v4 or formal_rule or dispute or metric_specification or runner_config_v56" -q` | V4/organization/formal-rule/dispute regression selection |
+| `PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest -m "integration and not scale" -q` | Integration lane; a disposable `palimpsest_test*` database is required |
+| `pnpm --dir clients/research-ui test` | Research UI tests, including the Disputes panel |
+| `pnpm --dir clients/research-ui check` | Research UI type/Svelte checks |
+| `pnpm --dir clients/research-ui build` | Research UI production build |
+
+A missing disposable database, Node/pnpm toolchain, or Docker prerequisite
+leaves the lane unexecuted with its blocker; it is never reported as a pass.
+See [Disputes](disputes.md) and
+[Research UI](research-ui.md).

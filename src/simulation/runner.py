@@ -1011,6 +1011,7 @@ def _cognition_config_for(
     generational_narratives: object | None = None,
     organizations_enabled: bool = False,
     formal_rules_enabled: bool = False,
+    legal_disputes_enabled: bool = False,
 ) -> CognitionLoopConfig:
     emotional_flag = capability_flags.short_term_emotional_state
     emotional_mode = (
@@ -1316,12 +1317,17 @@ def _cognition_config_for(
     if institutional_decay_mode is CognitionInstitutionalDecayMode.DETERMINISTIC:
         institutional_decay_policy = default_institutional_decay_policy()
     from agents.cognition.configuration import (
+        CognitionDisputeMode,
         CognitionFormalRuleMode,
         CognitionOrganizationMode,
     )
     from agents.cognition.formal_rules import (
         FORMAL_RULE_POLICY_VERSION,
         default_formal_rule_policy,
+    )
+    from agents.cognition.legal_disputes import (
+        DISPUTE_POLICY_VERSION,
+        default_dispute_policy,
     )
     from agents.cognition.organization_agency import (
         ORGANIZATION_AGENCY_POLICY_VERSION,
@@ -1387,6 +1393,17 @@ def _cognition_config_for(
             formal_rule_mode.value,
             None,
         )
+    dispute_mode = (
+        CognitionDisputeMode.DETERMINISTIC
+        if legal_disputes_enabled
+        else CognitionDisputeMode.DISABLED
+    )
+    dispute_policy = default_dispute_policy() if legal_disputes_enabled else None
+    _LOG.info(
+        "cognition_dispute_mode mode=%s policy_version=%s",
+        dispute_mode.value,
+        DISPUTE_POLICY_VERSION if dispute_policy is not None else None,
+    )
     _LOG.debug(
         "cognition_config_institutional_decay mode=%s policy_version=%s",
         institutional_decay_mode.value,
@@ -1517,6 +1534,8 @@ def _cognition_config_for(
         organization_agency_policy=organization_agency_policy,
         formal_rule_mode=formal_rule_mode,
         formal_rule_policy=formal_rule_policy,
+        dispute_mode=dispute_mode,
+        dispute_policy=dispute_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2648,6 +2667,7 @@ class SimulationRunner:
                     generational_narratives=config.generational_narratives,
                     organizations_enabled=(config.v4_capability_flags.organizations),
                     formal_rules_enabled=(config.v4_capability_flags.formal_rules),
+                    legal_disputes_enabled=(config.v4_capability_flags.legal_disputes),
                 )
                 memory_retriever = _memory_retriever_for(
                     agent_spec.cognition.memory_mode,
@@ -5038,6 +5058,7 @@ class SimulationRunner:
             ),
             organization_agency_ledgers=(self.export_organization_agency_ledgers()),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
+            dispute_ledgers=(self.export_dispute_ledgers()),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5459,6 +5480,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_formal_rule_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_dispute_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered dispute ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "disputes", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "dispute_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6296,6 +6332,9 @@ class SimulationRunner:
                 generational_narratives=self._config.generational_narratives,
                 organizations_enabled=(self._config.v4_capability_flags.organizations),
                 formal_rules_enabled=(self._config.v4_capability_flags.formal_rules),
+                legal_disputes_enabled=(
+                    self._config.v4_capability_flags.legal_disputes
+                ),
             )
             memory_retriever = _memory_retriever_for(
                 agent_spec.cognition.memory_mode,
@@ -6669,6 +6708,7 @@ def _construct_agent_bundle(
         generational_narratives=config.generational_narratives,
         organizations_enabled=config.v4_capability_flags.organizations,
         formal_rules_enabled=config.v4_capability_flags.formal_rules,
+        legal_disputes_enabled=config.v4_capability_flags.legal_disputes,
     )
     memory_retriever = _memory_retriever_for(
         agent_spec.cognition.memory_mode,

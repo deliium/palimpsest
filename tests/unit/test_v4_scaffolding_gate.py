@@ -115,7 +115,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
     tuple(
         name
         for name in V4_FLAG_NAMES
-        if name not in {"organizations", "formal_rules"}
+        if name not in {"organizations", "formal_rules", "legal_disputes"}
     ),
 )
 async def test_each_unowned_enabled_flag_fails_closed_at_construction(
@@ -134,7 +134,9 @@ async def test_each_unowned_enabled_flag_fails_closed_at_construction(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("flag_name", ("organizations", "formal_rules"))
+@pytest.mark.parametrize(
+    "flag_name", ("organizations", "formal_rules", "legal_disputes")
+)
 async def test_owned_v4_flag_constructs_but_stays_scaffolding_off(
     flag_name: str,
 ) -> None:

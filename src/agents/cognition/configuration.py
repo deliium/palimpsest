@@ -67,6 +67,11 @@ from agents.cognition.institutional_memory import (
     InstitutionalMemoryPolicy,
     default_institutional_memory_policy,
 )
+from agents.cognition.legal_disputes import (
+    DISPUTE_POLICY_VERSION,
+    DisputePolicy,
+    default_dispute_policy,
+)
 from agents.cognition.loop import CognitiveLoop
 from agents.cognition.mediation import (
     MediationPolicy,
@@ -416,6 +421,17 @@ class CognitionFormalRuleMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionDisputeMode(StrEnum):
+    """Owner-scoped structured disputes. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.legal_disputes``. This is a
+    run-level cognition mode, not a per-agent runner key.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -619,6 +635,8 @@ class CognitionLoopConfig:
     organization_agency_policy: OrganizationAgencyPolicy | None = None
     formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
     formal_rule_policy: FormalRulePolicy | None = None
+    dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
+    dispute_policy: DisputePolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1167,6 +1185,18 @@ class CognitionLoopConfig:
                 "invalid_enum path=formal_rule_policy reason_code=invalid_type"
             )
             raise TypeError("formal_rule_policy must be FormalRulePolicy or None")
+        if type(self.dispute_mode) is not CognitionDisputeMode:
+            _LOG.error("invalid_enum path=dispute_mode reason_code=invalid_mode")
+            raise TypeError("dispute_mode must be CognitionDisputeMode")
+        if self.dispute_mode is CognitionDisputeMode.DISABLED:
+            if self.dispute_policy is not None:
+                _LOG.debug("cognition_dispute_policy_cleared")
+            object.__setattr__(self, "dispute_policy", None)
+        elif self.dispute_policy is None:
+            object.__setattr__(self, "dispute_policy", default_dispute_policy())
+        elif type(self.dispute_policy) is not DisputePolicy:
+            _LOG.error("invalid_enum path=dispute_policy reason_code=invalid_type")
+            raise TypeError("dispute_policy must be DisputePolicy or None")
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1497,6 +1527,11 @@ class CognitionLoopConfig:
                 if self.formal_rule_policy is not None
                 else None
             )
+        if self.dispute_mode is CognitionDisputeMode.DETERMINISTIC:
+            material["dispute_mode"] = self.dispute_mode.value
+            material["dispute_policy_version"] = (
+                DISPUTE_POLICY_VERSION if self.dispute_policy is not None else None
+            )
         return material
 
 
@@ -1767,6 +1802,8 @@ def build_cognitive_loop(
         organization_agency_policy=resolved.organization_agency_policy,
         formal_rule_mode=resolved.formal_rule_mode,
         formal_rule_policy=resolved.formal_rule_policy,
+        dispute_mode=resolved.dispute_mode,
+        dispute_policy=resolved.dispute_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

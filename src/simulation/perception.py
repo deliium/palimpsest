@@ -158,6 +158,7 @@ def build_perspective(
     subjective_valuations: object | None = None,
     scarcity_beliefs: object | None = None,
     acceptance_memories: object | None = None,
+    disputes: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -369,6 +370,7 @@ def build_perspective(
         subjective_valuations=subjective_valuations,
         scarcity_beliefs=scarcity_beliefs,
         acceptance_memories=acceptance_memories,
+        disputes=disputes,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

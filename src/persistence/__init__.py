@@ -16,6 +16,12 @@ from memory.models import (
     MemoryScope,
     MemoryScoringPolicy,
 )
+from persistence.dispute_filesystem import (
+    FilesystemDisputePublisher,
+    FilesystemDisputeReader,
+    create_dispute_publisher,
+    create_dispute_reader,
+)
 from persistence.errors import (
     PersistenceAdapterError,
     PersistenceConflictError,
@@ -80,6 +86,8 @@ if TYPE_CHECKING:
     from social.relationships import RelationshipFormationPolicy
 
 __all__ = [
+    "FilesystemDisputePublisher",
+    "FilesystemDisputeReader",
     "FilesystemLineagePublisher",
     "FilesystemLineageReader",
     "FilesystemMacroSocietyPublisher",
@@ -95,6 +103,8 @@ __all__ = [
     "create_cognition_trace_repository",
     "create_debugger_event_lookup",
     "create_debugger_lineage_ports",
+    "create_dispute_publisher",
+    "create_dispute_reader",
     "create_empty_boundary_subjective_clone",
     "create_experiment_record_repository",
     "create_experiment_repository",

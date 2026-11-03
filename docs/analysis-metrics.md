@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **130** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **154** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -464,3 +464,42 @@ candidate lacks operation evidence, coverage is below one, or operations are
 orphaned; `PRESENT` otherwise. `mean_owner_support` is a mean of owner-local
 support counts, never a consensus statistic. Neither family is a capacity,
 prevalence, probability, prediction, or composite score.
+
+## Dispute-resolution families (catalog 154)
+
+V4-07 appends three detached families after the formal-rule families; the first
+151 keep their ids, order, versions, and value keys.
+
+`dispute_claim_structure@1` — population `final_window_dispute_candidates`;
+denominator `claims_with_an_owner_case` (`EVALUABLE_CLAIMS`). Value keys:
+`candidate_count`, `case_count`, `claim_count`, `counterclaim_count`,
+`counterclaim_ratio`, `claim_kind_histogram`, `polarity_histogram`,
+`rule_referenced_case_ratio`, `evidence_backed_claim_ratio`,
+`multi_party_case_ratio`, and `unresolved_case_ratio`. Claims and
+counterclaims are owner assertions, never objective truth.
+
+`dispute_testimony_independence@1` — same population; denominator
+`testimony_rows_and_claims`. Value keys: `testimony_count`,
+`direct_testimony_ratio`, `communicated_testimony_ratio`, `distinct_root_count`,
+`shared_root_duplicate_ratio`, `independently_evidenced_ratio`,
+`contradictory_testimony_ratio`, and `claim_without_testimony_ratio`. Shared
+testimony roots never count as independent corroboration, and silence is never
+inferred as testimony.
+
+`dispute_resolution_alignment@1` — same population; denominator
+`resolutions_responses_and_anchorable_claims`. Value keys:
+`resolution_count`, `proposed_resolution_count`,
+`apparently_accepted_resolution_count`, `contested_resolution_count`,
+`accepted_party_ratio`, `rejected_party_ratio`,
+`mediation_linked_resolution_ratio`, `objective_supported_claim_ratio`,
+`objective_unresolved_claim_ratio`, `objective_inconsistent_claim_ratio`, and
+`agreement_alignment_ratio`. Acceptance and rejection are per-party
+declarations, never binding findings.
+
+Availability: a missing dispute ledger or channel is `ABSENT`; an enabled
+ledger with zero cases is `PRESENT` with zero counts and explicit coverage.
+Missing rows stay unknown and are never coerced to zero or false. The
+objective `supported` / `unresolved` / `inconsistent` classification is
+researcher-only; claims without an objective anchor are excluded from the
+objective denominator rather than counted as inconsistent. None of the three
+families feeds cognition, prompts, memory, admission, or stop selectors.

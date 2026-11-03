@@ -174,3 +174,22 @@ account requests, responds to owner-directed recommendations using the
 recipient's own appraisal, and otherwise chooses hearing, account requests,
 vouching, mediation, or bounded terms from delivered evidence. See
 [Conflict mediation](mediation.md).
+
+## Structured dispute relations (`dsp_v1`)
+
+Optional dispute speech travels as one closed `dsp_v1` relation inside existing
+`Talk`/`Tell`; it adds no command, event, observer semantic type, free-text
+body, or relation subject. The ten predicates are `dsp_claim`,
+`dsp_counterclaim`, `dsp_testify`, `dsp_evidence`, `dsp_rule`, `dsp_mediation`,
+`dsp_propose`, `dsp_accept`, `dsp_reject`, and `dsp_withdraw`, each with a
+closed field set of tokens, opaque references, and a bounded terms digest.
+
+Delivery proves speech only. A claim or counterclaim is attributed to the
+verified observed speaker, never to a third party named in the payload.
+Direct (`direct=true`) and communicated testimony are distinct; communicated
+testimony declares a root, and a shared root is not independent corroboration.
+Acceptance and rejection are per-party declarations, never a finding about the
+other party. There is no free-text parsing: only the closed predicate and its
+token fields are read. A dispute-disabled recipient treats `dsp_v1` as ordinary
+unparsed communication and mutates no ledger. See
+[Disputes](disputes.md).

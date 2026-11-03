@@ -312,6 +312,8 @@ class MetricComputationInputs:
     organization_operation_rows: Sequence[object] | None = None
     organization_agency_rows: Sequence[object] | None = None
     formal_rule_rows: object | None = None
+    dispute_rows: object | None = None
+    dispute_objective_rows: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1624,6 +1626,85 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             ),
         )
 
+    if inputs.dispute_rows is not None:
+        from analysis.dispute_evidence import (
+            DisputeObjectiveAnchorRow,
+            build_dispute_windows,
+        )
+        from analysis.dispute_layers import project_dispute_layers
+        from analysis.dispute_lineage import (
+            derive_dispute_lineage,
+            summarize_disputes,
+        )
+        from analysis.dispute_metrics import (
+            compute_dispute_claim_structure,
+            compute_dispute_resolution_alignment,
+            compute_dispute_testimony_independence,
+        )
+        from analysis.disputes import (
+            DisputeHarvestRows,
+            harvest_dispute_rows,
+        )
+
+        dispute_rows = (
+            inputs.dispute_rows
+            if type(inputs.dispute_rows) is DisputeHarvestRows
+            else harvest_dispute_rows(
+                cast("Sequence[object]", inputs.dispute_rows),
+                window_ticks=100,
+            )
+        )
+        dispute_anchors = cast(
+            "Sequence[DisputeObjectiveAnchorRow]",
+            tuple(inputs.dispute_objective_rows or ()),
+        )
+        dispute_windows = build_dispute_windows(
+            dispute_rows,
+            window_ticks=100,
+            objective_rows=dispute_anchors,
+        )
+        dispute_analysis = derive_dispute_lineage(
+            dispute_rows,
+            dispute_windows,
+            objective_rows=dispute_anchors,
+        )
+        dispute_summary = summarize_disputes(dispute_rows, dispute_analysis)
+        dispute_layers = project_dispute_layers(
+            dispute_rows,
+            dispute_analysis,
+            dispute_summary,
+            windows=dispute_windows,
+            objective_rows=dispute_anchors,
+        )
+        _safe(
+            "dispute_claim_structure",
+            lambda: compute_dispute_claim_structure(
+                dispute_summary,
+                dispute_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "dispute_testimony_independence",
+            lambda: compute_dispute_testimony_independence(
+                dispute_summary,
+                dispute_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "dispute_resolution_alignment",
+            lambda: compute_dispute_resolution_alignment(
+                dispute_summary,
+                dispute_analysis,
+                dispute_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis
@@ -1790,8 +1871,6 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         )
 
     if inputs.office_rows is not None:
-        from typing import cast
-
         from analysis.offices import (
             OfficeSnapshotRow,
             align_office_roles,
@@ -1822,8 +1901,6 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         )
 
     if inputs.mediation_rows is not None:
-        from typing import cast
-
         from analysis.mediation import (
             MediationEffectRow,
             MediationSnapshot,
@@ -1859,8 +1936,6 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         )
 
     if inputs.collective_decision_rows is not None:
-        from typing import cast
-
         from analysis.collective_decisions import (
             CollectiveDecisionSnapshot,
             CollectiveEffectRow,

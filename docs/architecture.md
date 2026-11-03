@@ -561,8 +561,40 @@ Detached analysis appends `formal_rule_development@1`,
 catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
-Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-151 metric families, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and
-Alembic `0017`. Two V4 flags are owned (`organizations`, `formal_rules`) and ten
-remain unowned. The formal-rule context adds six GET-only `/v1` routes alongside
-the six organization routes.
+Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
+semantic types, 154 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`. Three V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned. The
+formal-rule context adds six GET-only `/v1` routes alongside the six organization
+routes.
+
+## V4-07 dispute resolution contract
+
+`legal_disputes` is the third owned V4 flag on `runner-config-v56`. A dispute is
+one owner's belief about attributed claims, counterclaims, testimony, evidence,
+rule references, mediation links, authority references, and proposed or declared
+resolutions. It is not a shared case file, court, judgment, or objective truth.
+`WorldEngine` never reads a dispute ledger: a socially disputed but physically
+possible command is still admitted, and a physically impossible command is still
+rejected by existing rules. There is no objective justice oracle, court, judge,
+jury, verdict, binding settlement, or global dispute registry.
+
+Claims and counterclaims stay separate and attributed. Direct and communicated
+testimony are distinct, and shared roots are never independent corroboration.
+Rule references resolve only against the owner's formal-rule ledger; missing or
+mismatched rules stay `orphaned` or `version_mismatch`, and `legal_disputes` may
+run without `formal_rules`. Mediation records and institutional roles are linked
+as beliefs, never as binding decisions. Resolutions are proposals:
+`apparently_accepted` requires every named party's active declaration and still
+binds nobody; acceptance requires a proposal observed in a prior committed tick.
+
+Detached analysis may classify objective alignment as `supported`, `unresolved`,
+`inconsistent`, or `not_applicable` for researchers only. It never reaches
+cognition, prompts, memory, world state, observer semantics, or stop selectors.
+`dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
+independent; publication is opt-in and post-completion. Six GET-only `/v1`
+dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **154** metric
+families, with 14 V4 contexts and 12 capability flags. No command, event,
+observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
+migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
+`0018`.

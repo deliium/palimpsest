@@ -53,6 +53,19 @@ remain discussion; nothing substitutes another item, target, `Feed`, project,
 or arbitrary feasible command. Recommendations never bypass custody,
 colocation, admission, survival, lifecycle, or project gates.
 
+## Dispute links
+
+A dispute ledger links only the owner's own `MediationLedger`; it never reads
+another owner's cases or a global mediation record. Cases, recommendations,
+responses, and outcomes are retained as owner-local `dmr-` beliefs. A
+mediator recommendation or a party response may become a proposed dispute
+resolution, but it remains a belief, not a binding decision or obligation.
+
+Only an exact supported owner-selected `Give` undertaking delegates to
+`compile_mediation_undertaking`. No dispute helper creates a second command
+compiler, constructs an `AgentCommand`, or bypasses ordinary admission. See
+[Disputes](disputes.md).
+
 ## Configuration and compatibility
 
 `mediation_mode` defaults to `DISABLED` for every agent, including newborn

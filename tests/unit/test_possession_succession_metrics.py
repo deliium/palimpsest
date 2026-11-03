@@ -56,7 +56,7 @@ def _event(
 
 
 def test_family_count_is_74() -> None:
-    assert METRIC_FAMILY_COUNT == 151
+    assert METRIC_FAMILY_COUNT == 154
     assert MetricFamilyId.POSSESSION_CUSTODY_OUTCOMES.value == (
         "possession_custody_outcomes"
     )

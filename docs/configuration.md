@@ -307,10 +307,10 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. Two V4 flags are owned and may construct on
-the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05) and `formal_rules`
-(V4-06). The other ten V4 flags remain unowned and fail closed at
-`SimulationRunner.from_config`.
+closed `v4_capability_flags` sibling. Three V4 flags are owned and may construct
+on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
+(V4-06), and `legal_disputes` (V4-07). The other nine V4 flags remain unowned and
+fail closed at `SimulationRunner.from_config`.
 
 Formal rules add no runner schema, root field, or per-agent runner key:
 `formal_rule_mode` is internal cognition configuration and is derived from
@@ -325,9 +325,26 @@ settings, not runner capabilities:
 - An unset root yields `503 formal_rule_disabled` and a CLI receipt of
   `disabled`.
 
-Operations deepen `organizations`; formal rules own `formal_rules`. There is no
-`runner-config-v57`, no `organization_operations_mode`, and no new root field.
-Absent evidence yields an empty operation or formal-rule ledger. Generational
+## Dispute resolution (`runner-config-v56`)
+
+`legal_disputes` is the third owned V4 flag alongside `organizations` and
+`formal_rules`. It is enabled only through `v4_capability_flags` on the accepted
+`runner-config-v56` keyset and adds no `runner-config-v57`, root field, or
+per-agent runner key. `legal_disputes` may run with or without `formal_rules`;
+without the formal-rule flag every rule reference stays `orphaned`.
+
+Dispute publication and reads are composition settings, not runner capabilities:
+
+- `--dispute-root` (default off), `--dispute-max-publications` (default 16), and
+  `--dispute-max-bytes` (default 8 MiB) control the opt-in research CLI producer.
+- `PALIMPSEST_DISPUTE_ROOT` and `PALIMPSEST_DISPUTE_CURSOR_KEY` configure the six
+  read-only API routes. `dispute_cursor_key` must be at least 32 UTF-8 bytes.
+- An unset root yields `503 dispute_disabled` and a CLI receipt of `disabled`.
+
+Operations deepen `organizations`; formal rules own `formal_rules`; structured
+disputes own `legal_disputes`. There is no `runner-config-v57`, no
+`organization_operations_mode`, and no new root field. Absent evidence yields an
+empty operation, formal-rule, or dispute ledger. Generational
 siblings remain mandatory only when a generational run is present. Default
 writes remain `runner-config-v4`, the latest feature runner remains
 `runner-config-v55`, and no behavior or migration is added. See

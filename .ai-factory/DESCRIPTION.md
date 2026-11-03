@@ -313,3 +313,33 @@ read-only Research UI Formal rules panel. Pins: runner v4/v55/v56, result v2/v3,
 commands 43, observer semantic types 73, metric families 151, replay-v22/codec
 v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; `institutional_economy` and
 `multi_hop_testimony_tracking` remain unowned.
+
+V4-07 (structured dispute resolution, 2026-11-03) owns the third V4 capability
+flag, `legal_disputes`, on the accepted `runner-config-v56` seam; it adds no
+`runner-config-v57`, root field, per-agent runner key, command, event, observer
+semantic type, write pair, `/v2` route, or migration. A dispute is one owner's
+belief about separately attributed claims, counterclaims, testimony, evidence
+references, rule references, mediation and authority references, and proposed or
+declared resolutions. It is never a shared case file, court, judgment, verdict,
+or binding settlement, and no objective justice oracle or global dispute
+registry exists. `WorldEngine` never reads a dispute ledger: a socially disputed
+but physically possible command is still admitted, and a physically impossible
+command is still rejected by existing rules. Direct and communicated testimony
+are distinct, shared roots are never independent corroboration, and rule
+references resolve only against the owner's formal-rule ledger (`orphaned` or
+`version_mismatch` otherwise; `legal_disputes` may run without `formal_rules`).
+Mediation links are beliefs, not binding decisions, and resolutions are
+proposals: `apparently_accepted` requires every named party's active declaration
+and still binds nobody, while acceptance requires a proposal observed in a prior
+committed tick. Detached analysis adds `dispute_claim_structure@1`,
+`dispute_testimony_independence@1`, and `dispute_resolution_alignment@1` (metric
+families 151 → 154), canonical `dispute-resolution-snapshot-v1`, an atomic
+`dispute-resolution-store-v1` filesystem store, six GET-only
+`/v1/simulations/{run_id}/disputes` routes under `SUBJECTIVE_DEBUG`, and a
+read-only Research UI disputes view. Researcher-only objective alignment
+(`supported`, `unresolved`, `inconsistent`, `not_applicable`) never reaches
+cognition, prompts, memory, world state, observer semantics, or stop selectors.
+Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
+metric families 154, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, Alembic `0017` with no `0018`; three V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned.

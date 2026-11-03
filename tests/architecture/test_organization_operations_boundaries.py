@@ -48,9 +48,7 @@ SRC = ROOT / "src"
 COGNITION_MODULES = tuple(
     sorted((SRC / "agents" / "cognition").glob("organization_operation*.py"))
 )
-ANALYSIS_MODULES = tuple(
-    sorted((SRC / "analysis").glob("organization_operation*.py"))
-)
+ANALYSIS_MODULES = tuple(sorted((SRC / "analysis").glob("organization_operation*.py")))
 SIMULATION_MODULES = tuple(sorted((SRC / "simulation").glob("organization_*.py")))
 PERSISTENCE_MODULES = (SRC / "persistence" / "organization_filesystem.py",)
 API_MODULES = (
@@ -140,14 +138,18 @@ def _class_fields(path: Path, names: set[str]) -> set[str]:
 
 @pytest.mark.parametrize("path", ANALYSIS_MODULES)
 def test_analysis_operation_modules_are_detached(path: Path) -> None:
-    assert _import_roots(path) & {
-        "agents",
-        "experiments",
-        "api",
-        "persistence",
-        "infrastructure",
-        "observer",
-    } == set()
+    assert (
+        _import_roots(path)
+        & {
+            "agents",
+            "experiments",
+            "api",
+            "persistence",
+            "infrastructure",
+            "observer",
+        }
+        == set()
+    )
 
 
 @pytest.mark.parametrize("path", SIMULATION_MODULES)
@@ -207,9 +209,7 @@ def test_update_reads_only_owner_inputs() -> None:
 
     from agents.cognition import apply_organization_operation_update
 
-    parameters = set(
-        inspect.signature(apply_organization_operation_update).parameters
-    )
+    parameters = set(inspect.signature(apply_organization_operation_update).parameters)
     for forbidden in (
         "peer",
         "other_owner",
@@ -266,7 +266,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 151
+    assert METRIC_FAMILY_COUNT == 154
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert next_revision() == "0018"
@@ -279,9 +279,7 @@ def test_v4_registry_and_reservations_are_unchanged() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_WRITE_PAIR_RESERVATIONS) == 4
-    assert V4ContextId.ORGANIZATIONS in {
-        context.context_id for context in V4_CONTEXTS
-    }
+    assert V4ContextId.ORGANIZATIONS in {context.context_id for context in V4_CONTEXTS}
     assert V4CapabilityFlags(organizations=True).owned_enabled_names() == (
         "organizations",
     )

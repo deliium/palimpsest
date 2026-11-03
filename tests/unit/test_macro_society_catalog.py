@@ -25,13 +25,13 @@ ORGANIZATION_FAMILIES = (
 )
 
 
-def test_catalog_validates_at_151_and_appends_macro_families() -> None:
+def test_catalog_validates_at_154_and_appends_macro_families() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 151
-    assert len(specs) == 151
-    assert tuple(spec.family_id for spec in specs[-15:-11]) == MACRO_FAMILIES
-    assert tuple(spec.family_id for spec in specs[-11:-7]) == ORGANIZATION_FAMILIES
-    assert len({spec.family_id for spec in all_metric_specifications()}) == 151
+    assert METRIC_FAMILY_COUNT == 154
+    assert len(specs) == 154
+    assert tuple(spec.family_id for spec in specs[-18:-14]) == MACRO_FAMILIES
+    assert tuple(spec.family_id for spec in specs[-14:-10]) == ORGANIZATION_FAMILIES
+    assert len({spec.family_id for spec in all_metric_specifications()}) == 154
 
 
 def test_macro_specs_declare_their_value_keys() -> None:

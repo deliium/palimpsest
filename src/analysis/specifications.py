@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 151
+METRIC_FAMILY_COUNT: Final[int] = 154
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -226,6 +226,9 @@ class MetricFamilyId(StrEnum):
     FORMAL_RULE_DEVELOPMENT = "formal_rule_development"
     FORMAL_RULE_AUTHORITY = "formal_rule_authority"
     FORMAL_RULE_RESPONSE = "formal_rule_response"
+    DISPUTE_CLAIM_STRUCTURE = "dispute_claim_structure"
+    DISPUTE_TESTIMONY_INDEPENDENCE = "dispute_testimony_independence"
+    DISPUTE_RESOLUTION_ALIGNMENT = "dispute_resolution_alignment"
 
 
 class DenominatorKind(StrEnum):
@@ -6829,6 +6832,224 @@ def _spec_formal_rule_response() -> MetricSpecification:
     )
 
 
+def _spec_dispute_claim_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DISPUTE_CLAIM_STRUCTURE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_dispute_candidates",
+        denominator="claims_with_an_owner_case",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached dispute windows",
+        deceased_policy="dead owners retain their last durable dispute beliefs",
+        zero_holding_policy=(
+            "no dispute ledger or channel -> availability=absent; "
+            "an enabled ledger with zero cases is present with zero counts and "
+            "never zero-filled from a missing channel"
+        ),
+        opportunity_vs_occurrence=(
+            "claims and counterclaims are owner assertions, not objective truth"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "pruned owner rows or partial windows are partial coverage; "
+            "missing evidence is never fabricated"
+        ),
+        formulas={
+            "candidate_count": "detached cross-owner dispute candidates",
+            "case_count": "owner-local dispute cases",
+            "claim_count": "attributed claims across all owners",
+            "counterclaim_count": "attributed claims with role=counterclaim",
+            "counterclaim_ratio": "counterclaim_count / claim_count",
+            "claim_kind_histogram": "claims per closed claim kind",
+            "polarity_histogram": "claims per closed polarity",
+            "rule_referenced_case_ratio": (
+                "cases with at least one rule reference / cases with claims"
+            ),
+            "evidence_backed_claim_ratio": (
+                "claims with at least one evidence reference / claims"
+            ),
+            "multi_party_case_ratio": (
+                "cases with more than two parties / cases with claims"
+            ),
+            "unresolved_case_ratio": (
+                "cases with status open, evidence_gathering, or contested / "
+                "cases with claims"
+            ),
+        },
+        value_keys=(
+            "candidate_count",
+            "case_count",
+            "claim_count",
+            "claim_kind_histogram",
+            "counterclaim_count",
+            "counterclaim_ratio",
+            "evidence_backed_claim_ratio",
+            "multi_party_case_ratio",
+            "polarity_histogram",
+            "rule_referenced_case_ratio",
+            "unresolved_case_ratio",
+        ),
+        empty_case=(
+            "no dispute ledger or channel -> availability=absent; "
+            "enabled empty ledger -> present with zero counts"
+        ),
+        unknown_case=(
+            "missing rows stay unknown; never coerced to zero or false"
+        ),
+    )
+
+
+def _spec_dispute_testimony_independence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DISPUTE_TESTIMONY_INDEPENDENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+                EvidenceStage.COMMUNICATED_TRACE,
+            }
+        ),
+        population="final_window_dispute_candidates",
+        denominator="testimony_rows_and_claims",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached dispute windows",
+        deceased_policy="retold testimony keeps its declared root lineage",
+        zero_holding_policy=(
+            "no testimony rows -> present zeros when the ledger exists; "
+            "absent when no dispute channel exists"
+        ),
+        opportunity_vs_occurrence=(
+            "testimony is an attributed account, never corroboration by repetition"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "shared roots never count as independent corroboration; "
+            "unobserved testimony is never inferred from silence"
+        ),
+        formulas={
+            "testimony_count": "attributed testimony rows",
+            "direct_testimony_ratio": "direct testimony / testimony rows",
+            "communicated_testimony_ratio": (
+                "communicated testimony / testimony rows"
+            ),
+            "distinct_root_count": "distinct declared testimony roots",
+            "shared_root_duplicate_ratio": (
+                "(testimony rows - distinct roots) / testimony rows"
+            ),
+            "independently_evidenced_ratio": (
+                "independently evidenced testimony / testimony rows"
+            ),
+            "contradictory_testimony_ratio": (
+                "testimony rows attached to claims with both affirm and deny "
+                "counterparts / testimony rows"
+            ),
+            "claim_without_testimony_ratio": (
+                "claims with no testimony / claims"
+            ),
+        },
+        value_keys=(
+            "claim_without_testimony_ratio",
+            "communicated_testimony_ratio",
+            "contradictory_testimony_ratio",
+            "direct_testimony_ratio",
+            "distinct_root_count",
+            "independently_evidenced_ratio",
+            "shared_root_duplicate_ratio",
+            "testimony_count",
+        ),
+        empty_case=(
+            "no dispute ledger -> absent; enabled ledger without testimony -> "
+            "present with zero counts"
+        ),
+        unknown_case=(
+            "missing testimony stays unknown; never counted as independent"
+        ),
+    )
+
+
+def _spec_dispute_resolution_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DISPUTE_RESOLUTION_ALIGNMENT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_dispute_candidates",
+        denominator="resolutions_responses_and_anchorable_claims",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached dispute windows",
+        deceased_policy="proposed resolutions expire by belief, never by force",
+        zero_holding_policy=(
+            "no dispute ledger -> absent; enabled ledger without resolutions -> "
+            "present with zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "acceptance and rejection are per-party declarations, never binding "
+            "findings; objective alignment is researcher-only classification"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "claims without an objective anchor are excluded from the objective "
+            "denominator, not counted as inconsistent"
+        ),
+        formulas={
+            "resolution_count": "owner-local proposed resolutions",
+            "proposed_resolution_count": "resolutions with status=proposed",
+            "apparently_accepted_resolution_count": (
+                "resolutions with status=apparently_accepted"
+            ),
+            "contested_resolution_count": "resolutions with status=contested",
+            "accepted_party_ratio": "active accept declarations / active responses",
+            "rejected_party_ratio": "active reject declarations / active responses",
+            "mediation_linked_resolution_ratio": (
+                "resolutions on mediation-linked cases / resolutions"
+            ),
+            "objective_supported_claim_ratio": (
+                "researcher-only supported claims / anchorable claims"
+            ),
+            "objective_unresolved_claim_ratio": (
+                "researcher-only unresolved claims / anchorable claims"
+            ),
+            "objective_inconsistent_claim_ratio": (
+                "researcher-only inconsistent claims / anchorable claims"
+            ),
+            "agreement_alignment_ratio": (
+                "candidates with two owner resolutions sharing one terms digest / "
+                "candidates with at least two owner resolutions"
+            ),
+        },
+        value_keys=(
+            "accepted_party_ratio",
+            "agreement_alignment_ratio",
+            "apparently_accepted_resolution_count",
+            "contested_resolution_count",
+            "mediation_linked_resolution_ratio",
+            "objective_inconsistent_claim_ratio",
+            "objective_supported_claim_ratio",
+            "objective_unresolved_claim_ratio",
+            "proposed_resolution_count",
+            "rejected_party_ratio",
+            "resolution_count",
+        ),
+        empty_case=(
+            "no dispute ledger -> absent; enabled ledger without resolutions -> "
+            "present with zero counts"
+        ),
+        unknown_case=(
+            "missing objective anchors stay unknown as unresolved claims; never "
+            "coerced to inconsistent or to a verdict"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -6981,6 +7202,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_formal_rule_development,
     _spec_formal_rule_authority,
     _spec_formal_rule_response,
+    _spec_dispute_claim_structure,
+    _spec_dispute_testimony_independence,
+    _spec_dispute_resolution_alignment,
 )
 
 

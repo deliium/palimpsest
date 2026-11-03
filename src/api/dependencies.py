@@ -157,6 +157,11 @@ def get_formal_rule_reader(request: Request) -> object | None:
     return getattr(request.app.state, "formal_rule_reader", None)
 
 
+def get_dispute_reader(request: Request) -> object | None:
+    """Return the read-only dispute reader, or ``None`` when disabled."""
+    return getattr(request.app.state, "dispute_reader", None)
+
+
 def get_lineage_service(request: Request) -> LineageApiService | None:
     service = getattr(request.app.state, "lineage_service", None)
     if service is None:

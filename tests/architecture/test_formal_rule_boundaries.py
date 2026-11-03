@@ -98,9 +98,7 @@ def test_formal_rule_modules_import_no_world_engine_state_or_commands() -> None:
         imports = _imports(path)
         assert not imports & forbidden, path
         names = {
-            node.id
-            for node in ast.walk(_tree(path))
-            if isinstance(node, ast.Name)
+            node.id for node in ast.walk(_tree(path)) if isinstance(node, ast.Name)
         }
         assert not names & forbidden_names, path
 
@@ -169,9 +167,7 @@ def test_six_get_only_formal_rule_routes() -> None:
         if getattr(route, "methods", None) is not None
     ]
     assert len(routes) == 6
-    assert all(
-        getattr(route, "methods", None) == {"GET"} for route in routes
-    )
+    assert all(getattr(route, "methods", None) == {"GET"} for route in routes)
 
 
 def test_six_organization_routes_are_unchanged() -> None:
@@ -181,9 +177,7 @@ def test_six_organization_routes_are_unchanged() -> None:
         if getattr(route, "methods", None) is not None
     ]
     assert len(routes) == 6
-    assert all(
-        getattr(route, "methods", None) == {"GET"} for route in routes
-    )
+    assert all(getattr(route, "methods", None) == {"GET"} for route in routes)
 
 
 def test_six_formal_rule_cursor_purposes() -> None:
@@ -203,11 +197,11 @@ def test_snapshot_schema_and_store_schema_are_v1() -> None:
     store = (SRC / "persistence" / "formal_rule_filesystem.py").read_text(
         encoding="utf-8"
     )
-    assert 'formal-rule-store-v1' in store
+    assert "formal-rule-store-v1" in store
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 151
+    assert METRIC_FAMILY_COUNT == 154
     assert len(COMMAND_RULE_MATRIX) == 43
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -230,6 +224,9 @@ def test_v4_registry_has_fourteen_contexts_twelve_flags_two_owned() -> None:
     )
     assert V4CapabilityFlags(formal_rules=True).owned_enabled_names() == (
         "formal_rules",
+    )
+    assert V4CapabilityFlags(legal_disputes=True).owned_enabled_names() == (
+        "legal_disputes",
     )
 
 
@@ -297,11 +294,7 @@ def test_no_global_rule_registry_or_cross_owner_store() -> None:
                 targets = list(node.targets)
             else:
                 continue
-            names = {
-                target.id
-                for target in targets
-                if isinstance(target, ast.Name)
-            }
+            names = {target.id for target in targets if isinstance(target, ast.Name)}
             if "__all__" in names:
                 continue
             mutable = isinstance(value, (ast.Dict, ast.List, ast.Set)) or (

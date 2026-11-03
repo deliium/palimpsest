@@ -150,6 +150,28 @@ Append-only `experiment_definitions`, `experiment_assignments`, and `experiment_
 
 Migration head is `0017`. V2/V3 capability flags are **not** Alembic columns — they are carried only inside canonical runner-config JSON stored in existing `run_control.config_payload` (`0011`). V3 scaffolding does **not** add `0018`; do not invent indexed V3 flag columns without a later justified plan. Tests may target only databases whose name contains `palimpsest_test`; Alembic receives the validated URL directly and fails closed on conflicting ambient URLs.
 
+## Dispute-resolution publication store
+
+`dispute-resolution-store-v1` is an append-only filesystem store, separate from
+SQL, objective replay, and the owner-local cognition ledger.
+
+| Path | Role |
+| --- | --- |
+| `state.json` | Store schema plus per-publication run, generated tick, snapshot digest, and byte count |
+| `publications/<disp-pub-…>.json` | Immutable `dispute-resolution-snapshot-v1` payload |
+| `.publish.lock` | Process lock around the atomic commit point |
+
+Publication writes the payload to `publications/.<publication_id>.tmp`, fsyncs
+it, renames it atomically, then atomically rewrites `state.json` while holding
+`.publish.lock`. Publication quotas default to 16 stored publications and
+8 MiB per artifact; an exceeded publication or cumulative byte quota fails
+closed with `dispute_quota_exceeded`, and an oversized snapshot fails with
+`dispute_size_limit`. A duplicate publication id with different bytes is
+refused with `dispute_publication_exists`; identical bytes are idempotent.
+Digest mismatch and invalid state fail closed. Reads verify the publication
+digest and never mutate files. See
+[Disputes](disputes.md).
+
 ## Copy-only cold history
 
 `persistence` cold export is an explicit copy, not a tier that rewrites source

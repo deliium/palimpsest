@@ -316,6 +316,8 @@ class CognitiveLoop:
         "_developmental_learning_spec",
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
+        "_dispute_mode",
+        "_dispute_policy",
         "_durable_records_active",
         "_emotional_state",
         "_epistemic_policy",
@@ -360,6 +362,7 @@ class CognitiveLoop:
         "_perception",
         "_planner",
         "_possession_succession_active",
+        "_prepared_disputes",
         "_prepared_formal_rules",
         "_prepared_institutional_decay",
         "_prepared_organization_agency",
@@ -493,6 +496,8 @@ class CognitiveLoop:
         organization_agency_policy: object | None = None,
         formal_rule_mode: object | None = None,
         formal_rule_policy: object | None = None,
+        dispute_mode: object | None = None,
+        dispute_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -975,6 +980,26 @@ class CognitiveLoop:
         self._formal_rule_mode = formal_mode
         self._formal_rule_policy = formal_rule_policy
         self._prepared_formal_rules: object | None = None
+        from agents.cognition.configuration import CognitionDisputeMode
+        from agents.cognition.legal_disputes import (
+            DisputePolicy,
+            default_dispute_policy,
+        )
+
+        dispute = (
+            CognitionDisputeMode.DISABLED if dispute_mode is None else dispute_mode
+        )
+        if type(dispute) is not CognitionDisputeMode:
+            raise TypeError("dispute_mode must be CognitionDisputeMode")
+        if dispute is CognitionDisputeMode.DISABLED:
+            dispute_policy = None
+        elif dispute_policy is None:
+            dispute_policy = default_dispute_policy()
+        elif type(dispute_policy) is not DisputePolicy:
+            raise TypeError("dispute_policy must be DisputePolicy")
+        self._dispute_mode = dispute
+        self._dispute_policy = dispute_policy
+        self._prepared_disputes: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1454,6 +1479,7 @@ class CognitiveLoop:
             prepared_organization_operations=self._prepared_organization_operations,
             prepared_organization_agency=self._prepared_organization_agency,
             prepared_formal_rules=self._prepared_formal_rules,
+            prepared_disputes=self._prepared_disputes,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1501,6 +1527,7 @@ class CognitiveLoop:
         self._prepared_organization_operations = state.prepared_organization_operations
         self._prepared_organization_agency = state.prepared_organization_agency
         self._prepared_formal_rules = state.prepared_formal_rules
+        self._prepared_disputes = state.prepared_disputes
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2514,6 +2541,86 @@ class CognitiveLoop:
             "formal_rule_prepare mode=%s rules=%s",
             self._formal_rule_mode.value,
             len(updated.rules),
+        )
+        return updated
+
+    def _prepare_disputes(
+        self, loop_input: CognitiveLoopInput, memory: object | None
+    ) -> object | None:
+        """Refresh one owner's dispute ledger from owner-visible evidence."""
+        from agents.cognition.configuration import CognitionDisputeMode
+        from agents.cognition.legal_disputes import (
+            DisputeLedger,
+            DisputePolicy,
+            apply_dispute_update,
+            derive_authority_references,
+            derive_rule_references,
+            expire_dispute_resolutions,
+            link_mediation_references,
+        )
+
+        if self._dispute_mode is not CognitionDisputeMode.DETERMINISTIC:
+            self._prepared_disputes = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = None if snapshot is None else getattr(snapshot, "disputes", None)
+        prior = carried if type(carried) is DisputeLedger else None
+        policy = self._dispute_policy
+        if type(policy) is not DisputePolicy:
+            raise TypeError("dispute_policy must be DisputePolicy")
+
+        def prepared(name: str) -> object | None:
+            return None if snapshot is None else getattr(snapshot, name, None)
+
+        tick = loop_input.observation.tick
+        updated = apply_dispute_update(
+            loop_input.agent_id,
+            tick,
+            loop_input.observation,
+            prior,
+            identity=prepared("social_identity"),
+            retrieved_memory_context=memory,
+            structured_commitments=prepared("structured_commitments"),
+            subjective_valuations=prepared("subjective_valuations"),
+            mediation=prepared("mediation"),
+            formal_rules=prepared("formal_rules"),
+            offices=prepared("office_concepts"),
+            institution_concepts=prepared("institution_concepts"),
+            organization_concepts=prepared("organization_concepts"),
+            collective_decisions=prepared("collective_decisions"),
+            policy=policy,
+        )
+        updated = derive_rule_references(
+            updated,
+            formal_rules=prepared("formal_rules"),
+            owner_id=loop_input.agent_id,
+            policy=policy,
+        )
+        updated = link_mediation_references(
+            updated,
+            mediation=prepared("mediation"),
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            policy=policy,
+        )
+        updated = derive_authority_references(
+            updated,
+            owner_id=loop_input.agent_id,
+            offices=prepared("office_concepts"),
+            institution_concepts=prepared("institution_concepts"),
+            organization_concepts=prepared("organization_concepts"),
+            collective_decisions=prepared("collective_decisions"),
+            mediation=prepared("mediation"),
+            tick=tick,
+            policy=policy,
+        )
+        updated = expire_dispute_resolutions(updated, tick, policy)
+        self._prepared_disputes = updated
+        _LOG.debug(
+            "dispute_prepare mode=%s cases=%s claims=%s",
+            self._dispute_mode.value,
+            len(updated.cases),
+            len(updated.claims),
         )
         return updated
 
@@ -4599,6 +4706,7 @@ class CognitiveLoop:
             organization_concepts,
         )
         formal_rules = self._prepare_formal_rules(loop_input)
+        disputes = self._prepare_disputes(loop_input, memory)
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -4968,6 +5076,7 @@ class CognitiveLoop:
             organization_operations=organization_operations,
             organization_agency=organization_agency,
             formal_rules=formal_rules,
+            disputes=disputes,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5271,6 +5380,25 @@ class CognitiveLoop:
                 final_command=command,
                 tick=loop_input.observation.tick,
             )
+        disputes = proposal.disputes
+        from agents.cognition.configuration import CognitionDisputeMode
+        from agents.cognition.legal_disputes import (
+            DisputeLedger,
+            record_dispute_utterance,
+        )
+
+        if self._dispute_mode is CognitionDisputeMode.DETERMINISTIC and (
+            type(disputes) is DisputeLedger
+        ):
+            snapshot = loop_input.snapshot
+            disputes = record_dispute_utterance(
+                disputes,
+                owner_id=loop_input.agent_id,
+                tick=loop_input.observation.tick,
+                command=command,
+                identity=(None if snapshot is None else snapshot.social_identity),
+                policy=self._dispute_policy,
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -5312,6 +5440,7 @@ class CognitiveLoop:
             organization_operations=proposal.organization_operations,
             organization_agency=proposal.organization_agency,
             formal_rules=proposal.formal_rules,
+            disputes=disputes,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

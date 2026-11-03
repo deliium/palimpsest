@@ -975,6 +975,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.dispute_composition import (
+                producer_options_from_args as dispute_options_from_args,
+            )
+
+            dispute_options = dispute_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_dispute_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1286,19 +1298,41 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 run_id=assignment.run_id.value,
                 receipt=formal_rule_receipt,
             )
+            print(f"formal_rule_publication_status={formal_rule_receipt['status']}")
             print(
-                "formal_rule_publication_status="
-                f"{formal_rule_receipt['status']}"
-            )
-            print(
-                "formal_rule_publication_reason="
-                f"{formal_rule_receipt['reason_code']}"
+                f"formal_rule_publication_reason={formal_rule_receipt['reason_code']}"
             )
             if "publication_id" in formal_rule_receipt:
                 print(
                     "formal_rule_publication_id="
                     f"{formal_rule_receipt['publication_id']}"
                 )
+        if dispute_options.enabled:
+            from research_runner.dispute_composition import (
+                publish_dispute_harvest,
+                write_dispute_receipt,
+            )
+
+            dispute_receipt = publish_dispute_harvest(
+                arm.runner_result,
+                dispute_options,
+                run_id=assignment.run_id.value,
+                input_revision=arm.config_fingerprint,
+                generated_tick=arm.runner_result.ticks_committed,
+                entity_to_agent={
+                    agent.entity_id.value: agent.agent_id.value
+                    for agent in arm.assignment.runner_config.agents
+                },
+            )
+            write_dispute_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                dispute_receipt,
+            )
+            print(f"dispute_publication_status={dispute_receipt['status']}")
+            print(f"dispute_publication_reason={dispute_receipt['reason_code']}")
+            if "publication_id" in dispute_receipt:
+                print(f"dispute_publication_id={dispute_receipt['publication_id']}")
         if lineage_options is not None:
             import json
 
@@ -1472,6 +1506,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--formal-rule-root", default=None)
     gen_p.add_argument("--formal-rule-max-publications", type=int, default=16)
     gen_p.add_argument("--formal-rule-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--dispute-root", default=None)
+    gen_p.add_argument("--dispute-max-publications", type=int, default=16)
+    gen_p.add_argument("--dispute-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

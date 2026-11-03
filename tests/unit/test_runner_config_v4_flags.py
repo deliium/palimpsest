@@ -108,7 +108,7 @@ def test_every_enabled_flag_is_owned_or_unimplemented() -> None:
         flags = V4CapabilityFlags(**{name: True})
         assert flags.any_enabled() is True
         assert flags.enabled_names() == (name,)
-        if name in {"organizations", "formal_rules"}:
+        if name in {"organizations", "formal_rules", "legal_disputes"}:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
         else:
@@ -117,5 +117,7 @@ def test_every_enabled_flag_is_owned_or_unimplemented() -> None:
 
 
 def test_owned_flag_pins_agree() -> None:
-    assert V4_OWNED_CAPABILITY_FLAGS == frozenset({"organizations", "formal_rules"})
+    assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
+        {"organizations", "formal_rules", "legal_disputes"}
+    )
     assert _V4_OWNED_CAPABILITY_FLAGS == V4_OWNED_CAPABILITY_FLAGS

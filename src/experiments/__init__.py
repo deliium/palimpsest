@@ -235,6 +235,16 @@ from experiments.cultural_metric_comparison import (
     load_cultural_metric_comparison,
 )
 from experiments.cultural_narratives_scenario import cultural_narratives_scenario
+from experiments.dispute_harvest import (
+    DisputeHarvest,
+    build_completed_run_dispute_harvest,
+)
+from experiments.dispute_publication import (
+    DisputeHarvestResult,
+    build_dispute_harvest_result,
+    dispute_publication_document,
+    publish_dispute_snapshot,
+)
 from experiments.emergent_naming_scenario import emergent_naming_scenario
 from experiments.environmental_scenario import (
     ENVIRONMENTAL_DYNAMICS_METRIC_VERSION,
@@ -467,6 +477,8 @@ __all__ = [
     "CulturalCaptureOptions",
     "CulturalCellMetrics",
     "CulturalChannelRow",
+    "DisputeHarvest",
+    "DisputeHarvestResult",
     "EvidenceAvailability",
     "EvidenceCompositionError",
     "EvidenceCompositionService",
@@ -580,8 +592,10 @@ __all__ = [
     "assert_v3_benchmark_build_comparable",
     "benchmark_suite_registry",
     "bounded_experimentation_profile",
+    "build_completed_run_dispute_harvest",
     "build_completed_run_harvest",
     "build_completed_run_organization_harvest",
+    "build_dispute_harvest_result",
     "build_generational_comparison",
     "build_macro_society_harvest_result",
     "build_matrix_aggregate",
@@ -622,6 +636,7 @@ __all__ = [
     "dependency_caregiving_profile",
     "developmental_learning_profile",
     "developmental_stages_profile",
+    "dispute_publication_document",
     "distributed_reputation_scenario",
     "durable_records_profile",
     "emergent_naming_scenario",
@@ -728,6 +743,7 @@ __all__ = [
     "new_agent_bootstrap_profile",
     "organization_publication_document",
     "persist_metric_bundle",
+    "publish_dispute_snapshot",
     "publish_macro_society_snapshot",
     "publish_organization_snapshot",
     "regional_context_from_run",

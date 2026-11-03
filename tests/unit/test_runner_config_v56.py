@@ -250,7 +250,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "legal_disputes",
         "diplomacy",
         "organized_conflict",
         "infrastructure_networks",
@@ -282,7 +281,9 @@ async def test_unowned_v4_flag_fails_closed_after_encode_decode(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("flag_name", ("organizations", "formal_rules"))
+@pytest.mark.parametrize(
+    "flag_name", ("organizations", "formal_rules", "legal_disputes")
+)
 async def test_owned_v4_flag_constructs_after_encode_decode(flag_name: str) -> None:
     config = replace(
         _base(),

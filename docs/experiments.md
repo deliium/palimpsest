@@ -570,3 +570,25 @@ claiming significance.
 ## Historical contingency (BN)
 
 Experiment BN and the `historical_contingency@1` grouped protocol are documented in [Historical contingency](historical-contingency.md). BN is a separate typed grouped recipe and is not an independent matrix cell or part of the V1 A–E gate.
+
+## Dispute-resolution publication (V4-07)
+
+Dispute publication is an opt-in, post-completion harvest/publication bridge.
+It reads exported owner-scoped dispute ledgers from a completed run, builds the
+detached `dispute-resolution-snapshot-v1`, and publishes it to the
+`dispute-resolution-store-v1` filesystem store. It runs only after
+finalization; a storage, composition, digest, or receipt failure changes only
+the publication receipt and never the scientific result,
+`SimulationRunnerResult`, or the experiment's status.
+
+The research CLI producer accepts `--dispute-root` (or
+`PALIMPSEST_DISPUTE_ROOT`), `--dispute-max-publications` (default 16), and
+`--dispute-max-bytes` (default 8 MiB), and writes a metadata-only
+`dispute-publication-{run_id}.json` receipt. The receipt records `status`
+(`published`, `empty`, `disabled`, `unavailable`, or `failed`), `reason_code`,
+publication id and digest, counts, and coverage. An unset root yields
+`disabled`; an incomplete run yields `unavailable`; duplicate or oversized
+artifacts yield `failed`. Receipts never contain claim text, party sets,
+evidence ids, rule ids, mediation ids, resolution terms, prompts, or
+credentials. See [Disputes](disputes.md) and
+[Persistence](persistence.md).
