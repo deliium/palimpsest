@@ -84,6 +84,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Configuration](docs/configuration.md) | `PALIMPSEST_` settings (including `PALIMPSEST_LLM_*`), logging, redaction, seeds, identifiers, clocks |
 | [Development](docs/development.md) | Tests, migrations (head `0017`), local and Docker workflows, exact commands |
 | [Organizations](docs/organizations.md) | Owner-scoped organization beliefs, nine aspects, operational state across eight domains, membership and identity rules, forward-only lineage, `organization-snapshot-v2`, five GET-only routes and the Research UI panel |
+| [Formal social rules](docs/formal-rules.md) | Owner-scoped formal-rule beliefs, monotone progression, recognized authority, written anchors, exceptions, competing systems, declared responses, `formal-rule-snapshot-v1`, six GET-only routes and the Research UI panel |
 | [Macro-societies](docs/macro-societies.md) | Analysis-only overlapping macro-society candidates, stable `msoc-` ids, split/merge lineage, snapshot artifact, read-only routes and Research UI |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |

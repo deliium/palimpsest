@@ -742,6 +742,7 @@ class SubjectiveSnapshot:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     organization_agency: object | None = None
+    formal_rules: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -1043,6 +1044,13 @@ class SubjectiveSnapshot:
             self.organization_agency,
             self.owner_id,
             field_name="SubjectiveSnapshot.organization_agency",
+        )
+        from agents.cognition.formal_rules import require_owner_formal_rules
+
+        require_owner_formal_rules(
+            self.formal_rules,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.formal_rules",
         )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
@@ -3934,6 +3942,7 @@ class CognitiveLoopProposal:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     organization_agency: object | None = None
+    formal_rules: object | None = None
     collective_decisions: object | None = None
     collective_decision_audit: tuple[object, ...] = ()
     mediation: object | None = None
@@ -4258,6 +4267,7 @@ class CognitiveLoopResult:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     organization_agency: object | None = None
+    formal_rules: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     mediation_authority: object | None = None

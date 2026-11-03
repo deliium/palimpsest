@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V3-43
+### Current baseline through V4-06
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 146 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, and two V4-04 organization-operation families) |
+| Metric families | 151 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, and three V4-06 formal-rule families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -201,6 +201,8 @@ those as current pins or silently drop their legacy accepted versions.
 - Owned V3 flags: `generational_population`, `kinship_inheritance`,
   `cultural_historical_memory`, `multi_polity_migration`.
   `institutional_economy` remains unowned and fails closed.
+- Owned V4 flags: `organizations` (V4-03/V4-04/V4-05) and `formal_rules`
+  (V4-06). The other ten V4 flags remain unowned and fail closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -678,3 +680,42 @@ and adds two families (`organization_collective_agency@1`,
 and v2 remain decodable; six GET-only `/v1` routes require `SUBJECTIVE_DEBUG`;
 the Svelte client adds a read-only collective-agency view. No command, event,
 observer semantic type, write pair, `/v2` route, or migration is added.
+
+### V4-06 formal rules seam
+
+V4-06 owns the second V4 capability flag, `formal_rules`, on the accepted
+`runner-config-v56` seam. It adds no `runner-config-v57`, root field, per-agent
+runner key, command, event, observer semantic type, write pair, `/v2` route, or
+migration. `agents.cognition.formal_rules` owns a closed owner-scoped ledger
+under `formal-rules.v1`: scope, proponents, recognized authority, written
+representation anchors, expected sanctions, exceptions, historical versions,
+and status. The progression `habit -> expectation -> norm -> documented ->
+recognized_enforcement` is monotone per owner rule and versioned.
+
+A rule is one owner's belief about a socially recognized constraint, not an
+objective law, permission, prohibition, court order, or enforcement engine.
+`WorldEngine`, perception, admission, stop selectors, and memory never read the
+ledger; a socially prohibited but physically possible command is still admitted,
+and a physically impossible command is still rejected by existing world rules.
+Expected sanctions remain beliefs, and exceptions never grant world permission.
+Bounded `fr_v1` claims travel inside existing `Talk`/`Tell`; `follow`, `violate`,
+`challenge`, `reinterpret`, and `ignore` are declarations, never objective
+compliance findings. Competing systems remain separate and mutually linked with
+no precedence, majority, quorum, or consensus gate.
+
+`analysis.formal_rule_*` harvests exported ledgers into detached rows and
+windows, detects overlapping candidates with stable `frule-` identities,
+derives forward-only lineage, projects objective counts, owner claims, and
+analytical summaries into three separated layers, and appends
+`formal_rule_development@1`, `formal_rule_authority@1`, and
+`formal_rule_response@1` (metric families 148 -> 151). `simulation.formal_rule_*`
+owns canonical `formal-rule-snapshot-v1`; `experiments.formal_rule_*` is the
+only composition bridge; `persistence.formal_rule_filesystem` stores
+publications atomically with quotas; six GET-only `/v1` formal-rule routes
+require `SUBJECTIVE_DEBUG` and return `formal_rule_disabled` when unconfigured;
+the Svelte client adds a read-only formal-rules view.
+
+Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
+types, 151 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`. Two V4 flags are owned
+(`organizations`, `formal_rules`) and ten remain unowned.

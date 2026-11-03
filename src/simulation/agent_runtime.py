@@ -447,6 +447,7 @@ class AgentRuntime:
         "_developmental_knowledge",
         "_emotional_state",
         "_finalized_hashes",
+        "_formal_rules",
         "_goal_revision_counters",
         "_group_formation",
         "_identity_cursor",
@@ -620,6 +621,7 @@ class AgentRuntime:
         self._organization_concepts: object | None = None
         self._organization_operations: object | None = None
         self._organization_agency: object | None = None
+        self._formal_rules: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1360,6 +1362,36 @@ class AgentRuntime:
             "organization_agency_carried owner_id=%s concepts=%s tick=%s",
             owner.value,
             len(ledger.concepts),
+            tick,
+        )
+
+    def _commit_formal_rules(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionFormalRuleMode
+        from agents.cognition.formal_rules import FormalRuleLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_formal_rule_mode",
+            CognitionFormalRuleMode.DISABLED,
+        )
+        if mode is not CognitionFormalRuleMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionFormalRuleMode.DETERMINISTIC:
+                self._formal_rules = None
+            return
+        if type(ledger) is not FormalRuleLedger:
+            raise TypeError("formal_rules must be FormalRuleLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._formal_rules = ledger
+        _LOG.debug(
+            "formal_rule_carried owner_id=%s rules=%s systems=%s tick=%s",
+            owner.value,
+            len(ledger.rules),
+            len(ledger.systems),
             tick,
         )
 
@@ -2260,6 +2292,7 @@ class AgentRuntime:
                 organization_concepts=self._organization_concepts,
                 organization_operations=self._organization_operations,
                 organization_agency=self._organization_agency,
+                formal_rules=self._formal_rules,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2750,6 +2783,10 @@ class AgentRuntime:
         )
         self._commit_organization_agency(
             getattr(pending.loop_result, "organization_agency", None),
+            pending.tick,
+        )
+        self._commit_formal_rules(
+            getattr(pending.loop_result, "formal_rules", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3324,6 +3361,16 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        self._formal_rules = getattr(checkpoint, "formal_rules", None)
+        if (
+            self._formal_rules is not None
+            and getattr(self._formal_rules, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._organization_concepts is not None
             and getattr(self._organization_concepts, "owner_id", None)
@@ -3435,6 +3482,7 @@ class AgentRuntime:
             organization_concepts=self._organization_concepts,
             organization_operations=self._organization_operations,
             organization_agency=self._organization_agency,
+            formal_rules=self._formal_rules,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

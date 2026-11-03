@@ -223,3 +223,7 @@ stance, authority basis, provenance code, tick, anchor kind, support, and
 contest, with a domain filter and a `contested` badge. Disabled and empty states
 are explicit; the client performs no candidate detection, identity minting,
 lineage derivation, operation classification, or write call.
+
+## Formal rules panel
+
+The **Formal rules** tab renders the six read-only routes: summary counts and coverage, competing candidates, rule stage/constraint/authority/recognition, written representation status, expected sanctions, exceptions, versions with revision kind and supersedes, lineage edges, and declared response counts. The response section is explicitly labelled as declared responses, not objective compliance. `formal_rule_disabled` renders as a normal unavailable state; no client-side rule inference or write action exists.

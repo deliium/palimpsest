@@ -152,6 +152,11 @@ def get_organization_reader(request: Request) -> OrganizationReadPort | None:
     return cast(OrganizationReadPort, reader)
 
 
+def get_formal_rule_reader(request: Request) -> object | None:
+    """Return the read-only formal-rule reader, or ``None`` when disabled."""
+    return getattr(request.app.state, "formal_rule_reader", None)
+
+
 def get_lineage_service(request: Request) -> LineageApiService | None:
     service = getattr(request.app.state, "lineage_service", None)
     if service is None:

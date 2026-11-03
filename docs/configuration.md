@@ -307,11 +307,31 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling; `organizations` is owned by V4-03/V4-04 and requires the accepted v56 seam, while the other eleven V4 flags stay unowned and fail closed. Operations extend the same flag: there is no `runner-config-v57`, no `organization_operations_mode`, and no new root field. Absent evidence yields an empty operation ledger. Generational siblings remain mandatory only
-when a generational run is present, every V4 flag is unowned and fails closed at
-`SimulationRunner.from_config`, default writes remain `runner-config-v4`, the
-latest feature runner remains `runner-config-v55`, and no behavior or migration
-is added. See [V4 versioning](v4-versioning.md). The closed axes
+closed `v4_capability_flags` sibling. Two V4 flags are owned and may construct on
+the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05) and `formal_rules`
+(V4-06). The other ten V4 flags remain unowned and fail closed at
+`SimulationRunner.from_config`.
+
+Formal rules add no runner schema, root field, or per-agent runner key:
+`formal_rule_mode` is internal cognition configuration and is derived from
+`v4_capability_flags.formal_rules`. Publication and reads are composition
+settings, not runner capabilities:
+
+- `--formal-rule-root` (default off), `--formal-rule-max-publications` (default
+  16), and `--formal-rule-max-bytes` (default 8 MiB) control the opt-in
+  research CLI producer.
+- `PALIMPSEST_FORMAL_RULE_ROOT` and `PALIMPSEST_FORMAL_RULE_CURSOR_KEY` configure
+  the six read-only API routes. The cursor key must be at least 32 UTF-8 bytes.
+- An unset root yields `503 formal_rule_disabled` and a CLI receipt of
+  `disabled`.
+
+Operations deepen `organizations`; formal rules own `formal_rules`. There is no
+`runner-config-v57`, no `organization_operations_mode`, and no new root field.
+Absent evidence yields an empty operation or formal-rule ledger. Generational
+siblings remain mandatory only when a generational run is present. Default
+writes remain `runner-config-v4`, the latest feature runner remains
+`runner-config-v55`, and no behavior or migration is added. See
+[V4 versioning](v4-versioning.md). The closed axes
 (`lifespan`, `learning_model`, `teaching_frequency`, `record_availability`,
 `memory_architecture`, `innovation_rate`, `migration`, `resource_scarcity`,
 `population_size`, `institution_support`, `cognitive_architecture`) are

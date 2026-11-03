@@ -112,7 +112,11 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "flag_name",
-    tuple(name for name in V4_FLAG_NAMES if name != "organizations"),
+    tuple(
+        name
+        for name in V4_FLAG_NAMES
+        if name not in {"organizations", "formal_rules"}
+    ),
 )
 async def test_each_unowned_enabled_flag_fails_closed_at_construction(
     flag_name: str,
@@ -130,18 +134,21 @@ async def test_each_unowned_enabled_flag_fails_closed_at_construction(
 
 
 @pytest.mark.asyncio
-async def test_owned_organizations_flag_constructs_but_stays_scaffolding_off() -> None:
+@pytest.mark.parametrize("flag_name", ("organizations", "formal_rules"))
+async def test_owned_v4_flag_constructs_but_stays_scaffolding_off(
+    flag_name: str,
+) -> None:
     config = replace(
         _v56_config(),
-        v4_capability_flags=V4CapabilityFlags(organizations=True),
+        v4_capability_flags=V4CapabilityFlags(**{flag_name: True}),
     )
     with pytest.raises(ValueError, match="code=v4_scaffolding_flags_enabled"):
         v4_scaffolding_profile(config)
 
     runner = await SimulationRunner.from_config(
-        config, run_id=RunId("run-v4-profile-organizations")
+        config, run_id=RunId(f"run-v4-profile-{flag_name}")
     )
-    assert runner.config.v4_capability_flags.owned_enabled_names() == ("organizations",)
+    assert runner.config.v4_capability_flags.owned_enabled_names() == (flag_name,)
     assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()
 
 

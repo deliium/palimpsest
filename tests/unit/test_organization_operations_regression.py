@@ -49,14 +49,14 @@ AUTHORITY_KEYS = {
 }
 
 
-def test_catalog_is_148_with_operation_families_last() -> None:
-    assert METRIC_FAMILY_COUNT == 148
-    assert len(all_metric_specifications()) == 148
-    assert [spec.family_id for spec in all_metric_specifications()[-4:-2]] == [
+def test_catalog_is_151_with_formal_rule_families_last() -> None:
+    assert METRIC_FAMILY_COUNT == 151
+    assert len(all_metric_specifications()) == 151
+    assert [spec.family_id for spec in all_metric_specifications()[-7:-5]] == [
         MetricFamilyId.ORGANIZATION_OPERATIONS,
         MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY,
     ]
-    assert [spec.family_id for spec in all_metric_specifications()[-2:]] == [
+    assert [spec.family_id for spec in all_metric_specifications()[-5:-3]] == [
         MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
         MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
     ]

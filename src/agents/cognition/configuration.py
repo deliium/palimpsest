@@ -46,6 +46,11 @@ from agents.cognition.cultural_narratives import (
     default_cultural_narrative_policy,
 )
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
+from agents.cognition.formal_rules import (
+    FORMAL_RULE_POLICY_VERSION,
+    FormalRulePolicy,
+    default_formal_rule_policy,
+)
 from agents.cognition.group_formation import (
     GroupFormationPolicy,
     default_group_formation_policy,
@@ -400,6 +405,17 @@ class CognitionOrganizationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionFormalRuleMode(StrEnum):
+    """Owner-scoped formal social rules. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.formal_rules``. This is a
+    cognition mode, not a capability flag.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -601,6 +617,8 @@ class CognitionLoopConfig:
     organization_concept_policy: OrganizationConceptPolicy | None = None
     organization_operation_policy: OrganizationOperationPolicy | None = None
     organization_agency_policy: OrganizationAgencyPolicy | None = None
+    formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
+    formal_rule_policy: FormalRulePolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1131,6 +1149,24 @@ class CognitionLoopConfig:
             raise TypeError(
                 "organization_agency_policy must be OrganizationAgencyPolicy or None"
             )
+        if type(self.formal_rule_mode) is not CognitionFormalRuleMode:
+            _LOG.error(
+                "invalid_enum path=formal_rule_mode reason_code=invalid_mode"
+            )
+            raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
+        if self.formal_rule_mode is CognitionFormalRuleMode.DISABLED:
+            if self.formal_rule_policy is not None:
+                _LOG.debug("cognition_formal_rule_policy_cleared")
+            object.__setattr__(self, "formal_rule_policy", None)
+        elif self.formal_rule_policy is None:
+            object.__setattr__(
+                self, "formal_rule_policy", default_formal_rule_policy()
+            )
+        elif type(self.formal_rule_policy) is not FormalRulePolicy:
+            _LOG.error(
+                "invalid_enum path=formal_rule_policy reason_code=invalid_type"
+            )
+            raise TypeError("formal_rule_policy must be FormalRulePolicy or None")
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1454,6 +1490,13 @@ class CognitionLoopConfig:
                 if self.organization_agency_policy is not None
                 else None
             )
+        if self.formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC:
+            material["formal_rule_mode"] = self.formal_rule_mode.value
+            material["formal_rule_policy_version"] = (
+                FORMAL_RULE_POLICY_VERSION
+                if self.formal_rule_policy is not None
+                else None
+            )
         return material
 
 
@@ -1722,6 +1765,8 @@ def build_cognitive_loop(
         organization_concept_policy=resolved.organization_concept_policy,
         organization_operation_policy=resolved.organization_operation_policy,
         organization_agency_policy=resolved.organization_agency_policy,
+        formal_rule_mode=resolved.formal_rule_mode,
+        formal_rule_policy=resolved.formal_rule_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

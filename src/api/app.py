@@ -29,6 +29,7 @@ from api.routes import (
     branches_router,
     civilization_router,
     debugger_router,
+    formal_rule_router,
     health_router,
     inspection_router,
     lineage_router,
@@ -276,6 +277,26 @@ def _attach_organization_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_formal_rule_reader(app: FastAPI) -> None:
+    from api.formal_rule_cursor import FormalRuleCursorCodec
+    from persistence.formal_rule_filesystem import create_formal_rule_reader
+
+    settings: Settings = app.state.settings
+    secret = (
+        settings.formal_rule_cursor_key.get_secret_value().encode("utf-8")
+        if settings.formal_rule_cursor_key is not None
+        else None
+    )
+    if settings.formal_rule_root is None or secret is None:
+        app.state.formal_rule_cursor_codec = None
+        app.state.formal_rule_reader = None
+        return
+    app.state.formal_rule_cursor_codec = FormalRuleCursorCodec.from_secret(secret)
+    app.state.formal_rule_reader = create_formal_rule_reader(
+        settings.formal_rule_root
+    )
+
+
 def _attach_lineage_service(app: FastAPI) -> None:
     from api.lineage_cursor import LineageCursorCodec
 
@@ -338,6 +359,7 @@ def create_app(
     _attach_lineage_service(app)
     _attach_macro_society_reader(app)
     _attach_organization_reader(app)
+    _attach_formal_rule_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -364,6 +386,7 @@ def create_app(
     app.include_router(lineage_router)
     app.include_router(macro_society_router)
     app.include_router(organization_router)
+    app.include_router(formal_rule_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

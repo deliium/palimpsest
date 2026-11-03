@@ -70,15 +70,19 @@ def _base() -> SimulationRunnerConfig:
     )
 
 
-def test_organizations_is_the_only_owned_v4_flag() -> None:
+def test_organizations_is_owned_and_other_unowned_v4_flags_fail_closed() -> None:
     flags = V4CapabilityFlags(organizations=True)
     assert flags.any_enabled() is True
     assert flags.enabled_names() == ("organizations",)
     assert flags.owned_enabled_names() == ("organizations",)
     assert flags.unimplemented_enabled_names() == ()
 
+    formal = V4CapabilityFlags(formal_rules=True)
+    assert formal.owned_enabled_names() == ("formal_rules",)
+    assert formal.unimplemented_enabled_names() == ()
+
     for name in V4_FLAG_NAMES:
-        if name == "organizations":
+        if name in {"organizations", "formal_rules"}:
             continue
         other = V4CapabilityFlags(**{name: True})
         assert other.owned_enabled_names() == ()

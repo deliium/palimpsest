@@ -250,7 +250,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "formal_rules",
         "legal_disputes",
         "diplomacy",
         "organized_conflict",
@@ -283,17 +282,18 @@ async def test_unowned_v4_flag_fails_closed_after_encode_decode(
 
 
 @pytest.mark.asyncio
-async def test_owned_organizations_flag_constructs_after_encode_decode() -> None:
+@pytest.mark.parametrize("flag_name", ("organizations", "formal_rules"))
+async def test_owned_v4_flag_constructs_after_encode_decode(flag_name: str) -> None:
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V56,
-        v4_capability_flags=V4CapabilityFlags(organizations=True),
+        v4_capability_flags=V4CapabilityFlags(**{flag_name: True}),
     )
     decoded = decode_runner_config(encode_runner_config(config))
-    assert decoded.v4_capability_flags.organizations is True
+    assert getattr(decoded.v4_capability_flags, flag_name) is True
 
     runner = await SimulationRunner.from_config(
-        config, run_id=RunId("run-v4-gate-organizations")
+        config, run_id=RunId(f"run-v4-gate-{flag_name}")
     )
-    assert runner.config.v4_capability_flags.owned_enabled_names() == ("organizations",)
+    assert runner.config.v4_capability_flags.owned_enabled_names() == (flag_name,)
     assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()

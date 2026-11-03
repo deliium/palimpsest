@@ -8,8 +8,12 @@ from dataclasses import fields
 
 import pytest
 
-from simulation.compatibility import V4_CAPABILITY_FLAG_NAMES
+from simulation.compatibility import (
+    V4_CAPABILITY_FLAG_NAMES,
+    V4_OWNED_CAPABILITY_FLAGS,
+)
 from simulation.runner_models import (
+    _V4_OWNED_CAPABILITY_FLAGS,
     V2CapabilityFlags,
     V3CapabilityFlags,
     V4CapabilityFlags,
@@ -104,9 +108,14 @@ def test_every_enabled_flag_is_owned_or_unimplemented() -> None:
         flags = V4CapabilityFlags(**{name: True})
         assert flags.any_enabled() is True
         assert flags.enabled_names() == (name,)
-        if name == "organizations":
+        if name in {"organizations", "formal_rules"}:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
         else:
             assert flags.unimplemented_enabled_names() == (name,)
             assert flags.owned_enabled_names() == ()
+
+
+def test_owned_flag_pins_agree() -> None:
+    assert V4_OWNED_CAPABILITY_FLAGS == frozenset({"organizations", "formal_rules"})
+    assert _V4_OWNED_CAPABILITY_FLAGS == V4_OWNED_CAPABILITY_FLAGS

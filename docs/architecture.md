@@ -545,3 +545,24 @@ creating, splitting, merging, dissolving, or re-identifying one, and appends
 `organization_collective_implementation@1`, raising the metric catalog to 148.
 `organization-snapshot-v3` is canonical and bounded while v1/v2 remain
 decodable. Six GET-only `/v1` routes require `SUBJECTIVE_DEBUG`.
+
+## V4-06 formal social rules contract
+
+The owned `formal_rules` context is an owner-scoped belief ledger under
+`formal-rules.v1`: scope, proponents, recognized authority, written
+representation anchors, expected sanctions, exceptions, and historical
+versions. The progression `habit -> expectation -> norm -> documented ->
+recognized_enforcement` is monotone per owner rule. `WorldEngine` never reads
+the ledger; a socially prohibited but physically possible command is still
+admitted, and a physically impossible command is still rejected by existing
+world rules. Bounded `fr_v1` claims travel inside existing `Talk`/`Tell`.
+Detached analysis appends `formal_rule_development@1`,
+`formal_rule_authority@1`, and `formal_rule_response@1`, raising the metric
+catalog from 148 to 151 while the first 148 families keep their ids, order,
+versions, and value keys.
+
+Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
+151 metric families, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and
+Alembic `0017`. Two V4 flags are owned (`organizations`, `formal_rules`) and ten
+remain unowned. The formal-rule context adds six GET-only `/v1` routes alongside
+the six organization routes.

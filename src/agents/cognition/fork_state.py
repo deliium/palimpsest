@@ -60,6 +60,7 @@ class CognitiveLoopForkState:
     prepared_organization_concepts: object | None = None
     prepared_organization_operations: object | None = None
     prepared_organization_agency: object | None = None
+    prepared_formal_rules: object | None = None
     state_format_version: str = COGNITIVE_LOOP_FORK_STATE_VERSION
 
     def __post_init__(self) -> None:

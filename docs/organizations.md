@@ -225,6 +225,7 @@ composite civilization score.
 ## See also
 
 - [V4 architecture](v4-architecture.md)
+- [Formal social rules](formal-rules.md)
 - [Macro-societies](macro-societies.md)
 - [Configuration](configuration.md)
 - [Research API](research-api.md)

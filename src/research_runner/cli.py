@@ -963,6 +963,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.formal_rule_composition import (
+                producer_options_from_args as formal_rule_options_from_args,
+            )
+
+            formal_rule_options = formal_rule_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_formal_rule_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1256,6 +1268,37 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"organization_publication_reason={receipt['reason_code']}")
             if "publication_id" in receipt:
                 print(f"organization_publication_id={receipt['publication_id']}")
+        if formal_rule_options.enabled:
+            from research_runner.formal_rule_composition import (
+                publish_formal_rule_harvest,
+                write_formal_rule_receipt,
+            )
+
+            formal_rule_receipt = publish_formal_rule_harvest(
+                runner_result=arm.runner_result,
+                run_id=assignment.run_id.value,
+                input_revision=arm.config_fingerprint,
+                generated_tick=arm.runner_result.ticks_committed,
+                options=formal_rule_options,
+            )
+            write_formal_rule_receipt(
+                args.artifact_root,
+                run_id=assignment.run_id.value,
+                receipt=formal_rule_receipt,
+            )
+            print(
+                "formal_rule_publication_status="
+                f"{formal_rule_receipt['status']}"
+            )
+            print(
+                "formal_rule_publication_reason="
+                f"{formal_rule_receipt['reason_code']}"
+            )
+            if "publication_id" in formal_rule_receipt:
+                print(
+                    "formal_rule_publication_id="
+                    f"{formal_rule_receipt['publication_id']}"
+                )
         if lineage_options is not None:
             import json
 
@@ -1426,6 +1469,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--organization-root", default=None)
     gen_p.add_argument("--organization-max-publications", type=int, default=16)
     gen_p.add_argument("--organization-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--formal-rule-root", default=None)
+    gen_p.add_argument("--formal-rule-max-publications", type=int, default=16)
+    gen_p.add_argument("--formal-rule-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

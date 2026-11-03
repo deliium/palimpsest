@@ -290,5 +290,26 @@ creating or changing identity. `simulation.organization_*` adds canonical
 require `SUBJECTIVE_DEBUG`; the Research UI adds a read-only collective-agency
 view. No new flag, runner schema, command, event, observer semantic type, write
 pair, `/v2` route, or migration is added. Pins: runner v4/v55/v56, result v2/v3,
-commands 43, observer semantic types 73, metric families 148, replay-v22/codec
+commands 43, observer semantic types 73, metric families 151, replay-v22/codec
 v20, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+V4-06 (formal social rules, 2026-11-03) owns the `formal_rules` V4 context on the
+accepted `runner-config-v56` seam; it claims the already-declared flag and adds
+no additional flag slot, runner schema, root field, or per-agent runner key. A formal rule is one owner's belief about a socially
+recognized constraint with scope, proponents, recognized authority, written
+representation anchors, expected sanctions, exceptions, historical versions,
+and status. The progression `habit → expectation → norm → documented →
+recognized_enforcement` is monotone and versioned. `WorldEngine` never reads the
+ledger: a socially prohibited but physically possible command is still admitted,
+and a physically impossible command is still rejected by existing rules.
+Bounded `fr_v1` claims travel inside existing `Talk`/`Tell`; `follow`, `violate`,
+`challenge`, `reinterpret`, and `ignore` are declarations, never objective
+compliance findings. Competing systems coexist without precedence. Detached
+analysis adds `formal_rule_development@1`, `formal_rule_authority@1`, and
+`formal_rule_response@1` (metric families 148 → 151), canonical
+`formal-rule-snapshot-v1`, an atomic filesystem store, six GET-only
+`/v1/simulations/{run_id}/formal-rules` routes under `SUBJECTIVE_DEBUG`, and a
+read-only Research UI Formal rules panel. Pins: runner v4/v55/v56, result v2/v3,
+commands 43, observer semantic types 73, metric families 151, replay-v22/codec
+v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; `institutional_economy` and
+`multi_hop_testimony_tracking` remain unowned.

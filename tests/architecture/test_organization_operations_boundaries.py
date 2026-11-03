@@ -266,7 +266,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 148
+    assert METRIC_FAMILY_COUNT == 151
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert next_revision() == "0018"

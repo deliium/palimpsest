@@ -152,7 +152,9 @@ V3_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 V4_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v4_capability_flags"
 # Single source of truth: the closed flag tuple declared on V4CapabilityFlags.
 V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = _V4_CAPABILITY_FLAG_NAMES
-V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset({"organizations"})
+V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
+    {"organizations", "formal_rules"}
+)
 
 __all__ = [
     "ALEMBIC_HEAD_REVISION",
@@ -524,7 +526,8 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "v9 omits reputation_mode and restores DISABLED; "
             f"{RUNNER_SCHEMA_VERSION_V56} is accepted for V4 scaffolding and "
             "carries the closed v4_capability_flags sibling; organizations is "
-            "owned by V4-03 while the other eleven V4 flags are unowned, and any "
+            "owned by V4-03 and formal_rules is owned by V4-06 while the other "
+            "ten V4 flags are unowned, and any "
             "enabled unowned flag fails closed at "
             "SimulationRunner.from_config with capability_unimplemented; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
@@ -762,8 +765,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
         bump_trigger=(
             "Closed reserved V4 capability set on SimulationRunnerConfig; wire key "
             f"{V4_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of capability_flags and "
-            f"{V3_CAPABILITY_FLAGS_WIRE_KEY}; organizations is owned by V4-03 on "
-            f"{RUNNER_SCHEMA_VERSION_V56} and the other eleven flags are unowned, "
+            f"{V3_CAPABILITY_FLAGS_WIRE_KEY}; organizations is owned by V4-03 and "
+            f"formal_rules is owned by V4-06 on "
+            f"{RUNNER_SCHEMA_VERSION_V56} and the other ten flags are unowned, "
             "so any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"

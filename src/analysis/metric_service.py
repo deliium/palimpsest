@@ -10,7 +10,7 @@ import logging
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
 from analysis.behavior_metrics import (
     compute_behavioral_specialization,
@@ -311,6 +311,7 @@ class MetricComputationInputs:
     organization_rows: Sequence[object] | None = None
     organization_operation_rows: Sequence[object] | None = None
     organization_agency_rows: Sequence[object] | None = None
+    formal_rule_rows: object | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1554,6 +1555,72 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 run_id=run_id,
                 input_revision=revision,
                 tick=window_end,
+            ),
+        )
+
+    if inputs.formal_rule_rows:
+        from analysis.formal_rule_evidence import build_formal_rule_windows
+        from analysis.formal_rule_layers import project_formal_rule_layers
+        from analysis.formal_rule_lineage import (
+            derive_formal_rule_lineage,
+            summarize_formal_rules,
+        )
+        from analysis.formal_rule_metrics import (
+            compute_formal_rule_authority_metric,
+            compute_formal_rule_development_metric,
+            compute_formal_rule_response_metric,
+        )
+        from analysis.formal_rules import (
+            FormalRuleHarvestRows,
+            harvest_formal_rule_rows,
+        )
+
+        formal_rows = (
+            inputs.formal_rule_rows
+            if type(inputs.formal_rule_rows) is FormalRuleHarvestRows
+            else harvest_formal_rule_rows(
+                cast("Sequence[object]", inputs.formal_rule_rows),
+                window_ticks=100,
+            )
+        )
+        formal_windows = build_formal_rule_windows(
+            formal_rows, window_ticks=100
+        )
+        formal_analysis = derive_formal_rule_lineage(
+            formal_rows, formal_windows
+        )
+        formal_summary = summarize_formal_rules(formal_rows, formal_analysis)
+        formal_layers = project_formal_rule_layers(
+            formal_rows,
+            formal_analysis,
+            formal_summary,
+            windows=formal_windows,
+        )
+        _safe(
+            "formal_rule_development",
+            lambda: compute_formal_rule_development_metric(
+                formal_summary,
+                formal_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "formal_rule_authority",
+            lambda: compute_formal_rule_authority_metric(
+                formal_summary,
+                formal_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "formal_rule_response",
+            lambda: compute_formal_rule_response_metric(
+                formal_summary,
+                formal_layers,
+                run_id=run_id,
+                input_revision=revision,
             ),
         )
 

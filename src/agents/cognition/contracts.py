@@ -174,6 +174,7 @@ class Perspective:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     organization_agency: object | None = None
+    formal_rules: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None

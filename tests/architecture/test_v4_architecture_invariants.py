@@ -125,7 +125,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 148
+    assert METRIC_FAMILY_COUNT == 151
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -169,8 +169,8 @@ def test_context_registry_and_capability_ownership() -> None:
             assert spec.authority is not V4Authority.DETACHED_ANALYSIS
     for name in V4_CAPABILITY_FLAGS:
         flags = V4CapabilityFlags(**{name: True})
-        if name == "organizations":
-            assert flags.owned_enabled_names() == ("organizations",)
+        if name in {"organizations", "formal_rules"}:
+            assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
         else:
             assert flags.unimplemented_enabled_names() == (name,)

@@ -3,6 +3,7 @@
 from api.routes.branches import router as branches_router
 from api.routes.civilization import router as civilization_router
 from api.routes.debugger import router as debugger_router
+from api.routes.formal_rule import router as formal_rule_router
 from api.routes.health import router as health_router
 from api.routes.inspection import research_router as research_router
 from api.routes.inspection import router as inspection_router
@@ -21,6 +22,7 @@ __all__ = [
     "branches_router",
     "civilization_router",
     "debugger_router",
+    "formal_rule_router",
     "health_router",
     "inspection_router",
     "lineage_router",

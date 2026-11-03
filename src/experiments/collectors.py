@@ -814,6 +814,18 @@ def assemble_arm_metric_bundle(
                 organization_agency_ledgers
             ),
         )
+    formal_rule_ledgers = getattr(
+        arm.runner_result, "formal_rule_ledgers", None
+    )
+    if formal_rule_ledgers:
+        from analysis.formal_rules import harvest_formal_rule_rows
+
+        inputs = replace(
+            inputs,
+            formal_rule_rows=harvest_formal_rule_rows(
+                formal_rule_ledgers, window_ticks=100
+            ),
+        )
     return assemble_metric_documents(inputs)
 
 

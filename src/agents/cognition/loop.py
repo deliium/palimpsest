@@ -320,6 +320,8 @@ class CognitiveLoop:
         "_emotional_state",
         "_epistemic_policy",
         "_experiment_ledger",
+        "_formal_rule_mode",
+        "_formal_rule_policy",
         "_futures",
         "_generational_narratives_spec",
         "_goal_manager",
@@ -358,6 +360,7 @@ class CognitiveLoop:
         "_perception",
         "_planner",
         "_possession_succession_active",
+        "_prepared_formal_rules",
         "_prepared_institutional_decay",
         "_prepared_organization_agency",
         "_prepared_organization_concepts",
@@ -488,6 +491,8 @@ class CognitiveLoop:
         organization_concept_policy: object | None = None,
         organization_operation_policy: object | None = None,
         organization_agency_policy: object | None = None,
+        formal_rule_mode: object | None = None,
+        formal_rule_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -946,6 +951,30 @@ class CognitiveLoop:
         self._prepared_organization_concepts: object | None = None
         self._prepared_organization_agency: object | None = None
         self._prepared_organization_operations: object | None = None
+        from agents.cognition.configuration import CognitionFormalRuleMode
+        from agents.cognition.formal_rules import (
+            FormalRulePolicy,
+            default_formal_rule_policy,
+        )
+
+        formal_mode = (
+            CognitionFormalRuleMode.DISABLED
+            if formal_rule_mode is None
+            else formal_rule_mode
+        )
+        if type(formal_mode) is not CognitionFormalRuleMode:
+            raise TypeError(
+                "formal_rule_mode must be CognitionFormalRuleMode"
+            )
+        if formal_mode is CognitionFormalRuleMode.DISABLED:
+            formal_rule_policy = None
+        elif formal_rule_policy is None:
+            formal_rule_policy = default_formal_rule_policy()
+        elif type(formal_rule_policy) is not FormalRulePolicy:
+            raise TypeError("formal_rule_policy must be FormalRulePolicy")
+        self._formal_rule_mode = formal_mode
+        self._formal_rule_policy = formal_rule_policy
+        self._prepared_formal_rules: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1424,6 +1453,7 @@ class CognitiveLoop:
             prepared_organization_concepts=self._prepared_organization_concepts,
             prepared_organization_operations=self._prepared_organization_operations,
             prepared_organization_agency=self._prepared_organization_agency,
+            prepared_formal_rules=self._prepared_formal_rules,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1470,6 +1500,7 @@ class CognitiveLoop:
         self._prepared_organization_concepts = state.prepared_organization_concepts
         self._prepared_organization_operations = state.prepared_organization_operations
         self._prepared_organization_agency = state.prepared_organization_agency
+        self._prepared_formal_rules = state.prepared_formal_rules
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2427,6 +2458,62 @@ class CognitiveLoop:
             len(updated.concepts),
             sum(len(item.decisions) for item in updated.concepts),
             sum(len(item.actions) for item in updated.concepts),
+        )
+        return updated
+
+    def _prepare_formal_rules(
+        self, loop_input: CognitiveLoopInput
+    ) -> object | None:
+        """Refresh one owner's formal-rule ledger from owner-visible evidence."""
+        from agents.cognition.configuration import CognitionFormalRuleMode
+        from agents.cognition.formal_rules import (
+            FormalRuleLedger,
+            FormalRulePolicy,
+            apply_formal_rule_update,
+            generate_formal_rule_position,
+        )
+
+        if self._formal_rule_mode is not CognitionFormalRuleMode.DETERMINISTIC:
+            self._prepared_formal_rules = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None if snapshot is None else getattr(snapshot, "formal_rules", None)
+        )
+        prior = carried if type(carried) is FormalRuleLedger else None
+        policy = self._formal_rule_policy
+        if type(policy) is not FormalRulePolicy:
+            raise TypeError("formal_rule_policy must be FormalRulePolicy")
+
+        def prepared(name: str) -> object | None:
+            return None if snapshot is None else getattr(snapshot, name, None)
+
+        updated = apply_formal_rule_update(
+            loop_input.agent_id,
+            loop_input.observation.tick,
+            loop_input.observation,
+            prior,
+            social_norms=prepared("social_norms"),
+            social_conventions=prepared("social_conventions"),
+            institution_concepts=prepared("institution_concepts"),
+            office_concepts=prepared("office_concepts"),
+            organization_concepts=prepared("organization_concepts"),
+            collective_decisions=prepared("collective_decisions"),
+            artifact_interpretations=prepared("artifact_interpretations"),
+            policy=policy,
+        )
+        for rule in updated.rules:
+            updated = generate_formal_rule_position(
+                updated,
+                tick=loop_input.observation.tick,
+                rule_id=rule.rule_id,
+                policy=policy,
+            )
+        self._prepared_formal_rules = updated
+        _LOG.debug(
+            "formal_rule_prepare mode=%s rules=%s",
+            self._formal_rule_mode.value,
+            len(updated.rules),
         )
         return updated
 
@@ -4511,6 +4598,7 @@ class CognitiveLoop:
             loop_input,
             organization_concepts,
         )
+        formal_rules = self._prepare_formal_rules(loop_input)
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -4879,6 +4967,7 @@ class CognitiveLoop:
             organization_concepts=organization_concepts,
             organization_operations=organization_operations,
             organization_agency=organization_agency,
+            formal_rules=formal_rules,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5222,6 +5311,7 @@ class CognitiveLoop:
             organization_concepts=proposal.organization_concepts,
             organization_operations=proposal.organization_operations,
             organization_agency=proposal.organization_agency,
+            formal_rules=proposal.formal_rules,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

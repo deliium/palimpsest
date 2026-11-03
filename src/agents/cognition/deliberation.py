@@ -482,6 +482,52 @@ class MultiCriteriaIntentionSelector:
                 "convention_penalty_applied future_count=%s",
                 len(convention_penalties),
             )
+        prepared_formal_rules = (
+            None if snapshot is None else getattr(snapshot, "formal_rules", None)
+        )
+        if prepared_formal_rules is not None:
+            from agents.cognition.formal_rules import (
+                FORMAL_RULE_ACTION_TOKENS,
+                formal_rule_direction_preference,
+            )
+
+            future_actions = {
+                "wait": "wait",
+                "move": "move",
+                "search": "move",
+                "drink": "feed",
+                "eat": "feed",
+                "sleep": "sleep",
+                "flee": "move",
+                "communicate": "communicate",
+                "help": "give",
+                "feed": "feed",
+                "transport": "transport",
+                "attack": "attack",
+            }
+            formal_rule_penalties: dict[str, float] = {}
+            for item in undominated:
+                future = futures_by_id.get(item.future_id)
+                direction = getattr(
+                    getattr(future, "direction", None), "value", ""
+                )
+                token = future_actions.get(direction)
+                if token not in FORMAL_RULE_ACTION_TOKENS:
+                    continue
+                bias = formal_rule_direction_preference(
+                    prepared_formal_rules, action_token=token
+                )
+                if bias:
+                    formal_rule_penalties[item.future_id] = -bias
+            if formal_rule_penalties:
+                merged = dict(norm_penalties or {})
+                for future_id, value in formal_rule_penalties.items():
+                    merged[future_id] = merged.get(future_id, 0.0) + value
+                norm_penalties = merged
+                _LOG.debug(
+                    "formal_rule_penalty_applied future_count=%s",
+                    len(formal_rule_penalties),
+                )
         _ = artifact_interpretations
         if artifact_penalties is None and artifact_interpretation_mode is not None:
             from agents.cognition.artifacts import artifact_inscribe_penalties
@@ -1295,6 +1341,16 @@ class CommandPlanner:
         command = organization_agency_communicate_utterance(
             command, prepared_agency
         )
+        from agents.cognition.formal_rule_communication import (
+            formal_rule_communicate_utterance,
+        )
+
+        prepared_formal_rules = (
+            None if snapshot is None else getattr(snapshot, "formal_rules", None)
+        )
+        claim = _select_formal_rule_claim(prepared_formal_rules)
+        if claim is not None and type(command).__name__ in {"Talk", "Tell"}:
+            command = formal_rule_communicate_utterance(command, claim)  # type: ignore[arg-type]
         from agents.cognition.mediation_communication import (
             mediation_communicate_utterance,
         )
@@ -2067,6 +2123,48 @@ def _competence_weight(policy: object | None) -> float:
     if type(weight) is not float:
         return 0.0
     return weight
+
+
+def _select_formal_rule_claim(ledger: object) -> object | None:
+    """Select one deterministic claim from an owner formal-rule ledger."""
+    if ledger is None:
+        return None
+    from agents.cognition.formal_rule_communication import (
+        FormalRuleAct,
+        FormalRuleClaim,
+    )
+    from agents.cognition.formal_rules import (
+        FormalRuleLedger,
+        FormalRuleRecognition,
+        FormalRuleStatus,
+    )
+
+    if type(ledger) is not FormalRuleLedger:
+        return None
+    for rule in sorted(ledger.rules, key=lambda item: item.rule_id):
+        version = rule.versions[-1]
+        if rule.status is FormalRuleStatus.CONTESTED:
+            return FormalRuleClaim(
+                act=FormalRuleAct.CHALLENGE,
+                system_ref=rule.system_id,
+                rule_ref=rule.rule_id,
+            )
+        if (
+            rule.status is FormalRuleStatus.ACTIVE
+            and rule.recognition is FormalRuleRecognition.CLAIMED
+        ):
+            return FormalRuleClaim(
+                act=FormalRuleAct.ASSERT,
+                system_ref=rule.system_id,
+                rule_ref=rule.rule_id,
+                version_number=version.version_number,
+                stage=version.stage,
+                constraint_kind=version.constraint,
+                action_token=rule.action_token,
+                scope_digest=rule.scope.digest,
+                authority_kind=version.authority,
+            )
+    return None
 
 
 def _pairwise_select(

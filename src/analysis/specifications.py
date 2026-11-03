@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 148
+METRIC_FAMILY_COUNT: Final[int] = 151
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -223,6 +223,9 @@ class MetricFamilyId(StrEnum):
     ORGANIZATION_OPERATION_AUTHORITY = "organization_operation_authority"
     ORGANIZATION_COLLECTIVE_AGENCY = "organization_collective_agency"
     ORGANIZATION_COLLECTIVE_IMPLEMENTATION = "organization_collective_implementation"
+    FORMAL_RULE_DEVELOPMENT = "formal_rule_development"
+    FORMAL_RULE_AUTHORITY = "formal_rule_authority"
+    FORMAL_RULE_RESPONSE = "formal_rule_response"
 
 
 class DenominatorKind(StrEnum):
@@ -6668,6 +6671,164 @@ def _spec_organization_collective_implementation() -> MetricSpecification:
     )
 
 
+def _spec_formal_rule_development() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.FORMAL_RULE_DEVELOPMENT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_formal_rule_candidates",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="complete detached formal-rule windows",
+        deceased_policy="retired rules retain their last recorded stage",
+        zero_holding_policy=(
+            "no formal-rule rows -> availability=absent; never zero-filled"
+        ),
+        opportunity_vs_occurrence=(
+            "a stage is an owner belief, not objective law or enforcement"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "missing windows stay partial; never fabricated as documented"
+        ),
+        formulas={
+            "candidate_count": "detected analytical candidates",
+            "active_count": "candidates that are not dissolved",
+            "documented_count": "rules at documented or later",
+            "recognized_enforcement_count": "rules at recognized enforcement",
+            "stage_histogram": "rules per stage",
+            "constraint_histogram": "rules per social constraint kind",
+            "written_representation_count": "rules with a written anchor",
+            "mean_version_count": "mean historical versions per rule",
+            "coverage": "observed / expected detached windows",
+        },
+        value_keys=(
+            "active_count",
+            "candidate_count",
+            "constraint_histogram",
+            "coverage",
+            "documented_count",
+            "mean_version_count",
+            "recognized_enforcement_count",
+            "stage_histogram",
+            "written_representation_count",
+        ),
+        empty_case="no formal-rule rows -> availability=absent",
+        unknown_case=(
+            "unknown or missing windows stay partial or absent; never zero-filled"
+        ),
+    )
+
+
+def _spec_formal_rule_authority() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.FORMAL_RULE_AUTHORITY,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_formal_rule_candidates",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="complete detached formal-rule windows",
+        deceased_policy="retired rules retain their last authority claim",
+        zero_holding_policy=(
+            "no formal-rule rows -> availability=absent; never zero-filled"
+        ),
+        opportunity_vs_occurrence=(
+            "recognition and proponents are beliefs, not permissions or quorums"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "unrecognized authority stays explicit; never inferred from silence"
+        ),
+        formulas={
+            "system_count": "distinct owner-local rule systems",
+            "proponent_count": "recorded proponent positions",
+            "recognized_authority_count": "rules with recognized authority",
+            "authority_histogram": "rules per authority basis",
+            "competing_system_count": "overlapping competing candidates",
+            "contested_system_count": "contested rule candidates",
+            "coverage": "observed / expected detached windows",
+        },
+        value_keys=(
+            "authority_histogram",
+            "competing_system_count",
+            "contested_system_count",
+            "coverage",
+            "proponent_count",
+            "recognized_authority_count",
+            "system_count",
+        ),
+        empty_case="no formal-rule rows -> availability=absent",
+        unknown_case=(
+            "unknown authority stays unrecognized; never treated as permission"
+        ),
+    )
+
+
+def _spec_formal_rule_response() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.FORMAL_RULE_RESPONSE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_formal_rule_candidates",
+        denominator="candidate_count",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="complete detached formal-rule windows",
+        deceased_policy="retired rules retain their last declared response",
+        zero_holding_policy=(
+            "no formal-rule rows -> availability=absent; never zero-filled"
+        ),
+        opportunity_vs_occurrence=(
+            "responses are declarations, not objective compliance findings"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "silence is never a violation; unobserved acts are never inferred"
+        ),
+        formulas={
+            "follow_count": "declared follow responses",
+            "violate_count": "declared violate responses",
+            "challenge_count": "declared challenge responses",
+            "reinterpret_count": "declared reinterpret responses",
+            "ignore_count": "declared ignore responses",
+            "response_histogram": "responses per kind",
+            "expected_sanction_histogram": "expected sanctions per kind",
+            "exception_count": "recorded exceptions",
+            "coverage": "observed / expected detached windows",
+        },
+        value_keys=(
+            "challenge_count",
+            "coverage",
+            "exception_count",
+            "expected_sanction_histogram",
+            "follow_count",
+            "ignore_count",
+            "reinterpret_count",
+            "response_histogram",
+            "violate_count",
+        ),
+        empty_case="no formal-rule rows -> availability=absent",
+        unknown_case=(
+            "missing responses stay unknown; never coerced to compliance"
+        ),
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -6817,6 +6978,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_organization_operation_authority,
     _spec_organization_collective_agency,
     _spec_organization_collective_implementation,
+    _spec_formal_rule_development,
+    _spec_formal_rule_authority,
+    _spec_formal_rule_response,
 )
 
 

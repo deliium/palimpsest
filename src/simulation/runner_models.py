@@ -317,10 +317,12 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "disasters",
 )
 
-# V4-03 owns ``organizations``; the remaining eleven V4 flags stay unowned and
-# fail closed at runtime construction until their behavior plans land and claim
-# ownership explicitly.
-_V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset({"organizations"})
+# V4-03 owns ``organizations`` and V4-06 owns ``formal_rules``; the remaining
+# ten V4 flags stay unowned and fail closed at runtime construction until their
+# behavior plans land and claim ownership explicitly.
+_V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
+    {"organizations", "formal_rules"}
+)
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
     {
@@ -1113,11 +1115,12 @@ class V3CapabilityFlags:
 class V4CapabilityFlags:
     """Run-level reserved V4 capability identifiers (configuration only).
 
-    Defaults are all off. V4-03 owns ``organizations``. Enabling an unowned flag
-    fails closed at ``SimulationRunner.from_config`` with
-    ``capability_unimplemented`` and ``stage="v4_capability_flags"`` until an
-    owning plan lands. Wire key ``v4_capability_flags`` is a sibling of
-    ``capability_flags`` and ``v3_capability_flags`` on ``runner-config-v56``.
+    Defaults are all off. V4-03 owns ``organizations`` and V4-06 owns
+    ``formal_rules``. Enabling an unowned flag fails closed at
+    ``SimulationRunner.from_config`` with ``capability_unimplemented`` and
+    ``stage="v4_capability_flags"`` until an owning plan lands. Wire key
+    ``v4_capability_flags`` is a sibling of ``capability_flags`` and
+    ``v3_capability_flags`` on ``runner-config-v56``.
     """
 
     organizations: bool = False
@@ -6374,6 +6377,7 @@ class SimulationRunnerResult:
     organization_concept_ledgers: tuple[object, ...] = ()
     organization_operation_ledgers: tuple[object, ...] = ()
     organization_agency_ledgers: tuple[object, ...] = ()
+    formal_rule_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6676,6 +6680,19 @@ class SimulationRunnerResult:
             "organization_agency_ledgers",
             tuple(self.organization_agency_ledgers),
         )
+        if isinstance(self.formal_rule_ledgers, (set, frozenset)):
+            raise TypeError("formal_rule_ledgers must be ordered")
+        if isinstance(self.formal_rule_ledgers, (str, bytes)) or not isinstance(
+            self.formal_rule_ledgers, Sequence
+        ):
+            raise TypeError("formal_rule_ledgers must be ordered")
+        from agents.cognition.formal_rules import FormalRuleLedger
+
+        formal_rule_ledgers = tuple(self.formal_rule_ledgers)
+        for ledger in formal_rule_ledgers:
+            if type(ledger) is not FormalRuleLedger:
+                raise TypeError("formal_rule_ledgers: invalid_item")
+        object.__setattr__(self, "formal_rule_ledgers", formal_rule_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

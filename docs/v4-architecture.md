@@ -7,10 +7,13 @@ runner schema, reserved wire versions, an ordered migration posture, a
 deterministic scale contract, and additive presentation negotiation. It
 implements no V4 social mechanic.
 
-Every V4 capability flag is closed, unowned, and fails closed at runtime
-construction (`capability_unimplemented`, stage `v4_capability_flags`). Enabling
-any of them in V4-01 is an error, not an experiment. A later V4 plan must claim
-ownership explicitly before a flag can enable behavior.
+Every V4 capability flag is closed. V4-01 declared all of them unowned and
+fail-closed at runtime construction (`capability_unimplemented`, stage
+`v4_capability_flags`); a later V4 plan must claim ownership explicitly before a
+flag can enable behavior. Today two flags are owned — `organizations`
+(V4-03/V4-04/V4-05) and `formal_rules` (V4-06) — and the other ten remain
+unowned and fail closed. Enabling an unowned flag is an error, not an
+experiment.
 
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned from
 V2/V3. V4 does not silently claim them, and they keep failing closed exactly as
@@ -56,7 +59,7 @@ The registry revision is `v4-context-map-v2`.
 | Context | Capability flag | Authority | Owning packages | Existing mechanism | Event strategy | Measurement |
 | --- | --- | --- | --- | --- | --- | --- |
 | `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship, institution concepts, offices, institutional memory, collective decisions, structured commitments, group formation, possession legitimacy | reuse | V4-03/V4-04 implementation |
-| `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | deferred to V4-02+ |
+| `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | V4-06 implementation |
 | `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation | reuse | deferred to V4-02+ |
 | `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | deferred to V4-02+ |
 | `organized_conflict` | `organized_conflict` | objective-world | `world`, `simulation`, `agents.cognition` | physical harm/attack commands | reuse | deferred to V4-02+ |
@@ -88,10 +91,20 @@ resource pool, teleport helper, command executor, or global registry is created.
 
 ### formal_rules
 
-A rule is a private expectation about conduct, inferred from norms,
-conventions, and records. Objective facts are the durable records agents choose
-to create and the physical consequences of compliance or violation. No world-law
-object, policy engine, or automatic sanction exists.
+**Owned by V4-06 on `runner-config-v56`.** A rule is a private expectation about
+conduct, inferred from norms, conventions, and records. It can carry scope,
+proponents, recognized authority, written representation anchors, expected
+sanctions, exceptions, and historical versions. Objective facts are the durable
+records agents choose to create and the physical consequences of compliance or
+violation. No world-law object, policy engine, or automatic sanction exists.
+
+The progression `habit -> expectation -> norm -> documented ->
+recognized_enforcement` is monotone per owner rule. Bounded `fr_v1` claims travel
+inside existing `Talk`/`Tell`; declared responses are not objective compliance
+findings. Competing systems coexist without precedence. Detached analysis
+publishes `formal-rule-snapshot-v1` and three metric families (148 -> 151); six
+GET-only routes serve it under `SUBJECTIVE_DEBUG`. `WorldEngine` never reads the
+ledger.
 
 ### legal_disputes
 
