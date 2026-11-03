@@ -387,7 +387,7 @@ certification; it is never a skip-pass.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | `executed_passed` | `pytest tests/unit tests/architecture -q` → 8183 passed in 515.92s; coverage-enabled V4-07 selection (`pytest tests/unit/test_dispute_*.py tests/architecture/test_dispute_boundaries.py -q --cov`) → 223 passed, V4-07 modules 81% branch coverage |
+| Python unit + architecture with coverage | `executed_passed` | `pytest tests/unit tests/architecture -q --cov --cov-report=term` → 8183 passed in 2043.20s, total coverage 78%; focused V4-07 selection (`pytest tests/unit/test_dispute_*.py tests/architecture/test_dispute_boundaries.py -q --cov`) → 223 passed, V4-07 modules 81% branch coverage |
 | Focused V4-07 suite | `executed_passed` | `pytest tests/unit/test_dispute_*.py tests/architecture/test_dispute_boundaries.py -q` → 223 passed |
 | V4/organization/formal-rule regression selection | `executed_passed` | `pytest -k "organization or v4 or formal_rule or dispute or metric_specification or runner_config_v56" tests/unit tests/architecture -q` → 1464 passed, 6719 deselected |
 | Documentation parity | `executed_passed` | `pytest tests/unit/test_dispute_docs.py tests/unit/test_formal_rule_docs.py tests/unit/test_organization_docs.py tests/unit/test_organization_operations_docs.py -q` → 32 passed |
