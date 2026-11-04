@@ -101,19 +101,23 @@ def _snapshot(
         for row in rows.relations
         if len(row.party_tokens) >= 2
     )
-    parties = tuple(
-        DiplomacySnapshotPartyRow(
-            party_id="dpp-" + hashlib.sha256(row.party_token.encode()).hexdigest()[:16],
-            owner_token=row.owner_token,
-            party_token=row.party_token,
-            party_kind=row.party_kind,
-            resolution=row.resolution,
-            first_seen_tick=row.first_seen_tick,
-            provenance="communicated",
+    parties_by_id = {
+        "dpp-" + hashlib.sha256(row.party_token.encode()).hexdigest()[:16]: (
+            DiplomacySnapshotPartyRow(
+                party_id="dpp-"
+                + hashlib.sha256(row.party_token.encode()).hexdigest()[:16],
+                owner_token=row.owner_token,
+                party_token=row.party_token,
+                party_kind=row.party_kind,
+                resolution=row.resolution,
+                first_seen_tick=row.first_seen_tick,
+                provenance="communicated",
+            )
         )
         for row in rows.parties
         if row.party_token is not None and row.party_token in party_tokens
-    )
+    }
+    parties = tuple(parties_by_id.values())
     contacts = tuple(
         DiplomacySnapshotContactRow(
             contact_id="dpc-" + f"{index:016x}",

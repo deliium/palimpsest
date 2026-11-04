@@ -175,6 +175,28 @@ class FilesystemDiplomacyReader:
             raise DiplomacyPortError("diplomacy_publication_digest_mismatch")
         return snapshot
 
+
+    def relations_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> DiplomacyRowSelection:
+        return select_diplomacy_relations(
+            self._snapshot(run_id), after_key=after_key, limit=limit
+        )
+
+    def instruments_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> DiplomacyRowSelection:
+        return select_diplomacy_instruments(
+            self._snapshot(run_id), after_key=after_key, limit=limit
+        )
+
+    def lineage_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> DiplomacyRowSelection:
+        return select_diplomacy_lineage(
+            self._snapshot(run_id), after_key=after_key, limit=limit
+        )
+
     def read_summary(self, run_id: str) -> DiplomacySummary:
         snapshot = self._snapshot(run_id)
         return DiplomacySummary(

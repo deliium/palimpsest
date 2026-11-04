@@ -227,6 +227,8 @@ class Settings(BaseSettings):
     evidence_cursor_key: SecretStr | None = Field(default=None, repr=False)
     representation_root: Path | None = None
     representation_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    diplomacy_root: Path | None = None
+    diplomacy_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -350,6 +352,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 "representation cursor key must be at least 32 UTF-8 bytes"
             )
+        return value
+
+    @field_validator("diplomacy_cursor_key")
+    @classmethod
+    def validate_diplomacy_cursor_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError("diplomacy cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("civilization_cursor_key")
@@ -642,6 +651,13 @@ class Settings(BaseSettings):
             "representation_cursor_enabled": (
                 self.representation_cursor_key is not None
             ),
+            "has_diplomacy_root": self.diplomacy_root is not None,
+            "has_diplomacy_cursor_key": self.diplomacy_cursor_key is not None,
+            "diplomacy_enabled": (
+                self.diplomacy_root is not None
+                and self.diplomacy_cursor_key is not None
+            ),
+            "diplomacy_cursor_enabled": self.diplomacy_cursor_key is not None,
             "has_revision": bool(self.revision),
         }
 

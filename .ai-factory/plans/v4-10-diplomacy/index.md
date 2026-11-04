@@ -431,7 +431,7 @@ they are not part of the 12 V4 flags. `/version` is unchanged;
 - [x] Task 19: Add the atomic filesystem store and CLI producer ([details](phase-05-composition-publication.md#task-19-add-the-atomic-filesystem-store-and-cli-producer)) (depends on 16-18)
 
 ### Phase 6: Read-Only API and Research UI
-- [ ] Task 20: Add six GET routes, schemas, settings, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-routes-schemas-settings-and-app-wiring)) (depends on 19)
+- [x] Task 20: Add six GET routes, schemas, settings, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-routes-schemas-settings-and-app-wiring)) (depends on 19)
 - [ ] Task 21: Add the read-only Research UI diplomacy view ([details](phase-06-read-only-surfaces.md#task-21-add-the-read-only-research-ui-diplomacy-view)) (depends on 20)
 
 ### Phase 7: Invariants, End-to-End Diplomacy, and Regression

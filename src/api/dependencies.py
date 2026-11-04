@@ -167,6 +167,10 @@ def get_evidence_testimony_reader(request: Request) -> object | None:
     return getattr(request.app.state, "evidence_testimony_reader", None)
 
 
+def get_diplomacy_reader(request: Request) -> object | None:
+    return getattr(request.app.state, "diplomacy_reader", None)
+
+
 def get_delegation_representation_reader(request: Request) -> object | None:
     """Return the read-only representation reader, or ``None`` when disabled."""
     return getattr(request.app.state, "representation_reader", None)

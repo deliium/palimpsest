@@ -6,6 +6,7 @@ from api.routes.debugger import router as debugger_router
 from api.routes.delegation_representation import (
     router as delegation_representation_router,
 )
+from api.routes.diplomacy import router as diplomacy_router
 from api.routes.dispute import router as dispute_router
 from api.routes.evidence_testimony import router as evidence_testimony_router
 from api.routes.formal_rule import router as formal_rule_router
@@ -28,6 +29,7 @@ __all__ = [
     "civilization_router",
     "debugger_router",
     "delegation_representation_router",
+    "diplomacy_router",
     "dispute_router",
     "evidence_testimony_router",
     "formal_rule_router",
