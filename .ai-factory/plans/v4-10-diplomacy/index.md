@@ -423,12 +423,12 @@ they are not part of the 12 V4 flags. `/version` is unchanged;
 - [x] Task 15: Add four metric families and raise the catalog to 164 ([details](phase-03-detached-analysis.md#task-15-add-four-metric-families-and-raise-the-catalog-to-164)) (depends on 12-14)
 
 ### Phase 4: Diplomacy Snapshot v1
-- [ ] Task 16: Define diplomacy-snapshot-v1 and its codec ([details](phase-04-snapshot-v1.md#task-16-define-diplomacy-snapshot-v1-and-its-codec)) (depends on 9, 12-15)
-- [ ] Task 17: Add paging, read ports, and cursor support ([details](phase-04-snapshot-v1.md#task-17-add-paging-read-ports-and-cursor-support)) (depends on 16)
+- [x] Task 16: Define diplomacy-snapshot-v1 and its codec ([details](phase-04-snapshot-v1.md#task-16-define-diplomacy-snapshot-v1-and-its-codec)) (depends on 9, 12-15)
+- [x] Task 17: Add paging, read ports, and cursor support ([details](phase-04-snapshot-v1.md#task-17-add-paging-read-ports-and-cursor-support)) (depends on 16)
 
 ### Phase 5: Composition and Durable Publication
-- [ ] Task 18: Compose completed-run snapshots and receipts ([details](phase-05-composition-publication.md#task-18-compose-completed-run-snapshots-and-receipts)) (depends on 9, 10, 15, 17)
-- [ ] Task 19: Add the atomic filesystem store and CLI producer ([details](phase-05-composition-publication.md#task-19-add-the-atomic-filesystem-store-and-cli-producer)) (depends on 16-18)
+- [x] Task 18: Compose completed-run snapshots and receipts ([details](phase-05-composition-publication.md#task-18-compose-completed-run-snapshots-and-receipts)) (depends on 9, 10, 15, 17)
+- [x] Task 19: Add the atomic filesystem store and CLI producer ([details](phase-05-composition-publication.md#task-19-add-the-atomic-filesystem-store-and-cli-producer)) (depends on 16-18)
 
 ### Phase 6: Read-Only API and Research UI
 - [ ] Task 20: Add six GET routes, schemas, settings, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-routes-schemas-settings-and-app-wiring)) (depends on 19)

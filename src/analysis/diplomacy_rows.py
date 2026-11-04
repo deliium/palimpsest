@@ -210,6 +210,7 @@ class DiplomacyTerminationRow:
     target_kind: str
     kind: str
     tick: int
+    target_ref: str = ""
 
     def __post_init__(self) -> None:
         require_diplomacy_token(self.owner_token)
@@ -435,6 +436,7 @@ def harvest_diplomacy_rows(
                     target_kind=row.target_kind,
                     kind=getattr(row.kind, "value", "unknown"),
                     tick=row.tick,
+                    target_ref=row.target_ref,
                 )
             )
         for row in getattr(ledger, "conflicts", ()):

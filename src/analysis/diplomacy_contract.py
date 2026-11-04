@@ -260,6 +260,7 @@ def require_diplomacy_candidate_id(value: object) -> str:
         type(value) is not str
         or not value.startswith(DIPLOMACY_CANDIDATE_PREFIX)
         or value.startswith(DIPLOMACY_EDGE_PREFIX)
+        or len(value) != len(DIPLOMACY_CANDIDATE_PREFIX) + 16
     ):
         _fail("diplomacy_invalid_row")
     return value
