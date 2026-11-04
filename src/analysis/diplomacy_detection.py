@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final, cast
 
 from analysis.diplomacy_contract import (
     DiplomacyAnalysisError,
@@ -67,7 +67,7 @@ def detect_diplomacy_candidates(
         raise TypeError("diplomacy_rows must be DiplomacyHarvestRows")
     if type(max_candidates) is not int or max_candidates <= 0:
         raise DiplomacyAnalysisError("diplomacy_analysis_invalid_input")
-    candidates: dict[str, dict[str, object]] = {}
+    candidates: dict[str, dict[str, Any]] = {}
     for relation in diplomacy_rows.relations:
         counterparties = tuple(
             token for token in relation.party_tokens if token != relation.owner_token
@@ -115,13 +115,13 @@ def detect_diplomacy_candidates(
             entry["contested"] = True
     for row in lane_rows:
         for entry in candidates.values():
-            parties = set(entry["parties"])  # type: ignore[arg-type]
-            if row.left_token in parties and row.right_token in parties:
-                entry["lanes"].add(row.lane)  # type: ignore[union-attr]
+            member_set = set(cast(tuple[str, ...], entry["parties"]))
+            if row.left_token in member_set and row.right_token in member_set:
+                cast(set[str], entry["lanes"]).add(row.lane)
     results: list[DiplomaticRelationCandidate] = []
     for key, entry in candidates.items():
-        parties = tuple(sorted(entry["parties"]))  # type: ignore[arg-type]
-        lanes = tuple(sorted(entry["lanes"]))  # type: ignore[arg-type]
+        parties = tuple(sorted(cast(tuple[str, ...], entry["parties"])))
+        lanes = tuple(sorted(cast(set[str], entry["lanes"])))
         if entry["contested"]:
             status = DiplomaticRelationStatus.CONTESTED
         elif len(lanes) <= 1 and int(entry["contact"]) <= 0:

@@ -32,6 +32,7 @@ from persistence.diplomacy_filesystem import (
     FilesystemDiplomacyPublisher,
     create_diplomacy_reader,
 )
+from simulation.diplomacy_models import DiplomacySnapshot
 
 pytestmark = pytest.mark.unit
 
@@ -91,12 +92,13 @@ def _result(run_id: str = RUN) -> object:
     )
 
 
-def _seed(root: Path, *, run_id: str = RUN):
+def _seed(root: Path, *, run_id: str = RUN) -> DiplomacySnapshot:
     harvest = build_completed_run_diplomacy_harvest(_result(run_id))
     result = build_diplomacy_harvest_result(
         harvest, run_id=run_id, revision="rev-1", window_end=2
     )
     publish_diplomacy_snapshot(result, FilesystemDiplomacyPublisher(root / "store"))
+    assert result.snapshot is not None
     return result.snapshot
 
 

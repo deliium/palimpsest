@@ -106,6 +106,7 @@ def publish_diplomacy_harvest(
         else (tick if type(tick) is int and tick >= 0 else 0)
     )
     try:
+        assert options.root is not None
         publisher = create_diplomacy_publisher(
             options.root,
             max_publications=options.max_publications,

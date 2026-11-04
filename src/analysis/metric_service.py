@@ -1898,6 +1898,7 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             compute_diplomatic_instrument_outcomes,
             compute_inter_society_relation_lanes,
         )
+        from analysis.diplomacy_objective import DiplomacyObjectiveAnchorRow
         from analysis.diplomacy_rows import (
             DiplomacyHarvestRows,
             harvest_diplomacy_rows,
@@ -1924,7 +1925,8 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             diplomacy_candidates,
             diplomacy_analysis,
             objective_rows=cast(
-                "Sequence[object]", tuple(inputs.diplomacy_objective_rows or ())
+                "tuple[DiplomacyObjectiveAnchorRow, ...]",
+                tuple(inputs.diplomacy_objective_rows or ()),
             ),
             coverage=diplomacy_rows.coverage.value,
         )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from analysis.diplomacy_contract import (
     DIPLOMACY_PARTY_KINDS,
@@ -292,7 +292,7 @@ def _party_maps(ledger: object) -> tuple[dict[str, str | None], dict[str, str]]:
 def harvest_diplomacy_rows(
     ledgers: Sequence[object],
     *,
-    entity_to_agent: Callable[[object], object] | Mapping[object, object] | None = None,
+    entity_to_agent: Callable[[object], object] | Mapping[Any, Any] | None = None,
     policy: object | None = None,
 ) -> DiplomacyHarvestRows:
     """Harvest exported owner ledgers into token-only detached rows."""
@@ -449,7 +449,7 @@ def harvest_diplomacy_rows(
                 )
             )
 
-    def ordered(rows: list, key: Callable[[object], object]) -> tuple:
+    def ordered(rows: list[Any], key: Callable[[Any], Any]) -> tuple[Any, ...]:
         return tuple(sorted(rows, key=key))
 
     harvest = DiplomacyHarvestRows(

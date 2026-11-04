@@ -176,7 +176,6 @@ class FilesystemDiplomacyReader:
             raise DiplomacyPortError("diplomacy_publication_digest_mismatch")
         return snapshot
 
-
     def relations_page(
         self, run_id: str, *, after_key: str | None = None, limit: int = 500
     ) -> DiplomacyRowSelection:
@@ -222,7 +221,7 @@ class FilesystemDiplomacyReader:
             selection = select_diplomacy_relation(snapshot, relation_id)
         except DiplomacyArtifactError as exc:
             raise DiplomacyPortError("diplomacy_unknown_relation") from exc
-        relation = selection.rows[0]
+        relation = cast(Any, selection.rows[0])
         return DiplomacyRelationDetail(
             relation=relation, rows=selection.rows, truncated=selection.truncated
         )
@@ -242,7 +241,7 @@ class FilesystemDiplomacyReader:
             selection = select_diplomacy_instrument(snapshot, instrument_id)
         except DiplomacyArtifactError as exc:
             raise DiplomacyPortError("diplomacy_unknown_instrument") from exc
-        instrument = selection.rows[0]
+        instrument = cast(Any, selection.rows[0])
         return DiplomacyInstrumentDetail(
             instrument=instrument, rows=selection.rows, truncated=selection.truncated
         )

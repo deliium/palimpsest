@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -256,12 +257,10 @@ def test_six_routes_and_six_purposes() -> None:
     from simulation.diplomacy_models import DIPLOMACY_CURSOR_PURPOSES
 
     routes = [
-        route
-        for route in router.routes
-        if getattr(route, "methods", None) is not None
+        route for route in router.routes if getattr(route, "methods", None) is not None
     ]
     assert len(routes) == 6
-    assert all(route.methods == {"GET"} for route in routes)
+    assert all(cast(Any, route).methods == {"GET"} for route in routes)
     assert len(DIPLOMACY_CURSOR_PURPOSES) == 6
 
 
@@ -278,7 +277,9 @@ def test_no_new_wire_surfaces() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((_SRC.parent / "alembic" / "versions").glob("0018_*.py"))
-    from simulation.compatibility import ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    from simulation import compatibility
 
-    assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    codecs = compatibility.ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+
+    assert "v20" in codecs
+    assert "v21" not in codecs

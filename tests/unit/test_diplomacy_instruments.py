@@ -20,6 +20,7 @@ from agents.cognition import (
     diplomacy_instrument_status,
     is_agreement_view,
 )
+from agents.cognition.diplomacy import DiplomacyLedger
 
 pytestmark = pytest.mark.unit
 
@@ -37,7 +38,9 @@ def _observation() -> SimpleNamespace:
     )
 
 
-def _update(prior: object, frames: tuple[object, ...], *, tick: int = 1):
+def _update(
+    prior: DiplomacyLedger | None, frames: tuple[object, ...], *, tick: int = 1
+) -> DiplomacyLedger:
     return apply_diplomacy_update(
         owner_id=OWNER,
         tick=tick,

@@ -451,3 +451,15 @@ The opt-in generational CLI adds `--representation-root`,
 successful scientific completion and records `disabled`, `unavailable`, `ready`,
 `published`, or `failed` with a safe reason. A publication failure never changes
 the runner result, metrics, or stop reason.
+
+## Diplomacy settings
+
+V4-10 requires `runner-config-v56` with `v4_capability_flags.diplomacy = true`.
+Read-only publication is opt-in:
+
+- `PALIMPSEST_DIPLOMACY_ROOT` / `--diplomacy-root` enables the filesystem read
+  model (default unset; 503 `diplomacy_disabled`).
+- `PALIMPSEST_DIPLOMACY_CURSOR_KEY` / `--diplomacy-*` cursor key must be at least
+  32 UTF-8 bytes when set.
+- `--diplomacy-max-publications` defaults to 16 (1..1024).
+- `--diplomacy-max-bytes` defaults to 8 MiB (1..268435456).

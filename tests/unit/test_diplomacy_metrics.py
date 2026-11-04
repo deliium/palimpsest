@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from analysis.diplomacy_alignment import summarize_diplomacy
+from analysis.diplomacy_alignment import DiplomacyAnalysisSummary, summarize_diplomacy
 from analysis.diplomacy_contract import (
     DIPLOMACY_FORBIDDEN_RESULT_FIELDS,
     DiplomacyCoverage,
     diplomacy_agent_token,
 )
-from analysis.diplomacy_detection import detect_diplomacy_candidates
-from analysis.diplomacy_identity import assign_diplomacy_identities
-from analysis.diplomacy_layers import project_diplomacy_layers
+from analysis.diplomacy_detection import (
+    DiplomaticRelationCandidate,
+    detect_diplomacy_candidates,
+)
+from analysis.diplomacy_identity import DiplomacyAnalysis, assign_diplomacy_identities
+from analysis.diplomacy_layers import DiplomacyLayerView, project_diplomacy_layers
 from analysis.diplomacy_metrics import (
     compute_diplomatic_contact_structure,
     compute_diplomatic_envoy_alignment,
@@ -101,7 +104,13 @@ def _rows() -> DiplomacyHarvestRows:
     )
 
 
-def _context():
+def _context() -> tuple[
+    DiplomacyHarvestRows,
+    tuple[DiplomaticRelationCandidate, ...],
+    tuple[DiplomacyAnalysis, ...],
+    DiplomacyLayerView,
+    DiplomacyAnalysisSummary,
+]:
     rows = _rows()
     candidates = detect_diplomacy_candidates(rows, ())
     analysis = assign_diplomacy_identities(candidates)

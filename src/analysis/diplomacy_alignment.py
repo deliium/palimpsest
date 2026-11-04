@@ -8,7 +8,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Final, cast
 
 from analysis.diplomacy_contract import (
     DiplomacyAnalysisError,
@@ -90,7 +90,7 @@ _AUTHORITY_ACTS: Final[frozenset[str]] = frozenset(
 
 def _status_value(value: object) -> str | None:
     return (
-        getattr(value, "value", value)
+        cast(str, getattr(value, "value", value))
         if type(value) is str or hasattr(value, "value")
         else None
     )

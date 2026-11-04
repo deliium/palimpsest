@@ -35,7 +35,7 @@ from simulation.diplomacy_models import (
 )
 from simulation.diplomacy_ports import (
     DiplomacyPublication,
-    DiplomacyPublicationPort,
+    DiplomacyPublisherPort,
 )
 
 __all__ = [
@@ -229,16 +229,7 @@ def _snapshot(
         )
         for index, row in enumerate(rows.conflicts, start=1)
     )
-    lineage = tuple(
-        DiplomacySnapshotLineageRow(
-            edge_id=edge.edge_id,
-            from_candidate_id=edge.from_candidate_id,
-            to_candidate_id=edge.to_candidate_id,
-            kind=edge.kind,
-            tick=edge.tick,
-        )
-        for edge in ()
-    )
+    lineage: tuple[DiplomacySnapshotLineageRow, ...] = ()
     relations = tuple(
         sorted(relations, key=lambda row: (row.opened_tick, row.relation_id))
     )
@@ -290,7 +281,7 @@ def _snapshot(
             family_version=1,
             document_digest="0" * 64,
         )
-        for family in harvest.summary.lane_histogram
+        for family, _ in harvest.summary.lane_histogram
         if family
     )
     return finalize_diplomacy_snapshot(
@@ -376,7 +367,7 @@ def build_diplomacy_harvest_result(
 
 def publish_diplomacy_snapshot(
     result: DiplomacyHarvestResult,
-    port: DiplomacyPublicationPort,
+    port: DiplomacyPublisherPort,
 ) -> DiplomacyHarvestResult:
     """Publish a ready snapshot; failures change only the receipt."""
 

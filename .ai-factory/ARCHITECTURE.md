@@ -845,3 +845,34 @@ commands, 73 observer semantic types, 164 metric families, 14 V4 contexts, 12 V4
 flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
 `diplomacy`, `institutional_economy`, and `multi_hop_testimony_tracking` remain
 unowned.
+
+### V4-10 diplomacy seam
+
+V4-10 owns the fourth V4 capability flag, `diplomacy`, on the accepted
+`runner-config-v56` seam and adds no `runner-config-v57`, root field, per-agent
+runner key, command, event, observer semantic type, write pair, `/v2` route, or
+migration. `agents.cognition.diplomacy` keeps one owner's retained relations,
+parties, contacts, envoys, negotiations, instruments, declarations,
+misrepresentation observations, terminations, and conflicts under `diplomacy.v1`.
+Parties are closed to `agent`, `organization`, `settlement`, `coalition`, and
+`unknown`; the owner self-party is retained first. Organization/coalition anchors
+resolve only against the owner's `orgc-` concepts, settlement anchors only against
+visible regions, and missing anchors stay unresolved. Envoy standing derives from
+the owner's representation ledger and is recomputed at read time; accreditation
+status is only a snapshot. Agreement acceptance requires every party's own
+declaration, with an envoy needing recognized standing and covering scope, and
+`apparently_accepted` binds nobody. Bounded `dip_v1` frames travel in existing
+`Talk`/`Ask`/`Tell`; `WorldEngine`, perception, admission, stop selectors, memory,
+prompts, and observer semantics never read the ledger. Detached
+`analysis.diplomacy_*` derives six independent inter-society lanes, stable
+`dip-` candidates, read-only `org-`/`msoc-` joins, three separated layers, and
+researcher-only envoy alignment. Four families append (catalog 160 -> 164).
+`simulation.diplomacy_*` owns canonical `diplomacy-snapshot-v1`;
+`experiments.diplomacy_*` and `persistence.diplomacy_filesystem` publish
+`diplomacy-store-v1` atomically; six GET-only `/v1/simulations/{run_id}/diplomacy`
+routes require `SUBJECTIVE_DEBUG`; the Research UI adds a read-only panel. Pins:
+runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 164
+metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`; four V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain
+unowned.

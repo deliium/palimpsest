@@ -237,3 +237,5 @@ composite civilization score.
 - [Formal social rules](formal-rules.md)
 - [Disputes](disputes.md)
 - [Research API](research-api.md)
+
+See also: [Diplomacy](diplomacy.md) composes organization concepts read-only for organization and coalition party anchors.

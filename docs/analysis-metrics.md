@@ -550,3 +550,41 @@ Researcher-only scope alignment is never a legitimacy finding or a revocation.
 `not_applicable` is never counted as `consistent`. Same-root support and the
 owner's self-support are excluded from independent roots. Missing anchors stay
 `unresolved`, never `inconsistent`.
+
+## Diplomacy families (catalog 164)
+
+Four families append after the delegation-representation families. They are
+detached and read-only, and none exposes a bilateral score or composite.
+
+### `diplomatic_contact_structure@1`
+
+Population `final_window_diplomacy_relations`; denominator
+`diplomacy_relations_with_contact_evidence`. Values: `relation_count`,
+`party_count`, `contact_count`, `envoy_count`, `negotiation_count`,
+`party_kind_histogram`, `contact_kind_histogram`, `envoy_status_histogram`,
+`negotiation_status_histogram`, `coverage`. No diplomacy ledger yields absent;
+an enabled empty ledger yields zero counts.
+
+### `diplomatic_instrument_outcomes@1`
+
+Population and denominator `diplomacy_instruments`. Values cover proposal,
+promise, agreement-view, dispute, and shared-project counts, acceptance,
+rejection, withdrawal, dispute, supersession, misrepresentation kinds,
+declarations, and a quantized acceptance ratio. `agreement_count` counts an
+every-party proposal view; no phantom `AGREEMENT` row exists.
+
+### `diplomatic_envoy_alignment@1`
+
+Population `diplomacy_declarations_with_authority_claim`. Researcher-only
+`consistent`, `unresolved`, `inconsistent`, and `not_applicable` counts with
+explicit ratios. Missing mandate or scope evidence stays unresolved and is never
+treated as inconsistent.
+
+### `inter_society_relation_lanes@1`
+
+Population `relation_candidate_pairs_with_identity_join`; denominator
+`relation_candidate_pairs`. Values are pair counts per independent lane (agent
+relationships, trade, conflict, agreements, narratives, institutional
+interaction), a lane-count histogram, pairs with any lane, pairs with multiple
+lanes, and a coverage ratio. The trade lane counts `ExchangeCompleted` only.
+There is no aggregate or composite key.

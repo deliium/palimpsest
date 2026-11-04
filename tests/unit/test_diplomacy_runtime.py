@@ -63,7 +63,7 @@ def test_snapshot_rejects_a_foreign_diplomacy_ledger() -> None:
         )
     require_owner_diplomacy(None, OWNER)
     with pytest.raises(TypeError):
-        require_owner_diplomacy(object(), OWNER)  # type: ignore[arg-type]
+        require_owner_diplomacy(object(), OWNER)
 
 
 def test_checkpoint_declares_the_diplomacy_slot() -> None:
@@ -74,8 +74,8 @@ def test_checkpoint_declares_the_diplomacy_slot() -> None:
 def test_disabled_mode_prepares_nothing() -> None:
     loop = build_cognitive_loop(CognitionLoopConfig())
     assert (
-        loop._prepare_diplomacy(  # type: ignore[attr-defined]
-            SimpleNamespace(),
+        loop._prepare_diplomacy(
+            SimpleNamespace(),  # type: ignore[arg-type]
             representation=None,
             organization_concepts=None,
             collective_decisions=None,

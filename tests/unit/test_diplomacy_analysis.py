@@ -35,7 +35,7 @@ def _observation() -> SimpleNamespace:
     )
 
 
-def _ledger():
+def _ledger() -> object:
     frame = DiplomacyFrame(
         act=DiplomaticAct.PROPOSE,
         envoy_ref=OWNER,

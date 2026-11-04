@@ -585,7 +585,7 @@ class DiplomacySnapshot:
         _tick(self.window_end)
         if self.coverage not in {"complete", "partial"}:
             _fail("diplomacy_snapshot_invalid")
-        tables = (
+        tables: tuple[tuple[str, type, int, str, str], ...] = (
             (
                 "relations",
                 DiplomacySnapshotRelationRow,
@@ -664,7 +664,7 @@ class DiplomacySnapshot:
                 "edge_id",
             ),
         )
-        resolved: dict[str, tuple] = {}
+        resolved: dict[str, tuple[Any, ...]] = {}
         for name, row_type, cap, tick_name, id_name in tables:
             rows = _ordered(getattr(self, name))
             if len(rows) > cap:

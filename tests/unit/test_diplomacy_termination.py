@@ -82,7 +82,9 @@ def _opening(
     return DiplomacyFrame(**values)  # type: ignore[arg-type]
 
 
-def _update(prior, frames, *, tick: int = 1):
+def _update(
+    prior: DiplomacyLedger | None, frames: tuple[object, ...], *, tick: int = 1
+) -> DiplomacyLedger:
     return apply_diplomacy_update(
         owner_id=OWNER,
         tick=tick,

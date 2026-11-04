@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from simulation.diplomacy_models import (
@@ -93,10 +95,10 @@ def test_paging_is_bounded_and_stable() -> None:
     snapshot = _snapshot()
     first = select_diplomacy_relations(snapshot, limit=1)
     assert len(first.rows) == 1
-    assert first.next_key == first.rows[0].relation_id
+    assert first.next_key == cast(Any, first.rows[0]).relation_id
     second = select_diplomacy_relations(snapshot, after_key=first.next_key, limit=1)
     assert len(second.rows) == 1
-    assert second.rows[0].relation_id != first.rows[0].relation_id
+    assert cast(Any, second.rows[0]).relation_id != cast(Any, first.rows[0]).relation_id
     assert len(select_diplomacy_relations(snapshot, limit=0).rows) == 1
     assert len(select_diplomacy_relations(snapshot, limit=501).rows) == 3
     assert (

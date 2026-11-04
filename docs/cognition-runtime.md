@@ -577,3 +577,16 @@ ledger is allocated, and snapshots, proposals, results, and checkpoints carry
 ledger stays owner-scoped and is never read by `WorldEngine`, admission,
 perception, prompts, observer semantics, or stop selectors. Durable SQL restart
 is not provided.
+
+## Diplomacy mode
+
+`CognitionDiplomacyMode` defaults to `DISABLED` and becomes `DETERMINISTIC` only
+when `runner-config-v56` enables `v4_capability_flags.diplomacy`. The prepare
+stage refreshes one owner's `DiplomacyLedger` from owner-visible contacts and
+`dip_v1` speech, using the owner's own representation, organization,
+collective-decision, commitment, dispute, and evidence sidecars read-only. The
+post-selection record stage captures the owner's own diplomacy utterance as a
+`self_declared` claim. The ledger travels through `Perspective`,
+`SubjectiveSnapshot`, proposal/result, runtime checkpoints, and
+`SimulationRunnerResult.diplomacy_ledgers`; the result document schema is
+unchanged. Disabled mode allocates nothing.

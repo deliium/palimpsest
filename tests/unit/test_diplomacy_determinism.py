@@ -16,6 +16,7 @@ from agents.cognition import (
     apply_diplomacy_update,
     diplomacy_ledger_digest,
 )
+from agents.cognition.diplomacy import DiplomacyLedger
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +33,7 @@ def _observation() -> SimpleNamespace:
     )
 
 
-def _update():
+def _update() -> DiplomacyLedger:
     return apply_diplomacy_update(
         owner_id="agent-a",
         tick=1,

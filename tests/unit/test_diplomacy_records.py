@@ -252,7 +252,7 @@ def test_valid_ledger_round_trips_and_summarizes() -> None:
 
 def test_require_owner_and_policy_fail_closed() -> None:
     with pytest.raises(TypeError, match="DiplomacyLedger"):
-        require_owner_diplomacy(object(), OWNER)  # type: ignore[arg-type]
+        require_owner_diplomacy(object(), OWNER)
     with pytest.raises(DiplomacyError) as excinfo:
         require_owner_diplomacy(_ledger(), "owner-z")
     assert excinfo.value.code == "diplomacy_owner_mismatch"
@@ -311,7 +311,7 @@ def test_ordering_duplicate_and_foreign_reference_fail_closed() -> None:
 
 def test_instrument_parties_must_match_the_relation() -> None:
     self_id, _, relation_id = _ids()
-    instrument = _instrument(relation_id, (self_id,))
+    instrument = _instrument(relation_id, (self_id,))  # type: ignore[arg-type]
     with pytest.raises(DiplomacyError) as excinfo:
         _ledger(instruments=(instrument,))
     assert excinfo.value.code == "diplomacy_instrument_party_mismatch"

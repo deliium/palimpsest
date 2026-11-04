@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from analysis.diplomacy_alignment import (
     DiplomacyAnalysisSummary,
@@ -50,7 +51,7 @@ def build_completed_run_diplomacy_harvest(
     runner_result: object,
     *,
     committed_events: Sequence[object] = (),
-    entity_to_agent: Mapping[str, str] | None = None,
+    entity_to_agent: Mapping[Any, Any] | None = None,
     lane_rows: Sequence[InterSocietyRelationRow] = (),
 ) -> DiplomacyHarvest:
     """Harvest exported diplomacy ledgers and objective lane anchors."""

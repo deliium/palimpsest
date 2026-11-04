@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import SecretStr, ValidationError
 
@@ -17,7 +19,7 @@ def test_defaults_are_disabled() -> None:
     assert settings.bootstrap_fields()["diplomacy_enabled"] is False
 
 
-def test_env_parsing(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_env_parsing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PALIMPSEST_DIPLOMACY_ROOT", str(tmp_path))
     monkeypatch.setenv("PALIMPSEST_DIPLOMACY_CURSOR_KEY", "k" * 32)
     settings = Settings()

@@ -337,3 +337,16 @@ Before a V4-02+ plan may enable any V4 flag it must declare:
 6. The migration need, or an explicit statement that head `0017` is unchanged.
 7. Null-capable tests: legal absence of the phenomenon is a valid outcome.
 8. The V1/V2/V3 regression suites green with V4 flags off.
+
+## Diplomacy (V4-10)
+
+`diplomacy` is owned by V4-10 on the accepted `runner-config-v56` seam. It is
+owner-scoped and reuses existing events, with `organizations` as a planning-order
+prerequisite rather than a runtime gate. Relations, parties, contacts, envoys,
+negotiations, instruments, declarations, misrepresentation observations,
+terminations, and conflicts are retained owner beliefs. There is no polity,
+border, citizenship, treaty store, treaty authority, envoy registry, army, war
+state, or bilateral score. Detached analysis derives six independent lanes and
+four metric families (catalog 160 -> 164). Canonical `diplomacy-snapshot-v1` and
+`diplomacy-store-v1` publications are served by six GET-only routes under
+`SUBJECTIVE_DEBUG`. See `docs/diplomacy.md`.

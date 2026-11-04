@@ -205,7 +205,7 @@ def get_diplomacy_relations(
         active.relations_page,
         run_id,
         after_key=after,
-        limit=limit,  # type: ignore[attr-defined]
+        limit=limit,
     )
     return DiplomacyRelationPageOut(
         items=tuple(_row_out(row) for row in selection.rows),  # type: ignore[misc]
@@ -274,7 +274,7 @@ def get_diplomacy_instruments(
         active.instruments_page,
         run_id,
         after_key=after,
-        limit=limit,  # type: ignore[attr-defined]
+        limit=limit,
     )
     return DiplomacyInstrumentPageOut(
         items=tuple(_row_out(row) for row in selection.rows),  # type: ignore[misc]
@@ -332,7 +332,7 @@ def get_diplomacy_lineage(
         active.lineage_page,
         run_id,
         after_key=after,
-        limit=limit,  # type: ignore[attr-defined]
+        limit=limit,
     )
     return DiplomacyLineagePageOut(
         items=tuple(_row_out(row) for row in selection.rows),  # type: ignore[misc]

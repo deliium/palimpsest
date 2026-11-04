@@ -200,3 +200,5 @@ or macro-society behavior.
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)
 - [Research UI](research-ui.md)
+
+See also: [Diplomacy](diplomacy.md) derives envoy standing from this owner-scoped representation ledger and never treats accreditation as authority.

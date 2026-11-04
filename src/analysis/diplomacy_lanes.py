@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
-from typing import Final
+from typing import Any, Final, cast
 
 from analysis.diplomacy_contract import (
     DIPLOMACY_FORBIDDEN_RESULT_FIELDS,
@@ -18,7 +18,7 @@ from analysis.diplomacy_contract import (
     diplomacy_agent_token,
     require_diplomacy_token,
 )
-from analysis.objective_metrics import CONFLICT_ACTION_KINDS
+from analysis.specifications import CONFLICT_ACTION_KINDS
 
 __all__ = [
     "InterSocietyRelationRow",
@@ -169,7 +169,7 @@ def relation_rows_from_conflict(
         target = getattr(row, "target_id", None)
         if target is None:
             continue
-        left_token, right_token = _pair(row.agent_id, target)
+        left_token, right_token = _pair(cast(Any, row).agent_id, target)
         result.append(
             InterSocietyRelationRow(
                 lane=InterSocietyLane.CONFLICT.value,

@@ -238,3 +238,22 @@ manifests and real producer `matrix-manifest-v1` documents with
 `matrix_schema_version=experiment-matrix-v1`. Runtime listings use only declared
 cell IDs; legacy exports exclude `.completion.json`, `.metrics.json`,
 `.cultural-evidence.json`, `.cultural-metrics.json` and other known sidecars.
+
+## Diplomacy routes
+
+Six GET-only routes require `SUBJECTIVE_DEBUG`:
+
+| Route | Result |
+| --- | --- |
+| `GET /v1/simulations/{run_id}/diplomacy` | summary |
+| `GET /v1/simulations/{run_id}/diplomacy/relations` | paged relations |
+| `GET /v1/simulations/{run_id}/diplomacy/relations/{relation_id}` | relation detail with retained terminations |
+| `GET /v1/simulations/{run_id}/diplomacy/instruments` | paged instruments |
+| `GET /v1/simulations/{run_id}/diplomacy/instruments/{instrument_id}` | instrument detail |
+| `GET /v1/simulations/{run_id}/diplomacy/lineage` | paged lineage |
+
+`PALIMPSEST_DIPLOMACY_ROOT` and `PALIMPSEST_DIPLOMACY_CURSOR_KEY` enable the
+read model; an unconfigured deployment returns 503 `diplomacy_disabled`. Unknown
+published ids return 404, cursor mismatch 400, and cursor expiry 410. Responses
+contain only content-addressed ids, hashed owner/party/envoy/actor tokens, and
+owner-safe `orgc-`/region anchors.

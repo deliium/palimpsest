@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, fields
-from typing import Final
+from typing import Any, Final, cast
 
 from analysis.diplomacy_contract import (
     DIPLOMACY_FORBIDDEN_RESULT_FIELDS,
@@ -65,14 +65,14 @@ class DiplomacyLayerView:
 
 
 def _field_names(row: object) -> set[str]:
-    return {field.name for field in fields(type(row))}
+    return {field.name for field in fields(cast(Any, type(row)))}
 
 
 def assert_diplomacy_layer_separation(layers: DiplomacyLayerView) -> None:
     """Reject any collapse of objective, subjective, or analytical authority."""
 
-    for row in layers.objective:
-        names = _field_names(row)
+    for objective_row in layers.objective:
+        names = _field_names(objective_row)
         if names & {
             "owner_token",
             "candidate_id",
@@ -81,19 +81,22 @@ def assert_diplomacy_layer_separation(layers: DiplomacyLayerView) -> None:
             "macro_society_candidate_ids",
         }:
             raise DiplomacyAnalysisError("diplomacy_layer_leak")
-    for row in layers.subjective:
-        names = _field_names(row)
+    for subjective_row in layers.subjective:
+        names = _field_names(subjective_row)
         if "candidate_id" in names:
             raise DiplomacyAnalysisError("diplomacy_layer_leak")
-        require_diplomacy_token(row.owner_token)
-        if row.party_token is not None:
-            require_diplomacy_token(row.party_token)
-    for row in layers.analytical:
-        require_diplomacy_candidate_id(row.candidate_id)
-        for token in row.party_tokens:
+        require_diplomacy_token(subjective_row.owner_token)
+        if subjective_row.party_token is not None:
+            require_diplomacy_token(subjective_row.party_token)
+    for analytical_row in layers.analytical:
+        require_diplomacy_candidate_id(analytical_row.candidate_id)
+        for token in analytical_row.party_tokens:
             require_diplomacy_token(token)
-    for row in (*layers.objective, *layers.subjective, *layers.analytical):
-        if _field_names(row) & DIPLOMACY_FORBIDDEN_RESULT_FIELDS:
+    for mixed_row in cast(
+        tuple[object, ...],
+        (*layers.objective, *layers.subjective, *layers.analytical),
+    ):
+        if _field_names(mixed_row) & DIPLOMACY_FORBIDDEN_RESULT_FIELDS:
             raise DiplomacyAnalysisError("diplomacy_layer_leak")
 
 

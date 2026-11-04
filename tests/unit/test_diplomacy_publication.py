@@ -13,7 +13,10 @@ from agents.cognition import (
     DiplomaticTermKind,
     apply_diplomacy_update,
 )
-from experiments.diplomacy_harvest import build_completed_run_diplomacy_harvest
+from experiments.diplomacy_harvest import (
+    DiplomacyHarvest,
+    build_completed_run_diplomacy_harvest,
+)
 from experiments.diplomacy_publication import (
     build_diplomacy_harvest_result,
     diplomacy_publication_document,
@@ -34,7 +37,7 @@ def _observation() -> SimpleNamespace:
     )
 
 
-def _runner_result():
+def _runner_result() -> SimpleNamespace:
     ledger = apply_diplomacy_update(
         owner_id="agent-a",
         tick=1,
@@ -61,16 +64,16 @@ def _runner_result():
     )
 
 
-def _harvest():
+def _harvest() -> DiplomacyHarvest:
     return build_completed_run_diplomacy_harvest(_runner_result())
 
 
 class _Port:
     def __init__(self, fail: bool = False) -> None:
-        self.publications = []
+        self.publications: list[object] = []
         self.fail = fail
 
-    def publish(self, publication) -> None:
+    def publish(self, publication: object) -> None:
         if self.fail:
             raise DiplomacyArtifactError("diplomacy_publication_exists")
         self.publications.append(publication)

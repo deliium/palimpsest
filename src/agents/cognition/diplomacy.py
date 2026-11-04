@@ -22,7 +22,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final, NoReturn
+from typing import Any, Final, NoReturn, cast
 
 __all__ = [
     "DIPLOMACY_AGREEMENT_MIN_PARTY_DECLARATIONS",
@@ -585,7 +585,9 @@ def _require_optional_token(value: object, *, code: str = _RECORD_CODE) -> str |
         _fail(code)
 
 
-def _require_rows(rows: object, row_type: type, code: str = _RECORD_CODE) -> tuple:
+def _require_rows(
+    rows: object, row_type: type, code: str = _RECORD_CODE
+) -> tuple[Any, ...]:
     if not isinstance(rows, (tuple, list)):
         _fail(code)
     values = tuple(rows)
@@ -595,7 +597,7 @@ def _require_rows(rows: object, row_type: type, code: str = _RECORD_CODE) -> tup
     return values
 
 
-def _require_ordered(rows: Sequence, *, tick_name: str, id_name: str) -> None:
+def _require_ordered(rows: Sequence[Any], *, tick_name: str, id_name: str) -> None:
     keys = [(getattr(row, tick_name), getattr(row, id_name)) for row in rows]
     if keys != sorted(keys):
         _fail("diplomacy_unordered_rows")
@@ -605,7 +607,9 @@ def _require_ordered(rows: Sequence, *, tick_name: str, id_name: str) -> None:
 
 
 def _check_no_forbidden(row: object) -> None:
-    assert_diplomacy_no_forbidden_fields([field.name for field in fields(type(row))])
+    assert_diplomacy_no_forbidden_fields(
+        [field.name for field in fields(cast(Any, type(row)))]
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1435,9 +1439,7 @@ _ENVOY_STATUS_MAP: Final[Mapping[str, DiplomaticEnvoyStatus]] = MappingProxyType
 )
 
 
-def _mandate_for(
-    envoy: DiplomaticEnvoy, representation: object | None
-) -> object | None:
+def _mandate_for(envoy: DiplomaticEnvoy, representation: object | None) -> Any:
     if representation is None or envoy.mandate_ref is None:
         return None
     for mandate in getattr(representation, "mandates", ()):
@@ -1477,7 +1479,7 @@ def diplomacy_envoy_status(
     if bool(getattr(mandate, "expired", False)):
         return DiplomaticEnvoyStatus.EXPIRED
     status = getattr(getattr(mandate, "status", None), "value", None)
-    return _ENVOY_STATUS_MAP.get(status, DiplomaticEnvoyStatus.UNKNOWN)
+    return _ENVOY_STATUS_MAP.get(cast(str, status), DiplomaticEnvoyStatus.UNKNOWN)
 
 
 def _declaration_counts_for_party(
@@ -1664,22 +1666,24 @@ def diplomacy_standing_summary(
     current = ledger.tick if tick is None else _require_tick(tick)
     active_policy = default_diplomacy_policy() if policy is None else policy
     envoy_counts: dict[str, int] = {}
-    for row in ledger.envoys:
+    for envoy_row in ledger.envoys:
         status = diplomacy_envoy_status(
-            row, representation, tick=current, policy=active_policy
+            envoy_row, representation, tick=current, policy=active_policy
         )
         envoy_counts[status.value] = envoy_counts.get(status.value, 0) + 1
     instrument_counts: dict[str, int] = {}
-    for row in ledger.instruments:
-        status, _ = diplomacy_instrument_status(
-            row,
+    for instrument_row in ledger.instruments:
+        instrument_status, _ = diplomacy_instrument_status(
+            instrument_row,
             ledger.declarations,
             tick=current,
             policy=active_policy,
             representation=representation,
             envoys=ledger.envoys,
         )
-        instrument_counts[status.value] = instrument_counts.get(status.value, 0) + 1
+        instrument_counts[instrument_status.value] = (
+            instrument_counts.get(instrument_status.value, 0) + 1
+        )
     highest = max((ledger.tick, *(row.first_seen_tick for row in ledger.parties), 0))
     return DiplomaticStandingSummary(
         relations=len(ledger.relations),
@@ -1701,16 +1705,19 @@ def diplomacy_standing_summary(
     )
 
 
-def _bump(ledger: DiplomacyLedger, **changes: object) -> DiplomacyLedger:
+def _bump(ledger: DiplomacyLedger, **changes: Any) -> DiplomacyLedger:
+    tick = changes.pop("tick", ledger.tick)
     return replace(
         ledger,
-        tick=max(ledger.tick, int(changes.pop("tick", ledger.tick))),
+        tick=max(ledger.tick, int(cast(int, tick))),
         revision=ledger.revision + 1,
         **changes,
     )
 
 
-def _append_sorted(rows: Sequence, new_rows: Sequence, key_name: str) -> tuple:
+def _append_sorted(
+    rows: Sequence[Any], new_rows: Sequence[Any], key_name: str
+) -> tuple[Any, ...]:
     by_id = {getattr(row, key_name): row for row in rows}
     for row in new_rows:
         by_id.setdefault(getattr(row, key_name), row)
@@ -1912,13 +1919,13 @@ def detect_diplomacy_conflicts(ledger: DiplomacyLedger) -> DiplomacyLedger:
         term_groups.setdefault(
             (instrument.relation_id, instrument.topic_subject), []
         ).append(instrument)
-    for (relation_id, _), group in term_groups.items():
-        terms = {row.term_kind for row in group}
+    for (relation_id, _), instrument_group in term_groups.items():
+        terms = {item.term_kind for item in instrument_group}
         if len(terms) > 1:
             add(
                 relation_id,
                 DiplomaticConflictKind.CONTRADICTORY_TERMS,
-                tuple(sorted(row.instrument_id for row in group)),
+                tuple(sorted(item.instrument_id for item in instrument_group)),
             )
 
     for relation in ledger.relations:
@@ -1978,7 +1985,9 @@ def detect_diplomacy_conflicts(ledger: DiplomacyLedger) -> DiplomacyLedger:
     )
 
 
-def _drop_oldest(rows: Sequence, *, table: str, count: int) -> tuple[tuple, int]:
+def _drop_oldest(
+    rows: Sequence[Any], *, table: str, count: int
+) -> tuple[tuple[Any, ...], int]:
     ordered = list(rows)
     drop = min(count, len(ordered))
     if drop <= 0:
@@ -2016,10 +2025,10 @@ def enforce_diplomacy_limits(
     )
 
     if len(instruments) > policy.max_instruments_per_relation * max(1, len(relations)):
-        grouped: dict[str, list] = {}
-        for row in instruments:
-            grouped.setdefault(row.relation_id, []).append(row)
-        kept_instruments: list = []
+        grouped: dict[str, list[Any]] = {}
+        for instrument_row in instruments:
+            grouped.setdefault(instrument_row.relation_id, []).append(instrument_row)
+        kept_instruments: list[Any] = []
         for group in grouped.values():
             if len(group) > policy.max_instruments_per_relation:
                 kept_instruments.extend(group[-policy.max_instruments_per_relation :])
@@ -2033,10 +2042,10 @@ def enforce_diplomacy_limits(
         instruments = kept_instruments
 
     if len(contacts) > policy.max_contacts_per_relation * max(1, len(relations)):
-        grouped_contacts: dict[str, list] = {}
-        for row in contacts:
-            grouped_contacts.setdefault(row.relation_id, []).append(row)
-        kept_contacts: list = []
+        grouped_contacts: dict[str, list[Any]] = {}
+        for contact_row in contacts:
+            grouped_contacts.setdefault(contact_row.relation_id, []).append(contact_row)
+        kept_contacts: list[Any] = []
         for group in grouped_contacts.values():
             if len(group) > policy.max_contacts_per_relation:
                 kept_contacts.extend(group[-policy.max_contacts_per_relation :])
@@ -2052,10 +2061,12 @@ def enforce_diplomacy_limits(
     if len(negotiations) > policy.max_negotiations_per_relation * max(
         1, len(relations)
     ):
-        grouped_negotiations: dict[str, list] = {}
-        for row in negotiations:
-            grouped_negotiations.setdefault(row.relation_id, []).append(row)
-        kept_negotiations: list = []
+        grouped_negotiations: dict[str, list[Any]] = {}
+        for negotiation_row in negotiations:
+            grouped_negotiations.setdefault(negotiation_row.relation_id, []).append(
+                negotiation_row
+            )
+        kept_negotiations: list[Any] = []
         for group in grouped_negotiations.values():
             if len(group) > policy.max_negotiations_per_relation:
                 kept_negotiations.extend(group[-policy.max_negotiations_per_relation :])
@@ -2069,10 +2080,10 @@ def enforce_diplomacy_limits(
         negotiations = kept_negotiations
 
     if len(envoys) > policy.max_envoys_per_relation * max(1, len(relations)):
-        grouped_envoys: dict[str, list] = {}
-        for row in envoys:
-            grouped_envoys.setdefault(row.relation_id, []).append(row)
-        kept_envoys: list = []
+        grouped_envoys: dict[str, list[Any]] = {}
+        for envoy_row in envoys:
+            grouped_envoys.setdefault(envoy_row.relation_id, []).append(envoy_row)
+        kept_envoys: list[Any] = []
         for group in grouped_envoys.values():
             if len(group) > policy.max_envoys_per_relation:
                 kept_envoys.extend(group[-policy.max_envoys_per_relation :])
@@ -2085,10 +2096,12 @@ def enforce_diplomacy_limits(
                 kept_envoys.extend(group)
         envoys = kept_envoys
 
-    declaration_groups: dict[str, list] = {}
-    for row in declarations:
-        declaration_groups.setdefault(row.instrument_id, []).append(row)
-    kept_declarations: list = []
+    declaration_groups: dict[str, list[Any]] = {}
+    for declaration_row in declarations:
+        declaration_groups.setdefault(declaration_row.instrument_id, []).append(
+            declaration_row
+        )
+    kept_declarations: list[Any] = []
     for group in declaration_groups.values():
         if len(group) > policy.max_declarations_per_instrument:
             kept_declarations.extend(group[-policy.max_declarations_per_instrument :])
@@ -2119,10 +2132,12 @@ def enforce_diplomacy_limits(
         if excess > len(removable):
             _LOG.error("diplomacy_capacity_reached table=parties")
             _fail("diplomacy_capacity_reached")
-        dropped = set(row.party_id for row in removable[:excess])
-        parties = [row for row in parties if row.party_id not in dropped]
+        dropped_parties = {item.party_id for item in removable[:excess]}
+        parties = [item for item in parties if item.party_id not in dropped_parties]
         notices.add("diplomacy_truncated:parties")
-        _LOG.warning("diplomacy_truncated table=parties dropped=%s", len(dropped))
+        _LOG.warning(
+            "diplomacy_truncated table=parties dropped=%s", len(dropped_parties)
+        )
 
     if len(relations) > policy.max_relations:
         removable_relations = [
@@ -2181,7 +2196,7 @@ def enforce_diplomacy_limits(
             )
         )
 
-    table_order: list[tuple[str, list]] = [
+    table_order: list[tuple[str, list[Any]]] = [
         ("contacts", contacts),
         ("negotiations", negotiations),
         ("envoys", envoys),
@@ -2192,10 +2207,10 @@ def enforce_diplomacy_limits(
     for table, rows in table_order:
         if total() <= policy.max_total_records:
             break
-        excess = total() - policy.max_total_records
+        excess_count = total() - policy.max_total_records
         if not rows:
             continue
-        kept, dropped = _drop_oldest(rows, table=table, count=excess)
+        kept, dropped = _drop_oldest(rows, table=table, count=excess_count)
         if dropped:
             notices.add(f"diplomacy_truncated:{table}")
             if table == "contacts":
@@ -2243,7 +2258,7 @@ def enforce_diplomacy_limits(
     if after_counts == before_counts:
         return ledger
 
-    def ordered(rows: list, tick_name: str, id_name: str) -> tuple:
+    def ordered(rows: list[Any], tick_name: str, id_name: str) -> tuple[Any, ...]:
         return tuple(
             sorted(
                 rows, key=lambda row: (getattr(row, tick_name), getattr(row, id_name))
@@ -2588,7 +2603,9 @@ class _Builder:
         return declaration_id
 
     def build(self) -> DiplomacyLedger:
-        def ordered(rows: Mapping[str, object], tick_name: str, id_name: str) -> tuple:
+        def ordered(
+            rows: Mapping[str, Any], tick_name: str, id_name: str
+        ) -> tuple[Any, ...]:
             return tuple(
                 sorted(
                     rows.values(),
@@ -2760,8 +2777,10 @@ def _process_frame(
             ):
                 builder.notices.add("diplomacy_party_duplicate")
                 return
+        if declaration_envoy is not None and type(declaration_envoy) is not str:
+            _fail("diplomacy_party_set_invalid")
         builder.add_declaration(
-            instrument_id,
+            instrument_id,  # type: ignore[arg-type]
             declarer_party_id=declarer_party,
             envoy_ref=declaration_envoy,
             act=_FRAME_TO_DECLARATION[act.value],
@@ -2896,6 +2915,8 @@ def _process_frame(
             anchor_refs=anchor_refs,
             provenance=provenance,
         )
+        if declaration_envoy is not None and type(declaration_envoy) is not str:
+            _fail("diplomacy_party_set_invalid")
         builder.add_declaration(
             instrument_id,
             declarer_party_id=declarer_party,

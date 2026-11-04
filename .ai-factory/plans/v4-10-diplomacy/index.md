@@ -432,16 +432,16 @@ they are not part of the 12 V4 flags. `/version` is unchanged;
 
 ### Phase 6: Read-Only API and Research UI
 - [x] Task 20: Add six GET routes, schemas, settings, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-routes-schemas-settings-and-app-wiring)) (depends on 19)
-- [ ] Task 21: Add the read-only Research UI diplomacy view ([details](phase-06-read-only-surfaces.md#task-21-add-the-read-only-research-ui-diplomacy-view)) (depends on 20)
+- [x] Task 21: Add the read-only Research UI diplomacy view ([details](phase-06-read-only-surfaces.md#task-21-add-the-read-only-research-ui-diplomacy-view)) (depends on 20)
 
 ### Phase 7: Invariants, End-to-End Diplomacy, and Regression
 - [x] Task 22: Add the diplomacy boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-22-add-the-diplomacy-boundary-and-determinism-suite)) (depends on 2-21)
-- [ ] Task 23: Add the diplomacy end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-23-add-the-diplomacy-end-to-end-scenario)) (depends on 7-21)
-- [ ] Task 24: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-24-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 22, 23)
+- [x] Task 23: Add the diplomacy end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-23-add-the-diplomacy-end-to-end-scenario)) (depends on 7-21)
+- [x] Task 24: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-24-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 22, 23)
 
 ### Phase 8: Documentation and Final Verification
-- [ ] Task 25: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-25-execute-the-documentation-checkpoint)) (depends on 2-24)
-- [ ] Task 26: Perform final V4-10 verification ([details](phase-08-docs-and-verification.md#task-26-perform-final-v4-10-verification)) (depends on 24, 25)
+- [x] Task 25: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-25-execute-the-documentation-checkpoint)) (depends on 2-24)
+- [x] Task 26: Perform final V4-10 verification ([details](phase-08-docs-and-verification.md#task-26-perform-final-v4-10-verification)) (depends on 24, 25)
 
 ## Verification Receipt (Tasks 24 and 26)
 
@@ -453,26 +453,25 @@ for every lane because nothing has run yet.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | unexecuted | Not yet run; Task 24 |
-| Focused V4-10 suite | unexecuted | Not yet run; Task 24 |
-| Focused in-process diplomacy E2E | unexecuted | Not yet run; Task 23/24 (no PostgreSQL) |
-| V4/organization/formal-rule/dispute/evidence/representation/diplomacy regression selection | unexecuted | Not yet run; Task 24 |
-| Documentation parity | unexecuted | Not yet run; Task 24; includes the four-owned/eight-unowned sweep |
-| Ruff | unexecuted | Not yet run; Task 24 |
-| Mypy | unexecuted | Not yet run; Task 24 |
-| Import-linter | unexecuted | Not yet run; Task 24 |
-| Integration (`-m "integration and not scale"`) | unexecuted | Requires disposable PostgreSQL/pgvector; Task 24 |
-| Integration including scale | unexecuted | Requires disposable PostgreSQL/pgvector and the 100,000-tick harness; Task 24 |
-| Docker Compose config | unexecuted | Not yet run; Task 24 |
-| Compose/browser acceptance | unexecuted | Requires pinned API image, Playwright driver, and acceptance harness; Task 24 |
-| Godot 4.7.2 regression | unexecuted | Requires the Godot binary/toolchain; Task 24 |
-| Benchmark/scale lane | unexecuted | Requires the multi-hour 100,000-tick harness; Task 24 |
-| Research UI tests | unexecuted | Requires `pnpm`; Task 24 |
-| Research UI type/static checks | unexecuted | Requires `pnpm`; Task 24 |
-| Research UI build | unexecuted | Requires `pnpm`; Task 24 |
+| Python unit + architecture with coverage | executed_passed | `uv run pytest tests/unit tests/architecture -q --cov --cov-report=term`: 8,791 passed, 79% total coverage (2026-11-04/05) |
+| Focused V4-10 suite | executed_passed | `uv run pytest tests/unit/test_diplomacy_*.py tests/architecture/test_diplomacy_boundaries.py -q`: 253 passed |
+| Focused in-process diplomacy E2E | executed_passed | `uv run pytest tests/unit/test_diplomacy_e2e.py -q`: 2 passed (no PostgreSQL) |
+| V4/organization/formal-rule/dispute/evidence/representation/diplomacy regression selection | executed_passed | Covered by the 8,791-test unit+architecture lane; focused V4-10 suite 253 passed |
+| Documentation parity | executed_passed | `tests/unit/test_diplomacy_docs.py` plus the existing docs/catalog parity tests pass; four-owned/eight-unowned and 164 pins swept |
+| Ruff | executed_passed | `uv run ruff check src tests`: all checks passed |
+| Mypy | executed_passed | `uv run mypy src tests`: no issues in 2,050 files |
+| Import-linter | executed_passed | `uv run lint-imports`: 25 kept, 0 broken |
+| Integration (`-m "integration and not scale"`) | unexecuted | Requires a disposable PostgreSQL/pgvector instance (not available in this session) |
+| Integration including scale | unexecuted | Requires a disposable PostgreSQL/pgvector instance and the 100,000-tick harness |
+| Docker Compose config | executed_passed | `docker compose config --quiet`: passed |
+| Compose/browser acceptance | unexecuted | Requires the pinned API image, Playwright driver, and acceptance harness |
+| Godot 4.7.2 regression | unexecuted | Requires the Godot binary/toolchain (not installed) |
+| Benchmark/scale lane | unexecuted | Requires the multi-hour 100,000-tick harness |
+| Research UI tests | unexecuted | Requires `pnpm` (not installed) |
+| Research UI type/static checks | unexecuted | Requires `pnpm` (not installed) |
+| Research UI build | unexecuted | Requires `pnpm` (not installed) |
 
-Certification outcome: pending — Task 24 fills every row and Task 26 records
-`certified` only when all required lanes are `executed_passed`.
+Certification outcome: **not certified** — every Python, static, docs, and Compose-config lane passed, but integration, Compose/browser, Godot, benchmark, and Research UI lanes remain `unexecuted` with their prerequisites named above.
 
 ## Commit Plan
 

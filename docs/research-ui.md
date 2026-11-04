@@ -266,3 +266,13 @@ list, then loads positions and revocations on selection. It renders
 as server-provided beliefs, and always shows the "owner belief — not legitimacy"
 label. The panel computes no recognition, authority, winner, or legitimacy, and
 never triggers publication or mutation.
+
+## Diplomacy panel
+
+The read-only Diplomacy panel consumes exactly the six diplomacy routes. It
+renders summary counts, relations, parties, envoys, instruments, declarations,
+misrepresentation observations, terminations, conflicts, and lineage. Envoy
+standing is shown as a server status label, never as authority or legitimacy.
+Misrepresentation rows are neutral retained observations. The panel shows
+explicit loading, empty, unavailable (`diplomacy_disabled`), and error states,
+and never aggregates lanes or invents a score.

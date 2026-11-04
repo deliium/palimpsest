@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from simulation.diplomacy_models import (
     MAX_DETAIL_ROWS,
@@ -37,7 +37,9 @@ def _clamp(limit: int) -> int:
     return max(1, min(limit, MAX_DETAIL_ROWS))
 
 
-def _page(rows: tuple, *, after_key: str | None, limit: int, id_name: str):
+def _page(
+    rows: tuple[Any, ...], *, after_key: str | None, limit: int, id_name: str
+) -> tuple[tuple[Any, ...], str | None]:
     ordered = tuple(sorted(rows, key=lambda row: getattr(row, id_name)))
     start = 0
     if after_key is not None:

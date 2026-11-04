@@ -69,7 +69,7 @@ def _rows(act: str = "accept") -> DiplomacyHarvestRows:
 
 
 def _mandate(status: str = "recognized", **overrides: object) -> SimpleNamespace:
-    values = {
+    values: dict[str, object] = {
         "owner_token": OWNER,
         "representative_token": ENVOY,
         "status": status,

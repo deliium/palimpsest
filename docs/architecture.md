@@ -658,3 +658,25 @@ require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
 semantic types, 164 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by V4-10.
+
+### V4-10 diplomacy seam
+
+V4-10 owns the fourth V4 capability flag, `diplomacy`, on the accepted
+`runner-config-v56` seam; it adds no `runner-config-v57`, root field, per-agent
+runner key, command, event, observer semantic type, write pair, `/v2` route, or
+migration. `agents.cognition.diplomacy` keeps one owner's retained relations,
+parties, contacts, envoys, negotiations, instruments, declarations,
+misrepresentation observations, terminations, and conflicts under
+`diplomacy.v1`. Organization/coalition anchors resolve only against the owner's
+`orgc-` concepts, settlement anchors only against visible regions, and missing
+anchors stay unresolved. Envoy standing is derived from the representation
+ledger and recomputed at read time; agreement acceptance requires every party's
+own declaration and still binds nobody. Bounded `dip_v1` claims travel inside
+existing speech. Detached analysis derives six independent inter-society lanes,
+`dip-` candidates, read-only `org-`/`msoc-` joins, three separated layers, and
+researcher-only envoy alignment. Four families append (catalog 160 -> 164).
+`simulation.diplomacy_*` owns `diplomacy-snapshot-v1`;
+`experiments.diplomacy_*` and `persistence.diplomacy_filesystem` publish
+`diplomacy-store-v1` atomically; six GET-only `/v1/simulations/{run_id}/diplomacy`
+routes require `SUBJECTIVE_DEBUG`; the Research UI adds a read-only panel.
+`WorldEngine` never reads the ledger. See `docs/diplomacy.md`.

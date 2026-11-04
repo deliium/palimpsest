@@ -165,7 +165,7 @@ def _organization_members(row: object) -> tuple[str, ...]:
     members = getattr(row, "member_tokens", None)
     if members is None:
         members = getattr(row, "members", ())
-    return tuple(str(getattr(item, "token", item)) for item in members)
+    return tuple(str(getattr(item, "token", item)) for item in (members or ()))
 
 
 def _organization_id(row: object) -> str | None:
@@ -180,7 +180,7 @@ def _macro_members(row: object) -> tuple[str, ...]:
     members = getattr(row, "member_tokens", None)
     if members is None:
         members = getattr(row, "members", ())
-    return tuple(str(getattr(item, "token", item)) for item in members)
+    return tuple(str(getattr(item, "token", item)) for item in (members or ()))
 
 
 def join_diplomacy_parties(

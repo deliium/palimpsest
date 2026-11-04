@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from analysis.diplomacy_contract import DiplomacyAnalysisError
 
@@ -39,7 +39,7 @@ class DiplomacyObjectiveAnchorRow:
 
 def diplomacy_objective_anchor_rows_from_events(
     events: Sequence[object],
-    entity_to_agent: Callable[[object], object] | Mapping[object, object] | None = None,
+    entity_to_agent: Callable[[object], object] | Mapping[Any, Any] | None = None,
 ) -> tuple[DiplomacyObjectiveAnchorRow, ...]:
     """Count objective acts by tick and region. No owner token is carried."""
 

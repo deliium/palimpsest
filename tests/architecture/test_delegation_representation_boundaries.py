@@ -109,7 +109,7 @@ def test_no_runner_config_v57_literal_in_source() -> None:
 
 
 @pytest.mark.asyncio
-async def test_organized_conflict_still_fails_closed_with_capability_unimplemented() -> None:
+async def test_organized_conflict_still_fails_closed() -> None:
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V56,

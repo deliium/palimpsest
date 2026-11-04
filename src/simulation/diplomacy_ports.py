@@ -25,6 +25,7 @@ __all__ = [
     "DiplomacyPortError",
     "DiplomacyPublication",
     "DiplomacyPublicationPort",
+    "DiplomacyPublisherPort",
     "DiplomacyReadPort",
     "DiplomacyRelationDetail",
     "DiplomacySummary",
@@ -184,6 +185,22 @@ class DiplomacyReadPort(Protocol):
     def read_lineage(
         self, run_id: str, *, cursor: DiplomacyCursor | None = None
     ) -> tuple[DiplomacySnapshotLineageRow, ...]: ...
+
+    def relations_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> object: ...
+
+    def instruments_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> object: ...
+
+    def lineage_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> object: ...
+
+
+class DiplomacyPublisherPort(Protocol):
+    def publish(self, publication: DiplomacyPublication) -> None: ...
 
 
 class DiplomacyPublicationPort(Protocol):
