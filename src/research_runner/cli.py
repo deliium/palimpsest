@@ -987,6 +987,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.evidence_testimony_composition import (
+                producer_options_from_args as evidence_options_from_args,
+            )
+
+            evidence_options = evidence_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_evidence_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1333,6 +1345,34 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"dispute_publication_reason={dispute_receipt['reason_code']}")
             if "publication_id" in dispute_receipt:
                 print(f"dispute_publication_id={dispute_receipt['publication_id']}")
+        if evidence_options.enabled:
+            from research_runner.evidence_testimony_composition import (
+                publish_evidence_testimony_harvest,
+                write_evidence_testimony_receipt,
+            )
+
+            evidence_receipt = publish_evidence_testimony_harvest(
+                arm.runner_result,
+                evidence_options,
+                run_id=assignment.run_id.value,
+                input_revision=arm.config_fingerprint,
+                generated_tick=arm.runner_result.ticks_committed,
+                entity_to_agent={
+                    agent.entity_id.value: agent.agent_id.value
+                    for agent in arm.assignment.runner_config.agents
+                },
+            )
+            write_evidence_testimony_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                evidence_receipt,
+            )
+            print(f"evidence_publication_status={evidence_receipt['status']}")
+            print(f"evidence_publication_reason={evidence_receipt['reason_code']}")
+            if "publication_id" in evidence_receipt:
+                print(
+                    f"evidence_publication_id={evidence_receipt['publication_id']}"
+                )
         if lineage_options is not None:
             import json
 
@@ -1509,6 +1549,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--dispute-root", default=None)
     gen_p.add_argument("--dispute-max-publications", type=int, default=16)
     gen_p.add_argument("--dispute-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--evidence-root", default=None)
+    gen_p.add_argument("--evidence-max-publications", type=int, default=16)
+    gen_p.add_argument("--evidence-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

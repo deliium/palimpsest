@@ -251,6 +251,16 @@ from experiments.environmental_scenario import (
     count_environmental_dynamics,
     seasonal_scarcity_scenario,
 )
+from experiments.evidence_testimony_harvest import (
+    EvidenceTestimonyHarvest,
+    build_completed_run_evidence_harvest,
+)
+from experiments.evidence_testimony_publication import (
+    EvidenceTestimonyHarvestResult,
+    build_evidence_testimony_harvest_result,
+    evidence_testimony_publication_document,
+    publish_evidence_testimony_snapshot,
+)
 from experiments.external_artifacts_scenario import external_artifacts_scenario
 from experiments.generational_comparison import build_generational_comparison
 from experiments.generational_comparison_base import (
@@ -483,6 +493,8 @@ __all__ = [
     "EvidenceCompositionError",
     "EvidenceCompositionService",
     "EvidenceManifestRepository",
+    "EvidenceTestimonyHarvest",
+    "EvidenceTestimonyHarvestResult",
     "ExperimentArmResult",
     "ExperimentAssignment",
     "ExperimentAssignmentRecord",
@@ -593,9 +605,11 @@ __all__ = [
     "benchmark_suite_registry",
     "bounded_experimentation_profile",
     "build_completed_run_dispute_harvest",
+    "build_completed_run_evidence_harvest",
     "build_completed_run_harvest",
     "build_completed_run_organization_harvest",
     "build_dispute_harvest_result",
+    "build_evidence_testimony_harvest_result",
     "build_generational_comparison",
     "build_macro_society_harvest_result",
     "build_matrix_aggregate",
@@ -646,6 +660,7 @@ __all__ = [
     "encode_matrix_spec",
     "encode_matrix_spec_document",
     "encode_run_version_identity",
+    "evidence_testimony_publication_document",
     "expand_architecture",
     "expand_matrix",
     "experiment_a_memory",
@@ -744,6 +759,7 @@ __all__ = [
     "organization_publication_document",
     "persist_metric_bundle",
     "publish_dispute_snapshot",
+    "publish_evidence_testimony_snapshot",
     "publish_macro_society_snapshot",
     "publish_organization_snapshot",
     "regional_context_from_run",
