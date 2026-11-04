@@ -358,8 +358,8 @@ fail closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 17: Add the atomic filesystem store and CLI producer ([details](phase-05-composition-publication.md#task-17-add-the-atomic-filesystem-store-and-cli-producer)) (depends on 14-16)
 
 ### Phase 6: Read-Only API and Research UI
-- [ ] Task 18: Add six GET routes, schemas, settings, and app wiring ([details](phase-06-read-only-surfaces.md#task-18-add-six-get-routes-schemas-settings-and-app-wiring)) (depends on 17)
-- [ ] Task 19: Add the read-only Research UI evidence view ([details](phase-06-read-only-surfaces.md#task-19-add-the-read-only-research-ui-evidence-view)) (depends on 18)
+- [x] Task 18: Add six GET routes, schemas, settings, and app wiring ([details](phase-06-read-only-surfaces.md#task-18-add-six-get-routes-schemas-settings-and-app-wiring)) (depends on 17)
+- [x] Task 19: Add the read-only Research UI evidence view ([details](phase-06-read-only-surfaces.md#task-19-add-the-read-only-research-ui-evidence-view)) (depends on 18)
 
 ### Phase 7: Invariants, End-to-End Evidence, and Regression
 - [ ] Task 20: Add the evidence boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-20-add-the-evidence-boundary-and-determinism-suite)) (depends on 2-19)

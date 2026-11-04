@@ -162,6 +162,11 @@ def get_dispute_reader(request: Request) -> object | None:
     return getattr(request.app.state, "dispute_reader", None)
 
 
+def get_evidence_testimony_reader(request: Request) -> object | None:
+    """Return the read-only evidence-testimony reader, or ``None`` when disabled."""
+    return getattr(request.app.state, "evidence_testimony_reader", None)
+
+
 def get_lineage_service(request: Request) -> LineageApiService | None:
     service = getattr(request.app.state, "lineage_service", None)
     if service is None:

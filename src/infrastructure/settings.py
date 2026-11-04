@@ -223,6 +223,8 @@ class Settings(BaseSettings):
     formal_rule_cursor_key: SecretStr | None = Field(default=None, repr=False)
     dispute_root: Path | None = None
     dispute_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    evidence_root: Path | None = None
+    evidence_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -274,6 +276,7 @@ class Settings(BaseSettings):
         "organization_root",
         "formal_rule_root",
         "dispute_root",
+        "evidence_root",
         mode="before",
     )
     @classmethod
@@ -300,9 +303,7 @@ class Settings(BaseSettings):
         cls, value: SecretStr | None
     ) -> SecretStr | None:
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
-            raise ValueError(
-                "macro_society cursor key must be at least 32 UTF-8 bytes"
-            )
+            raise ValueError("macro_society cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("organization_cursor_key")
@@ -311,9 +312,7 @@ class Settings(BaseSettings):
         cls, value: SecretStr | None
     ) -> SecretStr | None:
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
-            raise ValueError(
-                "organization cursor key must be at least 32 UTF-8 bytes"
-            )
+            raise ValueError("organization cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("formal_rule_cursor_key")
@@ -322,18 +321,21 @@ class Settings(BaseSettings):
         cls, value: SecretStr | None
     ) -> SecretStr | None:
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
-            raise ValueError(
-                "formal_rule cursor key must be at least 32 UTF-8 bytes"
-            )
+            raise ValueError("formal_rule cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("dispute_cursor_key")
     @classmethod
-    def validate_dispute_cursor_key(
-        cls, value: SecretStr | None
-    ) -> SecretStr | None:
+    def validate_dispute_cursor_key(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError("dispute cursor key must be at least 32 UTF-8 bytes")
+        return value
+
+    @field_validator("evidence_cursor_key")
+    @classmethod
+    def validate_evidence_cursor_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError("evidence cursor key must be at least 32 UTF-8 bytes")
         return value
 
     @field_validator("civilization_cursor_key")
@@ -613,6 +615,8 @@ class Settings(BaseSettings):
             "has_formal_rule_cursor_key": self.formal_rule_cursor_key is not None,
             "has_dispute_root": self.dispute_root is not None,
             "has_dispute_cursor_key": self.dispute_cursor_key is not None,
+            "has_evidence_root": self.evidence_root is not None,
+            "has_evidence_cursor_key": self.evidence_cursor_key is not None,
             "has_revision": bool(self.revision),
         }
 

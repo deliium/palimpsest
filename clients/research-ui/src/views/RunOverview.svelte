@@ -39,6 +39,7 @@
   import MacroSocietiesPanel from './MacroSocietiesPanel.svelte'
   import FormalRulesPanel from './FormalRulesPanel.svelte'
   import DisputesPanel from './DisputesPanel.svelte'
+  import EvidencePanel from './EvidencePanel.svelte'
   import OrganizationsPanel from './OrganizationsPanel.svelte'
   import ProjectsPanel from './ProjectsPanel.svelte'
 
@@ -102,6 +103,7 @@
           { id: 'organizations', label: 'Organizations' },
           { id: 'formal-rules', label: 'Formal rules' },
           { id: 'disputes', label: 'Disputes' },
+          { id: 'evidence', label: 'Evidence' },
           { id: 'contact', label: 'Contact' },
         ],
       },
@@ -319,6 +321,8 @@
     <FormalRulesPanel {runId} {selection} />
   {:else if view === 'disputes'}
     <DisputesPanel {runId} {selection} />
+  {:else if view === 'evidence'}
+    <EvidencePanel {runId} {selection} />
   {:else if view === 'institutions'}
     <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}
