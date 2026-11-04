@@ -868,6 +868,29 @@ def assemble_arm_metric_bundle(
                 )
             ),
         )
+    diplomacy_ledgers = getattr(arm.runner_result, "diplomacy_ledgers", None)
+    if diplomacy_ledgers:
+        from analysis.diplomacy_objective import (
+            diplomacy_objective_anchor_rows_from_events,
+        )
+        from analysis.diplomacy_rows import harvest_diplomacy_rows
+
+        entity_to_agent = {
+            agent.entity_id.value: agent.agent_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        inputs = replace(
+            inputs,
+            diplomacy_rows=harvest_diplomacy_rows(
+                diplomacy_ledgers, entity_to_agent=entity_to_agent
+            ),
+            diplomacy_objective_rows=(
+                diplomacy_objective_anchor_rows_from_events(
+                    events or (),
+                    entity_to_agent,
+                )
+            ),
+        )
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
     if dispute_ledgers:
         from analysis.dispute_evidence import (

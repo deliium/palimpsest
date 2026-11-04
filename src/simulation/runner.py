@@ -1029,6 +1029,7 @@ def _cognition_config_for(
     organizations_enabled: bool = False,
     formal_rules_enabled: bool = False,
     legal_disputes_enabled: bool = False,
+    diplomacy_enabled: bool = False,
 ) -> CognitionLoopConfig:
     emotional_flag = capability_flags.short_term_emotional_state
     emotional_mode = (
@@ -1334,6 +1335,7 @@ def _cognition_config_for(
     if institutional_decay_mode is CognitionInstitutionalDecayMode.DETERMINISTIC:
         institutional_decay_policy = default_institutional_decay_policy()
     from agents.cognition.configuration import (
+        CognitionDiplomacyMode,
         CognitionDisputeMode,
         CognitionEvidenceMode,
         CognitionFormalRuleMode,
@@ -1343,6 +1345,10 @@ def _cognition_config_for(
     from agents.cognition.delegation_representation import (
         REPRESENTATION_POLICY_VERSION,
         default_representation_policy,
+    )
+    from agents.cognition.diplomacy import (
+        DIPLOMACY_POLICY_VERSION,
+        default_diplomacy_policy,
     )
     from agents.cognition.evidence_testimony import (
         EVIDENCE_TESTIMONY_POLICY_VERSION,
@@ -1418,6 +1424,24 @@ def _cognition_config_for(
         _LOG.debug(
             "cognition_representation_mode mode=%s policy_version=%s",
             representation_mode.value,
+            None,
+        )
+    diplomacy_mode = (
+        CognitionDiplomacyMode.DETERMINISTIC
+        if diplomacy_enabled
+        else CognitionDiplomacyMode.DISABLED
+    )
+    diplomacy_policy = default_diplomacy_policy() if diplomacy_enabled else None
+    if diplomacy_mode is CognitionDiplomacyMode.DETERMINISTIC:
+        _LOG.info(
+            "cognition_diplomacy_mode mode=%s policy_version=%s",
+            diplomacy_mode.value,
+            DIPLOMACY_POLICY_VERSION,
+        )
+    else:
+        _LOG.debug(
+            "cognition_diplomacy_mode mode=%s policy_version=%s",
+            diplomacy_mode.value,
             None,
         )
     formal_rule_mode = (
@@ -1600,6 +1624,8 @@ def _cognition_config_for(
         evidence_policy=evidence_policy,
         representation_mode=representation_mode,
         representation_policy=representation_policy,
+        diplomacy_mode=diplomacy_mode,
+        diplomacy_policy=diplomacy_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2730,6 +2756,7 @@ class SimulationRunner:
                     organizations_enabled=(config.v4_capability_flags.organizations),
                     formal_rules_enabled=(config.v4_capability_flags.formal_rules),
                     legal_disputes_enabled=(config.v4_capability_flags.legal_disputes),
+                    diplomacy_enabled=(config.v4_capability_flags.diplomacy),
                 )
                 memory_retriever = _memory_retriever_for(
                     agent_spec.cognition.memory_mode,
@@ -5123,6 +5150,7 @@ class SimulationRunner:
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
             representation_ledgers=(self.export_representation_ledgers()),
+            diplomacy_ledgers=(self.export_diplomacy_ledgers()),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5574,6 +5602,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "representation_ledger_exported owners=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_diplomacy_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered diplomacy ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "diplomacy", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "diplomacy_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6429,6 +6472,7 @@ class SimulationRunner:
                 legal_disputes_enabled=(
                     self._config.v4_capability_flags.legal_disputes
                 ),
+                diplomacy_enabled=(self._config.v4_capability_flags.diplomacy),
             )
             memory_retriever = _memory_retriever_for(
                 agent_spec.cognition.memory_mode,
@@ -6803,6 +6847,7 @@ def _construct_agent_bundle(
         organizations_enabled=config.v4_capability_flags.organizations,
         formal_rules_enabled=config.v4_capability_flags.formal_rules,
         legal_disputes_enabled=config.v4_capability_flags.legal_disputes,
+        diplomacy_enabled=config.v4_capability_flags.diplomacy,
     )
     memory_retriever = _memory_retriever_for(
         agent_spec.cognition.memory_mode,

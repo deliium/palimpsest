@@ -86,7 +86,7 @@ def test_organizations_is_owned_and_other_unowned_v4_flags_fail_closed() -> None
     assert disputes.unimplemented_enabled_names() == ()
 
     for name in V4_FLAG_NAMES:
-        if name in {"organizations", "formal_rules", "legal_disputes"}:
+        if name in {"organizations", "formal_rules", "legal_disputes", "diplomacy"}:
             continue
         other = V4CapabilityFlags(**{name: True})
         assert other.owned_enabled_names() == ()

@@ -317,11 +317,12 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
     "disasters",
 )
 
-# V4-03 owns ``organizations``, V4-06 owns ``formal_rules``, and V4-07 owns
-# ``legal_disputes``; the remaining nine V4 flags stay unowned and fail closed
-# at runtime construction until their behavior plans land and claim ownership.
+# V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
+# V4-07 owns ``legal_disputes``, and V4-10 owns ``diplomacy``; the remaining
+# eight V4 flags stay unowned and fail closed at runtime construction until
+# their behavior plans land and claim ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"organizations", "formal_rules", "legal_disputes"}
+    {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -1115,8 +1116,9 @@ class V3CapabilityFlags:
 class V4CapabilityFlags:
     """Run-level reserved V4 capability identifiers (configuration only).
 
-    Defaults are all off. V4-03 owns ``organizations`` and V4-06 owns
-    ``formal_rules``. Enabling an unowned flag fails closed at
+    Defaults are all off. V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns
+    ``formal_rules``, V4-07 owns ``legal_disputes``, and V4-10 owns
+    ``diplomacy``. Enabling an unowned flag fails closed at
     ``SimulationRunner.from_config`` with ``capability_unimplemented`` and
     ``stage="v4_capability_flags"`` until an owning plan lands. Wire key
     ``v4_capability_flags`` is a sibling of ``capability_flags`` and
@@ -6381,6 +6383,7 @@ class SimulationRunnerResult:
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
     representation_ledgers: tuple[object, ...] = ()
+    diplomacy_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6733,6 +6736,21 @@ class SimulationRunnerResult:
             if type(ledger) is not RepresentationLedger:
                 raise TypeError("representation_ledgers: invalid_item")
         object.__setattr__(self, "representation_ledgers", representation_ledgers)
+        if isinstance(self.diplomacy_ledgers, (set, frozenset)):
+            raise TypeError("diplomacy_ledgers must be ordered")
+        if type(self.diplomacy_ledgers) is not tuple:
+            raise TypeError("diplomacy_ledgers must be ordered")
+        from agents.cognition.diplomacy import DiplomacyLedger, require_owner_diplomacy
+
+        diplomacy_ledgers = tuple(self.diplomacy_ledgers)
+        for ledger in diplomacy_ledgers:
+            if type(ledger) is not DiplomacyLedger:
+                raise TypeError("diplomacy_ledgers: invalid_item")
+            require_owner_diplomacy(ledger, ledger.owner_id)
+        owners = [ledger.owner_id for ledger in diplomacy_ledgers]
+        if len(set(owners)) != len(owners) or owners != sorted(owners):
+            raise ValueError("diplomacy_ledgers: invalid_order")
+        object.__setattr__(self, "diplomacy_ledgers", diplomacy_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

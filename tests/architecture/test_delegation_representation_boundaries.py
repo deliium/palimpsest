@@ -81,13 +81,14 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         "organizations",
         "formal_rules",
         "legal_disputes",
+        "diplomacy",
     }
 
     organizations = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS]
     diplomacy = V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY]
     assert organizations.authority is V4Authority.OWNER_SCOPED
     assert V4ContextId.ORGANIZATIONS in diplomacy.prerequisite_contexts
-    assert V4CapabilityFlags(diplomacy=True).owned_enabled_names() == ()
+    assert V4CapabilityFlags(organized_conflict=True).owned_enabled_names() == ()
 
     representation_contexts = {
         context_id
@@ -108,11 +109,11 @@ def test_no_runner_config_v57_literal_in_source() -> None:
 
 
 @pytest.mark.asyncio
-async def test_diplomacy_still_fails_closed_with_capability_unimplemented() -> None:
+async def test_organized_conflict_still_fails_closed_with_capability_unimplemented() -> None:
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V56,
-        v4_capability_flags=V4CapabilityFlags(diplomacy=True),
+        v4_capability_flags=V4CapabilityFlags(organized_conflict=True),
     )
 
     with pytest.raises(RunnerConstructionError) as excinfo:
@@ -242,14 +243,14 @@ def test_snapshot_store_and_catalog_pins() -> None:
     )
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 160
+    assert METRIC_FAMILY_COUNT == 164
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )
     assert DELEGATION_REPRESENTATION_STORE_SCHEMA == (
         "delegation-representation-store-v1"
     )
-    assert [spec.family_id for spec in all_metric_specifications()[-3:]] == [
+    assert [spec.family_id for spec in all_metric_specifications()[-7:-4]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,

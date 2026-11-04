@@ -51,15 +51,21 @@ ALIGNMENT_KEYS = (
 )
 
 
-def test_catalog_is_160_with_representation_last() -> None:
+def test_catalog_is_164_with_diplomacy_last() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 160
-    assert len(specs) == 160
-    assert len(validate_metric_catalog()) == 160
-    assert [spec.family_id for spec in specs[-3:]] == [
+    assert METRIC_FAMILY_COUNT == 164
+    assert len(specs) == 164
+    assert len(validate_metric_catalog()) == 164
+    assert [spec.family_id for spec in specs[-7:-4]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
+    ]
+    assert [spec.family_id for spec in specs[-4:]] == [
+        MetricFamilyId.DIPLOMATIC_CONTACT_STRUCTURE,
+        MetricFamilyId.DIPLOMATIC_INSTRUMENT_OUTCOMES,
+        MetricFamilyId.DIPLOMATIC_ENVOY_ALIGNMENT,
+        MetricFamilyId.INTER_SOCIETY_RELATION_LANES,
     ]
 
 
@@ -90,10 +96,11 @@ def test_representation_value_keys_are_exact() -> None:
     )
 
 
-def test_no_current_metric_count_assertion_still_uses_157() -> None:
+def test_no_current_metric_count_assertion_still_uses_160() -> None:
     root = Path(__file__).resolve().parents[1]
     pattern = re.compile(
-        r"(?:METRIC_FAMILY_COUNT\s*==\s*157|len\([^\n]*\)\s*==\s*157|==\s*157)"
+        r"(?:METRIC_FAMILY_COUNT\s*==\s*160|"
+        r"len\((?:specs|families|all_metric_specifications\(\))\)\s*==\s*160)"
     )
     offenders: list[str] = []
     for path in sorted((root / "unit").rglob("*.py")) + sorted(

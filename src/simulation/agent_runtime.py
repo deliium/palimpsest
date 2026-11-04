@@ -445,6 +445,7 @@ class AgentRuntime:
         "_decision_journal",
         "_developmental_audits",
         "_developmental_knowledge",
+        "_diplomacy",
         "_disputes",
         "_emotional_state",
         "_evidence",
@@ -628,6 +629,7 @@ class AgentRuntime:
         self._disputes: object | None = None
         self._evidence: object | None = None
         self._representation: object | None = None
+        self._diplomacy: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1488,6 +1490,36 @@ class AgentRuntime:
             "representation_ledger_carried mandates=%s positions=%s tick=%s",
             len(ledger.mandates),
             len(ledger.positions),
+            tick,
+        )
+
+    def _commit_diplomacy(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionDiplomacyMode
+        from agents.cognition.diplomacy import DiplomacyLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_diplomacy_mode",
+            CognitionDiplomacyMode.DISABLED,
+        )
+        if mode is not CognitionDiplomacyMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionDiplomacyMode.DETERMINISTIC:
+                self._diplomacy = None
+                _LOG.debug("cognition_diplomacy_mode disabled")
+            return
+        if type(ledger) is not DiplomacyLedger:
+            raise TypeError("diplomacy must be DiplomacyLedger")
+        if ledger.owner_id != owner.value:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._diplomacy = ledger
+        _LOG.debug(
+            "diplomacy_ledger_carried relations=%s instruments=%s tick=%s",
+            len(ledger.relations),
+            len(ledger.instruments),
             tick,
         )
 
@@ -2392,6 +2424,7 @@ class AgentRuntime:
                 disputes=self._disputes,
                 evidence=self._evidence,
                 representation=self._representation,
+                diplomacy=self._diplomacy,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2898,6 +2931,10 @@ class AgentRuntime:
         )
         self._commit_representation(
             getattr(pending.loop_result, "representation", None),
+            pending.tick,
+        )
+        self._commit_diplomacy(
+            getattr(pending.loop_result, "diplomacy", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3500,6 +3537,7 @@ class AgentRuntime:
                 agent_id=self._agent.agent_id.value,
             )
         self._representation = getattr(checkpoint, "representation", None)
+        self._diplomacy = getattr(checkpoint, "diplomacy", None)
         if (
             self._representation is not None
             and getattr(self._representation, "owner_id", None)
@@ -3624,6 +3662,7 @@ class AgentRuntime:
             disputes=self._disputes,
             evidence=self._evidence,
             representation=self._representation,
+            diplomacy=self._diplomacy,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

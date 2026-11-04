@@ -382,12 +382,12 @@ revocation are retained. Bounded `rep_v1` frames travel inside existing
 `Talk`/`Ask`/`Tell`. Detached analysis adds three appends
 (`representation_mandate_structure@1`,
 `representation_recognition_support@1`, `representation_scope_alignment@1`)
-raising the metric catalog from 157 to **160**, plus
+raising the metric catalog from 157 to **160** (V4-10 raises it to **164**), plus
 `delegation-representation-snapshot-v1`, a `delegation-representation-store-v1`
 filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 160, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 164, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; three V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
 unowned. `diplomacy` stays unowned and fail-closed.

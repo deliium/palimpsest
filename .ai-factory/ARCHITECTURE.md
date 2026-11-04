@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 160 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, and three V4-09 representation families) |
+| Metric families | 164 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, and three V4-09 representation families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -202,8 +202,8 @@ those as current pins or silently drop their legacy accepted versions.
   `cultural_historical_memory`, `multi_polity_migration`.
   `institutional_economy` remains unowned and fails closed.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
-  (V4-06), and `legal_disputes` (V4-07). The other nine V4 flags remain unowned
-  and fail closed.
+  (V4-06), `legal_disputes` (V4-07), and `diplomacy` (V4-10). The other eight V4
+  flags remain unowned and fail closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -841,7 +841,7 @@ cognition. `simulation.delegation_representation_*` owns canonical
 Three families append (`representation_mandate_structure@1`,
 `representation_recognition_support@1`, `representation_scope_alignment@1`),
 raising the catalog 157 -> 160. Pins: runner v4/v55/v56, result v2/v3, 43
-commands, 73 observer semantic types, 160 metric families, 14 V4 contexts, 12 V4
+commands, 73 observer semantic types, 164 metric families, 14 V4 contexts, 12 V4
 flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
 `diplomacy`, `institutional_economy`, and `multi_hop_testimony_tracking` remain
 unowned.

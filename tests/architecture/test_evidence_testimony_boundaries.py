@@ -294,7 +294,7 @@ def test_vocabulary_parity_matches_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 160
+    assert METRIC_FAMILY_COUNT == 164
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA == "evidence-testimony-snapshot-v1"
     assert DISPUTE_SNAPSHOT_SCHEMA == "dispute-resolution-snapshot-v1"
     assert FORMAL_RULE_SNAPSHOT_SCHEMA == "formal-rule-snapshot-v1"
@@ -309,7 +309,7 @@ def test_compatibility_pins_are_exact() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
-        {"organizations", "formal_rules", "legal_disputes"}
+        {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
     )
     assert "runner-config-v57" not in (
         ROOT / "src" / "simulation" / "runner_models.py"

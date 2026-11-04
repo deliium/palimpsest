@@ -50,6 +50,11 @@ from agents.cognition.delegation_representation import (
     RepresentationPolicy,
     default_representation_policy,
 )
+from agents.cognition.diplomacy import (
+    DIPLOMACY_POLICY_VERSION,
+    DiplomacyPolicy,
+    default_diplomacy_policy,
+)
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.evidence_testimony import (
     EVIDENCE_TESTIMONY_POLICY_VERSION,
@@ -466,6 +471,18 @@ class CognitionRepresentationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionDiplomacyMode(StrEnum):
+    """Owner-scoped inter-society diplomacy. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.diplomacy``. This is a
+    run-level cognition mode, not a capability flag and not a per-agent runner
+    key.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -677,6 +694,8 @@ class CognitionLoopConfig:
         CognitionRepresentationMode.DISABLED
     )
     representation_policy: RepresentationPolicy | None = None
+    diplomacy_mode: CognitionDiplomacyMode = CognitionDiplomacyMode.DISABLED
+    diplomacy_policy: DiplomacyPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1264,6 +1283,23 @@ class CognitionLoopConfig:
             raise TypeError(
                 "representation_policy must be RepresentationPolicy or None"
             )
+        if type(self.diplomacy_mode) is not CognitionDiplomacyMode:
+            _LOG.error("invalid_enum path=diplomacy_mode reason_code=invalid_mode")
+            raise TypeError("diplomacy_mode must be CognitionDiplomacyMode")
+        if self.diplomacy_mode is CognitionDiplomacyMode.DISABLED:
+            if self.diplomacy_policy is not None:
+                _LOG.debug("cognition_diplomacy_policy_cleared")
+            object.__setattr__(self, "diplomacy_policy", None)
+        elif self.diplomacy_policy is None:
+            object.__setattr__(self, "diplomacy_policy", default_diplomacy_policy())
+        elif type(self.diplomacy_policy) is not DiplomacyPolicy:
+            _LOG.error("invalid_enum path=diplomacy_policy reason_code=invalid_type")
+            raise TypeError("diplomacy_policy must be DiplomacyPolicy or None")
+        elif self.diplomacy_policy != default_diplomacy_policy():
+            _LOG.error(
+                "invalid_policy path=diplomacy_policy reason_code=mode_policy_mismatch"
+            )
+            raise ValueError("diplomacy_mode_policy_mismatch")
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1613,6 +1649,11 @@ class CognitionLoopConfig:
                 if self.representation_policy is not None
                 else None
             )
+        if self.diplomacy_mode is CognitionDiplomacyMode.DETERMINISTIC:
+            material["diplomacy_mode"] = self.diplomacy_mode.value
+            material["diplomacy_policy_version"] = (
+                DIPLOMACY_POLICY_VERSION if self.diplomacy_policy is not None else None
+            )
         return material
 
 
@@ -1889,6 +1930,8 @@ def build_cognitive_loop(
         evidence_policy=resolved.evidence_policy,
         representation_mode=resolved.representation_mode,
         representation_policy=resolved.representation_policy,
+        diplomacy_mode=resolved.diplomacy_mode,
+        diplomacy_policy=resolved.diplomacy_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

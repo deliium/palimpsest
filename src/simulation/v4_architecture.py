@@ -87,7 +87,13 @@ class V4Authority(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class V4ContextSpec:
-    """One declared V4 context; declaration is not implementation."""
+    """One declared V4 context; declaration is not implementation.
+
+    ``prerequisite_contexts`` declares planning order and dependency intent. It
+    is never a runtime gate: a context may run with its prerequisite disabled and
+    then leaves dependent anchors unresolved (for example ``diplomacy`` without
+    ``organizations`` leaves organization/coalition party anchors unresolved).
+    """
 
     context_id: V4ContextId
     capability_flag: str | None

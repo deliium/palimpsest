@@ -98,11 +98,11 @@ def test_analysis_agency_module_imports_no_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 160
+    assert METRIC_FAMILY_COUNT == 164
     families = all_metric_specifications()
-    assert len(families) == 160
-    assert families[-14].family_id.value == "organization_collective_agency"
-    assert families[-13].family_id.value == "organization_collective_implementation"
+    assert len(families) == 164
+    assert families[-18].family_id.value == "organization_collective_agency"
+    assert families[-17].family_id.value == "organization_collective_implementation"
     assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43

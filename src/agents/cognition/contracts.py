@@ -195,6 +195,7 @@ class Perspective:
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
+    diplomacy: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -448,6 +449,9 @@ class Perspective:
             self.representation,
             self.agent_id,
         )
+        from agents.cognition.diplomacy import require_owner_diplomacy
+
+        require_owner_diplomacy(self.diplomacy, self.agent_id)
         from agents.cognition.mediation import require_owner_mediation
 
         require_owner_mediation(
@@ -634,6 +638,7 @@ class Perspective:
             disputes=self.disputes,
             evidence=self.evidence,
             representation=self.representation,
+            diplomacy=self.diplomacy,
         )
 
     def __repr__(self) -> str:

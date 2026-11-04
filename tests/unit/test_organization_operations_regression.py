@@ -50,13 +50,13 @@ AUTHORITY_KEYS = {
 
 
 def test_catalog_is_154_with_formal_rule_families_last() -> None:
-    assert METRIC_FAMILY_COUNT == 160
-    assert len(all_metric_specifications()) == 160
-    assert [spec.family_id for spec in all_metric_specifications()[-16:-14]] == [
+    assert METRIC_FAMILY_COUNT == 164
+    assert len(all_metric_specifications()) == 164
+    assert [spec.family_id for spec in all_metric_specifications()[-20:-18]] == [
         MetricFamilyId.ORGANIZATION_OPERATIONS,
         MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY,
     ]
-    assert [spec.family_id for spec in all_metric_specifications()[-14:-12]] == [
+    assert [spec.family_id for spec in all_metric_specifications()[-18:-16]] == [
         MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
         MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
     ]

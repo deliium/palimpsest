@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 160
+METRIC_FAMILY_COUNT: Final[int] = 164
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -235,6 +235,10 @@ class MetricFamilyId(StrEnum):
     REPRESENTATION_MANDATE_STRUCTURE = "representation_mandate_structure"
     REPRESENTATION_RECOGNITION_SUPPORT = "representation_recognition_support"
     REPRESENTATION_SCOPE_ALIGNMENT = "representation_scope_alignment"
+    DIPLOMATIC_CONTACT_STRUCTURE = "diplomatic_contact_structure"
+    DIPLOMATIC_INSTRUMENT_OUTCOMES = "diplomatic_instrument_outcomes"
+    DIPLOMATIC_ENVOY_ALIGNMENT = "diplomatic_envoy_alignment"
+    INTER_SOCIETY_RELATION_LANES = "inter_society_relation_lanes"
 
 
 class DenominatorKind(StrEnum):
@@ -7373,6 +7377,225 @@ def _spec_representation_scope_alignment() -> MetricSpecification:
     )
 
 
+def _spec_diplomatic_contact_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DIPLOMATIC_CONTACT_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="final_window_diplomacy_relations",
+        denominator="diplomacy_relations_with_contact_evidence",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable diplomacy beliefs",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence="contacts are retained episodes, never a score",
+        self_edge_policy="the owner self-party is retained and never counted twice",
+        censoring_policy=(
+            "pruned rows and partial windows are explicit partial coverage"
+        ),
+        formulas={
+            "relation_count": "owner-local retained relations",
+            "party_count": "owner-local party anchors",
+            "contact_count": "retained contact episodes",
+            "envoy_count": "accredited envoy rows",
+            "negotiation_count": "retained negotiations",
+            "party_kind_histogram": "parties per closed kind",
+            "contact_kind_histogram": "contacts per closed kind",
+            "envoy_status_histogram": "envoy accreditations per closed status",
+            "negotiation_status_histogram": "negotiations per closed status",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "relation_count",
+            "party_count",
+            "contact_count",
+            "envoy_count",
+            "negotiation_count",
+            "party_kind_histogram",
+            "contact_kind_histogram",
+            "envoy_status_histogram",
+            "negotiation_status_histogram",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing anchors stay unknown and are never invented",
+    )
+
+
+def _spec_diplomatic_instrument_outcomes() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DIPLOMATIC_INSTRUMENT_OUTCOMES,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="diplomacy_instruments",
+        denominator="diplomacy_instruments",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable instrument beliefs",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence="instruments are retained claims, never binding",
+        self_edge_policy="agreement views reuse one proposal instrument",
+        censoring_policy=(
+            "superseded, expired, and pruned rows are retained or explicit"
+        ),
+        formulas={
+            "instrument_count": "retained instruments",
+            "proposal_count": "proposal instruments",
+            "promise_count": "promise instruments",
+            "agreement_count": "proposal instruments with every party accepted",
+            "dispute_count": "dispute instruments",
+            "shared_project_count": "shared-project instruments",
+            "apparently_accepted_count": "instruments with every party declaration",
+            "rejected_count": "instruments with an active reject",
+            "withdrawn_count": "instruments with an opener withdrawal",
+            "unresolved_count": "instruments with an active dispute",
+            "superseded_count": "retained superseded instruments",
+            "misrepresentation_count": "retained misrepresentation observations",
+            "misrepresentation_kind_histogram": "observations per closed kind",
+            "declaration_count": "retained declarations",
+            "acceptance_ratio": "agreement_count / instrument_count",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "instrument_count",
+            "proposal_count",
+            "promise_count",
+            "agreement_count",
+            "dispute_count",
+            "shared_project_count",
+            "apparently_accepted_count",
+            "rejected_count",
+            "withdrawn_count",
+            "unresolved_count",
+            "superseded_count",
+            "misrepresentation_count",
+            "misrepresentation_kind_histogram",
+            "declaration_count",
+            "acceptance_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing declarations stay unknown; acceptance is never inferred",
+    )
+
+
+def _spec_diplomatic_envoy_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.DIPLOMATIC_ENVOY_ALIGNMENT,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="diplomacy_declarations_with_authority_claim",
+        denominator="diplomacy_declarations_with_authority_claim",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead envoys retain their last durable belief rows",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "alignment is a researcher classification, never authority or truth"
+        ),
+        self_edge_policy="principal declarations are not envoy-aligned claims",
+        censoring_policy="missing mandates stay unresolved, never inconsistent",
+        formulas={
+            "consistent_count": "declarations with a recognized covering mandate",
+            "unresolved_count": "declarations without mandate or scope data",
+            "inconsistent_count": "declarations rejected by mandate or scope",
+            "not_applicable_count": "acts that assert no authority",
+            "aligned_declaration_count": "consistent plus inconsistent declarations",
+            "consistency_ratio": "consistent_count / aligned_declaration_count",
+            "inconsistency_ratio": "inconsistent_count / aligned_declaration_count",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "consistent_count",
+            "unresolved_count",
+            "inconsistent_count",
+            "not_applicable_count",
+            "aligned_declaration_count",
+            "consistency_ratio",
+            "inconsistency_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing authority evidence stays unknown and unresolved",
+    )
+
+
+def _spec_inter_society_relation_lanes() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INTER_SOCIETY_RELATION_LANES,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="relation_candidate_pairs_with_identity_join",
+        denominator="relation_candidate_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable relation evidence",
+        zero_holding_policy=(
+            "no lane evidence -> absent; empty lane set -> present with zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "each lane is an independent count with its own denominator; no "
+            "composite bilateral score exists"
+        ),
+        self_edge_policy="owner self-token is never paired with itself",
+        censoring_policy=(
+            "pruned rows and partial windows are explicit partial coverage"
+        ),
+        formulas={
+            "pair_count": "analytical relation candidate pairs",
+            "lane_pair_count_histogram": "candidates per lane-count bucket",
+            "agent_relationship_pair_count": "pairs with agent-relationship evidence",
+            "trade_pair_count": "pairs with completed-exchange evidence",
+            "conflict_pair_count": "pairs with conflict evidence",
+            "agreement_pair_count": "pairs with agreement evidence",
+            "narrative_pair_count": "pairs with narrative evidence",
+            "institutional_interaction_pair_count": "pairs with institutional evidence",
+            "pairs_with_any_lane": "pairs with at least one lane",
+            "pairs_with_multiple_lanes": "pairs with two or more lanes",
+            "lane_coverage_ratio": "pairs_with_any_lane / pair_count",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "pair_count",
+            "lane_pair_count_histogram",
+            "agent_relationship_pair_count",
+            "trade_pair_count",
+            "conflict_pair_count",
+            "agreement_pair_count",
+            "narrative_pair_count",
+            "institutional_interaction_pair_count",
+            "pairs_with_any_lane",
+            "pairs_with_multiple_lanes",
+            "lane_coverage_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no relation evidence -> absent; empty candidate set -> present with "
+            "zero counts"
+        ),
+        unknown_case="unmatched joins stay unknown and empty; never guessed",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -7534,6 +7757,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_representation_mandate_structure,
     _spec_representation_recognition_support,
     _spec_representation_scope_alignment,
+    _spec_diplomatic_contact_structure,
+    _spec_diplomatic_instrument_outcomes,
+    _spec_diplomatic_envoy_alignment,
+    _spec_inter_society_relation_lanes,
 )
 
 

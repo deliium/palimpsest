@@ -763,6 +763,7 @@ class SubjectiveSnapshot:
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
+    diplomacy: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -987,6 +988,9 @@ class SubjectiveSnapshot:
         )
 
         require_owner_representation(self.representation, self.owner_id)
+        from agents.cognition.diplomacy import require_owner_diplomacy
+
+        require_owner_diplomacy(self.diplomacy, self.owner_id)
         from agents.cognition.social_conventions import require_owner_social_conventions
 
         require_owner_social_conventions(
@@ -3987,6 +3991,7 @@ class CognitiveLoopProposal:
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
+    diplomacy: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4205,6 +4210,13 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.declarative_advice",
         )
+        from agents.cognition.diplomacy import require_owner_diplomacy
+
+        require_owner_diplomacy(
+            self.diplomacy,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.diplomacy",
+        )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:
@@ -4315,6 +4327,7 @@ class CognitiveLoopResult:
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
+    diplomacy: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4518,6 +4531,13 @@ class CognitiveLoopResult:
             self.declarative_advice,
             self.agent_id,
             field_name="CognitiveLoopResult.declarative_advice",
+        )
+        from agents.cognition.diplomacy import require_owner_diplomacy
+
+        require_owner_diplomacy(
+            self.diplomacy,
+            self.agent_id,
+            field_name="CognitiveLoopResult.diplomacy",
         )
         object.__setattr__(self, "command", require_agent_command(self.command))
         if isinstance(self.boundary_records, (set, frozenset, Mapping)):

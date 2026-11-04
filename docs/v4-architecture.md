@@ -10,9 +10,9 @@ implements no V4 social mechanic.
 Every V4 capability flag is closed. V4-01 declared all of them unowned and
 fail-closed at runtime construction (`capability_unimplemented`, stage
 `v4_capability_flags`); a later V4 plan must claim ownership explicitly before a
-flag can enable behavior. Today three flags are owned — `organizations`
-(V4-03/V4-04/V4-05), `formal_rules` (V4-06), and `legal_disputes` (V4-07) — and
-the other nine remain unowned and fail closed. Enabling an unowned flag is an
+flag can enable behavior. Today four flags are owned — `organizations`
+(V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07), and
+`diplomacy` (V4-10) — and the other eight remain unowned and fail closed. Enabling an unowned flag is an
 error, not an experiment.
 
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned from

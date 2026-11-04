@@ -307,10 +307,10 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. Three V4 flags are owned and may construct
+closed `v4_capability_flags` sibling. Four V4 flags are owned and may construct
 on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
-(V4-06), and `legal_disputes` (V4-07). The other nine V4 flags remain unowned and
-fail closed at `SimulationRunner.from_config`.
+(V4-06), `legal_disputes` (V4-07), and `diplomacy` (V4-10). The other eight V4 flags remain unowned
+and fail closed at `SimulationRunner.from_config`.
 
 Formal rules add no runner schema, root field, or per-agent runner key:
 `formal_rule_mode` is internal cognition configuration and is derived from

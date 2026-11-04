@@ -316,6 +316,8 @@ class CognitiveLoop:
         "_developmental_learning_spec",
         "_developmental_mid_run_admit",
         "_developmental_stage_learning_rates",
+        "_diplomacy_mode",
+        "_diplomacy_policy",
         "_dispute_mode",
         "_dispute_policy",
         "_durable_records_active",
@@ -364,6 +366,7 @@ class CognitiveLoop:
         "_perception",
         "_planner",
         "_possession_succession_active",
+        "_prepared_diplomacy",
         "_prepared_disputes",
         "_prepared_evidence",
         "_prepared_formal_rules",
@@ -508,6 +511,8 @@ class CognitiveLoop:
         evidence_policy: object | None = None,
         representation_mode: object | None = None,
         representation_policy: object | None = None,
+        diplomacy_mode: object | None = None,
+        diplomacy_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -1053,6 +1058,28 @@ class CognitiveLoop:
         self._representation_mode = representation
         self._representation_policy = representation_policy
         self._prepared_representation: object | None = None
+        from agents.cognition.configuration import CognitionDiplomacyMode
+        from agents.cognition.diplomacy import (
+            DiplomacyPolicy,
+            default_diplomacy_policy,
+        )
+
+        diplomacy = (
+            CognitionDiplomacyMode.DISABLED
+            if diplomacy_mode is None
+            else diplomacy_mode
+        )
+        if type(diplomacy) is not CognitionDiplomacyMode:
+            raise TypeError("diplomacy_mode must be CognitionDiplomacyMode")
+        if diplomacy is CognitionDiplomacyMode.DISABLED:
+            diplomacy_policy = None
+        elif diplomacy_policy is None:
+            diplomacy_policy = default_diplomacy_policy()
+        elif type(diplomacy_policy) is not DiplomacyPolicy:
+            raise TypeError("diplomacy_policy must be DiplomacyPolicy")
+        self._diplomacy_mode = diplomacy
+        self._diplomacy_policy = diplomacy_policy
+        self._prepared_diplomacy: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1535,6 +1562,7 @@ class CognitiveLoop:
             prepared_disputes=self._prepared_disputes,
             prepared_evidence=self._prepared_evidence,
             prepared_representation=self._prepared_representation,
+            prepared_diplomacy=self._prepared_diplomacy,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1585,6 +1613,7 @@ class CognitiveLoop:
         self._prepared_disputes = state.prepared_disputes
         self._prepared_evidence = state.prepared_evidence
         self._prepared_representation = state.prepared_representation
+        self._prepared_diplomacy = state.prepared_diplomacy
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2944,6 +2973,63 @@ class CognitiveLoop:
             self._representation_mode.value,
             len(updated.mandates),
             len(updated.positions),
+        )
+        return updated
+
+    def _prepare_diplomacy(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        representation: object | None,
+        organization_concepts: object | None,
+        collective_decisions: object | None,
+        structured_commitments: object | None,
+        disputes: object | None,
+        evidence: object | None,
+    ) -> object | None:
+        """Refresh one owner's diplomacy beliefs from owner-visible inputs."""
+
+        from agents.cognition.configuration import CognitionDiplomacyMode
+        from agents.cognition.diplomacy import (
+            DiplomacyLedger,
+            DiplomacyPolicy,
+            apply_diplomacy_update,
+            empty_diplomacy_ledger,
+        )
+
+        if self._diplomacy_mode is not CognitionDiplomacyMode.DETERMINISTIC:
+            self._prepared_diplomacy = None
+            return None
+        snapshot = loop_input.snapshot
+        tick = loop_input.observation.tick
+        carried = None if snapshot is None else getattr(snapshot, "diplomacy", None)
+        prior = (
+            carried
+            if type(carried) is DiplomacyLedger
+            else empty_diplomacy_ledger(loop_input.agent_id, tick=tick)
+        )
+        policy = self._diplomacy_policy
+        if type(policy) is not DiplomacyPolicy:
+            raise TypeError("diplomacy_policy must be DiplomacyPolicy")
+        updated = apply_diplomacy_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            observation=loop_input.observation,
+            prior=prior,
+            representation=representation,
+            organization_concepts=organization_concepts,
+            collective_decisions=collective_decisions,
+            structured_commitments=structured_commitments,
+            disputes=disputes,
+            evidence=evidence,
+            policy=policy,
+        )
+        self._prepared_diplomacy = updated
+        _LOG.debug(
+            "diplomacy_prepare mode=%s relations=%s instruments=%s",
+            self._diplomacy_mode.value,
+            len(updated.relations),
+            len(updated.instruments),
         )
         return updated
 
@@ -5038,6 +5124,15 @@ class CognitiveLoop:
             collective_decisions=collective_decisions,
             formal_rules=formal_rules,
         )
+        diplomacy = self._prepare_diplomacy(
+            loop_input,
+            representation=representation,
+            organization_concepts=organization_concepts,
+            collective_decisions=collective_decisions,
+            structured_commitments=structured_commitments,
+            disputes=disputes,
+            evidence=evidence,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -5410,6 +5505,7 @@ class CognitiveLoop:
             disputes=disputes,
             evidence=evidence,
             representation=representation,
+            diplomacy=diplomacy,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5770,6 +5866,30 @@ class CognitiveLoop:
                 formal_rules=proposal.formal_rules,
                 policy=self._representation_policy,
             )
+        from agents.cognition.configuration import CognitionDiplomacyMode
+        from agents.cognition.diplomacy import (
+            DiplomacyLedger,
+            record_diplomacy_utterance,
+        )
+
+        diplomacy = proposal.diplomacy
+        if (
+            self._diplomacy_mode is CognitionDiplomacyMode.DETERMINISTIC
+            and type(diplomacy) is DiplomacyLedger
+        ):
+            diplomacy = record_diplomacy_utterance(
+                diplomacy,
+                command,
+                owner_id=loop_input.agent_id,
+                tick=loop_input.observation.tick,
+                representation=representation,
+                organization_concepts=proposal.organization_concepts,
+                collective_decisions=proposal.collective_decisions,
+                structured_commitments=proposal.structured_commitments,
+                disputes=proposal.disputes,
+                evidence=proposal.evidence,
+                policy=self._diplomacy_policy,
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -5814,6 +5934,7 @@ class CognitiveLoop:
             disputes=disputes,
             evidence=evidence,
             representation=representation,
+            diplomacy=diplomacy,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

@@ -36,7 +36,7 @@ def test_exact_pins() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
-    assert METRIC_FAMILY_COUNT == 160
+    assert METRIC_FAMILY_COUNT == 164
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
@@ -61,25 +61,25 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
     from analysis.specifications import all_metric_specifications
 
     specs = all_metric_specifications()
-    assert len(specs) == 160
-    assert [spec.family_id.value for spec in specs[-12:-9]] == [
+    assert len(specs) == 164
+    assert [spec.family_id.value for spec in specs[-16:-13]] == [
         "formal_rule_development",
         "formal_rule_authority",
         "formal_rule_response",
     ]
-    assert [spec.family_id.value for spec in specs[-9:-6]] == [
+    assert [spec.family_id.value for spec in specs[-13:-10]] == [
         "dispute_claim_structure",
         "dispute_testimony_independence",
         "dispute_resolution_alignment",
     ]
-    assert [spec.family_id.value for spec in specs[-6:-3]] == [
+    assert [spec.family_id.value for spec in specs[-10:-7]] == [
         "evidence_source_structure",
         "evidence_provenance_continuity",
         "evidence_objective_alignment",
     ]
 
 
-def test_formal_rules_flag_is_owned_and_nine_flags_remain_unowned() -> None:
+def test_formal_rules_flag_is_owned_and_eight_flags_remain_unowned() -> None:
     assert Flags(formal_rules=True).owned_enabled_names() == ("formal_rules",)
     assert Flags(legal_disputes=True).owned_enabled_names() == ("legal_disputes",)
     assert (
@@ -87,7 +87,6 @@ def test_formal_rules_flag_is_owned_and_nine_flags_remain_unowned() -> None:
             [
                 name
                 for name in (
-                    "diplomacy",
                     "organized_conflict",
                     "infrastructure_networks",
                     "supply_chains",
@@ -100,7 +99,7 @@ def test_formal_rules_flag_is_owned_and_nine_flags_remain_unowned() -> None:
                 if Flags(**{name: True}).unimplemented_enabled_names()
             ]
         )
-        == 9
+        == 8
     )
 
 

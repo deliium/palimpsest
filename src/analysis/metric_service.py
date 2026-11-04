@@ -318,6 +318,9 @@ class MetricComputationInputs:
     evidence_objective_rows: Sequence[object] | None = None
     representation_rows: object | None = None
     representation_objective_rows: Sequence[object] | None = None
+    diplomacy_rows: object | None = None
+    diplomacy_objective_rows: Sequence[object] | None = None
+    diplomacy_lane_rows: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1875,6 +1878,102 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 representation_layers,
                 run_id=run_id,
                 input_revision=revision,
+            ),
+        )
+
+    if inputs.diplomacy_rows is not None:
+        from analysis.diplomacy_alignment import (
+            classify_diplomacy_envoy_alignment,
+            summarize_diplomacy,
+        )
+        from analysis.diplomacy_detection import detect_diplomacy_candidates
+        from analysis.diplomacy_identity import (
+            assign_diplomacy_identities,
+        )
+        from analysis.diplomacy_lanes import InterSocietyRelationRow
+        from analysis.diplomacy_layers import project_diplomacy_layers
+        from analysis.diplomacy_metrics import (
+            compute_diplomatic_contact_structure,
+            compute_diplomatic_envoy_alignment,
+            compute_diplomatic_instrument_outcomes,
+            compute_inter_society_relation_lanes,
+        )
+        from analysis.diplomacy_rows import (
+            DiplomacyHarvestRows,
+            harvest_diplomacy_rows,
+        )
+
+        diplomacy_rows = (
+            inputs.diplomacy_rows
+            if type(inputs.diplomacy_rows) is DiplomacyHarvestRows
+            else harvest_diplomacy_rows(
+                cast("Sequence[object]", inputs.diplomacy_rows),
+                entity_to_agent={},
+            )
+        )
+        diplomacy_lane_rows = tuple(
+            cast("Sequence[InterSocietyRelationRow]", inputs.diplomacy_lane_rows or ())
+        )
+        diplomacy_candidates = detect_diplomacy_candidates(
+            diplomacy_rows, diplomacy_lane_rows
+        )
+        diplomacy_analysis = assign_diplomacy_identities(diplomacy_candidates)
+        diplomacy_alignment = classify_diplomacy_envoy_alignment(diplomacy_rows)
+        diplomacy_layers = project_diplomacy_layers(
+            diplomacy_rows,
+            diplomacy_candidates,
+            diplomacy_analysis,
+            objective_rows=cast(
+                "Sequence[object]", tuple(inputs.diplomacy_objective_rows or ())
+            ),
+            coverage=diplomacy_rows.coverage.value,
+        )
+        diplomacy_summary = summarize_diplomacy(
+            diplomacy_rows,
+            diplomacy_candidates,
+            diplomacy_layers,
+            diplomacy_alignment,
+        )
+        _safe(
+            "diplomatic_contact_structure",
+            lambda: compute_diplomatic_contact_structure(
+                diplomacy_rows,
+                diplomacy_summary,
+                diplomacy_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "diplomatic_instrument_outcomes",
+            lambda: compute_diplomatic_instrument_outcomes(
+                diplomacy_rows,
+                diplomacy_summary,
+                diplomacy_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "diplomatic_envoy_alignment",
+            lambda: compute_diplomatic_envoy_alignment(
+                diplomacy_rows,
+                diplomacy_summary,
+                diplomacy_layers,
+                run_id=run_id,
+                input_revision=revision,
+                alignment=diplomacy_alignment,
+            ),
+        )
+        _safe(
+            "inter_society_relation_lanes",
+            lambda: compute_inter_society_relation_lanes(
+                diplomacy_rows,
+                diplomacy_summary,
+                diplomacy_layers,
+                run_id=run_id,
+                input_revision=revision,
+                candidates=diplomacy_candidates,
             ),
         )
 

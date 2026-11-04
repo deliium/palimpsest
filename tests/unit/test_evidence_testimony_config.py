@@ -98,7 +98,7 @@ def test_v4_registry_keeps_fourteen_contexts_and_twelve_flags() -> None:
         for name in V4_CAPABILITY_FLAGS
         if V4CapabilityFlags(**{name: True}).owned_enabled_names() == (name,)
     }
-    assert owned == {"organizations", "formal_rules", "legal_disputes"}
+    assert owned == {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
 
 
 @pytest.mark.parametrize(

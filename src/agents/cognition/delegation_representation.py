@@ -46,6 +46,7 @@ __all__ = [
     "RepresentationScopeKind",
     "RepresentationStatus",
     "default_representation_policy",
+    "observation_region_anchors",
     "require_representation_id",
     "require_representation_scope_subject",
     "require_representation_token",
@@ -1523,6 +1524,12 @@ def resolve_representation_principal(
     if mandate.principal_kind is RepresentationPrincipalKind.SETTLEMENT:
         return mandate.principal_ref in set(region_anchors)
     return False
+
+
+def observation_region_anchors(observation: object | None) -> tuple[str, ...]:
+    """Return owner-visible region anchors without exposing private helpers."""
+
+    return _observation_region_anchors(observation)
 
 
 def _observation_region_anchors(observation: object | None) -> tuple[str, ...]:

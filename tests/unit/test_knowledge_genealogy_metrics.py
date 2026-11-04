@@ -45,7 +45,7 @@ def _audit(**kwargs: object) -> SimpleNamespace:
 
 def test_catalog_includes_three_genealogy_families() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 160
+    assert len(specs) == METRIC_FAMILY_COUNT == 164
     ids = {spec.family_id.value for spec in specs}
     assert "knowledge_genealogy_holders" in ids
     assert "knowledge_genealogy_lineage" in ids

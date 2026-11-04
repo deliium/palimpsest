@@ -562,9 +562,9 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 160 metric families, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, and Alembic `0017`. Three V4 flags are owned
-(`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned. The
+semantic types, 164 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
 routes.
 
@@ -593,7 +593,7 @@ Detached analysis may classify objective alignment as `supported`, `unresolved`,
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 `dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
 independent; publication is opt-in and post-completion. Six GET-only `/v1`
-dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **160** metric
+dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **164** metric
 families, with 14 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
@@ -656,5 +656,5 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 160 metric families, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, and Alembic `0017`; `diplomacy` stays unowned.
+semantic types, 164 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by V4-10.

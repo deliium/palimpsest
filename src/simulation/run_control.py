@@ -618,6 +618,7 @@ class AgentRuntimeCheckpoint:
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
+    diplomacy: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -817,6 +818,13 @@ class AgentRuntimeCheckpoint:
         )
 
         require_owner_representation(self.representation, self.agent_id)
+        from agents.cognition.diplomacy import require_owner_diplomacy
+
+        require_owner_diplomacy(
+            self.diplomacy,
+            self.agent_id,
+            field_name="AgentRuntimeCheckpoint.diplomacy",
+        )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
         )
