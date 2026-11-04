@@ -19,7 +19,7 @@ from analysis.specifications import METRIC_FAMILY_COUNT
 from experiments import BENCHMARK_SCENARIO_COUNT, V3_BENCHMARK_SCENARIO_COUNT
 from observer.capabilities import SUPPORTED_OBSERVER_PROTOCOLS
 from observer.version import SEMANTIC_EVENT_TYPES
-from simulation.compatibility import ALEMBIC_HEAD_REVISION
+from simulation.compatibility import ALEMBIC_HEAD_REVISION, V4_OWNED_CAPABILITY_FLAGS
 from simulation.migration_plan import (
     V4_MIGRATION_SEQUENCE,
     next_revision,
@@ -36,7 +36,6 @@ from simulation.runner_models import (
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     V4CapabilityFlags,
 )
-from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 from simulation.v4_architecture import (
     V4_ANALYSIS_ONLY_CONTEXTS,
     V4_CAPABILITY_FLAGS,

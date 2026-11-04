@@ -1370,9 +1370,7 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"evidence_publication_status={evidence_receipt['status']}")
             print(f"evidence_publication_reason={evidence_receipt['reason_code']}")
             if "publication_id" in evidence_receipt:
-                print(
-                    f"evidence_publication_id={evidence_receipt['publication_id']}"
-                )
+                print(f"evidence_publication_id={evidence_receipt['publication_id']}")
         if lineage_options is not None:
             import json
 

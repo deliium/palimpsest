@@ -243,3 +243,16 @@ requires every named party's active declaration. The client never derives or
 displays a verdict, guilt, liability, winner, true owner, or binding
 settlement, and it performs no candidate detection, identity minting, lineage
 derivation, alignment classification, or write call.
+
+## Evidence panel
+
+The **Evidence** tab renders the six read-only
+`/v1/simulations/{run_id}/evidence` routes (`subjective_debug`). It has explicit
+`loading`, `unavailable` (`evidence_testimony_disabled`), `empty`, `available`,
+and `error` states, and shows summary counts, candidates, sources, custody
+status counts, retained contradictions, and lineage.
+
+The panel labels objective alignment as **researcher-only** and presents owner
+beliefs only. It never derives or displays truth, authenticity, guilt,
+liability, a winning account, or a composite evidence-quality score, and it
+performs no alignment classification, candidate detection, or write call.

@@ -66,13 +66,8 @@ def test_first_151_families_are_unchanged() -> None:
     specs = all_metric_specifications()
     assert len(specs[:151]) == 151
     assert specs[150].family_id is MetricFamilyId.FORMAL_RULE_RESPONSE
-    assert (
-        specs[147].family_id
-        is MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
-    )
-    assert not any(
-        spec.family_id.value.startswith("dispute_") for spec in specs[:151]
-    )
+    assert specs[147].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
+    assert not any(spec.family_id.value.startswith("dispute_") for spec in specs[:151])
 
 
 def test_three_formal_rule_families_precede_later_appends() -> None:

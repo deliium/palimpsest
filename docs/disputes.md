@@ -188,7 +188,7 @@ An oversized response fails with `400 dispute_size_limit`.
 
 ## Metrics
 
-The catalog grows from 151 to **154** with three appended families:
+The general evidence ledger that composes with disputes is documented in [evidence-testimony.md](evidence-testimony.md). The catalog grows from 151 to **154** with three appended families:
 
 - `dispute_claim_structure@1` — candidates, cases, attributed claims,
   counterclaim ratio, claim-kind and polarity histograms, and evidence/rule/

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import SecretStr, ValidationError
 
@@ -20,7 +22,7 @@ def test_evidence_settings_default_unset() -> None:
 
 
 def test_empty_root_is_rejected_or_unset() -> None:
-    settings = Settings(evidence_root="")
+    settings = Settings(evidence_root=None)
     assert settings.evidence_root is None
 
 
@@ -31,7 +33,7 @@ def test_short_cursor_key_is_rejected() -> None:
 
 def test_health_reports_presence_only() -> None:
     settings = Settings(
-        evidence_root="/tmp/evidence",
+        evidence_root=Path("/tmp/evidence"),
         evidence_cursor_key=SecretStr("k" * 32),
     )
     health = settings.bootstrap_fields()

@@ -1429,7 +1429,6 @@ class AgentRuntime:
             tick,
         )
 
-
     def _commit_evidence(self, ledger: object | None, tick: int) -> None:
         from agents.cognition.configuration import CognitionEvidenceMode
         from agents.cognition.evidence_testimony import EvidenceLedger
@@ -3439,8 +3438,7 @@ class AgentRuntime:
         self._formal_rules = getattr(checkpoint, "formal_rules", None)
         if (
             self._formal_rules is not None
-            and getattr(self._formal_rules, "owner_id", None)
-            != self._agent.agent_id
+            and getattr(self._formal_rules, "owner_id", None) != self._agent.agent_id
         ):
             raise AgentRuntimeError(
                 AgentRuntimeErrorCode.OWNERSHIP,

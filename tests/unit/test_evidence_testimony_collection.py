@@ -354,8 +354,8 @@ def test_repeated_application_is_deterministic() -> None:
             EvidenceRememberedReference(memory_id="mem-1", tick=5, confidence=0.3),
         ),
     )
-    first = apply_evidence_update(empty_evidence_ledger(OWNER), **inputs)
-    second = apply_evidence_update(empty_evidence_ledger(OWNER), **inputs)
+    first = apply_evidence_update(empty_evidence_ledger(OWNER), **inputs)  # type: ignore[arg-type]
+    second = apply_evidence_update(empty_evidence_ledger(OWNER), **inputs)  # type: ignore[arg-type]
     assert evidence_ledger_digest(first) == evidence_ledger_digest(second)
     assert first == second
 

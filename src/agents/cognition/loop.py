@@ -2648,7 +2648,6 @@ class CognitiveLoop:
         )
         return updated
 
-
     def _prepare_evidence(
         self, loop_input: CognitiveLoopInput, memory: object | None
     ) -> object | None:
@@ -2728,9 +2727,7 @@ class CognitiveLoop:
                     reference_kind=EvidenceReferenceKind.OBSERVED_OCCURRENCE,
                     reference_id=f"{occurrence.kind}-{index}",
                     tick=tick,
-                    correlation_id=(
-                        None if correlation is None else correlation.value
-                    ),
+                    correlation_id=(None if correlation is None else correlation.value),
                     actor_id=(
                         None
                         if occurrence.actor_id is None
@@ -2787,7 +2784,7 @@ class CognitiveLoop:
                     )
                 )
         relationship_trust: list[tuple[str, float]] = []
-        for profile in (() if snapshot is None else snapshot.relationships):
+        for profile in () if snapshot is None else snapshot.relationships:
             if profile.source_id != loop_input.agent_id:
                 continue
             for dimension in profile.dimensions:

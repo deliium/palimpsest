@@ -32,9 +32,7 @@ __all__ = [
     "compute_evidence_source_structure",
 ]
 
-_LOG: Final[logging.Logger] = logging.getLogger(
-    "analysis.evidence_testimony_metrics"
-)
+_LOG: Final[logging.Logger] = logging.getLogger("analysis.evidence_testimony_metrics")
 
 _ABSENT_COVERAGE: Final[MetricCoverage] = MetricCoverage(
     observed=0, expected=0, ratio=None
@@ -135,9 +133,7 @@ def compute_evidence_source_structure(
             "testimony_count": len(rows.testimony),
             "item_count": len(rows.items),
             "interpretation_histogram": _histogram(summary.interpretation_counts),
-            "confidence_band_histogram": _histogram(
-                summary.confidence_band_counts
-            ),
+            "confidence_band_histogram": _histogram(summary.confidence_band_counts),
             "multi_owner_candidate_ratio": _ratio(
                 summary.multi_owner_candidate_count,
                 summary.candidate_count,

@@ -117,6 +117,8 @@ def test_harvest_dedupes_sorts_and_marks_partial() -> None:
     assert len(rows.sources) == 1
     assert rows.sources[0].owner_token == evidence_owner_token(OWNER)
     assert rows.sources[0].local_id.startswith("evs-")
+    assert rows.window_start_tick is not None
+    assert rows.window_end_tick is not None
     assert rows.window_start_tick <= rows.window_end_tick
 
     with pytest.raises(EvidenceAnalysisError) as error:
@@ -206,7 +208,7 @@ def test_candidates_isolated_convergent_and_contested() -> None:
     assert isolated[0].candidate_id.startswith("evid-")
     assert not isolated[0].candidate_id.startswith(("disp-", "frule-", "org-", "msoc-"))
 
-    def rooted(owner: str, root: str, ordinal: int):
+    def rooted(owner: str, root: str, ordinal: int) -> EvidenceLedger:
         source = make_source(
             owner=owner, reference_id="artifact-1", ordinal=ordinal, root_ref=root
         )
@@ -262,7 +264,7 @@ def test_shared_roots_without_contradiction_are_fragmented() -> None:
         )
         for index, owner in enumerate((OWNER, OTHER))
     )
-    rows = EvidenceHarvestRows(testimony=(first,), items=items)
+    rows = EvidenceHarvestRows(items=items)
     candidates = detect_evidence_window_candidates(rows)
     assert candidates[0].status is EvidenceCandidateStatus.FRAGMENTED
 

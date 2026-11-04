@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ from tests.unit.evidence_testimony_helpers import OWNER, make_parts
 pytestmark = pytest.mark.unit
 
 
-def _documents(rows: EvidenceHarvestRows | None):
+def _documents(rows: EvidenceHarvestRows | None) -> tuple[Any, Any, Any]:
     if rows is None:
         return (
             compute_evidence_source_structure(

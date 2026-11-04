@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
+from typing import Any, cast
 
 import pytest
 
@@ -430,7 +431,7 @@ def test_limits_cascade_to_dependent_items_and_evaluations() -> None:
 
 def test_record_types_are_frozen_slots() -> None:
     for model in RECORD_TYPES:
-        assert model.__dataclass_params__.frozen is True
+        assert cast(Any, model).__dataclass_params__.frozen is True
         assert "__slots__" in model.__dict__
 
     parts = make_parts()

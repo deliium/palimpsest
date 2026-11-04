@@ -23,9 +23,8 @@ __all__ = [
     "select_evidence_sources",
 ]
 
-_LOG: Final[logging.Logger] = logging.getLogger(
-    "simulation.evidence_testimony_paging"
-)
+_LOG: Final[logging.Logger] = logging.getLogger("simulation.evidence_testimony_paging")
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceTestimonyRowSelection:
@@ -39,9 +38,9 @@ class EvidenceTestimonyRowSelection:
 
 def _row_bytes(row: object) -> int:
     return len(
-        json.dumps(
-            row, default=str, separators=(",", ":"), sort_keys=True
-        ).encode("utf-8")
+        json.dumps(row, default=str, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        )
     )
 
 
@@ -138,4 +137,3 @@ def select_evidence_lineage(
     byte_budget: int = EVIDENCE_TESTIMONY_PAGE_MAX_BYTES,
 ) -> EvidenceTestimonyRowSelection:
     return _select_snapshot(snapshot, "edges", offset, limit, byte_budget)
-

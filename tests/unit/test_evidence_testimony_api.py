@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -65,12 +66,12 @@ class _Result:
         self.stop_reason = type("Stop", (), {"value": "completed"})()
 
 
-def _snapshot(run_id: str = RUN):
+def _snapshot(run_id: str = RUN) -> Any:
     harvest = build_completed_run_evidence_harvest(_Result(run_id))
     return build_evidence_testimony_harvest_result(harvest).snapshot
 
 
-def _seed(root: Path, *, run_id: str = RUN):
+def _seed(root: Path, *, run_id: str = RUN) -> Any:
     result = build_evidence_testimony_harvest_result(
         build_completed_run_evidence_harvest(_Result(run_id))
     )
@@ -110,9 +111,10 @@ def _client(
 
 
 def test_exactly_six_get_routes() -> None:
-    routes = [
-        route for route in router.routes if getattr(route, "methods", None) is not None
-    ]
+    routes: list[Any] = []
+    for route in router.routes:
+        if getattr(route, "methods", None) is not None:
+            routes.append(cast(Any, route))
     assert len(routes) == 6
     assert {route.path for route in routes} == EVIDENCE_PATHS
     assert all(route.methods == {"GET"} for route in routes)

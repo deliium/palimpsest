@@ -362,13 +362,13 @@ fail closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 19: Add the read-only Research UI evidence view ([details](phase-06-read-only-surfaces.md#task-19-add-the-read-only-research-ui-evidence-view)) (depends on 18)
 
 ### Phase 7: Invariants, End-to-End Evidence, and Regression
-- [ ] Task 20: Add the evidence boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-20-add-the-evidence-boundary-and-determinism-suite)) (depends on 2-19)
-- [ ] Task 21: Add the evidence end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-21-add-the-evidence-end-to-end-scenario)) (depends on 6-19)
-- [ ] Task 22: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-22-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 20, 21)
+- [x] Task 20: Add the evidence boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-20-add-the-evidence-boundary-and-determinism-suite)) (depends on 2-19)
+- [x] Task 21: Add the evidence end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-21-add-the-evidence-end-to-end-scenario)) (depends on 6-19)
+- [x] Task 22: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-22-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 20, 21)
 
 ### Phase 8: Documentation and Final Verification
-- [ ] Task 23: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-23-execute-the-documentation-checkpoint)) (depends on 2-22)
-- [ ] Task 24: Perform final V4-08 verification ([details](phase-08-docs-and-verification.md#task-24-perform-final-v4-08-verification)) (depends on 22, 23)
+- [x] Task 23: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-23-execute-the-documentation-checkpoint)) (depends on 2-22)
+- [x] Task 24: Perform final V4-08 verification ([details](phase-08-docs-and-verification.md#task-24-perform-final-v4-08-verification)) (depends on 22, 23)
 
 ## Verification Receipt (Tasks 22 and 24)
 
@@ -379,25 +379,26 @@ certification; it is never a skip-pass.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | `unexecuted` | Pending Task 22; no implementation exists at planning time |
-| Focused V4-08 suite | `unexecuted` | Pending Task 22 |
-| V4/organization/formal-rule/dispute regression selection | `unexecuted` | Pending Task 22 |
-| Documentation parity | `unexecuted` | Pending Task 22 |
-| Ruff | `unexecuted` | Pending Task 22 |
-| Mypy | `unexecuted` | Pending Task 22 |
-| Import-linter | `unexecuted` | Pending Task 22 |
-| Integration (`-m "integration and not scale"`) | `unexecuted` | Pending Task 22; requires a disposable `pgvector/pgvector:pg17` database named `palimpsest_test` |
-| Integration including scale | `unexecuted` | Pending Task 22; requires the 100,000-tick generational/scale lane |
-| Docker Compose config | `unexecuted` | Pending Task 22 |
-| Compose/browser acceptance | `unexecuted` | Pending Task 22; requires the pinned API image and Playwright chromium |
-| Godot 4.7.2 regression | `unexecuted` | Pending Task 22; requires `GODOT_BIN` |
-| Benchmark/scale lane | `unexecuted` | Pending Task 22; requires the multi-hour 100,000-tick harness |
-| Research UI tests | `unexecuted` | Pending Task 22 |
-| Research UI type/static checks | `unexecuted` | Pending Task 22 |
-| Research UI build | `unexecuted` | Pending Task 22 |
+| Python unit + architecture with coverage | `executed_passed` | `uv run pytest tests/unit tests/architecture -q --cov --cov-report=term` -> 8,356 passed, 78% coverage |
+| Focused V4-08 suite | `executed_passed` | Evidence unit/architecture/E2E selection -> 190 passed, 2 deselected |
+| V4/organization/formal-rule/dispute regression selection | `executed_passed` | `-k "organization or v4 or formal_rule or dispute or evidence_testimony or metric_specification or runner_config_v56"` -> 1,637 passed, 6,719 deselected |
+| Documentation parity | `executed_passed` | Docs parity suites -> 32 passed; evidence docs parity -> 4 passed |
+| Ruff | `executed_passed` | `uv run ruff check src tests` -> all checks passed |
+| Mypy | `executed_passed` | `uv run mypy src tests` -> 1,957 files, no issues |
+| Import-linter | `executed_passed` | `uv run lint-imports` -> 25 kept, 0 broken |
+| Integration (`-m "integration and not scale"`) | `unexecuted` | Command ran: 44 passed, 60 environment-gated skips. Prerequisite: disposable `pgvector/pgvector:pg17` database named `palimpsest_test` for the skipped subsets |
+| Integration including scale | `unexecuted` | Prerequisite: 100,000-tick generational/scale lane |
+| Docker Compose config | `executed_passed` | `docker compose config --quiet` -> exit 0 |
+| Compose/browser acceptance | `unexecuted` | Prerequisite: pinned API image and Playwright chromium |
+| Godot 4.7.2 regression | `unexecuted` | Prerequisite: `GODOT_BIN` |
+| Benchmark/scale lane | `unexecuted` | Prerequisite: multi-hour 100,000-tick harness |
+| Research UI tests | `executed_passed` | `vitest run` -> 52 files, 266 tests passed |
+| Research UI type/static checks | `executed_passed` | `svelte-check` 0 errors/0 warnings; `tsc -p tsconfig.node.json` passed |
+| Research UI build | `executed_passed` | `vite build` completed |
 
-Certification outcome: **not certified** until every required lane is
-`executed_passed`.
+Certification outcome: **not certified**. Integration/database, integration-scale,
+Compose/browser, Godot 4.7.2, and benchmark/scale remain `unexecuted` with
+explicit prerequisites.
 
 ## Commit Plan
 

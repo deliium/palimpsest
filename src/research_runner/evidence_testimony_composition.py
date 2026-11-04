@@ -154,8 +154,8 @@ def publish_evidence_testimony_harvest(
             committed_events=committed_events,
             entity_to_agent=entity_to_agent,
         )
-        built: EvidenceTestimonyHarvestResult = (
-            build_evidence_testimony_harvest_result(harvest)
+        built: EvidenceTestimonyHarvestResult = build_evidence_testimony_harvest_result(
+            harvest
         )
         receipt = publish_evidence_testimony_snapshot(built, publisher)
         document = evidence_testimony_publication_document(built)

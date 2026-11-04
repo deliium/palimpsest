@@ -22,6 +22,7 @@ from simulation.evidence_testimony_models import (
     EvidenceTestimonySnapshot,
 )
 from simulation.evidence_testimony_paging import (
+    EvidenceTestimonyRowSelection,
     select_evidence_candidates,
     select_evidence_contradictions,
     select_evidence_lineage,
@@ -218,24 +219,30 @@ class FilesystemEvidenceTestimonyReader:
             provenance_code="evidence_testimony_published",
         )
 
-    def candidates(self, *, run_id: str, offset: int = 0, limit: int = 100) -> object:
+    def candidates(
+        self, *, run_id: str, offset: int = 0, limit: int = 100
+    ) -> EvidenceTestimonyRowSelection:
         return select_evidence_candidates(
             self._snapshot(run_id), offset=offset, limit=limit
         )
 
-    def sources(self, *, run_id: str, offset: int = 0, limit: int = 100) -> object:
+    def sources(
+        self, *, run_id: str, offset: int = 0, limit: int = 100
+    ) -> EvidenceTestimonyRowSelection:
         return select_evidence_sources(
             self._snapshot(run_id), offset=offset, limit=limit
         )
 
     def contradictions(
         self, *, run_id: str, offset: int = 0, limit: int = 100
-    ) -> object:
+    ) -> EvidenceTestimonyRowSelection:
         return select_evidence_contradictions(
             self._snapshot(run_id), offset=offset, limit=limit
         )
 
-    def lineage(self, *, run_id: str, offset: int = 0, limit: int = 100) -> object:
+    def lineage(
+        self, *, run_id: str, offset: int = 0, limit: int = 100
+    ) -> EvidenceTestimonyRowSelection:
         return select_evidence_lineage(
             self._snapshot(run_id), offset=offset, limit=limit
         )

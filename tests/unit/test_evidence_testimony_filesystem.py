@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -43,7 +44,7 @@ class _RunnerResult:
     ticks_committed: int = 2
 
 
-def _result(run_id: str = "run-evidence-fs", ticks: int = 2):
+def _result(run_id: str = "run-evidence-fs", ticks: int = 2) -> Any:
     harvest = build_completed_run_evidence_harvest(
         _RunnerResult((make_parts().ledger(),), run_id=run_id, ticks_committed=ticks)
     )

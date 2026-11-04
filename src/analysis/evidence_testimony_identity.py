@@ -286,8 +286,7 @@ def assign_evidence_identities(
                     last_window=snapshot.window_index,
                 )
         active = {
-            candidate.candidate_id: candidate
-            for candidate in snapshot.candidates
+            candidate.candidate_id: candidate for candidate in snapshot.candidates
         }
 
     transitions.sort(

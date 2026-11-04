@@ -90,9 +90,7 @@ def test_current_v4_docs_state_the_three_owned_flags() -> None:
     assert "`organizations`" in research_api
     assert "`formal_rules`" in research_api
 
-    v4_doc = " ".join(
-        (ROOT / "docs" / "v4-architecture.md").read_text().split()
-    )
+    v4_doc = " ".join((ROOT / "docs" / "v4-architecture.md").read_text().split())
     assert "Every V4 capability flag is closed, unowned" not in v4_doc
     assert "the other nine remain unowned" in v4_doc
     assert "`organizations`" in v4_doc
@@ -101,9 +99,9 @@ def test_current_v4_docs_state_the_three_owned_flags() -> None:
 
 def test_architecture_v4_05_seam_keeps_its_own_metric_count() -> None:
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
-    section = architecture.split(
-        "### V4-05 organization collective-agency seam", 1
-    )[1].split("\n### ", 1)[0]
+    section = architecture.split("### V4-05 organization collective-agency seam", 1)[
+        1
+    ].split("\n### ", 1)[0]
     assert "metric families 148" in section
     assert "metric families 151" not in section
 

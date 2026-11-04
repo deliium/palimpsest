@@ -176,7 +176,7 @@ def test_missing_required_fields_and_extra_fields_are_rejected() -> None:
 
     for missing in ("source_kind", "reference_kind", "reference_id"):
         with pytest.raises(EvidenceError):
-            replace(source, **{missing: None})
+            replace(source, **{missing: None})  # type: ignore[arg-type]
 
     text = encode_evidence_frame(source)
     reference_index = 2 + _FRAME_KEYS_AFTER_ACT.index("reference_id")
@@ -251,14 +251,14 @@ def test_frame_party_matching_rejects_a_foreign_witness() -> None:
     assert evidence_frame_party_matches(testify, "agent-2") is False
     assert evidence_frame_party_matches(testify, EntityId(SPEAKER)) is True
     assert evidence_frame_party_matches(_frames()[0], SPEAKER) is True
-    assert evidence_frame_party_matches(object(), SPEAKER) is False
+    assert evidence_frame_party_matches(object(), SPEAKER) is False  # type: ignore[arg-type]
 
     command = _talk()
     foreign = replace(testify, witness_id="agent-2")
     assert evidence_communicate_utterance(command, foreign) is command
     attached = evidence_communicate_utterance(command, testify)
     assert attached is not command
-    assert attached.recipient_id == command.recipient_id
+    assert attached.recipient_id == command.recipient_id  # type: ignore[attr-defined]
 
 
 def test_oversized_and_malformed_frames_return_none() -> None:
@@ -283,7 +283,7 @@ def test_command_at_relation_limit_is_returned_unchanged() -> None:
     assert evidence_communicate_utterance(command, _frames()[0]) is command
 
     attached = evidence_communicate_utterance(_talk(), _frames()[0])
-    contents = attached.utterance.content.relations
+    contents = attached.utterance.content.relations  # type: ignore[attr-defined]
     assert len(contents) == 1
     assert contents[0].subject == EVIDENCE_FRAME_SUBJECT
 

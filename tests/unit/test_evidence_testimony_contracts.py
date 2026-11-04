@@ -505,7 +505,7 @@ def test_id_minters_reject_cross_prefixes_and_bad_inputs() -> None:
         _code(
             lambda: evidence_source_id(
                 OWNER,
-                "objective_truth",  # type: ignore[arg-type]
+                "objective_truth",
                 EvidenceReferenceKind.ARTIFACT,
                 "artifact-1",
                 0,

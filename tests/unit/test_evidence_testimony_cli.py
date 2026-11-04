@@ -73,7 +73,7 @@ def test_successful_publication_and_receipt(tmp_path: Path) -> None:
         _result(), EvidenceTestimonyProducerOptions(root=root)
     )
     assert receipt["status"] == "published"
-    assert receipt["publication_id"].startswith("evid-pub-")
+    assert str(receipt["publication_id"]).startswith("evid-pub-")
 
     path = write_evidence_testimony_receipt(tmp_path, "run-evidence-cli", receipt)
     assert path is not None and path.exists()
