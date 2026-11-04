@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 154
+METRIC_FAMILY_COUNT: Final[int] = 157
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -229,6 +229,9 @@ class MetricFamilyId(StrEnum):
     DISPUTE_CLAIM_STRUCTURE = "dispute_claim_structure"
     DISPUTE_TESTIMONY_INDEPENDENCE = "dispute_testimony_independence"
     DISPUTE_RESOLUTION_ALIGNMENT = "dispute_resolution_alignment"
+    EVIDENCE_SOURCE_STRUCTURE = "evidence_source_structure"
+    EVIDENCE_PROVENANCE_CONTINUITY = "evidence_provenance_continuity"
+    EVIDENCE_OBJECTIVE_ALIGNMENT = "evidence_objective_alignment"
 
 
 class DenominatorKind(StrEnum):
@@ -6826,9 +6829,7 @@ def _spec_formal_rule_response() -> MetricSpecification:
             "violate_count",
         ),
         empty_case="no formal-rule rows -> availability=absent",
-        unknown_case=(
-            "missing responses stay unknown; never coerced to compliance"
-        ),
+        unknown_case=("missing responses stay unknown; never coerced to compliance"),
     )
 
 
@@ -6898,9 +6899,7 @@ def _spec_dispute_claim_structure() -> MetricSpecification:
             "no dispute ledger or channel -> availability=absent; "
             "enabled empty ledger -> present with zero counts"
         ),
-        unknown_case=(
-            "missing rows stay unknown; never coerced to zero or false"
-        ),
+        unknown_case=("missing rows stay unknown; never coerced to zero or false"),
     )
 
 
@@ -6934,9 +6933,7 @@ def _spec_dispute_testimony_independence() -> MetricSpecification:
         formulas={
             "testimony_count": "attributed testimony rows",
             "direct_testimony_ratio": "direct testimony / testimony rows",
-            "communicated_testimony_ratio": (
-                "communicated testimony / testimony rows"
-            ),
+            "communicated_testimony_ratio": ("communicated testimony / testimony rows"),
             "distinct_root_count": "distinct declared testimony roots",
             "shared_root_duplicate_ratio": (
                 "(testimony rows - distinct roots) / testimony rows"
@@ -6948,9 +6945,7 @@ def _spec_dispute_testimony_independence() -> MetricSpecification:
                 "testimony rows attached to claims with both affirm and deny "
                 "counterparts / testimony rows"
             ),
-            "claim_without_testimony_ratio": (
-                "claims with no testimony / claims"
-            ),
+            "claim_without_testimony_ratio": ("claims with no testimony / claims"),
         },
         value_keys=(
             "claim_without_testimony_ratio",
@@ -6966,9 +6961,7 @@ def _spec_dispute_testimony_independence() -> MetricSpecification:
             "no dispute ledger -> absent; enabled ledger without testimony -> "
             "present with zero counts"
         ),
-        unknown_case=(
-            "missing testimony stays unknown; never counted as independent"
-        ),
+        unknown_case=("missing testimony stays unknown; never counted as independent"),
     )
 
 
@@ -7047,6 +7040,174 @@ def _spec_dispute_resolution_alignment() -> MetricSpecification:
             "missing objective anchors stay unknown as unresolved claims; never "
             "coerced to inconsistent or to a verdict"
         ),
+    )
+
+
+def _spec_evidence_source_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EVIDENCE_SOURCE_STRUCTURE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_evidence_candidates",
+        denominator="evidence_items_with_owner_source",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached evidence windows",
+        deceased_policy="dead owners retain their last durable evidence beliefs",
+        zero_holding_policy=(
+            "no evidence ledger -> availability=absent; an enabled ledger with "
+            "zero rows is present with zero counts and never zero-filled from a "
+            "missing channel"
+        ),
+        opportunity_vs_occurrence=(
+            "sources, testimony, and interpretations are owner beliefs, not truth"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=(
+            "pruned owner rows or partial windows are partial coverage; missing "
+            "evidence is never fabricated"
+        ),
+        formulas={
+            "candidate_count": "detached cross-owner evidence candidates",
+            "source_count": "owner-local evidence sources",
+            "source_kind_histogram": "sources per closed source kind",
+            "testimony_count": "owner-local witness statements",
+            "item_count": "owner-local interpreted items",
+            "interpretation_histogram": "items per closed interpretation",
+            "confidence_band_histogram": "sources per closed confidence band",
+            "multi_owner_candidate_ratio": (
+                "candidates with at least two owner tokens / all candidates"
+            ),
+            "uncorroborated_item_ratio": ("uncorroborated active items / active items"),
+        },
+        value_keys=(
+            "candidate_count",
+            "source_count",
+            "source_kind_histogram",
+            "testimony_count",
+            "item_count",
+            "interpretation_histogram",
+            "confidence_band_histogram",
+            "multi_owner_candidate_ratio",
+            "uncorroborated_item_ratio",
+        ),
+        empty_case=(
+            "no evidence ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing rows stay unknown; never coerced to zero or false",
+    )
+
+
+def _spec_evidence_provenance_continuity() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EVIDENCE_PROVENANCE_CONTINUITY,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="final_window_evidence_sources",
+        denominator="evidence_sources_with_owner_provenance",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        cohort_window="complete detached evidence windows",
+        deceased_policy="dead owners retain their last durable provenance beliefs",
+        zero_holding_policy=(
+            "no evidence ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "provenance and custody are owner beliefs; repetition is not "
+            "independent corroboration"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=("missing links are explicit gaps; a chain is never repaired"),
+        formulas={
+            "provenance_channel_histogram": "sources per provenance channel",
+            "independent_root_ratio": (
+                "testimonies with a distinct non-empty root / testimonies with any root"
+            ),
+            "communicated_testimony_ratio": ("communicated testimony / all testimony"),
+            "custody_link_count": "owner-local custody links",
+            "custody_complete_ratio": (
+                "complete_belief sources / applicable custody sources"
+            ),
+            "custody_incomplete_count": "sources with incomplete_belief",
+            "custody_conflicting_count": "sources with conflicting_belief",
+            "missing_provenance_ratio": (
+                "sources with missing provenance / all sources"
+            ),
+        },
+        value_keys=(
+            "provenance_channel_histogram",
+            "independent_root_ratio",
+            "communicated_testimony_ratio",
+            "custody_link_count",
+            "custody_complete_ratio",
+            "custody_incomplete_count",
+            "custody_conflicting_count",
+            "missing_provenance_ratio",
+        ),
+        empty_case=(
+            "no evidence ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing rows stay unknown; never coerced to zero or false",
+    )
+
+
+def _spec_evidence_objective_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.EVIDENCE_OBJECTIVE_ALIGNMENT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="final_window_evidence_items",
+        denominator="evidence_items_with_objective_referent",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached evidence windows",
+        deceased_policy="dead owners retain their last durable evidence beliefs",
+        zero_holding_policy=(
+            "no evidence ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "alignment classifies a relationship for researchers; it is never a "
+            "verdict, authenticity, guilt, liability, or a correct account"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=("not_applicable rows are excluded from alignment ratios"),
+        formulas={
+            "aligned_item_count": "items with an objective referent",
+            "consistent_count": "aligned items classified consistent",
+            "unresolved_count": "aligned items classified unresolved",
+            "inconsistent_count": "aligned items classified inconsistent",
+            "not_applicable_count": "items with no objective referent",
+            "consistency_ratio": (
+                "consistent / (consistent + unresolved + inconsistent)"
+            ),
+            "custody_match_count": "custody chains classified matches",
+            "custody_mismatch_count": "custody chains classified mismatches",
+            "custody_unknown_count": "custody chains classified unknown",
+        },
+        value_keys=(
+            "aligned_item_count",
+            "consistent_count",
+            "unresolved_count",
+            "inconsistent_count",
+            "not_applicable_count",
+            "consistency_ratio",
+            "custody_match_count",
+            "custody_mismatch_count",
+            "custody_unknown_count",
+        ),
+        empty_case=(
+            "no evidence ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case=("missing anchors stay unknown and unresolved; never a verdict"),
     )
 
 
@@ -7205,6 +7366,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_dispute_claim_structure,
     _spec_dispute_testimony_independence,
     _spec_dispute_resolution_alignment,
+    _spec_evidence_source_structure,
+    _spec_evidence_provenance_continuity,
+    _spec_evidence_objective_alignment,
 )
 
 

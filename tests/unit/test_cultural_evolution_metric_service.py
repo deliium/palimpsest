@@ -78,8 +78,8 @@ def _computation(
 
 def test_six_cultural_families_are_in_the_catalog() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 154
-    assert len(specs) == 154
+    assert METRIC_FAMILY_COUNT == 157
+    assert len(specs) == 157
     for family in (
         MetricFamilyId.CULTURAL_TRAIT_DYNAMICS,
         MetricFamilyId.CULTURAL_EVOLUTION_TRANSMISSION,

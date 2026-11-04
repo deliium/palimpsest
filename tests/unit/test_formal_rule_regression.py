@@ -36,7 +36,7 @@ def test_exact_pins() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
-    assert METRIC_FAMILY_COUNT == 154
+    assert METRIC_FAMILY_COUNT == 157
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
@@ -57,20 +57,25 @@ def test_no_new_write_pair_reservation() -> None:
     }
 
 
-def test_catalog_is_154_with_three_dispute_families_last() -> None:
+def test_catalog_is_157_with_evidence_families_last() -> None:
     from analysis.specifications import all_metric_specifications
 
     specs = all_metric_specifications()
-    assert len(specs) == 154
-    assert [spec.family_id.value for spec in specs[-6:-3]] == [
+    assert len(specs) == 157
+    assert [spec.family_id.value for spec in specs[-9:-6]] == [
         "formal_rule_development",
         "formal_rule_authority",
         "formal_rule_response",
     ]
-    assert [spec.family_id.value for spec in specs[-3:]] == [
+    assert [spec.family_id.value for spec in specs[-6:-3]] == [
         "dispute_claim_structure",
         "dispute_testimony_independence",
         "dispute_resolution_alignment",
+    ]
+    assert [spec.family_id.value for spec in specs[-3:]] == [
+        "evidence_source_structure",
+        "evidence_provenance_continuity",
+        "evidence_objective_alignment",
     ]
 
 

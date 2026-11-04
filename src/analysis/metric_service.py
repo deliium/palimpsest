@@ -314,6 +314,8 @@ class MetricComputationInputs:
     formal_rule_rows: object | None = None
     dispute_rows: object | None = None
     dispute_objective_rows: Sequence[object] | None = None
+    evidence_rows: object | None = None
+    evidence_objective_rows: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1585,12 +1587,8 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 window_ticks=100,
             )
         )
-        formal_windows = build_formal_rule_windows(
-            formal_rows, window_ticks=100
-        )
-        formal_analysis = derive_formal_rule_lineage(
-            formal_rows, formal_windows
-        )
+        formal_windows = build_formal_rule_windows(formal_rows, window_ticks=100)
+        formal_analysis = derive_formal_rule_lineage(formal_rows, formal_windows)
         formal_summary = summarize_formal_rules(formal_rows, formal_analysis)
         formal_layers = project_formal_rule_layers(
             formal_rows,
@@ -1700,6 +1698,86 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 dispute_summary,
                 dispute_analysis,
                 dispute_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+
+    if inputs.evidence_rows is not None:
+        from analysis.evidence_testimony_alignment import derive_evidence_lineage
+        from analysis.evidence_testimony_layers import project_evidence_layers
+        from analysis.evidence_testimony_metrics import (
+            compute_evidence_objective_alignment,
+            compute_evidence_provenance_continuity,
+            compute_evidence_source_structure,
+        )
+        from analysis.evidence_testimony_objective import (
+            EvidenceObjectiveAnchorRow,
+            build_evidence_windows,
+        )
+        from analysis.evidence_testimony_rows import (
+            EvidenceHarvestRows,
+            harvest_evidence_rows,
+        )
+
+        evidence_rows = (
+            inputs.evidence_rows
+            if type(inputs.evidence_rows) is EvidenceHarvestRows
+            else harvest_evidence_rows(
+                cast("Sequence[object]", inputs.evidence_rows),
+                window_ticks=100,
+            )
+        )
+        evidence_anchors = cast(
+            "Sequence[EvidenceObjectiveAnchorRow]",
+            tuple(inputs.evidence_objective_rows or ()),
+        )
+        evidence_windows = build_evidence_windows(
+            evidence_rows,
+            window_ticks=100,
+            objective_rows=evidence_anchors,
+        )
+        evidence_analysis = derive_evidence_lineage(
+            evidence_rows,
+            objective_rows=evidence_anchors,
+            window_ticks=100,
+        )
+        evidence_layers = project_evidence_layers(
+            evidence_rows,
+            evidence_analysis,
+            evidence_analysis.summary,
+            windows=evidence_windows,
+            objective_rows=evidence_anchors,
+        )
+        _safe(
+            "evidence_source_structure",
+            lambda: compute_evidence_source_structure(
+                evidence_rows,
+                evidence_analysis,
+                evidence_analysis.summary,
+                evidence_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "evidence_provenance_continuity",
+            lambda: compute_evidence_provenance_continuity(
+                evidence_rows,
+                evidence_analysis,
+                evidence_analysis.summary,
+                evidence_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "evidence_objective_alignment",
+            lambda: compute_evidence_objective_alignment(
+                evidence_rows,
+                evidence_analysis,
+                evidence_analysis.summary,
+                evidence_layers,
                 run_id=run_id,
                 input_revision=revision,
             ),
@@ -2018,11 +2096,11 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             "regional_migration",
             lambda: compute_regional_migration_metrics(regional_inputs),
         )
-        evidence_rows = inputs.regional_destination_evidence
+        destination_rows = inputs.regional_destination_evidence
         _safe(
             "regional_destination_beliefs",
             lambda: compute_regional_destination_beliefs(
-                evidence_rows,
+                destination_rows,
                 run_id=run_id,
                 input_revision=revision,
                 as_of_tick=window_end,

@@ -344,10 +344,10 @@ fail closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 9: Carry the ledger through cognition and runtime ([details](phase-02-evidence-beliefs.md#task-9-carry-the-ledger-through-cognition-and-runtime)) (depends on 4-8)
 
 ### Phase 3: Detached Analysis, Candidates, and Metrics
-- [ ] Task 10: Harvest evidence rows and objective anchors ([details](phase-03-detached-analysis.md#task-10-harvest-evidence-rows-and-objective-anchors)) (depends on 9)
-- [ ] Task 11: Detect candidates and derive forward-only lineage ([details](phase-03-detached-analysis.md#task-11-detect-candidates-and-derive-forward-only-lineage)) (depends on 10)
-- [ ] Task 12: Project layers and researcher-only objective alignment ([details](phase-03-detached-analysis.md#task-12-project-layers-and-researcher-only-objective-alignment)) (depends on 10, 11)
-- [ ] Task 13: Add three metric families and raise the catalog to 157 ([details](phase-03-detached-analysis.md#task-13-add-three-metric-families-and-raise-the-catalog-to-157)) (depends on 10-12)
+- [x] Task 10: Harvest evidence rows and objective anchors ([details](phase-03-detached-analysis.md#task-10-harvest-evidence-rows-and-objective-anchors)) (depends on 9)
+- [x] Task 11: Detect candidates and derive forward-only lineage ([details](phase-03-detached-analysis.md#task-11-detect-candidates-and-derive-forward-only-lineage)) (depends on 10)
+- [x] Task 12: Project layers and researcher-only objective alignment ([details](phase-03-detached-analysis.md#task-12-project-layers-and-researcher-only-objective-alignment)) (depends on 10, 11)
+- [x] Task 13: Add three metric families and raise the catalog to 157 ([details](phase-03-detached-analysis.md#task-13-add-three-metric-families-and-raise-the-catalog-to-157)) (depends on 10-12)
 
 ### Phase 4: Evidence-Testimony Snapshot v1
 - [ ] Task 14: Define evidence-testimony-snapshot-v1 and its codec ([details](phase-04-snapshot-v1.md#task-14-define-evidence-testimony-snapshot-v1-and-its-codec)) (depends on 10-13)

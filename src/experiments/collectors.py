@@ -814,9 +814,7 @@ def assemble_arm_metric_bundle(
                 organization_agency_ledgers
             ),
         )
-    formal_rule_ledgers = getattr(
-        arm.runner_result, "formal_rule_ledgers", None
-    )
+    formal_rule_ledgers = getattr(arm.runner_result, "formal_rule_ledgers", None)
     if formal_rule_ledgers:
         from analysis.formal_rules import harvest_formal_rule_rows
 
@@ -824,6 +822,25 @@ def assemble_arm_metric_bundle(
             inputs,
             formal_rule_rows=harvest_formal_rule_rows(
                 formal_rule_ledgers, window_ticks=100
+            ),
+        )
+    evidence_ledgers = getattr(arm.runner_result, "evidence_ledgers", None)
+    if evidence_ledgers:
+        from analysis.evidence_testimony_objective import (
+            evidence_objective_anchor_rows_from_events,
+        )
+        from analysis.evidence_testimony_rows import harvest_evidence_rows
+
+        entity_to_agent = {
+            agent.entity_id.value: agent.agent_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        inputs = replace(
+            inputs,
+            evidence_rows=harvest_evidence_rows(evidence_ledgers, window_ticks=100),
+            evidence_objective_rows=evidence_objective_anchor_rows_from_events(
+                events or (),
+                entity_to_agent,
             ),
         )
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
@@ -839,9 +856,7 @@ def assemble_arm_metric_bundle(
         }
         inputs = replace(
             inputs,
-            dispute_rows=harvest_dispute_rows(
-                dispute_ledgers, window_ticks=100
-            ),
+            dispute_rows=harvest_dispute_rows(dispute_ledgers, window_ticks=100),
             dispute_objective_rows=dispute_objective_anchor_rows_from_events(
                 events or (),
                 entity_to_agent=entity_to_agent,

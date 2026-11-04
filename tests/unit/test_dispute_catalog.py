@@ -1,4 +1,4 @@
-"""V4-07 metric catalog append: 154 families with an unchanged first 151."""
+"""V4-07 metric catalog append, updated by V4-08: 157 with first 154 fixed."""
 
 from __future__ import annotations
 
@@ -24,38 +24,37 @@ NEW_FAMILIES = (
 
 # Digest of the first 151 families as (family@version:value_keys), recorded when
 # V4-07 appended its three families. Any id, order, version, or key drift fails.
-FIRST_151_DIGEST = "c34a7267643ad175955db4c4fb0e5e3ebbd048c75212ee7235ac33dc694a9eac"
+FIRST_154_DIGEST = "d7882d7890d17ae8c6fcb36eb9152c2c1d56562bf879c0beb5d28e10e40f2dad"
 
 
-def test_metric_catalog_count_is_154() -> None:
+def test_metric_catalog_count_is_157() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 154
-    assert len(specs) == 154
-    assert len({spec.family_id for spec in specs}) == 154
-    assert len(all_metric_specifications()) == 154
+    assert METRIC_FAMILY_COUNT == 157
+    assert len(specs) == 157
+    assert len({spec.family_id for spec in specs}) == 157
+    assert len(all_metric_specifications()) == 157
 
 
-def test_first_151_families_are_unchanged() -> None:
+def test_first_154_families_are_unchanged() -> None:
     specs = all_metric_specifications()
-    assert len(specs[:151]) == 151
-    assert specs[150].family_id is MetricFamilyId.FORMAL_RULE_RESPONSE
-    assert not any(spec.family_id in NEW_FAMILIES for spec in specs[:151])
+    assert len(specs[:154]) == 154
+    assert specs[153].family_id is MetricFamilyId.DISPUTE_RESOLUTION_ALIGNMENT
     material = "\x1f".join(
         f"{spec.family_id.value}@{spec.algorithm_version}:{','.join(spec.value_keys)}"
-        for spec in specs[:151]
+        for spec in specs[:154]
     )
-    assert hashlib.sha256(material.encode("utf-8")).hexdigest() == FIRST_151_DIGEST
+    assert hashlib.sha256(material.encode("utf-8")).hexdigest() == FIRST_154_DIGEST
 
 
-def test_three_dispute_families_are_last_and_versioned_at_1() -> None:
+def test_three_dispute_families_precede_the_evidence_families() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-3:]) == NEW_FAMILIES
-    assert tuple(spec.family_id for spec in specs[-6:-3]) == (
-        MetricFamilyId.FORMAL_RULE_DEVELOPMENT,
-        MetricFamilyId.FORMAL_RULE_AUTHORITY,
-        MetricFamilyId.FORMAL_RULE_RESPONSE,
+    assert tuple(spec.family_id for spec in specs[-6:-3]) == NEW_FAMILIES
+    assert tuple(spec.family_id.value for spec in specs[-3:]) == (
+        "evidence_source_structure",
+        "evidence_provenance_continuity",
+        "evidence_objective_alignment",
     )
-    assert [spec.version_identifier for spec in specs[-3:]] == [
+    assert [spec.version_identifier for spec in specs[-6:-3]] == [
         "dispute_claim_structure@1",
         "dispute_testimony_independence@1",
         "dispute_resolution_alignment@1",

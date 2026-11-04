@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 154 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, and three V4-07 dispute families) |
+| Metric families | 157 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, and three V4-08 evidence families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -764,7 +764,7 @@ atomically with quotas; six GET-only `/v1` dispute routes require
 client adds a read-only disputes view.
 
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 154 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 157 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
 are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
 unowned.

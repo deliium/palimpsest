@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **154** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **157** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -503,3 +503,28 @@ objective `supported` / `unresolved` / `inconsistent` classification is
 researcher-only; claims without an objective anchor are excluded from the
 objective denominator rather than counted as inconsistent. None of the three
 families feeds cognition, prompts, memory, admission, or stop selectors.
+
+## Evidence-testimony families (catalog 157)
+
+Three analysis-only families append after the dispute families. They read
+detached evidence rows and committed objective anchors; they never feed
+cognition, prompts, memory, world state, stop selectors, or observer semantics.
+Objective alignment classifies a relationship for researchers and is never a
+verdict, authenticity claim, guilt, liability, or a correct account.
+
+- `evidence_source_structure@1`: `candidate_count`, `source_count`,
+  `source_kind_histogram`, `testimony_count`, `item_count`,
+  `interpretation_histogram`, `confidence_band_histogram`,
+  `multi_owner_candidate_ratio`, `uncorroborated_item_ratio`.
+- `evidence_provenance_continuity@1`: `provenance_channel_histogram`,
+  `independent_root_ratio`, `communicated_testimony_ratio`,
+  `custody_link_count`, `custody_complete_ratio`, `custody_incomplete_count`,
+  `custody_conflicting_count`, `missing_provenance_ratio`.
+- `evidence_objective_alignment@1`: `aligned_item_count`, `consistent_count`,
+  `unresolved_count`, `inconsistent_count`, `not_applicable_count`,
+  `consistency_ratio`, `custody_match_count`, `custody_mismatch_count`,
+  `custody_unknown_count`.
+
+Absent inputs yield `availability=absent`. An enabled ledger with zero rows
+yields `present` with zero counts. `not_applicable` alignment rows and
+non-applicable custody chains are excluded from ratios.

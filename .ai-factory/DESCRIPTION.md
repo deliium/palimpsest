@@ -340,6 +340,6 @@ read-only Research UI disputes view. Researcher-only objective alignment
 (`supported`, `unresolved`, `inconsistent`, `not_applicable`) never reaches
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 154, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 157, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017` with no `0018`; three V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned.

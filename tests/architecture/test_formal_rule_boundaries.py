@@ -201,7 +201,7 @@ def test_snapshot_schema_and_store_schema_are_v1() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 154
+    assert METRIC_FAMILY_COUNT == 157
     assert len(COMMAND_RULE_MATRIX) == 43
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert ALEMBIC_HEAD_REVISION == "0017"
