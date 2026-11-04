@@ -17,6 +17,7 @@ from simulation.diplomacy_models import (
     DiplomacySnapshot,
 )
 from simulation.diplomacy_paging import (
+    DiplomacyRowSelection,
     select_diplomacy_instrument,
     select_diplomacy_instruments,
     select_diplomacy_lineage,

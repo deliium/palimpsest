@@ -435,7 +435,7 @@ they are not part of the 12 V4 flags. `/version` is unchanged;
 - [ ] Task 21: Add the read-only Research UI diplomacy view ([details](phase-06-read-only-surfaces.md#task-21-add-the-read-only-research-ui-diplomacy-view)) (depends on 20)
 
 ### Phase 7: Invariants, End-to-End Diplomacy, and Regression
-- [ ] Task 22: Add the diplomacy boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-22-add-the-diplomacy-boundary-and-determinism-suite)) (depends on 2-21)
+- [x] Task 22: Add the diplomacy boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-22-add-the-diplomacy-boundary-and-determinism-suite)) (depends on 2-21)
 - [ ] Task 23: Add the diplomacy end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-23-add-the-diplomacy-end-to-end-scenario)) (depends on 7-21)
 - [ ] Task 24: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-24-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 22, 23)
 

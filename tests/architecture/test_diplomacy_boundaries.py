@@ -120,3 +120,165 @@ async def test_organized_conflict_still_fails_closed() -> None:
 
     assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
     assert excinfo.value.stage == "v4_capability_flags"
+
+
+def _sources(patterns: tuple[str, ...]) -> list[Path]:
+    files: list[Path] = []
+    for pattern in patterns:
+        files.extend(sorted(_SRC.glob(pattern)))
+    return [path for path in files if "__pycache__" not in path.parts]
+
+
+def test_diplomacy_has_no_command_path() -> None:
+    import ast
+
+    forbidden_calls = {"submit", "admit", "submit_command", "resolve_command"}
+    for path in _sources(
+        (
+            "agents/cognition/diplomacy*.py",
+            "analysis/diplomacy*.py",
+            "simulation/diplomacy*.py",
+            "experiments/diplomacy*.py",
+            "api/routes/diplomacy.py",
+        )
+    ):
+        source = path.read_text(encoding="utf-8")
+        assert "AgentCommand" not in source, path
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                name = (
+                    func.id
+                    if isinstance(func, ast.Name)
+                    else func.attr
+                    if isinstance(func, ast.Attribute)
+                    else ""
+                )
+                assert name not in forbidden_calls, (path.name, name)
+
+
+def test_diplomacy_ledger_is_not_world_read() -> None:
+    for path in sorted((_SRC / "world").glob("*.py")):
+        assert "agents.cognition.diplomacy" not in path.read_text(encoding="utf-8")
+    for name in ("engine.py",):
+        path = _SRC / "simulation" / name
+        source = path.read_text(encoding="utf-8")
+        assert "agents.cognition.diplomacy import" not in source
+    api_source = (_SRC / "api" / "routes" / "diplomacy.py").read_text()
+    assert "agents.cognition.diplomacy" not in api_source
+    assert "analysis." not in api_source
+
+
+def test_no_score_or_oracle_symbol_exists() -> None:
+    forbidden = {
+        "RelationScore",
+        "DiplomacyScore",
+        "LegitimacyOracle",
+        "TruthEngine",
+        "TreatyStore",
+        "TreatyAuthority",
+        "EnvoyRegistry",
+        "Polity",
+        "Border",
+        "Citizenship",
+        "WarState",
+        "ArmyActor",
+    }
+    for path in _sources(
+        (
+            "agents/cognition/diplomacy*.py",
+            "analysis/diplomacy*.py",
+            "simulation/diplomacy*.py",
+            "experiments/diplomacy*.py",
+            "api/routes/diplomacy.py",
+        )
+    ):
+        source = path.read_text(encoding="utf-8")
+        for symbol in forbidden:
+            assert f"class {symbol}" not in source, (path.name, symbol)
+
+
+def test_representation_principal_roundness() -> None:
+    from agents.cognition import DiplomaticPartyKind
+    from agents.cognition.delegation_representation import (
+        RepresentationPrincipalKind,
+    )
+
+    assert {member.value for member in DiplomaticPartyKind} == {
+        member.value for member in RepresentationPrincipalKind
+    }
+    assert {member.value for member in DiplomaticPartyKind} == {
+        "agent",
+        "organization",
+        "settlement",
+        "coalition",
+        "unknown",
+    }
+
+
+def test_token_domains_interoperate() -> None:
+    from analysis.delegation_representation_contract import representation_owner_token
+    from analysis.diplomacy_contract import (
+        DiplomacyAnalysisError,
+        diplomacy_agent_token,
+        diplomacy_party_token,
+        require_diplomacy_candidate_id,
+    )
+
+    assert diplomacy_agent_token("agent-a") == representation_owner_token("agent-a")
+    anchor = "orgc-" + "a" * 16
+    assert diplomacy_party_token("organization", anchor) == anchor
+    assert diplomacy_party_token("settlement", "region-1") == "region-1"
+    import pytest
+
+    with pytest.raises(DiplomacyAnalysisError):
+        require_diplomacy_candidate_id("dip-pub-" + "a" * 16)
+
+
+def test_alignment_stays_researcher_only() -> None:
+    for root in ("agents", "world", "observer"):
+        for path in sorted((_SRC / root).rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            assert "DiplomacyAlignmentStatus" not in source, path
+
+
+def test_snapshot_and_store_schemas_exist() -> None:
+    from persistence.diplomacy_filesystem import DIPLOMACY_STORE_SCHEMA
+    from simulation.diplomacy_models import DIPLOMACY_SNAPSHOT_SCHEMA
+
+    assert DIPLOMACY_SNAPSHOT_SCHEMA == "diplomacy-snapshot-v1"
+    assert DIPLOMACY_STORE_SCHEMA == "diplomacy-store-v1"
+
+
+def test_six_routes_and_six_purposes() -> None:
+    from api.routes.diplomacy import router
+    from simulation.diplomacy_models import DIPLOMACY_CURSOR_PURPOSES
+
+    routes = [
+        route
+        for route in router.routes
+        if getattr(route, "methods", None) is not None
+    ]
+    assert len(routes) == 6
+    assert all(route.methods == {"GET"} for route in routes)
+    assert len(DIPLOMACY_CURSOR_PURPOSES) == 6
+
+
+def test_no_new_wire_surfaces() -> None:
+    from analysis.specifications import METRIC_FAMILY_COUNT
+    from observer.version import SEMANTIC_EVENT_TYPES
+    from simulation.compatibility import ALEMBIC_HEAD_REVISION
+    from world._rules import COMMAND_RULE_MATRIX
+    from world.events import EVENT_SCHEMA_REPLAY_V22
+
+    assert METRIC_FAMILY_COUNT == 164
+    assert EVENT_SCHEMA_REPLAY_V22 == 22
+    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(SEMANTIC_EVENT_TYPES) == 73
+    assert ALEMBIC_HEAD_REVISION == "0017"
+    assert not list((_SRC.parent / "alembic" / "versions").glob("0018_*.py"))
+    from simulation.compatibility import ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+
+    assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
