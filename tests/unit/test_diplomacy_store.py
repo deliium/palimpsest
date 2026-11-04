@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -93,7 +94,7 @@ def test_publish_and_read(tmp_path: Path) -> None:
     assert summary.summary.relation_count == 1
     relations = reader.read_relations("run-1")
     assert relations
-    relation_id = relations[0].relation_id
+    relation_id = cast(Any, relations[0]).relation_id
     detail = reader.read_relation("run-1", relation_id)
     assert detail.relation.relation_id == relation_id
     with pytest.raises(DiplomacyPortError):

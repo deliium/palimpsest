@@ -70,7 +70,7 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "six GET-only" in docs_architecture
 
 
-def test_configuration_documents_three_owned_and_nine_unowned_flags() -> None:
+def test_configuration_documents_four_owned_and_eight_unowned_flags() -> None:
     text = (ROOT / "docs" / "configuration.md").read_text()
     assert "Four V4 flags are owned" in text
     assert "`organizations`" in text
@@ -83,7 +83,7 @@ def test_configuration_documents_three_owned_and_nine_unowned_flags() -> None:
     assert "other eleven V4 flags" not in text
 
 
-def test_current_v4_docs_state_the_three_owned_flags() -> None:
+def test_current_v4_docs_state_the_four_owned_flags() -> None:
     research_api = (ROOT / "docs" / "research-api.md").read_text()
     assert "all V4 flags are unowned" not in research_api
     assert "other eight remain unowned" in research_api

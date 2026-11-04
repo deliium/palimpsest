@@ -765,9 +765,9 @@ client adds a read-only disputes view.
 
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
 types, 157 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
-`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
-are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
-unowned.
+`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Four V4 flags
+are owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and
+eight remain unowned.
 
 ### V4-08 evidence and testimony seam
 
@@ -810,9 +810,9 @@ first 154 keep their ids, order, versions, and value keys.
 
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
 types, 157 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
-`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
-are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
-unowned. See `docs/evidence-testimony.md`.
+`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Four V4 flags
+are owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and
+eight remain unowned. See `docs/evidence-testimony.md`.
 
 ### V4-09 delegation and representation seam
 
@@ -843,8 +843,7 @@ Three families append (`representation_mandate_structure@1`,
 raising the catalog 157 -> 160. Pins: runner v4/v55/v56, result v2/v3, 43
 commands, 73 observer semantic types, 164 metric families, 14 V4 contexts, 12 V4
 flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
-`diplomacy`, `institutional_economy`, and `multi_hop_testimony_tracking` remain
-unowned.
+`institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
 
 ### V4-10 diplomacy seam
 

@@ -131,9 +131,14 @@ def _snapshot(
         )
         for index, row in enumerate(rows.contacts, start=1)
     )
+    envoy_ids = [f"dpe-{index:016x}" for index in range(1, len(rows.envoys) + 1)]
+    envoy_ids_by_owner_token = {
+        (row.owner_token, row.envoy_token): envoy_ids[index]
+        for index, row in enumerate(rows.envoys)
+    }
     envoys = tuple(
         DiplomacySnapshotEnvoyRow(
-            envoy_id="dpe-" + f"{index:016x}",
+            envoy_id=envoy_ids[index],
             relation_id=row.relation_id,
             owner_token=row.owner_token,
             party_token=row.party_token,
@@ -144,7 +149,7 @@ def _snapshot(
             end_tick=row.end_tick,
             provenance="communicated",
         )
-        for index, row in enumerate(rows.envoys, start=1)
+        for index, row in enumerate(rows.envoys)
     )
     negotiations = tuple(
         DiplomacySnapshotNegotiationRow(
@@ -208,13 +213,22 @@ def _snapshot(
             termination_id="dpt-" + f"{index:016x}",
             owner_token=row.owner_token,
             target_kind=row.target_kind,
-            target_ref=row.target_ref,
+            target_ref=(
+                envoy_ids_by_owner_token.get(
+                    (row.owner_token, row.target_ref), row.target_ref
+                )
+                if row.target_kind == "envoy"
+                else row.target_ref
+            ),
             kind=row.kind,
             tick=row.tick,
             provenance="communicated",
         )
         for index, row in enumerate(rows.terminations, start=1)
         if row.target_ref
+    )
+    _LOG.debug(
+        "[FIX] diplomacy_snapshot_envoys_remapped count=%s", len(envoy_ids)
     )
     conflicts = tuple(
         DiplomacySnapshotConflictRow(

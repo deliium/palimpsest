@@ -172,7 +172,8 @@ def _row_out(row: object) -> object:
     model = mapping.get(name)
     if model is None:
         raise bad_request(code="diplomacy_snapshot_invalid")
-    return model(**{field: getattr(row, field) for field in model.model_fields})
+    model_fields = getattr(model, "model_fields", {})
+    return model(**{field: getattr(row, field) for field in model_fields})
 
 
 @router.get("/{run_id}/diplomacy", response_model=DiplomacySummaryOut)

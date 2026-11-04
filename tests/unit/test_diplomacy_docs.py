@@ -90,6 +90,37 @@ def test_agent_context_artifacts_state_v4_10() -> None:
     assert "eight remain" in architecture
 
 
+def test_no_current_document_claims_diplomacy_is_unowned() -> None:
+    current_docs = (
+        ROOT / ".ai-factory" / "DESCRIPTION.md",
+        ROOT / ".ai-factory" / "ARCHITECTURE.md",
+        ROOT / "docs" / "disputes.md",
+        ROOT / "docs" / "v4-architecture.md",
+        ROOT / "docs" / "architecture.md",
+        ROOT / "docs" / "configuration.md",
+        ROOT / "docs" / "research-api.md",
+    )
+    stale = (
+        "diplomacy` stays unowned",
+        "diplomacy stays unowned",
+        "`diplomacy`, `institutional_economy`",
+        "three V4 flags are owned",
+        "nine remain unowned",
+        "**3 owned**",
+    )
+    for path in current_docs:
+        text = path.read_text(encoding="utf-8")
+        for phrase in stale:
+            assert phrase not in text, f"{path}: stale phrase {phrase!r}"
+
+    v4_text = (ROOT / "docs" / "v4-architecture.md").read_text(encoding="utf-8")
+    row = next(
+        line for line in v4_text.splitlines() if line.startswith("| `diplomacy` |")
+    )
+    assert "V4-10 implementation" in row
+    assert "deferred" not in row
+
+
 def test_readme_links_the_contract() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "docs/diplomacy.md" in readme

@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 
+from agents.cognition.diplomacy import DiplomacyLedger
 from agents.models import AgentId
 from experiments.catalog import base_runner_config_from_scenario
 from simulation.models import RunId
@@ -277,9 +278,289 @@ def test_no_new_wire_surfaces() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((_SRC.parent / "alembic" / "versions").glob("0018_*.py"))
-    from simulation import compatibility
+    from simulation.persistence import ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
-    codecs = compatibility.ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    codecs = ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
     assert "v20" in codecs
     assert "v21" not in codecs
+
+
+def test_no_peer_ledger_reads() -> None:
+    import inspect
+
+    from agents.cognition import apply_diplomacy_update, record_diplomacy_utterance
+
+    for callable_obj in (apply_diplomacy_update, record_diplomacy_utterance):
+        names = set(inspect.signature(callable_obj).parameters)
+        assert names.isdisjoint(
+            {
+                "peer_ledger",
+                "other_owner_ledger",
+                "foreign_representation",
+                "world_state",
+                "event_store",
+            }
+        )
+    source = (_SRC / "agents" / "cognition" / "diplomacy.py").read_text(
+        encoding="utf-8"
+    )
+    assert "require_owner_diplomacy" in source
+    assert "other_owner" not in source
+
+
+def _frame(act: object, **overrides: object) -> object:
+    from agents.cognition import DiplomacyFrame
+
+    values: dict[str, object] = {
+        "act": act,
+        "envoy_ref": "agent-owner",
+        "actor_ref": "agent-owner",
+    }
+    values.update(overrides)
+    return DiplomacyFrame(**values)  # type: ignore[arg-type]
+
+
+def _proposal_ledger() -> DiplomacyLedger:
+    from agents.cognition import (
+        DiplomaticAct,
+        DiplomaticPartyKind,
+        DiplomaticTermKind,
+        apply_diplomacy_update,
+        default_diplomacy_policy,
+        empty_diplomacy_ledger,
+    )
+
+    policy = default_diplomacy_policy()
+    ledger = empty_diplomacy_ledger("agent-owner", tick=0)
+    return apply_diplomacy_update(
+        owner_id="agent-owner",
+        tick=1,
+        observation=None,
+        prior=ledger,
+        frames=(
+            _frame(
+                DiplomaticAct.PROPOSE,
+                party_kind=DiplomaticPartyKind.AGENT,
+                party_ref="agent-other",
+                topic_subject="trade",
+                term_kind=DiplomaticTermKind.MATERIAL_EXCHANGE,
+            ),
+        ),
+        policy=policy,
+    )
+
+
+def test_relation_and_termination_records() -> None:
+    from agents.cognition import (
+        DiplomaticProvenance,
+        DiplomaticTerminationKind,
+    )
+    from agents.cognition.diplomacy import apply_diplomacy_termination
+
+    ledger = _proposal_ledger()
+    assert ledger.relations
+    assert ledger.instruments
+    relation = ledger.relations[0]
+    instrument = ledger.instruments[0]
+    self_party = next(
+        party for party in ledger.parties if party.anchor_ref == "agent-owner"
+    )
+    assert relation.party_ids[0] == self_party.party_id
+    assert instrument.party_ids == relation.party_ids
+
+    terminated = apply_diplomacy_termination(
+        ledger,
+        target_kind="instrument",
+        target_ref=instrument.instrument_id,
+        kind=DiplomaticTerminationKind.PARTY_WITHDREW,
+        tick=2,
+        provenance=DiplomaticProvenance.SELF_DECLARED,
+    )
+    assert any(
+        row.target_ref == instrument.instrument_id for row in terminated.terminations
+    )
+    assert instrument.instrument_id in {
+        row.instrument_id for row in terminated.instruments
+    }
+
+
+def test_scope_duration_matrix() -> None:
+    from agents.cognition import diplomacy_scope_covers
+
+    assert not diplomacy_scope_covers(
+        scope_kind="negotiate",
+        duration_kind="single_act",
+        instrument_kind="agreement",
+        scope_subject="trade",
+        topic_subject="trade",
+    )
+    assert not diplomacy_scope_covers(
+        scope_kind="negotiate",
+        duration_kind="occasion",
+        instrument_kind="promise",
+        scope_subject="trade",
+        topic_subject="trade",
+    )
+    assert diplomacy_scope_covers(
+        scope_kind="negotiate",
+        duration_kind="until_revoked",
+        instrument_kind="agreement",
+        scope_subject="trade",
+        topic_subject="trade",
+    )
+    assert not diplomacy_scope_covers(
+        scope_kind="negotiate",
+        duration_kind="until_revoked",
+        instrument_kind="agreement",
+        scope_subject="trade",
+        topic_subject="passage",
+    )
+
+
+def test_principal_declaration_and_current_standing() -> None:
+    from types import SimpleNamespace
+
+    from agents.cognition import (
+        DiplomacyPolicy,
+        DiplomaticAct,
+        RepresentationStatus,
+        apply_diplomacy_update,
+        default_diplomacy_policy,
+        diplomacy_envoy_status,
+    )
+
+    policy: DiplomacyPolicy = default_diplomacy_policy()
+    ledger = _proposal_ledger()
+    instrument = ledger.instruments[0]
+    ledger = apply_diplomacy_update(
+        owner_id="agent-owner",
+        tick=2,
+        observation=None,
+        prior=ledger,
+        frames=(
+            _frame(
+                DiplomaticAct.ACCEPT,
+                instrument_ref=instrument.instrument_id,
+                envoy_ref="agent-owner",
+                actor_ref="agent-owner",
+            ),
+        ),
+        policy=policy,
+    )
+    assert ledger.declarations
+    self_party = next(
+        party for party in ledger.parties if party.anchor_ref == "agent-owner"
+    )
+    assert any(
+        declaration.declarer_party_id == self_party.party_id
+        for declaration in ledger.declarations
+    )
+
+    revoked = SimpleNamespace(
+        mandate_id="rmd-" + "0" * 16,
+        status=RepresentationStatus.REVOKED,
+        scope_kind="negotiate",
+        duration_kind="until_revoked",
+        scope_subject="trade",
+        end_tick=None,
+        revoked=True,
+        superseded=False,
+        expired=False,
+    )
+    from agents.cognition import DiplomaticEnvoy, DiplomaticEnvoyStatus
+
+    envoy = DiplomaticEnvoy(
+        envoy_id="dpe-" + "0" * 16,
+        relation_id=ledger.relations[0].relation_id,
+        party_id=ledger.parties[0].party_id,
+        envoy_ref="agent-envoy",
+        mandate_ref="rmd-" + "0" * 16,
+        status=DiplomaticEnvoyStatus.RECOGNIZED,
+        accredited_tick=1,
+        end_tick=None,
+        revision=0,
+        provenance=ledger.parties[0].provenance,
+    )
+    representation = SimpleNamespace(mandates=(revoked,))
+    status = diplomacy_envoy_status(envoy, representation, tick=2, policy=policy)
+    assert status.value == "revoked"
+
+
+def test_derived_row_pipeline() -> None:
+    from agents.cognition import (
+        DiplomaticAct,
+        default_diplomacy_policy,
+    )
+    from agents.cognition.diplomacy import detect_diplomatic_misrepresentation
+
+    policy = default_diplomacy_policy()
+    ledger = _proposal_ledger()
+    instrument = ledger.instruments[0]
+    from agents.cognition import apply_diplomacy_update
+
+    ledger = apply_diplomacy_update(
+        owner_id="agent-owner",
+        tick=2,
+        observation=None,
+        prior=ledger,
+        frames=(
+            _frame(
+                DiplomaticAct.ACCEPT,
+                envoy_ref="agent-envoy",
+                actor_ref="agent-envoy",
+                party_ref="agent-owner",
+                instrument_ref=instrument.instrument_id,
+            ),
+        ),
+        policy=policy,
+    )
+    first = detect_diplomatic_misrepresentation(
+        ledger, None, tick=2, policy=policy
+    )
+    second = detect_diplomatic_misrepresentation(
+        ledger, None, tick=2, policy=policy
+    )
+    assert first.misrepresentations
+    assert [row.misrepresentation_id for row in first.misrepresentations] == [
+        row.misrepresentation_id for row in second.misrepresentations
+    ]
+    source = (_SRC / "agents" / "cognition" / "diplomacy.py").read_text(
+        encoding="utf-8"
+    )
+    order = [
+        "detect_diplomatic_misrepresentation(",
+        "expire_diplomacy_records(",
+        "supersede_diplomacy_instruments(",
+        "detect_diplomacy_conflicts(",
+        "enforce_diplomacy_limits(",
+    ]
+    start = source.index("def apply_diplomacy_update")
+    positions = [source.index(name, start) for name in order]
+    assert positions == sorted(positions)
+
+
+def test_existing_pins_unchanged() -> None:
+    from observer.capabilities import ObserverCapability
+    from simulation.versioning import V4_WRITE_PAIR_RESERVATIONS
+
+    assert len(V4_WRITE_PAIR_RESERVATIONS) == 4
+    assert {reservation.event_schema for reservation in V4_WRITE_PAIR_RESERVATIONS} == {
+        23,
+        24,
+        25,
+        26,
+    }
+    assert ObserverCapability.ORGANIZATION_ROWS.value == "organization_rows"
+    for spec in (SimulationRunnerConfig,):
+        assert "prepare_parallel" not in {field.name for field in fields(spec)}
+
+
+def test_no_roadmap_or_client_authority() -> None:
+    for path in sorted(_SRC.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert "clients/godot-observer" not in source, path
+        assert "clients/research-ui" not in source, path
+        assert ".ai-factory/ROADMAP.md" not in source, path

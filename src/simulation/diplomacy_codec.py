@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict
-from typing import Any, Final, NoReturn
+from dataclasses import fields as dataclass_fields
+from typing import Any, Final, NoReturn, cast
 
 from simulation.diplomacy_models import (
     MAX_SNAPSHOT_BYTES,
@@ -188,7 +189,7 @@ def _row(name: str, value: object) -> object:
     if type(value) is not dict:
         _fail("diplomacy_snapshot_invalid")
     row_type = _ROW_TYPES[name]
-    fields = set(row_type.__dataclass_fields__)
+    fields = {field.name for field in dataclass_fields(cast(type[Any], row_type))}
     if set(value) != fields:
         _fail("diplomacy_snapshot_invalid")
     return row_type(**value)

@@ -341,8 +341,9 @@ read-only Research UI disputes view. Researcher-only objective alignment
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
 metric families 157, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, Alembic `0017` with no `0018`; three V4 flags are owned
-(`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned.
+`observer-protocol-v1`, Alembic `0017` with no `0018`; four V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain
+unowned.
 
 V4-08 (evidence and testimony, 2026-11-04) deepens the owned `legal_disputes`
 context with a general owner-scoped evidence ledger; it adds no capability flag,
@@ -367,8 +368,9 @@ routes under `SUBJECTIVE_DEBUG`, and a read-only Research UI Evidence panel are
 added. Three metric families (154 → 157) are appended. Pins: runner v4/v55/v56,
 result v2/v3, commands 43, observer semantic types 73, metric families 157,
 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, Alembic `0017` with no `0018`; three V4 flags are owned
-(`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned.
+`observer-protocol-v1`, Alembic `0017` with no `0018`; four V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain
+unowned.
 
 V4-09 (delegation and representation, 2026-11-04) deepens the owned
 `organizations` context with an owner-scoped representation ledger under
@@ -388,9 +390,9 @@ filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
 metric families 164, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, and Alembic `0017` with no `0018`; three V4 flags are
-owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
-unowned. `diplomacy` stays unowned and fail-closed.
+`observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
+owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
+remain unowned.
 
 V4-10 (inter-society diplomacy, 2026-11-04) owns the fourth V4 capability flag,
 `diplomacy`, on the accepted `runner-config-v56` seam; it adds no

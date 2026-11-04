@@ -429,14 +429,21 @@ def harvest_diplomacy_rows(
                     envoy_token=diplomacy_agent_token(row.envoy_ref),
                 )
             )
+        envoy_token_by_id = {
+            row.envoy_id: diplomacy_agent_token(row.envoy_ref)
+            for row in getattr(ledger, "envoys", ())
+        }
         for row in getattr(ledger, "terminations", ()):
+            target_ref = row.target_ref
+            if row.target_kind == "envoy":
+                target_ref = envoy_token_by_id.get(target_ref, target_ref)
             terminations.append(
                 DiplomacyTerminationRow(
                     owner_token=owner_token,
                     target_kind=row.target_kind,
                     kind=getattr(row.kind, "value", "unknown"),
                     tick=row.tick,
-                    target_ref=row.target_ref,
+                    target_ref=target_ref,
                 )
             )
         for row in getattr(ledger, "conflicts", ()):

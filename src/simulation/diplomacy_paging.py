@@ -101,10 +101,13 @@ def select_diplomacy_relation(
         for row in snapshot.misrepresentations
         if row.instrument_id in instrument_ids
     )
+    envoy_ids = {row.envoy_id for row in envoys}
     terminations = tuple(
         row
         for row in snapshot.terminations
-        if row.target_ref == relation_id or row.target_ref in instrument_ids
+        if row.target_ref == relation_id
+        or row.target_ref in instrument_ids
+        or row.target_ref in envoy_ids
     )
     rows = (
         relation,

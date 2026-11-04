@@ -61,7 +61,7 @@ The registry revision is `v4-context-map-v2`.
 | `organizations` | `organizations` | owner-scoped | `agents.cognition`, `social`, `simulation` | collective projects, public goods, mentorship, institution concepts, offices, institutional memory, collective decisions, structured commitments, group formation, possession legitimacy | reuse | V4-03/V4-04 implementation |
 | `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | V4-06 implementation |
 | `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation, formal rules, offices, organizations | reuse | V4-07 implementation |
-| `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | deferred to V4-02+ |
+| `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | V4-10 implementation |
 | `organized_conflict` | `organized_conflict` | objective-world | `world`, `simulation`, `agents.cognition` | physical harm/attack commands | reuse | deferred to V4-02+ |
 | `infrastructure_networks` | `infrastructure_networks` | objective-world | `world`, `simulation` | new physical network graph | reserve event 23 / codec `v21` | deferred to V4-02+ |
 | `supply_chains` | `supply_chains` | objective-world | `world`, `simulation` | production, storage, transport | reuse | deferred to V4-02+ |

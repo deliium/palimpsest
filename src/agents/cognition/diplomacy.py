@@ -2875,7 +2875,7 @@ def _process_frame(
         negotiating = (envoy_ref,) if envoy_ref in envoy_rows else ()
         builder.add_negotiation(
             relation,
-            topic_subject=frame.topic_subject,
+            topic_subject=str(getattr(frame, "topic_subject", None) or ""),
             envoy_refs=negotiating,
             term_kind=getattr(frame, "term_kind", None) or DiplomaticTermKind.UNKNOWN,
             provenance=provenance,
@@ -2884,7 +2884,7 @@ def _process_frame(
 
     if act.value in _ACT_TO_INSTRUMENT:
         instrument_kind = _ACT_TO_INSTRUMENT[act.value]
-        topic = frame.topic_subject
+        topic = str(getattr(frame, "topic_subject", None) or "")
         if actor in {None, owner}:
             declarer_party = builder.self_party()
             declaration_envoy = None

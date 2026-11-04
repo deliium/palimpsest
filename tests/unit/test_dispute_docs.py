@@ -143,7 +143,7 @@ def test_readme_and_research_api_link_the_feature() -> None:
     assert "dispute_cursor_invalid" in research_api
 
 
-def test_configuration_documents_three_owned_flags() -> None:
+def test_configuration_documents_four_owned_flags() -> None:
     text = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
     assert "`organizations`" in text
     assert "`formal_rules`" in text

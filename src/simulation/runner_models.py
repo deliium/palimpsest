@@ -6747,7 +6747,9 @@ class SimulationRunnerResult:
             if type(ledger) is not DiplomacyLedger:
                 raise TypeError("diplomacy_ledgers: invalid_item")
             require_owner_diplomacy(ledger, ledger.owner_id)
-        owners = [ledger.owner_id for ledger in diplomacy_ledgers]
+        owners = [
+            cast(DiplomacyLedger, ledger).owner_id for ledger in diplomacy_ledgers
+        ]
         if len(set(owners)) != len(owners) or owners != sorted(owners):
             raise ValueError("diplomacy_ledgers: invalid_order")
         object.__setattr__(self, "diplomacy_ledgers", diplomacy_ledgers)
