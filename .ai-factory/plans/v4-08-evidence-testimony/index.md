@@ -387,18 +387,19 @@ certification; it is never a skip-pass.
 | Mypy | `executed_passed` | `uv run mypy src tests` -> 1,957 files, no issues |
 | Import-linter | `executed_passed` | `uv run lint-imports` -> 25 kept, 0 broken |
 | Integration (`-m "integration and not scale"`) | `executed_passed` | `PALIMPSEST_TEST_DATABASE_URL=postgresql+asyncpg://…@127.0.0.1:5432/palimpsest_test uv run pytest -m "integration and not scale" -q` -> 104 passed against disposable `pgvector/pgvector:pg17` |
-| Integration including scale | `unexecuted` | Prerequisite: 100,000-tick generational/scale lane |
+| Integration including scale | `executed_passed` | `PALIMPSEST_TEST_DATABASE_URL=… uv run pytest -m "integration and scale" -q` -> 23 passed, 8,492 deselected (2:58:53), including the 100,000-tick generational lane |
 | Docker Compose config | `executed_passed` | `docker compose config --quiet` -> exit 0 |
 | Compose/browser acceptance | `unexecuted` | Prerequisite: pinned API image and Playwright chromium |
 | Godot 4.7.2 regression | `executed_passed` | Pinned Godot 4.7.2 (SHA-512 verified) editor pass + `run_protocol.gd` -> `godot_protocol_tests failed=0` |
-| Benchmark/scale lane | `unexecuted` | Prerequisite: multi-hour 100,000-tick harness |
+| Benchmark/scale lane | `executed_passed` | Included in the 23-test `-m "integration and scale"` lane (`tests/benchmarks/test_v3_long_horizon.py` and the 100,000-tick generational harness) -> 23 passed (2:58:53) |
 | Research UI tests | `executed_passed` | `vitest run` -> 52 files, 266 tests passed |
 | Research UI type/static checks | `executed_passed` | `svelte-check` 0 errors/0 warnings; `tsc -p tsconfig.node.json` passed |
 | Research UI build | `executed_passed` | `vite build` completed |
 
-Certification outcome: **not certified**. Integration-scale, Compose/browser
-acceptance, and benchmark/scale remain `unexecuted` with explicit prerequisites.
-The integration-database and Godot 4.7.2 lanes are now `executed_passed`.
+Certification outcome: **not certified**. Compose/browser acceptance remains
+`unexecuted` because the cached API images predate V4-08 and a fresh pinned image
+plus a Playwright browser run are required. Integration/database, integration
+including scale, benchmark/scale, and Godot 4.7.2 are now `executed_passed`.
 
 ### Task 24 audit
 
@@ -434,7 +435,7 @@ receipt above. Results:
   prerequisite, and certification remains withheld.
 
 Audit verdict: implementation complete; certification **not certified** pending
-the integration-scale, Compose/browser, and benchmark/scale lanes.
+only the Compose/browser acceptance lane.
 
 Follow-up repair (2026-11-04): completed the Task 23 documentation and context
 updates (`docs/research-api.md`, `docs/configuration.md`,
@@ -447,10 +448,11 @@ unit+architecture lane (8,360 passed, 78% coverage) was recorded before this
 follow-up.
 
 The same follow-up executed the integration-database lane against a disposable
-`pgvector/pgvector:pg17` instance (`104 passed`) and the pinned Godot 4.7.2
-protocol suite (`godot_protocol_tests failed=0`), added a two-owner `Talk`/`ev_v1`
-E2E to the real runner path, and registered V4-08 under M8 in
-`.ai-factory/ROADMAP.md`.
+`pgvector/pgvector:pg17` instance (`104 passed`), the full integration+scale lane
+(`23 passed`, 2:58:53, including the 100,000-tick generational and benchmark
+harness selections), and the pinned Godot 4.7.2 protocol suite
+(`godot_protocol_tests failed=0`), added a two-owner `Talk`/`ev_v1` E2E to the
+real runner path, and registered V4-08 under M8 in `.ai-factory/ROADMAP.md`.
 
 ## Commit Plan
 
