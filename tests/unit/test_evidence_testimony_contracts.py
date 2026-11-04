@@ -484,7 +484,7 @@ def test_id_minters_reject_cross_prefixes_and_bad_inputs() -> None:
     assert (
         _code(
             lambda: evidence_item_id(
-                OWNER, "evw-0123456789abcdef", EvidenceInterpretationKind.UNKNOWN, 0
+                OWNER, "evc-0123456789abcdef", EvidenceInterpretationKind.UNKNOWN, 0
             )
         )
         == "evidence_invalid_id"

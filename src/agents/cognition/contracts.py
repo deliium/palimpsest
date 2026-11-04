@@ -193,6 +193,7 @@ class Perspective:
     scarcity_beliefs: object | None = None
     acceptance_memories: object | None = None
     disputes: object | None = None
+    evidence: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -622,6 +623,7 @@ class Perspective:
                 "AcceptanceMemoryLedger | None", self.acceptance_memories
             ),
             disputes=self.disputes,
+            evidence=self.evidence,
         )
 
     def __repr__(self) -> str:

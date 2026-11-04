@@ -1,5 +1,11 @@
 """Simulation orchestration ports and deterministic primitives."""
 
+from agents.cognition.evidence_testimony import (
+    EVIDENCE_TESTIMONY_POLICY_VERSION,
+    EvidenceLedger,
+    empty_evidence_ledger,
+    require_owner_evidence,
+)
 from agents.cognition.legal_disputes import (
     DisputeLedger,
     empty_dispute_ledger,
@@ -1177,6 +1183,7 @@ __all__ = [
     "DISPUTE_SNAPSHOT_SCHEMA",
     "EVENT_SCHEMA_VERSION",
     "EVIDENCE_MANIFEST_SCHEMA_VERSION",
+    "EVIDENCE_TESTIMONY_POLICY_VERSION",
     "EXPERIMENT_DEFINITION_SCHEMA_VERSION",
     "FINALIZATION_COMMAND_CODEC_VERSION",
     "FORBIDDEN_DEBUGGER_ATTRIBUTES",
@@ -1509,6 +1516,7 @@ __all__ = [
     "EnginePhase",
     "EventKeysetCursor",
     "EvidenceHighWaterMarks",
+    "EvidenceLedger",
     "EvidenceManifest",
     "EvidenceManifestError",
     "EvidenceManifestReader",
@@ -1911,6 +1919,7 @@ __all__ = [
     "draw_parameter_distribution",
     "empty_dispute_ledger",
     "empty_dispute_snapshot",
+    "empty_evidence_ledger",
     "empty_formal_rule_snapshot",
     "empty_organization_snapshot",
     "encode_action_resolution_evidence",
@@ -2045,6 +2054,7 @@ __all__ = [
     "require_operation_id",
     "require_organization_id",
     "require_owner_disputes",
+    "require_owner_evidence",
     "require_payload_hash",
     "require_publication_id",
     "require_snapshot_digest",

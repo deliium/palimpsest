@@ -336,12 +336,12 @@ fail closed. `/version` is unchanged; `organization_rows` remains reserved.
 - [x] Task 3: Add the cognition evidence mode and policy seam ([details](phase-01-contract-and-seam.md#task-3-add-the-cognition-evidence-mode-and-policy-seam)) (depends on 2)
 
 ### Phase 2: Owner-Scoped Evidence Beliefs
-- [ ] Task 4: Define evidence records and ledger invariants ([details](phase-02-evidence-beliefs.md#task-4-define-evidence-records-and-ledger-invariants)) (depends on 3)
-- [ ] Task 5: Add bounded ev_v1 evidence speech frames ([details](phase-02-evidence-beliefs.md#task-5-add-bounded-ev_v1-evidence-speech-frames)) (depends on 4)
-- [ ] Task 6: Collect sources, testimony, and interpretations ([details](phase-02-evidence-beliefs.md#task-6-collect-sources-testimony-and-interpretations)) (depends on 4, 5)
-- [ ] Task 7: Derive provenance and chain-of-custody beliefs ([details](phase-02-evidence-beliefs.md#task-7-derive-provenance-and-chain-of-custody-beliefs)) (depends on 6)
-- [ ] Task 8: Evaluate evidence and retain contradictions ([details](phase-02-evidence-beliefs.md#task-8-evaluate-evidence-and-retain-contradictions)) (depends on 6, 7)
-- [ ] Task 9: Carry the ledger through cognition and runtime ([details](phase-02-evidence-beliefs.md#task-9-carry-the-ledger-through-cognition-and-runtime)) (depends on 4-8)
+- [x] Task 4: Define evidence records and ledger invariants ([details](phase-02-evidence-beliefs.md#task-4-define-evidence-records-and-ledger-invariants)) (depends on 3)
+- [x] Task 5: Add bounded ev_v1 evidence speech frames ([details](phase-02-evidence-beliefs.md#task-5-add-bounded-ev_v1-evidence-speech-frames)) (depends on 4)
+- [x] Task 6: Collect sources, testimony, and interpretations ([details](phase-02-evidence-beliefs.md#task-6-collect-sources-testimony-and-interpretations)) (depends on 4, 5)
+- [x] Task 7: Derive provenance and chain-of-custody beliefs ([details](phase-02-evidence-beliefs.md#task-7-derive-provenance-and-chain-of-custody-beliefs)) (depends on 6)
+- [x] Task 8: Evaluate evidence and retain contradictions ([details](phase-02-evidence-beliefs.md#task-8-evaluate-evidence-and-retain-contradictions)) (depends on 6, 7)
+- [x] Task 9: Carry the ledger through cognition and runtime ([details](phase-02-evidence-beliefs.md#task-9-carry-the-ledger-through-cognition-and-runtime)) (depends on 4-8)
 
 ### Phase 3: Detached Analysis, Candidates, and Metrics
 - [ ] Task 10: Harvest evidence rows and objective anchors ([details](phase-03-detached-analysis.md#task-10-harvest-evidence-rows-and-objective-anchors)) (depends on 9)

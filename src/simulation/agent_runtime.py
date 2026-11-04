@@ -447,6 +447,7 @@ class AgentRuntime:
         "_developmental_knowledge",
         "_disputes",
         "_emotional_state",
+        "_evidence",
         "_finalized_hashes",
         "_formal_rules",
         "_goal_revision_counters",
@@ -624,6 +625,7 @@ class AgentRuntime:
         self._organization_agency: object | None = None
         self._formal_rules: object | None = None
         self._disputes: object | None = None
+        self._evidence: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1424,6 +1426,37 @@ class AgentRuntime:
             "dispute_ledger_carried owner_id=%s cases=%s tick=%s",
             owner.value,
             len(ledger.cases),
+            tick,
+        )
+
+
+    def _commit_evidence(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionEvidenceMode
+        from agents.cognition.evidence_testimony import EvidenceLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_evidence_mode",
+            CognitionEvidenceMode.DISABLED,
+        )
+        if mode is not CognitionEvidenceMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionEvidenceMode.DETERMINISTIC:
+                self._evidence = None
+                _LOG.debug("cognition_evidence_mode disabled")
+            return
+        if type(ledger) is not EvidenceLedger:
+            raise TypeError("evidence must be EvidenceLedger")
+        if ledger.owner_id != owner.value:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._evidence = ledger
+        _LOG.debug(
+            "evidence_ledger_carried sources=%s items=%s tick=%s",
+            len(ledger.sources),
+            len(ledger.items),
             tick,
         )
 
@@ -2326,6 +2359,7 @@ class AgentRuntime:
                 organization_agency=self._organization_agency,
                 formal_rules=self._formal_rules,
                 disputes=self._disputes,
+                evidence=self._evidence,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2824,6 +2858,10 @@ class AgentRuntime:
         )
         self._commit_disputes(
             getattr(pending.loop_result, "disputes", None),
+            pending.tick,
+        )
+        self._commit_evidence(
+            getattr(pending.loop_result, "evidence", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3417,6 +3455,15 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        self._evidence = getattr(checkpoint, "evidence", None)
+        if (
+            self._evidence is not None
+            and getattr(self._evidence, "owner_id", None) != self._agent.agent_id.value
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._organization_concepts is not None
             and getattr(self._organization_concepts, "owner_id", None)
@@ -3530,6 +3577,7 @@ class AgentRuntime:
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
             disputes=self._disputes,
+            evidence=self._evidence,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

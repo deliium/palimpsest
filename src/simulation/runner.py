@@ -5094,6 +5094,7 @@ class SimulationRunner:
             organization_agency_ledgers=(self.export_organization_agency_ledgers()),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
+            evidence_ledgers=(self.export_evidence_ledgers()),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5515,6 +5516,22 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_formal_rule_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+
+    def export_evidence_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered evidence ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "evidence", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "evidence_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)

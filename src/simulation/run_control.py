@@ -616,6 +616,7 @@ class AgentRuntimeCheckpoint:
     organization_agency: object | None = None
     formal_rules: object | None = None
     disputes: object | None = None
+    evidence: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -802,6 +803,13 @@ class AgentRuntimeCheckpoint:
             self.disputes,
             self.agent_id,
             field_name="disputes",
+        )
+        from agents.cognition.evidence_testimony import require_owner_evidence
+
+        require_owner_evidence(
+            self.evidence,
+            self.agent_id,
+            field_name="evidence",
         )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,

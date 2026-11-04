@@ -1506,6 +1506,7 @@ class CognitiveLoop:
             prepared_organization_agency=self._prepared_organization_agency,
             prepared_formal_rules=self._prepared_formal_rules,
             prepared_disputes=self._prepared_disputes,
+            prepared_evidence=self._prepared_evidence,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1554,6 +1555,7 @@ class CognitiveLoop:
         self._prepared_organization_agency = state.prepared_organization_agency
         self._prepared_formal_rules = state.prepared_formal_rules
         self._prepared_disputes = state.prepared_disputes
+        self._prepared_evidence = state.prepared_evidence
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2643,6 +2645,224 @@ class CognitiveLoop:
             self._dispute_mode.value,
             len(updated.cases),
             len(updated.claims),
+        )
+        return updated
+
+
+    def _prepare_evidence(
+        self, loop_input: CognitiveLoopInput, memory: object | None
+    ) -> object | None:
+        """Refresh one owner's evidence ledger from owner-visible inputs.
+
+        Only the owner's own observation, recall, commitments, reputation,
+        relationships, offices, institutions, and rules are read. No world
+        state, event store, command, or peer ledger enters this method.
+        """
+        from agents.cognition.configuration import CognitionEvidenceMode
+        from agents.cognition.evidence_testimony import (
+            EvidenceIntegrityBelief,
+            EvidenceLedger,
+            EvidenceObservedReference,
+            EvidenceOwnerContext,
+            EvidenceReferenceKind,
+            EvidenceRememberedReference,
+            apply_evidence_update,
+            detect_evidence_contradictions,
+            empty_evidence_ledger,
+            evaluate_evidence,
+        )
+
+        if self._evidence_mode is not CognitionEvidenceMode.DETERMINISTIC:
+            self._prepared_evidence = None
+            return None
+        snapshot = loop_input.snapshot
+        tick = loop_input.observation.tick
+        carried = None if snapshot is None else getattr(snapshot, "evidence", None)
+        prior = (
+            carried
+            if type(carried) is EvidenceLedger
+            else empty_evidence_ledger(loop_input.agent_id, tick=tick)
+        )
+        observation = loop_input.observation
+        integrity_by_value = {
+            "intact": EvidenceIntegrityBelief.INTACT,
+            "damaged": EvidenceIntegrityBelief.DAMAGED,
+            "partially_lost": EvidenceIntegrityBelief.PARTIALLY_LOST,
+            "destroyed": EvidenceIntegrityBelief.DESTROYED_BELIEF,
+        }
+        observed: list[EvidenceObservedReference] = []
+        for artifact in observation.artifacts:
+            integrity = getattr(artifact, "integrity", None)
+            observed.append(
+                EvidenceObservedReference(
+                    reference_kind=EvidenceReferenceKind.ARTIFACT,
+                    reference_id=artifact.entity_id.value,
+                    tick=tick,
+                    integrity=integrity_by_value.get(
+                        getattr(integrity, "value", ""),
+                        EvidenceIntegrityBelief.UNCERTAIN,
+                    ),
+                    actor_id=artifact.author_id.value,
+                    custodian_token=(
+                        None
+                        if artifact.custodian_repository_id is None
+                        else artifact.custodian_repository_id.value
+                    ),
+                    owner_id=loop_input.agent_id.value,
+                )
+            )
+        for repository in observation.repositories:
+            observed.append(
+                EvidenceObservedReference(
+                    reference_kind=EvidenceReferenceKind.REPOSITORY_ENTRY,
+                    reference_id=repository.repository_id.value,
+                    tick=tick,
+                    location_token=repository.location_id.value,
+                    owner_id=loop_input.agent_id.value,
+                )
+            )
+        for index, occurrence in enumerate(observation.occurrences):
+            correlation = getattr(occurrence.provenance, "source_event_id", None)
+            observed.append(
+                EvidenceObservedReference(
+                    reference_kind=EvidenceReferenceKind.OBSERVED_OCCURRENCE,
+                    reference_id=f"{occurrence.kind}-{index}",
+                    tick=tick,
+                    correlation_id=(
+                        None if correlation is None else correlation.value
+                    ),
+                    actor_id=(
+                        None
+                        if occurrence.actor_id is None
+                        else occurrence.actor_id.value
+                    ),
+                    owner_id=loop_input.agent_id.value,
+                )
+            )
+        frames: list[Any] = []
+        from agents.cognition.evidence_testimony_communication import (
+            parse_evidence_frame_relation,
+        )
+
+        for communication in observation.communications:
+            observed.append(
+                EvidenceObservedReference(
+                    reference_kind=EvidenceReferenceKind.OBSERVED_COMMUNICATION,
+                    reference_id=communication.utterance.declared.communication_id.value,
+                    tick=tick,
+                    correlation_id=(
+                        None
+                        if communication.provenance.source_event_id is None
+                        else communication.provenance.source_event_id.value
+                    ),
+                    actor_id=communication.speaker_id.value,
+                    owner_id=loop_input.agent_id.value,
+                )
+            )
+            for relation in communication.utterance.content.relations:
+                frame = parse_evidence_frame_relation(relation)
+                if frame is not None and getattr(frame, "witness_id", None) in (
+                    None,
+                    communication.speaker_id.value,
+                ):
+                    frames.append(frame)
+        remembered: list[EvidenceRememberedReference] = []
+        if memory is not None:
+            for reconstruction in getattr(memory, "reconstructions", ()):
+                owner_id = getattr(reconstruction, "owner_id", None)
+                if owner_id is not None and owner_id != loop_input.agent_id:
+                    continue
+                anchor = (
+                    reconstruction.source_memory_ids[0].value
+                    if reconstruction.source_memory_ids
+                    else reconstruction.reconstruction_id.value
+                )
+                remembered.append(
+                    EvidenceRememberedReference(
+                        memory_id=anchor,
+                        tick=tick,
+                        confidence=reconstruction.confidence,
+                        reconstruction_id=reconstruction.reconstruction_id.value,
+                        owner_id=loop_input.agent_id.value,
+                    )
+                )
+        relationship_trust: list[tuple[str, float]] = []
+        for profile in (() if snapshot is None else snapshot.relationships):
+            if profile.source_id != loop_input.agent_id:
+                continue
+            for dimension in profile.dimensions:
+                if dimension.dimension.value != "trust":
+                    continue
+                relationship_trust.append(
+                    (profile.target_id.value, (dimension.value + 1.0) / 2.0)
+                )
+        reputation_bands: list[tuple[str, str]] = []
+        reputation_ledger = None if snapshot is None else snapshot.reputation
+        for profile in getattr(reputation_ledger, "profiles", ()):
+            reliability = profile.reliability.value
+            if reliability >= 0.5:
+                band = "trusted"
+            elif reliability >= 0.2:
+                band = "reliable"
+            elif reliability <= -0.5:
+                band = "distrusted"
+            elif reliability <= -0.2:
+                band = "unreliable"
+            else:
+                band = "neutral"
+            reputation_bands.append((profile.target_id.value, band))
+        context = EvidenceOwnerContext(
+            relationship_trust=tuple(sorted(relationship_trust)),
+            reputation_bands=tuple(sorted(reputation_bands)),
+            governing_rule_ids=tuple(
+                row.rule_id
+                for row in getattr(
+                    None if snapshot is None else snapshot.formal_rules, "rules", ()
+                )
+            ),
+            office_refs=tuple(
+                row.office_id
+                for row in getattr(
+                    None if snapshot is None else snapshot.office_concepts,
+                    "offices",
+                    (),
+                )
+            ),
+            institution_refs=tuple(
+                row.concept_id
+                for row in getattr(
+                    None if snapshot is None else snapshot.institution_concepts,
+                    "concepts",
+                    (),
+                )
+            ),
+        )
+        updated = apply_evidence_update(
+            prior,
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            frames=tuple(frames),
+            observed=tuple(observed),
+            remembered=tuple(remembered),
+        )
+        updated = detect_evidence_contradictions(
+            updated, owner_id=loop_input.agent_id, tick=tick
+        )
+        updated = evaluate_evidence(
+            updated,
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            context=context,
+        )
+        self._prepared_evidence = updated
+        _LOG.debug(
+            "evidence_prepare mode=%s sources=%s testimony=%s items=%s "
+            "contradictions=%s",
+            self._evidence_mode.value,
+            len(updated.sources),
+            len(updated.testimony),
+            len(updated.items),
+            len(updated.contradictions),
         )
         return updated
 
@@ -4729,6 +4949,7 @@ class CognitiveLoop:
         )
         formal_rules = self._prepare_formal_rules(loop_input)
         disputes = self._prepare_disputes(loop_input, memory)
+        evidence = self._prepare_evidence(loop_input, memory)
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -5099,6 +5320,7 @@ class CognitiveLoop:
             organization_agency=organization_agency,
             formal_rules=formal_rules,
             disputes=disputes,
+            evidence=evidence,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5421,6 +5643,22 @@ class CognitiveLoop:
                 identity=(None if snapshot is None else snapshot.social_identity),
                 policy=self._dispute_policy,
             )
+        evidence = proposal.evidence
+        from agents.cognition.configuration import CognitionEvidenceMode
+        from agents.cognition.evidence_testimony import (
+            EvidenceLedger,
+            record_evidence_utterance,
+        )
+
+        if self._evidence_mode is CognitionEvidenceMode.DETERMINISTIC and (
+            type(evidence) is EvidenceLedger
+        ):
+            evidence = record_evidence_utterance(
+                evidence,
+                command,
+                owner_id=loop_input.agent_id,
+                tick=loop_input.observation.tick,
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -5463,6 +5701,7 @@ class CognitiveLoop:
             organization_agency=proposal.organization_agency,
             formal_rules=proposal.formal_rules,
             disputes=disputes,
+            evidence=evidence,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,
