@@ -43,13 +43,21 @@ from analysis.evidence_testimony_contract import (
 )
 from analysis.specifications import METRIC_FAMILY_COUNT
 from observer.version import SEMANTIC_EVENT_TYPES
-from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
+from simulation.compatibility import ALEMBIC_HEAD_REVISION, V4_OWNED_CAPABILITY_FLAGS
+from simulation.dispute_models import DISPUTE_SNAPSHOT_SCHEMA
 from simulation.evidence_testimony_models import (
     EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA,
 )
 from simulation.evidence_testimony_ports import EVIDENCE_TESTIMONY_CURSOR_PURPOSES
+from simulation.formal_rule_models import FORMAL_RULE_SNAPSHOT_SCHEMA
+from simulation.organization_models import ORGANIZATION_SNAPSHOT_SCHEMA_VERSION
+from simulation.persistence import (
+    ACCEPTED_EVENT_SCHEMA_VERSIONS,
+    ACCEPTED_PERSISTENCE_CODEC_VERSIONS,
+)
 from simulation.v4_architecture import V4_CAPABILITY_FLAGS, V4_CONTEXTS
 from world._rules import COMMAND_RULE_MATRIX
+from world.events import EVENT_SCHEMA_REPLAY_V22
 
 pytestmark = pytest.mark.architecture
 
@@ -288,6 +296,14 @@ def test_vocabulary_parity_matches_cognition() -> None:
 def test_compatibility_pins_are_exact() -> None:
     assert METRIC_FAMILY_COUNT == 157
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA == "evidence-testimony-snapshot-v1"
+    assert DISPUTE_SNAPSHOT_SCHEMA == "dispute-resolution-snapshot-v1"
+    assert FORMAL_RULE_SNAPSHOT_SCHEMA == "formal-rule-snapshot-v1"
+    assert ORGANIZATION_SNAPSHOT_SCHEMA_VERSION == "organization-snapshot-v3"
+    assert EVENT_SCHEMA_REPLAY_V22 == 22
+    assert EVENT_SCHEMA_REPLAY_V22 in ACCEPTED_EVENT_SCHEMA_VERSIONS
+    assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert ALEMBIC_HEAD_REVISION == "0017"
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 14

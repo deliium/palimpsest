@@ -5,7 +5,7 @@ Mode: ultra
 Branch: main
 Created: 2026-11-04
 Plan identifier: `v4-08-evidence-testimony`
-Status: planned; not implemented
+Status: implemented; not certified (see Verification Receipt)
 
 ## Original Request
 
@@ -379,26 +379,78 @@ certification; it is never a skip-pass.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | `executed_passed` | `uv run pytest tests/unit tests/architecture -q --cov --cov-report=term` -> 8,356 passed, 78% coverage |
-| Focused V4-08 suite | `executed_passed` | Evidence unit/architecture/E2E selection -> 190 passed, 2 deselected |
-| V4/organization/formal-rule/dispute regression selection | `executed_passed` | `-k "organization or v4 or formal_rule or dispute or evidence_testimony or metric_specification or runner_config_v56"` -> 1,637 passed, 6,719 deselected |
+| Python unit + architecture with coverage | `executed_passed` | `uv run pytest tests/unit tests/architecture -q --cov --cov-report=term` -> 8,360 passed, 78% coverage |
+| Focused V4-08 suite | `executed_passed` | Evidence unit/architecture/E2E selection -> 181 passed, 3 deselected |
+| V4/organization/formal-rule/dispute regression selection | `executed_passed` | `-k "organization or v4 or formal_rule or dispute or evidence_testimony or metric_specification or runner_config_v56"` -> 1,646 passed, 6,719 deselected |
 | Documentation parity | `executed_passed` | Docs parity suites -> 32 passed; evidence docs parity -> 4 passed |
 | Ruff | `executed_passed` | `uv run ruff check src tests` -> all checks passed |
 | Mypy | `executed_passed` | `uv run mypy src tests` -> 1,957 files, no issues |
 | Import-linter | `executed_passed` | `uv run lint-imports` -> 25 kept, 0 broken |
-| Integration (`-m "integration and not scale"`) | `unexecuted` | Command ran: 44 passed, 60 environment-gated skips. Prerequisite: disposable `pgvector/pgvector:pg17` database named `palimpsest_test` for the skipped subsets |
+| Integration (`-m "integration and not scale"`) | `executed_passed` | `PALIMPSEST_TEST_DATABASE_URL=postgresql+asyncpg://…@127.0.0.1:5432/palimpsest_test uv run pytest -m "integration and not scale" -q` -> 104 passed against disposable `pgvector/pgvector:pg17` |
 | Integration including scale | `unexecuted` | Prerequisite: 100,000-tick generational/scale lane |
 | Docker Compose config | `executed_passed` | `docker compose config --quiet` -> exit 0 |
 | Compose/browser acceptance | `unexecuted` | Prerequisite: pinned API image and Playwright chromium |
-| Godot 4.7.2 regression | `unexecuted` | Prerequisite: `GODOT_BIN` |
+| Godot 4.7.2 regression | `executed_passed` | Pinned Godot 4.7.2 (SHA-512 verified) editor pass + `run_protocol.gd` -> `godot_protocol_tests failed=0` |
 | Benchmark/scale lane | `unexecuted` | Prerequisite: multi-hour 100,000-tick harness |
 | Research UI tests | `executed_passed` | `vitest run` -> 52 files, 266 tests passed |
 | Research UI type/static checks | `executed_passed` | `svelte-check` 0 errors/0 warnings; `tsc -p tsconfig.node.json` passed |
 | Research UI build | `executed_passed` | `vite build` completed |
 
-Certification outcome: **not certified**. Integration/database, integration-scale,
-Compose/browser, Godot 4.7.2, and benchmark/scale remain `unexecuted` with
-explicit prerequisites.
+Certification outcome: **not certified**. Integration-scale, Compose/browser
+acceptance, and benchmark/scale remain `unexecuted` with explicit prerequisites.
+The integration-database and Godot 4.7.2 lanes are now `executed_passed`.
+
+### Task 24 audit
+
+The final audit re-read every authority claim against the implementation and the
+receipt above. Results:
+
+- `index.md` is the only checkbox source; 24/24 tasks are checked, all 8 Phase
+  Index links resolve, and every `Task N` maps to exactly one `## Task N:` phase
+  section.
+- `legal_disputes` remains the third owned V4 flag; `V4_CONTEXTS` is 14,
+  `V4_CAPABILITY_FLAGS` is 12, and `V4_OWNED_CAPABILITY_FLAGS` is exactly
+  `{organizations, formal_rules, legal_disputes}`. No `runner-config-v57`, new
+  flag, context, root field, or per-agent runner key exists.
+- No new event, command, observer semantic type, write pair, `/v2` route, or
+  migration: replay `EVENT_SCHEMA_REPLAY_V22` (22), codec `v20`, commands 43,
+  observer semantics 73, Alembic `0017`, no `0018`.
+- Six GET-only `/v1/.../evidence` routes and six cursor purposes exist; the
+  organization, formal-rule, and dispute route sets are unchanged.
+- `evidence-testimony-snapshot-v1` and `evidence-testimony-store-v1` are
+  independent; dispute, organization v1/v2/v3, and `formal-rule-snapshot-v1`
+  codecs remain decodable and byte-verifiable.
+- `WorldEngine` and admission never read an evidence ledger; the E2E and
+  physical-distinction suite prove a contested-but-possible command is admitted
+  and an impossible command is rejected.
+- Metric families are 157; the first 154 are unchanged; completed-run assembly
+  emits all three evidence documents.
+- `docs/evidence-testimony.md` is canonical, README and `docs/disputes.md` link
+  it, and the documentation parity suite checks headings, routes, settings,
+  schema names, and counts.
+- `.ai-factory/RULES.md` was not edited by V4-08. V4-08 is now registered under
+  M8 in `.ai-factory/ROADMAP.md` during the follow-up roadmap update.
+- The receipt is three-state and honest: every `unexecuted` row names its
+  prerequisite, and certification remains withheld.
+
+Audit verdict: implementation complete; certification **not certified** pending
+the integration-scale, Compose/browser, and benchmark/scale lanes.
+
+Follow-up repair (2026-11-04): completed the Task 23 documentation and context
+updates (`docs/research-api.md`, `docs/configuration.md`,
+`.ai-factory/DESCRIPTION.md`, `.ai-factory/ARCHITECTURE.md`,
+`docs/architecture.md`, canonical headings/non-goals/non-claims, and the
+`docs/disputes.md` See-also link) and recorded this audit. Re-ran the focused
+evidence suite (181 passed), the V4 regression selection (1,646 passed), the
+four documentation parity suites (32 passed), Ruff, and Mypy. The full
+unit+architecture lane (8,360 passed, 78% coverage) was recorded before this
+follow-up.
+
+The same follow-up executed the integration-database lane against a disposable
+`pgvector/pgvector:pg17` instance (`104 passed`) and the pinned Godot 4.7.2
+protocol suite (`godot_protocol_tests failed=0`), added a two-owner `Talk`/`ev_v1`
+E2E to the real runner path, and registered V4-08 under M8 in
+`.ai-factory/ROADMAP.md`.
 
 ## Commit Plan
 

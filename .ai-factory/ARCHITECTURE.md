@@ -768,3 +768,48 @@ types, 157 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
 are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
 unowned.
+
+### V4-08 evidence and testimony seam
+
+V4-08 deepens the owned `legal_disputes` context; it adds no flag, context,
+`runner-config-v57`, root field, per-agent runner key, command, event, observer
+semantic type, write pair, `/v2` route, or migration. `agents.cognition
+.evidence_testimony` owns one owner's general evidence ledger under
+`evidence-testimony.v1`: seven requested source kinds plus closed `unknown`,
+mandatory provenance (a visible reference anchor plus an opaque correlation
+token), an optional chain-of-custody belief limited to artifact, written-record,
+and physical-state sources, quantized confidence, closed interpretation,
+retained contradictions, and owner-relative evaluation. Evidence is never truth:
+witnesses may misremember, records may be wrong, artifacts may be misinterpreted,
+and no truth, authenticity, verdict, guilt, liability, winner, oracle, registry,
+or global trust score exists. Direct and communicated testimony are distinct;
+shared roots are never independent corroboration; a speaker cannot attribute
+testimony to another party. Bounded `ev_v1` claims travel inside existing
+`Talk`/`Ask`/`Tell`, and no evidence helper constructs, submits, resolves, or
+executes an `AgentCommand`.
+
+`WorldEngine`, perception, admission, stop selectors, memory, prompts, and
+observer semantics never read the ledger. `apply_evidence_update` accepts only
+owner-scoped DTOs and frames; `evaluate_evidence` receives only an
+`EvidenceOwnerContext`. `analysis.evidence_testimony_*` harvests exported
+ledgers, derives stable `evid-` candidates and forward-only lineage, keeps
+objective counts, owner rows, and analytical candidates in three separated
+layers with a hard leakage guard, and classifies
+`consistent`/`unresolved`/`inconsistent`/`not_applicable` objective alignment for
+researchers only. That alignment never reaches cognition, prompts, memory, world
+state, stop selectors, or observer semantics. `simulation.evidence_testimony_*`
+owns canonical bounded `evidence-testimony-snapshot-v1`; `experiments
+.evidence_testimony_*` is the only bridge from analysis to artifact;
+`persistence.evidence_testimony_filesystem` stores
+`evidence-testimony-store-v1` atomically with quotas; six GET-only `/v1` evidence
+routes require `SUBJECTIVE_DEBUG` and return `evidence_testimony_disabled` when
+unconfigured; the Svelte client adds a read-only Evidence panel. Three metric
+families (`evidence_source_structure@1`, `evidence_provenance_continuity@1`,
+`evidence_objective_alignment@1`) raise the catalog from 154 to 157 while the
+first 154 keep their ids, order, versions, and value keys.
+
+Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
+types, 157 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
+are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
+unowned. See `docs/evidence-testimony.md`.

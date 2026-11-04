@@ -343,3 +343,29 @@ Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
 metric families 157, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017` with no `0018`; three V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned.
+
+V4-08 (evidence and testimony, 2026-11-04) deepens the owned `legal_disputes`
+context with a general owner-scoped evidence ledger; it adds no capability flag,
+`runner-config-v57`, root field, per-agent runner key, command, event, observer
+semantic type, write pair, `/v2` route, or migration. Seven requested source
+kinds (witness testimony, written record, artifact, physical state, prior
+agreement, reputation, remembered event) plus closed `unknown` carry mandatory
+provenance, an optional custody-belief chain, quantized confidence, closed
+interpretation, retained contradictions, and owner-relative trust evaluation.
+Evidence is never truth: witnesses may misremember, records may be wrong, and
+artifacts may be misinterpreted, and no truth/authenticity/verdict/guilt/
+liability/winner field or oracle exists. Direct and communicated testimony are
+distinct and shared roots are never independent corroboration. Bounded `ev_v1`
+claims travel inside existing `Talk`/`Ask`/`Tell`; `WorldEngine` never reads the
+ledger. Detached `analysis.evidence_testimony_*` derives stable `evid-`
+candidates, keeps objective counts, owner rows, and analytical candidates in
+three separated layers, and classifies researcher-only objective alignment
+(`consistent`, `unresolved`, `inconsistent`, `not_applicable`) that never
+reaches cognition. Canonical `evidence-testimony-snapshot-v1`,
+`evidence-testimony-store-v1`, six GET-only `/v1/simulations/{run_id}/evidence`
+routes under `SUBJECTIVE_DEBUG`, and a read-only Research UI Evidence panel are
+added. Three metric families (154 → 157) are appended. Pins: runner v4/v55/v56,
+result v2/v3, commands 43, observer semantic types 73, metric families 157,
+14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, Alembic `0017` with no `0018`; three V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned.

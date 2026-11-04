@@ -229,3 +229,40 @@ def test_unknown_schema_and_nan_fail_closed() -> None:
         )
     with pytest.raises(EvidenceTestimonyArtifactError):
         decode_evidence_testimony_snapshot(text.replace('"mid"', "NaN", 1))
+
+
+def test_existing_v4_snapshots_remain_decodable() -> None:
+    """V4-08 adds a sibling schema; it never widens existing snapshots."""
+
+    from simulation.dispute_codec import (
+        decode_dispute_snapshot,
+        encode_dispute_snapshot,
+    )
+    from simulation.formal_rule_codec import (
+        decode_formal_rule_snapshot,
+        encode_formal_rule_snapshot,
+    )
+    from simulation.organization_codec import (
+        decode_organization_snapshot,
+        encode_organization_snapshot,
+    )
+    from tests.unit.organization_artifact_helpers import example_snapshot
+    from tests.unit.test_dispute_snapshot import _snapshot as dispute_snapshot
+    from tests.unit.test_formal_rule_snapshot import (
+        _snapshot as formal_rule_snapshot,
+    )
+
+    dispute_payload = encode_dispute_snapshot(dispute_snapshot())
+    assert encode_dispute_snapshot(decode_dispute_snapshot(dispute_payload)) == (
+        dispute_payload
+    )
+
+    organization_payload = encode_organization_snapshot(example_snapshot())
+    assert encode_organization_snapshot(
+        decode_organization_snapshot(organization_payload)
+    ) == organization_payload
+
+    formal_payload = encode_formal_rule_snapshot(formal_rule_snapshot())
+    assert encode_formal_rule_snapshot(
+        decode_formal_rule_snapshot(formal_payload)
+    ) == formal_payload

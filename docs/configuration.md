@@ -341,6 +341,23 @@ Dispute publication and reads are composition settings, not runner capabilities:
   read-only API routes. `dispute_cursor_key` must be at least 32 UTF-8 bytes.
 - An unset root yields `503 dispute_disabled` and a CLI receipt of `disabled`.
 
+## Evidence and testimony (`runner-config-v56`)
+
+V4-08 deepens `legal_disputes` with an owner-scoped evidence ledger. It adds no
+capability flag, `runner-config-v57`, root field, or per-agent runner key; the
+ledger is active exactly when `legal_disputes` is enabled on the accepted
+`runner-config-v56` keyset. Evidence publication and reads are composition
+settings, not runner capabilities:
+
+- `--evidence-root` (default off), `--evidence-max-publications` (1–1024,
+  default 16), and `--evidence-max-bytes` (1–268435456, default 8 MiB) control
+  the opt-in research CLI producer.
+- `PALIMPSEST_EVIDENCE_ROOT` and `PALIMPSEST_EVIDENCE_CURSOR_KEY` configure the
+  six read-only API routes. The cursor key must be at least 32 UTF-8 bytes.
+- An unset root yields `503 evidence_testimony_disabled` and a CLI receipt of
+  `disabled`. Publication is post-completion and never changes the scientific
+  result.
+
 Operations deepen `organizations`; formal rules own `formal_rules`; structured
 disputes own `legal_disputes`. There is no `runner-config-v57`, no
 `organization_operations_mode`, and no new root field. Absent evidence yields an

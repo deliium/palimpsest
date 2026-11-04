@@ -259,6 +259,7 @@ predictive-power, capacity, throughput, or composite-civilization-score claim.
 
 ## See also
 
+- [Evidence and testimony](evidence-testimony.md)
 - [Conflict mediation](mediation.md)
 - [Formal social rules](formal-rules.md)
 - [V4 architecture](v4-architecture.md)

@@ -45,6 +45,15 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
   - `GET /v1/simulations/{run_id}/disputes/lineage`
 
   Every paged route uses a purpose-bound cursor bound to the publication digest; a changed run, filter, publication, or digest yields `400 dispute_cursor_invalid`, and an expired cursor yields `410 dispute_cursor_expired`. `PALIMPSEST_DISPUTE_CURSOR_KEY` keeps cursors restart-stable. See [Disputes](disputes.md).
+- Evidence-testimony reads require `SUBJECTIVE_DEBUG` (the `subjective_debug` capability); six GET-only routes serve a published `evidence-testimony-snapshot-v1`, return `503 evidence_testimony_disabled` when `PALIMPSEST_EVIDENCE_ROOT` is unset, and never expose capability flags or owner ids:
+  - `GET /v1/simulations/{run_id}/evidence`
+  - `GET /v1/simulations/{run_id}/evidence/candidates`
+  - `GET /v1/simulations/{run_id}/evidence/candidates/{candidate_id}`
+  - `GET /v1/simulations/{run_id}/evidence/candidates/{candidate_id}/sources`
+  - `GET /v1/simulations/{run_id}/evidence/candidates/{candidate_id}/contradictions`
+  - `GET /v1/simulations/{run_id}/evidence/lineage`
+
+  Cursor purposes are exactly `summary`, `candidates`, `candidate`, `sources`, `contradictions`, and `lineage`; TTL is 900 seconds. A changed run, filter, publication, or digest yields `400 evidence_testimony_cursor_invalid`, and an expired cursor yields `410 evidence_testimony_cursor_expired`. Each response is charged against a 2 MiB budget. `PALIMPSEST_EVIDENCE_CURSOR_KEY` keeps cursors restart-stable. See [Evidence and testimony](evidence-testimony.md).
 - Organization reads under `/v1/simulations/{run_id}/organizations[/candidates|/lineage|/operations|/collective-agency]` require `subjective_debug`; six GET-only routes serve a published `organization-snapshot-v3` (v1/v2 remain readable), return `503 organization_disabled` when `PALIMPSEST_ORGANIZATION_ROOT` is unset, and never expose capability flags. The operations route filters by `domain` and `organization_id`; the collective-agency route filters by `recognition` and `organization_id`. Every paged route uses a purpose-bound cursor bound to the publication digest; a changed filter, run, publication, or digest yields `400 organization_cursor_invalid`, and an expired cursor yields `410 organization_cursor_expired`. `PALIMPSEST_ORGANIZATION_CURSOR_KEY` keeps cursors restart-stable.
 - Macro-society reads under `/v1/simulations/{run_id}/macro-societies[/candidates|/lineage]` require `subjective_debug`; four GET-only routes serve a published `macro-society-snapshot-v1`, return `503 macro_society_disabled` when `PALIMPSEST_MACRO_SOCIETY_ROOT` is unset, and never expose capability flags. `PALIMPSEST_MACRO_SOCIETY_CURSOR_KEY` keeps cursors restart-stable; when absent a per-process key is used. See [Macro-societies](macro-societies.md).
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)

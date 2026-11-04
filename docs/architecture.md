@@ -598,3 +598,40 @@ families, with 14 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
 `0018`.
+
+## V4-08 evidence and testimony contract
+
+V4-08 deepens the owned `legal_disputes` context with a general owner-scoped
+evidence ledger; it adds no capability flag, `runner-config-v57`, root field,
+per-agent runner key, command, event, observer semantic type, write pair,
+`/v2` route, or SQL migration. Evidence is one owner's belief about a source,
+its provenance, an optional chain of custody, confidence, interpretation, and
+retained contradictions. It is never truth, proof, authenticity, guilt,
+liability, or a verdict, and no evidence oracle, global registry, or trust
+oracle exists. Witnesses may misremember, records may be wrong, and artifacts
+may be misinterpreted.
+
+`agents.cognition.evidence_testimony` owns the closed vocabulary, records, and
+ledger; bounded `ev_v1` claims travel inside existing `Talk`/`Ask`/`Tell`.
+`analysis.evidence_testimony_*` harvests exported ledgers, derives stable
+`evid-` candidates and forward-only lineage, keeps objective counts, owner rows,
+and analytical candidates in three separated layers, and classifies
+`consistent`/`unresolved`/`inconsistent`/`not_applicable` objective alignment
+for researchers only. That alignment never reaches cognition, prompts, memory,
+world state, observer semantics, or stop selectors. `WorldEngine` never reads an
+evidence ledger: a socially contested but physically possible command is still
+admitted, and a physically impossible command is still rejected.
+
+`simulation.evidence_testimony_*` owns canonical bounded
+`evidence-testimony-snapshot-v1`, paging, and read/publication ports;
+`experiments.evidence_testimony_*` is the only analysis-to-artifact bridge;
+`persistence.evidence_testimony_filesystem` stores `evidence-testimony-store-v1`
+atomically with quotas; six GET-only `/v1` evidence routes require
+`SUBJECTIVE_DEBUG` and return `evidence_testimony_disabled` when unconfigured;
+the Research UI adds a read-only Evidence panel. The catalog grows from 154 to
+157 with `evidence_source_structure@1`, `evidence_provenance_continuity@1`, and
+`evidence_objective_alignment@1`. Pins remain runner v4/v55/v56, result v2/v3,
+43 commands, 73 observer semantic types, 157 metric families, replay-v22/codec
+v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4
+flags remain owned (`organizations`, `formal_rules`, `legal_disputes`).
+See [Evidence and testimony](evidence-testimony.md).
