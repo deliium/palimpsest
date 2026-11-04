@@ -36,10 +36,12 @@ from simulation.runner_models import (
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     V4CapabilityFlags,
 )
+from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 from simulation.v4_architecture import (
     V4_ANALYSIS_ONLY_CONTEXTS,
     V4_CAPABILITY_FLAGS,
     V4_CONTEXT_BY_ID,
+    V4_CONTEXT_MAP_VERSION,
     V4_CONTEXTS,
     V4Authority,
     V4ContextId,
@@ -175,6 +177,28 @@ def test_context_registry_and_capability_ownership() -> None:
         else:
             assert flags.unimplemented_enabled_names() == (name,)
             assert flags.owned_enabled_names() == ()
+
+
+def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
+    """V4-08 adds no context, flag, runner schema, or reserved surface."""
+
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
+    assert len(V4_CONTEXTS) == 14
+    assert len(V4_CAPABILITY_FLAGS) == 12
+    assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
+        {"organizations", "formal_rules", "legal_disputes"}
+    )
+    assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
+    assert V4_CONTEXT_BY_ID[V4ContextId.LEGAL_DISPUTES].authority is (
+        V4Authority.OWNER_SCOPED
+    )
+
+    offenders = [
+        str(path.relative_to(SRC))
+        for path in _first_party_python_files()
+        if "runner-config-v57" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []
 
 
 def test_reservations_and_prerequisite_graph() -> None:

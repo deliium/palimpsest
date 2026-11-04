@@ -1003,6 +1003,23 @@ def _generational_narrative_spec_digest(spec: object | None) -> str | None:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def _evidence_testimony_enabled(config: SimulationRunnerConfig) -> bool:
+    """Derive evidence-testimony activation from the owned ``legal_disputes`` flag.
+
+    V4-08 deepens the existing owner-scoped ``legal_disputes`` context. It adds
+    no capability flag, runner schema, root field, or per-agent runner key, so
+    activation is a pure function of that one flag.
+    """
+
+    enabled = config.v4_capability_flags.legal_disputes
+    _LOG.debug(
+        "evidence_testimony_seam enabled=%s runner_schema=%s",
+        enabled,
+        config.schema_version,
+    )
+    return enabled
+
+
 def _cognition_config_for(
     spec: AgentCognitionSpec,
     *,
@@ -1318,8 +1335,13 @@ def _cognition_config_for(
         institutional_decay_policy = default_institutional_decay_policy()
     from agents.cognition.configuration import (
         CognitionDisputeMode,
+        CognitionEvidenceMode,
         CognitionFormalRuleMode,
         CognitionOrganizationMode,
+    )
+    from agents.cognition.evidence_testimony import (
+        EVIDENCE_TESTIMONY_POLICY_VERSION,
+        default_evidence_policy,
     )
     from agents.cognition.formal_rules import (
         FORMAL_RULE_POLICY_VERSION,
@@ -1378,9 +1400,7 @@ def _cognition_config_for(
         if formal_rules_enabled
         else CognitionFormalRuleMode.DISABLED
     )
-    formal_rule_policy = (
-        default_formal_rule_policy() if formal_rules_enabled else None
-    )
+    formal_rule_policy = default_formal_rule_policy() if formal_rules_enabled else None
     if formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC:
         _LOG.info(
             "cognition_formal_rule_mode mode=%s policy_version=%s",
@@ -1403,6 +1423,21 @@ def _cognition_config_for(
         "cognition_dispute_mode mode=%s policy_version=%s",
         dispute_mode.value,
         DISPUTE_POLICY_VERSION if dispute_policy is not None else None,
+    )
+    evidence_mode = (
+        CognitionEvidenceMode.DETERMINISTIC
+        if legal_disputes_enabled
+        else CognitionEvidenceMode.DISABLED
+    )
+    evidence_policy = default_evidence_policy() if legal_disputes_enabled else None
+    _LOG.info(
+        "cognition_evidence_mode mode=%s policy_version=%s",
+        evidence_mode.value,
+        EVIDENCE_TESTIMONY_POLICY_VERSION if evidence_policy is not None else None,
+    )
+    _LOG.debug(
+        "cognition_evidence_mode_source flag=%s",
+        legal_disputes_enabled,
     )
     _LOG.debug(
         "cognition_config_institutional_decay mode=%s policy_version=%s",
@@ -1536,6 +1571,8 @@ def _cognition_config_for(
         formal_rule_policy=formal_rule_policy,
         dispute_mode=dispute_mode,
         dispute_policy=dispute_policy,
+        evidence_mode=evidence_mode,
+        evidence_policy=evidence_policy,
         cultural_narrative_mode=narrative_mode,
         cultural_narrative_policy=narrative_policy,
         generational_narrative_spec_digest=_generational_narrative_spec_digest(
@@ -2210,9 +2247,7 @@ class SimulationRunner:
                 len(v4_enabled_flags),
                 len(v4_unimplemented),
             )
-            _LOG.info(
-                "runner_v4_owned_flags count=%s", len(V4_OWNED_CAPABILITY_FLAGS)
-            )
+            _LOG.info("runner_v4_owned_flags count=%s", len(V4_OWNED_CAPABILITY_FLAGS))
             if unimplemented_flags:
                 _LOG.error(
                     "runner_construction_capability_unimplemented "

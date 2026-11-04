@@ -46,6 +46,11 @@ from agents.cognition.cultural_narratives import (
     default_cultural_narrative_policy,
 )
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
+from agents.cognition.evidence_testimony import (
+    EVIDENCE_TESTIMONY_POLICY_VERSION,
+    EvidencePolicy,
+    default_evidence_policy,
+)
 from agents.cognition.formal_rules import (
     FORMAL_RULE_POLICY_VERSION,
     FormalRulePolicy,
@@ -432,6 +437,18 @@ class CognitionDisputeMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionEvidenceMode(StrEnum):
+    """Owner-scoped evidence and testimony. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.legal_disputes``. This is a
+    run-level cognition mode, not a capability flag and not a per-agent runner
+    key.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -637,6 +654,8 @@ class CognitionLoopConfig:
     formal_rule_policy: FormalRulePolicy | None = None
     dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
     dispute_policy: DisputePolicy | None = None
+    evidence_mode: CognitionEvidenceMode = CognitionEvidenceMode.DISABLED
+    evidence_policy: EvidencePolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1140,8 +1159,7 @@ class CognitionLoopConfig:
                 default_organization_operation_policy(),
             )
         elif (
-            type(self.organization_operation_policy)
-            is not OrganizationOperationPolicy
+            type(self.organization_operation_policy) is not OrganizationOperationPolicy
         ):
             _LOG.error(
                 "invalid_enum path=organization_operation_policy "
@@ -1161,29 +1179,22 @@ class CognitionLoopConfig:
             )
         elif type(self.organization_agency_policy) is not OrganizationAgencyPolicy:
             _LOG.error(
-                "invalid_enum path=organization_agency_policy "
-                "reason_code=invalid_type"
+                "invalid_enum path=organization_agency_policy reason_code=invalid_type"
             )
             raise TypeError(
                 "organization_agency_policy must be OrganizationAgencyPolicy or None"
             )
         if type(self.formal_rule_mode) is not CognitionFormalRuleMode:
-            _LOG.error(
-                "invalid_enum path=formal_rule_mode reason_code=invalid_mode"
-            )
+            _LOG.error("invalid_enum path=formal_rule_mode reason_code=invalid_mode")
             raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
         if self.formal_rule_mode is CognitionFormalRuleMode.DISABLED:
             if self.formal_rule_policy is not None:
                 _LOG.debug("cognition_formal_rule_policy_cleared")
             object.__setattr__(self, "formal_rule_policy", None)
         elif self.formal_rule_policy is None:
-            object.__setattr__(
-                self, "formal_rule_policy", default_formal_rule_policy()
-            )
+            object.__setattr__(self, "formal_rule_policy", default_formal_rule_policy())
         elif type(self.formal_rule_policy) is not FormalRulePolicy:
-            _LOG.error(
-                "invalid_enum path=formal_rule_policy reason_code=invalid_type"
-            )
+            _LOG.error("invalid_enum path=formal_rule_policy reason_code=invalid_type")
             raise TypeError("formal_rule_policy must be FormalRulePolicy or None")
         if type(self.dispute_mode) is not CognitionDisputeMode:
             _LOG.error("invalid_enum path=dispute_mode reason_code=invalid_mode")
@@ -1197,6 +1208,23 @@ class CognitionLoopConfig:
         elif type(self.dispute_policy) is not DisputePolicy:
             _LOG.error("invalid_enum path=dispute_policy reason_code=invalid_type")
             raise TypeError("dispute_policy must be DisputePolicy or None")
+        if type(self.evidence_mode) is not CognitionEvidenceMode:
+            _LOG.error("invalid_enum path=evidence_mode reason_code=invalid_mode")
+            raise TypeError("evidence_mode must be CognitionEvidenceMode")
+        if self.evidence_mode is CognitionEvidenceMode.DISABLED:
+            if self.evidence_policy is not None:
+                _LOG.debug("cognition_evidence_policy_cleared")
+            object.__setattr__(self, "evidence_policy", None)
+        elif self.evidence_policy is None:
+            object.__setattr__(self, "evidence_policy", default_evidence_policy())
+        elif type(self.evidence_policy) is not EvidencePolicy:
+            _LOG.error("invalid_enum path=evidence_policy reason_code=invalid_type")
+            raise TypeError("evidence_policy must be EvidencePolicy or None")
+        elif self.evidence_policy.version != EVIDENCE_TESTIMONY_POLICY_VERSION:
+            _LOG.error(
+                "invalid_policy path=evidence_policy reason_code=unsupported_version"
+            )
+            raise ValueError("unsupported evidence_policy version")
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1532,6 +1560,13 @@ class CognitionLoopConfig:
             material["dispute_policy_version"] = (
                 DISPUTE_POLICY_VERSION if self.dispute_policy is not None else None
             )
+        if self.evidence_mode is CognitionEvidenceMode.DETERMINISTIC:
+            material["evidence_mode"] = self.evidence_mode.value
+            material["evidence_policy_version"] = (
+                EVIDENCE_TESTIMONY_POLICY_VERSION
+                if self.evidence_policy is not None
+                else None
+            )
         return material
 
 
@@ -1804,6 +1839,8 @@ def build_cognitive_loop(
         formal_rule_policy=resolved.formal_rule_policy,
         dispute_mode=resolved.dispute_mode,
         dispute_policy=resolved.dispute_policy,
+        evidence_mode=resolved.evidence_mode,
+        evidence_policy=resolved.evidence_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

@@ -321,6 +321,8 @@ class CognitiveLoop:
         "_durable_records_active",
         "_emotional_state",
         "_epistemic_policy",
+        "_evidence_mode",
+        "_evidence_policy",
         "_experiment_ledger",
         "_formal_rule_mode",
         "_formal_rule_policy",
@@ -363,6 +365,7 @@ class CognitiveLoop:
         "_planner",
         "_possession_succession_active",
         "_prepared_disputes",
+        "_prepared_evidence",
         "_prepared_formal_rules",
         "_prepared_institutional_decay",
         "_prepared_organization_agency",
@@ -498,6 +501,8 @@ class CognitiveLoop:
         formal_rule_policy: object | None = None,
         dispute_mode: object | None = None,
         dispute_policy: object | None = None,
+        evidence_mode: object | None = None,
+        evidence_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -968,9 +973,7 @@ class CognitiveLoop:
             else formal_rule_mode
         )
         if type(formal_mode) is not CognitionFormalRuleMode:
-            raise TypeError(
-                "formal_rule_mode must be CognitionFormalRuleMode"
-            )
+            raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
         if formal_mode is CognitionFormalRuleMode.DISABLED:
             formal_rule_policy = None
         elif formal_rule_policy is None:
@@ -1000,6 +1003,29 @@ class CognitiveLoop:
         self._dispute_mode = dispute
         self._dispute_policy = dispute_policy
         self._prepared_disputes: object | None = None
+        from agents.cognition.configuration import CognitionEvidenceMode
+        from agents.cognition.evidence_testimony import (
+            EVIDENCE_TESTIMONY_POLICY_VERSION,
+            EvidencePolicy,
+            default_evidence_policy,
+        )
+
+        evidence = (
+            CognitionEvidenceMode.DISABLED if evidence_mode is None else evidence_mode
+        )
+        if type(evidence) is not CognitionEvidenceMode:
+            raise TypeError("evidence_mode must be CognitionEvidenceMode")
+        if evidence is CognitionEvidenceMode.DISABLED:
+            evidence_policy = None
+        elif evidence_policy is None:
+            evidence_policy = default_evidence_policy()
+        elif type(evidence_policy) is not EvidencePolicy:
+            raise TypeError("evidence_policy must be EvidencePolicy")
+        elif evidence_policy.version != EVIDENCE_TESTIMONY_POLICY_VERSION:
+            raise ValueError("unsupported evidence_policy version")
+        self._evidence_mode = evidence
+        self._evidence_policy = evidence_policy
+        self._prepared_evidence: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -2488,9 +2514,7 @@ class CognitiveLoop:
         )
         return updated
 
-    def _prepare_formal_rules(
-        self, loop_input: CognitiveLoopInput
-    ) -> object | None:
+    def _prepare_formal_rules(self, loop_input: CognitiveLoopInput) -> object | None:
         """Refresh one owner's formal-rule ledger from owner-visible evidence."""
         from agents.cognition.configuration import CognitionFormalRuleMode
         from agents.cognition.formal_rules import (
@@ -2504,9 +2528,7 @@ class CognitiveLoop:
             self._prepared_formal_rules = None
             return None
         snapshot = loop_input.snapshot
-        carried = (
-            None if snapshot is None else getattr(snapshot, "formal_rules", None)
-        )
+        carried = None if snapshot is None else getattr(snapshot, "formal_rules", None)
         prior = carried if type(carried) is FormalRuleLedger else None
         policy = self._formal_rule_policy
         if type(policy) is not FormalRulePolicy:
