@@ -1,4 +1,4 @@
-"""V4-08 catalog append: 154 -> 157 with the first 154 unchanged."""
+"""V4-08 catalog append: 154 -> 160 with the first 154 unchanged."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from analysis.specifications import (
 pytestmark = pytest.mark.unit
 
 FIRST_154_DIGEST = "71c0925dc37943888827b8f82ef4b448227d760e56f9bd6389f16da2441ceec7"
+FIRST_157_DIGEST = "22d2f317370e09f25667d3191e7fc72c577f9cf9bb1cfe2fa8b60d931db6c438"
 
 SOURCE_KEYS = (
     "candidate_count",
@@ -52,24 +53,39 @@ ALIGNMENT_KEYS = (
 )
 
 
-def test_catalog_is_157_unique_and_validated() -> None:
+def test_catalog_is_160_unique_and_validated() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 157
-    assert len(specs) == 157
-    assert len({spec.family_id for spec in specs}) == 157
-    assert len(validate_metric_catalog()) == 157
+    assert METRIC_FAMILY_COUNT == 160
+    assert len(specs) == 160
+    assert len({spec.family_id for spec in specs}) == 160
+    assert len(validate_metric_catalog()) == 160
 
 
-def test_evidence_families_are_last_and_versioned() -> None:
+def test_evidence_families_are_retained_before_representation() -> None:
     specs = all_metric_specifications()
-    assert [spec.family_id for spec in specs[-3:]] == [
+    assert [spec.family_id for spec in specs[-6:-3]] == [
         MetricFamilyId.EVIDENCE_SOURCE_STRUCTURE,
         MetricFamilyId.EVIDENCE_PROVENANCE_CONTINUITY,
         MetricFamilyId.EVIDENCE_OBJECTIVE_ALIGNMENT,
     ]
+    assert [spec.family_id for spec in specs[-3:]] == [
+        MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
+        MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
+        MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
+    ]
     for spec in specs[-3:]:
         assert spec.algorithm_version == "1"
         assert set(spec.formula_ids) == set(spec.value_keys)
+
+
+def test_first_157_catalog_is_unchanged() -> None:
+    specs = all_metric_specifications()[:157]
+    material = [
+        (spec.family_id.value, spec.algorithm_version, tuple(spec.value_keys))
+        for spec in specs
+    ]
+    payload = json.dumps(material, separators=(",", ":"))
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == FIRST_157_DIGEST
 
 
 def test_first_154_catalog_is_unchanged() -> None:

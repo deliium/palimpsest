@@ -105,7 +105,7 @@ def test_links_and_metric_documentation() -> None:
     disputes = (ROOT / "docs" / "disputes.md").read_text(encoding="utf-8")
     assert "[Evidence and testimony](evidence-testimony.md)" in disputes
     metrics = (ROOT / "docs" / "analysis-metrics.md").read_text(encoding="utf-8")
-    assert "157" in metrics
+    assert "160" in metrics
     assert "evidence_source_structure@1" in metrics
 
 
@@ -165,4 +165,4 @@ def test_counts_match_the_code() -> None:
 
     text = DOC.read_text(encoding="utf-8")
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA in text
-    assert METRIC_FAMILY_COUNT == 157
+    assert METRIC_FAMILY_COUNT == 160

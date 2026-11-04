@@ -99,6 +99,11 @@ def test_harvest_orders_multiple_owners() -> None:
     assert [row.owner.owner_id for row in rows] == ["ada", "ben"]
 
 
+def test_harvest_accepts_already_harvested_rows() -> None:
+    first = harvest_organization_rows((_ledger(),))
+    assert harvest_organization_rows(first) == first
+
+
 def test_empty_or_missing_ledgers_yield_empty_rows() -> None:
     assert harvest_organization_rows(None) == ()
     assert harvest_organization_rows(()) == ()

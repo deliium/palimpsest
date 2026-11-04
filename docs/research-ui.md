@@ -256,3 +256,13 @@ The panel labels objective alignment as **researcher-only** and presents owner
 beliefs only. It never derives or displays truth, authenticity, guilt,
 liability, a winning account, or a composite evidence-quality score, and it
 performs no alignment classification, candidate detection, or write call.
+
+## Representation panel
+
+The **Representation** tab is read-only. It loads the run summary and mandate
+list, then loads positions and revocations on selection. It renders
+`representation_disabled` as an explicit unavailable state, shows `claimed`,
+`recognized`, `contested`, `rejected`, `revoked`, `expired`, and `superseded`
+as server-provided beliefs, and always shows the "owner belief — not legitimacy"
+label. The panel computes no recognition, authority, winner, or legitimacy, and
+never triggers publication or mutation.

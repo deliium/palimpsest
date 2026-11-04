@@ -843,6 +843,31 @@ def assemble_arm_metric_bundle(
                 entity_to_agent,
             ),
         )
+    representation_ledgers = getattr(arm.runner_result, "representation_ledgers", None)
+    if representation_ledgers:
+        from analysis.delegation_representation_objective import (
+            representation_objective_anchor_rows_from_events,
+        )
+        from analysis.delegation_representation_rows import (
+            harvest_representation_rows,
+        )
+
+        entity_to_agent = {
+            agent.entity_id.value: agent.agent_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        inputs = replace(
+            inputs,
+            representation_rows=harvest_representation_rows(
+                representation_ledgers, entity_to_agent=entity_to_agent
+            ),
+            representation_objective_rows=(
+                representation_objective_anchor_rows_from_events(
+                    events or (),
+                    entity_to_agent,
+                )
+            ),
+        )
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
     if dispute_ledgers:
         from analysis.dispute_evidence import (

@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **157** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **160** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -504,7 +504,7 @@ researcher-only; claims without an objective anchor are excluded from the
 objective denominator rather than counted as inconsistent. None of the three
 families feeds cognition, prompts, memory, admission, or stop selectors.
 
-## Evidence-testimony families (catalog 157)
+## Evidence-testimony families (catalog 160)
 
 Three analysis-only families append after the dispute families. They read
 detached evidence rows and committed objective anchors; they never feed
@@ -528,3 +528,25 @@ verdict, authenticity claim, guilt, liability, or a correct account.
 Absent inputs yield `availability=absent`. An enabled ledger with zero rows
 yields `present` with zero counts. `not_applicable` alignment rows and
 non-applicable custody chains are excluded from ratios.
+
+## Delegation-representation families (catalog 160)
+
+Three analysis-only families append after the evidence families. They read
+detached representation rows and committed speech anchors; they never feed
+cognition, prompts, memory, world state, stop selectors, or observer semantics.
+Researcher-only scope alignment is never a legitimacy finding or a revocation.
+
+- `representation_mandate_structure@1`: `mandate_count`, `candidate_count`,
+  `principal_kind_histogram`, `scope_kind_histogram`, `duration_kind_histogram`,
+  `provenance_histogram`, `status_histogram`, `coverage`.
+- `representation_recognition_support@1`: `recognized_count`,
+  `contested_count`, `rejected_count`, `support_root_total`,
+  `opposition_root_total`, `positioned_mandate_count`, `recognition_ratio`,
+  `contestation_ratio`, `rejection_ratio`, `coverage`.
+- `representation_scope_alignment@1`: `consistent_count`, `unresolved_count`,
+  `inconsistent_count`, `not_applicable_count`, `aligned_mandate_count`,
+  `consistency_ratio`, `inconsistency_ratio`, `coverage`.
+
+`not_applicable` is never counted as `consistent`. Same-root support and the
+owner's self-support are excluded from independent roots. Missing anchors stay
+`unresolved`, never `inconsistent`.

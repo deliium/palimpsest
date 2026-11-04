@@ -6380,6 +6380,7 @@ class SimulationRunnerResult:
     formal_rule_ledgers: tuple[object, ...] = ()
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
+    representation_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6721,6 +6722,17 @@ class SimulationRunnerResult:
             if type(ledger) is not EvidenceLedger:
                 raise TypeError("evidence_ledgers: invalid_item")
         object.__setattr__(self, "evidence_ledgers", evidence_ledgers)
+        if isinstance(self.representation_ledgers, (set, frozenset)):
+            raise TypeError("representation_ledgers must be ordered")
+        if type(self.representation_ledgers) is not tuple:
+            raise TypeError("representation_ledgers must be ordered")
+        from agents.cognition.delegation_representation import RepresentationLedger
+
+        representation_ledgers = tuple(self.representation_ledgers)
+        for ledger in representation_ledgers:
+            if type(ledger) is not RepresentationLedger:
+                raise TypeError("representation_ledgers: invalid_item")
+        object.__setattr__(self, "representation_ledgers", representation_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

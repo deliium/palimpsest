@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-07
+### Current baseline through V4-09
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 157 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, and three V4-08 evidence families) |
+| Metric families | 160 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, and three V4-09 representation families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -813,3 +813,35 @@ types, 157 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4 flags
 are owned (`organizations`, `formal_rules`, `legal_disputes`) and nine remain
 unowned. See `docs/evidence-testimony.md`.
+
+### V4-09 delegation and representation seam
+
+V4-09 deepens the owned `organizations` context on the accepted
+`runner-config-v56` seam. It adds no capability flag, `runner-config-v57`, root
+field, per-agent runner key, command, event, observer semantic type, write pair,
+`/v2` route, or migration. `agents.cognition.delegation_representation` owns a
+closed owner-scoped ledger under `delegation-representation.v1`: principals
+(`agent`, `organization`, `settlement`, `coalition`, `unknown`), scope, duration,
+provenance, support, opposition, revocation, conflicts, and derived recognition.
+Recognition is never automatic: a self-claim stays `claimed`; principal acts,
+independent support, or office/decision/written bases are required; same-root
+retellings never count as independent, and the owner's own support is excluded.
+Bounded `rep_v1` frames travel inside existing `Talk`/`Ask`/`Tell`; a verified
+speaker cannot attribute a mandate to another party. `WorldEngine`, perception,
+admission, stop selectors, memory, prompts, and observer semantics never read the
+ledger, and no representation helper returns, constructs, submits, or resolves an
+`AgentCommand`. Detached `analysis.delegation_representation_*` harvests exported
+ledgers into three separated layers, derives stable `rep-` candidates and
+forward-only lineage, and classifies researcher-only scope alignment
+(`consistent`, `unresolved`, `inconsistent`, `not_applicable`) that never reaches
+cognition. `simulation.delegation_representation_*` owns canonical
+`delegation-representation-snapshot-v1`; `experiments` and `persistence` publish
+`delegation-representation-store-v1` atomically; six GET-only `/v1` routes require
+`SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation panel.
+Three families append (`representation_mandate_structure@1`,
+`representation_recognition_support@1`, `representation_scope_alignment@1`),
+raising the catalog 157 -> 160. Pins: runner v4/v55/v56, result v2/v3, 43
+commands, 73 observer semantic types, 160 metric families, 14 V4 contexts, 12 V4
+flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
+`diplomacy`, `institutional_economy`, and `multi_hop_testimony_tracking` remain
+unowned.

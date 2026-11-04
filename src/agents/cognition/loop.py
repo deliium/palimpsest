@@ -371,6 +371,7 @@ class CognitiveLoop:
         "_prepared_organization_agency",
         "_prepared_organization_concepts",
         "_prepared_organization_operations",
+        "_prepared_representation",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -380,6 +381,8 @@ class CognitiveLoop:
         "_reflection_selector",
         "_regional_migration_cognition_mode",
         "_regional_migration_hop_limit",
+        "_representation_mode",
+        "_representation_policy",
         "_reputation_mode",
         "_reputation_policy",
         "_resource_exchange_profile_active",
@@ -503,6 +506,8 @@ class CognitiveLoop:
         dispute_policy: object | None = None,
         evidence_mode: object | None = None,
         evidence_policy: object | None = None,
+        representation_mode: object | None = None,
+        representation_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -1026,6 +1031,28 @@ class CognitiveLoop:
         self._evidence_mode = evidence
         self._evidence_policy = evidence_policy
         self._prepared_evidence: object | None = None
+        from agents.cognition.configuration import CognitionRepresentationMode
+        from agents.cognition.delegation_representation import (
+            RepresentationPolicy,
+            default_representation_policy,
+        )
+
+        representation = (
+            CognitionRepresentationMode.DISABLED
+            if representation_mode is None
+            else representation_mode
+        )
+        if type(representation) is not CognitionRepresentationMode:
+            raise TypeError("representation_mode must be CognitionRepresentationMode")
+        if representation is CognitionRepresentationMode.DISABLED:
+            representation_policy = None
+        elif representation_policy is None:
+            representation_policy = default_representation_policy()
+        elif type(representation_policy) is not RepresentationPolicy:
+            raise TypeError("representation_policy must be RepresentationPolicy")
+        self._representation_mode = representation
+        self._representation_policy = representation_policy
+        self._prepared_representation: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1507,6 +1534,7 @@ class CognitiveLoop:
             prepared_formal_rules=self._prepared_formal_rules,
             prepared_disputes=self._prepared_disputes,
             prepared_evidence=self._prepared_evidence,
+            prepared_representation=self._prepared_representation,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1556,6 +1584,7 @@ class CognitiveLoop:
         self._prepared_formal_rules = state.prepared_formal_rules
         self._prepared_disputes = state.prepared_disputes
         self._prepared_evidence = state.prepared_evidence
+        self._prepared_representation = state.prepared_representation
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -2860,6 +2889,61 @@ class CognitiveLoop:
             len(updated.testimony),
             len(updated.items),
             len(updated.contradictions),
+        )
+        return updated
+
+    def _prepare_representation(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        organization_concepts: object | None,
+        offices: object | None,
+        collective_decisions: object | None,
+        formal_rules: object | None,
+    ) -> object | None:
+        """Refresh one owner's representation beliefs from owner-visible inputs."""
+
+        from agents.cognition.configuration import CognitionRepresentationMode
+        from agents.cognition.delegation_representation import (
+            RepresentationLedger,
+            RepresentationPolicy,
+            apply_representation_update,
+            empty_representation_ledger,
+        )
+
+        if self._representation_mode is not CognitionRepresentationMode.DETERMINISTIC:
+            self._prepared_representation = None
+            return None
+        snapshot = loop_input.snapshot
+        tick = loop_input.observation.tick
+        carried = (
+            None if snapshot is None else getattr(snapshot, "representation", None)
+        )
+        prior = (
+            carried
+            if type(carried) is RepresentationLedger
+            else empty_representation_ledger(loop_input.agent_id, tick=tick)
+        )
+        policy = self._representation_policy
+        if type(policy) is not RepresentationPolicy:
+            raise TypeError("representation_policy must be RepresentationPolicy")
+        updated = apply_representation_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            observation=loop_input.observation,
+            prior=prior,
+            organization_concepts=organization_concepts,
+            offices=offices,
+            collective_decisions=collective_decisions,
+            formal_rules=formal_rules,
+            policy=policy,
+        )
+        self._prepared_representation = updated
+        _LOG.debug(
+            "representation_prepare mode=%s mandates=%s positions=%s",
+            self._representation_mode.value,
+            len(updated.mandates),
+            len(updated.positions),
         )
         return updated
 
@@ -4947,6 +5031,13 @@ class CognitiveLoop:
         formal_rules = self._prepare_formal_rules(loop_input)
         disputes = self._prepare_disputes(loop_input, memory)
         evidence = self._prepare_evidence(loop_input, memory)
+        representation = self._prepare_representation(
+            loop_input,
+            organization_concepts=organization_concepts,
+            offices=office_concepts,
+            collective_decisions=collective_decisions,
+            formal_rules=formal_rules,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -5318,6 +5409,7 @@ class CognitiveLoop:
             formal_rules=formal_rules,
             disputes=disputes,
             evidence=evidence,
+            representation=representation,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5656,6 +5748,28 @@ class CognitiveLoop:
                 owner_id=loop_input.agent_id,
                 tick=loop_input.observation.tick,
             )
+        representation = proposal.representation
+        from agents.cognition.configuration import CognitionRepresentationMode
+        from agents.cognition.delegation_representation import (
+            RepresentationLedger,
+            record_representation_utterance,
+        )
+
+        if (
+            self._representation_mode is CognitionRepresentationMode.DETERMINISTIC
+            and type(representation) is RepresentationLedger
+        ):
+            representation = record_representation_utterance(
+                representation,
+                command,
+                owner_id=loop_input.agent_id,
+                tick=loop_input.observation.tick,
+                organization_concepts=proposal.organization_concepts,
+                collective_decisions=proposal.collective_decisions,
+                offices=proposal.office_concepts,
+                formal_rules=proposal.formal_rules,
+                policy=self._representation_policy,
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -5699,6 +5813,7 @@ class CognitiveLoop:
             formal_rules=proposal.formal_rules,
             disputes=disputes,
             evidence=evidence,
+            representation=representation,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

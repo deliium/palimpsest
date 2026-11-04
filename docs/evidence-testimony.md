@@ -206,3 +206,6 @@ account is true, who is guilty or liable, or which party should win.
 - [Research UI](research-ui.md)
 - [Research API](research-api.md)
 - [Configuration](configuration.md)
+
+Current catalog note: the evidence families remain in place, and the current
+closed catalog is **160** families after the V4-09 representation appends.

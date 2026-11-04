@@ -126,7 +126,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 157
+    assert METRIC_FAMILY_COUNT == 160
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -341,3 +341,29 @@ def test_validators_reject_mutated_copies() -> None:
                 for index, stage in enumerate(V4_MIGRATION_SEQUENCE)
             )
         )
+
+
+def test_v4_09_deepens_organizations_without_new_schema() -> None:
+    """V4-09 deepens organizations; it adds no context, flag, or schema."""
+
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
+    assert len(V4_CONTEXTS) == 14
+    assert len(V4_CAPABILITY_FLAGS) == 12
+    assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
+        {"organizations", "formal_rules", "legal_disputes"}
+    )
+    assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (
+        V4Authority.OWNER_SCOPED
+    )
+    assert (
+        V4ContextId.ORGANIZATIONS
+        in V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY].prerequisite_contexts
+    )
+    assert V4CapabilityFlags(diplomacy=True).owned_enabled_names() == ()
+
+    offenders = [
+        str(path.relative_to(SRC))
+        for path in _first_party_python_files()
+        if "runner-config-v57" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []

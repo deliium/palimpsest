@@ -666,7 +666,14 @@ def harvest_organization_rows(
         return ()
     if isinstance(ledgers, (str, bytes)) or not isinstance(ledgers, Sequence):
         raise OrganizationAnalysisError("organization_row_invalid_order")
-    rows = tuple(_ledger_rows(ledger) for ledger in ledgers)
+    items = tuple(ledgers)
+    rows: tuple[OrganizationHarvestRows, ...]
+    if items and all(isinstance(row, OrganizationHarvestRows) for row in items):
+        rows = tuple(
+            row for row in items if isinstance(row, OrganizationHarvestRows)
+        )
+    else:
+        rows = tuple(_ledger_rows(ledger) for ledger in items)
     owners = [row.owner.owner_id for row in rows]
     if len(set(owners)) != len(owners):
         raise OrganizationAnalysisError("organization_row_duplicate")

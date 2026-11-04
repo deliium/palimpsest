@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 157
+METRIC_FAMILY_COUNT: Final[int] = 160
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -232,6 +232,9 @@ class MetricFamilyId(StrEnum):
     EVIDENCE_SOURCE_STRUCTURE = "evidence_source_structure"
     EVIDENCE_PROVENANCE_CONTINUITY = "evidence_provenance_continuity"
     EVIDENCE_OBJECTIVE_ALIGNMENT = "evidence_objective_alignment"
+    REPRESENTATION_MANDATE_STRUCTURE = "representation_mandate_structure"
+    REPRESENTATION_RECOGNITION_SUPPORT = "representation_recognition_support"
+    REPRESENTATION_SCOPE_ALIGNMENT = "representation_scope_alignment"
 
 
 class DenominatorKind(StrEnum):
@@ -7211,6 +7214,165 @@ def _spec_evidence_objective_alignment() -> MetricSpecification:
     )
 
 
+def _spec_representation_mandate_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="final_window_representation_mandates",
+        denominator="representation_mandates_with_owner_belief",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached representation windows",
+        deceased_policy="dead owners retain their last durable representation beliefs",
+        zero_holding_policy=(
+            "no representation ledger -> absent; enabled empty ledger -> present "
+            "with zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "mandates, support, and opposition are owner beliefs, never authority "
+            "or legitimacy"
+        ),
+        self_edge_policy="owner self-support is excluded from root counts",
+        censoring_policy=(
+            "pruned rows and partial windows are explicit partial coverage"
+        ),
+        formulas={
+            "mandate_count": "owner-local representation mandates",
+            "candidate_count": "detached representation candidates",
+            "principal_kind_histogram": "mandates per closed principal kind",
+            "scope_kind_histogram": "mandates per closed scope kind",
+            "duration_kind_histogram": "mandates per closed duration kind",
+            "provenance_histogram": "mandates per provenance channel",
+            "status_histogram": "mandates per derived status",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "mandate_count",
+            "candidate_count",
+            "principal_kind_histogram",
+            "scope_kind_histogram",
+            "duration_kind_histogram",
+            "provenance_histogram",
+            "status_histogram",
+            "coverage",
+        ),
+        empty_case=(
+            "no representation ledger -> absent; enabled empty ledger -> present "
+            "with zero counts"
+        ),
+        unknown_case="missing rows stay unknown; never coerced to legitimacy",
+    )
+
+
+def _spec_representation_recognition_support() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population="final_window_representation_positions",
+        denominator="representation_mandates_with_any_active_position",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        cohort_window="complete detached representation windows",
+        deceased_policy="dead owners retain their last durable representation beliefs",
+        zero_holding_policy=(
+            "no representation ledger -> absent; enabled empty ledger -> present "
+            "with zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "recognition is a derived owner belief; same-root retellings are not "
+            "independent support"
+        ),
+        self_edge_policy="owner self-support is excluded",
+        censoring_policy="not_applicable rows are excluded from recognition ratios",
+        formulas={
+            "recognized_count": "mandates with status recognized",
+            "contested_count": "mandates with status contested",
+            "rejected_count": "mandates with status rejected",
+            "support_root_total": "distinct active support roots",
+            "opposition_root_total": "distinct active opposition roots",
+            "positioned_mandate_count": "mandates with any active position",
+            "recognition_ratio": "recognized / positioned mandates",
+            "contestation_ratio": "contested / positioned mandates",
+            "rejection_ratio": "rejected / positioned mandates",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "recognized_count",
+            "contested_count",
+            "rejected_count",
+            "support_root_total",
+            "opposition_root_total",
+            "positioned_mandate_count",
+            "recognition_ratio",
+            "contestation_ratio",
+            "rejection_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no representation ledger -> absent; enabled empty ledger -> present "
+            "with zero counts"
+        ),
+        unknown_case="missing positions stay unknown; never fabricated",
+    )
+
+
+def _spec_representation_scope_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="final_window_representation_mandates",
+        denominator="representation_mandates_with_objective_speech_referent",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached representation windows",
+        deceased_policy="dead owners retain their last durable representation beliefs",
+        zero_holding_policy=(
+            "no representation ledger -> absent; enabled empty ledger -> present "
+            "with zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "alignment classifies scope for researchers; it is never a legitimacy "
+            "finding or a reason to revoke"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy=("not_applicable rows are excluded from consistency ratios"),
+        formulas={
+            "consistent_count": "mandates with an in-window representative act",
+            "unresolved_count": "mandates with no attributable representative act",
+            "inconsistent_count": "mandates with acts only outside the window",
+            "not_applicable_count": "mandates with no objective scope referent",
+            "aligned_mandate_count": (
+                "consistent + unresolved + inconsistent mandates"
+            ),
+            "consistency_ratio": "consistent / aligned mandates",
+            "inconsistency_ratio": "inconsistent / aligned mandates",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "consistent_count",
+            "unresolved_count",
+            "inconsistent_count",
+            "not_applicable_count",
+            "aligned_mandate_count",
+            "consistency_ratio",
+            "inconsistency_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no representation ledger -> absent; enabled empty ledger -> present "
+            "with zero counts"
+        ),
+        unknown_case="missing anchors stay unknown and unresolved; never inconsistent",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -7369,6 +7531,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_evidence_source_structure,
     _spec_evidence_provenance_continuity,
     _spec_evidence_objective_alignment,
+    _spec_representation_mandate_structure,
+    _spec_representation_recognition_support,
+    _spec_representation_scope_alignment,
 )
 
 

@@ -225,6 +225,8 @@ class Settings(BaseSettings):
     dispute_cursor_key: SecretStr | None = Field(default=None, repr=False)
     evidence_root: Path | None = None
     evidence_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    representation_root: Path | None = None
+    representation_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -277,6 +279,7 @@ class Settings(BaseSettings):
         "formal_rule_root",
         "dispute_root",
         "evidence_root",
+        "representation_root",
         mode="before",
     )
     @classmethod
@@ -336,6 +339,17 @@ class Settings(BaseSettings):
     def validate_evidence_cursor_key(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError("evidence cursor key must be at least 32 UTF-8 bytes")
+        return value
+
+    @field_validator("representation_cursor_key")
+    @classmethod
+    def validate_representation_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "representation cursor key must be at least 32 UTF-8 bytes"
+            )
         return value
 
     @field_validator("civilization_cursor_key")
@@ -617,6 +631,17 @@ class Settings(BaseSettings):
             "has_dispute_cursor_key": self.dispute_cursor_key is not None,
             "has_evidence_root": self.evidence_root is not None,
             "has_evidence_cursor_key": self.evidence_cursor_key is not None,
+            "has_representation_root": self.representation_root is not None,
+            "has_representation_cursor_key": (
+                self.representation_cursor_key is not None
+            ),
+            "representation_enabled": (
+                self.representation_root is not None
+                and self.representation_cursor_key is not None
+            ),
+            "representation_cursor_enabled": (
+                self.representation_cursor_key is not None
+            ),
             "has_revision": bool(self.revision),
         }
 

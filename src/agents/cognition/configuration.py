@@ -45,6 +45,11 @@ from agents.cognition.cultural_narratives import (
     CulturalNarrativePolicy,
     default_cultural_narrative_policy,
 )
+from agents.cognition.delegation_representation import (
+    REPRESENTATION_POLICY_VERSION,
+    RepresentationPolicy,
+    default_representation_policy,
+)
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.evidence_testimony import (
     EVIDENCE_TESTIMONY_POLICY_VERSION,
@@ -449,6 +454,18 @@ class CognitionEvidenceMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionRepresentationMode(StrEnum):
+    """Owner-scoped delegation and representation. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.organizations``. This is a
+    run-level cognition mode, not a capability flag and not a per-agent runner
+    key.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -656,6 +673,10 @@ class CognitionLoopConfig:
     dispute_policy: DisputePolicy | None = None
     evidence_mode: CognitionEvidenceMode = CognitionEvidenceMode.DISABLED
     evidence_policy: EvidencePolicy | None = None
+    representation_mode: CognitionRepresentationMode = (
+        CognitionRepresentationMode.DISABLED
+    )
+    representation_policy: RepresentationPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1225,6 +1246,24 @@ class CognitionLoopConfig:
                 "invalid_policy path=evidence_policy reason_code=unsupported_version"
             )
             raise ValueError("unsupported evidence_policy version")
+        if type(self.representation_mode) is not CognitionRepresentationMode:
+            _LOG.error("invalid_enum path=representation_mode reason_code=invalid_mode")
+            raise TypeError("representation_mode must be CognitionRepresentationMode")
+        if self.representation_mode is CognitionRepresentationMode.DISABLED:
+            if self.representation_policy is not None:
+                _LOG.debug("cognition_representation_policy_cleared")
+            object.__setattr__(self, "representation_policy", None)
+        elif self.representation_policy is None:
+            object.__setattr__(
+                self, "representation_policy", default_representation_policy()
+            )
+        elif type(self.representation_policy) is not RepresentationPolicy:
+            _LOG.error(
+                "invalid_enum path=representation_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "representation_policy must be RepresentationPolicy or None"
+            )
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1567,6 +1606,13 @@ class CognitionLoopConfig:
                 if self.evidence_policy is not None
                 else None
             )
+        if self.representation_mode is CognitionRepresentationMode.DETERMINISTIC:
+            material["representation_mode"] = self.representation_mode.value
+            material["representation_policy_version"] = (
+                REPRESENTATION_POLICY_VERSION
+                if self.representation_policy is not None
+                else None
+            )
         return material
 
 
@@ -1841,6 +1887,8 @@ def build_cognitive_loop(
         dispute_policy=resolved.dispute_policy,
         evidence_mode=resolved.evidence_mode,
         evidence_policy=resolved.evidence_policy,
+        representation_mode=resolved.representation_mode,
+        representation_policy=resolved.representation_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

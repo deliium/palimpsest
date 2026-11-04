@@ -485,6 +485,7 @@ class AgentRuntime:
         "_reflection_cursor",
         "_relationship_reader",
         "_remembered_decisions",
+        "_representation",
         "_reputation",
         "_retired",
         "_run_id",
@@ -626,6 +627,7 @@ class AgentRuntime:
         self._formal_rules: object | None = None
         self._disputes: object | None = None
         self._evidence: object | None = None
+        self._representation: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1456,6 +1458,36 @@ class AgentRuntime:
             "evidence_ledger_carried sources=%s items=%s tick=%s",
             len(ledger.sources),
             len(ledger.items),
+            tick,
+        )
+
+    def _commit_representation(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionRepresentationMode
+        from agents.cognition.delegation_representation import RepresentationLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_representation_mode",
+            CognitionRepresentationMode.DISABLED,
+        )
+        if mode is not CognitionRepresentationMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionRepresentationMode.DETERMINISTIC:
+                self._representation = None
+                _LOG.debug("cognition_representation_mode disabled")
+            return
+        if type(ledger) is not RepresentationLedger:
+            raise TypeError("representation must be RepresentationLedger")
+        if ledger.owner_id != owner.value:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._representation = ledger
+        _LOG.debug(
+            "representation_ledger_carried mandates=%s positions=%s tick=%s",
+            len(ledger.mandates),
+            len(ledger.positions),
             tick,
         )
 
@@ -2359,6 +2391,7 @@ class AgentRuntime:
                 formal_rules=self._formal_rules,
                 disputes=self._disputes,
                 evidence=self._evidence,
+                representation=self._representation,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2861,6 +2894,10 @@ class AgentRuntime:
         )
         self._commit_evidence(
             getattr(pending.loop_result, "evidence", None),
+            pending.tick,
+        )
+        self._commit_representation(
+            getattr(pending.loop_result, "representation", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3462,6 +3499,16 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        self._representation = getattr(checkpoint, "representation", None)
+        if (
+            self._representation is not None
+            and getattr(self._representation, "owner_id", None)
+            != self._agent.agent_id.value
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._organization_concepts is not None
             and getattr(self._organization_concepts, "owner_id", None)
@@ -3576,6 +3623,7 @@ class AgentRuntime:
             formal_rules=self._formal_rules,
             disputes=self._disputes,
             evidence=self._evidence,
+            representation=self._representation,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

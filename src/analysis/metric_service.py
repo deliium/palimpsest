@@ -316,6 +316,8 @@ class MetricComputationInputs:
     dispute_objective_rows: Sequence[object] | None = None
     evidence_rows: object | None = None
     evidence_objective_rows: Sequence[object] | None = None
+    representation_rows: object | None = None
+    representation_objective_rows: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1778,6 +1780,99 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 evidence_analysis,
                 evidence_analysis.summary,
                 evidence_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+
+    if inputs.representation_rows is not None:
+        from analysis.delegation_representation_alignment import (
+            summarize_representation,
+        )
+        from analysis.delegation_representation_identity import (
+            derive_representation_lineage,
+        )
+        from analysis.delegation_representation_layers import (
+            project_representation_layers,
+        )
+        from analysis.delegation_representation_metrics import (
+            compute_representation_mandate_structure,
+            compute_representation_recognition_support,
+            compute_representation_scope_alignment,
+        )
+        from analysis.delegation_representation_objective import (
+            RepresentationObjectiveAnchorRow,
+            build_representation_windows,
+        )
+        from analysis.delegation_representation_rows import (
+            RepresentationHarvestRows,
+            harvest_representation_rows,
+        )
+
+        representation_rows = (
+            inputs.representation_rows
+            if type(inputs.representation_rows) is RepresentationHarvestRows
+            else harvest_representation_rows(
+                cast("Sequence[object]", inputs.representation_rows),
+                entity_to_agent={},
+            )
+        )
+        representation_anchors = cast(
+            "Sequence[RepresentationObjectiveAnchorRow]",
+            tuple(inputs.representation_objective_rows or ()),
+        )
+        representation_windows = build_representation_windows(
+            representation_rows,
+            window_ticks=100,
+            objective_rows=representation_anchors,
+        )
+        representation_analysis = derive_representation_lineage(
+            representation_rows,
+            objective_rows=tuple(representation_anchors),
+            window_ticks=100,
+        )
+        representation_summary = summarize_representation(
+            representation_rows,
+            representation_analysis,
+            anchors=representation_anchors,
+            windows=representation_windows,
+        )
+        representation_layers = project_representation_layers(
+            representation_rows,
+            representation_analysis,
+            representation_summary,
+            windows=representation_windows,
+            objective_rows=representation_anchors,
+        )
+        _safe(
+            "representation_mandate_structure",
+            lambda: compute_representation_mandate_structure(
+                representation_rows,
+                representation_analysis,
+                representation_summary,
+                representation_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "representation_recognition_support",
+            lambda: compute_representation_recognition_support(
+                representation_rows,
+                representation_analysis,
+                representation_summary,
+                representation_layers,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "representation_scope_alignment",
+            lambda: compute_representation_scope_alignment(
+                representation_rows,
+                representation_analysis,
+                representation_summary,
+                representation_layers,
                 run_id=run_id,
                 input_revision=revision,
             ),

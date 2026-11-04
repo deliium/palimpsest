@@ -230,3 +230,10 @@ composite civilization score.
 - [Configuration](configuration.md)
 - [Research API](research-api.md)
 - [Research UI](research-ui.md)
+
+## See also
+
+- [Delegation and representation](delegation-representation.md)
+- [Formal social rules](formal-rules.md)
+- [Disputes](disputes.md)
+- [Research API](research-api.md)

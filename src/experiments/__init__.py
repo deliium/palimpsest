@@ -235,6 +235,16 @@ from experiments.cultural_metric_comparison import (
     load_cultural_metric_comparison,
 )
 from experiments.cultural_narratives_scenario import cultural_narratives_scenario
+from experiments.delegation_representation_harvest import (
+    RepresentationHarvest,
+    build_completed_run_representation_harvest,
+)
+from experiments.delegation_representation_publication import (
+    RepresentationHarvestResult,
+    build_representation_harvest_result,
+    publish_representation_snapshot,
+    representations_publication_document,
+)
 from experiments.dispute_harvest import (
     DisputeHarvest,
     build_completed_run_dispute_harvest,
@@ -560,6 +570,8 @@ __all__ = [
     "PersistedRegionalLocation",
     "ProposedVersusEffectiveRecord",
     "ReferenceScenarioBundle",
+    "RepresentationHarvest",
+    "RepresentationHarvestResult",
     "RetryPolicy",
     "RunVersionIdentity",
     "SmokeOutputAvailability",
@@ -608,6 +620,7 @@ __all__ = [
     "build_completed_run_evidence_harvest",
     "build_completed_run_harvest",
     "build_completed_run_organization_harvest",
+    "build_completed_run_representation_harvest",
     "build_dispute_harvest_result",
     "build_evidence_testimony_harvest_result",
     "build_generational_comparison",
@@ -616,6 +629,7 @@ __all__ = [
     "build_observer_graphical_scenario",
     "build_organization_harvest_result",
     "build_reference_scenario",
+    "build_representation_harvest_result",
     "build_v3_benchmark_base",
     "build_v3_benchmark_comparison",
     "build_v3_benchmark_scenario",
@@ -762,6 +776,7 @@ __all__ = [
     "publish_evidence_testimony_snapshot",
     "publish_macro_society_snapshot",
     "publish_organization_snapshot",
+    "publish_representation_snapshot",
     "regional_context_from_run",
     "regional_destination_evidence_rows_from_traces",
     "regional_metric_inputs_from_snapshots",
@@ -771,6 +786,7 @@ __all__ = [
     "registered_architecture_ids",
     "registered_benchmark_scenario_ids",
     "registered_v3_benchmark_scenario_ids",
+    "representations_publication_document",
     "run_benchmark_smoke",
     "run_one_assignment",
     "seasonal_scarcity_scenario",

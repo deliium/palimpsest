@@ -617,6 +617,7 @@ class AgentRuntimeCheckpoint:
     formal_rules: object | None = None
     disputes: object | None = None
     evidence: object | None = None
+    representation: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -811,6 +812,11 @@ class AgentRuntimeCheckpoint:
             self.agent_id,
             field_name="evidence",
         )
+        from agents.cognition.delegation_representation import (
+            require_owner_representation,
+        )
+
+        require_owner_representation(self.representation, self.agent_id)
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
         )

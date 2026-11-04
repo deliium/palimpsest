@@ -194,6 +194,7 @@ class Perspective:
     acceptance_memories: object | None = None
     disputes: object | None = None
     evidence: object | None = None
+    representation: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -439,6 +440,14 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.collective_decisions",
         )
+        from agents.cognition.delegation_representation import (
+            require_owner_representation,
+        )
+
+        require_owner_representation(
+            self.representation,
+            self.agent_id,
+        )
         from agents.cognition.mediation import require_owner_mediation
 
         require_owner_mediation(
@@ -624,6 +633,7 @@ class Perspective:
             ),
             disputes=self.disputes,
             evidence=self.evidence,
+            representation=self.representation,
         )
 
     def __repr__(self) -> str:

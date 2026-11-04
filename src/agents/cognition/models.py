@@ -762,6 +762,7 @@ class SubjectiveSnapshot:
     acceptance_memories: AcceptanceMemoryLedger | None = None
     disputes: object | None = None
     evidence: object | None = None
+    representation: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -981,6 +982,11 @@ class SubjectiveSnapshot:
             self.owner_id,
             field_name="SubjectiveSnapshot.evidence",
         )
+        from agents.cognition.delegation_representation import (
+            require_owner_representation,
+        )
+
+        require_owner_representation(self.representation, self.owner_id)
         from agents.cognition.social_conventions import require_owner_social_conventions
 
         require_owner_social_conventions(
@@ -3980,6 +3986,7 @@ class CognitiveLoopProposal:
     acceptance_memories: object | None = None
     disputes: object | None = None
     evidence: object | None = None
+    representation: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4307,6 +4314,7 @@ class CognitiveLoopResult:
     acceptance_memories: object | None = None
     disputes: object | None = None
     evidence: object | None = None
+    representation: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(

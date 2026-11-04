@@ -999,6 +999,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.delegation_representation_composition import (
+                producer_options_from_args as representation_options_from_args,
+            )
+
+            representation_options = representation_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_representation_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1371,6 +1383,36 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"evidence_publication_reason={evidence_receipt['reason_code']}")
             if "publication_id" in evidence_receipt:
                 print(f"evidence_publication_id={evidence_receipt['publication_id']}")
+        if representation_options.enabled:
+            from research_runner.delegation_representation_composition import (
+                publish_representation_harvest,
+                write_representation_receipt,
+            )
+
+            representation_receipt = publish_representation_harvest(
+                arm.runner_result,
+                representation_options,
+                entity_to_agent={
+                    agent.entity_id.value: agent.agent_id.value
+                    for agent in arm.assignment.runner_config.agents
+                },
+            )
+            write_representation_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                representation_receipt,
+            )
+            print(
+                f"representation_publication_status={representation_receipt['status']}"
+            )
+            print(
+                f"representation_publication_reason={representation_receipt['reason']}"
+            )
+            if "publication_id" in representation_receipt:
+                print(
+                    "representation_publication_id="
+                    f"{representation_receipt['publication_id']}"
+                )
         if lineage_options is not None:
             import json
 
@@ -1550,6 +1592,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--evidence-root", default=None)
     gen_p.add_argument("--evidence-max-publications", type=int, default=16)
     gen_p.add_argument("--evidence-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--representation-root", default=None)
+    gen_p.add_argument("--representation-max-publications", type=int, default=16)
+    gen_p.add_argument("--representation-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

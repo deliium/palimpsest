@@ -29,6 +29,7 @@ from api.routes import (
     branches_router,
     civilization_router,
     debugger_router,
+    delegation_representation_router,
     dispute_router,
     evidence_testimony_router,
     formal_rule_router,
@@ -348,6 +349,36 @@ def _attach_evidence_testimony_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_delegation_representation_reader(app: FastAPI) -> None:
+    from api.delegation_representation_cursor import (
+        DelegationRepresentationCursorCodec,
+    )
+    from persistence.delegation_representation_filesystem import (
+        create_delegation_representation_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.representation_cursor_codec = None
+        app.state.representation_reader = None
+        return
+    secret = (
+        settings.representation_cursor_key.get_secret_value().encode("utf-8")
+        if settings.representation_cursor_key is not None
+        else None
+    )
+    if settings.representation_root is None or secret is None:
+        app.state.representation_cursor_codec = None
+        app.state.representation_reader = None
+        return
+    app.state.representation_cursor_codec = (
+        DelegationRepresentationCursorCodec.from_secret(secret)
+    )
+    app.state.representation_reader = create_delegation_representation_reader(
+        settings.representation_root
+    )
+
+
 def _attach_lineage_service(app: FastAPI) -> None:
     from api.lineage_cursor import LineageCursorCodec
 
@@ -413,6 +444,7 @@ def create_app(
     _attach_formal_rule_reader(app)
     _attach_dispute_reader(app)
     _attach_evidence_testimony_reader(app)
+    _attach_delegation_representation_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -442,6 +474,7 @@ def create_app(
     app.include_router(formal_rule_router)
     app.include_router(dispute_router)
     app.include_router(evidence_testimony_router)
+    app.include_router(delegation_representation_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

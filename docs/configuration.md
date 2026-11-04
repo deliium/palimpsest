@@ -433,3 +433,21 @@ The API mounts the host root read-only (UID 1001); the producer writes it
 separately. Plain `./run.sh` and `compose.yaml` remain the root-off zero-install
 baseline. See [Godot civilization overlays](godot-civilization-overlays.md) for
 selectors, availability semantics, and the verification handoff.
+
+## Delegation-representation publication
+
+Representation activates only through `v4_capability_flags.organizations` on
+`runner-config-v56`; there is no per-agent runner key. The inspection root and
+cursor key are:
+
+- `PALIMPSEST_REPRESENTATION_ROOT` — filesystem root for
+  `delegation-representation-store-v1`; unset disables API reads.
+- `PALIMPSEST_REPRESENTATION_CURSOR_KEY` — at least 32 UTF-8 bytes; unset
+  disables cursor-backed reads.
+
+The opt-in generational CLI adds `--representation-root`,
+`--representation-max-publications` (1–1024, default 16), and
+`--representation-max-bytes` (1–268435456, default 8 MiB). Publication runs after
+successful scientific completion and records `disabled`, `unavailable`, `ready`,
+`published`, or `failed` with a safe reason. A publication failure never changes
+the runner result, metrics, or stop reason.

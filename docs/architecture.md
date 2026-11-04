@@ -562,7 +562,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 157 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 160 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Three V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`) and nine remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -593,7 +593,7 @@ Detached analysis may classify objective alignment as `supported`, `unresolved`,
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 `dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
 independent; publication is opt-in and post-completion. Six GET-only `/v1`
-dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **157** metric
+dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **160** metric
 families, with 14 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
@@ -635,3 +635,26 @@ the Research UI adds a read-only Evidence panel. The catalog grows from 154 to
 v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4
 flags remain owned (`organizations`, `formal_rules`, `legal_disputes`).
 See [Evidence and testimony](evidence-testimony.md).
+
+### V4-09 delegation and representation seam
+
+V4-09 deepens the owned `organizations` context on `runner-config-v56` with an
+owner-scoped representation ledger under `delegation-representation.v1`; it adds
+no flag, `runner-config-v57`, root field, per-agent runner key, command, event,
+observer semantic type, write pair, `/v2` route, or migration. Recognition is a
+derived belief, never legitimacy: a self-claim stays `claimed`, independent
+roots are deduplicated, the owner's self-support is excluded, and rejection,
+contestation, revocation, expiry, supersession, and conflicts are retained.
+Bounded `rep_v1` frames travel inside existing `Talk`/`Ask`/`Tell` and are
+verified against the actual speaker. `WorldEngine`, perception, admission, stop
+selectors, memory, prompts, and observer semantics never read the ledger, and no
+representation helper constructs or resolves an `AgentCommand`. Detached
+analysis keeps objective counts, owner-token rows, and `rep-` candidates in three
+separated layers, adds researcher-only scope alignment, and appends three
+families (157 -> 160). `delegation-representation-snapshot-v1` and
+`delegation-representation-store-v1` are independent of the dispute, evidence,
+organization, and formal-rule siblings. Six GET-only `/v1` representation routes
+require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
+panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
+semantic types, 160 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`; `diplomacy` stays unowned.

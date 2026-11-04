@@ -294,7 +294,7 @@ def test_vocabulary_parity_matches_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 157
+    assert METRIC_FAMILY_COUNT == 160
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA == "evidence-testimony-snapshot-v1"
     assert DISPUTE_SNAPSHOT_SCHEMA == "dispute-resolution-snapshot-v1"
     assert FORMAL_RULE_SNAPSHOT_SCHEMA == "formal-rule-snapshot-v1"

@@ -24,15 +24,15 @@ V4_03_FAMILIES = (
 
 
 def test_catalog_is_exactly_154() -> None:
-    assert METRIC_FAMILY_COUNT == 157
+    assert METRIC_FAMILY_COUNT == 160
     specs = all_metric_specifications()
-    assert len(specs) == 157
-    assert len(validate_metric_catalog()) == 157
+    assert len(specs) == 160
+    assert len(validate_metric_catalog()) == 160
 
 
 def test_new_families_are_appended_last() -> None:
     specs = all_metric_specifications()
-    assert [spec.family_id.value for spec in specs[-17:-3]] == [
+    assert [spec.family_id.value for spec in specs[-20:-6]] == [
         *V4_03_FAMILIES,
         "organization_operations",
         "organization_operation_authority",
@@ -45,21 +45,26 @@ def test_new_families_are_appended_last() -> None:
         "dispute_testimony_independence",
         "dispute_resolution_alignment",
     ]
-    assert [spec.family_id.value for spec in specs[-3:]] == [
+    assert [spec.family_id.value for spec in specs[-6:-3]] == [
         "evidence_source_structure",
         "evidence_provenance_continuity",
         "evidence_objective_alignment",
     ]
-    assert specs[-4].family_id is MetricFamilyId.DISPUTE_RESOLUTION_ALIGNMENT
-    assert specs[-5].family_id is MetricFamilyId.DISPUTE_TESTIMONY_INDEPENDENCE
-    assert specs[-6].family_id is MetricFamilyId.DISPUTE_CLAIM_STRUCTURE
-    assert specs[-7].family_id is MetricFamilyId.FORMAL_RULE_RESPONSE
-    assert specs[-8].family_id is MetricFamilyId.FORMAL_RULE_AUTHORITY
-    assert specs[-9].family_id is MetricFamilyId.FORMAL_RULE_DEVELOPMENT
-    assert specs[-10].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
-    assert specs[-11].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY
-    assert specs[-12].family_id is MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY
-    assert specs[-13].family_id is MetricFamilyId.ORGANIZATION_OPERATIONS
+    assert [spec.family_id.value for spec in specs[-3:]] == [
+        "representation_mandate_structure",
+        "representation_recognition_support",
+        "representation_scope_alignment",
+    ]
+    assert specs[-7].family_id is MetricFamilyId.DISPUTE_RESOLUTION_ALIGNMENT
+    assert specs[-8].family_id is MetricFamilyId.DISPUTE_TESTIMONY_INDEPENDENCE
+    assert specs[-9].family_id is MetricFamilyId.DISPUTE_CLAIM_STRUCTURE
+    assert specs[-10].family_id is MetricFamilyId.FORMAL_RULE_RESPONSE
+    assert specs[-11].family_id is MetricFamilyId.FORMAL_RULE_AUTHORITY
+    assert specs[-12].family_id is MetricFamilyId.FORMAL_RULE_DEVELOPMENT
+    assert specs[-13].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION
+    assert specs[-14].family_id is MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY
+    assert specs[-15].family_id is MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY
+    assert specs[-16].family_id is MetricFamilyId.ORGANIZATION_OPERATIONS
 
 
 def test_existing_families_keep_identity_and_order() -> None:

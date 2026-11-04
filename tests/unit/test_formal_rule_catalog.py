@@ -1,4 +1,4 @@
-"""V4-06 metric catalog append, updated by later appends to 157 families."""
+"""V4-06 metric catalog append, updated by later appends to 160 families."""
 
 from __future__ import annotations
 
@@ -55,11 +55,11 @@ EXPECTED_KEYS = {
 }
 
 
-def test_catalog_validates_at_157() -> None:
+def test_catalog_validates_at_160() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 157
-    assert len(specs) == 157
-    assert len({spec.family_id for spec in specs}) == 157
+    assert METRIC_FAMILY_COUNT == 160
+    assert len(specs) == 160
+    assert len({spec.family_id for spec in specs}) == 160
 
 
 def test_first_151_families_are_unchanged() -> None:
@@ -72,7 +72,7 @@ def test_first_151_families_are_unchanged() -> None:
 
 def test_three_formal_rule_families_precede_later_appends() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-9:-6]) == NEW_FAMILIES
+    assert tuple(spec.family_id for spec in specs[-12:-9]) == NEW_FAMILIES
 
 
 def test_each_family_has_exact_value_keys() -> None:
