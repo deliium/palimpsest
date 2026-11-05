@@ -16,13 +16,15 @@ from analysis.diplomacy_contract import (
 )
 from analysis.diplomacy_detection import DiplomaticRelationCandidate
 from analysis.diplomacy_layers import DiplomacyLayerView
-from analysis.diplomacy_rows import DiplomacyHarvestRows
+from analysis.diplomacy_rows import DiplomacyHarvestRows, treaty_version_accepted
 
 __all__ = [
     "DiplomacyAlignmentStatus",
     "DiplomacyAnalysisSummary",
     "DiplomacyEnvoyAlignmentRow",
+    "TreatyRecollectionAlignmentRow",
     "classify_diplomacy_envoy_alignment",
+    "classify_treaty_recollection_alignment",
     "diplomacy_analysis_digest",
     "summarize_diplomacy",
 ]
@@ -53,6 +55,21 @@ class DiplomacyEnvoyAlignmentRow:
 
 
 @dataclass(frozen=True, slots=True)
+class TreatyRecollectionAlignmentRow:
+    owner_token: str
+    treaty_ref: str
+    version_ref: str
+    subject_token: str
+    claimed_terms_digest: str | None
+    status: str
+    basis: str
+
+    def __post_init__(self) -> None:
+        if self.status not in {member.value for member in DiplomacyAlignmentStatus}:
+            raise DiplomacyAnalysisError("diplomacy_invalid_row")
+
+
+@dataclass(frozen=True, slots=True)
 class DiplomacyAnalysisSummary:
     relation_count: int
     candidate_count: int
@@ -68,6 +85,15 @@ class DiplomacyAnalysisSummary:
     agreement_count: int
     misrepresentation_count: int
     coverage: DiplomacyCoverage
+    treaty_count: int = 0
+    treaty_version_count: int = 0
+    treaty_accepted_count: int = 0
+    recollection_count: int = 0
+    recollection_consistent_count: int = 0
+    recollection_unresolved_count: int = 0
+    recollection_inconsistent_count: int = 0
+    recollection_not_applicable_count: int = 0
+    recollection_aligned_count: int = 0
 
 
 _SCOPE_COVERAGE: Final[Mapping[str, frozenset[str]]] = {
@@ -79,9 +105,10 @@ _SCOPE_COVERAGE: Final[Mapping[str, frozenset[str]]] = {
     "promise": frozenset({"speak_for", "negotiate"}),
     "dispute": frozenset({"speak_for", "negotiate"}),
     "shared_project": frozenset({"coordinate_project"}),
+    "treaty": frozenset({"negotiate", "decide"}),
 }
 _LONG_RUNNING: Final[frozenset[str]] = frozenset(
-    {"agreement", "promise", "shared_project"}
+    {"agreement", "promise", "shared_project", "treaty"}
 )
 _AUTHORITY_ACTS: Final[frozenset[str]] = frozenset(
     {"accept", "propose", "promise", "dispute", "shared_project"}
@@ -196,11 +223,89 @@ def classify_diplomacy_envoy_alignment(
     )
 
 
+def classify_treaty_recollection_alignment(
+    rows: DiplomacyHarvestRows,
+    versions: Sequence[object] = (),
+) -> tuple[TreatyRecollectionAlignmentRow, ...]:
+    """Classify recollection claims against retained versions for researchers only."""
+
+    version_by_id = {
+        getattr(row, "version_id", None): row
+        for row in (*rows.treaty_versions, *versions)
+        if getattr(row, "version_id", None) is not None
+    }
+    result: list[TreatyRecollectionAlignmentRow] = []
+    for recollection in rows.treaty_recollections:
+        claimed = recollection.claimed_terms_digest
+        stance = recollection.stance
+        if stance in {"ignore", "renew"} and claimed is None:
+            status = DiplomacyAlignmentStatus.NOT_APPLICABLE
+        elif claimed is None:
+            status = DiplomacyAlignmentStatus.UNRESOLVED
+        else:
+            version = version_by_id.get(recollection.version_ref)
+            if version is None:
+                status = DiplomacyAlignmentStatus.UNRESOLVED
+            else:
+                version_subject = next(
+                    (
+                        treaty.subject_token
+                        for treaty in rows.treaties
+                        if treaty.treaty_id == recollection.treaty_ref
+                    ),
+                    getattr(version, "subject_token", None),
+                )
+                if (
+                    version_subject is not None
+                    and recollection.subject_token is not None
+                    and version_subject != recollection.subject_token
+                ):
+                    status = DiplomacyAlignmentStatus.INCONSISTENT
+                elif getattr(version, "terms_digest", None) == claimed:
+                    status = DiplomacyAlignmentStatus.CONSISTENT
+                else:
+                    status = DiplomacyAlignmentStatus.INCONSISTENT
+        result.append(
+            TreatyRecollectionAlignmentRow(
+                owner_token=recollection.owner_token,
+                treaty_ref=recollection.treaty_ref,
+                version_ref=recollection.version_ref,
+                subject_token=recollection.subject_token,
+                claimed_terms_digest=claimed,
+                status=status.value,
+                basis=recollection.basis,
+            )
+        )
+    counts = {
+        status.value: sum(1 for row in result if row.status == status.value)
+        for status in DiplomacyAlignmentStatus
+    }
+    if result:
+        _LOG.debug(
+            "treaty_recollection_alignment consistent=%s unresolved=%s inconsistent=%s",
+            counts[DiplomacyAlignmentStatus.CONSISTENT.value],
+            counts[DiplomacyAlignmentStatus.UNRESOLVED.value],
+            counts[DiplomacyAlignmentStatus.INCONSISTENT.value],
+        )
+    return tuple(
+        sorted(
+            result,
+            key=lambda row: (
+                row.owner_token,
+                row.treaty_ref,
+                row.version_ref,
+                row.subject_token,
+            ),
+        )
+    )
+
+
 def summarize_diplomacy(
     rows: DiplomacyHarvestRows,
     candidates: Sequence[DiplomaticRelationCandidate],
     layers: DiplomacyLayerView,
     alignment: Sequence[DiplomacyEnvoyAlignmentRow] = (),
+    treaty_alignment: Sequence[TreatyRecollectionAlignmentRow] = (),
 ) -> DiplomacyAnalysisSummary:
     status_counts: dict[str, int] = {}
     for candidate in candidates:
@@ -228,6 +333,14 @@ def summarize_diplomacy(
             and len(accepted.get(instrument.instrument_id, set())) >= 2
         ):
             agreements += 1
+    treaty_accepted = 0
+    for version in rows.treaty_versions:
+        if treaty_version_accepted(version, rows.treaty_declarations):
+            treaty_accepted += 1
+    treaty_alignment_counts = {
+        status.value: sum(1 for row in treaty_alignment if row.status == status.value)
+        for status in DiplomacyAlignmentStatus
+    }
     return DiplomacyAnalysisSummary(
         relation_count=len(rows.relations),
         candidate_count=len(candidates),
@@ -249,6 +362,26 @@ def summarize_diplomacy(
         agreement_count=agreements,
         misrepresentation_count=len(rows.misrepresentations),
         coverage=rows.coverage,
+        treaty_count=len(rows.treaties),
+        treaty_version_count=len(rows.treaty_versions),
+        treaty_accepted_count=treaty_accepted,
+        recollection_count=len(rows.treaty_recollections),
+        recollection_consistent_count=treaty_alignment_counts[
+            DiplomacyAlignmentStatus.CONSISTENT.value
+        ],
+        recollection_unresolved_count=treaty_alignment_counts[
+            DiplomacyAlignmentStatus.UNRESOLVED.value
+        ],
+        recollection_inconsistent_count=treaty_alignment_counts[
+            DiplomacyAlignmentStatus.INCONSISTENT.value
+        ],
+        recollection_not_applicable_count=treaty_alignment_counts[
+            DiplomacyAlignmentStatus.NOT_APPLICABLE.value
+        ],
+        recollection_aligned_count=(
+            treaty_alignment_counts[DiplomacyAlignmentStatus.CONSISTENT.value]
+            + treaty_alignment_counts[DiplomacyAlignmentStatus.INCONSISTENT.value]
+        ),
     )
 
 

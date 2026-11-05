@@ -34,6 +34,10 @@ const summary = {
   candidate_count: 1,
   lineage_edge_count: 0,
   coverage: 'partial',
+  treaty_count: 1,
+  treaty_version_count: 1,
+  treaty_accepted_count: 0,
+  treaty_recollection_count: 0,
 }
 
 const relation = {
@@ -66,6 +70,48 @@ const instruments = {
   next_cursor: null,
 }
 const lineage = { items: [], next_cursor: null }
+const treaty = {
+  treaty_id: 'dpg-0000000000000001',
+  relation_id: relation.relation_id,
+  owner_token: '0'.repeat(16),
+  party_tokens: relation.party_tokens,
+  subject_kind: 'ceasefire',
+  current_version_id: 'dpv-0000000000000001',
+  status: 'proposed',
+  opened_tick: 1,
+  last_tick: 2,
+  provenance: 'communicated',
+}
+const treaties = { items: [treaty], next_cursor: null }
+const treatyVersion = {
+  version_id: 'dpv-0000000000000001',
+  treaty_id: treaty.treaty_id,
+  owner_token: '0'.repeat(16),
+  version_index: 1,
+  parent_version_ids: [],
+  change_kind: 'original',
+  status: 'proposed',
+  acceptance_basis: 'none',
+  party_tokens: relation.party_tokens,
+  provision_kinds: ['non_hostility'],
+  terms_digest: 'b'.repeat(64),
+  record_refs: [],
+  institutional_memory_refs: [],
+  effective_tick: 1,
+  end_tick: null,
+  proposer_party_token: '0'.repeat(16),
+  proposer_envoy_token: null,
+  provenance: 'communicated',
+}
+const treatyDetail = {
+  treaty,
+  versions: [treatyVersion],
+  declarations: [],
+  recollections: [],
+  misrepresentations: [],
+  lineage: [],
+  truncated: false,
+}
 const detail = {
   relation,
   parties: [
@@ -134,6 +180,8 @@ function stubFetch(override?: (path: string) => Response | null): void {
       if (path.endsWith('/diplomacy/relations')) return json(relations)
       if (path.endsWith('/diplomacy/instruments')) return json(instruments)
       if (path.endsWith('/diplomacy/lineage')) return json(lineage)
+      if (path.endsWith('/diplomacy/treaties')) return json(treaties)
+      if (path.includes('/diplomacy/treaties/')) return json(treatyDetail)
       if (path.includes('/diplomacy/relations/')) return json(detail)
       return json({ code: 'not_found' }, 404)
     }),
@@ -154,14 +202,39 @@ describe('DiplomacyPanel', () => {
     await settle()
     const text = view.target.textContent ?? ''
     expect(text).toContain('Diplomacy')
-    expect(text).toContain('scope exceeded')
-    expect(text).toContain('standing: contested')
     expect(text).not.toContain('score')
     const buttons = Array.from(view.target.querySelectorAll('button'))
-    ;(buttons[1] as HTMLButtonElement).click()
+    const relationButton = buttons.find((button) =>
+      button.textContent?.includes('dpl-'),
+    )
+    expect(relationButton).toBeTruthy()
+    ;(relationButton as HTMLButtonElement).click()
     await settle()
+    expect(view.target.textContent).toContain('scope exceeded')
+    expect(view.target.textContent).toContain('standing: contested')
     expect(view.target.textContent).toContain('Retained misrepresentation observations')
     expect(view.target.textContent).toContain('Retained terminations')
+  })
+
+  it('renders treaty rows and treaty version detail', async () => {
+    stubFetch()
+    const view = render(DiplomacyPanel as never, {
+      runId: 'run-1',
+      selection: emptyResearchSelection(),
+    })
+    await settle()
+    const text = view.target.textContent ?? ''
+    expect(text).toContain('ceasefire')
+    expect(text).toContain('Treaties')
+    const treatyButton = Array.from(
+      view.target.querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('ceasefire'))
+    expect(treatyButton).toBeTruthy()
+    ;(treatyButton as HTMLButtonElement).click()
+    await settle()
+    expect(view.target.textContent).toContain('Treaty detail')
+    expect(view.target.textContent).toContain('original')
+    expect(view.target.textContent).not.toContain('score')
   })
 
   it('renders the empty state', async () => {

@@ -36,7 +36,7 @@ def test_exact_pins() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
-    assert METRIC_FAMILY_COUNT == 164
+    assert METRIC_FAMILY_COUNT == 168
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
@@ -61,18 +61,18 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
     from analysis.specifications import all_metric_specifications
 
     specs = all_metric_specifications()
-    assert len(specs) == 164
-    assert [spec.family_id.value for spec in specs[-16:-13]] == [
+    assert len(specs) == 168
+    assert [spec.family_id.value for spec in specs[-20:-17]] == [
         "formal_rule_development",
         "formal_rule_authority",
         "formal_rule_response",
     ]
-    assert [spec.family_id.value for spec in specs[-13:-10]] == [
+    assert [spec.family_id.value for spec in specs[-17:-14]] == [
         "dispute_claim_structure",
         "dispute_testimony_independence",
         "dispute_resolution_alignment",
     ]
-    assert [spec.family_id.value for spec in specs[-10:-7]] == [
+    assert [spec.family_id.value for spec in specs[-14:-11]] == [
         "evidence_source_structure",
         "evidence_provenance_continuity",
         "evidence_objective_alignment",

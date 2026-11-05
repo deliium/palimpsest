@@ -16,14 +16,22 @@ from analysis.diplomacy_contract import (
     require_diplomacy_token,
 )
 from analysis.diplomacy_detection import DiplomaticRelationCandidate
+from analysis.diplomacy_rows import (
+    DiplomacyTreatyDeclarationRow,
+    DiplomacyTreatyRow,
+    DiplomacyTreatyVersionRow,
+    treaty_version_accepted,
+)
 
 __all__ = [
     "DIPLOMACY_ANALYSIS_VERSION",
     "DiplomacyAnalysis",
     "DiplomacyLineageEdge",
     "DiplomaticPartyJoinRow",
+    "TreatyVersionLineageEdge",
     "assign_diplomacy_identities",
     "derive_diplomacy_lineage",
+    "derive_treaty_version_lineage",
     "join_diplomacy_parties",
     "party_member_tokens",
 ]
@@ -43,6 +51,10 @@ class DiplomacyAnalysis:
     creation_tick: int
     organization_candidate_ids: tuple[str, ...] = ()
     macro_society_candidate_ids: tuple[str, ...] = ()
+    treaty_count: int = 0
+    version_count: int = 0
+    accepted_version_count: int = 0
+    lineage_edge_count: int = 0
 
     def __post_init__(self) -> None:
         require_diplomacy_candidate_id(self.candidate_id)
@@ -66,10 +78,75 @@ class DiplomaticPartyJoinRow:
     macro_society_candidate_ids: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class TreatyVersionLineageEdge:
+    edge_id: str
+    treaty_id: str
+    from_version_id: str
+    to_version_id: str
+    change_kind: str
+    tick: int
+
+
+def derive_treaty_version_lineage(
+    rows: Sequence[object],
+) -> tuple[TreatyVersionLineageEdge, ...]:
+    """Derive forward-only analytical treaty-version lineage edges."""
+
+    import hashlib
+
+    edges: list[TreatyVersionLineageEdge] = []
+    for row in rows:
+        treaty_id = getattr(row, "treaty_id", None)
+        version_id = getattr(row, "version_id", None)
+        change_kind = getattr(row, "change_kind", None)
+        tick = getattr(row, "effective_tick", None)
+        parents = getattr(row, "parent_version_ids", ())
+        if (
+            type(treaty_id) is not str
+            or type(version_id) is not str
+            or type(change_kind) is not str
+            or type(tick) is not int
+        ):
+            continue
+        for parent_id in parents:
+            if type(parent_id) is not str:
+                continue
+            body = hashlib.sha256(
+                "|".join(
+                    (
+                        "palimpsest.diplomacy.treaty-edge.v1",
+                        treaty_id,
+                        parent_id,
+                        version_id,
+                        change_kind,
+                        str(tick),
+                    )
+                ).encode("utf-8")
+            ).hexdigest()[:16]
+            edges.append(
+                TreatyVersionLineageEdge(
+                    edge_id=f"dip-edge-{body}",
+                    treaty_id=treaty_id,
+                    from_version_id=parent_id,
+                    to_version_id=version_id,
+                    change_kind=change_kind,
+                    tick=tick,
+                )
+            )
+    return tuple(
+        sorted(edges, key=lambda edge: (edge.tick, edge.treaty_id, edge.edge_id))
+    )
+
+
 def assign_diplomacy_identities(
     candidates: Sequence[DiplomaticRelationCandidate],
     *,
     creation_ticks: dict[str, int] | None = None,
+    treaty_rows: Sequence[DiplomacyTreatyRow] = (),
+    treaty_versions: Sequence[DiplomacyTreatyVersionRow] = (),
+    treaty_declarations: Sequence[DiplomacyTreatyDeclarationRow] = (),
+    treaty_lineage: Sequence[TreatyVersionLineageEdge] = (),
 ) -> tuple[DiplomacyAnalysis, ...]:
     """Mint content-addressed ``dip-`` ids from creation evidence only."""
 
@@ -84,6 +161,19 @@ def assign_diplomacy_identities(
         if candidate_id in seen:
             continue
         seen.add(candidate_id)
+        candidate_parties = set(candidate.party_tokens)
+        matched_treaties = tuple(
+            treaty
+            for treaty in treaty_rows
+            if treaty.owner_token == candidate.owner_token
+            and candidate_parties.issubset(set(treaty.party_tokens))
+        )
+        treaty_ids = {treaty.treaty_id for treaty in matched_treaties}
+        matched_versions = tuple(
+            version
+            for version in treaty_versions
+            if version.treaty_id in treaty_ids
+        )
         rows.append(
             DiplomacyAnalysis(
                 candidate_id=candidate_id,
@@ -93,6 +183,18 @@ def assign_diplomacy_identities(
                 status=candidate.status,
                 lanes=tuple(sorted(candidate.lanes)),
                 creation_tick=tick,
+                treaty_count=len(matched_treaties),
+                version_count=len(matched_versions),
+                accepted_version_count=sum(
+                    1
+                    for version in matched_versions
+                    if treaty_version_accepted(version, treaty_declarations)
+                ),
+                lineage_edge_count=sum(
+                    1
+                    for edge in treaty_lineage
+                    if edge.treaty_id in treaty_ids
+                ),
             )
         )
     return tuple(rows)

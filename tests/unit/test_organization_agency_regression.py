@@ -22,9 +22,9 @@ pytestmark = pytest.mark.unit
 
 
 def test_exact_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 164
-    assert len(all_metric_specifications()) == 164
-    assert [spec.family_id.value for spec in all_metric_specifications()[-18:-16]] == [
+    assert METRIC_FAMILY_COUNT == 168
+    assert len(all_metric_specifications()) == 168
+    assert [spec.family_id.value for spec in all_metric_specifications()[-22:-20]] == [
         "organization_collective_agency",
         "organization_collective_implementation",
     ]

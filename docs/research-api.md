@@ -257,3 +257,14 @@ read model; an unconfigured deployment returns 503 `diplomacy_disabled`. Unknown
 published ids return 404, cursor mismatch 400, and cursor expiry 410. Responses
 contain only content-addressed ids, hashed owner/party/envoy/actor tokens, and
 owner-safe `orgc-`/region anchors.
+
+### Treaty routes (V4-11)
+
+| Route | Response |
+| --- | --- |
+| `GET /v1/simulations/{run_id}/diplomacy/treaties` | paged treaty anchors with derived status |
+| `GET /v1/simulations/{run_id}/diplomacy/treaties/{treaty_id}` | treaty detail with versions, declarations, recollections, misrepresentations, and lineage |
+
+Both require `SUBJECTIVE_DEBUG`, use the existing publication-bound cursors, and
+return tokens, content-addressed record IDs, closed values, and
+composer-derived status labels only. The diplomacy GET route total is eight.

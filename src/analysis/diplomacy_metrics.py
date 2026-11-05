@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from typing import Final
 
 from analysis.diplomacy_alignment import (
@@ -13,7 +14,7 @@ from analysis.diplomacy_alignment import (
 )
 from analysis.diplomacy_contract import InterSocietyLane
 from analysis.diplomacy_layers import DiplomacyLayerView
-from analysis.diplomacy_rows import DiplomacyHarvestRows
+from analysis.diplomacy_rows import DiplomacyHarvestRows, treaty_version_accepted
 from analysis.models import (
     METRIC_DOCUMENT_SCHEMA_VERSION,
     MetricAvailability,
@@ -29,6 +30,10 @@ __all__ = [
     "compute_diplomatic_envoy_alignment",
     "compute_diplomatic_instrument_outcomes",
     "compute_inter_society_relation_lanes",
+    "compute_treaty_anchor_coverage",
+    "compute_treaty_recollection",
+    "compute_treaty_structure",
+    "compute_treaty_version_lineage",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.diplomacy_metrics")
@@ -316,4 +321,198 @@ def compute_inter_society_relation_lanes(
         input_revision=input_revision,
         values=values,
         notes_code="inter_society_relation_lanes_v1",
+    )
+
+
+def compute_treaty_structure(
+    rows: DiplomacyHarvestRows | None,
+    *,
+    run_id: str,
+    input_revision: str,
+) -> MetricDocument:
+    if rows is None:
+        values: dict[str, object] = {}
+    else:
+        accepted_versions = [
+            row
+            for row in rows.treaty_versions
+            if treaty_version_accepted(row, rows.treaty_declarations)
+        ]
+        expired_count = sum(
+            1
+            for row in rows.terminations
+            if row.target_kind == "treaty_version" and row.kind == "expired"
+        )
+        superseded_count = sum(
+            1
+            for row in rows.terminations
+            if row.target_kind == "treaty_version" and row.kind == "superseded"
+        )
+        values = {
+            "treaty_count": len(rows.treaties),
+            "participant_count": sum(len(row.party_tokens) for row in rows.treaties),
+            "multi_party_count": sum(
+                1 for row in rows.treaties if len(row.party_tokens) >= 3
+            ),
+            "apparently_accepted_count": len(accepted_versions),
+            "suspended_count": sum(
+                1 for row in rows.treaty_versions if row.change_kind == "suspension"
+            ),
+            "terminated_count": sum(
+                1 for row in rows.treaty_versions if row.change_kind == "termination"
+            ),
+            "expired_count": expired_count,
+            "superseded_count": superseded_count,
+            "subject_kind_histogram": _histogram(
+                _counts([row.subject_token for row in rows.treaties])
+            ),
+            "participant_count_histogram": _histogram(
+                _counts([str(len(row.party_tokens)) for row in rows.treaties])
+            ),
+            "coverage": rows.coverage.value,
+        }
+    return _document(
+        MetricFamilyId.TREATY_STRUCTURE,
+        rows,
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+        notes_code="treaty_structure_v1",
+    )
+
+
+def compute_treaty_version_lineage(
+    rows: DiplomacyHarvestRows | None,
+    *,
+    run_id: str,
+    input_revision: str,
+) -> MetricDocument:
+    if rows is None:
+        values: dict[str, object] = {}
+    else:
+        changes = _counts([row.change_kind for row in rows.treaty_versions])
+        version_by_id = {row.version_id: row for row in rows.treaty_versions}
+
+        def _depth(version_id: str, seen: frozenset[str] = frozenset()) -> int:
+            row = version_by_id.get(version_id)
+            if row is None or version_id in seen:
+                return 0
+            parents = tuple(
+                parent
+                for parent in row.parent_version_ids
+                if parent in version_by_id and parent not in seen
+            )
+            if not parents:
+                return 1
+            return 1 + max(
+                _depth(parent, seen | {version_id}) for parent in parents
+            )
+
+        values = {
+            "version_count": len(rows.treaty_versions),
+            "original_count": changes.get("original", 0),
+            "amendment_count": changes.get("amendment", 0),
+            "renewal_count": changes.get("renewal", 0),
+            "accession_count": changes.get("accession", 0),
+            "withdrawal_count": changes.get("withdrawal", 0),
+            "suspension_count": changes.get("suspension", 0),
+            "termination_count": changes.get("termination", 0),
+            "lineage_edge_count": len(rows.treaty_lineage),
+            "max_lineage_depth": max(
+                (_depth(version_id) for version_id in version_by_id), default=0
+            ),
+            "renewal_ratio": _ratio(
+                changes.get("renewal", 0), len(rows.treaty_versions)
+            ),
+            "coverage": rows.coverage.value,
+        }
+    return _document(
+        MetricFamilyId.TREATY_VERSION_LINEAGE,
+        rows,
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+        notes_code="treaty_version_lineage_v1",
+    )
+
+
+def compute_treaty_recollection(
+    rows: DiplomacyHarvestRows | None,
+    alignment: Sequence[object] = (),
+    *,
+    run_id: str,
+    input_revision: str,
+) -> MetricDocument:
+    if rows is None:
+        values: dict[str, object] = {}
+    else:
+        stance_counts = _counts([row.stance for row in rows.treaty_recollections])
+        basis_counts = _counts([row.basis for row in rows.treaty_recollections])
+        statuses = _counts([getattr(row, "status", "unknown") for row in alignment])
+        consistent = statuses.get("consistent", 0)
+        inconsistent = statuses.get("inconsistent", 0)
+        aligned = consistent + inconsistent
+        values = {
+            "recollection_count": len(rows.treaty_recollections),
+            "remember_count": stance_counts.get("remember", 0),
+            "reinterpret_count": stance_counts.get("reinterpret", 0),
+            "ignore_count": stance_counts.get("ignore", 0),
+            "renew_count": stance_counts.get("renew", 0),
+            "basis_histogram": _histogram(basis_counts),
+            "consistent_count": consistent,
+            "unresolved_count": statuses.get("unresolved", 0),
+            "inconsistent_count": inconsistent,
+            "not_applicable_count": statuses.get("not_applicable", 0),
+            "aligned_recollection_count": aligned,
+            "consistency_ratio": _ratio(consistent, aligned),
+            "inconsistency_ratio": _ratio(inconsistent, aligned),
+            "coverage": rows.coverage.value,
+        }
+    return _document(
+        MetricFamilyId.TREATY_RECOLLECTION,
+        rows,
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+        notes_code="treaty_recollection_v1",
+    )
+
+
+def compute_treaty_anchor_coverage(
+    rows: DiplomacyHarvestRows | None,
+    *,
+    run_id: str,
+    input_revision: str,
+) -> MetricDocument:
+    if rows is None:
+        values: dict[str, object] = {}
+    else:
+        version_count = len(rows.treaty_anchors)
+        record_count = sum(row.record_anchor_count for row in rows.treaty_anchors)
+        memory_count = sum(
+            row.institutional_memory_anchor_count for row in rows.treaty_anchors
+        )
+        with_record = sum(1 for row in rows.treaty_anchors if row.has_record_anchor)
+        with_memory = sum(
+            1 for row in rows.treaty_anchors if row.has_institutional_memory_anchor
+        )
+        without_any = sum(1 for row in rows.treaty_anchors if not row.has_any_anchor)
+        values = {
+            "version_count": version_count,
+            "record_anchor_count": record_count,
+            "institutional_memory_anchor_count": memory_count,
+            "versions_with_record_anchor": with_record,
+            "versions_with_institutional_memory_anchor": with_memory,
+            "versions_without_any_anchor": without_any,
+            "record_anchor_coverage_ratio": _ratio(with_record, version_count),
+            "institutional_memory_coverage_ratio": _ratio(with_memory, version_count),
+            "coverage": rows.coverage.value,
+        }
+    return _document(
+        MetricFamilyId.TREATY_ANCHOR_COVERAGE,
+        rows,
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+        notes_code="treaty_anchor_coverage_v1",
     )

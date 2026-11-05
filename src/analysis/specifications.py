@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 164
+METRIC_FAMILY_COUNT: Final[int] = 168
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -239,6 +239,10 @@ class MetricFamilyId(StrEnum):
     DIPLOMATIC_INSTRUMENT_OUTCOMES = "diplomatic_instrument_outcomes"
     DIPLOMATIC_ENVOY_ALIGNMENT = "diplomatic_envoy_alignment"
     INTER_SOCIETY_RELATION_LANES = "inter_society_relation_lanes"
+    TREATY_STRUCTURE = "treaty_structure"
+    TREATY_VERSION_LINEAGE = "treaty_version_lineage"
+    TREATY_RECOLLECTION = "treaty_recollection"
+    TREATY_ANCHOR_COVERAGE = "treaty_anchor_coverage"
 
 
 class DenominatorKind(StrEnum):
@@ -7596,6 +7600,220 @@ def _spec_inter_society_relation_lanes() -> MetricSpecification:
     )
 
 
+def _spec_treaty_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TREATY_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_treaty_anchors",
+        denominator="owner_treaty_anchors",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable treaty beliefs",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence="treaties are retained beliefs, never enforcement",
+        self_edge_policy="the owner self-party is retained and counted once",
+        censoring_policy=(
+            "pruned rows and partial windows are explicit partial coverage"
+        ),
+        formulas={
+            "treaty_count": "retained treaty anchors",
+            "participant_count": "sum of retained participant anchors",
+            "multi_party_count": "treaties with at least three participants",
+            "apparently_accepted_count": (
+                "versions with every participant's accept declaration"
+            ),
+            "suspended_count": "suspension versions",
+            "terminated_count": "termination versions",
+            "expired_count": "retained expiry rows",
+            "superseded_count": "retained supersession rows",
+            "subject_kind_histogram": "treaties per closed subject kind",
+            "participant_count_histogram": "treaties per participant count",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "treaty_count",
+            "participant_count",
+            "multi_party_count",
+            "apparently_accepted_count",
+            "suspended_count",
+            "terminated_count",
+            "expired_count",
+            "superseded_count",
+            "subject_kind_histogram",
+            "participant_count_histogram",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing anchors stay unknown and unresolved; never invented",
+    )
+
+
+def _spec_treaty_version_lineage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TREATY_VERSION_LINEAGE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_treaty_versions",
+        denominator="owner_treaty_versions",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable version lineage",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence="versions are immutable retained beliefs",
+        self_edge_policy="each parent link is counted once",
+        censoring_policy="pruned parent links are explicit partial coverage",
+        formulas={
+            "version_count": "retained versions",
+            "original_count": "original versions",
+            "amendment_count": "amendment versions",
+            "renewal_count": "renewal versions",
+            "accession_count": "accession versions",
+            "withdrawal_count": "withdrawal versions",
+            "suspension_count": "suspension versions",
+            "termination_count": "termination versions",
+            "lineage_edge_count": "retained parent links",
+            "max_lineage_depth": "longest parent chain",
+            "renewal_ratio": "renewal_count / version_count",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "version_count",
+            "original_count",
+            "amendment_count",
+            "renewal_count",
+            "accession_count",
+            "withdrawal_count",
+            "suspension_count",
+            "termination_count",
+            "lineage_edge_count",
+            "max_lineage_depth",
+            "renewal_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing parent links stay unknown and unresolved; never invented",
+    )
+
+
+def _spec_treaty_recollection() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TREATY_RECOLLECTION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_treaty_recollections",
+        denominator="owner_treaty_recollections",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable recollections",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence=(
+            "alignment compares a claim to a retained record; it is never truth"
+        ),
+        self_edge_policy="each recollection is classified once",
+        censoring_policy="missing records stay unresolved, never inconsistent",
+        formulas={
+            "recollection_count": "retained recollections",
+            "remember_count": "remember stances",
+            "reinterpret_count": "reinterpret stances",
+            "ignore_count": "ignore stances",
+            "renew_count": "renew stances",
+            "basis_histogram": "recollections per closed basis",
+            "consistent_count": "claims equal to the retained digest",
+            "unresolved_count": "claims without a local version or digest",
+            "inconsistent_count": "claims differing from the retained digest",
+            "not_applicable_count": "stances that assert no claim",
+            "aligned_recollection_count": "consistent plus inconsistent claims",
+            "consistency_ratio": "consistent_count / aligned_recollection_count",
+            "inconsistency_ratio": "inconsistent_count / aligned_recollection_count",
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "recollection_count",
+            "remember_count",
+            "reinterpret_count",
+            "ignore_count",
+            "renew_count",
+            "basis_histogram",
+            "consistent_count",
+            "unresolved_count",
+            "inconsistent_count",
+            "not_applicable_count",
+            "aligned_recollection_count",
+            "consistency_ratio",
+            "inconsistency_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing records stay unknown and unresolved, never inconsistent",
+    )
+
+
+def _spec_treaty_anchor_coverage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TREATY_ANCHOR_COVERAGE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_treaty_versions",
+        denominator="owner_treaty_versions",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="complete detached diplomacy windows",
+        deceased_policy="dead owners retain their last durable anchors",
+        zero_holding_policy=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        opportunity_vs_occurrence="anchors are opaque references, never content",
+        self_edge_policy="each version anchor is counted once",
+        censoring_policy="peer anchors stay unresolved and partial",
+        formulas={
+            "version_count": "retained versions",
+            "record_anchor_count": "record anchors across versions",
+            "institutional_memory_anchor_count": "institutional-memory anchors",
+            "versions_with_record_anchor": "versions with a record anchor",
+            "versions_with_institutional_memory_anchor": (
+                "versions with a memory anchor"
+            ),
+            "versions_without_any_anchor": "versions with no anchor",
+            "record_anchor_coverage_ratio": "with-record versions / version_count",
+            "institutional_memory_coverage_ratio": (
+                "with-memory versions / version_count"
+            ),
+            "coverage": "complete or partial",
+        },
+        value_keys=(
+            "version_count",
+            "record_anchor_count",
+            "institutional_memory_anchor_count",
+            "versions_with_record_anchor",
+            "versions_with_institutional_memory_anchor",
+            "versions_without_any_anchor",
+            "record_anchor_coverage_ratio",
+            "institutional_memory_coverage_ratio",
+            "coverage",
+        ),
+        empty_case=(
+            "no diplomacy ledger -> absent; enabled empty ledger -> present with "
+            "zero counts"
+        ),
+        unknown_case="missing anchors stay unknown and unresolved; never invented",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -7761,6 +7979,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_diplomatic_instrument_outcomes,
     _spec_diplomatic_envoy_alignment,
     _spec_inter_society_relation_lanes,
+    _spec_treaty_structure,
+    _spec_treaty_version_lineage,
+    _spec_treaty_recollection,
+    _spec_treaty_anchor_coverage,
 )
 
 

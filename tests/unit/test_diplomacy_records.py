@@ -454,6 +454,7 @@ def test_misrepresentation_and_id_minters_are_deterministic() -> None:
         "agreement",
         "promise",
         "shared_project",
+        "treaty",
     }
 
 

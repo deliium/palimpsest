@@ -23,6 +23,14 @@ __all__ = [
     "DiplomacyRelationPageOut",
     "DiplomacySummaryOut",
     "DiplomacyTerminationOut",
+    "DiplomacyTreatyDeclarationOut",
+    "DiplomacyTreatyDetailOut",
+    "DiplomacyTreatyLineageOut",
+    "DiplomacyTreatyMisrepresentationOut",
+    "DiplomacyTreatyOut",
+    "DiplomacyTreatyPageOut",
+    "DiplomacyTreatyRecollectionOut",
+    "DiplomacyTreatyVersionOut",
 ]
 
 MAX_PAGE_LIMIT = 500
@@ -49,6 +57,10 @@ class DiplomacySummaryOut(_Strict):
     candidate_count: int
     lineage_edge_count: int
     coverage: str
+    treaty_count: int = 0
+    treaty_version_count: int = 0
+    treaty_accepted_count: int = 0
+    treaty_recollection_count: int = 0
 
 
 class DiplomacyRelationOut(_Strict):
@@ -206,3 +218,99 @@ class DiplomacyInstrumentPageOut(_Strict):
 class DiplomacyLineagePageOut(_Strict):
     items: tuple[DiplomacyLineageOut, ...]
     next_cursor: str | None = None
+
+
+class DiplomacyTreatyOut(_Strict):
+    treaty_id: str
+    relation_id: str
+    owner_token: str
+    party_tokens: tuple[str, ...]
+    subject_kind: str
+    current_version_id: str
+    status: str
+    opened_tick: int
+    last_tick: int
+    provenance: str
+
+
+class DiplomacyTreatyVersionOut(_Strict):
+    version_id: str
+    treaty_id: str
+    owner_token: str
+    version_index: int
+    parent_version_ids: tuple[str, ...]
+    change_kind: str
+    status: str
+    acceptance_basis: str
+    party_tokens: tuple[str, ...]
+    provision_kinds: tuple[str, ...]
+    terms_digest: str
+    record_refs: tuple[str, ...]
+    institutional_memory_refs: tuple[str, ...]
+    effective_tick: int
+    end_tick: int | None = None
+    proposer_party_token: str | None = None
+    proposer_envoy_token: str | None = None
+    provenance: str
+
+
+class DiplomacyTreatyDeclarationOut(_Strict):
+    declaration_id: str
+    treaty_id: str
+    version_id: str
+    owner_token: str
+    party_token: str | None = None
+    envoy_token: str | None = None
+    act: str
+    declared_tick: int
+    provenance: str
+
+
+class DiplomacyTreatyRecollectionOut(_Strict):
+    recollection_id: str
+    owner_token: str
+    treaty_ref: str
+    version_ref: str
+    subject_kind: str
+    basis: str
+    stance: str
+    claimed_terms_digest: str | None = None
+    confidence: float
+    first_tick: int
+    last_tick: int
+    provenance: str
+
+
+class DiplomacyTreatyMisrepresentationOut(_Strict):
+    misrepresentation_id: str
+    version_id: str
+    owner_token: str
+    kind: str
+    observed_tick: int
+    envoy_token: str
+    party_token: str | None = None
+    provenance: str
+
+
+class DiplomacyTreatyLineageOut(_Strict):
+    edge_id: str
+    treaty_id: str
+    from_version_id: str
+    to_version_id: str
+    change_kind: str
+    tick: int
+
+
+class DiplomacyTreatyPageOut(_Strict):
+    items: tuple[DiplomacyTreatyOut, ...]
+    next_cursor: str | None = None
+
+
+class DiplomacyTreatyDetailOut(_Strict):
+    treaty: DiplomacyTreatyOut
+    versions: tuple[DiplomacyTreatyVersionOut, ...] = ()
+    declarations: tuple[DiplomacyTreatyDeclarationOut, ...] = ()
+    recollections: tuple[DiplomacyTreatyRecollectionOut, ...] = ()
+    misrepresentations: tuple[DiplomacyTreatyMisrepresentationOut, ...] = ()
+    lineage: tuple[DiplomacyTreatyLineageOut, ...] = ()
+    truncated: bool = False

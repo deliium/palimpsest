@@ -19,6 +19,10 @@ export type DiplomacySummary = {
   candidate_count: number
   lineage_edge_count: number
   coverage: string
+  treaty_count: number
+  treaty_version_count: number
+  treaty_accepted_count: number
+  treaty_recollection_count: number
 }
 
 export type DiplomacyRelation = {
@@ -120,6 +124,97 @@ export type DiplomacyInstrumentDetail = {
 
 type Page<T> = { items: T[]; next_cursor: string | null }
 
+export type DiplomacyTreaty = {
+  treaty_id: string
+  relation_id: string
+  owner_token: string
+  party_tokens: string[]
+  subject_kind: string
+  current_version_id: string
+  status: string
+  opened_tick: number
+  last_tick: number
+  provenance: string
+}
+
+export type DiplomacyTreatyVersion = {
+  version_id: string
+  treaty_id: string
+  owner_token: string
+  version_index: number
+  parent_version_ids: string[]
+  change_kind: string
+  status: string
+  acceptance_basis: string
+  party_tokens: string[]
+  provision_kinds: string[]
+  terms_digest: string
+  record_refs: string[]
+  institutional_memory_refs: string[]
+  effective_tick: number
+  end_tick?: number | null
+  proposer_party_token?: string | null
+  proposer_envoy_token?: string | null
+  provenance: string
+}
+
+export type DiplomacyTreatyDeclaration = {
+  declaration_id: string
+  treaty_id: string
+  version_id: string
+  owner_token: string
+  party_token?: string | null
+  envoy_token?: string | null
+  act: string
+  declared_tick: number
+  provenance: string
+}
+
+export type DiplomacyTreatyRecollection = {
+  recollection_id: string
+  owner_token: string
+  treaty_ref: string
+  version_ref: string
+  subject_kind: string
+  basis: string
+  stance: string
+  claimed_terms_digest?: string | null
+  confidence: number
+  first_tick: number
+  last_tick: number
+  provenance: string
+}
+
+export type DiplomacyTreatyMisrepresentation = {
+  misrepresentation_id: string
+  version_id: string
+  owner_token: string
+  kind: string
+  observed_tick: number
+  envoy_token: string
+  party_token?: string | null
+  provenance: string
+}
+
+export type DiplomacyTreatyLineage = {
+  edge_id: string
+  treaty_id: string
+  from_version_id: string
+  to_version_id: string
+  change_kind: string
+  tick: number
+}
+
+export type DiplomacyTreatyDetail = {
+  treaty: DiplomacyTreaty
+  versions: DiplomacyTreatyVersion[]
+  declarations: DiplomacyTreatyDeclaration[]
+  recollections: DiplomacyTreatyRecollection[]
+  misrepresentations: DiplomacyTreatyMisrepresentation[]
+  lineage: DiplomacyTreatyLineage[]
+  truncated: boolean
+}
+
 function base(runId: string): string {
   return `/v1/simulations/${encodeURIComponent(runId)}/diplomacy`
 }
@@ -176,4 +271,24 @@ export function getDiplomacyLineage(
     capability: CAPABILITY,
     query: { limit: 200, cursor },
   })
+}
+
+export function getDiplomacyTreaties(
+  runId: string,
+  cursor?: string,
+): Promise<Page<DiplomacyTreaty>> {
+  return apiFetch<Page<DiplomacyTreaty>>(`${base(runId)}/treaties`, {
+    capability: CAPABILITY,
+    query: { limit: 200, cursor },
+  })
+}
+
+export function getDiplomacyTreaty(
+  runId: string,
+  treatyId: string,
+): Promise<DiplomacyTreatyDetail> {
+  return apiFetch<DiplomacyTreatyDetail>(
+    `${base(runId)}/treaties/${encodeURIComponent(treatyId)}`,
+    { capability: CAPABILITY },
+  )
 }

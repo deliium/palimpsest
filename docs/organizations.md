@@ -238,4 +238,4 @@ composite civilization score.
 - [Disputes](disputes.md)
 - [Research API](research-api.md)
 
-See also: [Diplomacy](diplomacy.md) composes organization concepts read-only for organization and coalition party anchors.
+See also: [Diplomacy](diplomacy.md) composes organization concepts read-only for organization and coalition party anchors; organizations are participant sources, not treaty authorities.

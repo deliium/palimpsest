@@ -23,6 +23,9 @@ from simulation.diplomacy_paging import (
     select_diplomacy_lineage,
     select_diplomacy_relation,
     select_diplomacy_relations,
+    select_diplomacy_treaties,
+    select_diplomacy_treaty,
+    select_diplomacy_treaty_versions,
 )
 from simulation.diplomacy_ports import (
     DiplomacyInstrumentDetail,
@@ -30,6 +33,7 @@ from simulation.diplomacy_ports import (
     DiplomacyPublication,
     DiplomacyRelationDetail,
     DiplomacySummary,
+    DiplomacyTreatyDetail,
 )
 
 __all__ = [
@@ -138,7 +142,7 @@ class FilesystemDiplomacyPublisher:
             )
             state["publications"] = entries
             _atomic_json(self._root / "state.json", state)
-        _LOG.info("diplomacy_store_published status=published")
+        _LOG.info("diplomacy_store_published schema=%s", snapshot.schema_version)
 
 
 def _encode(snapshot: DiplomacySnapshot) -> bytes:
@@ -206,6 +210,14 @@ class FilesystemDiplomacyReader:
             summary=snapshot.summary,
             metric_families=snapshot.metric_families,
             coverage=snapshot.coverage,
+            treaty_count=len(snapshot.treaties),
+            treaty_version_count=len(snapshot.treaty_versions),
+            treaty_accepted_count=sum(
+                1
+                for row in snapshot.treaty_versions
+                if row.status == "apparently_accepted"
+            ),
+            treaty_recollection_count=len(snapshot.treaty_recollections),
         )
 
     def read_relations(
@@ -252,6 +264,46 @@ class FilesystemDiplomacyReader:
         snapshot = self._snapshot(run_id)
         after = None if cursor is None else getattr(cursor, "after_key", None)
         return select_diplomacy_lineage(snapshot, after_key=after).rows
+
+    def treaties_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> DiplomacyRowSelection:
+        return select_diplomacy_treaties(
+            self._snapshot(run_id), after_key=after_key, limit=limit
+        )
+
+    def treaty_versions_page(
+        self,
+        run_id: str,
+        *,
+        treaty_id: str,
+        after_key: str | None = None,
+        limit: int = 500,
+    ) -> DiplomacyRowSelection:
+        return select_diplomacy_treaty_versions(
+            self._snapshot(run_id),
+            treaty_id=treaty_id,
+            after_key=after_key,
+            limit=limit,
+        )
+
+    def read_treaties(
+        self, run_id: str, *, cursor: object | None = None
+    ) -> tuple[object, ...]:
+        snapshot = self._snapshot(run_id)
+        after = None if cursor is None else getattr(cursor, "after_key", None)
+        return select_diplomacy_treaties(snapshot, after_key=after).rows
+
+    def read_treaty(self, run_id: str, treaty_id: str) -> DiplomacyTreatyDetail:
+        snapshot = self._snapshot(run_id)
+        try:
+            selection = select_diplomacy_treaty(snapshot, treaty_id)
+        except DiplomacyArtifactError as exc:
+            raise DiplomacyPortError("diplomacy_not_found") from exc
+        treaty = cast(Any, selection.rows[0])
+        return DiplomacyTreatyDetail(
+            treaty=treaty, rows=selection.rows, truncated=selection.truncated
+        )
 
     def read_publication(self, publication_id: str) -> DiplomacyPublication | None:
         state = _read_state(self._root)

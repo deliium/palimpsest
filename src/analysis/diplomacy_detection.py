@@ -85,6 +85,7 @@ def detect_diplomacy_candidates(
                     "last_tick": relation.last_tick,
                     "contested": False,
                     "contact": 0,
+                    "treaty": False,
                 },
             )
             entry["last_tick"] = max(int(entry["last_tick"]), relation.last_tick)
@@ -107,9 +108,31 @@ def detect_diplomacy_candidates(
                         "last_tick": contact.tick,
                         "contested": False,
                         "contact": 0,
+                        "treaty": False,
                     },
                 )
                 entry["contact"] = int(entry["contact"]) + 1
+    for treaty in diplomacy_rows.treaties:
+        for party in treaty.party_tokens:
+            if party == treaty.owner_token:
+                continue
+            key = diplomacy_candidate_key(
+                treaty.owner_token, (treaty.owner_token, party)
+            )
+            entry = candidates.setdefault(
+                key,
+                {
+                    "owner": treaty.owner_token,
+                    "parties": (treaty.owner_token, party),
+                    "lanes": set(),
+                    "last_tick": treaty.last_tick,
+                    "contested": False,
+                    "contact": 0,
+                    "treaty": True,
+                },
+            )
+            entry["last_tick"] = max(int(entry["last_tick"]), treaty.last_tick)
+            entry["treaty"] = True
     for _ in diplomacy_rows.conflicts:
         for entry in candidates.values():
             entry["contested"] = True
@@ -124,6 +147,8 @@ def detect_diplomacy_candidates(
         lanes = tuple(sorted(cast(set[str], entry["lanes"])))
         if entry["contested"]:
             status = DiplomaticRelationStatus.CONTESTED
+        elif entry["treaty"]:
+            status = DiplomaticRelationStatus.OBSERVED
         elif len(lanes) <= 1 and int(entry["contact"]) <= 0:
             status = DiplomaticRelationStatus.FRAGMENTED
         elif int(entry["contact"]) <= 0 and not lanes:

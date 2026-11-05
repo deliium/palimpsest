@@ -24,6 +24,11 @@ from agents.cognition import (
     DIPLOMACY_SCOPE_COVERAGE,
     DIPLOMACY_SEPARATOR,
     DIPLOMACY_TERMINATION_ID_PREFIX,
+    DIPLOMACY_TREATY_DECLARATION_ID_PREFIX,
+    DIPLOMACY_TREATY_ID_PREFIX,
+    DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX,
+    DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX,
+    DIPLOMACY_TREATY_VERSION_ID_PREFIX,
     LONG_RUNNING_INSTRUMENT_KINDS,
     DiplomacyError,
     DiplomacyPolicy,
@@ -59,6 +64,11 @@ _ALL_PREFIXES = (
     DIPLOMACY_MISREPRESENTATION_ID_PREFIX,
     DIPLOMACY_TERMINATION_ID_PREFIX,
     DIPLOMACY_CONFLICT_ID_PREFIX,
+    DIPLOMACY_TREATY_ID_PREFIX,
+    DIPLOMACY_TREATY_VERSION_ID_PREFIX,
+    DIPLOMACY_TREATY_DECLARATION_ID_PREFIX,
+    DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX,
+    DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX,
 )
 
 _ALL_SCOPES = (
@@ -177,6 +187,7 @@ def test_provenance_and_termination_vocabularies_are_closed() -> None:
         "agreement_disputed",
         "superseded",
         "expired",
+        "treaty_terminated",
         "unknown",
     }
 
@@ -194,6 +205,9 @@ def test_misrepresentation_and_conflict_vocabularies_are_closed() -> None:
         "contradictory_terms",
         "conflicting_party",
         "agreement_dispute",
+        "treaty_participant_conflict",
+        "treaty_record_conflict",
+        "treaty_recollection_conflict",
         "unknown",
     }
 

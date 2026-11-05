@@ -82,6 +82,16 @@ DIPLOMACY_FORBIDDEN_RESULT_FIELDS: Final[frozenset[str]] = frozenset(
         "overall_relation",
         "bilateral_score",
         "mean_score",
+        "truth",
+        "verified",
+        "legitimate",
+        "binding",
+        "enforced",
+        "enforcement",
+        "winner",
+        "misremembered",
+        "false_belief",
+        "truth_value",
     }
 )
 

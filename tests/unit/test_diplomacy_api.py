@@ -46,6 +46,8 @@ PATHS = {
     "/v1/simulations/{run_id}/diplomacy/instruments",
     "/v1/simulations/{run_id}/diplomacy/instruments/{instrument_id}",
     "/v1/simulations/{run_id}/diplomacy/lineage",
+    "/v1/simulations/{run_id}/diplomacy/treaties",
+    "/v1/simulations/{run_id}/diplomacy/treaties/{treaty_id}",
 }
 
 
@@ -121,13 +123,13 @@ def _client(root: Path | None, *, clock: list[float]) -> httpx.AsyncClient:
     )
 
 
-def test_exactly_six_get_routes() -> None:
+def test_exactly_eight_get_routes() -> None:
     routes = [
         cast(Any, route)
         for route in router.routes
         if getattr(route, "methods", None) is not None
     ]
-    assert len(routes) == 6
+    assert len(routes) == 8
     assert {route.path for route in routes} == PATHS
     assert all(route.methods == {"GET"} for route in routes)
 

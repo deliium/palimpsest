@@ -26,6 +26,12 @@ from simulation.diplomacy_models import (
     DiplomacySnapshotRelationRow,
     DiplomacySnapshotSummaryRow,
     DiplomacySnapshotTerminationRow,
+    DiplomacySnapshotTreatyDeclarationRow,
+    DiplomacySnapshotTreatyLineageRow,
+    DiplomacySnapshotTreatyMisrepresentationRow,
+    DiplomacySnapshotTreatyRecollectionRow,
+    DiplomacySnapshotTreatyRow,
+    DiplomacySnapshotTreatyVersionRow,
 )
 
 __all__ = [
@@ -36,7 +42,7 @@ __all__ = [
     "finalize_diplomacy_snapshot",
 ]
 
-_TOP_KEYS: Final[tuple[str, ...]] = (
+_TOP_KEYS_V1: Final[tuple[str, ...]] = (
     "conflicts",
     "contacts",
     "coverage",
@@ -60,7 +66,7 @@ _TOP_KEYS: Final[tuple[str, ...]] = (
     "terminations",
     "window_end",
 )
-_ROW_TYPES: Final[dict[str, type]] = {
+_ROW_TYPES_V1: Final[dict[str, type]] = {
     "relations": DiplomacySnapshotRelationRow,
     "parties": DiplomacySnapshotPartyRow,
     "contacts": DiplomacySnapshotContactRow,
@@ -73,6 +79,28 @@ _ROW_TYPES: Final[dict[str, type]] = {
     "conflicts": DiplomacySnapshotConflictRow,
     "lineage": DiplomacySnapshotLineageRow,
     "metric_provenance": DiplomacySnapshotMetricProvenanceRow,
+}
+_TOP_KEYS_V2: Final[tuple[str, ...]] = tuple(
+    sorted(
+        {
+            *_TOP_KEYS_V1,
+            "treaties",
+            "treaty_versions",
+            "treaty_declarations",
+            "treaty_recollections",
+            "treaty_misrepresentations",
+            "treaty_lineage",
+        }
+    )
+)
+_ROW_TYPES_V2: Final[dict[str, type]] = {
+    **_ROW_TYPES_V1,
+    "treaties": DiplomacySnapshotTreatyRow,
+    "treaty_versions": DiplomacySnapshotTreatyVersionRow,
+    "treaty_declarations": DiplomacySnapshotTreatyDeclarationRow,
+    "treaty_recollections": DiplomacySnapshotTreatyRecollectionRow,
+    "treaty_misrepresentations": DiplomacySnapshotTreatyMisrepresentationRow,
+    "treaty_lineage": DiplomacySnapshotTreatyLineageRow,
 }
 
 
@@ -104,7 +132,12 @@ def _payload(snapshot: DiplomacySnapshot) -> dict[str, Any]:
         "digest": "",
         "publication_id": "",
     }
-    for name in _ROW_TYPES:
+    row_types = (
+        _ROW_TYPES_V1
+        if snapshot.schema_version == "diplomacy-snapshot-v1"
+        else _ROW_TYPES_V2
+    )
+    for name in row_types:
         if name == "metric_provenance":
             continue
         payload[name] = [asdict(row) for row in getattr(snapshot, name)]
@@ -160,6 +193,12 @@ def finalize_diplomacy_snapshot(snapshot: DiplomacySnapshot) -> DiplomacySnapsho
                     "lineage",
                     "metric_provenance",
                     "metric_families",
+                    "treaties",
+                    "treaty_versions",
+                    "treaty_declarations",
+                    "treaty_recollections",
+                    "treaty_misrepresentations",
+                    "treaty_lineage",
                 )
             },
             "policy_version": snapshot.policy_version,
@@ -185,10 +224,10 @@ def encode_diplomacy_snapshot(snapshot: DiplomacySnapshot) -> bytes:
     return data
 
 
-def _row(name: str, value: object) -> object:
+def _row(name: str, value: object, row_types: dict[str, type]) -> object:
     if type(value) is not dict:
         _fail("diplomacy_snapshot_invalid")
-    row_type = _ROW_TYPES[name]
+    row_type = row_types[name]
     fields = {field.name for field in dataclass_fields(cast(type[Any], row_type))}
     if set(value) != fields:
         _fail("diplomacy_snapshot_invalid")
@@ -204,10 +243,17 @@ def decode_diplomacy_snapshot(payload: bytes) -> DiplomacySnapshot:
         data = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         _fail("diplomacy_snapshot_invalid")
-    if type(data) is not dict or set(data) != set(_TOP_KEYS):
+    if type(data) is not dict:
         _fail("diplomacy_snapshot_invalid")
-    if data["schema_version"] not in {"diplomacy-snapshot-v1"}:
+    schema = data.get("schema_version")
+    if schema == "diplomacy-snapshot-v1":
+        top_keys, row_types = _TOP_KEYS_V1, _ROW_TYPES_V1
+    elif schema == "diplomacy-snapshot-v2":
+        top_keys, row_types = _TOP_KEYS_V2, _ROW_TYPES_V2
+    else:
         _fail("diplomacy_snapshot_schema_unknown")
+    if set(data) != set(top_keys):
+        _fail("diplomacy_snapshot_invalid")
     summary_raw = data["summary"]
     if type(summary_raw) is not dict or set(summary_raw) != set(
         DiplomacySnapshotSummaryRow.__dataclass_fields__
@@ -225,11 +271,11 @@ def decode_diplomacy_snapshot(payload: bytes) -> DiplomacySnapshot:
         "digest": data["digest"],
         "publication_id": data["publication_id"],
     }
-    for name in _ROW_TYPES:
+    for name in row_types:
         rows = data[name]
         if type(rows) is not list:
             _fail("diplomacy_snapshot_invalid")
-        values[name] = tuple(_row(name, row) for row in rows)
+        values[name] = tuple(_row(name, row, row_types) for row in rows)
     snapshot = DiplomacySnapshot(**values)
     if snapshot.digest != diplomacy_snapshot_digest(snapshot):
         _fail("diplomacy_snapshot_digest_mismatch")

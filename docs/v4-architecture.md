@@ -350,3 +350,16 @@ state, or bilateral score. Detached analysis derives six independent lanes and
 four metric families (catalog 160 -> 164). Canonical `diplomacy-snapshot-v1` and
 `diplomacy-store-v1` publications are served by six GET-only routes under
 `SUBJECTIVE_DEBUG`. See `docs/diplomacy.md`.
+
+## V4-11 treaties and ceasefires seam
+
+V4-11 deepens the owned `diplomacy` context on `runner-config-v56`; it adds no
+flag, context, runner schema/root field, command, event, observer semantic type,
+write pair, `/v2` route, or migration. Treaties are owner beliefs with ordered
+participants, immutable parent-linked versions, declarations, recollections,
+opaque record/institutional-memory anchors, and retained terminations and
+conflicts. Recognized representatives are derived from the owner representation
+ledger; `apparently_accepted` binds nobody. `diplomacy-snapshot-v2` is canonical,
+`diplomacy-snapshot-v1` remains decodable, `diplomacy-store-v1` is unchanged, and
+eight GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine` and
+every enforcement path never read a treaty ledger.

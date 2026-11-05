@@ -29,6 +29,7 @@ __all__ = [
     "DiplomacyReadPort",
     "DiplomacyRelationDetail",
     "DiplomacySummary",
+    "DiplomacyTreatyDetail",
     "bounded_detail_rows",
     "diplomacy_cursor_matches",
     "diplomacy_query_fingerprint",
@@ -76,6 +77,10 @@ class DiplomacySummary:
     summary: DiplomacySnapshotSummaryRow
     metric_families: tuple[str, ...]
     coverage: str
+    treaty_count: int = 0
+    treaty_version_count: int = 0
+    treaty_accepted_count: int = 0
+    treaty_recollection_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +93,13 @@ class DiplomacyRelationDetail:
 @dataclass(frozen=True, slots=True)
 class DiplomacyInstrumentDetail:
     instrument: DiplomacySnapshotInstrumentRow
+    rows: tuple[object, ...]
+    truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomacyTreatyDetail:
+    treaty: object
     rows: tuple[object, ...]
     truncated: bool
 
@@ -196,6 +208,25 @@ class DiplomacyReadPort(Protocol):
 
     def lineage_page(
         self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> object: ...
+
+    def read_treaties(
+        self, run_id: str, *, cursor: DiplomacyCursor | None = None
+    ) -> tuple[object, ...]: ...
+
+    def read_treaty(self, run_id: str, treaty_id: str) -> DiplomacyTreatyDetail: ...
+
+    def treaties_page(
+        self, run_id: str, *, after_key: str | None = None, limit: int = 500
+    ) -> object: ...
+
+    def treaty_versions_page(
+        self,
+        run_id: str,
+        *,
+        treaty_id: str,
+        after_key: str | None = None,
+        limit: int = 500,
     ) -> object: ...
 
 

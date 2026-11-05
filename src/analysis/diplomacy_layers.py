@@ -15,7 +15,10 @@ from analysis.diplomacy_contract import (
 from analysis.diplomacy_detection import DiplomaticRelationCandidate
 from analysis.diplomacy_identity import DiplomacyAnalysis
 from analysis.diplomacy_objective import DiplomacyObjectiveAnchorRow
-from analysis.diplomacy_rows import DiplomacyHarvestRows
+from analysis.diplomacy_rows import (
+    DiplomacyHarvestRows,
+    treaty_version_status_label,
+)
 
 __all__ = [
     "DiplomacyAnalyticalRow",
@@ -44,6 +47,8 @@ class DiplomacySubjectiveRow:
     party_token: str | None
     status_counts: tuple[tuple[str, int], ...]
     lane_counts: tuple[tuple[str, int], ...]
+    treaty_status_counts: tuple[tuple[str, int], ...] = ()
+    treaty_subject_counts: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +59,9 @@ class DiplomacyAnalyticalRow:
     macro_society_candidate_ids: tuple[str, ...]
     lanes: tuple[str, ...]
     status: str
+    treaty_count: int = 0
+    version_count: int = 0
+    lineage_edge_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +85,9 @@ def assert_diplomacy_layer_separation(layers: DiplomacyLayerView) -> None:
             "owner_token",
             "candidate_id",
             "party_token",
+            "party_tokens",
+            "treaty_id",
+            "version_id",
             "organization_candidate_ids",
             "macro_society_candidate_ids",
         }:
@@ -127,10 +138,27 @@ def project_diplomacy_layers(
     )
     statuses: dict[tuple[str, str | None], dict[str, int]] = {}
     lanes: dict[tuple[str, str | None], dict[str, int]] = {}
+    treaty_subjects: dict[tuple[str, str | None], dict[str, int]] = {}
+    treaty_statuses: dict[tuple[str, str | None], dict[str, int]] = {}
+    versions_by_id = {row.version_id: row for row in rows.treaty_versions}
     for party in rows.parties:
         key = (party.owner_token, party.party_token)
         statuses.setdefault(key, {})
         lanes.setdefault(key, {})
+    for treaty in rows.treaties:
+        position = (treaty.owner_token, None)
+        treaty_subjects.setdefault(position, {})[treaty.subject_token] = (
+            treaty_subjects.setdefault(position, {}).get(treaty.subject_token, 0) + 1
+        )
+        version = versions_by_id.get(treaty.current_version_id)
+        status_label = (
+            treaty_version_status_label(version, rows.treaty_declarations)
+            if version is not None
+            else "proposed"
+        )
+        treaty_statuses.setdefault(position, {})[status_label] = (
+            treaty_statuses.setdefault(position, {}).get(status_label, 0) + 1
+        )
     for envoy in rows.envoys:
         statuses.setdefault((envoy.owner_token, envoy.party_token), {})[
             envoy.status
@@ -151,9 +179,16 @@ def project_diplomacy_layers(
             party_token=party,
             status_counts=tuple(sorted(statuses.get((owner, party), {}).items())),
             lane_counts=tuple(sorted(lanes.get((owner, party), {}).items())),
+            treaty_status_counts=tuple(
+                sorted(treaty_statuses.get((owner, party), {}).items())
+            ),
+            treaty_subject_counts=tuple(
+                sorted(treaty_subjects.get((owner, party), {}).items())
+            ),
         )
         for owner, party in sorted(
-            set(statuses) | set(lanes), key=lambda item: (item[0], item[1] or "")
+            set(statuses) | set(lanes) | set(treaty_subjects) | set(treaty_statuses),
+            key=lambda item: (item[0], item[1] or ""),
         )
     )
     analytical = tuple(
@@ -164,6 +199,9 @@ def project_diplomacy_layers(
             macro_society_candidate_ids=row.macro_society_candidate_ids,
             lanes=row.lanes,
             status=row.status,
+            treaty_count=getattr(row, "treaty_count", 0),
+            version_count=getattr(row, "version_count", 0),
+            lineage_edge_count=getattr(row, "lineage_edge_count", 0),
         )
         for row in sorted(analysis, key=lambda item: item.candidate_id)
     )

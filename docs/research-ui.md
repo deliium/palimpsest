@@ -276,3 +276,13 @@ standing is shown as a server status label, never as authority or legitimacy.
 Misrepresentation rows are neutral retained observations. The panel shows
 explicit loading, empty, unavailable (`diplomacy_disabled`), and error states,
 and never aggregates lanes or invents a score.
+
+### Treaties view (V4-11)
+
+The read-only Diplomacy panel adds a Treaties section. It lists subject kind,
+participant count, current version, derived status, and opened/last ticks;
+selecting a treaty shows versions in order (change kind, status, acceptance
+basis, participants, provision kinds, record and institutional-memory anchor
+counts, parent links), declarations, recollections, and version lineage. Terms
+digests are shown only as opaque values. The panel never computes authority,
+recognition, alignment, legitimacy, enforcement, a score, or a winner.

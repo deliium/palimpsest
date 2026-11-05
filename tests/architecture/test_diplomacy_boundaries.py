@@ -249,20 +249,20 @@ def test_snapshot_and_store_schemas_exist() -> None:
     from persistence.diplomacy_filesystem import DIPLOMACY_STORE_SCHEMA
     from simulation.diplomacy_models import DIPLOMACY_SNAPSHOT_SCHEMA
 
-    assert DIPLOMACY_SNAPSHOT_SCHEMA == "diplomacy-snapshot-v1"
+    assert DIPLOMACY_SNAPSHOT_SCHEMA == "diplomacy-snapshot-v2"
     assert DIPLOMACY_STORE_SCHEMA == "diplomacy-store-v1"
 
 
-def test_six_routes_and_six_purposes() -> None:
+def test_eight_routes_and_eight_purposes() -> None:
     from api.routes.diplomacy import router
     from simulation.diplomacy_models import DIPLOMACY_CURSOR_PURPOSES
 
     routes = [
         route for route in router.routes if getattr(route, "methods", None) is not None
     ]
-    assert len(routes) == 6
+    assert len(routes) == 8
     assert all(cast(Any, route).methods == {"GET"} for route in routes)
-    assert len(DIPLOMACY_CURSOR_PURPOSES) == 6
+    assert len(DIPLOMACY_CURSOR_PURPOSES) == 8
 
 
 def test_no_new_wire_surfaces() -> None:
@@ -272,7 +272,7 @@ def test_no_new_wire_surfaces() -> None:
     from world._rules import COMMAND_RULE_MATRIX
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 164
+    assert METRIC_FAMILY_COUNT == 168
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

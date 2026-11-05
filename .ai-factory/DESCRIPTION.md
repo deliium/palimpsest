@@ -389,7 +389,7 @@ raising the metric catalog from 157 to **160** (V4-10 raises it to **164**), plu
 filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 164, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 168, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -418,7 +418,31 @@ catalog from 160 to **164**. `diplomacy-snapshot-v1` and
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG` and fail
 closed with `diplomacy_disabled`; the Research UI adds a read-only panel.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-164 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+168 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
+
+V4-11 (treaties and ceasefires, 2026-11-05) deepens the owned `diplomacy` context
+on the accepted `runner-config-v56` seam; it adds no flag, context, runner
+schema/root field, command, event, observer semantic type, write pair, `/v2`
+route, or migration. Treaties are owner beliefs with ordered participants,
+immutable parent-linked versions (`original`, `amendment`, `renewal`,
+`accession`, `withdrawal`, `suspension`, `termination`), participant
+declarations, later-generation recollections, opaque durable-record and
+institutional-memory anchors, and retained terminations and conflicts. Seven
+requested subject kinds plus closed `unknown` are descriptive categories, never
+permissions or world states. Recognized representatives derive from the owner
+representation ledger; principals count directly, an envoy needs recognized
+`negotiate`/`decide` standing and covering scope, and `apparently_accepted`
+binds nobody. `trt_v1` travels in existing speech as at most four ordered chunks
+(22 fields, 832 characters); `dip_v1` remains 15 fields and 320 characters.
+Detached analysis appends four families (164 -> **168**) and classifies
+recollection alignment for researchers only. `diplomacy-snapshot-v2` is
+canonical, v1 remains decodable, `diplomacy-store-v1` is unchanged, and eight
+GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine`, perception,
+admission, stop selectors, memory, prompts, observer semantics, and Godot never
+read a treaty ledger. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
+observer semantic types, 168 metric families, 14 V4 contexts, 12 V4 flags,
+replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; four V4
+flags are owned and eight remain unowned.

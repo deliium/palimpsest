@@ -57,9 +57,9 @@ EXPECTED_KEYS = {
 
 def test_catalog_validates_at_160() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 164
-    assert len(specs) == 164
-    assert len({spec.family_id for spec in specs}) == 164
+    assert METRIC_FAMILY_COUNT == 168
+    assert len(specs) == 168
+    assert len({spec.family_id for spec in specs}) == 168
 
 
 def test_first_151_families_are_unchanged() -> None:
@@ -72,7 +72,7 @@ def test_first_151_families_are_unchanged() -> None:
 
 def test_three_formal_rule_families_precede_later_appends() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-16:-13]) == NEW_FAMILIES
+    assert tuple(spec.family_id for spec in specs[-20:-17]) == NEW_FAMILIES
 
 
 def test_each_family_has_exact_value_keys() -> None:

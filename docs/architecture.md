@@ -562,7 +562,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 164 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 168 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -593,7 +593,7 @@ Detached analysis may classify objective alignment as `supported`, `unresolved`,
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 `dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
 independent; publication is opt-in and post-completion. Six GET-only `/v1`
-dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **164** metric
+dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **168** metric
 families, with 14 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
@@ -656,8 +656,9 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 164 metric families, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by V4-10.
+semantic types, 168 metric families, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
+V4-10/V4-11.
 
 ### V4-10 diplomacy seam
 
@@ -677,6 +678,36 @@ existing speech. Detached analysis derives six independent inter-society lanes,
 researcher-only envoy alignment. Four families append (catalog 160 -> 164).
 `simulation.diplomacy_*` owns `diplomacy-snapshot-v1`;
 `experiments.diplomacy_*` and `persistence.diplomacy_filesystem` publish
-`diplomacy-store-v1` atomically; six GET-only `/v1/simulations/{run_id}/diplomacy`
-routes require `SUBJECTIVE_DEBUG`; the Research UI adds a read-only panel.
+`diplomacy-store-v1` atomically; six V4-10 GET-only `/v1/simulations/{run_id}/diplomacy`
+routes require `SUBJECTIVE_DEBUG`; V4-11 adds two treaty routes for eight total;
+the Research UI adds a read-only panel.
 `WorldEngine` never reads the ledger. See `docs/diplomacy.md`.
+
+### V4-11 treaties seam
+
+V4-11 deepens the owned `diplomacy` context on the accepted
+`runner-config-v56` seam; it adds no flag, context, runner schema/root field,
+per-agent key, command, event, observer semantic type, write pair, `/v2` route,
+or migration. `agents.cognition.diplomacy` retains multi-party treaty anchors,
+immutable parent-linked versions, participant declarations, later-generation
+recollections, misrepresentation observations, terminations, and conflicts
+under `diplomacy-treaties-v1` / `treaty.v1`. Parties reuse the five V4-10 kinds
+and keep the owner self-party first. Recognition derives from the owner
+representation ledger; a principal counts directly, a recognized envoy needs
+covering `negotiate`/`decide` scope, `single_act`/`occasion` never cover a
+treaty, and `apparently_accepted` binds nobody. Durable records and
+institutional memory appear only as opaque anchors. `trt_v1` travels inside
+existing speech as at most four ordered chunks (22 fields, 832 characters);
+`dip_v1` is unchanged. Detached `analysis.diplomacy_*` harvests token-only
+treaty rows, derives `dip-edge-` version lineage, joins `org-`/`msoc-` read-only,
+keeps three separated layers, and classifies recollection alignment for
+researchers only. Four families append (catalog 164 -> 168).
+`simulation.diplomacy_*` makes `diplomacy-snapshot-v2` canonical while v1 stays
+decodable; `experiments` and `persistence` keep `diplomacy-store-v1`; eight
+GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
+read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
+memory, prompts, observer semantics, and Godot never read a treaty ledger.
+Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
+types, 168 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+`/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
+`docs/diplomacy.md`.

@@ -80,7 +80,7 @@ def _snapshot() -> DiplomacySnapshot:
     )
 
 
-def test_cursor_purposes_are_exactly_six() -> None:
+def test_cursor_purposes_are_exactly_eight() -> None:
     assert DIPLOMACY_CURSOR_PURPOSES == (
         "summary",
         "relations",
@@ -88,6 +88,8 @@ def test_cursor_purposes_are_exactly_six() -> None:
         "instruments",
         "instrument",
         "lineage",
+        "treaties",
+        "treaty",
     )
 
 

@@ -321,6 +321,7 @@ class MetricComputationInputs:
     diplomacy_rows: object | None = None
     diplomacy_objective_rows: Sequence[object] | None = None
     diplomacy_lane_rows: Sequence[object] | None = None
+    diplomacy_treaty_alignment: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -1883,7 +1884,9 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
 
     if inputs.diplomacy_rows is not None:
         from analysis.diplomacy_alignment import (
+            TreatyRecollectionAlignmentRow,
             classify_diplomacy_envoy_alignment,
+            classify_treaty_recollection_alignment,
             summarize_diplomacy,
         )
         from analysis.diplomacy_detection import detect_diplomacy_candidates
@@ -1897,6 +1900,10 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             compute_diplomatic_envoy_alignment,
             compute_diplomatic_instrument_outcomes,
             compute_inter_society_relation_lanes,
+            compute_treaty_anchor_coverage,
+            compute_treaty_recollection,
+            compute_treaty_structure,
+            compute_treaty_version_lineage,
         )
         from analysis.diplomacy_objective import DiplomacyObjectiveAnchorRow
         from analysis.diplomacy_rows import (
@@ -1920,6 +1927,11 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         )
         diplomacy_analysis = assign_diplomacy_identities(diplomacy_candidates)
         diplomacy_alignment = classify_diplomacy_envoy_alignment(diplomacy_rows)
+        diplomacy_treaty_alignment = (
+            tuple(inputs.diplomacy_treaty_alignment)
+            if inputs.diplomacy_treaty_alignment is not None
+            else classify_treaty_recollection_alignment(diplomacy_rows)
+        )
         diplomacy_layers = project_diplomacy_layers(
             diplomacy_rows,
             diplomacy_candidates,
@@ -1935,6 +1947,10 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             diplomacy_candidates,
             diplomacy_layers,
             diplomacy_alignment,
+            cast(
+                "Sequence[TreatyRecollectionAlignmentRow]",
+                diplomacy_treaty_alignment,
+            ),
         )
         _safe(
             "diplomatic_contact_structure",
@@ -1976,6 +1992,39 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 run_id=run_id,
                 input_revision=revision,
                 candidates=diplomacy_candidates,
+            ),
+        )
+        _safe(
+            "treaty_structure",
+            lambda: compute_treaty_structure(
+                diplomacy_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "treaty_version_lineage",
+            lambda: compute_treaty_version_lineage(
+                diplomacy_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "treaty_recollection",
+            lambda: compute_treaty_recollection(
+                diplomacy_rows,
+                diplomacy_treaty_alignment,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "treaty_anchor_coverage",
+            lambda: compute_treaty_anchor_coverage(
+                diplomacy_rows,
+                run_id=run_id,
+                input_revision=revision,
             ),
         )
 

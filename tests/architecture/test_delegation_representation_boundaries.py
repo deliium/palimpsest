@@ -243,14 +243,14 @@ def test_snapshot_store_and_catalog_pins() -> None:
     )
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 164
+    assert METRIC_FAMILY_COUNT == 168
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )
     assert DELEGATION_REPRESENTATION_STORE_SCHEMA == (
         "delegation-representation-store-v1"
     )
-    assert [spec.family_id for spec in all_metric_specifications()[-7:-4]] == [
+    assert [spec.family_id for spec in all_metric_specifications()[-11:-8]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,

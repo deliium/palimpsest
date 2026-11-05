@@ -27,6 +27,14 @@ from api.diplomacy_schemas import (
     DiplomacyRelationPageOut,
     DiplomacySummaryOut,
     DiplomacyTerminationOut,
+    DiplomacyTreatyDeclarationOut,
+    DiplomacyTreatyDetailOut,
+    DiplomacyTreatyLineageOut,
+    DiplomacyTreatyMisrepresentationOut,
+    DiplomacyTreatyOut,
+    DiplomacyTreatyPageOut,
+    DiplomacyTreatyRecollectionOut,
+    DiplomacyTreatyVersionOut,
 )
 from api.errors import bad_request, gone, not_found, service_unavailable
 from api.security import ApiCapability, require_http_capability
@@ -151,6 +159,10 @@ def _summary_out(summary: Any) -> DiplomacySummaryOut:
         candidate_count=row.candidate_count,
         lineage_edge_count=row.lineage_edge_count,
         coverage=summary.coverage,
+        treaty_count=getattr(summary, "treaty_count", 0),
+        treaty_version_count=getattr(summary, "treaty_version_count", 0),
+        treaty_accepted_count=getattr(summary, "treaty_accepted_count", 0),
+        treaty_recollection_count=getattr(summary, "treaty_recollection_count", 0),
     )
 
 
@@ -168,6 +180,14 @@ def _row_out(row: object) -> object:
         "DiplomacySnapshotTerminationRow": DiplomacyTerminationOut,
         "DiplomacySnapshotConflictRow": DiplomacyConflictOut,
         "DiplomacySnapshotLineageRow": DiplomacyLineageOut,
+        "DiplomacySnapshotTreatyRow": DiplomacyTreatyOut,
+        "DiplomacySnapshotTreatyVersionRow": DiplomacyTreatyVersionOut,
+        "DiplomacySnapshotTreatyDeclarationRow": DiplomacyTreatyDeclarationOut,
+        "DiplomacySnapshotTreatyRecollectionRow": DiplomacyTreatyRecollectionOut,
+        "DiplomacySnapshotTreatyMisrepresentationRow": (
+            DiplomacyTreatyMisrepresentationOut
+        ),
+        "DiplomacySnapshotTreatyLineageRow": DiplomacyTreatyLineageOut,
     }
     model = mapping.get(name)
     if model is None:
@@ -340,4 +360,63 @@ def get_diplomacy_lineage(
         next_cursor=_next_cursor(
             codec, summary=summary, purpose="lineage", next_key=selection.next_key
         ),
+    )
+
+
+@router.get("/{run_id}/diplomacy/treaties", response_model=DiplomacyTreatyPageOut)
+def get_diplomacy_treaties(
+    run_id: str,
+    request: Request,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=MAX_PAGE_LIMIT),
+    reader: object | None = Depends(get_diplomacy_reader),
+    settings: Settings = Depends(get_settings),
+) -> DiplomacyTreatyPageOut:
+    _authorize(request, settings)
+    active = _reader(reader)  # type: ignore[arg-type]
+    summary = _read(active.read_summary, run_id)
+    codec = _codec(request)
+    after = _cursor_key(codec, cursor, summary=summary, purpose="treaties")
+    selection = _read(active.treaties_page, run_id, after_key=after, limit=limit)
+    return DiplomacyTreatyPageOut(
+        items=tuple(_row_out(row) for row in selection.rows),  # type: ignore[misc]
+        next_cursor=_next_cursor(
+            codec, summary=summary, purpose="treaties", next_key=selection.next_key
+        ),
+    )
+
+
+@router.get(
+    "/{run_id}/diplomacy/treaties/{treaty_id}",
+    response_model=DiplomacyTreatyDetailOut,
+)
+def get_diplomacy_treaty(
+    run_id: str,
+    treaty_id: str,
+    request: Request,
+    reader: object | None = Depends(get_diplomacy_reader),
+    settings: Settings = Depends(get_settings),
+) -> DiplomacyTreatyDetailOut:
+    _authorize(request, settings)
+    active = _reader(reader)  # type: ignore[arg-type]
+    detail = _read(active.read_treaty, run_id, treaty_id)
+    rows = [_row_out(row) for row in detail.rows]
+    return DiplomacyTreatyDetailOut(
+        treaty=rows[0],  # type: ignore[arg-type]
+        versions=tuple(
+            row for row in rows if isinstance(row, DiplomacyTreatyVersionOut)
+        ),
+        declarations=tuple(
+            row for row in rows if isinstance(row, DiplomacyTreatyDeclarationOut)
+        ),
+        recollections=tuple(
+            row for row in rows if isinstance(row, DiplomacyTreatyRecollectionOut)
+        ),
+        misrepresentations=tuple(
+            row for row in rows if isinstance(row, DiplomacyTreatyMisrepresentationOut)
+        ),
+        lineage=tuple(
+            row for row in rows if isinstance(row, DiplomacyTreatyLineageOut)
+        ),
+        truncated=detail.truncated,
     )

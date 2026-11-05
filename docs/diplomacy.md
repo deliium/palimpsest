@@ -4,8 +4,9 @@
 
 Diplomacy is one owner's belief about recurring contact, envoys, negotiations,
 and agreements with another party. It is never a polity, nation, civilization,
-border, citizenship, treaty store, treaty authority, envoy registry, army, war
-state, or bilateral relationship score.
+border, citizenship, a treaty store (`TreatyStore`), treaty authority
+(`TreatyAuthority`), envoy registry, army, war state, or bilateral relationship
+score.
 
 ## Status and ownership
 
@@ -223,3 +224,59 @@ not implement organized conflict, infrastructure, supply chains, markets,
 credit, science, epidemics, ecological feedback, disasters, resilience, or
 macro-society behavior. Diplomacy is a belief; a later plan that lets it bias
 behavior must be separately owned.
+
+## Treaties (V4-11)
+
+`diplomacy-treaties-v1` extends the same owner-scoped ledger with multi-party
+treaty anchors, immutable parent-linked versions, participant declarations,
+later-generation recollections, treaty misrepresentation observations, and
+version lineage. Subject kinds (`TreatySubjectKind`) are closed to `ceasefire`,
+`access`, `migration`,
+`resource_sharing`, `trade`, `territorial_understanding`, `mutual_aid`, and
+`unknown`; change kinds are closed to `original`, `amendment`, `renewal`,
+`accession`, `withdrawal`, `suspension`, `termination`, and `unknown`. Terms are
+closed provision kinds plus a canonical 64-hex `terms_digest`; no free-text
+conditions, quotas, prices, boundaries, or aid text exists.
+
+A treaty anchor retains ordered participants with the owner self-party first.
+Versions are immutable: `original` has index 1 and no parents, every later
+change has at least one lower-index parent. Participation can accrete or
+withdraw, but the self-party is never removed; owner withdrawal or a remaining
+set below two non-owner participants becomes a termination version.
+Structurally invalid version indices or parent links fail closed, while
+record, recollection, and envoy conflicts are retained and never reconciled.
+
+Acceptance is every participant's own declaration. A principal counts directly;
+a recognized envoy counts only with a recognized `negotiate`/`decide` mandate
+and covering scope, and `single_act`/`occasion` never cover a treaty.
+`apparently_accepted` requires every participant and binds nobody. Termination
+and suspension are collective declarations too: one party's termination or
+suspension version stays proposed until every participant declares it. A later
+accepted, suspended, or terminated version supersedes earlier versions; a
+rejected or still-proposed renewal leaves the earlier accepted version active.
+A rejection is retained as a `rejected` acceptance basis; the closed status
+vocabulary has no separate `rejected` status.
+
+Durable records and institutional-memory entries appear only as opaque anchors
+(`record_refs` / `institutional_memory_refs`); diplomacy never writes either
+ledger. Later generations hold recollections with
+a closed basis and stance (`remember`, `reinterpret`, `ignore`, `renew`). A
+recollection never creates a local treaty or version. `misremember` is
+researcher-only alignment (`consistent`, `unresolved`, `inconsistent`,
+`not_applicable`) comparing a claimed digest to a retained digest; no truth,
+lie, guilt, or enforcement field exists.
+
+`trt_v1` claims travel inside existing `Talk`/`Ask`/`Tell` as at most four
+ordered `trt_chunk_NN` relations, bounded at 22 fields and 832 characters; the
+verified speaker must match the claimed envoy, peer provenance is replaced by
+delivery provenance, and a peer mandate is only a claim. `WorldEngine`,
+perception, admission, stop selectors, memory, prompts, observer semantics, and
+Godot never read a treaty ledger: a ceasefire blocks no command, an access
+agreement grants no access, a trade agreement moves nothing, and mutual aid
+performs no aid.
+
+Publication is opt-in and atomic as `diplomacy-snapshot-v2` under the unchanged
+`diplomacy-store-v1`; `diplomacy-snapshot-v1` remains decodable and
+byte-verifiable. Eight GET-only `/v1/simulations/{run_id}/diplomacy` routes
+require `SUBJECTIVE_DEBUG`, return 503 `diplomacy_disabled` when unconfigured,
+and 404 for unknown published records.

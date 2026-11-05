@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _doc() -> str:
-    return (ROOT / "docs" / "diplomacy.md").read_text(encoding="utf-8")
+    return " ".join(
+        (ROOT / "docs" / "diplomacy.md").read_text(encoding="utf-8").split()
+    )
 
 
 def test_canonical_contract_states_authority_and_non_goals() -> None:
@@ -34,6 +36,10 @@ def test_canonical_contract_states_authority_and_non_goals() -> None:
         "diplomacy_disabled",
         "six independent lanes",
         "researcher-only",
+        "Treaties (V4-11)",
+        "trt_v1",
+        "diplomacy-snapshot-v2",
+        "Eight GET-only",
     ):
         assert phrase in text
     assert "diplomacy.v1" in text
@@ -52,9 +58,9 @@ def test_docs_state_four_owned_and_eight_unowned() -> None:
 
 
 def test_catalog_and_families_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 164
+    assert METRIC_FAMILY_COUNT == 168
     metrics = (ROOT / "docs" / "analysis-metrics.md").read_text(encoding="utf-8")
-    assert "Closed catalog cardinality: **164**" in metrics
+    assert "Closed catalog cardinality: **168**" in metrics
     for family in (
         "diplomatic_contact_structure@1",
         "diplomatic_instrument_outcomes@1",
@@ -72,8 +78,11 @@ def test_routes_and_panel_are_documented() -> None:
         "/relations",
         "/instruments",
         "/lineage",
+        "/treaties",
+        "/treaties/{treaty_id}",
     ):
         assert route in api
+    assert "eight" in api
     ui = (ROOT / "docs" / "research-ui.md").read_text(encoding="utf-8")
     assert "Diplomacy panel" in ui
     assert "never as authority or legitimacy" in ui

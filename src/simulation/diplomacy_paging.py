@@ -19,6 +19,10 @@ __all__ = [
     "select_diplomacy_lineage",
     "select_diplomacy_relation",
     "select_diplomacy_relations",
+    "select_diplomacy_treaties",
+    "select_diplomacy_treaty",
+    "select_diplomacy_treaty_lineage",
+    "select_diplomacy_treaty_versions",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.diplomacy_paging")
@@ -38,9 +42,15 @@ def _clamp(limit: int) -> int:
 
 
 def _page(
-    rows: tuple[Any, ...], *, after_key: str | None, limit: int, id_name: str
+    rows: tuple[Any, ...],
+    *,
+    after_key: str | None,
+    limit: int,
+    id_name: str,
+    sort_key: Any | None = None,
 ) -> tuple[tuple[Any, ...], str | None]:
-    ordered = tuple(sorted(rows, key=lambda row: getattr(row, id_name)))
+    key = sort_key or (lambda row: getattr(row, id_name))
+    ordered = tuple(sorted(rows, key=key))
     start = 0
     if after_key is not None:
         ids = [getattr(row, id_name) for row in ordered]
@@ -181,5 +191,101 @@ def select_diplomacy_lineage(
 ) -> DiplomacyRowSelection:
     rows, next_key = _page(
         snapshot.lineage, after_key=after_key, limit=limit, id_name="edge_id"
+    )
+    return DiplomacyRowSelection(rows=rows, next_key=next_key)
+
+
+def select_diplomacy_treaties(
+    snapshot: DiplomacySnapshot,
+    *,
+    after_key: str | None = None,
+    limit: int = MAX_DETAIL_ROWS,
+) -> DiplomacyRowSelection:
+    rows, next_key = _page(
+        tuple(snapshot.treaties),
+        after_key=after_key,
+        limit=limit,
+        id_name="treaty_id",
+        sort_key=lambda row: (row.opened_tick, row.treaty_id),
+    )
+    return DiplomacyRowSelection(rows=rows, next_key=next_key)
+
+
+def select_diplomacy_treaty(
+    snapshot: DiplomacySnapshot,
+    treaty_id: str,
+    *,
+    limit: int = MAX_DETAIL_ROWS,
+) -> DiplomacyRowSelection:
+    treaty = next(
+        (row for row in snapshot.treaties if row.treaty_id == treaty_id), None
+    )
+    if treaty is None:
+        raise DiplomacyArtifactError("diplomacy_not_found")
+    versions = tuple(
+        row for row in snapshot.treaty_versions if row.treaty_id == treaty_id
+    )
+    version_ids = {row.version_id for row in versions}
+    declarations = tuple(
+        row for row in snapshot.treaty_declarations if row.version_id in version_ids
+    )
+    recollections = tuple(
+        row
+        for row in snapshot.treaty_recollections
+        if row.treaty_ref == treaty_id or row.version_ref in version_ids
+    )
+    misrepresentations = tuple(
+        row
+        for row in snapshot.treaty_misrepresentations
+        if row.version_id in version_ids
+    )
+    lineage = tuple(
+        row for row in snapshot.treaty_lineage if row.treaty_id == treaty_id
+    )
+    rows = (
+        treaty,
+        *versions,
+        *declarations,
+        *recollections,
+        *misrepresentations,
+        *lineage,
+    )
+    clipped = rows[: _clamp(limit)]
+    return DiplomacyRowSelection(
+        rows=clipped,
+        next_key=None,
+        truncated=len(clipped) < len(rows),
+    )
+
+
+def select_diplomacy_treaty_versions(
+    snapshot: DiplomacySnapshot,
+    *,
+    treaty_id: str,
+    after_key: str | None = None,
+    limit: int = MAX_DETAIL_ROWS,
+) -> DiplomacyRowSelection:
+    rows, next_key = _page(
+        tuple(row for row in snapshot.treaty_versions if row.treaty_id == treaty_id),
+        after_key=after_key,
+        limit=limit,
+        id_name="version_id",
+        sort_key=lambda row: (row.effective_tick, row.version_id),
+    )
+    return DiplomacyRowSelection(rows=rows, next_key=next_key)
+
+
+def select_diplomacy_treaty_lineage(
+    snapshot: DiplomacySnapshot,
+    *,
+    after_key: str | None = None,
+    limit: int = MAX_DETAIL_ROWS,
+) -> DiplomacyRowSelection:
+    rows, next_key = _page(
+        tuple(snapshot.treaty_lineage),
+        after_key=after_key,
+        limit=limit,
+        id_name="edge_id",
+        sort_key=lambda row: (row.tick, row.edge_id),
     )
     return DiplomacyRowSelection(rows=rows, next_key=next_key)

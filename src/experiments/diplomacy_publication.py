@@ -32,6 +32,12 @@ from simulation.diplomacy_models import (
     DiplomacySnapshotRelationRow,
     DiplomacySnapshotSummaryRow,
     DiplomacySnapshotTerminationRow,
+    DiplomacySnapshotTreatyDeclarationRow,
+    DiplomacySnapshotTreatyLineageRow,
+    DiplomacySnapshotTreatyMisrepresentationRow,
+    DiplomacySnapshotTreatyRecollectionRow,
+    DiplomacySnapshotTreatyRow,
+    DiplomacySnapshotTreatyVersionRow,
 )
 from simulation.diplomacy_ports import (
     DiplomacyPublication,
@@ -79,6 +85,20 @@ def _receipt(
         "instruments": 0 if snapshot is None else snapshot.summary.instrument_count,
         "terminations": 0 if snapshot is None else snapshot.summary.termination_count,
         "coverage": "partial" if snapshot is None else snapshot.coverage,
+        "treaties": 0 if snapshot is None else len(snapshot.treaties),
+        "treaty_versions": (0 if snapshot is None else len(snapshot.treaty_versions)),
+        "treaty_accepted": (
+            0
+            if snapshot is None
+            else sum(
+                1
+                for row in snapshot.treaty_versions
+                if row.status == "apparently_accepted"
+            )
+        ),
+        "treaty_recollections": (
+            0 if snapshot is None else len(snapshot.treaty_recollections)
+        ),
     }
 
 
@@ -227,9 +247,7 @@ def _snapshot(
         for index, row in enumerate(rows.terminations, start=1)
         if row.target_ref
     )
-    _LOG.debug(
-        "[FIX] diplomacy_snapshot_envoys_remapped count=%s", len(envoy_ids)
-    )
+    _LOG.debug("[FIX] diplomacy_snapshot_envoys_remapped count=%s", len(envoy_ids))
     conflicts = tuple(
         DiplomacySnapshotConflictRow(
             conflict_id="dpx-" + f"{index:016x}",
@@ -273,6 +291,134 @@ def _snapshot(
     conflicts = tuple(
         sorted(conflicts, key=lambda row: (row.observed_tick, row.conflict_id))
     )
+    version_status: dict[tuple[str, str], tuple[str, str]] = {
+        (row.treaty_id, row.version_id): (row.status, row.acceptance_basis)
+        for row in harvest.treaty_statuses
+    }
+    treaties = tuple(
+        DiplomacySnapshotTreatyRow(
+            treaty_id=row.treaty_id,
+            relation_id=row.relation_id,
+            owner_token=row.owner_token,
+            party_tokens=row.party_tokens,
+            subject_kind=row.subject_token,
+            current_version_id=row.current_version_id,
+            status=version_status.get(
+                (row.treaty_id, row.current_version_id), ("proposed", "none")
+            )[0],
+            opened_tick=row.opened_tick,
+            last_tick=row.last_tick,
+            provenance=row.provenance,
+        )
+        for row in rows.treaties
+    )
+    treaty_versions = tuple(
+        DiplomacySnapshotTreatyVersionRow(
+            version_id=row.version_id,
+            treaty_id=row.treaty_id,
+            owner_token=row.owner_token,
+            version_index=row.version_index,
+            parent_version_ids=row.parent_version_ids,
+            change_kind=row.change_kind,
+            status=version_status.get(
+                (row.treaty_id, row.version_id), ("proposed", "none")
+            )[0],
+            acceptance_basis=version_status.get(
+                (row.treaty_id, row.version_id), ("proposed", "none")
+            )[1],
+            party_tokens=row.party_tokens,
+            provision_kinds=row.provision_kinds,
+            terms_digest=row.terms_digest,
+            record_refs=row.record_refs,
+            institutional_memory_refs=row.institutional_memory_refs,
+            effective_tick=row.effective_tick,
+            end_tick=row.end_tick,
+            proposer_party_token=row.proposer_party_token,
+            proposer_envoy_token=row.proposer_envoy_token,
+            provenance=row.provenance,
+        )
+        for row in rows.treaty_versions
+    )
+    treaty_declarations = tuple(
+        DiplomacySnapshotTreatyDeclarationRow(
+            declaration_id="dpq-" + f"{index:016x}",
+            treaty_id=row.treaty_id,
+            version_id=row.version_id,
+            owner_token=row.owner_token,
+            party_token=row.party_token,
+            envoy_token=row.envoy_token,
+            act=row.act,
+            declared_tick=row.declared_tick,
+            provenance=row.provenance,
+        )
+        for index, row in enumerate(rows.treaty_declarations, start=1)
+    )
+    treaty_recollections = tuple(
+        DiplomacySnapshotTreatyRecollectionRow(
+            recollection_id="dpz-" + f"{index:016x}",
+            owner_token=row.owner_token,
+            treaty_ref=row.treaty_ref,
+            version_ref=row.version_ref,
+            subject_kind=row.subject_token,
+            basis=row.basis,
+            stance=row.stance,
+            claimed_terms_digest=row.claimed_terms_digest,
+            confidence=row.confidence,
+            first_tick=row.first_tick,
+            last_tick=row.last_tick,
+            provenance=row.provenance,
+        )
+        for index, row in enumerate(rows.treaty_recollections, start=1)
+    )
+    treaty_misrepresentations = tuple(
+        DiplomacySnapshotTreatyMisrepresentationRow(
+            misrepresentation_id="dpj-" + f"{index:016x}",
+            version_id=row.version_id,
+            owner_token=row.owner_token,
+            kind=row.kind,
+            observed_tick=row.observed_tick,
+            envoy_token=row.envoy_token,
+            party_token=row.party_token,
+            provenance=row.provenance,
+        )
+        for index, row in enumerate(rows.treaty_misrepresentations, start=1)
+    )
+    treaty_lineage = tuple(
+        DiplomacySnapshotTreatyLineageRow(
+            edge_id=edge.edge_id,
+            treaty_id=edge.treaty_id,
+            from_version_id=edge.from_version_id,
+            to_version_id=edge.to_version_id,
+            change_kind=edge.change_kind,
+            tick=edge.tick,
+        )
+        for edge in harvest.treaty_lineage
+    )
+    treaties = tuple(sorted(treaties, key=lambda row: (row.opened_tick, row.treaty_id)))
+    treaty_versions = tuple(
+        sorted(treaty_versions, key=lambda row: (row.effective_tick, row.version_id))
+    )
+    treaty_declarations = tuple(
+        sorted(
+            treaty_declarations,
+            key=lambda row: (row.declared_tick, row.declaration_id),
+        )
+    )
+    treaty_recollections = tuple(
+        sorted(
+            treaty_recollections,
+            key=lambda row: (row.first_tick, row.recollection_id),
+        )
+    )
+    treaty_misrepresentations = tuple(
+        sorted(
+            treaty_misrepresentations,
+            key=lambda row: (row.observed_tick, row.misrepresentation_id),
+        )
+    )
+    treaty_lineage = tuple(
+        sorted(treaty_lineage, key=lambda row: (row.tick, row.edge_id))
+    )
     summary = DiplomacySnapshotSummaryRow(
         relation_count=len(relations),
         party_count=len(parties),
@@ -298,6 +444,35 @@ def _snapshot(
         for family, _ in harvest.summary.lane_histogram
         if family
     )
+    treaty_families = (
+        (
+            "treaty_structure",
+            "treaty_version_lineage",
+            "treaty_recollection",
+            "treaty_anchor_coverage",
+        )
+        if rows.has_any_rows()
+        else ()
+    )
+    provenance = tuple(
+        sorted(
+            (*provenance, *tuple(
+                DiplomacySnapshotMetricProvenanceRow(
+                    family_id=family,
+                    family_version=1,
+                    document_digest="0" * 64,
+                )
+                for family in treaty_families
+            )),
+            key=lambda row: (row.family_id, row.family_version),
+        )
+    )
+    metric_families = tuple(
+        sorted(
+            {family for family, _ in harvest.summary.lane_histogram}
+            | set(treaty_families)
+        )
+    )
     return finalize_diplomacy_snapshot(
         DiplomacySnapshot(
             run_id=run_id,
@@ -316,10 +491,14 @@ def _snapshot(
             terminations=terminations,
             conflicts=conflicts,
             lineage=lineage,
+            treaties=treaties,
+            treaty_versions=treaty_versions,
+            treaty_declarations=treaty_declarations,
+            treaty_recollections=treaty_recollections,
+            treaty_misrepresentations=treaty_misrepresentations,
+            treaty_lineage=treaty_lineage,
             metric_provenance=provenance,
-            metric_families=tuple(
-                family for family, _ in harvest.summary.lane_histogram
-            ),
+            metric_families=metric_families,
         )
     )
 
@@ -421,4 +600,8 @@ def diplomacy_publication_document(receipt: Mapping[str, object]) -> dict[str, o
         "publication_id": receipt.get("publication_id"),
         "digest": receipt.get("digest"),
         "coverage": receipt.get("coverage"),
+        "treaties": receipt.get("treaties"),
+        "treaty_versions": receipt.get("treaty_versions"),
+        "treaty_accepted": receipt.get("treaty_accepted"),
+        "treaty_recollections": receipt.get("treaty_recollections"),
     }

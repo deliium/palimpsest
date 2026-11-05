@@ -6,6 +6,8 @@
     getDiplomacyRelation,
     getDiplomacyRelations,
     getDiplomacySummary,
+    getDiplomacyTreaties,
+    getDiplomacyTreaty,
     type DiplomacyEnvoy,
     type DiplomacyInstrument,
     type DiplomacyLineage,
@@ -14,6 +16,8 @@
     type DiplomacyRelationDetail,
     type DiplomacySummary,
     type DiplomacyTermination,
+    type DiplomacyTreaty,
+    type DiplomacyTreatyDetail,
   } from '../api/diplomacy'
   import type { ResearchSelection } from '../research/selection'
 
@@ -32,8 +36,11 @@
   let relations = $state<DiplomacyRelation[]>([])
   let instruments = $state<DiplomacyInstrument[]>([])
   let lineage = $state<DiplomacyLineage[]>([])
+  let treaties = $state<DiplomacyTreaty[]>([])
   let selected = $state<DiplomacyRelationDetail | null>(null)
   let selectedId = $state<string | null>(null)
+  let treatyDetail = $state<DiplomacyTreatyDetail | null>(null)
+  let selectedTreatyId = $state<string | null>(null)
 
   function label(value: string | null | undefined): string {
     return value ? value.replaceAll('_', ' ') : 'unknown'
@@ -46,14 +53,17 @@
     selectedId = null
     try {
       summary = await getDiplomacySummary(runId)
-      const [relationPage, instrumentPage, lineagePage] = await Promise.all([
-        getDiplomacyRelations(runId),
-        getDiplomacyInstruments(runId),
-        getDiplomacyLineage(runId),
-      ])
+      const [relationPage, instrumentPage, lineagePage, treatyPage] =
+        await Promise.all([
+          getDiplomacyRelations(runId),
+          getDiplomacyInstruments(runId),
+          getDiplomacyLineage(runId),
+          getDiplomacyTreaties(runId),
+        ])
       relations = relationPage.items
       instruments = instrumentPage.items
       lineage = lineagePage.items
+      treaties = treatyPage.items
       status = relations.length === 0 ? 'empty' : 'available'
     } catch (error) {
       if (error instanceof ApiClientError) {
@@ -63,6 +73,16 @@
       }
       reason = 'diplomacy_read_failed'
       status = 'error'
+    }
+  }
+
+  async function selectTreaty(treatyId: string): Promise<void> {
+    selectedTreatyId = treatyId
+    try {
+      treatyDetail = await getDiplomacyTreaty(runId, treatyId)
+    } catch (error) {
+      reason = error instanceof ApiClientError ? error.code : 'diplomacy_read_failed'
+      treatyDetail = null
     }
   }
 
@@ -103,6 +123,9 @@
       <dt>Contacts</dt><dd>{summary.contact_count}</dd>
       <dt>Instruments</dt><dd>{summary.instrument_count}</dd>
       <dt>Terminations</dt><dd>{summary.termination_count}</dd>
+      <dt>Treaties</dt><dd>{summary.treaty_count}</dd>
+      <dt>Treaty versions</dt><dd>{summary.treaty_version_count}</dd>
+      <dt>Recollections</dt><dd>{summary.treaty_recollection_count}</dd>
       <dt>Coverage</dt><dd>{label(summary.coverage)}</dd>
     </dl>
 
@@ -151,6 +174,56 @@
       <ul>
         {#each selected.terminations as row (row.termination_id)}
           <li>{label(row.kind)} · {label(row.target_kind)} · tick {row.tick}</li>
+        {/each}
+      </ul>
+    {/if}
+
+    <h3>Treaties</h3>
+    {#if treaties.length === 0}
+      <p>No treaty records were published for this run.</p>
+    {:else}
+      <table>
+        <thead><tr><th>Subject</th><th>Participants</th><th>Current version</th><th>Status</th><th>Opened</th><th>Last</th></tr></thead>
+        <tbody>
+          {#each treaties as treaty (treaty.treaty_id)}
+            <tr class:selected={selectedTreatyId === treaty.treaty_id}>
+              <td><button type="button" onclick={() => selectTreaty(treaty.treaty_id)}>{label(treaty.subject_kind)}</button></td>
+              <td>{treaty.party_tokens.length}</td>
+              <td>{treaty.current_version_id}</td>
+              <td>{label(treaty.status)}</td>
+              <td>{treaty.opened_tick}</td>
+              <td>{treaty.last_tick}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+
+    {#if treatyDetail}
+      <h4>Treaty detail</h4>
+      <p>Truncated: {treatyDetail.truncated ? 'yes' : 'no'}</p>
+      <h4>Versions</h4>
+      <ul>
+        {#each treatyDetail.versions as version (version.version_id)}
+          <li>{version.version_index} · {label(version.change_kind)} · {label(version.status)} · {label(version.acceptance_basis)} · parents: {version.parent_version_ids.join(', ') || 'none'} · provisions: {version.provision_kinds.join(', ')} · records: {version.record_refs.length} · memory anchors: {version.institutional_memory_refs.length}</li>
+        {/each}
+      </ul>
+      <h4>Declarations</h4>
+      <ul>
+        {#each treatyDetail.declarations as declaration (declaration.declaration_id)}
+          <li>{label(declaration.act)} · {declaration.party_token ?? 'unknown'} · tick {declaration.declared_tick}</li>
+        {/each}
+      </ul>
+      <h4>Recollections</h4>
+      <ul>
+        {#each treatyDetail.recollections as recollection (recollection.recollection_id)}
+          <li>{label(recollection.stance)} · {label(recollection.basis)} · confidence {recollection.confidence} · first tick {recollection.first_tick}</li>
+        {/each}
+      </ul>
+      <h4>Version lineage</h4>
+      <ul>
+        {#each treatyDetail.lineage as edge (edge.edge_id)}
+          <li>{edge.from_version_id} → {edge.to_version_id} · {label(edge.change_kind)} · tick {edge.tick}</li>
         {/each}
       </ul>
     {/if}

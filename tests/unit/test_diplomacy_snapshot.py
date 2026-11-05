@@ -281,7 +281,7 @@ def test_existing_snapshot_schemas_remain_unchanged() -> None:
     from simulation.formal_rule_models import FORMAL_RULE_SNAPSHOT_SCHEMA
     from simulation.organization_models import ORGANIZATION_SNAPSHOT_SCHEMA_VERSION
 
-    assert DIPLOMACY_SNAPSHOT_SCHEMA == "diplomacy-snapshot-v1"
+    assert DIPLOMACY_SNAPSHOT_SCHEMA == "diplomacy-snapshot-v2"
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )

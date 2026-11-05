@@ -10,6 +10,11 @@ matrix, and error codes that later diplomacy code consumes.
 No record or policy field may carry a numeric relationship value, valence,
 ranking, or composite. Macro-level relationship evidence is derived by detached
 analysis from independent lanes; it never becomes a single bilateral score.
+
+Treaty rows (multi-party commitments, immutable versions, declarations, and
+recollections) are an additive extension of the same owner-scoped contract.
+They exist whenever a diplomacy ledger exists; there is no separate treaty
+mode, capability flag, runner field, or settings object.
 """
 
 from __future__ import annotations
@@ -17,9 +22,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, replace
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Final, NoReturn, cast
@@ -42,7 +49,15 @@ __all__ = [
     "DIPLOMACY_SCOPE_COVERAGE",
     "DIPLOMACY_SEPARATOR",
     "DIPLOMACY_TERMINATION_ID_PREFIX",
+    "DIPLOMACY_TREATY_DECLARATION_ID_PREFIX",
+    "DIPLOMACY_TREATY_ID_PREFIX",
+    "DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX",
+    "DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX",
+    "DIPLOMACY_TREATY_VERSION_ID_PREFIX",
     "LONG_RUNNING_INSTRUMENT_KINDS",
+    "TREATY_CONTRACT_VERSION",
+    "TREATY_POLICY_VALUES",
+    "TREATY_POLICY_VERSION",
     "DiplomacyError",
     "DiplomacyLedger",
     "DiplomacyPolicy",
@@ -71,13 +86,25 @@ __all__ = [
     "DiplomaticTermKind",
     "DiplomaticTermination",
     "DiplomaticTerminationKind",
+    "TreatyAcceptanceBasis",
+    "TreatyChangeKind",
+    "TreatyDeclarationAct",
+    "TreatyPolicy",
+    "TreatyProvisionKind",
+    "TreatyRecollectionBasis",
+    "TreatyRecollectionStance",
+    "TreatyStatus",
+    "TreatySubjectKind",
     "apply_diplomacy_termination",
     "apply_diplomacy_update",
     "assert_diplomacy_no_forbidden_fields",
     "claim_diplomacy_completion",
     "default_diplomacy_policy",
+    "default_treaty_policy",
     "detect_diplomacy_conflicts",
     "detect_diplomatic_misrepresentation",
+    "detect_treaty_conflicts",
+    "detect_treaty_misrepresentation",
     "diplomacy_conflict_id",
     "diplomacy_contact_id",
     "diplomacy_declaration_id",
@@ -94,9 +121,18 @@ __all__ = [
     "diplomacy_scope_covers",
     "diplomacy_standing_summary",
     "diplomacy_termination_id",
+    "diplomacy_treaty_current_version",
+    "diplomacy_treaty_declaration_id",
+    "diplomacy_treaty_id",
+    "diplomacy_treaty_misrepresentation_id",
+    "diplomacy_treaty_recollection_id",
+    "diplomacy_treaty_statuses",
+    "diplomacy_treaty_version_id",
+    "diplomacy_treaty_version_status",
     "empty_diplomacy_ledger",
     "enforce_diplomacy_limits",
     "expire_diplomacy_records",
+    "expire_treaty_records",
     "is_agreement_view",
     "record_diplomacy_utterance",
     "require_diplomacy_id",
@@ -104,11 +140,19 @@ __all__ = [
     "require_diplomacy_token",
     "require_owner_diplomacy",
     "supersede_diplomacy_instruments",
+    "supersede_treaty_records",
+    "treaty_change_histogram",
+    "treaty_extension_enabled",
+    "treaty_participant_union",
+    "treaty_provision_histogram",
+    "treaty_terms_digest",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.diplomacy")
 
 DIPLOMACY_POLICY_VERSION: Final[str] = "diplomacy.v1"
+TREATY_CONTRACT_VERSION: Final[str] = "diplomacy-treaties-v1"
+TREATY_POLICY_VERSION: Final[str] = "treaty.v1"
 DIPLOMACY_ID_HEX_LEN: Final[int] = 16
 DIPLOMACY_SEPARATOR: Final[str] = "\x1f"
 DIPLOMACY_PUBLICATION_PREFIX: Final[str] = "dip-pub-"
@@ -124,6 +168,11 @@ DIPLOMACY_DECLARATION_ID_PREFIX: Final[str] = "dpd-"
 DIPLOMACY_MISREPRESENTATION_ID_PREFIX: Final[str] = "dps-"
 DIPLOMACY_TERMINATION_ID_PREFIX: Final[str] = "dpt-"
 DIPLOMACY_CONFLICT_ID_PREFIX: Final[str] = "dpx-"
+DIPLOMACY_TREATY_ID_PREFIX: Final[str] = "dpg-"
+DIPLOMACY_TREATY_VERSION_ID_PREFIX: Final[str] = "dpv-"
+DIPLOMACY_TREATY_DECLARATION_ID_PREFIX: Final[str] = "dpq-"
+DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX: Final[str] = "dpz-"
+DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX: Final[str] = "dpj-"
 
 DIPLOMACY_ID_PREFIXES: Final[tuple[str, ...]] = (
     DIPLOMACY_RELATION_ID_PREFIX,
@@ -136,6 +185,11 @@ DIPLOMACY_ID_PREFIXES: Final[tuple[str, ...]] = (
     DIPLOMACY_MISREPRESENTATION_ID_PREFIX,
     DIPLOMACY_TERMINATION_ID_PREFIX,
     DIPLOMACY_CONFLICT_ID_PREFIX,
+    DIPLOMACY_TREATY_ID_PREFIX,
+    DIPLOMACY_TREATY_VERSION_ID_PREFIX,
+    DIPLOMACY_TREATY_DECLARATION_ID_PREFIX,
+    DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX,
+    DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX,
 )
 
 _ID_PATTERNS: Final[Mapping[str, re.Pattern[str]]] = MappingProxyType(
@@ -168,6 +222,18 @@ _FORBIDDEN_FIELD_NAMES: Final[frozenset[str]] = frozenset(
         "index",
         "composite",
         "overall_relation",
+        "treaty_store",
+        "treaty_authority",
+        "treaty_registry",
+        "enforced",
+        "enforcement",
+        "war_state",
+        "ceasefire_state",
+        "misremembered",
+        "false_belief",
+        "truth_value",
+        "legitimacy",
+        "reliability",
     }
 )
 
@@ -285,6 +351,7 @@ class DiplomaticTerminationKind(StrEnum):
     AGREEMENT_DISPUTED = "agreement_disputed"
     SUPERSEDED = "superseded"
     EXPIRED = "expired"
+    TREATY_TERMINATED = "treaty_terminated"
     UNKNOWN = "unknown"
 
 
@@ -305,6 +372,111 @@ class DiplomaticConflictKind(StrEnum):
     CONTRADICTORY_TERMS = "contradictory_terms"
     CONFLICTING_PARTY = "conflicting_party"
     AGREEMENT_DISPUTE = "agreement_dispute"
+    TREATY_PARTICIPANT_CONFLICT = "treaty_participant_conflict"
+    TREATY_RECORD_CONFLICT = "treaty_record_conflict"
+    TREATY_RECOLLECTION_CONFLICT = "treaty_recollection_conflict"
+    UNKNOWN = "unknown"
+
+
+class TreatySubjectKind(StrEnum):
+    """Closed treaty subject categories. Never a permission or world state."""
+
+    CEASEFIRE = "ceasefire"
+    ACCESS = "access"
+    MIGRATION = "migration"
+    RESOURCE_SHARING = "resource_sharing"
+    TRADE = "trade"
+    TERRITORIAL_UNDERSTANDING = "territorial_understanding"
+    MUTUAL_AID = "mutual_aid"
+    UNKNOWN = "unknown"
+
+
+class TreatyChangeKind(StrEnum):
+    """Closed version change kinds. Every non-original version is parented."""
+
+    ORIGINAL = "original"
+    AMENDMENT = "amendment"
+    RENEWAL = "renewal"
+    ACCESSION = "accession"
+    WITHDRAWAL = "withdrawal"
+    SUSPENSION = "suspension"
+    TERMINATION = "termination"
+    UNKNOWN = "unknown"
+
+
+class TreatyStatus(StrEnum):
+    """Closed believed treaty-version statuses. Acceptance binds nobody."""
+
+    PROPOSED = "proposed"
+    APPARENTLY_ACCEPTED = "apparently_accepted"
+    SUSPENDED = "suspended"
+    TERMINATED = "terminated"
+    EXPIRED = "expired"
+    SUPERSEDED = "superseded"
+    UNKNOWN = "unknown"
+
+
+class TreatyAcceptanceBasis(StrEnum):
+    """Diagnostic acceptance basis. Never a legitimacy or truth verdict."""
+
+    ALL_PARTICIPANTS_DECLARED = "all_participants_declared"
+    PROPOSER_ONLY = "proposer_only"
+    REJECTED = "rejected"
+    SUSPENDED = "suspended"
+    TERMINATED = "terminated"
+    EXPIRED = "expired"
+    SUPERSEDED = "superseded"
+    NONE = "none"
+    UNKNOWN = "unknown"
+
+
+class TreatyDeclarationAct(StrEnum):
+    """Closed treaty declaration acts. A declaration is a claim only."""
+
+    PROPOSE = "propose"
+    ACCEPT = "accept"
+    REJECT = "reject"
+    ACCEDE = "accede"
+    WITHDRAW = "withdraw"
+    AMEND = "amend"
+    RENEW = "renew"
+    SUSPEND = "suspend"
+    TERMINATE = "terminate"
+    INTERPRET = "interpret"
+    IGNORE = "ignore"
+
+
+class TreatyProvisionKind(StrEnum):
+    """Closed provision kinds. Terms carry no free text."""
+
+    NON_HOSTILITY = "non_hostility"
+    PASSAGE = "passage"
+    RESOURCE_SHARING = "resource_sharing"
+    EXCHANGE = "exchange"
+    TERRITORY_ACKNOWLEDGEMENT = "territory_acknowledgement"
+    MUTUAL_ASSISTANCE = "mutual_assistance"
+    PROCEDURE = "procedure"
+    UNKNOWN = "unknown"
+
+
+class TreatyRecollectionBasis(StrEnum):
+    """Closed recollection evidence bases. A recollection creates no treaty."""
+
+    DURABLE_RECORD = "durable_record"
+    INSTITUTIONAL_MEMORY = "institutional_memory"
+    COMMUNICATED_TESTIMONY = "communicated_testimony"
+    NARRATIVE = "narrative"
+    DIRECT_PARTICIPATION = "direct_participation"
+    UNKNOWN = "unknown"
+
+
+class TreatyRecollectionStance(StrEnum):
+    """Closed owner stances toward a recollected treaty."""
+
+    REMEMBER = "remember"
+    REINTERPRET = "reinterpret"
+    IGNORE = "ignore"
+    RENEW = "renew"
     UNKNOWN = "unknown"
 
 
@@ -318,11 +490,12 @@ DIPLOMACY_SCOPE_COVERAGE: Final[Mapping[str, frozenset[str]]] = MappingProxyType
         "promise": frozenset({"speak_for", "negotiate"}),
         "dispute": frozenset({"speak_for", "negotiate"}),
         "shared_project": frozenset({"coordinate_project"}),
+        "treaty": frozenset({"negotiate", "decide"}),
     }
 )
 
 LONG_RUNNING_INSTRUMENT_KINDS: Final[frozenset[str]] = frozenset(
-    {"agreement", "promise", "shared_project"}
+    {"agreement", "promise", "shared_project", "treaty"}
 )
 
 _DIPLOMACY_POLICY_VALUES: Final[Mapping[str, int]] = MappingProxyType(
@@ -377,6 +550,60 @@ def default_diplomacy_policy() -> DiplomacyPolicy:
 
     _LOG.debug("diplomacy_policy_loaded version=%s", DIPLOMACY_POLICY_VERSION)
     return DiplomacyPolicy()
+
+
+_TREATY_POLICY_VALUES: Final[Mapping[str, int]] = MappingProxyType(
+    {
+        "max_treaties_per_relation": 8,
+        "max_versions_per_treaty": 16,
+        "max_treaty_declarations_per_version": 32,
+        "max_treaty_recollections": 64,
+        "max_participants_per_treaty": 32,
+        "max_provisions": 8,
+        "max_record_refs": 8,
+        "max_institutional_memory_refs": 8,
+        "max_treaty_frame_chars": 832,
+    }
+)
+
+# Public read-only view of the locked treaty policy values. Kept as a separate
+# name so callers do not depend on the private implementation spelling.
+TREATY_POLICY_VALUES: Final[Mapping[str, int]] = _TREATY_POLICY_VALUES
+
+
+@dataclass(frozen=True, slots=True)
+class TreatyPolicy:
+    """Locked owner-local treaty bounds.
+
+    Every value is part of the accepted contract. Any deviation is a programming
+    error and fails closed with ``diplomacy_policy_not_locked``.
+    """
+
+    max_treaties_per_relation: int = 8
+    max_versions_per_treaty: int = 16
+    max_treaty_declarations_per_version: int = 32
+    max_treaty_recollections: int = 64
+    max_participants_per_treaty: int = 32
+    max_provisions: int = 8
+    max_record_refs: int = 8
+    max_institutional_memory_refs: int = 8
+    max_treaty_frame_chars: int = 832
+
+    def __post_init__(self) -> None:
+        for field in fields(type(self)):
+            if field.name in _FORBIDDEN_FIELD_NAMES:
+                raise DiplomacyError("diplomacy_policy_not_locked")
+            expected = _TREATY_POLICY_VALUES[field.name]
+            actual = getattr(self, field.name)
+            if type(actual) is not type(expected) or actual != expected:
+                raise DiplomacyError("diplomacy_policy_not_locked")
+
+
+def default_treaty_policy() -> TreatyPolicy:
+    """Return the one locked treaty policy value."""
+
+    _LOG.debug("treaty_policy_loaded version=%s", TREATY_POLICY_VERSION)
+    return TreatyPolicy()
 
 
 class DiplomacyError(ValueError):
@@ -534,6 +761,12 @@ _TERMINATION_KINDS_BY_TARGET: Final[Mapping[str, frozenset[str]]] = MappingProxy
             {"envoy_recalled", "envoy_resigned", "superseded", "expired"}
         ),
         "relation": frozenset({"party_withdrew"}),
+        "treaty": frozenset(
+            {"party_withdrew", "treaty_terminated", "superseded", "expired"}
+        ),
+        "treaty_version": frozenset(
+            {"party_withdrew", "treaty_terminated", "superseded", "expired"}
+        ),
     }
 )
 _COMPLETION_CLAIM_MARKER: Final[str] = "completion_claim"
@@ -925,6 +1158,383 @@ class DiplomaticConflict:
         )
 
 
+_HEX_64: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{64}$")
+_TREATY_CONFIDENCE_QUANTUM: Final[Decimal] = Decimal("0.0001")
+
+
+def treaty_terms_digest(
+    subject_kind: TreatySubjectKind,
+    provision_kinds: Sequence[TreatyProvisionKind],
+    effective_tick: int,
+    end_tick: int | None,
+) -> str:
+    """Return one owner-independent content digest over closed treaty terms."""
+
+    subject = _require_enum(
+        subject_kind, TreatySubjectKind, "diplomacy_treaty_terms_invalid"
+    )
+    provisions = _require_enum_tuple(
+        provision_kinds,
+        TreatyProvisionKind,
+        "diplomacy_treaty_terms_invalid",
+        max_items=8,
+    )
+    effective = _require_tick(effective_tick, "diplomacy_treaty_terms_invalid")
+    end = (
+        None
+        if end_tick is None
+        else _require_tick(end_tick, "diplomacy_treaty_terms_invalid")
+    )
+    if end is not None and end < effective:
+        _fail("diplomacy_treaty_terms_invalid")
+    payload = "|".join(
+        (
+            "palimpsest.treaty.terms.v1",
+            subject.value,
+            ",".join(
+                row.value for row in sorted(provisions, key=lambda item: item.value)
+            ),
+            str(effective),
+            "none" if end is None else str(end),
+        )
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _require_terms_digest(value: object, code: str) -> str:
+    if type(value) is not str or _HEX_64.match(value) is None:
+        _fail(code)
+    return value
+
+
+def _require_enum_tuple(
+    values: object,
+    enum_type: type[StrEnum],
+    code: str,
+    *,
+    max_items: int,
+    min_items: int = 1,
+) -> tuple[Any, ...]:
+    if not isinstance(values, (tuple, list)):
+        _fail(code)
+    rows = tuple(values)
+    if len(rows) < min_items or len(rows) > max_items:
+        _fail(code)
+    for value in rows:
+        if type(value) is not enum_type:
+            _fail(code)
+    if len({row.value for row in rows}) != len(rows):
+        _fail(code)
+    return tuple(sorted(rows, key=lambda row: row.value))
+
+
+def _quantize_treaty_confidence(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _fail("diplomacy_invalid_recollection")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0 or number > 1.0:
+        _fail("diplomacy_invalid_recollection")
+    quantized = Decimal(str(number)).quantize(
+        _TREATY_CONFIDENCE_QUANTUM, rounding=ROUND_HALF_UP
+    )
+    return 0.0 if quantized == 0 else float(quantized)
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomaticTreaty:
+    """Retained anchor for one owner's multi-party treaty belief."""
+
+    treaty_id: str
+    relation_id: str
+    participant_party_ids: tuple[str, ...]
+    subject_kind: TreatySubjectKind
+    current_version_id: str
+    opened_tick: int
+    last_tick: int
+    provenance: DiplomaticProvenance
+    revision: int
+
+    def __post_init__(self) -> None:
+        _check_no_forbidden(self)
+        require_diplomacy_id(self.treaty_id, DIPLOMACY_TREATY_ID_PREFIX)
+        require_diplomacy_id(self.relation_id, DIPLOMACY_RELATION_ID_PREFIX)
+        participant_cap = TREATY_POLICY_VALUES["max_participants_per_treaty"]
+        if (
+            isinstance(self.participant_party_ids, (tuple, list))
+            and len(self.participant_party_ids) > participant_cap
+        ):
+            _fail("treaty_capacity_reached")
+        participants = _require_tokens(
+            self.participant_party_ids,
+            max_items=participant_cap,
+            code="diplomacy_invalid_treaty",
+        )
+        if len(participants) < 2:
+            _fail("diplomacy_invalid_treaty")
+        object.__setattr__(self, "participant_party_ids", participants)
+        _require_enum(
+            self.subject_kind, TreatySubjectKind, "diplomacy_unknown_treaty_kind"
+        )
+        require_diplomacy_id(
+            self.current_version_id, DIPLOMACY_TREATY_VERSION_ID_PREFIX
+        )
+        opened = _require_tick(self.opened_tick)
+        last = _require_tick(self.last_tick)
+        if last < opened:
+            _fail("diplomacy_invalid_treaty")
+        _require_enum(self.provenance, DiplomaticProvenance, _RECORD_CODE)
+        if type(self.revision) is not int or self.revision < 0:
+            _fail("diplomacy_invalid_treaty")
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomaticTreatyVersion:
+    """One immutable, parent-linked treaty version belief."""
+
+    version_id: str
+    treaty_id: str
+    version_index: int
+    parent_version_ids: tuple[str, ...]
+    change_kind: TreatyChangeKind
+    participant_party_ids: tuple[str, ...]
+    provision_kinds: tuple[TreatyProvisionKind, ...]
+    terms_digest: str
+    record_refs: tuple[str, ...]
+    institutional_memory_refs: tuple[str, ...]
+    effective_tick: int
+    end_tick: int | None
+    proposer_party_id: str
+    proposer_envoy_ref: str | None
+    provenance: DiplomaticProvenance
+    revision: int
+
+    def __post_init__(self) -> None:
+        code = "diplomacy_invalid_treaty"
+        _check_no_forbidden(self)
+        require_diplomacy_id(self.version_id, DIPLOMACY_TREATY_VERSION_ID_PREFIX)
+        require_diplomacy_id(self.treaty_id, DIPLOMACY_TREATY_ID_PREFIX)
+        if (
+            type(self.version_index) is not int
+            or isinstance(self.version_index, bool)
+            or self.version_index < 1
+        ):
+            _fail(code)
+        parents = _require_tokens(
+            self.parent_version_ids,
+            max_items=2,
+            code="diplomacy_treaty_lineage_invalid",
+        )
+        for parent in parents:
+            require_diplomacy_id(parent, DIPLOMACY_TREATY_VERSION_ID_PREFIX)
+        object.__setattr__(self, "parent_version_ids", tuple(sorted(parents)))
+        change = _require_enum(
+            self.change_kind, TreatyChangeKind, "diplomacy_unknown_treaty_kind"
+        )
+        if change is TreatyChangeKind.ORIGINAL:
+            if self.version_index != 1 or parents:
+                _fail("diplomacy_treaty_lineage_invalid")
+        elif not parents:
+            _fail("diplomacy_treaty_lineage_invalid")
+        participant_cap = TREATY_POLICY_VALUES["max_participants_per_treaty"]
+        if (
+            isinstance(self.participant_party_ids, (tuple, list))
+            and len(self.participant_party_ids) > participant_cap
+        ):
+            _fail("treaty_capacity_reached")
+        participants = _require_tokens(
+            self.participant_party_ids, max_items=participant_cap, code=code
+        )
+        if len(participants) < 2:
+            _fail(code)
+        object.__setattr__(self, "participant_party_ids", participants)
+        provision_cap = TREATY_POLICY_VALUES["max_provisions"]
+        if (
+            isinstance(self.provision_kinds, (tuple, list))
+            and len(self.provision_kinds) > provision_cap
+        ):
+            _fail("treaty_capacity_reached")
+        object.__setattr__(
+            self,
+            "provision_kinds",
+            _require_enum_tuple(
+                self.provision_kinds,
+                TreatyProvisionKind,
+                "diplomacy_treaty_terms_invalid",
+                max_items=provision_cap,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "terms_digest",
+            _require_terms_digest(self.terms_digest, "diplomacy_treaty_terms_invalid"),
+        )
+        object.__setattr__(
+            self,
+            "record_refs",
+            tuple(
+                sorted(
+                    _require_tokens(
+                        self.record_refs, max_items=8, max_chars=128, code=code
+                    )
+                )
+            ),
+        )
+        memory_refs = _require_tokens(
+            self.institutional_memory_refs, max_items=8, code=code
+        )
+        for ref in memory_refs:
+            _require_terms_digest(ref, code)
+        object.__setattr__(
+            self, "institutional_memory_refs", tuple(sorted(memory_refs))
+        )
+        effective = _require_tick(self.effective_tick)
+        if self.end_tick is not None:
+            end = _require_tick(self.end_tick)
+            if end < effective:
+                _fail(code)
+        require_diplomacy_id(self.proposer_party_id, DIPLOMACY_PARTY_ID_PREFIX)
+        if self.proposer_party_id not in participants:
+            _fail("diplomacy_party_set_invalid")
+        object.__setattr__(
+            self,
+            "proposer_envoy_ref",
+            _require_optional_token(self.proposer_envoy_ref),
+        )
+        _require_enum(self.provenance, DiplomaticProvenance, _RECORD_CODE)
+        if type(self.revision) is not int or self.revision < 0:
+            _fail(code)
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomaticTreatyDeclaration:
+    """Immutable participant declaration on one treaty version."""
+
+    declaration_id: str
+    treaty_id: str
+    version_id: str
+    declarer_party_id: str
+    envoy_ref: str | None
+    act: TreatyDeclarationAct
+    declared_tick: int
+    provenance: DiplomaticProvenance
+    independence_ref: str | None
+    revision: int
+
+    def __post_init__(self) -> None:
+        code = "diplomacy_invalid_treaty_declaration"
+        _check_no_forbidden(self)
+        require_diplomacy_id(
+            self.declaration_id, DIPLOMACY_TREATY_DECLARATION_ID_PREFIX
+        )
+        require_diplomacy_id(self.treaty_id, DIPLOMACY_TREATY_ID_PREFIX)
+        require_diplomacy_id(self.version_id, DIPLOMACY_TREATY_VERSION_ID_PREFIX)
+        require_diplomacy_id(self.declarer_party_id, DIPLOMACY_PARTY_ID_PREFIX)
+        object.__setattr__(
+            self, "envoy_ref", _require_optional_token(self.envoy_ref, code=code)
+        )
+        _require_enum(self.act, TreatyDeclarationAct, code)
+        _require_enum(self.provenance, DiplomaticProvenance, _RECORD_CODE)
+        _require_tick(self.declared_tick, code)
+        object.__setattr__(
+            self,
+            "independence_ref",
+            _require_optional_token(self.independence_ref, code=code),
+        )
+        if type(self.revision) is not int or self.revision < 0:
+            _fail(code)
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomaticTreatyRecollection:
+    """One owner's later-generation recollection of a treaty. Creates nothing."""
+
+    recollection_id: str
+    treaty_ref: str
+    version_ref: str
+    subject_kind: TreatySubjectKind
+    basis: TreatyRecollectionBasis
+    stance: TreatyRecollectionStance
+    claimed_terms_digest: str | None
+    confidence: float
+    first_tick: int
+    last_tick: int
+    independence_ref: str | None
+    provenance: DiplomaticProvenance
+    revision: int
+
+    def __post_init__(self) -> None:
+        code = "diplomacy_invalid_recollection"
+        _check_no_forbidden(self)
+        require_diplomacy_id(
+            self.recollection_id, DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX
+        )
+        object.__setattr__(
+            self,
+            "treaty_ref",
+            require_diplomacy_token(self.treaty_ref, max_chars=128),
+        )
+        object.__setattr__(
+            self,
+            "version_ref",
+            require_diplomacy_token(self.version_ref, max_chars=128),
+        )
+        _require_enum(self.subject_kind, TreatySubjectKind, code)
+        _require_enum(self.basis, TreatyRecollectionBasis, code)
+        _require_enum(self.stance, TreatyRecollectionStance, code)
+        if self.claimed_terms_digest is not None:
+            object.__setattr__(
+                self,
+                "claimed_terms_digest",
+                _require_terms_digest(self.claimed_terms_digest, code),
+            )
+        object.__setattr__(
+            self, "confidence", _quantize_treaty_confidence(self.confidence)
+        )
+        first = _require_tick(self.first_tick, code)
+        last = _require_tick(self.last_tick, code)
+        if last < first:
+            _fail(code)
+        object.__setattr__(
+            self,
+            "independence_ref",
+            _require_optional_token(self.independence_ref, code=code),
+        )
+        _require_enum(self.provenance, DiplomaticProvenance, _RECORD_CODE)
+        if type(self.revision) is not int or self.revision < 0:
+            _fail(code)
+
+
+@dataclass(frozen=True, slots=True)
+class DiplomaticTreatyMisrepresentation:
+    """One retained observation of an envoy's exceedance on a treaty version."""
+
+    misrepresentation_id: str
+    version_id: str
+    kind: DiplomaticMisrepresentationKind
+    observed_tick: int
+    envoy_ref: str
+    declarer_party_id: str
+    provenance: DiplomaticProvenance
+
+    def __post_init__(self) -> None:
+        code = "diplomacy_invalid_treaty"
+        _check_no_forbidden(self)
+        require_diplomacy_id(
+            self.misrepresentation_id,
+            DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX,
+        )
+        require_diplomacy_id(self.version_id, DIPLOMACY_TREATY_VERSION_ID_PREFIX)
+        _require_enum(self.kind, DiplomaticMisrepresentationKind, code)
+        _require_tick(self.observed_tick, code)
+        object.__setattr__(
+            self,
+            "envoy_ref",
+            require_diplomacy_token(self.envoy_ref, max_chars=128),
+        )
+        require_diplomacy_id(self.declarer_party_id, DIPLOMACY_PARTY_ID_PREFIX)
+        _require_enum(self.provenance, DiplomaticProvenance, _RECORD_CODE)
+
+
 def diplomacy_relation_id(owner_id: object, party_anchor_keys: Sequence[str]) -> str:
     """Mint a deterministic relation id from the owner and anchor keys."""
 
@@ -1106,6 +1716,123 @@ def diplomacy_conflict_id(
     )
 
 
+def diplomacy_treaty_id(
+    owner_id: object,
+    relation_id: str,
+    subject_kind: TreatySubjectKind,
+    opened_tick: int,
+) -> str:
+    """Mint a deterministic treaty anchor id."""
+
+    subject = _require_enum(
+        subject_kind, TreatySubjectKind, "diplomacy_unknown_treaty_kind"
+    )
+    return diplomacy_record_id(
+        DIPLOMACY_TREATY_ID_PREFIX,
+        _owner_text(owner_id),
+        relation_id,
+        subject.value,
+        _require_tick(opened_tick),
+    )
+
+
+def diplomacy_treaty_version_id(
+    owner_id: object,
+    treaty_id: str,
+    version_index: int,
+    change_kind: TreatyChangeKind,
+    terms_digest: str,
+) -> str:
+    """Mint a deterministic immutable treaty-version id."""
+
+    change = _require_enum(
+        change_kind, TreatyChangeKind, "diplomacy_unknown_treaty_kind"
+    )
+    return diplomacy_record_id(
+        DIPLOMACY_TREATY_VERSION_ID_PREFIX,
+        _owner_text(owner_id),
+        treaty_id,
+        _require_tick(version_index),
+        change.value,
+        require_diplomacy_token(terms_digest, max_chars=128),
+    )
+
+
+def diplomacy_treaty_declaration_id(
+    owner_id: object,
+    treaty_id: str,
+    version_id: str,
+    party_id: str,
+    act: TreatyDeclarationAct,
+    tick: int,
+    revision: int,
+) -> str:
+    """Mint a deterministic treaty declaration id."""
+
+    declaration_act = _require_enum(
+        act, TreatyDeclarationAct, "diplomacy_unknown_treaty_kind"
+    )
+    return diplomacy_record_id(
+        DIPLOMACY_TREATY_DECLARATION_ID_PREFIX,
+        _owner_text(owner_id),
+        treaty_id,
+        version_id,
+        party_id,
+        declaration_act.value,
+        _require_tick(tick),
+        _require_tick(revision, _RECORD_CODE),
+    )
+
+
+def diplomacy_treaty_recollection_id(
+    owner_id: object,
+    treaty_ref: str | None,
+    version_ref: str | None,
+    basis: TreatyRecollectionBasis,
+    stance: TreatyRecollectionStance,
+    first_tick: int,
+) -> str:
+    """Mint a deterministic recollection id."""
+
+    recollection_basis = _require_enum(
+        basis, TreatyRecollectionBasis, "diplomacy_unknown_treaty_kind"
+    )
+    recollection_stance = _require_enum(
+        stance, TreatyRecollectionStance, "diplomacy_unknown_treaty_kind"
+    )
+    return diplomacy_record_id(
+        DIPLOMACY_TREATY_RECOLLECTION_ID_PREFIX,
+        _owner_text(owner_id),
+        treaty_ref or "none",
+        version_ref or "none",
+        recollection_basis.value,
+        recollection_stance.value,
+        _require_tick(first_tick),
+    )
+
+
+def diplomacy_treaty_misrepresentation_id(
+    owner_id: object,
+    version_id: str,
+    envoy_ref: str,
+    kind: DiplomaticMisrepresentationKind,
+    observed_tick: int,
+) -> str:
+    """Mint a deterministic treaty misrepresentation observation id."""
+
+    observation_kind = _require_enum(
+        kind, DiplomaticMisrepresentationKind, "diplomacy_unknown_treaty_kind"
+    )
+    return diplomacy_record_id(
+        DIPLOMACY_TREATY_MISREPRESENTATION_ID_PREFIX,
+        _owner_text(owner_id),
+        version_id,
+        envoy_ref,
+        observation_kind.value,
+        _require_tick(observed_tick),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class DiplomaticStandingSummary:
     """Read-only counts over one owner's diplomacy beliefs. No score."""
@@ -1167,6 +1894,11 @@ class DiplomacyLedger:
     terminations: tuple[DiplomaticTermination, ...] = ()
     conflicts: tuple[DiplomaticConflict, ...] = ()
     notices: tuple[str, ...] = ()
+    treaties: tuple[DiplomaticTreaty, ...] = ()
+    treaty_versions: tuple[DiplomaticTreatyVersion, ...] = ()
+    treaty_declarations: tuple[DiplomaticTreatyDeclaration, ...] = ()
+    treaty_recollections: tuple[DiplomaticTreatyRecollection, ...] = ()
+    treaty_misrepresentations: tuple[DiplomaticTreatyMisrepresentation, ...] = ()
 
     def __post_init__(self) -> None:
         _check_no_forbidden(self)
@@ -1189,6 +1921,17 @@ class DiplomacyLedger:
         )
         terminations = _require_rows(self.terminations, DiplomaticTermination)
         conflicts = _require_rows(self.conflicts, DiplomaticConflict)
+        treaties = _require_rows(self.treaties, DiplomaticTreaty)
+        treaty_versions = _require_rows(self.treaty_versions, DiplomaticTreatyVersion)
+        treaty_declarations = _require_rows(
+            self.treaty_declarations, DiplomaticTreatyDeclaration
+        )
+        treaty_recollections = _require_rows(
+            self.treaty_recollections, DiplomaticTreatyRecollection
+        )
+        treaty_misrepresentations = _require_rows(
+            self.treaty_misrepresentations, DiplomaticTreatyMisrepresentation
+        )
 
         _require_ordered(relations, tick_name="opened_tick", id_name="relation_id")
         _require_ordered(parties, tick_name="first_seen_tick", id_name="party_id")
@@ -1208,6 +1951,23 @@ class DiplomacyLedger:
         )
         _require_ordered(terminations, tick_name="tick", id_name="termination_id")
         _require_ordered(conflicts, tick_name="observed_tick", id_name="conflict_id")
+        _require_ordered(treaties, tick_name="opened_tick", id_name="treaty_id")
+        _require_ordered(
+            treaty_versions, tick_name="effective_tick", id_name="version_id"
+        )
+        _require_ordered(
+            treaty_declarations,
+            tick_name="declared_tick",
+            id_name="declaration_id",
+        )
+        _require_ordered(
+            treaty_recollections, tick_name="first_tick", id_name="recollection_id"
+        )
+        _require_ordered(
+            treaty_misrepresentations,
+            tick_name="observed_tick",
+            id_name="misrepresentation_id",
+        )
 
         party_by_id = {row.party_id: row for row in parties}
         relation_by_id = {row.relation_id: row for row in relations}
@@ -1299,11 +2059,18 @@ class DiplomacyLedger:
             if instrument is None or row.declarer_party_id not in instrument.party_ids:
                 _fail("diplomacy_foreign_reference")
 
+        treaty_by_id = {row.treaty_id: row for row in treaties}
+        version_by_id = {row.version_id: row for row in treaty_versions}
+
         for termination in terminations:
             if termination.target_kind == "instrument":
                 exists = termination.target_ref in instrument_by_id
             elif termination.target_kind == "envoy":
                 exists = termination.target_ref in envoy_by_id
+            elif termination.target_kind == "treaty":
+                exists = termination.target_ref in treaty_by_id
+            elif termination.target_kind == "treaty_version":
+                exists = termination.target_ref in version_by_id
             else:
                 exists = termination.target_ref in relation_by_id
             if not exists:
@@ -1313,9 +2080,109 @@ class DiplomacyLedger:
             relation = relation_by_id.get(conflict.relation_id)
             if relation is None:
                 _fail("diplomacy_foreign_reference")
-            if any(ref not in instrument_by_id for ref in conflict.instrument_refs):
+            allowed_refs = (
+                instrument_by_id.keys() | treaty_by_id.keys() | version_by_id.keys()
+            )
+            if any(ref not in allowed_refs for ref in conflict.instrument_refs):
                 _fail("diplomacy_foreign_reference")
             if any(ref not in party_by_id for ref in conflict.party_refs):
+                _fail("diplomacy_foreign_reference")
+
+        for treaty in treaties:
+            relation = relation_by_id.get(treaty.relation_id)
+            if relation is None:
+                _fail("diplomacy_foreign_reference")
+            for party_id in treaty.participant_party_ids:
+                if party_id not in party_by_id:
+                    _fail("diplomacy_foreign_reference")
+            if treaty.participant_party_ids[0] != relation.party_ids[0]:
+                _fail("diplomacy_treaty_lineage_invalid")
+            if treaty.current_version_id not in version_by_id:
+                _fail("diplomacy_foreign_reference")
+
+        versions_by_treaty: dict[str, list[DiplomaticTreatyVersion]] = {}
+        for version in treaty_versions:
+            if version.treaty_id not in treaty_by_id:
+                _fail("diplomacy_foreign_reference")
+            versions_by_treaty.setdefault(version.treaty_id, []).append(version)
+            for party_id in version.participant_party_ids:
+                if party_id not in party_by_id:
+                    _fail("diplomacy_foreign_reference")
+            relation = relation_by_id[treaty_by_id[version.treaty_id].relation_id]
+            if version.participant_party_ids[0] != relation.party_ids[0]:
+                _fail("diplomacy_treaty_lineage_invalid")
+            if version.proposer_envoy_ref is not None and not any(
+                row.relation_id == relation.relation_id
+                and row.envoy_ref == version.proposer_envoy_ref
+                for row in envoys
+            ):
+                _fail("diplomacy_foreign_reference")
+
+        for treaty in treaties:
+            rows = versions_by_treaty.get(treaty.treaty_id, [])
+            indices = sorted(row.version_index for row in rows)
+            if indices != list(range(1, len(indices) + 1)):
+                _fail("diplomacy_treaty_lineage_invalid")
+            by_index = {row.version_index: row for row in rows}
+            if by_index[1].change_kind is not TreatyChangeKind.ORIGINAL:
+                _fail("diplomacy_treaty_lineage_invalid")
+            for row in rows:
+                if row.change_kind is TreatyChangeKind.ORIGINAL:
+                    continue
+                if not row.parent_version_ids:
+                    _fail("diplomacy_treaty_lineage_invalid")
+                for parent_id in row.parent_version_ids:
+                    parent = next(
+                        (
+                            candidate
+                            for candidate in rows
+                            if candidate.version_id == parent_id
+                        ),
+                        None,
+                    )
+                    if parent is None or parent.version_index >= row.version_index:
+                        _fail("diplomacy_treaty_lineage_invalid")
+            if treaty.current_version_id != by_index[indices[-1]].version_id:
+                _fail("diplomacy_treaty_lineage_invalid")
+
+        for declaration in treaty_declarations:
+            version = version_by_id.get(declaration.version_id)
+            if version is None or version.treaty_id != declaration.treaty_id:
+                _fail("diplomacy_foreign_reference")
+            if declaration.declarer_party_id not in version.participant_party_ids:
+                _fail("diplomacy_party_set_invalid")
+            relation = relation_by_id[treaty_by_id[version.treaty_id].relation_id]
+            if declaration.envoy_ref is not None and not any(
+                row.relation_id == relation.relation_id
+                and row.envoy_ref == declaration.envoy_ref
+                for row in envoys
+            ):
+                _fail("diplomacy_foreign_reference")
+            if declaration.declared_tick < version.effective_tick:
+                _fail("diplomacy_invalid_treaty_declaration")
+
+        for recollection in treaty_recollections:
+            if recollection.treaty_ref not in treaty_by_id:
+                continue
+            treaty = treaty_by_id[recollection.treaty_ref]
+            if recollection.subject_kind.value != treaty.subject_kind.value:
+                continue
+            if recollection.version_ref not in version_by_id:
+                continue
+
+        for row in treaty_misrepresentations:
+            version = version_by_id.get(row.version_id)
+            if version is None:
+                _fail("diplomacy_foreign_reference")
+            if row.declarer_party_id not in version.participant_party_ids:
+                _fail("diplomacy_party_set_invalid")
+            treaty = treaty_by_id[version.treaty_id]
+            relation = relation_by_id[treaty.relation_id]
+            if not any(
+                candidate.relation_id == relation.relation_id
+                and candidate.envoy_ref == row.envoy_ref
+                for candidate in envoys
+            ):
                 _fail("diplomacy_foreign_reference")
 
         notices = _require_tokens(self.notices, max_items=64, max_chars=64)
@@ -1333,6 +2200,11 @@ class DiplomacyLedger:
                 *(row.observed_tick for row in misrepresentations),
                 *(row.tick for row in terminations),
                 *(row.observed_tick for row in conflicts),
+                *(row.opened_tick for row in treaties),
+                *(row.last_tick for row in treaties),
+                *(row.declared_tick for row in treaty_declarations),
+                *(row.last_tick for row in treaty_recollections),
+                *(row.observed_tick for row in treaty_misrepresentations),
                 0,
             )
         )
@@ -1344,6 +2216,17 @@ def empty_diplomacy_ledger(owner_id: object, *, tick: int) -> DiplomacyLedger:
     """Return one empty owner ledger at ``tick``."""
 
     return DiplomacyLedger(owner_id=_owner_text(owner_id), tick=_require_tick(tick))
+
+
+def treaty_extension_enabled(ledger: DiplomacyLedger | None) -> bool:
+    """Return whether treaty beliefs are active for one owner ledger.
+
+    Treaties are an additive extension of the owner-scoped diplomacy contract.
+    They activate whenever a diplomacy ledger exists and carries the accepted
+    ``diplomacy.v1`` policy; this helper is pure and allocates nothing.
+    """
+
+    return ledger is not None and ledger.policy_version == DIPLOMACY_POLICY_VERSION
 
 
 def require_owner_diplomacy(
@@ -1417,6 +2300,32 @@ def diplomacy_ledger_digest(ledger: DiplomacyLedger) -> str:
         ],
         "conflicts": [
             asdict(row) for row in sorted(ledger.conflicts, key=lambda r: r.conflict_id)
+        ],
+        "treaties": [
+            asdict(row) for row in sorted(ledger.treaties, key=lambda r: r.treaty_id)
+        ],
+        "treaty_versions": [
+            asdict(row)
+            for row in sorted(ledger.treaty_versions, key=lambda r: r.version_id)
+        ],
+        "treaty_declarations": [
+            asdict(row)
+            for row in sorted(
+                ledger.treaty_declarations, key=lambda r: r.declaration_id
+            )
+        ],
+        "treaty_recollections": [
+            asdict(row)
+            for row in sorted(
+                ledger.treaty_recollections, key=lambda r: r.recollection_id
+            )
+        ],
+        "treaty_misrepresentations": [
+            asdict(row)
+            for row in sorted(
+                ledger.treaty_misrepresentations,
+                key=lambda r: r.misrepresentation_id,
+            )
         ],
     }
     text = json.dumps(
@@ -1626,6 +2535,230 @@ def diplomacy_instrument_status(
     return DiplomaticInstrumentStatus.PROPOSED, DiplomaticAcceptanceBasis.NONE
 
 
+def _treaty_declaration_counts(
+    declaration: DiplomaticTreatyDeclaration,
+    version: DiplomaticTreatyVersion,
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    representation: object | None,
+    envoys: Sequence[DiplomaticEnvoy],
+    relation_id: str | None,
+    subject_kind: TreatySubjectKind | None,
+) -> bool:
+    if declaration.envoy_ref is None:
+        return True
+    envoy = next(
+        (
+            row
+            for row in envoys
+            if (relation_id is None or row.relation_id == relation_id)
+            and row.envoy_ref == declaration.envoy_ref
+        ),
+        None,
+    )
+    if envoy is None:
+        return False
+    if (
+        diplomacy_envoy_status(envoy, representation, tick=tick, policy=policy)
+        is not DiplomaticEnvoyStatus.RECOGNIZED
+    ):
+        return False
+    mandate = _mandate_for(envoy, representation)
+    if mandate is None:
+        return False
+    subject = subject_kind.value if subject_kind is not None else ""
+    return diplomacy_scope_covers(
+        scope_kind=getattr(mandate, "scope_kind", None),
+        duration_kind=getattr(mandate, "duration_kind", None),
+        instrument_kind="treaty",
+        scope_subject=getattr(mandate, "scope_subject", None),
+        topic_subject=subject,
+    )
+
+
+def diplomacy_treaty_version_status(
+    version: DiplomaticTreatyVersion,
+    declarations: Sequence[DiplomaticTreatyDeclaration],
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+    representation: object | None = None,
+    envoys: Sequence[DiplomaticEnvoy] = (),
+    relation_id: str | None = None,
+    subject_kind: TreatySubjectKind | None = None,
+) -> tuple[TreatyStatus, TreatyAcceptanceBasis]:
+    """Derive one treaty version's status from retained participant declarations."""
+
+    if type(version) is not DiplomaticTreatyVersion:
+        raise TypeError("version must be DiplomaticTreatyVersion")
+    if type(policy) is not DiplomacyPolicy:
+        raise TypeError("policy must be DiplomacyPolicy")
+    active_treaty_policy = (
+        default_treaty_policy() if treaty_policy is None else treaty_policy
+    )
+    if type(active_treaty_policy) is not TreatyPolicy:
+        raise TypeError("treaty_policy must be TreatyPolicy")
+    _require_tick(tick)
+    rows = sorted(
+        (
+            row
+            for row in declarations
+            if type(row) is DiplomaticTreatyDeclaration
+            and row.version_id == version.version_id
+        ),
+        key=lambda row: (row.declared_tick, row.declaration_id),
+    )
+    if version.end_tick is not None and tick >= version.end_tick:
+        return TreatyStatus.EXPIRED, TreatyAcceptanceBasis.EXPIRED
+    if any(row.act is TreatyDeclarationAct.REJECT for row in rows):
+        return TreatyStatus.PROPOSED, TreatyAcceptanceBasis.REJECTED
+    participants = version.participant_party_ids
+    minimum = max(2, min(policy.agreement_min_party_declarations, len(participants)))
+
+    def counted(act: TreatyDeclarationAct) -> set[str]:
+        result: set[str] = set()
+        envoy_parties: dict[str, str] = {}
+        for row in rows:
+            if row.act is not act:
+                continue
+            if row.envoy_ref is not None:
+                other = envoy_parties.get(row.envoy_ref)
+                if other is not None and other != row.declarer_party_id:
+                    continue
+                envoy_parties[row.envoy_ref] = row.declarer_party_id
+            if _treaty_declaration_counts(
+                row,
+                version,
+                tick=tick,
+                policy=policy,
+                representation=representation,
+                envoys=envoys,
+                relation_id=relation_id,
+                subject_kind=subject_kind,
+            ):
+                result.add(row.declarer_party_id)
+        return result
+
+    terminated = counted(TreatyDeclarationAct.TERMINATE)
+    if len(participants) >= minimum and set(participants).issubset(terminated):
+        return TreatyStatus.TERMINATED, TreatyAcceptanceBasis.TERMINATED
+    suspended = counted(TreatyDeclarationAct.SUSPEND)
+    if len(participants) >= minimum and set(participants).issubset(suspended):
+        return TreatyStatus.SUSPENDED, TreatyAcceptanceBasis.SUSPENDED
+    accepted = counted(TreatyDeclarationAct.ACCEPT)
+    if len(participants) >= minimum and set(participants).issubset(accepted):
+        return (
+            TreatyStatus.APPARENTLY_ACCEPTED,
+            TreatyAcceptanceBasis.ALL_PARTICIPANTS_DECLARED,
+        )
+    if rows:
+        return TreatyStatus.PROPOSED, TreatyAcceptanceBasis.PROPOSER_ONLY
+    return TreatyStatus.PROPOSED, TreatyAcceptanceBasis.NONE
+
+
+def diplomacy_treaty_statuses(
+    treaty: DiplomaticTreaty,
+    versions: Sequence[DiplomaticTreatyVersion],
+    declarations: Sequence[DiplomaticTreatyDeclaration],
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+    representation: object | None = None,
+    envoys: Sequence[DiplomaticEnvoy] = (),
+    subject_kind: TreatySubjectKind | None = None,
+) -> tuple[tuple[str, TreatyStatus, TreatyAcceptanceBasis], ...]:
+    """Derive every version status and apply forward-only supersession."""
+
+    if type(treaty) is not DiplomaticTreaty:
+        raise TypeError("treaty must be DiplomaticTreaty")
+    ordered = sorted(
+        (row for row in versions if row.treaty_id == treaty.treaty_id),
+        key=lambda row: row.version_index,
+    )
+    base: dict[str, tuple[TreatyStatus, TreatyAcceptanceBasis]] = {}
+    for version in ordered:
+        base[version.version_id] = diplomacy_treaty_version_status(
+            version,
+            declarations,
+            tick=tick,
+            policy=policy,
+            treaty_policy=treaty_policy,
+            representation=representation,
+            envoys=envoys,
+            relation_id=treaty.relation_id,
+            subject_kind=subject_kind or treaty.subject_kind,
+        )
+    results: list[tuple[str, TreatyStatus, TreatyAcceptanceBasis]] = []
+    decisive = {
+        TreatyStatus.APPARENTLY_ACCEPTED,
+        TreatyStatus.SUSPENDED,
+        TreatyStatus.TERMINATED,
+    }
+    for index, version in enumerate(ordered):
+        status, basis = base[version.version_id]
+        if status in decisive and any(
+            later_status in decisive
+            for later_version in ordered[index + 1 :]
+            for later_status, _ in (base[later_version.version_id],)
+        ):
+            status, basis = TreatyStatus.SUPERSEDED, TreatyAcceptanceBasis.SUPERSEDED
+        results.append((version.version_id, status, basis))
+    return tuple(results)
+
+
+def diplomacy_treaty_current_version(
+    treaty: DiplomaticTreaty, versions: Sequence[DiplomaticTreatyVersion]
+) -> DiplomaticTreatyVersion:
+    """Return the highest-index version of one treaty."""
+
+    if type(treaty) is not DiplomaticTreaty:
+        raise TypeError("treaty must be DiplomaticTreaty")
+    rows = [row for row in versions if row.treaty_id == treaty.treaty_id]
+    if not rows:
+        _fail("diplomacy_treaty_lineage_invalid")
+    return max(rows, key=lambda row: row.version_index)
+
+
+def treaty_participant_union(
+    treaty: DiplomaticTreaty, versions: Sequence[DiplomaticTreatyVersion]
+) -> tuple[str, ...]:
+    """Return the retained participant union with the owner self-party first."""
+
+    self_party = treaty.participant_party_ids[0]
+    union = set(treaty.participant_party_ids)
+    for version in versions:
+        if version.treaty_id == treaty.treaty_id:
+            union.update(version.participant_party_ids)
+    union.discard(self_party)
+    return (self_party, *sorted(union))
+
+
+def treaty_provision_histogram(
+    versions: Sequence[DiplomaticTreatyVersion],
+) -> tuple[tuple[str, int], ...]:
+    """Count closed provision kinds across retained versions."""
+
+    counts: dict[str, int] = {}
+    for version in versions:
+        for provision in version.provision_kinds:
+            counts[provision.value] = counts.get(provision.value, 0) + 1
+    return tuple(sorted(counts.items()))
+
+
+def treaty_change_histogram(
+    versions: Sequence[DiplomaticTreatyVersion],
+) -> tuple[tuple[str, int], ...]:
+    """Count closed change kinds across retained versions."""
+
+    counts: dict[str, int] = {}
+    for version in versions:
+        counts[version.change_kind.value] = counts.get(version.change_kind.value, 0) + 1
+    return tuple(sorted(counts.items()))
+
+
 def is_agreement_view(
     instrument: DiplomaticInstrument,
     declarations: Sequence[DiplomaticDeclaration],
@@ -1745,6 +2878,10 @@ def apply_diplomacy_termination(
         exists = any(row.instrument_id == target_ref for row in ledger.instruments)
     elif target_kind == "envoy":
         exists = any(row.envoy_id == target_ref for row in ledger.envoys)
+    elif target_kind == "treaty":
+        exists = any(row.treaty_id == target_ref for row in ledger.treaties)
+    elif target_kind == "treaty_version":
+        exists = any(row.version_id == target_ref for row in ledger.treaty_versions)
     else:
         exists = any(row.relation_id == target_ref for row in ledger.relations)
     if not exists:
@@ -1970,9 +3107,11 @@ def detect_diplomacy_conflicts(ledger: DiplomacyLedger) -> DiplomacyLedger:
                     tuple(sorted((dispute.instrument_id, candidate.instrument_id))),
                 )
 
-    merged = {row.conflict_id: row for row in ledger.conflicts}
-    for row in rows:
-        merged.setdefault(row.conflict_id, row)
+    merged = {
+        conflict_row.conflict_id: conflict_row for conflict_row in ledger.conflicts
+    }
+    for conflict_row in rows:
+        merged.setdefault(conflict_row.conflict_id, conflict_row)
     if set(merged) == {row.conflict_id for row in ledger.conflicts}:
         return ledger
     return _bump(
@@ -1980,6 +3119,326 @@ def detect_diplomacy_conflicts(ledger: DiplomacyLedger) -> DiplomacyLedger:
         conflicts=tuple(
             sorted(
                 merged.values(), key=lambda item: (item.observed_tick, item.conflict_id)
+            )
+        ),
+    )
+
+
+def expire_treaty_records(
+    ledger: DiplomacyLedger,
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+) -> DiplomacyLedger:
+    """Append retained expiry terminations for treaty versions. Rows stay."""
+
+    if type(ledger) is not DiplomacyLedger:
+        raise TypeError("ledger must be DiplomacyLedger")
+    if type(policy) is not DiplomacyPolicy:
+        raise TypeError("policy must be DiplomacyPolicy")
+    if treaty_policy is not None and type(treaty_policy) is not TreatyPolicy:
+        raise TypeError("treaty_policy must be TreatyPolicy")
+    _require_tick(tick)
+    updated = ledger
+    expired = {
+        row.target_ref
+        for row in ledger.terminations
+        if row.target_kind == "treaty_version"
+        and row.kind is DiplomaticTerminationKind.EXPIRED
+    }
+    for version in ledger.treaty_versions:
+        if (
+            version.end_tick is not None
+            and tick >= version.end_tick
+            and version.version_id not in expired
+        ):
+            updated = apply_diplomacy_termination(
+                updated,
+                target_kind="treaty_version",
+                target_ref=version.version_id,
+                kind=DiplomaticTerminationKind.EXPIRED,
+                tick=tick,
+                provenance=DiplomaticProvenance.COMMUNICATED,
+            )
+    return updated
+
+
+def supersede_treaty_records(
+    ledger: DiplomacyLedger,
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+    representation: object | None = None,
+) -> DiplomacyLedger:
+    """Append retained supersession when a later version is collectively decided."""
+
+    if type(ledger) is not DiplomacyLedger:
+        raise TypeError("ledger must be DiplomacyLedger")
+    if type(policy) is not DiplomacyPolicy:
+        raise TypeError("policy must be DiplomacyPolicy")
+    active_treaty_policy = (
+        default_treaty_policy() if treaty_policy is None else treaty_policy
+    )
+    if type(active_treaty_policy) is not TreatyPolicy:
+        raise TypeError("treaty_policy must be TreatyPolicy")
+    _require_tick(tick)
+    updated = ledger
+    superseded = {
+        row.target_ref
+        for row in ledger.terminations
+        if row.target_kind == "treaty_version"
+        and row.kind is DiplomaticTerminationKind.SUPERSEDED
+    }
+    for treaty in ledger.treaties:
+        statuses = diplomacy_treaty_statuses(
+            treaty,
+            ledger.treaty_versions,
+            ledger.treaty_declarations,
+            tick=tick,
+            policy=policy,
+            treaty_policy=active_treaty_policy,
+            representation=representation,
+            envoys=ledger.envoys,
+            subject_kind=treaty.subject_kind,
+        )
+        for version_id, status, _ in statuses:
+            if status is not TreatyStatus.SUPERSEDED or version_id in superseded:
+                continue
+            updated = apply_diplomacy_termination(
+                updated,
+                target_kind="treaty_version",
+                target_ref=version_id,
+                kind=DiplomaticTerminationKind.SUPERSEDED,
+                tick=tick,
+                provenance=DiplomaticProvenance.COMMUNICATED,
+            )
+            superseded.add(version_id)
+    return updated
+
+
+def detect_treaty_misrepresentation(
+    ledger: DiplomacyLedger,
+    representation: object | None,
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+) -> DiplomacyLedger:
+    """Derive retained treaty-envoy misrepresentation observations."""
+
+    if type(ledger) is not DiplomacyLedger:
+        raise TypeError("ledger must be DiplomacyLedger")
+    if type(policy) is not DiplomacyPolicy:
+        raise TypeError("policy must be DiplomacyPolicy")
+    _require_tick(tick)
+    version_by_id = {row.version_id: row for row in ledger.treaty_versions}
+    treaty_by_id = {row.treaty_id: row for row in ledger.treaties}
+    rows = {row.misrepresentation_id: row for row in ledger.treaty_misrepresentations}
+
+    def add(
+        declaration: DiplomaticTreatyDeclaration,
+        kind: DiplomaticMisrepresentationKind,
+        envoy_ref: str,
+    ) -> None:
+        row_id = diplomacy_treaty_misrepresentation_id(
+            ledger.owner_id,
+            declaration.version_id,
+            envoy_ref,
+            kind,
+            tick,
+        )
+        rows.setdefault(
+            row_id,
+            DiplomaticTreatyMisrepresentation(
+                misrepresentation_id=row_id,
+                version_id=declaration.version_id,
+                kind=kind,
+                observed_tick=tick,
+                envoy_ref=envoy_ref,
+                declarer_party_id=declaration.declarer_party_id,
+                provenance=DiplomaticProvenance.REPRESENTATION_BELIEF,
+            ),
+        )
+
+    for declaration in ledger.treaty_declarations:
+        if declaration.envoy_ref is None:
+            continue
+        version = version_by_id.get(declaration.version_id)
+        if version is None:
+            continue
+        treaty = treaty_by_id.get(version.treaty_id)
+        if treaty is None:
+            continue
+        envoy = next(
+            (
+                row
+                for row in ledger.envoys
+                if row.relation_id == treaty.relation_id
+                and row.envoy_ref == declaration.envoy_ref
+            ),
+            None,
+        )
+        if envoy is None:
+            add(
+                declaration,
+                DiplomaticMisrepresentationKind.MANDATE_UNRECOGNIZED,
+                declaration.envoy_ref,
+            )
+            continue
+        status = diplomacy_envoy_status(envoy, representation, tick=tick, policy=policy)
+        if status is not DiplomaticEnvoyStatus.RECOGNIZED:
+            add(
+                declaration,
+                DiplomaticMisrepresentationKind.MANDATE_UNRECOGNIZED,
+                declaration.envoy_ref,
+            )
+            continue
+        mandate = _mandate_for(envoy, representation)
+        if mandate is not None and not diplomacy_scope_covers(
+            scope_kind=getattr(mandate, "scope_kind", None),
+            duration_kind=getattr(mandate, "duration_kind", None),
+            instrument_kind="treaty",
+            scope_subject=getattr(mandate, "scope_subject", None),
+            topic_subject=treaty.subject_kind.value,
+        ):
+            add(
+                declaration,
+                DiplomaticMisrepresentationKind.SCOPE_EXCEEDED,
+                declaration.envoy_ref,
+            )
+    if set(rows) == {
+        row.misrepresentation_id for row in ledger.treaty_misrepresentations
+    }:
+        return ledger
+    return _bump(
+        ledger,
+        treaty_misrepresentations=tuple(
+            sorted(
+                rows.values(),
+                key=lambda row: (row.observed_tick, row.misrepresentation_id),
+            )
+        ),
+    )
+
+
+def detect_treaty_conflicts(
+    ledger: DiplomacyLedger,
+    *,
+    tick: int,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+) -> DiplomacyLedger:
+    """Append retained treaty conflicts. Conflicts coexist; nothing is reconciled."""
+
+    if type(ledger) is not DiplomacyLedger:
+        raise TypeError("ledger must be DiplomacyLedger")
+    if type(policy) is not DiplomacyPolicy:
+        raise TypeError("policy must be DiplomacyPolicy")
+    _require_tick(tick)
+    treaty_by_id = {row.treaty_id: row for row in ledger.treaties}
+    rows: list[DiplomaticConflict] = []
+
+    def add(
+        relation_id: str,
+        kind: DiplomaticConflictKind,
+        refs: Sequence[str],
+    ) -> None:
+        conflict_id = diplomacy_conflict_id(
+            ledger.owner_id, relation_id, kind, tuple(sorted(refs))
+        )
+        rows.append(
+            DiplomaticConflict(
+                conflict_id=conflict_id,
+                relation_id=relation_id,
+                kind=kind,
+                observed_tick=tick,
+                instrument_refs=tuple(sorted(refs)),
+                party_refs=(),
+                provenance=DiplomaticProvenance.COMMUNICATED,
+            )
+        )
+
+    by_treaty: dict[str, list[DiplomaticTreatyVersion]] = {}
+    for version in ledger.treaty_versions:
+        by_treaty.setdefault(version.treaty_id, []).append(version)
+
+    for treaty_id, versions in by_treaty.items():
+        treaty = treaty_by_id.get(treaty_id)
+        if treaty is None:
+            continue
+        indices = [row.version_index for row in versions]
+        if len(set(indices)) != len(indices):
+            add(
+                treaty.relation_id,
+                DiplomaticConflictKind.TREATY_PARTICIPANT_CONFLICT,
+                tuple(row.version_id for row in versions),
+            )
+        by_index: dict[int, set[tuple[str, ...]]] = {}
+        for row in versions:
+            by_index.setdefault(row.version_index, set()).add(row.participant_party_ids)
+        for index, participant_sets in by_index.items():
+            if len(participant_sets) > 1:
+                add(
+                    treaty.relation_id,
+                    DiplomaticConflictKind.TREATY_PARTICIPANT_CONFLICT,
+                    tuple(
+                        row.version_id for row in versions if row.version_index == index
+                    ),
+                )
+        record_terms: dict[str, set[str]] = {}
+        for row in versions:
+            for ref in row.record_refs:
+                record_terms.setdefault(ref, set()).add(row.terms_digest)
+        for ref, digests in record_terms.items():
+            if len(digests) > 1:
+                add(
+                    treaty.relation_id,
+                    DiplomaticConflictKind.TREATY_RECORD_CONFLICT,
+                    tuple(row.version_id for row in versions if ref in row.record_refs),
+                )
+        for version in versions:
+            by_envoy: dict[str, set[str]] = {}
+            for declaration in ledger.treaty_declarations:
+                if (
+                    declaration.version_id == version.version_id
+                    and declaration.envoy_ref is not None
+                ):
+                    by_envoy.setdefault(declaration.envoy_ref, set()).add(
+                        declaration.declarer_party_id
+                    )
+            if any(len(parties) > 1 for parties in by_envoy.values()):
+                add(
+                    treaty.relation_id,
+                    DiplomaticConflictKind.TREATY_PARTICIPANT_CONFLICT,
+                    (version.version_id,),
+                )
+
+    for recollection in ledger.treaty_recollections:
+        treaty = treaty_by_id.get(recollection.treaty_ref)
+        if treaty is None:
+            continue
+        if recollection.subject_kind is not treaty.subject_kind:
+            add(
+                treaty.relation_id,
+                DiplomaticConflictKind.TREATY_RECOLLECTION_CONFLICT,
+                (recollection.version_ref,),
+            )
+
+    merged = {
+        conflict_row.conflict_id: conflict_row for conflict_row in ledger.conflicts
+    }
+    for conflict_row in rows:
+        merged.setdefault(conflict_row.conflict_id, conflict_row)
+    if set(merged) == {row.conflict_id for row in ledger.conflicts}:
+        return ledger
+    return _bump(
+        ledger,
+        conflicts=tuple(
+            sorted(
+                merged.values(),
+                key=lambda item: (item.observed_tick, item.conflict_id),
             )
         ),
     )
@@ -1997,7 +3456,11 @@ def _drop_oldest(
 
 
 def enforce_diplomacy_limits(
-    ledger: DiplomacyLedger, *, policy: DiplomacyPolicy
+    ledger: DiplomacyLedger,
+    *,
+    policy: DiplomacyPolicy,
+    treaty_policy: TreatyPolicy | None = None,
+    representation: object | None = None,
 ) -> DiplomacyLedger:
     """Deterministically drop only documented low-priority rows."""
 
@@ -2005,6 +3468,11 @@ def enforce_diplomacy_limits(
         raise TypeError("ledger must be DiplomacyLedger")
     if type(policy) is not DiplomacyPolicy:
         raise TypeError("policy must be DiplomacyPolicy")
+    active_treaty_policy = (
+        default_treaty_policy() if treaty_policy is None else treaty_policy
+    )
+    if type(active_treaty_policy) is not TreatyPolicy:
+        raise TypeError("treaty_policy must be TreatyPolicy")
 
     contacts = list(ledger.contacts)
     envoys = list(ledger.envoys)
@@ -2014,6 +3482,8 @@ def enforce_diplomacy_limits(
     relations = list(ledger.relations)
     parties = list(ledger.parties)
     notices = set(ledger.notices)
+    treaty_recollections = list(ledger.treaty_recollections)
+    treaty_declarations = list(ledger.treaty_declarations)
     before_counts = (
         len(relations),
         len(parties),
@@ -2022,6 +3492,8 @@ def enforce_diplomacy_limits(
         len(negotiations),
         len(instruments),
         len(declarations),
+        len(treaty_declarations),
+        len(treaty_recollections),
     )
 
     if len(instruments) > policy.max_instruments_per_relation * max(1, len(relations)):
@@ -2117,10 +3589,106 @@ def enforce_diplomacy_limits(
     kept_ids = {row.instrument_id for row in instruments}
     declarations = [row for row in declarations if row.instrument_id in kept_ids]
 
+    treaty_relation_ids = {row.relation_id for row in ledger.treaties}
+    treaties_by_relation: dict[str, int] = {}
+    for treaty_row in ledger.treaties:
+        treaties_by_relation[treaty_row.relation_id] = (
+            treaties_by_relation.get(treaty_row.relation_id, 0) + 1
+        )
+    if any(
+        count > active_treaty_policy.max_treaties_per_relation
+        for count in treaties_by_relation.values()
+    ):
+        _LOG.error("treaty_capacity_reached table=treaties")
+        _fail("treaty_capacity_reached")
+    versions_by_treaty: dict[str, int] = {}
+    for version_row in ledger.treaty_versions:
+        versions_by_treaty[version_row.treaty_id] = (
+            versions_by_treaty.get(version_row.treaty_id, 0) + 1
+        )
+    if any(
+        count > active_treaty_policy.max_versions_per_treaty
+        for count in versions_by_treaty.values()
+    ):
+        _LOG.error("treaty_capacity_reached table=versions")
+        _fail("treaty_capacity_reached")
+    declarations_by_version: dict[str, list[Any]] = {}
+    for treaty_declaration_row in treaty_declarations:
+        declarations_by_version.setdefault(
+            treaty_declaration_row.version_id, []
+        ).append(treaty_declaration_row)
+    accepted_version_ids = {
+        version_id
+        for treaty in ledger.treaties
+        for version_id, status, _ in diplomacy_treaty_statuses(
+            treaty,
+            ledger.treaty_versions,
+            ledger.treaty_declarations,
+            tick=ledger.tick,
+            policy=policy,
+            treaty_policy=active_treaty_policy,
+            representation=representation,
+            envoys=ledger.envoys,
+            subject_kind=treaty.subject_kind,
+        )
+        if status
+        in {
+            TreatyStatus.APPARENTLY_ACCEPTED,
+            TreatyStatus.SUSPENDED,
+            TreatyStatus.TERMINATED,
+            TreatyStatus.SUPERSEDED,
+            TreatyStatus.EXPIRED,
+        }
+    }
+    for version_id, group in declarations_by_version.items():
+        excess = len(group) - active_treaty_policy.max_treaty_declarations_per_version
+        if excess <= 0:
+            continue
+        removable = [
+            row
+            for row in sorted(
+                group, key=lambda item: (item.declared_tick, item.declaration_id)
+            )
+            if not (
+                version_id in accepted_version_ids
+                and row.act is TreatyDeclarationAct.ACCEPT
+            )
+        ]
+        if excess > len(removable):
+            _LOG.error("treaty_capacity_reached table=treaty_declarations")
+            _fail("treaty_capacity_reached")
+        dropped = {row.declaration_id for row in removable[:excess]}
+        treaty_declarations = [
+            row for row in treaty_declarations if row.declaration_id not in dropped
+        ]
+        notices.add("diplomacy_truncated:treaty_declarations")
+        _LOG.warning(
+            "treaty_truncated table=treaty_declarations dropped=%s", len(dropped)
+        )
+    if len(treaty_recollections) > active_treaty_policy.max_treaty_recollections:
+        excess = (
+            len(treaty_recollections) - active_treaty_policy.max_treaty_recollections
+        )
+        kept_recollections, dropped_count = _drop_oldest(
+            treaty_recollections, table="treaty_recollections", count=excess
+        )
+        treaty_recollections = list(kept_recollections)
+        notices.add("diplomacy_truncated:treaty_recollections")
+        _LOG.warning(
+            "treaty_truncated table=treaty_recollections dropped=%s", dropped_count
+        )
+
     referenced_parties = {
         *[party_id for relation in relations for party_id in relation.party_ids],
         *[row.party_id for row in envoys],
         *[row.declarer_party_id for row in declarations],
+        *[
+            party_id
+            for treaty in ledger.treaties
+            for party_id in treaty.participant_party_ids
+        ],
+        *[row.declarer_party_id for row in treaty_declarations],
+        *[row.declarer_party_id for row in ledger.treaty_misrepresentations],
     }
     if len(parties) > policy.max_parties:
         removable = [
@@ -2154,6 +3722,7 @@ def enforce_diplomacy_limits(
                 )
                 for instrument in instruments
             )
+            and row.relation_id not in treaty_relation_ids
         ]
         excess = len(relations) - policy.max_relations
         if excess > len(removable_relations):
@@ -2193,10 +3762,16 @@ def enforce_diplomacy_limits(
                 ledger.misrepresentations,
                 ledger.terminations,
                 ledger.conflicts,
+                ledger.treaties,
+                ledger.treaty_versions,
+                treaty_declarations,
+                treaty_recollections,
+                ledger.treaty_misrepresentations,
             )
         )
 
     table_order: list[tuple[str, list[Any]]] = [
+        ("treaty_recollections", treaty_recollections),
         ("contacts", contacts),
         ("negotiations", negotiations),
         ("envoys", envoys),
@@ -2210,11 +3785,15 @@ def enforce_diplomacy_limits(
         excess_count = total() - policy.max_total_records
         if not rows:
             continue
-        kept, dropped = _drop_oldest(rows, table=table, count=excess_count)
-        if dropped:
+        kept, dropped_count = _drop_oldest(
+            rows, table=table, count=excess_count
+        )
+        if dropped_count:
             notices.add(f"diplomacy_truncated:{table}")
             if table == "contacts":
                 contacts = list(kept)
+            elif table == "treaty_recollections":
+                treaty_recollections = list(kept)
             elif table == "negotiations":
                 negotiations = list(kept)
             elif table == "envoys":
@@ -2254,6 +3833,8 @@ def enforce_diplomacy_limits(
         len(negotiations),
         len(instruments),
         len(declarations),
+        len(treaty_declarations),
+        len(treaty_recollections),
     )
     if after_counts == before_counts:
         return ledger
@@ -2275,6 +3856,12 @@ def enforce_diplomacy_limits(
         negotiations=ordered(negotiations, "opened_tick", "negotiation_id"),
         instruments=ordered(instruments, "opened_tick", "instrument_id"),
         declarations=ordered(declarations, "declared_tick", "declaration_id"),
+        treaty_declarations=ordered(
+            treaty_declarations, "declared_tick", "declaration_id"
+        ),
+        treaty_recollections=ordered(
+            treaty_recollections, "first_tick", "recollection_id"
+        ),
     )
 
 
@@ -2343,6 +3930,17 @@ class _Builder:
         }
         self.terminations = {row.termination_id: row for row in ledger.terminations}
         self.conflicts = {row.conflict_id: row for row in ledger.conflicts}
+        self.treaties = {row.treaty_id: row for row in ledger.treaties}
+        self.treaty_versions = {row.version_id: row for row in ledger.treaty_versions}
+        self.treaty_declarations = {
+            row.declaration_id: row for row in ledger.treaty_declarations
+        }
+        self.treaty_recollections = {
+            row.recollection_id: row for row in ledger.treaty_recollections
+        }
+        self.treaty_misrepresentations = {
+            row.misrepresentation_id: row for row in ledger.treaty_misrepresentations
+        }
         self.notices = set(ledger.notices)
 
     def self_party(self) -> str:
@@ -2602,6 +4200,180 @@ class _Builder:
         )
         return declaration_id
 
+    def add_treaty(
+        self,
+        relation_id: str,
+        *,
+        subject_kind: TreatySubjectKind,
+        participant_party_ids: Sequence[str],
+        current_version_id: str,
+        provenance: DiplomaticProvenance,
+    ) -> str:
+        self_party = self.self_party()
+        participants = (
+            self_party,
+            *(
+                party_id
+                for party_id in sorted(set(participant_party_ids))
+                if party_id != self_party
+            ),
+        )
+        treaty_id = diplomacy_treaty_id(
+            self.owner_id, relation_id, subject_kind, self.tick
+        )
+        existing = self.treaties.get(treaty_id)
+        self.treaties[treaty_id] = DiplomaticTreaty(
+            treaty_id=treaty_id,
+            relation_id=relation_id,
+            participant_party_ids=participants,
+            subject_kind=subject_kind,
+            current_version_id=current_version_id,
+            opened_tick=existing.opened_tick if existing is not None else self.tick,
+            last_tick=self.tick,
+            provenance=existing.provenance if existing is not None else provenance,
+            revision=(existing.revision + 1) if existing is not None else 0,
+        )
+        return treaty_id
+
+    def add_treaty_version(
+        self,
+        treaty_id: str,
+        *,
+        change_kind: TreatyChangeKind,
+        participant_party_ids: Sequence[str],
+        provision_kinds: Sequence[TreatyProvisionKind],
+        terms_digest: str,
+        record_refs: Sequence[str],
+        institutional_memory_refs: Sequence[str],
+        effective_tick: int,
+        end_tick: int | None,
+        proposer_party_id: str,
+        proposer_envoy_ref: str | None,
+        provenance: DiplomaticProvenance,
+        parent_version_ids: Sequence[str] = (),
+    ) -> str:
+        existing_rows = [
+            row for row in self.treaty_versions.values() if row.treaty_id == treaty_id
+        ]
+        version_index = max((row.version_index for row in existing_rows), default=0) + 1
+        version_id = diplomacy_treaty_version_id(
+            self.owner_id,
+            treaty_id,
+            version_index,
+            change_kind,
+            terms_digest,
+        )
+        self.treaty_versions.setdefault(
+            version_id,
+            DiplomaticTreatyVersion(
+                version_id=version_id,
+                treaty_id=treaty_id,
+                version_index=version_index,
+                parent_version_ids=tuple(sorted(parent_version_ids)),
+                change_kind=change_kind,
+                participant_party_ids=tuple(participant_party_ids),
+                provision_kinds=tuple(provision_kinds),
+                terms_digest=terms_digest,
+                record_refs=tuple(record_refs),
+                institutional_memory_refs=tuple(institutional_memory_refs),
+                effective_tick=effective_tick,
+                end_tick=end_tick,
+                proposer_party_id=proposer_party_id,
+                proposer_envoy_ref=proposer_envoy_ref,
+                provenance=provenance,
+                revision=0,
+            ),
+        )
+        _LOG.debug("treaty_version_appended versions=%s", len(existing_rows) + 1)
+        return version_id
+
+    def add_treaty_declaration(
+        self,
+        treaty_id: str,
+        version_id: str,
+        *,
+        declarer_party_id: str,
+        envoy_ref: str | None,
+        act: TreatyDeclarationAct,
+        provenance: DiplomaticProvenance,
+        independence_ref: str | None,
+        revision: int,
+        tick: int | None = None,
+    ) -> str:
+        current_tick = self.tick if tick is None else tick
+        declaration_id = diplomacy_treaty_declaration_id(
+            self.owner_id,
+            treaty_id,
+            version_id,
+            declarer_party_id,
+            act,
+            current_tick,
+            revision,
+        )
+        self.treaty_declarations.setdefault(
+            declaration_id,
+            DiplomaticTreatyDeclaration(
+                declaration_id=declaration_id,
+                treaty_id=treaty_id,
+                version_id=version_id,
+                declarer_party_id=declarer_party_id,
+                envoy_ref=envoy_ref,
+                act=act,
+                declared_tick=current_tick,
+                provenance=provenance,
+                independence_ref=independence_ref,
+                revision=revision,
+            ),
+        )
+        return declaration_id
+
+    def add_treaty_recollection(
+        self,
+        *,
+        treaty_ref: str,
+        version_ref: str,
+        subject_kind: TreatySubjectKind,
+        basis: TreatyRecollectionBasis,
+        stance: TreatyRecollectionStance,
+        claimed_terms_digest: str | None,
+        confidence: float,
+        provenance: DiplomaticProvenance,
+        independence_ref: str | None = None,
+        revision: int = 0,
+    ) -> str:
+        recollection_id = diplomacy_treaty_recollection_id(
+            self.owner_id,
+            treaty_ref,
+            version_ref,
+            basis,
+            stance,
+            self.tick,
+        )
+        self.treaty_recollections.setdefault(
+            recollection_id,
+            DiplomaticTreatyRecollection(
+                recollection_id=recollection_id,
+                treaty_ref=treaty_ref,
+                version_ref=version_ref,
+                subject_kind=subject_kind,
+                basis=basis,
+                stance=stance,
+                claimed_terms_digest=claimed_terms_digest,
+                confidence=confidence,
+                first_tick=self.tick,
+                last_tick=self.tick,
+                independence_ref=independence_ref,
+                provenance=provenance,
+                revision=revision,
+            ),
+        )
+        _LOG.debug(
+            "treaty_recollection_retained stance=%s basis=%s",
+            stance.value,
+            basis.value,
+        )
+        return recollection_id
+
     def build(self) -> DiplomacyLedger:
         def ordered(
             rows: Mapping[str, Any], tick_name: str, id_name: str
@@ -2629,6 +4401,21 @@ class _Builder:
             ),
             terminations=ordered(self.terminations, "tick", "termination_id"),
             conflicts=ordered(self.conflicts, "observed_tick", "conflict_id"),
+            treaties=ordered(self.treaties, "opened_tick", "treaty_id"),
+            treaty_versions=ordered(
+                self.treaty_versions, "effective_tick", "version_id"
+            ),
+            treaty_declarations=ordered(
+                self.treaty_declarations, "declared_tick", "declaration_id"
+            ),
+            treaty_recollections=ordered(
+                self.treaty_recollections, "first_tick", "recollection_id"
+            ),
+            treaty_misrepresentations=ordered(
+                self.treaty_misrepresentations,
+                "observed_tick",
+                "misrepresentation_id",
+            ),
             notices=tuple(sorted(self.notices)),
         )
 
@@ -2703,6 +4490,438 @@ def _resolve_party_id(
     return builder.add_party(kind, anchor, resolution=resolution, provenance=provenance)
 
 
+def _process_treaty_frame(
+    builder: _Builder,
+    frame: object,
+    *,
+    policy: DiplomacyPolicy,
+    representation: object | None,
+    organization_concepts: object | None,
+    region_anchors: Sequence[str],
+    anchor_refs: Sequence[str],
+    provenance: DiplomaticProvenance,
+    treaty_policy: TreatyPolicy,
+) -> None:
+    from agents.cognition.diplomacy_communication import TreatyAct, TreatyFrame
+
+    if type(frame) is not TreatyFrame or type(frame.act) is not TreatyAct:
+        return
+    act = frame.act
+    owner = builder.owner_id
+    self_party = builder.self_party()
+    resolved: list[str] = []
+    owner_included = False
+    resolved_count = 0
+    for raw in frame.participant_refs:
+        kind_text, _, anchor = raw.partition(":")
+        kind = DiplomaticPartyKind(kind_text)
+        if kind is DiplomaticPartyKind.UNKNOWN:
+            party_id = builder.add_party(
+                kind,
+                None,
+                resolution=DiplomaticPartyResolution.UNRESOLVED,
+                provenance=provenance,
+            )
+        elif anchor == owner:
+            party_id = self_party
+            owner_included = True
+            resolved_count += 1
+        else:
+            party_id = _resolve_party_id(
+                builder,
+                kind,
+                anchor or None,
+                organization_concepts=organization_concepts,
+                region_anchors=region_anchors,
+                provenance=provenance,
+            )
+            if (
+                builder.parties[party_id].resolution
+                is DiplomaticPartyResolution.RESOLVED
+            ):
+                resolved_count += 1
+        if party_id not in resolved:
+            resolved.append(party_id)
+
+    if act is TreatyAct.TREATY_RECOLLECT:
+        builder.add_treaty_recollection(
+            treaty_ref=frame.treaty_ref or "none",
+            version_ref=frame.version_ref or "none",
+            subject_kind=frame.subject_kind or TreatySubjectKind.UNKNOWN,
+            basis=frame.basis or TreatyRecollectionBasis.UNKNOWN,
+            stance=frame.stance or TreatyRecollectionStance.UNKNOWN,
+            claimed_terms_digest=frame.terms_digest,
+            confidence=frame.confidence if frame.confidence is not None else 0.0,
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+        return
+
+    if act is TreatyAct.TREATY_PROPOSE:
+        if not owner_included or resolved_count < 2:
+            builder.add_treaty_recollection(
+                treaty_ref=frame.treaty_ref or "none",
+                version_ref=frame.version_ref or "none",
+                subject_kind=frame.subject_kind or TreatySubjectKind.UNKNOWN,
+                basis=TreatyRecollectionBasis.COMMUNICATED_TESTIMONY,
+                stance=TreatyRecollectionStance.REMEMBER,
+                claimed_terms_digest=frame.terms_digest,
+                confidence=frame.confidence if frame.confidence is not None else 1.0,
+                provenance=provenance,
+            )
+            return
+        subject = frame.subject_kind or TreatySubjectKind.UNKNOWN
+        relation_id = (
+            frame.relation_ref
+            if frame.relation_ref in builder.relations
+            else builder.add_relation(tuple(resolved), provenance=provenance)
+        )
+        provisions = frame.provision_kinds or (TreatyProvisionKind.UNKNOWN,)
+        effective = (
+            frame.effective_tick if frame.effective_tick is not None else builder.tick
+        )
+        digest = frame.terms_digest or treaty_terms_digest(
+            subject, provisions, effective, frame.end_tick
+        )
+        proposer_anchor = frame.party_ref or (
+            owner if frame.actor_ref in {None, owner} else frame.actor_ref
+        )
+        if (
+            frame.actor_ref is None
+            and frame.envoy_ref is not None
+            and frame.envoy_ref != owner
+        ):
+            proposer_anchor = frame.party_ref or frame.envoy_ref
+        proposer = (
+            self_party
+            if proposer_anchor == owner
+            else _resolve_party_id(
+                builder,
+                frame.party_kind or DiplomaticPartyKind.AGENT,
+                proposer_anchor,
+                organization_concepts=organization_concepts,
+                region_anchors=region_anchors,
+                provenance=provenance,
+            )
+        )
+        proposer_envoy = (
+            None
+            if frame.actor_ref in {None, owner}
+            or frame.actor_ref == proposer_anchor
+            else frame.envoy_ref
+        )
+        treaty_id = diplomacy_treaty_id(owner, relation_id, subject, builder.tick)
+        version_id = diplomacy_treaty_version_id(
+            owner, treaty_id, 1, TreatyChangeKind.ORIGINAL, digest
+        )
+        if version_id in builder.treaty_versions:
+            return
+        builder.add_treaty(
+            relation_id,
+            subject_kind=subject,
+            participant_party_ids=tuple(resolved),
+            current_version_id=version_id,
+            provenance=provenance,
+        )
+        builder.add_treaty_version(
+            treaty_id,
+            change_kind=TreatyChangeKind.ORIGINAL,
+            participant_party_ids=tuple(resolved),
+            provision_kinds=provisions,
+            terms_digest=digest,
+            record_refs=(*frame.record_refs, *anchor_refs),
+            institutional_memory_refs=frame.institutional_memory_refs,
+            effective_tick=effective,
+            end_tick=frame.end_tick,
+            proposer_party_id=proposer,
+            proposer_envoy_ref=proposer_envoy,
+            provenance=provenance,
+        )
+        builder.add_treaty_declaration(
+            treaty_id,
+            version_id,
+            declarer_party_id=proposer,
+            envoy_ref=proposer_envoy,
+            act=TreatyDeclarationAct.PROPOSE,
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+        return
+
+    treaty_ref = frame.treaty_ref
+    treaty = builder.treaties.get(treaty_ref or "")
+    if treaty is None:
+        builder.notices.add("treaty_unknown_treaty")
+        return
+    version = (
+        builder.treaty_versions.get(frame.version_ref)
+        if frame.version_ref is not None
+        else None
+    )
+    if version is not None and version.treaty_id != treaty_ref:
+        builder.notices.add("treaty_unknown_version")
+        return
+    if version is None and frame.version_ref is not None:
+        builder.notices.add("treaty_unknown_version")
+        return
+    if version is None:
+        version = next(
+            (
+                row
+                for row in builder.treaty_versions.values()
+                if row.treaty_id == treaty_id
+                and row.version_index
+                == max(
+                    candidate.version_index
+                    for candidate in builder.treaty_versions.values()
+                    if candidate.treaty_id == treaty_id
+                )
+            ),
+            None,
+        )
+    if version is None:
+        builder.notices.add("treaty_unknown_version")
+        return
+
+    if act in {
+        TreatyAct.TREATY_ACCEPT,
+        TreatyAct.TREATY_REJECT,
+        TreatyAct.TREATY_INTERPRET,
+        TreatyAct.TREATY_IGNORE,
+    }:
+        declarer_anchor = frame.party_ref or (
+            owner if frame.actor_ref in {None, owner} else frame.actor_ref
+        )
+        if (
+            frame.actor_ref is None
+            and frame.envoy_ref is not None
+            and frame.envoy_ref != owner
+        ):
+            declarer_anchor = frame.party_ref or frame.envoy_ref
+        declarer = (
+            self_party
+            if declarer_anchor == owner
+            else _resolve_party_id(
+                builder,
+                frame.party_kind or DiplomaticPartyKind.AGENT,
+                declarer_anchor,
+                organization_concepts=organization_concepts,
+                region_anchors=region_anchors,
+                provenance=provenance,
+            )
+        )
+        if declarer not in version.participant_party_ids:
+            return
+        declaration_envoy = (
+            None
+            if frame.actor_ref in {None, owner}
+            or frame.actor_ref == declarer_anchor
+            else frame.envoy_ref
+        )
+        if declaration_envoy is not None and not any(
+            row.relation_id == treaty.relation_id and row.envoy_ref == declaration_envoy
+            for row in builder.envoys.values()
+        ):
+            builder.add_envoy(
+                treaty.relation_id,
+                declarer,
+                declaration_envoy,
+                frame.mandate_ref,
+                representation=representation,
+                policy=policy,
+                end_tick=frame.end_tick,
+                provenance=provenance,
+            )
+        mapping = {
+            TreatyAct.TREATY_ACCEPT: TreatyDeclarationAct.ACCEPT,
+            TreatyAct.TREATY_REJECT: TreatyDeclarationAct.REJECT,
+            TreatyAct.TREATY_INTERPRET: TreatyDeclarationAct.INTERPRET,
+            TreatyAct.TREATY_IGNORE: TreatyDeclarationAct.IGNORE,
+        }
+        builder.add_treaty_declaration(
+            treaty.treaty_id,
+            version.version_id,
+            declarer_party_id=declarer,
+            envoy_ref=declaration_envoy,
+            act=mapping[act],
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+        return
+
+    change_map = {
+        TreatyAct.TREATY_AMEND: TreatyChangeKind.AMENDMENT,
+        TreatyAct.TREATY_RENEW: TreatyChangeKind.RENEWAL,
+        TreatyAct.TREATY_ACCEDE: TreatyChangeKind.ACCESSION,
+        TreatyAct.TREATY_WITHDRAW: TreatyChangeKind.WITHDRAWAL,
+        TreatyAct.TREATY_SUSPEND: TreatyChangeKind.SUSPENSION,
+        TreatyAct.TREATY_TERMINATE: TreatyChangeKind.TERMINATION,
+    }
+    change_kind = change_map.get(act)
+    if change_kind is None:
+        return
+    if change_kind is TreatyChangeKind.ACCESSION:
+        participants = tuple(dict.fromkeys((*version.participant_party_ids, *resolved)))
+    elif change_kind is TreatyChangeKind.WITHDRAWAL:
+        withdrawer_anchor = frame.party_ref or (
+            owner if frame.actor_ref in {None, owner} else frame.actor_ref
+        )
+        if (
+            frame.actor_ref is None
+            and frame.envoy_ref is not None
+            and frame.envoy_ref != owner
+        ):
+            withdrawer_anchor = frame.party_ref or frame.envoy_ref
+        withdrawer = (
+            self_party
+            if withdrawer_anchor == owner
+            else _resolve_party_id(
+                builder,
+                frame.party_kind or DiplomaticPartyKind.AGENT,
+                withdrawer_anchor,
+                organization_concepts=organization_concepts,
+                region_anchors=region_anchors,
+                provenance=provenance,
+            )
+        )
+        if withdrawer == self_party:
+            change_kind = TreatyChangeKind.TERMINATION
+            participants = version.participant_party_ids
+        else:
+            remaining = tuple(
+                party_id
+                for party_id in version.participant_party_ids
+                if party_id != withdrawer
+            )
+            non_owner = [party_id for party_id in remaining if party_id != self_party]
+            if len(non_owner) < 2:
+                change_kind = TreatyChangeKind.TERMINATION
+                participants = version.participant_party_ids
+            else:
+                participants = remaining
+    else:
+        participants = version.participant_party_ids
+    proposer_anchor = frame.party_ref or (
+        owner if frame.actor_ref in {None, owner} else frame.actor_ref
+    )
+    if (
+        frame.actor_ref is None
+        and frame.envoy_ref is not None
+        and frame.envoy_ref != owner
+    ):
+        proposer_anchor = frame.party_ref or frame.envoy_ref
+    proposer = (
+        self_party
+        if proposer_anchor == owner
+        else _resolve_party_id(
+            builder,
+            frame.party_kind or DiplomaticPartyKind.AGENT,
+            proposer_anchor,
+            organization_concepts=organization_concepts,
+            region_anchors=region_anchors,
+            provenance=provenance,
+        )
+    )
+    proposer_envoy = (
+        None
+        if frame.actor_ref in {None, owner}
+        or frame.actor_ref == proposer_anchor
+        else frame.envoy_ref
+    )
+    if proposer not in participants:
+        return
+    if change_kind is TreatyChangeKind.SUSPENSION and (
+        version.change_kind is TreatyChangeKind.SUSPENSION
+    ):
+        builder.add_treaty_declaration(
+            treaty.treaty_id,
+            version.version_id,
+            declarer_party_id=proposer,
+            envoy_ref=proposer_envoy,
+            act=TreatyDeclarationAct.SUSPEND,
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+        return
+    if change_kind is TreatyChangeKind.TERMINATION and (
+        version.change_kind is TreatyChangeKind.TERMINATION
+    ):
+        builder.add_treaty_declaration(
+            treaty.treaty_id,
+            version.version_id,
+            declarer_party_id=proposer,
+            envoy_ref=proposer_envoy,
+            act=TreatyDeclarationAct.TERMINATE,
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+        return
+    provisions = frame.provision_kinds or version.provision_kinds
+    effective = (
+        frame.effective_tick if frame.effective_tick is not None else builder.tick
+    )
+    digest = frame.terms_digest or treaty_terms_digest(
+        treaty.subject_kind, provisions, effective, frame.end_tick
+    )
+    new_version_id = builder.add_treaty_version(
+        treaty.treaty_id,
+        change_kind=change_kind,
+        participant_party_ids=participants,
+        provision_kinds=provisions,
+        terms_digest=digest,
+        record_refs=(*version.record_refs, *frame.record_refs, *anchor_refs),
+        institutional_memory_refs=(
+            *version.institutional_memory_refs,
+            *frame.institutional_memory_refs,
+        ),
+        effective_tick=effective,
+        end_tick=frame.end_tick,
+        proposer_party_id=proposer,
+        proposer_envoy_ref=proposer_envoy,
+        provenance=provenance,
+        parent_version_ids=(version.version_id,),
+    )
+    new_version = builder.treaty_versions[new_version_id]
+    if change_kind is TreatyChangeKind.SUSPENSION:
+        builder.add_treaty_declaration(
+            treaty.treaty_id,
+            new_version_id,
+            declarer_party_id=proposer,
+            envoy_ref=proposer_envoy,
+            act=TreatyDeclarationAct.SUSPEND,
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+    elif change_kind is TreatyChangeKind.TERMINATION:
+        builder.add_treaty_declaration(
+            treaty.treaty_id,
+            new_version_id,
+            declarer_party_id=proposer,
+            envoy_ref=proposer_envoy,
+            act=TreatyDeclarationAct.TERMINATE,
+            provenance=provenance,
+            independence_ref=None,
+            revision=frame.revision,
+        )
+    builder.treaties[treaty.treaty_id] = replace(
+        treaty,
+        participant_party_ids=treaty_participant_union(
+            treaty,
+            (*builder.treaty_versions.values(),),
+        ),
+        current_version_id=new_version.version_id,
+        last_tick=builder.tick,
+        revision=treaty.revision + 1,
+    )
+    _LOG.debug("treaty_anchor_updated treaties=%s", len(builder.treaties))
+
+
 def _process_frame(
     builder: _Builder,
     frame: object,
@@ -2713,8 +4932,23 @@ def _process_frame(
     region_anchors: Sequence[str],
     anchor_refs: Sequence[str],
     provenance: DiplomaticProvenance,
+    treaty_policy: TreatyPolicy | None = None,
 ) -> None:
-    from agents.cognition.diplomacy_communication import DiplomaticAct
+    from agents.cognition.diplomacy_communication import DiplomaticAct, TreatyFrame
+
+    if type(frame) is TreatyFrame:
+        _process_treaty_frame(
+            builder,
+            frame,
+            policy=policy,
+            representation=representation,
+            organization_concepts=organization_concepts,
+            region_anchors=region_anchors,
+            anchor_refs=anchor_refs,
+            provenance=provenance,
+            treaty_policy=treaty_policy or default_treaty_policy(),
+        )
+        return
 
     act = getattr(frame, "act", None)
     if type(act) is not DiplomaticAct:
@@ -2938,6 +5172,7 @@ def _apply_frames(
     organization_concepts: object | None,
     observation: object | None,
     anchor_refs: Sequence[str],
+    treaty_policy: TreatyPolicy | None = None,
 ) -> None:
     region_anchors = _region_anchors(observation)
     rank = {
@@ -2953,14 +5188,50 @@ def _apply_frames(
         "dip_reject": 5,
         "dip_withdraw": 5,
         "dip_report": 5,
+        "treaty_propose": 0,
+        "treaty_amend": 1,
+        "treaty_renew": 1,
+        "treaty_accede": 1,
+        "treaty_withdraw": 1,
+        "treaty_suspend": 1,
+        "treaty_terminate": 1,
+        "treaty_accept": 2,
+        "treaty_reject": 2,
+        "treaty_interpret": 2,
+        "treaty_ignore": 2,
+        "treaty_recollect": 0,
     }
+    if observation is not None:
+        from agents.cognition.diplomacy_communication import (
+            TREATY_FRAME_SUBJECT,
+            parse_treaty_frame_relations,
+        )
+
+        for communication in getattr(observation, "communications", ()):
+            utterance = getattr(communication, "utterance", None)
+            content = getattr(utterance, "content", None)
+            relations = tuple(getattr(content, "relations", ()) or ())
+            if (
+                any(
+                    getattr(relation, "subject", None) == TREATY_FRAME_SUBJECT
+                    for relation in relations
+                )
+                and parse_treaty_frame_relations(relations) is None
+            ):
+                builder.notices.add("treaty_malformed_chunks")
     ordered = sorted(
         frames,
         key=lambda frame: (
             rank.get(getattr(getattr(frame, "act", None), "value", ""), 9),
             getattr(frame, "relation_ref", None) or "",
             getattr(frame, "instrument_ref", None) or "",
+            getattr(frame, "treaty_ref", None) or "",
+            getattr(frame, "version_ref", None) or "",
             getattr(frame, "topic_subject", None) or "",
+            (
+                getattr(getattr(frame, "subject_kind", None), "value", "")
+            )
+            or "",
             getattr(frame, "revision", 0),
             getattr(frame, "envoy_ref", None) or "",
         ),
@@ -2976,6 +5247,7 @@ def _apply_frames(
             anchor_refs=anchor_refs,
             provenance=getattr(frame, "provenance", None)
             or DiplomaticProvenance.COMMUNICATED,
+            treaty_policy=treaty_policy,
         )
 
 
@@ -3163,6 +5435,7 @@ def apply_diplomacy_update(
     disputes: object | None = None,
     evidence: object | None = None,
     policy: DiplomacyPolicy | None = None,
+    treaty_policy: TreatyPolicy | None = None,
     anchor_refs: Sequence[str] = (),
 ) -> DiplomacyLedger:
     """Fold owner-visible evidence and speech into one diplomacy ledger."""
@@ -3170,6 +5443,11 @@ def apply_diplomacy_update(
     active_policy = default_diplomacy_policy() if policy is None else policy
     if type(active_policy) is not DiplomacyPolicy:
         raise TypeError("policy must be DiplomacyPolicy")
+    active_treaty_policy = (
+        default_treaty_policy() if treaty_policy is None else treaty_policy
+    )
+    if type(active_treaty_policy) is not TreatyPolicy:
+        raise TypeError("treaty_policy must be TreatyPolicy")
     owner = _owner_text(owner_id)
     current_tick = _require_tick(tick)
     if prior is not None:
@@ -3184,26 +5462,60 @@ def apply_diplomacy_update(
     _apply_contact_anchors(builder, observation, owner_id=owner)
     from agents.cognition.diplomacy_communication import (
         diplomacy_frames_from_observation,
+        treaty_frames_from_observation,
     )
 
     observed_frames = diplomacy_frames_from_observation(observation, owner_id=owner)
+    observed_treaty_frames = treaty_frames_from_observation(observation, owner_id=owner)
     _apply_frames(
         builder,
-        (*observed_frames, *frames),
+        (*observed_frames, *observed_treaty_frames, *frames),
         policy=active_policy,
         representation=representation,
         organization_concepts=organization_concepts,
         observation=observation,
         anchor_refs=anchor_refs,
+        treaty_policy=active_treaty_policy,
     )
     ledger = builder.build()
     ledger = detect_diplomatic_misrepresentation(
         ledger, representation, tick=current_tick, policy=active_policy
     )
+    ledger = detect_treaty_misrepresentation(
+        ledger,
+        representation,
+        tick=current_tick,
+        policy=active_policy,
+        treaty_policy=active_treaty_policy,
+    )
     ledger = expire_diplomacy_records(ledger, tick=current_tick, policy=active_policy)
+    ledger = expire_treaty_records(
+        ledger,
+        tick=current_tick,
+        policy=active_policy,
+        treaty_policy=active_treaty_policy,
+    )
     ledger = supersede_diplomacy_instruments(ledger)
+    ledger = supersede_treaty_records(
+        ledger,
+        tick=current_tick,
+        policy=active_policy,
+        treaty_policy=active_treaty_policy,
+        representation=representation,
+    )
     ledger = detect_diplomacy_conflicts(ledger)
-    return enforce_diplomacy_limits(ledger, policy=active_policy)
+    ledger = detect_treaty_conflicts(
+        ledger,
+        tick=current_tick,
+        policy=active_policy,
+        treaty_policy=active_treaty_policy,
+    )
+    return enforce_diplomacy_limits(
+        ledger,
+        policy=active_policy,
+        treaty_policy=active_treaty_policy,
+        representation=representation,
+    )
 
 
 def record_diplomacy_utterance(
@@ -3219,6 +5531,7 @@ def record_diplomacy_utterance(
     disputes: object | None = None,
     evidence: object | None = None,
     policy: DiplomacyPolicy | None = None,
+    treaty_policy: TreatyPolicy | None = None,
     anchor_refs: Sequence[str] = (),
 ) -> DiplomacyLedger:
     """Record the owner's own already-selected ``dip_v1`` speech."""
@@ -3234,11 +5547,20 @@ def record_diplomacy_utterance(
     active_policy = default_diplomacy_policy() if policy is None else policy
     if type(active_policy) is not DiplomacyPolicy:
         raise TypeError("policy must be DiplomacyPolicy")
+    active_treaty_policy = (
+        default_treaty_policy() if treaty_policy is None else treaty_policy
+    )
+    if type(active_treaty_policy) is not TreatyPolicy:
+        raise TypeError("treaty_policy must be TreatyPolicy")
     from agents.cognition.diplomacy_communication import (
         diplomacy_frames_from_command,
+        treaty_frames_from_command,
     )
 
-    frames = diplomacy_frames_from_command(command, owner_id=owner)
+    frames = (
+        *diplomacy_frames_from_command(command, owner_id=owner),
+        *treaty_frames_from_command(command, owner_id=owner),
+    )
     if not frames:
         return ledger
     builder = _Builder(ledger, owner_id=owner, tick=max(current_tick, ledger.tick))
@@ -3250,6 +5572,7 @@ def record_diplomacy_utterance(
         organization_concepts=organization_concepts,
         observation=None,
         anchor_refs=anchor_refs,
+        treaty_policy=active_treaty_policy,
     )
     return builder.build()
 

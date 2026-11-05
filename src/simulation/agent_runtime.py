@@ -1517,9 +1517,13 @@ class AgentRuntime:
             )
         self._diplomacy = ledger
         _LOG.debug(
-            "diplomacy_ledger_carried relations=%s instruments=%s tick=%s",
+            "diplomacy_ledger_carried relations=%s instruments=%s treaties=%s "
+            "versions=%s recollections=%s tick=%s",
             len(ledger.relations),
             len(ledger.instruments),
+            len(ledger.treaties),
+            len(ledger.treaty_versions),
+            len(ledger.treaty_recollections),
             tick,
         )
 
