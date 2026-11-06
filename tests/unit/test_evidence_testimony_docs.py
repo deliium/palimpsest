@@ -165,4 +165,4 @@ def test_counts_match_the_code() -> None:
 
     text = DOC.read_text(encoding="utf-8")
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA in text
-    assert METRIC_FAMILY_COUNT == 168
+    assert METRIC_FAMILY_COUNT == 172

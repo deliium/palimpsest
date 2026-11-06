@@ -42,6 +42,7 @@
   import EvidencePanel from './EvidencePanel.svelte'
   import RepresentationPanel from './RepresentationPanel.svelte'
   import DiplomacyPanel from './DiplomacyPanel.svelte'
+  import OrganizedConflictPanel from './OrganizedConflictPanel.svelte'
   import OrganizationsPanel from './OrganizationsPanel.svelte'
   import ProjectsPanel from './ProjectsPanel.svelte'
 
@@ -107,6 +108,7 @@
           { id: 'disputes', label: 'Disputes' },
           { id: 'evidence', label: 'Evidence' },
           { id: 'representation', label: 'Representation' },
+          { id: 'conflict', label: 'Organized conflict' },
           { id: 'contact', label: 'Contact' },
         ],
       },
@@ -328,7 +330,10 @@
     <EvidencePanel {runId} {selection} />
   {:else if view === 'representation'}
     <RepresentationPanel {runId} {selection} />
+  {:else if view === 'diplomacy'}
     <DiplomacyPanel {runId} {selection} />
+  {:else if view === 'conflict'}
+    <OrganizedConflictPanel {runId} {selection} />
   {:else if view === 'institutions'}
     <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}

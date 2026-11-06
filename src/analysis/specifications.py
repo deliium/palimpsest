@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 168
+METRIC_FAMILY_COUNT: Final[int] = 172
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -243,6 +243,10 @@ class MetricFamilyId(StrEnum):
     TREATY_VERSION_LINEAGE = "treaty_version_lineage"
     TREATY_RECOLLECTION = "treaty_recollection"
     TREATY_ANCHOR_COVERAGE = "treaty_anchor_coverage"
+    ORGANIZED_CONFLICT_PARTICIPATION = "organized_conflict_participation"
+    ORGANIZED_CONFLICT_PERSISTENCE = "organized_conflict_persistence"
+    ORGANIZED_CONFLICT_OUTCOMES = "organized_conflict_outcomes"
+    ORGANIZED_CONFLICT_INTERPRETATION = "organized_conflict_interpretation"
 
 
 class DenominatorKind(StrEnum):
@@ -7814,6 +7818,212 @@ def _spec_treaty_anchor_coverage() -> MetricSpecification:
     )
 
 
+def _spec_organized_conflict_participation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZED_CONFLICT_PARTICIPATION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_conflict_episodes",
+        denominator="detached_conflict_episodes",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="complete detached conflict windows",
+        deceased_policy="dead actors retain their observed conflict rows",
+        zero_holding_policy="no conflict rows -> absent; empty ledger -> present zero",
+        opportunity_vs_occurrence="episodes are occurrence; actors are opportunity",
+        self_edge_policy="each participant is counted once per episode",
+        censoring_policy="unresolved owner claims never change objective counts",
+        formulas={
+            "episode_count": "detected episodes",
+            "individual_episode_count": "individual_violence episodes",
+            "coordinated_episode_count": "coordinated_conflict episodes",
+            "persistent_inter_group_episode_count": "persistent episodes",
+            "participant_count": "distinct participant tokens",
+            "side_count": "sum of episode side counts",
+            "attacker_count": "distinct participants",
+            "defender_count": "closed role count",
+            "scout_count": "closed role count",
+            "blocker_count": "closed role count",
+            "capturer_count": "closed role count",
+            "assistant_count": "closed role count",
+            "retreater_count": "closed role count",
+            "messenger_count": "closed role count",
+            "unknown_role_count": "closed role count",
+            "organized_episode_ratio": "non-individual episodes / episode_count",
+            "role_coverage_ratio": "participants with a closed role / participants",
+        },
+        value_keys=(
+            "episode_count",
+            "individual_episode_count",
+            "coordinated_episode_count",
+            "persistent_inter_group_episode_count",
+            "participant_count",
+            "side_count",
+            "attacker_count",
+            "defender_count",
+            "scout_count",
+            "blocker_count",
+            "capturer_count",
+            "assistant_count",
+            "retreater_count",
+            "messenger_count",
+            "unknown_role_count",
+            "organized_episode_ratio",
+            "role_coverage_ratio",
+        ),
+        empty_case="no conflict rows -> absent",
+        unknown_case="unknown tokens are excluded from sides",
+    )
+
+
+def _spec_organized_conflict_persistence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZED_CONFLICT_PERSISTENCE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_conflict_windows",
+        denominator="detached_conflict_windows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="complete detached conflict windows",
+        deceased_policy="dead actors retain their observed conflict rows",
+        zero_holding_policy="no conflict rows -> absent; empty ledger -> present zero",
+        opportunity_vs_occurrence="windows are opportunity; hostile events occurrence",
+        self_edge_policy="each window is counted once per episode",
+        censoring_policy="sustained requires the locked span and event thresholds",
+        formulas={
+            "active_window_count": "windows with hostile rows",
+            "episode_duration_ticks_total": "sum end_tick - start_tick",
+            "episode_duration_ticks_max": "maximum episode duration",
+            "recurrent_episode_count": "episodes with recurrent flag",
+            "sustained_episode_count": "episodes meeting sustained thresholds",
+            "inter_group_episode_count": "persistent episodes",
+            "reciprocal_window_count": "reciprocal windows",
+            "escalation_count": "reserved count, zero without a locked rule",
+            "deescalation_count": "reserved count, zero without a locked rule",
+            "hostile_event_count": "hostile objective rows",
+            "persistence_ratio": "sustained episodes / episode_count",
+        },
+        value_keys=(
+            "active_window_count",
+            "episode_duration_ticks_total",
+            "episode_duration_ticks_max",
+            "recurrent_episode_count",
+            "sustained_episode_count",
+            "inter_group_episode_count",
+            "reciprocal_window_count",
+            "escalation_count",
+            "deescalation_count",
+            "hostile_event_count",
+            "persistence_ratio",
+        ),
+        empty_case="no conflict rows -> absent",
+        unknown_case="unknown windows stay censored and partial",
+    )
+
+
+def _spec_organized_conflict_outcomes() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZED_CONFLICT_OUTCOMES,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="objective_conflict_events",
+        denominator="objective_conflict_events",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="complete detached conflict windows",
+        deceased_policy="committed outcomes remain after death",
+        zero_holding_policy="no conflict rows -> absent; empty ledger -> present zero",
+        opportunity_vs_occurrence="events are occurrence; rows are opportunity",
+        self_edge_policy="each event is counted once",
+        censoring_policy="unknown success stays unknown, never a hit",
+        formulas={
+            "attack_event_count": "attack rows",
+            "hit_count": "attack rows with success true",
+            "miss_count": "attack rows with success false",
+            "damage_total": "sum attack magnitude",
+            "lethal_attack_count": "attacks at or above the lethal magnitude",
+            "death_count": "death rows",
+            "flee_success_count": "successful retreats",
+            "flee_failure_count": "failed retreats",
+            "custody_capture_count": "custody capture rows",
+            "structure_opposition_count": "structure opposition rows",
+            "assistance_count": "assistance rows",
+            "co_movement_count": "co-movement rows",
+            "route_denial_evidence_count": "route denial evidence rows",
+            "outcome_coverage_ratio": "outcome rows / all objective rows",
+        },
+        value_keys=(
+            "attack_event_count",
+            "hit_count",
+            "miss_count",
+            "damage_total",
+            "lethal_attack_count",
+            "death_count",
+            "flee_success_count",
+            "flee_failure_count",
+            "custody_capture_count",
+            "structure_opposition_count",
+            "assistance_count",
+            "co_movement_count",
+            "route_denial_evidence_count",
+            "outcome_coverage_ratio",
+        ),
+        empty_case="no conflict rows -> absent",
+        unknown_case="unknown success never becomes a hit or miss",
+    )
+
+
+def _spec_organized_conflict_interpretation() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.ORGANIZED_CONFLICT_INTERPRETATION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="owner_conflict_interpretations",
+        denominator="owner_conflict_interpretations",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="complete detached conflict windows",
+        deceased_policy="dead owners retain their last interpretations",
+        zero_holding_policy="no conflict rows -> absent; empty ledger -> present zero",
+        opportunity_vs_occurrence="interpretations are occurrence; owners opportunity",
+        self_edge_policy="each interpretation is counted once",
+        censoring_policy="alignment is researcher-only and never a truth verdict",
+        formulas={
+            "interpretation_count": "owner interpretations",
+            "individual_interpretation_count": "individual_violence kinds",
+            "coordinated_interpretation_count": "coordinated_conflict kinds",
+            "persistent_inter_group_interpretation_count": "persistent kinds",
+            "defense_interpretation_count": "defense kinds",
+            "retreat_interpretation_count": "retreat kinds",
+            "assistance_interpretation_count": "assistance kinds",
+            "resource_capture_interpretation_count": "capture kinds",
+            "route_blocking_interpretation_count": "route blocking kinds",
+            "structure_attack_interpretation_count": "structure attack kinds",
+            "unclear_interpretation_count": "unclear kinds",
+            "aligned_count": "consistent alignment rows",
+            "unresolved_count": "unresolved alignment rows",
+            "inconsistent_count": "inconsistent alignment rows",
+            "not_applicable_count": "not applicable alignment rows",
+            "owner_disagreement_count": "episodes with differing owner kinds",
+            "interpretation_coverage_ratio": "alignment rows / interpretations",
+        },
+        value_keys=(
+            "interpretation_count",
+            "individual_interpretation_count",
+            "coordinated_interpretation_count",
+            "persistent_inter_group_interpretation_count",
+            "defense_interpretation_count",
+            "retreat_interpretation_count",
+            "assistance_interpretation_count",
+            "resource_capture_interpretation_count",
+            "route_blocking_interpretation_count",
+            "structure_attack_interpretation_count",
+            "unclear_interpretation_count",
+            "aligned_count",
+            "unresolved_count",
+            "inconsistent_count",
+            "not_applicable_count",
+            "owner_disagreement_count",
+            "interpretation_coverage_ratio",
+        ),
+        empty_case="no conflict rows -> absent",
+        unknown_case="no matching candidate -> unknown/unresolved, never truth",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -7983,6 +8193,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_treaty_version_lineage,
     _spec_treaty_recollection,
     _spec_treaty_anchor_coverage,
+    _spec_organized_conflict_participation,
+    _spec_organized_conflict_persistence,
+    _spec_organized_conflict_outcomes,
+    _spec_organized_conflict_interpretation,
 )
 
 

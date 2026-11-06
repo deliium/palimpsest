@@ -891,6 +891,28 @@ def assemble_arm_metric_bundle(
                 )
             ),
         )
+
+    organized_conflict_ledgers = getattr(
+        arm.runner_result, "organized_conflict_ledgers", None
+    )
+    if organized_conflict_ledgers:
+        from analysis.organized_conflict_policy import (
+            default_organized_conflict_analysis_policy,
+        )
+        from analysis.organized_conflict_rows import (
+            harvest_organized_conflict_rows,
+        )
+
+        harvested = harvest_organized_conflict_rows(
+            organized_conflict_ledgers,
+            events or (),
+            policy=default_organized_conflict_analysis_policy(),
+        )
+        inputs = replace(
+            inputs,
+            organized_conflict_rows=harvested,
+            organized_conflict_objective_rows=harvested.objective_events,
+        )
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
     if dispute_ledgers:
         from analysis.dispute_evidence import (

@@ -48,19 +48,19 @@ def test_canonical_contract_states_authority_and_non_goals() -> None:
 def test_docs_state_four_owned_and_eight_unowned() -> None:
     text = _doc()
     assert "fourth owned V4 flag" in text
-    assert "other eight V4 flags" in text
+    assert "seven V4 flags unowned" in text
     architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
     assert "Four V4 flags are owned" in architecture
     assert "eight remain" in architecture
     configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
-    assert "Four V4 flags are owned" in configuration
-    assert "other eight V4 flags remain unowned" in configuration
+    assert "five owned V4 flags" in configuration
+    assert "other seven V4 flags" in configuration
 
 
 def test_catalog_and_families_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 168
+    assert METRIC_FAMILY_COUNT == 172
     metrics = (ROOT / "docs" / "analysis-metrics.md").read_text(encoding="utf-8")
-    assert "Closed catalog cardinality: **168**" in metrics
+    assert "Closed catalog cardinality: **172**" in metrics
     for family in (
         "diplomatic_contact_structure@1",
         "diplomatic_instrument_outcomes@1",

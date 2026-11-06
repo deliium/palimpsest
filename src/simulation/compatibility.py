@@ -153,7 +153,13 @@ V4_CAPABILITY_FLAGS_WIRE_KEY: Final[str] = "v4_capability_flags"
 # Single source of truth: the closed flag tuple declared on V4CapabilityFlags.
 V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = _V4_CAPABILITY_FLAG_NAMES
 V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
+    {
+        "organizations",
+        "formal_rules",
+        "legal_disputes",
+        "diplomacy",
+        "organized_conflict",
+    }
 )
 
 __all__ = [
@@ -767,8 +773,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{V4_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of capability_flags and "
             f"{V3_CAPABILITY_FLAGS_WIRE_KEY}; organizations is owned by "
             f"V4-03/V4-04/V4-05, formal_rules is owned by V4-06, legal_disputes "
-            f"is owned by V4-07, and diplomacy is owned by V4-10 on "
-            f"{RUNNER_SCHEMA_VERSION_V56}; the other eight flags are unowned, "
+            f"is owned by V4-07, diplomacy is owned by V4-10, and "
+            f"organized_conflict is owned by V4-12 on "
+            f"{RUNNER_SCHEMA_VERSION_V56}; the other seven flags are unowned, "
             "so any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"

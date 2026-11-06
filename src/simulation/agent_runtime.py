@@ -474,6 +474,7 @@ class AgentRuntime:
         "_organization_agency",
         "_organization_concepts",
         "_organization_operations",
+        "_organized_conflict",
         "_pending",
         "_possession_legitimacy",
         "_practical_knowledge",
@@ -630,6 +631,7 @@ class AgentRuntime:
         self._evidence: object | None = None
         self._representation: object | None = None
         self._diplomacy: object | None = None
+        self._organized_conflict: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1524,6 +1526,40 @@ class AgentRuntime:
             len(ledger.treaties),
             len(ledger.treaty_versions),
             len(ledger.treaty_recollections),
+            tick,
+        )
+
+    def _commit_organized_conflict(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import (
+            CognitionOrganizedConflictMode,
+        )
+        from agents.cognition.organized_conflict import ConflictLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_organized_conflict_mode",
+            CognitionOrganizedConflictMode.DISABLED,
+        )
+        if mode is not CognitionOrganizedConflictMode.DETERMINISTIC:
+            self._organized_conflict = None
+            _LOG.debug("cognition_organized_conflict_mode disabled")
+            return
+        if ledger is None:
+            _LOG.warning("organized_conflict_pending_ledger_missing tick=%s", tick)
+            return
+        if type(ledger) is not ConflictLedger:
+            raise TypeError("organized_conflict must be ConflictLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._organized_conflict = ledger
+        _LOG.debug(
+            "organized_conflict_ledger_carried plans=%s observations=%s tick=%s",
+            len(ledger.plans),
+            len(ledger.observations),
             tick,
         )
 
@@ -2429,6 +2465,7 @@ class AgentRuntime:
                 evidence=self._evidence,
                 representation=self._representation,
                 diplomacy=self._diplomacy,
+                organized_conflict=self._organized_conflict,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2939,6 +2976,10 @@ class AgentRuntime:
         )
         self._commit_diplomacy(
             getattr(pending.loop_result, "diplomacy", None),
+            pending.tick,
+        )
+        self._commit_organized_conflict(
+            getattr(pending.loop_result, "organized_conflict", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3542,6 +3583,7 @@ class AgentRuntime:
             )
         self._representation = getattr(checkpoint, "representation", None)
         self._diplomacy = getattr(checkpoint, "diplomacy", None)
+        self._organized_conflict = getattr(checkpoint, "organized_conflict", None)
         if (
             self._representation is not None
             and getattr(self._representation, "owner_id", None)
@@ -3667,6 +3709,7 @@ class AgentRuntime:
             evidence=self._evidence,
             representation=self._representation,
             diplomacy=self._diplomacy,
+            organized_conflict=self._organized_conflict,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

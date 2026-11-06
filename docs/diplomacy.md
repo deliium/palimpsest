@@ -12,8 +12,9 @@ score.
 
 V4-10 owns the declared `diplomacy` V4 context on the accepted
 `runner-config-v56` seam. It is the fourth owned V4 flag alongside
-`organizations`, `formal_rules`, and `legal_disputes`; the other eight V4 flags
-remain unowned and fail closed. Activation is exactly
+`organizations`, `formal_rules`, and `legal_disputes`; V4-12 adds
+`organized_conflict` as the fifth, leaving seven V4 flags unowned and fail
+closed. Activation is exactly
 `v4_capability_flags.diplomacy = true` on `runner-config-v56`; there is no
 `runner-config-v57`, runner root field, or per-agent runner key.
 
@@ -223,7 +224,8 @@ event, observer semantic type, write pair, `/v2` route, or SQL migration. It doe
 not implement organized conflict, infrastructure, supply chains, markets,
 credit, science, epidemics, ecological feedback, disasters, resilience, or
 macro-society behavior. Diplomacy is a belief; a later plan that lets it bias
-behavior must be separately owned.
+behavior must be separately owned. The V4-12 organized-conflict contract is
+documented separately in [organized conflict](organized-conflict.md).
 
 ## Treaties (V4-11)
 

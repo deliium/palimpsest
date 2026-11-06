@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-09
+### Current baseline through V4-12
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 168 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, and four V4-11 treaty families) |
+| Metric families | 172 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, four V4-11 treaty families, and four V4-12 organized-conflict families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -202,8 +202,9 @@ those as current pins or silently drop their legacy accepted versions.
   `cultural_historical_memory`, `multi_polity_migration`.
   `institutional_economy` remains unowned and fails closed.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
-  (V4-06), `legal_disputes` (V4-07), and `diplomacy` (V4-10). The other eight V4
-  flags remain unowned and fail closed.
+  (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and
+  `organized_conflict` (V4-12). The other seven V4 flags remain unowned and fail
+  closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -841,7 +842,7 @@ cognition. `simulation.delegation_representation_*` owns canonical
 Three families append (`representation_mandate_structure@1`,
 `representation_recognition_support@1`, `representation_scope_alignment@1`),
 raising the catalog 157 -> 160. Pins: runner v4/v55/v56, result v2/v3, 43
-commands, 73 observer semantic types, 168 metric families, 14 V4 contexts, 12 V4
+commands, 73 observer semantic types, 172 metric families, 14 V4 contexts, 12 V4
 flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
 
@@ -872,11 +873,11 @@ researcher-only envoy alignment. Four families append (catalog 160 -> 164).
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG`; V4-11
 adds two treaty routes for eight total; the Research UI adds a read-only panel.
 Pins:
-runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 168
+runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 172
 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
-`observer-protocol-v1`, and Alembic `0017`; four V4 flags are owned
-(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain
-unowned.
+`observer-protocol-v1`, and Alembic `0017`; five V4 flags are owned
+(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`,
+`organized_conflict`) and seven remain unowned.
 
 ### V4-11 treaties and ceasefires seam
 
@@ -902,3 +903,39 @@ append (catalog 164 -> 168). `simulation.diplomacy_*` makes
 `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only treaties view.
 `WorldEngine`, perception, admission, stop selectors, memory, prompts, observer
 semantics, and Godot never read a treaty ledger.
+
+### V4-12 organized conflict seam
+
+`organized_conflict` is the fifth owned V4 capability flag on the accepted
+`runner-config-v56` seam and requires `diplomacy`. It adds no flag, context,
+runner schema/root field, per-agent key, command, event, observer semantic type,
+write pair, `/v2` route, or migration. `agents.cognition.organized_conflict`
+keeps one owner's plans, participations, observations, interpretations,
+outcomes, contradictions, terminations, and local episodes under
+`organized-conflict.v1`. Eight closed operations (`coordinated_attack`,
+`defense`, `movement_group`, `resource_capture`, `structure_attack`,
+`route_blocking`, `retreat`, `assistance`) compile only to existing command
+names. The deterministic `Wait` replacement is the only command-producing path;
+it returns one existing command and never submits or resolves it. Defense grants
+no mitigation, resource capture is ground/corpse custody or voluntary `Give`,
+structure attack is completed-public-good opposition, route blocking never
+closes a route, movement groups are independent `Move`/`Transport`, retreat is
+`Flee`, and assistance is `Help`/`Feed`/`Transport`. Bounded `ocf_v1` frames
+(12 fields, 256 characters) travel as at most one relation inside existing
+`Talk`/`Ask`/`Tell`.
+
+Detached `analysis.organized_conflict_*` consumes committed events only, keeps
+objective counts, owner-token rows, and analytical candidates in three separated
+layers, detects `individual_violence`, `coordinated_conflict`, and
+`persistent_inter_group_conflict` with the locked
+`organized-conflict-analysis.v1` thresholds, derives forward-only `oc-` lineage,
+joins `org-`/`msoc-` read-only, and classifies researcher-only interpretation
+alignment (`consistent`, `unresolved`, `inconsistent`, `not_applicable`). Four
+families append (catalog 168 -> 172). `simulation.organized_conflict_*` owns
+canonical `organized-conflict-snapshot-v1`; `experiments` and `persistence`
+publish `organized-conflict-store-v1` atomically; six GET-only
+`/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`
+and return `organized_conflict_disabled` when unconfigured; the Svelte client
+adds a read-only conflict view. `WorldEngine`, perception, admission, stop
+selectors, memory, prompts, observer semantics, and Godot never read a conflict
+ledger. See `docs/organized-conflict.md`.

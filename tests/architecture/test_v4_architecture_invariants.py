@@ -126,7 +126,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 168
+    assert METRIC_FAMILY_COUNT == 172
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -170,7 +170,13 @@ def test_context_registry_and_capability_ownership() -> None:
             assert spec.authority is not V4Authority.DETACHED_ANALYSIS
     for name in V4_CAPABILITY_FLAGS:
         flags = V4CapabilityFlags(**{name: True})
-        if name in {"organizations", "formal_rules", "legal_disputes", "diplomacy"}:
+        if name in {
+            "organizations",
+            "formal_rules",
+            "legal_disputes",
+            "diplomacy",
+            "organized_conflict",
+        }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
         else:
@@ -185,7 +191,13 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
-        {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
+        {
+            "organizations",
+            "formal_rules",
+            "legal_disputes",
+            "diplomacy",
+            "organized_conflict",
+        }
     )
     assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
     assert V4_CONTEXT_BY_ID[V4ContextId.LEGAL_DISPUTES].authority is (
@@ -350,7 +362,13 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
-        {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
+        {
+            "organizations",
+            "formal_rules",
+            "legal_disputes",
+            "diplomacy",
+            "organized_conflict",
+        }
     )
     assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (
         V4Authority.OWNER_SCOPED
@@ -359,7 +377,9 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         V4ContextId.ORGANIZATIONS
         in V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY].prerequisite_contexts
     )
-    assert V4CapabilityFlags(organized_conflict=True).owned_enabled_names() == ()
+    assert V4CapabilityFlags(organized_conflict=True).owned_enabled_names() == (
+        "organized_conflict",
+    )
 
     offenders = [
         str(path.relative_to(SRC))

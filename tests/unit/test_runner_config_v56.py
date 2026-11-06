@@ -250,7 +250,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "organized_conflict",
         "infrastructure_networks",
         "supply_chains",
         "markets_credit",
@@ -296,4 +295,44 @@ async def test_owned_v4_flag_constructs_after_encode_decode(flag_name: str) -> N
         config, run_id=RunId(f"run-v4-gate-{flag_name}")
     )
     assert runner.config.v4_capability_flags.owned_enabled_names() == (flag_name,)
+    assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()
+
+
+@pytest.mark.asyncio
+async def test_organized_conflict_requires_diplomacy_prerequisite() -> None:
+    """V4-12 activation fails closed without the declared diplomacy context."""
+
+    config = replace(
+        _base(),
+        schema_version=RUNNER_SCHEMA_VERSION_V56,
+        v4_capability_flags=V4CapabilityFlags(organized_conflict=True),
+    )
+    with pytest.raises(RunnerConstructionError) as excinfo:
+        await SimulationRunner.from_config(
+            config, run_id=RunId("run-v4-conflict-prerequisite")
+        )
+    assert excinfo.value.code is RunnerConstructionErrorCode.V4_PREREQUISITE_MISSING
+    assert excinfo.value.stage == "v4_capability_flags"
+
+
+@pytest.mark.asyncio
+async def test_organized_conflict_with_diplomacy_constructs() -> None:
+    config = replace(
+        _base(),
+        schema_version=RUNNER_SCHEMA_VERSION_V56,
+        v4_capability_flags=V4CapabilityFlags(
+            diplomacy=True, organized_conflict=True
+        ),
+    )
+    runner = await SimulationRunner.from_config(
+        config, run_id=RunId("run-v4-conflict-owned")
+    )
+    assert runner.config.v4_capability_flags.enabled_names() == (
+        "diplomacy",
+        "organized_conflict",
+    )
+    assert runner.config.v4_capability_flags.owned_enabled_names() == (
+        "diplomacy",
+        "organized_conflict",
+    )
     assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()

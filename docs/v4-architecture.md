@@ -10,10 +10,11 @@ implements no V4 social mechanic.
 Every V4 capability flag is closed. V4-01 declared all of them unowned and
 fail-closed at runtime construction (`capability_unimplemented`, stage
 `v4_capability_flags`); a later V4 plan must claim ownership explicitly before a
-flag can enable behavior. Today four flags are owned — `organizations`
-(V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07), and
-`diplomacy` (V4-10) — and the other eight remain unowned and fail closed. Enabling an unowned flag is an
-error, not an experiment.
+flag can enable behavior. Today five flags are owned — `organizations`
+(V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07),
+`diplomacy` (V4-10/V4-11), and `organized_conflict` (V4-12) — and the other
+seven remain unowned and fail closed. Enabling an unowned flag is an error, not
+an experiment.
 
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned from
 V2/V3. V4 does not silently claim them, and they keep failing closed exactly as
@@ -62,7 +63,7 @@ The registry revision is `v4-context-map-v2`.
 | `formal_rules` | `formal_rules` | owner-scoped | `agents.cognition`, `simulation` | norms, conventions, durable records | reuse | V4-06 implementation |
 | `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation, formal rules, offices, organizations | reuse | V4-07 implementation |
 | `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | V4-10 implementation |
-| `organized_conflict` | `organized_conflict` | objective-world | `world`, `simulation`, `agents.cognition` | physical harm/attack commands | reuse | deferred to V4-02+ |
+| `organized_conflict` | `organized_conflict` | objective-world | `world`, `simulation`, `agents.cognition` | physical harm/attack commands | reuse | V4-12 implementation |
 | `infrastructure_networks` | `infrastructure_networks` | objective-world | `world`, `simulation` | new physical network graph | reserve event 23 / codec `v21` | deferred to V4-02+ |
 | `supply_chains` | `supply_chains` | objective-world | `world`, `simulation` | production, storage, transport | reuse | deferred to V4-02+ |
 | `markets_credit` | `markets_credit` | owner-scoped | `agents.cognition`, `simulation` | exchange profile, commitments | reuse | deferred to V4-02+ |
@@ -363,3 +364,15 @@ ledger; `apparently_accepted` binds nobody. `diplomacy-snapshot-v2` is canonical
 `diplomacy-snapshot-v1` remains decodable, `diplomacy-store-v1` is unchanged, and
 eight GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine` and
 every enforcement path never read a treaty ledger.
+
+## V4-12 organized conflict seam
+
+`organized_conflict` is the fifth owned V4 capability flag on
+`runner-config-v56`. It requires `diplomacy`. Owner-scoped plans,
+participations, observations, interpretations, outcomes, contradictions, and
+terminations compile only to existing commands through the deterministic
+`Wait` replacement. Detached detection classifies `individual_violence`,
+`coordinated_conflict`, and `persistent_inter_group_conflict` from committed
+events. `organized-conflict-snapshot-v1` and `organized-conflict-store-v1` are
+additive; diplomacy v1/v2 and its store are unchanged. See
+[organized conflict](organized-conflict.md).

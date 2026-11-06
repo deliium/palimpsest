@@ -72,10 +72,10 @@ def test_docs_state_non_enforcement_and_forbidden_objects() -> None:
 
 
 def test_current_counts_and_routes_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 168
-    assert "168" in _read("docs/analysis-metrics.md")
-    assert "168" in _read("docs/architecture.md")
-    assert "168" in _read(".ai-factory/ARCHITECTURE.md")
+    assert METRIC_FAMILY_COUNT == 172
+    assert "172" in _read("docs/analysis-metrics.md")
+    assert "172" in _read("docs/architecture.md")
+    assert "172" in _read(".ai-factory/ARCHITECTURE.md")
     api = _read("docs/research-api.md")
     for route in (
         "/diplomacy",

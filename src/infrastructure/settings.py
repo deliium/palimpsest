@@ -229,6 +229,8 @@ class Settings(BaseSettings):
     representation_cursor_key: SecretStr | None = Field(default=None, repr=False)
     diplomacy_root: Path | None = None
     diplomacy_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    organized_conflict_root: Path | None = None
+    organized_conflict_cursor_key: SecretStr | None = Field(default=None, repr=False)
     revision: str = ""
 
     @field_validator(
@@ -658,6 +660,17 @@ class Settings(BaseSettings):
                 and self.diplomacy_cursor_key is not None
             ),
             "diplomacy_cursor_enabled": self.diplomacy_cursor_key is not None,
+            "has_organized_conflict_root": self.organized_conflict_root is not None,
+            "has_organized_conflict_cursor_key": (
+                self.organized_conflict_cursor_key is not None
+            ),
+            "organized_conflict_enabled": (
+                self.organized_conflict_root is not None
+                and self.organized_conflict_cursor_key is not None
+            ),
+            "organized_conflict_cursor_enabled": (
+                self.organized_conflict_cursor_key is not None
+            ),
             "has_revision": bool(self.revision),
         }
 

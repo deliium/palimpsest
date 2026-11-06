@@ -764,6 +764,7 @@ class SubjectiveSnapshot:
     evidence: object | None = None
     representation: object | None = None
     diplomacy: object | None = None
+    organized_conflict: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -991,6 +992,13 @@ class SubjectiveSnapshot:
         from agents.cognition.diplomacy import require_owner_diplomacy
 
         require_owner_diplomacy(self.diplomacy, self.owner_id)
+        from agents.cognition.organized_conflict import require_owner_conflict
+
+        require_owner_conflict(
+            self.organized_conflict,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.organized_conflict",
+        )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
         require_owner_social_conventions(
@@ -3611,6 +3619,7 @@ class ActionPlan:
     communication_intent: object | None = None
     communication_intent_audit: object | None = None
     territorial_audits: tuple[object, ...] | None = None
+    organized_conflict_audits: tuple[object, ...] | None = None
     institutional_memory_selection: object | None = None
 
     def __post_init__(self) -> None:
@@ -3992,6 +4001,7 @@ class CognitiveLoopProposal:
     evidence: object | None = None
     representation: object | None = None
     diplomacy: object | None = None
+    organized_conflict: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4217,6 +4227,13 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.diplomacy",
         )
+        from agents.cognition.organized_conflict import require_owner_conflict
+
+        require_owner_conflict(
+            self.organized_conflict,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.organized_conflict",
+        )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:
@@ -4328,6 +4345,8 @@ class CognitiveLoopResult:
     evidence: object | None = None
     representation: object | None = None
     diplomacy: object | None = None
+    organized_conflict: object | None = None
+    organized_conflict_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4539,6 +4558,23 @@ class CognitiveLoopResult:
             self.agent_id,
             field_name="CognitiveLoopResult.diplomacy",
         )
+        from agents.cognition.organized_conflict import require_owner_conflict
+
+        require_owner_conflict(
+            self.organized_conflict,
+            self.agent_id,
+            field_name="CognitiveLoopResult.organized_conflict",
+        )
+        if self.organized_conflict_audits is not None:
+            from agents.cognition.organized_conflict import ConflictActionAudit
+
+            if isinstance(self.organized_conflict_audits, (set, frozenset, Mapping)):
+                raise TypeError("organized_conflict_audits must be ordered")
+            audits = tuple(self.organized_conflict_audits)
+            for audit in audits:
+                if type(audit) is not ConflictActionAudit:
+                    raise TypeError("organized_conflict_audits: invalid_item")
+            object.__setattr__(self, "organized_conflict_audits", audits)
         object.__setattr__(self, "command", require_agent_command(self.command))
         if isinstance(self.boundary_records, (set, frozenset, Mapping)):
             raise TypeError("CognitiveLoopResult.boundary_records must be ordered")

@@ -115,7 +115,14 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
     tuple(
         name
         for name in V4_FLAG_NAMES
-        if name not in {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
+        if name
+        not in {
+            "organizations",
+            "formal_rules",
+            "legal_disputes",
+            "diplomacy",
+            "organized_conflict",
+        }
     ),
 )
 async def test_each_unowned_enabled_flag_fails_closed_at_construction(
@@ -159,3 +166,22 @@ def test_v3_regression_profile_keeps_v1_rules() -> None:
     assert invalid.schema_version == RUNNER_SCHEMA_VERSION_V4
     with pytest.raises(ValueError, match="code=v1_regression_trace_enabled"):
         v3_regression_profile(invalid)
+
+
+@pytest.mark.asyncio
+async def test_organized_conflict_constructs_with_diplomacy() -> None:
+    config = replace(
+        _v56_config(),
+        v4_capability_flags=V4CapabilityFlags(
+            diplomacy=True, organized_conflict=True
+        ),
+    )
+    with pytest.raises(ValueError, match="code=v4_scaffolding_flags_enabled"):
+        v4_scaffolding_profile(config)
+    runner = await SimulationRunner.from_config(
+        config, run_id=RunId("run-v4-profile-organized-conflict")
+    )
+    assert runner.config.v4_capability_flags.owned_enabled_names() == (
+        "diplomacy",
+        "organized_conflict",
+    )

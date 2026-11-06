@@ -29,10 +29,10 @@ FIRST_154_DIGEST = "d7882d7890d17ae8c6fcb36eb9152c2c1d56562bf879c0beb5d28e10e40f
 
 def test_metric_catalog_count_is_160() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 168
-    assert len(specs) == 168
-    assert len({spec.family_id for spec in specs}) == 168
-    assert len(all_metric_specifications()) == 168
+    assert METRIC_FAMILY_COUNT == 172
+    assert len(specs) == 172
+    assert len({spec.family_id for spec in specs}) == 172
+    assert len(all_metric_specifications()) == 172
 
 
 def test_first_154_families_are_unchanged() -> None:
@@ -48,13 +48,13 @@ def test_first_154_families_are_unchanged() -> None:
 
 def test_three_dispute_families_precede_the_evidence_families() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-17:-14]) == NEW_FAMILIES
-    assert tuple(spec.family_id.value for spec in specs[-14:-11]) == (
+    assert tuple(spec.family_id for spec in specs[-21:-18]) == NEW_FAMILIES
+    assert tuple(spec.family_id.value for spec in specs[-18:-15]) == (
         "evidence_source_structure",
         "evidence_provenance_continuity",
         "evidence_objective_alignment",
     )
-    assert [spec.version_identifier for spec in specs[-17:-14]] == [
+    assert [spec.version_identifier for spec in specs[-21:-18]] == [
         "dispute_claim_structure@1",
         "dispute_testimony_independence@1",
         "dispute_resolution_alignment@1",

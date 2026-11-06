@@ -41,7 +41,13 @@ pytestmark = pytest.mark.unit
 
 _SRC = Path(__file__).resolve().parents[2] / "src"
 _OWNED_FLAGS = frozenset(
-    {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
+    {
+        "organizations",
+        "formal_rules",
+        "legal_disputes",
+        "diplomacy",
+        "organized_conflict",
+    }
 )
 
 
@@ -77,7 +83,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == _OWNED_FLAGS
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 4
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 5
 
     diplomacy = V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY]
     assert diplomacy.authority is V4Authority.OWNER_SCOPED
@@ -108,7 +114,9 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
 
 
 @pytest.mark.asyncio
-async def test_organized_conflict_still_fails_closed() -> None:
+async def test_organized_conflict_requires_diplomacy_prerequisite() -> None:
+    """V4-12 owns organized_conflict but never bypasses its declared prerequisite."""
+
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V56,
@@ -117,10 +125,10 @@ async def test_organized_conflict_still_fails_closed() -> None:
 
     with pytest.raises(RunnerConstructionError) as excinfo:
         await SimulationRunner.from_config(
-            config, run_id=RunId("run-v4-diplomacy-unowned-gate")
+            config, run_id=RunId("run-v4-diplomacy-prerequisite-gate")
         )
 
-    assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+    assert excinfo.value.code is RunnerConstructionErrorCode.V4_PREREQUISITE_MISSING
     assert excinfo.value.stage == "v4_capability_flags"
 
 
@@ -272,7 +280,7 @@ def test_no_new_wire_surfaces() -> None:
     from world._rules import COMMAND_RULE_MATRIX
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 168
+    assert METRIC_FAMILY_COUNT == 172
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

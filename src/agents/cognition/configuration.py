@@ -111,6 +111,11 @@ from agents.cognition.organization_operations import (
     OrganizationOperationPolicy,
     default_organization_operation_policy,
 )
+from agents.cognition.organized_conflict import (
+    ORGANIZED_CONFLICT_POLICY_VERSION,
+    OrganizedConflictPolicy,
+    default_organized_conflict_policy,
+)
 from agents.cognition.production import ProductionKnowledgeMode
 from agents.cognition.prospective import ProspectivePolicy, default_prospective_policy
 from agents.cognition.reflection import ReflectionPolicy
@@ -483,6 +488,18 @@ class CognitionDiplomacyMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionOrganizedConflictMode(StrEnum):
+    """Owner-scoped organized conflict beliefs. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.organized_conflict``. This is a
+    run-level cognition mode, not a capability flag and not a per-agent runner
+    key.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionCollectiveDecisionMode(StrEnum):
     """Owner-scoped collective decisions. Disabled allocates nothing.
 
@@ -696,6 +713,10 @@ class CognitionLoopConfig:
     representation_policy: RepresentationPolicy | None = None
     diplomacy_mode: CognitionDiplomacyMode = CognitionDiplomacyMode.DISABLED
     diplomacy_policy: DiplomacyPolicy | None = None
+    organized_conflict_mode: CognitionOrganizedConflictMode = (
+        CognitionOrganizedConflictMode.DISABLED
+    )
+    organized_conflict_policy: OrganizedConflictPolicy | None = None
     cultural_narrative_mode: CognitionCulturalNarrativeMode = (
         CognitionCulturalNarrativeMode.DISABLED
     )
@@ -1300,6 +1321,36 @@ class CognitionLoopConfig:
                 "invalid_policy path=diplomacy_policy reason_code=mode_policy_mismatch"
             )
             raise ValueError("diplomacy_mode_policy_mismatch")
+        if type(self.organized_conflict_mode) is not CognitionOrganizedConflictMode:
+            _LOG.error(
+                "invalid_enum path=organized_conflict_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "organized_conflict_mode must be CognitionOrganizedConflictMode"
+            )
+        if self.organized_conflict_mode is CognitionOrganizedConflictMode.DISABLED:
+            if self.organized_conflict_policy is not None:
+                _LOG.debug("cognition_organized_conflict_policy_cleared")
+            object.__setattr__(self, "organized_conflict_policy", None)
+        elif self.organized_conflict_policy is None:
+            object.__setattr__(
+                self,
+                "organized_conflict_policy",
+                default_organized_conflict_policy(),
+            )
+        elif type(self.organized_conflict_policy) is not OrganizedConflictPolicy:
+            _LOG.error(
+                "invalid_enum path=organized_conflict_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "organized_conflict_policy must be OrganizedConflictPolicy or None"
+            )
+        elif self.organized_conflict_policy != default_organized_conflict_policy():
+            _LOG.error(
+                "invalid_policy path=organized_conflict_policy "
+                "reason_code=mode_policy_mismatch"
+            )
+            raise ValueError("organized_conflict_mode_policy_mismatch")
         if type(self.cultural_narrative_mode) is not CognitionCulturalNarrativeMode:
             _LOG.error(
                 "invalid_enum path=cultural_narrative_mode reason_code=invalid_mode"
@@ -1654,6 +1705,13 @@ class CognitionLoopConfig:
             material["diplomacy_policy_version"] = (
                 DIPLOMACY_POLICY_VERSION if self.diplomacy_policy is not None else None
             )
+        if self.organized_conflict_mode is CognitionOrganizedConflictMode.DETERMINISTIC:
+            material["organized_conflict_mode"] = self.organized_conflict_mode.value
+            material["organized_conflict_policy_version"] = (
+                ORGANIZED_CONFLICT_POLICY_VERSION
+                if self.organized_conflict_policy is not None
+                else None
+            )
         return material
 
 
@@ -1932,6 +1990,8 @@ def build_cognitive_loop(
         representation_policy=resolved.representation_policy,
         diplomacy_mode=resolved.diplomacy_mode,
         diplomacy_policy=resolved.diplomacy_policy,
+        organized_conflict_mode=resolved.organized_conflict_mode,
+        organized_conflict_policy=resolved.organized_conflict_policy,
         cultural_narrative_mode=resolved.cultural_narrative_mode,
         cultural_narrative_policy=resolved.cultural_narrative_policy,
         cognitive_budget_mode=resolved.cognitive_budget_mode,

@@ -286,3 +286,11 @@ basis, participants, provision kinds, record and institutional-memory anchor
 counts, parent links), declarations, recollections, and version lineage. Terms
 digests are shown only as opaque values. The panel never computes authority,
 recognition, alignment, legitimacy, enforcement, a score, or a winner.
+
+## Organized conflict panel (V4-12)
+
+The Research UI adds a read-only Organized conflict panel reachable from the
+Institutions tab and a direct `conflict` view URL. It renders published episode
+classifications, participant counts, plans, interpretations, alignment, and
+coverage. It derives no authority, legitimacy, enforcement, score, winner, or
+war status.

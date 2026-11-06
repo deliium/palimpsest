@@ -132,10 +132,10 @@ async def test_diplomacy_runs_without_organizations() -> None:
 
 @pytest.mark.asyncio
 async def test_unowned_v4_flag_still_fails_closed() -> None:
-    config = _v56_config(flags=V4CapabilityFlags(organized_conflict=True))
+    config = _v56_config(flags=V4CapabilityFlags(infrastructure_networks=True))
     with pytest.raises(RunnerConstructionError) as exc:
         await SimulationRunner.from_config(
-            config, run_id=RunId("run-v4-treaty-organized-conflict")
+            config, run_id=RunId("run-v4-treaty-unowned")
         )
     assert exc.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
     assert exc.value.stage == "v4_capability_flags"

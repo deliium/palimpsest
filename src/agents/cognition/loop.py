@@ -363,6 +363,8 @@ class CognitiveLoop:
         "_organization_concept_mode",
         "_organization_concept_policy",
         "_organization_operation_policy",
+        "_organized_conflict_mode",
+        "_organized_conflict_policy",
         "_perception",
         "_planner",
         "_possession_succession_active",
@@ -374,6 +376,7 @@ class CognitiveLoop:
         "_prepared_organization_agency",
         "_prepared_organization_concepts",
         "_prepared_organization_operations",
+        "_prepared_organized_conflict",
         "_prepared_representation",
         "_production_allow_provider",
         "_production_knowledge_mode",
@@ -513,6 +516,8 @@ class CognitiveLoop:
         representation_policy: object | None = None,
         diplomacy_mode: object | None = None,
         diplomacy_policy: object | None = None,
+        organized_conflict_mode: object | None = None,
+        organized_conflict_policy: object | None = None,
         collective_decision_mode: object | None = None,
         collective_decision_policy: object | None = None,
         mediation_mode: object | None = None,
@@ -1080,6 +1085,30 @@ class CognitiveLoop:
         self._diplomacy_mode = diplomacy
         self._diplomacy_policy = diplomacy_policy
         self._prepared_diplomacy: object | None = None
+        from agents.cognition.configuration import CognitionOrganizedConflictMode
+        from agents.cognition.organized_conflict import (
+            OrganizedConflictPolicy,
+            default_organized_conflict_policy,
+        )
+
+        organized_conflict = (
+            CognitionOrganizedConflictMode.DISABLED
+            if organized_conflict_mode is None
+            else organized_conflict_mode
+        )
+        if type(organized_conflict) is not CognitionOrganizedConflictMode:
+            raise TypeError(
+                "organized_conflict_mode must be CognitionOrganizedConflictMode"
+            )
+        if organized_conflict is CognitionOrganizedConflictMode.DISABLED:
+            organized_conflict_policy = None
+        elif organized_conflict_policy is None:
+            organized_conflict_policy = default_organized_conflict_policy()
+        elif type(organized_conflict_policy) is not OrganizedConflictPolicy:
+            raise TypeError("organized_conflict_policy must be OrganizedConflictPolicy")
+        self._organized_conflict_mode = organized_conflict
+        self._organized_conflict_policy = organized_conflict_policy
+        self._prepared_organized_conflict: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1563,6 +1592,7 @@ class CognitiveLoop:
             prepared_evidence=self._prepared_evidence,
             prepared_representation=self._prepared_representation,
             prepared_diplomacy=self._prepared_diplomacy,
+            prepared_organized_conflict=self._prepared_organized_conflict,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1614,6 +1644,7 @@ class CognitiveLoop:
         self._prepared_evidence = state.prepared_evidence
         self._prepared_representation = state.prepared_representation
         self._prepared_diplomacy = state.prepared_diplomacy
+        self._prepared_organized_conflict = state.prepared_organized_conflict
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -3030,6 +3061,62 @@ class CognitiveLoop:
             self._diplomacy_mode.value,
             len(updated.relations),
             len(updated.instruments),
+        )
+        return updated
+
+    def _prepare_organized_conflict(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        representation: object | None,
+        diplomacy: object | None,
+    ) -> object | None:
+        """Refresh one owner's organized-conflict beliefs from visible inputs."""
+
+        from agents.cognition.configuration import CognitionOrganizedConflictMode
+        from agents.cognition.organized_conflict import (
+            ConflictLedger,
+            OrganizedConflictPolicy,
+            apply_organized_conflict_update,
+            empty_organized_conflict_ledger,
+        )
+
+        if (
+            self._organized_conflict_mode
+            is not CognitionOrganizedConflictMode.DETERMINISTIC
+        ):
+            self._prepared_organized_conflict = None
+            return None
+        snapshot = loop_input.snapshot
+        tick = loop_input.observation.tick
+        carried = (
+            None if snapshot is None else getattr(snapshot, "organized_conflict", None)
+        )
+        prior = (
+            carried
+            if type(carried) is ConflictLedger
+            else empty_organized_conflict_ledger(loop_input.agent_id, tick=tick)
+        )
+        policy = self._organized_conflict_policy
+        if type(policy) is not OrganizedConflictPolicy:
+            raise TypeError("organized_conflict_policy must be OrganizedConflictPolicy")
+        updated = apply_organized_conflict_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            observation=loop_input.observation,
+            prior=prior,
+            representation=representation,
+            diplomacy=diplomacy,
+            identity=None if snapshot is None else snapshot.social_identity,
+            relationships=() if snapshot is None else snapshot.relationships,
+            policy=policy,
+        )
+        self._prepared_organized_conflict = updated
+        _LOG.debug(
+            "organized_conflict_prepare mode=%s plans=%s observations=%s",
+            self._organized_conflict_mode.value,
+            len(updated.plans),
+            len(updated.observations),
         )
         return updated
 
@@ -5133,6 +5220,11 @@ class CognitiveLoop:
             disputes=disputes,
             evidence=evidence,
         )
+        organized_conflict = self._prepare_organized_conflict(
+            loop_input,
+            representation=representation,
+            diplomacy=diplomacy,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -5379,6 +5471,9 @@ class CognitiveLoop:
                     selected_recipe_id=production_recipe_id,
                     territorial_claims=territorial_claims,
                     territorial_claim_mode=self._territorial_claim_mode,
+                    organized_conflict=self._prepared_organized_conflict,
+                    organized_conflict_mode=self._organized_conflict_mode,
+                    organized_conflict_policy=self._organized_conflict_policy,
                     social_norms=social_norms,
                     social_norm_mode=self._social_norm_mode,
                     social_conventions=social_conventions,
@@ -5506,6 +5601,7 @@ class CognitiveLoop:
             evidence=evidence,
             representation=representation,
             diplomacy=diplomacy,
+            organized_conflict=organized_conflict,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -5890,6 +5986,29 @@ class CognitiveLoop:
                 evidence=proposal.evidence,
                 policy=self._diplomacy_policy,
             )
+        from agents.cognition.configuration import CognitionOrganizedConflictMode
+        from agents.cognition.organized_conflict import (
+            ConflictLedger,
+            OrganizedConflictPolicy,
+            record_organized_conflict_utterance,
+        )
+
+        if (
+            self._organized_conflict_mode
+            is CognitionOrganizedConflictMode.DETERMINISTIC
+            and type(proposal.organized_conflict) is ConflictLedger
+            and type(self._organized_conflict_policy) is OrganizedConflictPolicy
+        ):
+            proposal = replace(
+                proposal,
+                organized_conflict=record_organized_conflict_utterance(
+                    proposal.organized_conflict,
+                    command,
+                    owner_id=loop_input.agent_id,
+                    tick=loop_input.observation.tick,
+                    policy=self._organized_conflict_policy,
+                ),
+            )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -5935,6 +6054,7 @@ class CognitiveLoop:
             evidence=evidence,
             representation=representation,
             diplomacy=diplomacy,
+            organized_conflict=proposal.organized_conflict,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,
@@ -5949,6 +6069,9 @@ class CognitiveLoop:
             declarative_advice=proposal.declarative_advice,
             recipe_beliefs=proposal.recipe_beliefs,
             territorial_audits=getattr(proposal.plan, "territorial_audits", None),
+            organized_conflict_audits=getattr(
+                proposal.plan, "organized_conflict_audits", None
+            ),
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
         )

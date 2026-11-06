@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **168** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **172** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -551,7 +551,7 @@ Researcher-only scope alignment is never a legitimacy finding or a revocation.
 owner's self-support are excluded from independent roots. Missing anchors stay
 `unresolved`, never `inconsistent`.
 
-## Diplomacy families (catalog 168)
+## Diplomacy families (catalog 172)
 
 Four families append after the delegation-representation families. They are
 detached and read-only, and none exposes a bilateral score or composite.
@@ -592,7 +592,7 @@ There is no aggregate or composite key.
 ## Treaty families (V4-11)
 
 Four detached families append after the V4-10 set, raising the catalog from 164
-to **168**: `treaty_structure@1`, `treaty_version_lineage@1`,
+to **172**: `treaty_structure@1`, `treaty_version_lineage@1`,
 `treaty_recollection@1`, and `treaty_anchor_coverage@1`. They cover treaty and
 participant counts, closed subject/participant histograms, immutable version
 change counts, forward-only parent-link depth, recollection stance/basis
@@ -600,3 +600,13 @@ counts, researcher-only alignment counts and ratios, and opaque record /
 institutional-memory anchor coverage. The first 164 families keep their IDs,
 order, versions, and value keys. No family exposes a score, ranking, trust
 value, composite, truth, legitimacy, or enforcement value.
+
+## Organized conflict families (V4-12)
+
+Four families append after the treaty families, raising the catalog from 168 to
+172: `organized_conflict_participation@1`,
+`organized_conflict_persistence@1`, `organized_conflict_outcomes@1`, and
+`organized_conflict_interpretation@1`. Objective counts, durations, ratios, and
+closed labels only; there is no war score, violence score, escalation index,
+legitimacy score, winner, loser, or composite. See
+[organized conflict](organized-conflict.md).

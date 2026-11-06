@@ -145,6 +145,9 @@ class MultiCriteriaIntentionSelector:
         teaching_policy: object | None = None,
         territorial_claims: object | None = None,
         territorial_claim_mode: object | None = None,
+        organized_conflict: object | None = None,
+        organized_conflict_mode: object | None = None,
+        organized_conflict_policy: object | None = None,
         social_norms: object | None = None,
         social_norm_mode: object | None = None,
         norm_penalties: Mapping[str, float] | None = None,
@@ -508,9 +511,7 @@ class MultiCriteriaIntentionSelector:
             formal_rule_penalties: dict[str, float] = {}
             for item in undominated:
                 future = futures_by_id.get(item.future_id)
-                direction = getattr(
-                    getattr(future, "direction", None), "value", ""
-                )
+                direction = getattr(getattr(future, "direction", None), "value", "")
                 token = future_actions.get(direction)
                 if token not in FORMAL_RULE_ACTION_TOKENS:
                     continue
@@ -960,6 +961,9 @@ class CommandPlanner:
         selected_recipe_id: object | None = None,
         territorial_claims: object | None = None,
         territorial_claim_mode: object | None = None,
+        organized_conflict: object | None = None,
+        organized_conflict_mode: object | None = None,
+        organized_conflict_policy: object | None = None,
         social_norms: object | None = None,
         social_norm_mode: object | None = None,
         social_conventions: object | None = None,
@@ -1169,6 +1173,33 @@ class CommandPlanner:
             relationships=() if snapshot is None else snapshot.relationships,
             mode=territorial_claim_mode,
         )
+        from agents.cognition.organized_conflict import (
+            ConflictLedger,
+            OrganizedConflictPolicy,
+        )
+        from agents.cognition.organized_conflict_actions import (
+            organized_conflict_wait_replacement,
+        )
+
+        prepared_conflict = organized_conflict
+        if (
+            prepared_conflict is None
+            and snapshot is not None
+            and type(getattr(snapshot, "organized_conflict", None)) is ConflictLedger
+        ):
+            prepared_conflict = snapshot.organized_conflict
+        if type(organized_conflict_policy) is not OrganizedConflictPolicy:
+            organized_conflict_audits = None
+        else:
+            command, organized_conflict_audits = organized_conflict_wait_replacement(
+                command,  # type: ignore[arg-type]
+                owner_id=owner,
+                tick=tick,
+                observation=loop_input.observation,
+                identity=None if snapshot is None else snapshot.social_identity,
+                ledger=prepared_conflict,
+                policy=organized_conflict_policy,
+            )
         from agents.cognition.social_norms import norm_communicate_utterance
 
         prepared_norms = social_norms
@@ -1314,9 +1345,7 @@ class CommandPlanner:
             if snapshot is None
             else getattr(snapshot, "organization_concepts", None)
         )
-        command = organization_communicate_utterance(
-            command, prepared_organizations
-        )
+        command = organization_communicate_utterance(command, prepared_organizations)
         from agents.cognition.organization_operations_communication import (
             organization_operation_communicate_utterance,
         )
@@ -1334,13 +1363,9 @@ class CommandPlanner:
         )
 
         prepared_agency = (
-            None
-            if snapshot is None
-            else getattr(snapshot, "organization_agency", None)
+            None if snapshot is None else getattr(snapshot, "organization_agency", None)
         )
-        command = organization_agency_communicate_utterance(
-            command, prepared_agency
-        )
+        command = organization_agency_communicate_utterance(command, prepared_agency)
         from agents.cognition.formal_rule_communication import (
             formal_rule_communicate_utterance,
         )
@@ -1607,6 +1632,7 @@ class CommandPlanner:
             communication_intent=communication_intent,
             communication_intent_audit=communication_intent_audit,
             territorial_audits=territorial_audits,
+            organized_conflict_audits=organized_conflict_audits,
             institutional_memory_selection=institutional_selection,
         )
         band = (

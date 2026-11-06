@@ -322,6 +322,9 @@ class MetricComputationInputs:
     diplomacy_objective_rows: Sequence[object] | None = None
     diplomacy_lane_rows: Sequence[object] | None = None
     diplomacy_treaty_alignment: Sequence[object] | None = None
+    organized_conflict_rows: object | None = None
+    organized_conflict_objective_rows: Sequence[object] | None = None
+    organized_conflict_interpretation_alignment: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2028,6 +2031,105 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
             ),
         )
 
+    if inputs.organized_conflict_rows is not None:
+        from analysis.organized_conflict_alignment import (
+            ConflictAlignmentRow,
+            align_conflict_interpretations,
+            summarize_organized_conflict,
+        )
+        from analysis.organized_conflict_detection import (
+            detect_organized_conflict_episodes,
+        )
+        from analysis.organized_conflict_identity import (
+            assign_organized_conflict_identities,
+            derive_organized_conflict_lineage,
+            join_organized_conflict_identities,
+        )
+        from analysis.organized_conflict_layers import project_conflict_layers
+        from analysis.organized_conflict_metrics import (
+            compute_organized_conflict_interpretation,
+            compute_organized_conflict_outcomes,
+            compute_organized_conflict_participation,
+            compute_organized_conflict_persistence,
+        )
+        from analysis.organized_conflict_policy import (
+            default_organized_conflict_analysis_policy,
+        )
+        from analysis.organized_conflict_rows import (
+            OrganizedConflictHarvestRows,
+            harvest_organized_conflict_rows,
+        )
+
+        conflict_policy = default_organized_conflict_analysis_policy()
+        if type(inputs.organized_conflict_rows) is OrganizedConflictHarvestRows:
+            organized_conflict_rows = inputs.organized_conflict_rows
+        else:
+            organized_conflict_rows = harvest_organized_conflict_rows(
+                cast("Sequence[object]", inputs.organized_conflict_rows),
+                tuple(inputs.organized_conflict_objective_rows or ()),
+                policy=conflict_policy,
+            )
+        conflict_candidates = detect_organized_conflict_episodes(
+            organized_conflict_rows.objective_events, policy=conflict_policy
+        )
+        conflict_candidates = assign_organized_conflict_identities(conflict_candidates)
+        _ = derive_organized_conflict_lineage(conflict_candidates)
+        conflict_candidates = join_organized_conflict_identities(conflict_candidates)
+        _ = project_conflict_layers(organized_conflict_rows, conflict_candidates)
+        conflict_alignment = (
+            cast(
+                "Sequence[ConflictAlignmentRow]",
+                tuple(inputs.organized_conflict_interpretation_alignment),
+            )
+            if inputs.organized_conflict_interpretation_alignment is not None
+            else align_conflict_interpretations(
+                organized_conflict_rows.owner_interpretations,
+                conflict_candidates,
+            )
+        )
+        conflict_summary = summarize_organized_conflict(
+            organized_conflict_rows,
+            conflict_candidates,
+            conflict_alignment,
+        )
+        _safe(
+            "organized_conflict_participation",
+            lambda: compute_organized_conflict_participation(
+                organized_conflict_rows,
+                conflict_candidates,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "organized_conflict_persistence",
+            lambda: compute_organized_conflict_persistence(
+                organized_conflict_rows,
+                conflict_candidates,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "organized_conflict_outcomes",
+            lambda: compute_organized_conflict_outcomes(
+                organized_conflict_rows,
+                conflict_candidates,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "organized_conflict_interpretation",
+            lambda: compute_organized_conflict_interpretation(
+                organized_conflict_rows,
+                conflict_candidates,
+                conflict_alignment,
+                conflict_summary,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

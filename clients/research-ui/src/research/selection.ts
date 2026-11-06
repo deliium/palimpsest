@@ -18,6 +18,7 @@ export const RESEARCH_UI_VIEWS = [
   'evidence',
   'representation',
   'diplomacy',
+  'conflict',
   'institutions',
   'contact',
   'traces',

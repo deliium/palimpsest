@@ -307,10 +307,23 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. Four V4 flags are owned and may construct
+closed `v4_capability_flags` sibling. The accepted set has five owned V4 flags that may construct
 on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
-(V4-06), `legal_disputes` (V4-07), and `diplomacy` (V4-10). The other eight V4 flags remain unowned
-and fail closed at `SimulationRunner.from_config`.
+(V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and
+`organized_conflict` (V4-12, requiring `diplomacy`). The other seven V4 flags
+remain unowned and fail closed at `SimulationRunner.from_config`.
+
+## Organized conflict (`runner-config-v56`)
+
+V4-12 owns `organized_conflict` on the same v56 seam and requires
+`v4_capability_flags.diplomacy`. It adds no runner root field or per-agent key;
+the run-level `CognitionOrganizedConflictMode` is derived from the flag.
+`PALIMPSEST_ORGANIZED_CONFLICT_ROOT` and
+`PALIMPSEST_ORGANIZED_CONFLICT_CURSOR_KEY` configure the read-only publication
+store and cursors. The CLI producer accepts `--organized-conflict-root`,
+`--organized-conflict-max-publications` (default 16, range 1..1024), and
+`--organized-conflict-max-bytes` (default 8 MiB, range 1..268435456). The
+Research UI conflict panel is read-only and derives no authority or score.
 
 Formal rules add no runner schema, root field, or per-agent runner key:
 `formal_rule_mode` is internal cognition configuration and is derived from

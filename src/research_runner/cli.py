@@ -1023,6 +1023,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.organized_conflict_composition import (
+                producer_options_from_args as organized_conflict_options_from_args,
+            )
+
+            organized_conflict_options = organized_conflict_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_organized_conflict_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1451,6 +1463,31 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"diplomacy_publication_reason={diplomacy_receipt.get('reason')}")
             if diplomacy_receipt.get("publication_id"):
                 print(f"diplomacy_publication_id={diplomacy_receipt['publication_id']}")
+        if organized_conflict_options.enabled:
+            from research_runner.organized_conflict_composition import (
+                publish_organized_conflict_harvest,
+                write_organized_conflict_receipt,
+            )
+
+            organized_conflict_receipt = publish_organized_conflict_harvest(
+                arm.runner_result,
+                organized_conflict_options,
+                committed_events=arm.committed_events or (),
+                run_id=assignment.run_id.value,
+            )
+            write_organized_conflict_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                organized_conflict_receipt,
+            )
+            print(
+                "organized_conflict_publication_status="
+                f"{organized_conflict_receipt['status']}"
+            )
+            print(
+                "organized_conflict_publication_reason="
+                f"{organized_conflict_receipt.get('reason')}"
+            )
         if lineage_options is not None:
             import json
 
@@ -1636,6 +1673,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--diplomacy-root", default=None)
     gen_p.add_argument("--diplomacy-max-publications", type=int, default=16)
     gen_p.add_argument("--diplomacy-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--organized-conflict-root", default=None)
+    gen_p.add_argument("--organized-conflict-max-publications", type=int, default=16)
+    gen_p.add_argument("--organized-conflict-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

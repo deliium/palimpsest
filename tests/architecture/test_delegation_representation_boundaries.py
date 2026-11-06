@@ -82,13 +82,16 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         "formal_rules",
         "legal_disputes",
         "diplomacy",
+        "organized_conflict",
     }
 
     organizations = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS]
     diplomacy = V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY]
     assert organizations.authority is V4Authority.OWNER_SCOPED
     assert V4ContextId.ORGANIZATIONS in diplomacy.prerequisite_contexts
-    assert V4CapabilityFlags(organized_conflict=True).owned_enabled_names() == ()
+    assert V4CapabilityFlags(organized_conflict=True).owned_enabled_names() == (
+        "organized_conflict",
+    )
 
     representation_contexts = {
         context_id
@@ -109,7 +112,7 @@ def test_no_runner_config_v57_literal_in_source() -> None:
 
 
 @pytest.mark.asyncio
-async def test_organized_conflict_still_fails_closed() -> None:
+async def test_organized_conflict_requires_diplomacy_prerequisite() -> None:
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V56,
@@ -121,7 +124,7 @@ async def test_organized_conflict_still_fails_closed() -> None:
             config, run_id=RunId("run-v4-representation-gate")
         )
 
-    assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
+    assert excinfo.value.code is RunnerConstructionErrorCode.V4_PREREQUISITE_MISSING
     assert excinfo.value.stage == "v4_capability_flags"
 
 
@@ -243,14 +246,14 @@ def test_snapshot_store_and_catalog_pins() -> None:
     )
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 168
+    assert METRIC_FAMILY_COUNT == 172
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )
     assert DELEGATION_REPRESENTATION_STORE_SCHEMA == (
         "delegation-representation-store-v1"
     )
-    assert [spec.family_id for spec in all_metric_specifications()[-11:-8]] == [
+    assert [spec.family_id for spec in all_metric_specifications()[-15:-12]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,

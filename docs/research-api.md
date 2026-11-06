@@ -85,7 +85,7 @@ Stable problem-detail errors carry closed reason codes. Lifecycle conflicts retu
 - Introduce `/v2` only when a request/response shape cannot be expressed as optional additive fields on `/v1`.
 - WebSocket subprotocol remains `palimpsest.v1` (credentials via header / subprotocol only — never query strings).
 - `SimulationManager` stores opaque `config_payload` + fingerprint; decode happens at runner construction.
-- Accepted runner config wire versions: `runner-config-v1`…`runner-config-v56` (mode-driven), with default write **`runner-config-v4`** (default-off `V2CapabilityFlags` + disabled tracing). Accepted `runner-config-v23` carries sibling root `v3_capability_flags` (V3 scaffolding; writers emit v23 only when some V3 flag is true; flags-on fail closed at runner construction until owned). Accepted `runner-config-v56` is V4 scaffolding: the active v55 family keyset plus one closed `v4_capability_flags` sibling, with generational siblings present only when a generational run is present. Four V4 flags are owned — `organizations` (V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07), and `diplomacy` (V4-10) — and the other eight remain unowned and fail closed. Legacy v1/v2 payloads must remain creatable/configurable and constructible.
+- Accepted runner config wire versions: `runner-config-v1`…`runner-config-v56` (mode-driven), with default write **`runner-config-v4`** (default-off `V2CapabilityFlags` + disabled tracing). Accepted `runner-config-v23` carries sibling root `v3_capability_flags` (V3 scaffolding; writers emit v23 only when some V3 flag is true; flags-on fail closed at runner construction until owned). Accepted `runner-config-v56` is V4 scaffolding: the active v55 family keyset plus one closed `v4_capability_flags` sibling, with generational siblings present only when a generational run is present. Five V4 flags are owned — `organizations` (V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and `organized_conflict` (V4-12) — and the other seven remain unowned and fail closed. Legacy v1/v2 payloads must remain creatable/configurable and constructible.
 - Observer protocol stays `observer-protocol-v1` / `observer-layout-v1` (Godot↔Python mirror pin). Prefer additive optional fields and semantic types. V2/V3 deliberately kept `GET /version` minimal; V4-01 refined that policy to advertise protocol, layout, and capability **metadata** additively (`supported_observer_protocols`, `observer_layout_version`, `observer_capabilities`, `observer_reserved_capabilities`). It still exposes no capability-flag values or configuration payloads, and `observer-protocol-v2` is reserved but not served.
 
 ## Debug security
@@ -268,3 +268,13 @@ owner-safe `orgc-`/region anchors.
 Both require `SUBJECTIVE_DEBUG`, use the existing publication-bound cursors, and
 return tokens, content-addressed record IDs, closed values, and
 composer-derived status labels only. The diplomacy GET route total is eight.
+
+## Organized-conflict routes (V4-12)
+
+Six GET-only routes under `/v1/simulations/{run_id}/organized-conflict` require
+`SUBJECTIVE_DEBUG`, return `503 organized_conflict_disabled` when publication is
+not configured, and `404 organized_conflict_not_found` for unknown published
+runs. Cursor mismatch is `400 organized_conflict_cursor_invalid`; expiry is
+`410 organized_conflict_cursor_expired`. The six purposes are `summary`,
+`episodes`, `episode`, `plans`, `plan`, and `interpretations`. No `/v2` route
+exists.

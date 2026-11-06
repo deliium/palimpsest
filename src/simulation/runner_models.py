@@ -318,11 +318,18 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 )
 
 # V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
-# V4-07 owns ``legal_disputes``, and V4-10 owns ``diplomacy``; the remaining
-# eight V4 flags stay unowned and fail closed at runtime construction until
-# their behavior plans land and claim ownership.
+# V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, and V4-12 owns
+# ``organized_conflict``; the remaining seven V4 flags stay unowned and fail
+# closed at runtime construction until their behavior plans land and claim
+# ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
-    {"organizations", "formal_rules", "legal_disputes", "diplomacy"}
+    {
+        "organizations",
+        "formal_rules",
+        "legal_disputes",
+        "diplomacy",
+        "organized_conflict",
+    }
 )
 
 _OVERRIDEABLE_DRIVE_KINDS: Final[frozenset[DriveKind]] = frozenset(
@@ -6384,6 +6391,7 @@ class SimulationRunnerResult:
     evidence_ledgers: tuple[object, ...] = ()
     representation_ledgers: tuple[object, ...] = ()
     diplomacy_ledgers: tuple[object, ...] = ()
+    organized_conflict_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6753,6 +6761,28 @@ class SimulationRunnerResult:
         if len(set(owners)) != len(owners) or owners != sorted(owners):
             raise ValueError("diplomacy_ledgers: invalid_order")
         object.__setattr__(self, "diplomacy_ledgers", diplomacy_ledgers)
+        if isinstance(self.organized_conflict_ledgers, (set, frozenset)):
+            raise TypeError("organized_conflict_ledgers must be ordered")
+        if type(self.organized_conflict_ledgers) is not tuple:
+            raise TypeError("organized_conflict_ledgers must be ordered")
+        from agents.cognition.organized_conflict import (
+            ConflictLedger,
+            require_owner_conflict,
+        )
+
+        conflict_ledgers = tuple(self.organized_conflict_ledgers)
+        for ledger in conflict_ledgers:
+            if type(ledger) is not ConflictLedger:
+                raise TypeError("organized_conflict_ledgers: invalid_item")
+            require_owner_conflict(ledger, ledger.owner_id)
+        conflict_owners: list[Any] = [
+            cast(ConflictLedger, ledger).owner_id for ledger in conflict_ledgers
+        ]
+        if len(set(conflict_owners)) != len(conflict_owners) or [
+            owner.value for owner in conflict_owners
+        ] != sorted(owner.value for owner in conflict_owners):
+            raise ValueError("organized_conflict_ledgers: invalid_order")
+        object.__setattr__(self, "organized_conflict_ledgers", conflict_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

@@ -389,7 +389,7 @@ raising the metric catalog from 157 to **160** (V4-10 raises it to **164**), plu
 filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 168, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 172, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -418,7 +418,7 @@ catalog from 160 to **164**. `diplomacy-snapshot-v1` and
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG` and fail
 closed with `diplomacy_disabled`; the Research UI adds a read-only panel.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-168 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+172 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -443,6 +443,30 @@ canonical, v1 remains decodable, `diplomacy-store-v1` is unchanged, and eight
 GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine`, perception,
 admission, stop selectors, memory, prompts, observer semantics, and Godot never
 read a treaty ledger. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 168 metric families, 14 V4 contexts, 12 V4 flags,
-replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; four V4
-flags are owned and eight remain unowned.
+observer semantic types, 172 metric families, 14 V4 contexts, 12 V4 flags,
+replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
+flags are owned and seven remain unowned.
+
+V4-12 (organized conflict, 2026-11-05) owns the fifth V4 capability flag,
+`organized_conflict`, on the accepted `runner-config-v56` seam and requires
+`diplomacy`; it adds no flag, context, runner schema/root field, per-agent key,
+command, event, observer semantic type, write pair, `/v2` route, or migration.
+One owner retains plans, participations, observations, interpretations,
+outcomes, contradictions, terminations, and local episodes under
+`organized-conflict.v1`. Eight closed operations (`coordinated_attack`,
+`defense`, `movement_group`, `resource_capture`, `structure_attack`,
+`route_blocking`, `retreat`, `assistance`) compile only to existing command
+names; the deterministic `Wait` replacement is the only command-producing path.
+`ocf_v1` is 12 fields and 256 characters inside existing `Talk`/`Ask`/`Tell`.
+Detached detection consumes committed events only, keeps three separated layers,
+classifies individual, coordinated, and persistent inter-group conflict with the
+locked `organized-conflict-analysis.v1` thresholds, derives forward-only `oc-`
+lineage, joins `org-`/`msoc-` read-only, and classifies researcher-only
+alignment. Four families append (168 -> 172). `organized-conflict-snapshot-v1`
+and `organized-conflict-store-v1` publish opt-in and atomically; six GET-only
+`/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`
+and fail closed with `organized_conflict_disabled`; the Research UI adds a
+read-only conflict view. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
+observer semantic types, 172 metric families, 14 V4 contexts, 12 V4 flags,
+replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
+flags are owned and seven remain unowned.

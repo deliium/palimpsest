@@ -236,7 +236,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 168
+    assert METRIC_FAMILY_COUNT == 172
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -267,7 +267,13 @@ def test_v4_registry_keeps_fourteen_contexts_and_ownership_split() -> None:
         "formal_rules",
     )
     for name in V4_CAPABILITY_FLAGS:
-        if name in {"organizations", "formal_rules", "legal_disputes", "diplomacy"}:
+        if name in {
+            "organizations",
+            "formal_rules",
+            "legal_disputes",
+            "diplomacy",
+            "organized_conflict",
+        }:
             continue
         flags = V4CapabilityFlags(**{name: True})
         assert flags.owned_enabled_names() == ()

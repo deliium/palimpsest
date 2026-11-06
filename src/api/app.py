@@ -41,6 +41,7 @@ from api.routes import (
     observer_router,
     observer_stream_router,
     organization_router,
+    organized_conflict_router,
     replay_router,
     research_matrix_router,
     research_router,
@@ -350,6 +351,34 @@ def _attach_evidence_testimony_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_organized_conflict_reader(app: FastAPI) -> None:
+    from api.organized_conflict_cursor import OrganizedConflictCursorCodec
+    from persistence.organized_conflict_filesystem import (
+        create_organized_conflict_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.organized_conflict_cursor_codec = None
+        app.state.organized_conflict_reader = None
+        return
+    secret = (
+        settings.organized_conflict_cursor_key.get_secret_value().encode("utf-8")
+        if settings.organized_conflict_cursor_key is not None
+        else None
+    )
+    if settings.organized_conflict_root is None or secret is None:
+        app.state.organized_conflict_cursor_codec = None
+        app.state.organized_conflict_reader = None
+        return
+    app.state.organized_conflict_cursor_codec = (
+        OrganizedConflictCursorCodec.from_secret(secret)
+    )
+    app.state.organized_conflict_reader = create_organized_conflict_reader(
+        settings.organized_conflict_root
+    )
+
+
 def _attach_diplomacy_reader(app: FastAPI) -> None:
     from api.diplomacy_cursor import DiplomacyCursorCodec
     from persistence.diplomacy_filesystem import create_diplomacy_reader
@@ -469,6 +498,7 @@ def create_app(
     _attach_evidence_testimony_reader(app)
     _attach_delegation_representation_reader(app)
     _attach_diplomacy_reader(app)
+    _attach_organized_conflict_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -500,6 +530,7 @@ def create_app(
     app.include_router(evidence_testimony_router)
     app.include_router(delegation_representation_router)
     app.include_router(diplomacy_router)
+    app.include_router(organized_conflict_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)
