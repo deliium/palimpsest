@@ -20,7 +20,10 @@ from analysis.borders_contract import (
     BorderDisputeRow,
     BorderRecognitionRow,
 )
-from analysis.borders_events import BorderPhysicalRow, harvest_physical_rows
+from analysis.borders_events import (
+    BorderPhysicalRow,
+    harvest_physical_rows_with_coverage,
+)
 from analysis.borders_policy import BordersAnalysisPolicy
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.borders.rows")
@@ -165,7 +168,9 @@ def harvest_border_rows(
         exported_ledgers, Sequence
     ):
         raise TypeError("exported_ledgers must be a sequence")
-    physical = harvest_physical_rows(committed_events, policy=policy)
+    physical, physical_coverage = harvest_physical_rows_with_coverage(
+        committed_events, policy=policy
+    )
     claims: list[BorderClaimRow] = []
     recognitions: list[BorderRecognitionRow] = []
     access: list[BorderAccessRow] = []
@@ -202,7 +207,12 @@ def harvest_border_rows(
     has_rows = bool(
         physical or claims or recognitions or access or agreements or disputes
     )
-    coverage = "complete" if has_rows else "not_applicable"
+    if physical_coverage == "partial":
+        coverage = "partial"
+    elif has_rows:
+        coverage = "complete"
+    else:
+        coverage = "not_applicable"
     _LOG.debug(
         "borders_harvest claims=%s agreements=%s disputes=%s physical=%s",
         len(claims),

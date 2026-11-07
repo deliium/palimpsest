@@ -72,7 +72,11 @@ class BordersAnalysisPolicy:
 
     def __post_init__(self) -> None:
         if self.version != BORDERS_ANALYSIS_POLICY_VERSION:
-            raise BordersAnalysisPolicyError("borders_analysis_policy_not_locked")
+            _LOG.error(
+                "borders_policy_rejected field=version "
+                "reason_code=unsupported_policy"
+            )
+            raise BordersAnalysisPolicyError("unsupported_policy")
         for item in fields(type(self)):
             if item.name == "version":
                 continue
@@ -80,11 +84,19 @@ class BordersAnalysisPolicy:
             actual = getattr(self, item.name)
             if isinstance(expected, float):
                 if type(actual) is not float or actual != expected:
-                    raise BordersAnalysisPolicyError(
-                        "borders_analysis_policy_not_locked"
+                    _LOG.error(
+                        "borders_policy_rejected field=%s "
+                        "reason_code=unsupported_policy",
+                        item.name,
                     )
+                    raise BordersAnalysisPolicyError("unsupported_policy")
             elif type(actual) is not int or actual != expected:
-                raise BordersAnalysisPolicyError("borders_analysis_policy_not_locked")
+                _LOG.error(
+                    "borders_policy_rejected field=%s "
+                    "reason_code=unsupported_policy",
+                    item.name,
+                )
+                raise BordersAnalysisPolicyError("unsupported_policy")
 
 
 def default_borders_analysis_policy() -> BordersAnalysisPolicy:

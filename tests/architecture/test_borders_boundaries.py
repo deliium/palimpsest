@@ -8,6 +8,11 @@ from pathlib import Path
 
 from analysis.specifications import METRIC_FAMILY_COUNT
 from observer.version import SEMANTIC_EVENT_TYPES
+from simulation.borders_ports import BORDERS_CURSOR_PURPOSES
+from simulation.compatibility import (
+    ALEMBIC_HEAD_REVISION,
+    V4_OWNED_CAPABILITY_FLAGS,
+)
 from simulation.persistence import ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 from simulation.v4_architecture import V4_CAPABILITY_FLAGS, V4_CONTEXTS
 from world._rules import COMMAND_RULE_MATRIX
@@ -73,11 +78,17 @@ def _tree(path: Path) -> ast.AST:
 
 def test_border_paths_exist() -> None:
     names = {path.name for path in BORDER_PATHS}
-    assert "borders.py" in names
-    assert "borders_models.py" in names
-    assert "borders.py" in names
-    assert "borders_filesystem.py" in names
-    assert "borders.py" in names
+    expected = {
+        "borders.py",
+        "borders_communication.py",
+        "borders_models.py",
+        "borders_codec.py",
+        "borders_ports.py",
+        "borders_paging.py",
+        "borders_filesystem.py",
+    }
+    assert expected <= names
+    assert len(BORDER_PATHS) >= 20
 
 
 def test_no_objective_border_or_owner_field_exists() -> None:
@@ -113,8 +124,6 @@ def test_no_authority_or_registry_class_exists() -> None:
 
 def test_no_command_construction_or_resolution() -> None:
     for path in BORDER_PATHS:
-        if path.name == "borders_communication.py":
-            continue
         tree = _tree(path)
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
@@ -125,6 +134,38 @@ def test_no_command_construction_or_resolution() -> None:
                 assert name not in {"submit", "resolve", "admit"}, (path, name)
 
 
+def test_no_score_or_oracle_result_field() -> None:
+    forbidden = {
+        "winner",
+        "loser",
+        "score",
+        "composite",
+        "sovereignty",
+        "legitimacy",
+        "country_owner",
+        "ownership",
+        "refugee",
+        "forced",
+        "wellbeing",
+        "assimilation",
+        "enforcement",
+    }
+    for path in BORDER_PATHS:
+        tree = _tree(path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for item in node.body:
+                targets: list[ast.expr] = []
+                if isinstance(item, ast.AnnAssign):
+                    targets = [item.target]
+                elif isinstance(item, ast.Assign):
+                    targets = list(item.targets)
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        assert target.id not in forbidden, (path, node.name, target.id)
+
+
 def test_world_and_perception_never_read_border_ledgers() -> None:
     for path in (
         *(ROOT / "src" / "world").rglob("*.py"),
@@ -133,11 +174,13 @@ def test_world_and_perception_never_read_border_ledgers() -> None:
         text = path.read_text(encoding="utf-8")
         assert "borders" not in text
         assert "BorderLedger" not in text
-    perception = (ROOT / "src" / "simulation" / "perception.py").read_text(
-        encoding="utf-8"
-    )
-    assert "BorderLedger" not in perception
-    assert "from agents.cognition.borders" not in perception
+    for path in (
+        ROOT / "src" / "simulation" / "perception.py",
+        ROOT / "src" / "simulation" / "engine.py",
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "BorderLedger" not in text
+        assert "from agents.cognition.borders" not in text
 
 
 def test_analysis_modules_are_detached() -> None:
@@ -225,6 +268,16 @@ def test_pins_are_unchanged() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert METRIC_FAMILY_COUNT == 176
+    assert ALEMBIC_HEAD_REVISION == "0017"
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 5
+    assert BORDERS_CURSOR_PURPOSES == {
+        "summary",
+        "claims",
+        "claim",
+        "agreements",
+        "agreement",
+        "control",
+    }
 
 
 def test_godot_and_ui_are_read_only() -> None:

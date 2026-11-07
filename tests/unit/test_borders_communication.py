@@ -214,6 +214,12 @@ def test_non_contiguous_missing_and_duplicate_indices_are_dropped() -> None:
     assert parsed == lines[0]
 
 
+def test_identity_none_drops_frames_instead_of_trusting_raw_speaker() -> None:
+    frame = _frame(AgreementAct.CLAIM_DOMAIN)
+    assert border_frames_from_observation(_observation(frame), identity=None) == ()
+    assert border_frame_deliveries(_observation(frame), identity=None) == ()
+
+
 def test_speaker_cannot_accept_for_another_party() -> None:
     frame = _frame(
         AgreementAct.ACCEPT,

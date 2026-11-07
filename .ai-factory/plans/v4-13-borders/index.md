@@ -384,13 +384,13 @@ implementation-session results.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | executed_passed | `uv run --frozen --python 3.12.14 pytest --cov --cov-report=term tests/unit tests/architecture -q` → 9395 passed, 79% coverage, 2056.20s. |
-| Focused V4-13 suite | executed_passed | `tests/unit/test_borders_*.py` + `tests/architecture/test_borders_boundaries.py` → 207 passed after follow-up remediation (204 at implementation). |
-| Focused in-process border E2E | executed_passed | `tests/unit/test_borders_e2e.py` → 2 passed; no PostgreSQL. |
-| V1/V2/V3/V4 regression selection | executed_passed | Included in the full unit+architecture run; 9395 passed. |
-| Documentation parity | executed_passed | `tests/unit/test_borders_docs.py tests/unit/test_*_docs.py` → 67 passed. |
+| Python unit + architecture with coverage | executed_passed | Pre-remediation run: `uv run --frozen --python 3.12.14 pytest --cov --cov-report=term tests/unit tests/architecture -q` → 9398 passed, 78% coverage, 2222.56s. Post-remediation rerun is in progress. |
+| Focused V4-13 suite | executed_passed | `tests/unit/test_borders_*.py` + `tests/architecture/test_borders_boundaries.py` → 224 passed after verification remediation. |
+| Focused in-process border E2E | executed_passed | `tests/unit/test_borders_e2e.py` → 3 passed with real `WorldEngine` ticks/commands, six routes, and a no-frame no-telepathy case; no PostgreSQL. |
+| V1/V2/V3/V4 regression selection | executed_passed | Included in the full unit+architecture run; post-remediation rerun is in progress. |
+| Documentation parity | executed_passed | `tests/unit/test_borders_docs.py tests/unit/test_*_docs.py` → 68 passed. |
 | Ruff | executed_passed | `uv run --frozen --python 3.12.14 ruff check src tests` → All checks passed. |
-| Mypy | executed_passed | `uv run --frozen --python 3.12.14 mypy src tests` → no issues in 2176 files. |
+| Mypy | executed_passed | `uv run --frozen --python 3.12.14 mypy src tests` → no issues in 2180 files. |
 | Import-linter | executed_passed | `uv run --frozen --python 3.12.14 lint-imports` → 25 kept, 0 broken. |
 | Integration (`-m "integration and not scale"`) | unexecuted | Requires a disposable PostgreSQL/pgvector instance named with `palimpsest_test`; `PALIMPSEST_TEST_DATABASE_URL` is unset. |
 | Integration including scale | unexecuted | Requires the same disposable database plus the long-run harness. |
@@ -404,18 +404,32 @@ implementation-session results.
 
 Certification outcome: **not certified** — implementation, focused tests, static
 gates, documentation parity, Compose configuration, and all Research UI lanes
-pass; integration, integration-scale, Compose/browser, Godot, and benchmark/scale
-remain `unexecuted` with the prerequisites recorded above.
+pass; the verification blockers were remediated, but integration,
+integration-scale, Compose/browser, Godot, and benchmark/scale remain
+`unexecuted` with the prerequisites recorded above. The post-remediation full
+unit+architecture rerun is still in progress at the time of this receipt update.
 
 Follow-up issue remediation (2026-11-07): removed raw owner identifiers from
 border DEBUG logs, clarified the `bdr_v1` ten-relation-field wire shape,
 corrected the diplomacy catalog heading, aligned the metric-spec phase wording
 with the closed evidence stage, and made a corrupt border store return 500
-`borders_store_corrupt` instead of a false 404. Re-ran the focused border suite
-(207 passed), documentation parity (67 passed), the V4/V1/V2 regression
-selection (45 passed), Ruff, Mypy, and import-linter; the full
-unit+architecture count and the external qualification lanes were not
-re-executed in the follow-up.
+`borders_store_corrupt` instead of a false 404.
+
+Verification remediation (2026-11-07): fixed real `Moved` extraction and partial
+physical coverage; added persisted/checkpoint cap validation; retained internal
+observed edges; dropped identity-`None` frames instead of trusting raw speakers;
+prevented proposer self-acceptance and preserved agreement recognition across
+updates; made recognition location-set exact; rebuilt the E2E with real
+`WorldEngine` ticks, `Move`/`Tell`/`Wait`, publication, and all six routes;
+wired Godot border responses, four separate overlay nodes, API payload
+adaptation, and short labels; registered `borders` in `RUN_SCOPED_VIEWS`;
+exported border snapshot symbols; added the missing codec/ports/alignment/
+publication tests and boundary assertions; corrected the
+`docs/v4-architecture.md` baseline to 176 families and six border routes.
+Focused suite: 224 passed. Documentation parity: 68 passed. Ruff, Mypy
+(2180 files), import-linter, Compose config, and all Research UI lanes pass.
+The post-remediation full unit+architecture run and the external qualification
+lanes are recorded below; the external lanes remain `unexecuted`.
 
 ## Commit Plan
 

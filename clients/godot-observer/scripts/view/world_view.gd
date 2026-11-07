@@ -41,7 +41,13 @@ var presentation_detail := "full"
 @onready var _civilization: Node2D = get_node_or_null("CivilizationFacilities")
 @onready var _civilization_flows: Node2D = get_node_or_null("CivilizationFlows")
 @onready var _civilization_beliefs: Node2D = get_node_or_null("CivilizationBeliefs")
-var _border: Node2D = null
+const BORDER_OVERLAY_KINDS := [
+	"border_physical",
+	"border_claims",
+	"border_agreements",
+	"border_patterns",
+]
+var _borders: Dictionary = {}
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
@@ -49,11 +55,14 @@ signal location_selected(location_id: String)
 signal civilization_inspect_requested(summary: Dictionary)
 
 func _ready() -> void:
-	_border = get_node_or_null("BorderOverlay")
-	if _border == null:
-		_border = BorderOverlay.new()
-		_border.name = "BorderOverlay"
-		add_child(_border)
+	for kind in BORDER_OVERLAY_KINDS:
+		var node_name := "BorderOverlay_%s" % kind
+		var overlay: Node2D = get_node_or_null(node_name)
+		if overlay == null:
+			overlay = BorderOverlay.new()
+			overlay.name = node_name
+			add_child(overlay)
+		_borders[kind] = overlay
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
 	if _locations != null and _locations.has_signal("location_selected"):
@@ -102,6 +111,8 @@ func show_world(world: Variant) -> void:
 	_agents.show_world(world, _centers, _reducer.activity)
 	if _claims != null:
 		_claims.set_centers(_centers)
+	for overlay in _borders.values():
+		overlay.set_centers(_centers)
 	if _analytics != null:
 		_analytics.set_centers(_centers)
 	if _labels != null:
@@ -130,21 +141,36 @@ func show_world(world: Variant) -> void:
 		_generational.set_positions(agent_points)
 	_rebuild_civilization()
 
-func set_border_overlay(data: Variant, enabled_value: bool = true) -> void:
-	if _border != null:
-		_border.set_enabled(enabled_value)
-		_border.apply_payload(data)
+func _border_for(kind: String) -> Node2D:
+	if _borders.has(kind):
+		return _borders[kind]
+	return _borders.get("border_physical", null)
 
-func clear_border_overlay() -> void:
-	if _border != null:
-		_border.clear()
-		_border.set_enabled(false)
+func set_border_overlay(data: Variant, enabled_value: bool = true, kind: String = "") -> void:
+	var overlay := _border_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		overlay.apply_payload(data, kind)
 
-func set_border_overlay_enabled(enabled_value: bool) -> void:
-	if _border != null:
-		_border.set_enabled(enabled_value)
+func clear_border_overlay(kind: String = "") -> void:
+	if kind == "":
+		for overlay in _borders.values():
+			overlay.clear()
+			overlay.set_enabled(false)
+		return
+	var overlay := _border_for(kind)
+	if overlay != null:
+		overlay.clear()
+		overlay.set_enabled(false)
+
+func set_border_overlay_enabled(enabled_value: bool, kind: String = "") -> void:
+	var overlay := _border_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
 		if not enabled_value:
-			_border.clear()
+			overlay.clear()
+		elif kind != "":
+			overlay.apply_payload(null, kind)
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
 	if _claims != null:

@@ -42,6 +42,7 @@ const FORBIDDEN_FIELDS := [
 var enabled := false
 var _payload: Variant = null
 var _centers := {}
+var _centers_by_token := {}
 var _layer := ""
 
 
@@ -71,8 +72,22 @@ static func _contains_forbidden(value: Variant) -> bool:
 	return false
 
 
+func _location_token(value: String) -> String:
+	if value == "":
+		return ""
+	var context := HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(value.to_utf8_buffer())
+	return "bloc-" + context.finish().hex_encode().substr(0, 16)
+
+
 func set_centers(centers: Dictionary) -> void:
 	_centers = centers
+	_centers_by_token = {}
+	for key in centers.keys():
+		var text := str(key)
+		_centers_by_token[text] = centers[key]
+		_centers_by_token[_location_token(text)] = centers[key]
 	_rebuild()
 
 
@@ -87,13 +102,15 @@ func clear() -> void:
 	_rebuild()
 
 
-func apply_payload(payload: Variant) -> void:
+func apply_payload(payload: Variant, kind: String = "") -> void:
 	if typeof(payload) != TYPE_DICTIONARY:
 		_payload = null
 		_layer = ""
 		_rebuild()
 		return
-	var layer := str(payload.get("layer", ""))
+	var layer := layer_for_kind(kind)
+	if layer == "":
+		layer = str(payload.get("layer", ""))
 	if not is_valid_layer(layer):
 		ObserverLog.warn("view", "border_overlay_rejected reason_code=unknown_layer")
 		_payload = null
@@ -135,23 +152,34 @@ func _rebuild() -> void:
 	for row in _rows():
 		if typeof(row) != TYPE_DICTIONARY:
 			continue
-		var location := str(row.get("location_id", row.get("location_token", "")))
 		var domain := str(row.get("domain_token", ""))
-		var key := location if location != "" else domain
-		if key == "" or seen.has(key):
-			continue
-		seen[key] = true
-		var marker := Node2D.new()
-		marker.name = "BorderMarker"
-		marker.position = _centers.get(key, Vector2.ZERO)
-		marker.set_meta("overlay_kind", _kind_for_layer())
-		marker.set_meta("evidence_class", evidence_for_layer(_layer))
-		marker.set_meta("layer", _layer)
-		marker.set_meta("style", _marker_style(_layer))
-		marker.set_meta("location_id", location)
-		marker.set_meta("domain_token", domain)
-		marker.set_meta("copy", _copy())
-		add_child(marker)
+		var tokens: Array = []
+		var listed: Variant = row.get("location_tokens", null)
+		if typeof(listed) == TYPE_ARRAY:
+			tokens = listed
+		else:
+			var single := str(row.get("location_id", row.get("location_token", "")))
+			if single != "":
+				tokens = [single]
+		if tokens.is_empty():
+			tokens = [""]
+		for item in tokens:
+			var location := str(item)
+			var key := location if location != "" else domain
+			if key == "" or seen.has(key):
+				continue
+			seen[key] = true
+			var marker := Node2D.new()
+			marker.name = "BorderMarker"
+			marker.position = _centers_by_token.get(key, Vector2.ZERO)
+			marker.set_meta("overlay_kind", _kind_for_layer())
+			marker.set_meta("evidence_class", evidence_for_layer(_layer))
+			marker.set_meta("layer", _layer)
+			marker.set_meta("style", _marker_style(_layer))
+			marker.set_meta("location_id", location)
+			marker.set_meta("domain_token", domain)
+			marker.set_meta("copy", _copy())
+			add_child(marker)
 
 
 func _rows() -> Array:

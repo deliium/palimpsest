@@ -44,6 +44,17 @@ from simulation.bootstrap import (
     WorldBootstrap,
     registration_translator,
 )
+from simulation.borders_codec import (
+    decode_borders_snapshot,
+    encode_borders_snapshot,
+)
+from simulation.borders_models import BordersSnapshot
+from simulation.borders_ports import (
+    BORDERS_CURSOR_PURPOSES,
+    BordersCursor,
+    BordersPublication,
+    BordersSummary,
+)
 from simulation.branch_compare import (
     JournalBranchCompare,
     compare_branch_timelines,
@@ -1209,6 +1220,7 @@ __all__ = [
     "ALLOWED_OBJECTIVE_INHERITANCE_KEYS",
     "API_HTTP_PREFIX",
     "BLANK_SLATE_SUBJECTIVE_STORES",
+    "BORDERS_CURSOR_PURPOSES",
     "CAPTURE_MAX_ARTIFACT_BYTES",
     "CAPTURE_MAX_EDGES",
     "CAPTURE_MAX_NODES",
@@ -1450,6 +1462,10 @@ __all__ = [
     "BeliefEvidenceLineagePort",
     "BeliefPatchPayload",
     "BlankSlateStoreCounts",
+    "BordersCursor",
+    "BordersPublication",
+    "BordersSnapshot",
+    "BordersSummary",
     "BoundaryEventFact",
     "BranchCreateRequest",
     "BranchCreateResult",
@@ -1973,6 +1989,7 @@ __all__ = [
     "create_rng",
     "creation_config_fingerprint",
     "criterion_status_value",
+    "decode_borders_snapshot",
     "decode_branch_lineage",
     "decode_cognition_trace_invocation",
     "decode_delegation_representation_snapshot",
@@ -2045,6 +2062,7 @@ __all__ = [
     "empty_organization_snapshot",
     "empty_representation_ledger",
     "encode_action_resolution_evidence",
+    "encode_borders_snapshot",
     "encode_branch_lineage",
     "encode_cognition_trace_invocation",
     "encode_delegation_representation_snapshot",

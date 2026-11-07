@@ -94,6 +94,33 @@ def align_border_interpretations(
                 ),
             )
         )
+    claimed_domains = {claim.domain_token for claim in claims}
+    for domain_token in sorted(
+        (agreement_domains | pattern_domains | disputed_domains) - claimed_domains
+    ):
+        rows.append(
+            BorderAlignmentRow(
+                candidate_id=domain_token,
+                alignment="not_applicable",
+                claim_alignment="not_applicable",
+                agreement_alignment=(
+                    "consistent"
+                    if domain_token in agreement_domains
+                    else "not_applicable"
+                ),
+                pattern_alignment=(
+                    "consistent"
+                    if domain_token in pattern_domains
+                    else "not_applicable"
+                ),
+                basis_counts=(
+                    ("claims", 0),
+                    ("agreements", int(domain_token in agreement_domains)),
+                    ("patterns", int(domain_token in pattern_domains)),
+                    ("disputes", int(domain_token in disputed_domains)),
+                ),
+            )
+        )
     rows.sort(key=lambda item: item.candidate_id)
     return tuple(rows)
 

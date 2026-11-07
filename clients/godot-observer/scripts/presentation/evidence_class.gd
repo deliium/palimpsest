@@ -10,6 +10,13 @@ const LABEL_OBJECTIVE := "OBJECTIVE"
 const LABEL_SUBJECTIVE := "SUBJECTIVE"
 const LABEL_ANALYTICAL := "ANALYTICAL"
 
+const OVERLAY_LABELS := {
+	"border_physical": "Physical",
+	"border_claims": "Claims",
+	"border_agreements": "Agreements",
+	"border_patterns": "Patterns",
+}
+
 ## Overlay kind → evidence class. Presentation-only; never invents world facts.
 const OVERLAY_CLASSES := {
 	"communication_flows": OBJECTIVE,
@@ -72,6 +79,12 @@ static func for_overlay(kind: String) -> String:
 	if OVERLAY_CLASSES.has(kind):
 		return str(OVERLAY_CLASSES[kind])
 	return ANALYTICAL
+
+
+static func label_for_overlay(kind: String) -> String:
+	if OVERLAY_LABELS.has(kind):
+		return str(OVERLAY_LABELS[kind])
+	return short_label(for_overlay(kind))
 
 
 static func is_valid(evidence_class: String) -> bool:

@@ -6788,13 +6788,18 @@ class SimulationRunnerResult:
             raise TypeError("border_ledgers must be ordered")
         if type(self.border_ledgers) is not tuple:
             raise TypeError("border_ledgers must be ordered")
-        from agents.cognition.borders import BorderLedger, require_owner_borders
+        from agents.cognition.borders import (
+            BorderLedger,
+            require_owner_borders,
+            validate_border_ledger_caps,
+        )
 
         border_ledgers = tuple(self.border_ledgers)
         for ledger in border_ledgers:
             if type(ledger) is not BorderLedger:
                 raise TypeError("border_ledgers: invalid_item")
             require_owner_borders(ledger, ledger.owner_id, field_name="border_ledgers")
+            validate_border_ledger_caps(ledger)
         border_owners: list[Any] = [
             cast(BorderLedger, ledger).owner_id for ledger in border_ledgers
         ]

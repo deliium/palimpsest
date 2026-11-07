@@ -24,6 +24,7 @@ BORDER_LOCATION_PREFIX: Final[str] = "bloc-"
 
 _PRESENCE_EVENTS: Final[frozenset[str]] = frozenset(
     {
+        "move",
         "moved",
         "journey_started",
         "journey_arrived",
@@ -152,7 +153,7 @@ def _as_entity_id(value: object) -> object | None:
 
 def _location_for(event: object, action_code: str) -> object | None:
     details = getattr(event, "details", None)
-    if action_code == "moved":
+    if action_code in {"move", "moved"}:
         value = _as_entity_id(getattr(details, "destination_id", None))
         if value is not None:
             return value
@@ -273,13 +274,11 @@ def _classification(
     return "unoccupied"
 
 
-def harvest_physical_rows(
-    committed_events: Sequence[object],
+def _physical_rows_from_events(
+    events: Sequence[PhysicalUseEvent],
     *,
     policy: BordersAnalysisPolicy,
 ) -> tuple[BorderPhysicalRow, ...]:
-    """One row per observed location and fixed six-tick window."""
-    events, _partial = extract_physical_events(committed_events)
     window = policy.physical_window_ticks
     grouped: dict[tuple[str, int], dict[str, object]] = {}
     for event in events:
@@ -328,13 +327,42 @@ def harvest_physical_rows(
                 ),
             )
         )
+    return tuple(rows)
+
+
+def harvest_physical_rows_with_coverage(
+    committed_events: Sequence[object],
+    *,
+    policy: BordersAnalysisPolicy,
+) -> tuple[tuple[BorderPhysicalRow, ...], str]:
+    """Return physical rows and explicit observed/partial/missing coverage."""
+    events, partial = extract_physical_events(committed_events)
+    rows = _physical_rows_from_events(events, policy=policy)
+    if partial:
+        coverage = "partial"
+    elif rows:
+        coverage = "observed"
+    else:
+        coverage = "not_applicable"
     _LOG.debug(
         "borders_physical_rows rows=%s windows=%s coverage=%s",
         len(rows),
-        len(grouped),
-        "partial" if _partial else "observed",
+        len({(row.location_token, row.window_start) for row in rows}),
+        coverage,
     )
-    return tuple(rows)
+    return rows, coverage
+
+
+def harvest_physical_rows(
+    committed_events: Sequence[object],
+    *,
+    policy: BordersAnalysisPolicy,
+) -> tuple[BorderPhysicalRow, ...]:
+    """One row per observed location and fixed six-tick window."""
+    rows, _coverage = harvest_physical_rows_with_coverage(
+        committed_events, policy=policy
+    )
+    return rows
 
 
 def physical_rows_summary(
@@ -369,5 +397,6 @@ __all__ = [
     "border_location_token",
     "extract_physical_events",
     "harvest_physical_rows",
+    "harvest_physical_rows_with_coverage",
     "physical_rows_summary",
 ]

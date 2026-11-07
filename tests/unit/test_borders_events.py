@@ -16,6 +16,7 @@ from analysis.borders_events import (
     physical_rows_summary,
 )
 from analysis.borders_policy import default_borders_analysis_policy
+from world.events import Moved
 from world.identifiers import EntityId, EventId
 
 POLICY = default_borders_analysis_policy()
@@ -52,6 +53,25 @@ def test_event_class_to_action_code_is_closed() -> None:
     assert len(events) == 1
     assert events[0].kind == "presence"
     assert partial is False
+
+
+def test_real_moved_event_is_presence() -> None:
+    event = SimpleNamespace(
+        event_id=EventId("event-real-move"),
+        tick=2,
+        actor_id=EntityId("body-1"),
+        details=Moved(destination_id=EntityId("loc-2")),
+        occurrence=SimpleNamespace(
+            origin_location_id=None,
+            destination_location_id=None,
+        ),
+    )
+    events, partial = extract_physical_events((event,))
+    assert partial is False
+    assert len(events) == 1
+    assert events[0].action_code == "move"
+    assert events[0].kind == "presence"
+    assert events[0].location_token == border_location_token(EntityId("loc-2"))
 
 
 def test_location_resolution_per_event_kind() -> None:

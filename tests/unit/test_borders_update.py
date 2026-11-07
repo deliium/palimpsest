@@ -34,8 +34,10 @@ from world.identifiers import EntityId
 
 OWNER = AgentId("agent-1")
 PEER = AgentId("agent-2")
+PEER3 = AgentId("agent-3")
 OWNER_ENTITY = EntityId("body-1")
 PEER_ENTITY = EntityId("body-2")
+PEER3_ENTITY = EntityId("body-3")
 LOC_A = EntityId("loc-a")
 LOC_B = EntityId("loc-b")
 LOC_C = EntityId("loc-c")
@@ -43,7 +45,10 @@ LOC_C = EntityId("loc-c")
 IDENTITY = SimpleNamespace(
     owner_id=OWNER,
     owner_entity_id=OWNER_ENTITY,
-    counterparts=(SimpleNamespace(entity_id=PEER_ENTITY, agent_id=PEER),),
+    counterparts=(
+        SimpleNamespace(entity_id=PEER_ENTITY, agent_id=PEER),
+        SimpleNamespace(entity_id=PEER3_ENTITY, agent_id=PEER3),
+    ),
 )
 
 
@@ -100,11 +105,20 @@ def _observation(
     *frames: BorderFrame,
     exits: tuple[EntityId, ...] = (LOC_B,),
     regional: str | None = None,
+    speakers: tuple[EntityId, ...] | None = None,
+    location: EntityId = LOC_A,
 ):
+    if speakers is None:
+        speakers = tuple(PEER_ENTITY for _ in frames)
+    if len(speakers) != len(frames):
+        raise ValueError("speakers must match frames")
     return SimpleNamespace(
-        self_body=SimpleNamespace(location_id=LOC_A),
+        self_body=SimpleNamespace(location_id=location),
         exits=tuple(SimpleNamespace(destination_id=item) for item in exits),
-        communications=tuple(_communication(frame) for frame in frames),
+        communications=tuple(
+            _communication(frame, speaker=speaker)
+            for frame, speaker in zip(frames, speakers, strict=True)
+        ),
         regional_context=SimpleNamespace(region_id=regional),
     )
 
@@ -154,6 +168,36 @@ def test_own_claims_form_contiguous_and_isolated_domains() -> None:
     assert "boundary_unobserved" in ledger.notices
 
 
+def test_prior_internal_observation_keeps_a_domain_contiguous() -> None:
+    first = _update(
+        empty_border_ledger(OWNER),
+        _observation(exits=(LOC_B,)),
+        claims=_claims(LOC_A, LOC_B),
+    )
+    assert len(first.domains) == 1
+    assert tuple(item.value for item in first.domains[0].location_ids) == (
+        "loc-a",
+        "loc-b",
+    )
+
+    second = _update(
+        first,
+        _observation(exits=(), location=LOC_C),
+        claims=_claims(LOC_A, LOC_B),
+        tick=4,
+    )
+    active = [
+        domain
+        for domain in second.domains
+        if domain.status is not DomainClaimStatus.EXPIRED
+    ]
+    assert len(active) == 1
+    assert tuple(item.value for item in active[0].location_ids) == (
+        "loc-a",
+        "loc-b",
+    )
+
+
 def test_peer_claim_overlap_creates_dispute_without_reconciliation() -> None:
     ledger = _update(
         empty_border_ledger(OWNER),
@@ -187,14 +231,42 @@ def test_agreement_requires_proposal_then_counterparty_acceptance() -> None:
         _observation(
             _frame(
                 AgreementAct.ACCEPT,
+                owner=PEER3,
                 provision=AgreementProvision.TERRITORIAL_ACKNOWLEDGEMENT,
-            )
+            ),
+            speakers=(PEER3_ENTITY,),
         ),
         claims=_claims(LOC_A, LOC_B),
         tick=4,
     )
     assert second.agreements[0].status is AgreementStatus.APPARENT_ACCEPTANCE
     assert second.domains[0].status is DomainClaimStatus.RECOGNIZED
+
+
+def test_proposer_cannot_accept_its_own_proposal() -> None:
+    first = _update(
+        empty_border_ledger(OWNER),
+        _observation(
+            _frame(
+                AgreementAct.PROPOSE,
+                provision=AgreementProvision.TERRITORIAL_ACKNOWLEDGEMENT,
+            )
+        ),
+        claims=_claims(LOC_A, LOC_B),
+    )
+    second = _update(
+        first,
+        _observation(
+            _frame(
+                AgreementAct.ACCEPT,
+                provision=AgreementProvision.TERRITORIAL_ACKNOWLEDGEMENT,
+            )
+        ),
+        claims=_claims(LOC_A, LOC_B),
+        tick=4,
+    )
+    assert second.agreements[0].status is AgreementStatus.PROPOSED
+    assert second.domains[0].status is DomainClaimStatus.CLAIMED
 
 
 def test_reject_and_withdraw_are_retained() -> None:

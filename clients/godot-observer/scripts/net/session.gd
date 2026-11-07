@@ -1901,6 +1901,10 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		or kind == "communication_strategy_audit"
 		or kind == "relationships"
 		or kind == "narrative_hops"
+		or kind == "border_physical"
+		or kind == "border_claims"
+		or kind == "border_agreements"
+		or kind == "border_patterns"
 		or kind == "causal_debugger"
 		or kind == "causal_debugger_lineage"
 	):

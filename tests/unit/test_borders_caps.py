@@ -31,6 +31,7 @@ from agents.cognition.borders import (
     domain_claim_id,
     enforce_borders_limits,
     export_border_rows,
+    validate_border_ledger_caps,
 )
 from agents.models import AgentId
 from world.identifiers import EntityId
@@ -85,6 +86,13 @@ def _agreement(domain: TerritorialDomainClaim, ref: str) -> BorderAgreement:
         status=AgreementStatus.WITHDRAWN,
         recognition=BoundaryStatus.UNRESOLVED,
     )
+
+
+def test_persisted_ledger_caps_reject_over_cap_rows() -> None:
+    domains = tuple(_domain(index) for index in range(9))
+    ledger = BorderLedger(owner_id=OWNER, domains=domains)
+    with pytest.raises(ValueError, match="borders_capacity_reached:domains"):
+        validate_border_ledger_caps(ledger, default_borders_policy())
 
 
 def test_evidence_cap_prunes_oldest_first() -> None:

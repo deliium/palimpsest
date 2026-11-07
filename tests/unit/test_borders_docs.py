@@ -82,6 +82,13 @@ def test_ui_and_overlay_docs_cover_four_layers() -> None:
     assert "49 suites" in _read("docs/development.md")
 
 
+def test_v4_architecture_baseline_uses_current_pins() -> None:
+    v4 = _read("docs/v4-architecture.md")
+    assert "| Metric catalog | 176 families" in v4
+    assert "six GET routes under `/v1/simulations/{run_id}/borders`" in v4
+    assert "| Metric catalog | 140 families" not in v4
+
+
 def test_configuration_and_contract_docs() -> None:
     config = _read("docs/configuration.md")
     assert "PALIMPSEST_BORDERS_ROOT" in config

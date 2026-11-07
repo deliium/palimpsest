@@ -9,6 +9,7 @@ func run() -> Array:
 	_expect(failures, _mapping(), "border overlay mapping")
 	_expect(failures, _styles(), "border overlay styles")
 	_expect(failures, _forbidden(), "border overlay forbidden payload")
+	_expect(failures, _kind_payload(), "border overlay kind payload")
 	_expect(failures, _toggle_clear(), "border overlay clear")
 	return failures
 
@@ -51,6 +52,35 @@ func _forbidden() -> String:
 	if overlay.get_child_count() != 0:
 		overlay.free()
 		return "unknown layer must be rejected"
+	overlay.free()
+	return ""
+
+
+func _kind_payload() -> String:
+	var overlay = BorderOverlay.new()
+	overlay.set_centers({"loc-1": Vector2.ZERO, "loc-2": Vector2.ZERO})
+	overlay.set_enabled(true)
+	overlay.apply_payload(
+		{"items": [{"location_token": "loc-1", "layer": "physical"}]},
+		"border_physical"
+	)
+	if overlay.get_child_count() != 1:
+		overlay.free()
+		return "api physical items should render"
+	overlay.apply_payload(
+		{"items": [{"domain_token": "bdc-1", "location_tokens": ["loc-1", "loc-2"]}]},
+		"border_claims"
+	)
+	if overlay.get_child_count() != 2:
+		overlay.free()
+		return "api claim location_tokens should render"
+	var token := overlay._location_token("loc-1")
+	overlay.apply_payload(
+		{"layer": "physical_control", "rows": [{"location_token": token}]}
+	)
+	if overlay.get_child_count() != 1:
+		overlay.free()
+		return "hashed location token should resolve a center"
 	overlay.free()
 	return ""
 

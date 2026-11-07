@@ -473,6 +473,7 @@ class TerritorialDomainClaim:
     first_tick: int
     last_tick: int
     evidence: tuple[BorderEvidence, ...] = ()
+    observed_edges: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -488,6 +489,13 @@ class TerritorialDomainClaim:
             self,
             "boundary_edges",
             require_boundary_edges(self.boundary_edges, field_name="boundary_edges"),
+        )
+        object.__setattr__(
+            self,
+            "observed_edges",
+            require_boundary_edges(
+                self.observed_edges, field_name="observed_edges"
+            ),
         )
         if self.anchor_kind is not None:
             if (
@@ -729,20 +737,39 @@ class BordersPolicy:
 
     def __post_init__(self) -> None:
         if self.version != BORDERS_POLICY_VERSION:
+            _LOG.error(
+                "borders_policy_rejected field=version "
+                "reason_code=unsupported_policy"
+            )
             raise _log_failure("version", "unsupported_policy")
         expected = _policy_values()
         for name, value in expected.items():
             actual = getattr(self, name)
             if isinstance(value, bool):
                 if actual is not value:
+                    _LOG.error(
+                        "borders_policy_rejected field=%s "
+                        "reason_code=unsupported_policy",
+                        name,
+                    )
                     raise _log_failure(name, "unsupported_policy")
             elif isinstance(value, float):
                 if _unit(name, actual) != value:
+                    _LOG.error(
+                        "borders_policy_rejected field=%s "
+                        "reason_code=unsupported_policy",
+                        name,
+                    )
                     raise _log_failure(name, "unsupported_policy")
             else:
                 if isinstance(actual, bool) or type(actual) is not int:
                     raise _log_failure(name, "invalid_type")
                 if actual != value:
+                    _LOG.error(
+                        "borders_policy_rejected field=%s "
+                        "reason_code=unsupported_policy",
+                        name,
+                    )
                     raise _log_failure(name, "unsupported_policy")
         _LOG.debug(
             "borders_policy_constructed policy_version=%s domains=%s locations=%s",
@@ -788,13 +815,9 @@ def border_ledger_digest(ledger: BorderLedger) -> str:
     for row in ledger.domains:
         edges = ",".join(f"{left}>{right}" for left, right in row.boundary_edges)
         locations = ",".join(item.value for item in row.location_ids)
-        evidence = ",".join(
-            f"{item.kind.value}:{item.lineage_ref}:{item.source_tick}"
-            for item in row.evidence
-        )
         lines.append(
-            "bdc|{domain}|{owner}|{locations}|{edges}|{anchor_kind}|{anchor_ref}|"
-            "{status}|{strength}|{first}|{last}|{evidence}".format(
+            "bdc|{domain}|{owner}|{locations}|{edges}|{anchor_kind}|"
+            "{anchor_ref}|{status}|{strength}|{first}|{last}".format(
                 domain=row.domain_id,
                 owner=row.owner_id.value,
                 locations=locations,
@@ -805,17 +828,21 @@ def border_ledger_digest(ledger: BorderLedger) -> str:
                 strength=f"{row.strength:.6f}",
                 first=row.first_tick,
                 last=row.last_tick,
-                evidence=evidence,
             )
         )
     for row in ledger.recognitions:
         edges = ",".join(f"{left}>{right}" for left, right in row.boundary_edges)
+        recognition_id = boundary_recognition_id(
+            ledger.owner_id, row.domain_id, row.basis
+        )
         lines.append(
-            f"bdr|{row.domain_id}|{edges}|{row.basis.value}|{row.status.value}"
+            f"bdr|{recognition_id}|{row.domain_id}|{edges}|{row.basis.value}|"
+            f"{row.status.value}"
         )
     for row in ledger.access_expectations:
         lines.append(
-            "bdx|{domain}|{subject_kind}|{subject_ref}|{mode}|{status}".format(
+            "bdx|{id}|{domain}|{subject_kind}|{subject_ref}|{mode}|{status}".format(
+                id=row.expectation_id,
                 domain=row.domain_id,
                 subject_kind=row.subject_kind.value,
                 subject_ref=row.subject_ref or "-",
@@ -826,8 +853,9 @@ def border_ledger_digest(ledger: BorderLedger) -> str:
     for row in ledger.agreements:
         provisions = ",".join(item.value for item in row.provisions)
         lines.append(
-            "bda|{domain}|{kind}|{ref}|{provisions}|{status}|{recognition}|"
+            "bda|{id}|{domain}|{kind}|{ref}|{provisions}|{status}|{recognition}|"
             "{effective}|{expiry}".format(
+                id=row.agreement_id,
                 domain=row.domain_id,
                 kind=row.counterparty_kind.value,
                 ref=row.counterparty_ref or "-",
@@ -841,7 +869,8 @@ def border_ledger_digest(ledger: BorderLedger) -> str:
     for row in ledger.disputes:
         contested = ",".join(item.value for item in row.contested_location_ids)
         lines.append(
-            "bdd|{domain}|{kind}|{ref}|{contested}|{status}".format(
+            "bdd|{id}|{domain}|{kind}|{ref}|{contested}|{status}".format(
+                id=row.dispute_id,
                 domain=row.domain_id,
                 kind=row.counterparty_kind.value,
                 ref=row.counterparty_ref or "-",
@@ -1474,6 +1503,42 @@ def _prune_domain_evidence(
     )
 
 
+def validate_border_ledger_caps(
+    ledger: BorderLedger, policy: BordersPolicy | None = None
+) -> None:
+    """Reject a persisted ledger above the exact cognition caps.
+
+    Low-level construction keeps a wider hard cap so ``enforce_borders_limits``
+    can prune an over-cap candidate before it is persisted or checkpointed.
+    """
+    if type(ledger) is not BorderLedger:
+        raise TypeError("ledger must be BorderLedger")
+    effective = default_borders_policy() if policy is None else policy
+    if type(effective) is not BordersPolicy:
+        raise TypeError("policy must be BordersPolicy")
+    for name, rows, cap in (
+        ("domains", ledger.domains, effective.max_domains),
+        ("agreements", ledger.agreements, effective.max_agreements),
+        (
+            "access_expectations",
+            ledger.access_expectations,
+            effective.max_access_expectations,
+        ),
+        ("disputes", ledger.disputes, effective.max_disputes),
+    ):
+        if len(rows) > cap:
+            raise ValueError(f"borders_capacity_reached:{name}")
+    total = (
+        len(ledger.domains)
+        + len(ledger.recognitions)
+        + len(ledger.access_expectations)
+        + len(ledger.agreements)
+        + len(ledger.disputes)
+    )
+    if total > effective.max_ledger_rows:
+        raise ValueError("borders_capacity_reached:ledger")
+
+
 def enforce_borders_limits(
     ledger: BorderLedger, policy: BordersPolicy
 ) -> BorderLedger:
@@ -1696,7 +1761,7 @@ def _prior_observed_edges(
 ) -> list[tuple[EntityId, EntityId]]:
     edges: dict[tuple[str, str], tuple[EntityId, EntityId]] = {}
     for domain in prior.domains:
-        for left, right in domain.boundary_edges:
+        for left, right in (*domain.boundary_edges, *domain.observed_edges):
             try:
                 a = EntityId(left)
                 b = EntityId(right)
@@ -1744,15 +1809,26 @@ def _components(
     return components
 
 
+def _internal_observed_edges(
+    component: Sequence[EntityId],
+    observed_edges: Sequence[tuple[EntityId, EntityId]],
+) -> tuple[tuple[str, str], ...]:
+    """Retain observed adjacency wholly inside one logical domain."""
+    values = {item.value for item in component}
+    edges: set[tuple[str, str]] = set()
+    for left, right in observed_edges:
+        if left.value in values and right.value in values:
+            edge = boundary_edge(left, right)
+            edges.add(edge)
+    return tuple(sorted(edges))
+
+
 def _own_domain_for_locations(
     domains: Sequence[TerritorialDomainClaim], locations: Sequence[str]
 ) -> TerritorialDomainClaim | None:
     location_set = set(locations)
     for domain in domains:
         if {item.value for item in domain.location_ids} == location_set:
-            return domain
-    for domain in domains:
-        if location_set & {item.value for item in domain.location_ids}:
             return domain
     return None
 
@@ -1858,11 +1934,25 @@ def apply_borders_update(
     for component in components:
         key = tuple(item.value for item in component)
         old = prior_by_set.get(key)
+        current_observed = _internal_observed_edges(component, observed_edges)
         if old is not None:
             domain = dataclasses_replace(
                 old,
                 status=DomainClaimStatus.CLAIMED,
                 last_tick=max(old.last_tick, tick),
+                boundary_edges=tuple(
+                    sorted(
+                        set(old.boundary_edges)
+                        | set(
+                            boundary_edges_for_domain(
+                                component, observed_edges
+                            )
+                        )
+                    )
+                ),
+                observed_edges=tuple(
+                    sorted(set(old.observed_edges) | set(current_observed))
+                ),
             )
         else:
             edges = boundary_edges_for_domain(component, observed_edges)
@@ -1877,6 +1967,7 @@ def apply_borders_update(
                 strength=1.0,
                 first_tick=tick,
                 last_tick=tick,
+                observed_edges=current_observed,
             )
         reused_ids.add(domain.domain_id)
         if not domain.boundary_edges:
@@ -1961,6 +2052,11 @@ def apply_borders_update(
                 if frame.provision is not None
                 else AgreementProvision.UNKNOWN
             )
+            proposer = None
+            try:
+                proposer = AgentId(speaker)
+            except (TypeError, ValueError):
+                proposer = None
             agreement = BorderAgreement(
                 agreement_id=border_agreement_id(
                     owner_id, domain.domain_id, kind, ref
@@ -1973,6 +2069,14 @@ def apply_borders_update(
                 recognition=BoundaryStatus.UNRESOLVED,
                 effective_tick=tick,
                 expiry_tick=frame.expiry_tick,
+                evidence=(
+                    BorderEvidence(
+                        kind=BoundaryBasis.TESTIMONY,
+                        source_owner_id=proposer,
+                        source_tick=tick,
+                        lineage_ref=frame.domain_id,
+                    ),
+                ),
             )
             agreements = [
                 item
@@ -1990,6 +2094,13 @@ def apply_borders_update(
                 domain_id=domain.domain_id,
                 speaker=speaker,
             )
+            if target is None or _proposed_by(target, speaker):
+                target = _acceptance_target(
+                    agreements=agreements,
+                    base=base,
+                    domain_id=domain.domain_id,
+                    speaker=speaker,
+                )
             if target is None:
                 continue
             updated = dataclasses_replace(
@@ -2031,7 +2142,18 @@ def apply_borders_update(
             if domain is None:
                 continue
             recognition_sources.setdefault(domain.domain_id, set()).add(speaker)
-            agreement_domains.setdefault(domain.domain_id, set()).add(speaker)
+            if any(
+                agreement.domain_id == domain.domain_id
+                and AgreementProvision.TERRITORIAL_ACKNOWLEDGEMENT
+                in agreement.provisions
+                and agreement.status
+                in {
+                    AgreementStatus.APPARENT_ACCEPTANCE,
+                    AgreementStatus.RECOGNIZED,
+                }
+                for agreement in (*agreements, *base.agreements)
+            ):
+                agreement_domains.setdefault(domain.domain_id, set()).add(speaker)
             continue
         if act is AgreementAct.EXPECT_ACCESS:
             if domain is None:
@@ -2109,7 +2231,10 @@ def apply_borders_update(
             if len(shared) < policy.overlap_min_locations:
                 continue
             notices.add(BorderNoticeCode.OVERLAP_DETECTED.value)
-            recognition_sources.setdefault(domain.domain_id, set()).add(speaker)
+            if set(peer_locations) == location_values:
+                recognition_sources.setdefault(domain.domain_id, set()).add(
+                    speaker
+                )
             if _covered_by_agreement(
                 domain.domain_id, speaker, agreements
             ):
@@ -2137,6 +2262,23 @@ def apply_borders_update(
             except ValueError:
                 continue
             disputes = _merge_by_id(disputes, (dispute,))
+
+    # A retained territorial-acknowledgement agreement remains a distinct
+    # recognition source on later updates; it is not re-derived from silence.
+    for agreement in (*agreements, *base.agreements):
+        if (
+            agreement.status
+            in {
+                AgreementStatus.APPARENT_ACCEPTANCE,
+                AgreementStatus.RECOGNIZED,
+            }
+            and AgreementProvision.TERRITORIAL_ACKNOWLEDGEMENT
+            in agreement.provisions
+            and agreement.counterparty_ref is not None
+        ):
+            agreement_domains.setdefault(agreement.domain_id, set()).add(
+                agreement.counterparty_ref
+            )
 
     # Derive recognition status and rows.
     recognitions: list[BoundaryRecognition] = []
@@ -2242,6 +2384,7 @@ def apply_borders_update(
     )
     try:
         result = enforce_borders_limits(candidate, policy)
+        validate_border_ledger_caps(result, policy)
     except ValueError as exc:
         _LOG.error("borders_capacity_reached family=ledger")
         raise ValueError("borders_capacity_reached") from exc
@@ -2298,6 +2441,15 @@ def _merge_by_id[RowT](
     return list(by_id.values())
 
 
+def _proposed_by(agreement: BorderAgreement, speaker: str) -> bool:
+    """Return whether the delivered speaker authored this proposal."""
+    return any(
+        evidence.source_owner_id is not None
+        and evidence.source_owner_id.value == speaker
+        for evidence in agreement.evidence
+    )
+
+
 def _agreement_for_speaker(
     *,
     agreements: Sequence[BorderAgreement],
@@ -2305,13 +2457,31 @@ def _agreement_for_speaker(
     domain_id: str,
     speaker: str,
 ) -> BorderAgreement | None:
-    for agreement in (*agreements, *base.agreements):
-        if agreement.domain_id != domain_id:
-            continue
-        if agreement.counterparty_ref != speaker:
-            continue
-        return agreement
-    return None
+    by_id = {
+        agreement.agreement_id: agreement
+        for agreement in (*agreements, *base.agreements)
+        if agreement.domain_id == domain_id
+        and agreement.counterparty_ref == speaker
+    }
+    return next(iter(by_id.values())) if len(by_id) == 1 else None
+
+
+def _acceptance_target(
+    *,
+    agreements: Sequence[BorderAgreement],
+    base: BorderLedger,
+    domain_id: str,
+    speaker: str,
+) -> BorderAgreement | None:
+    """Find one proposal the speaker may accept without self-acceptance."""
+    by_id = {
+        agreement.agreement_id: agreement
+        for agreement in (*agreements, *base.agreements)
+        if agreement.domain_id == domain_id
+        and agreement.status is AgreementStatus.PROPOSED
+        and not _proposed_by(agreement, speaker)
+    }
+    return next(iter(by_id.values())) if len(by_id) == 1 else None
 
 
 def _covered_by_agreement(
@@ -2390,4 +2560,5 @@ __all__ = [
     "require_location_set",
     "require_owner_borders",
     "unobserved_domain_locations",
+    "validate_border_ledger_caps",
 ]

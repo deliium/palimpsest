@@ -35,6 +35,14 @@ func _labels_and_mapping() -> String:
 		return "border_agreements must be SUBJECTIVE"
 	if EvidenceClass.for_overlay("border_patterns") != EvidenceClass.ANALYTICAL:
 		return "border_patterns must be ANALYTICAL"
+	if EvidenceClass.label_for_overlay("border_physical") != "Physical":
+		return "border_physical label"
+	if EvidenceClass.label_for_overlay("border_claims") != "Claims":
+		return "border_claims label"
+	if EvidenceClass.label_for_overlay("border_agreements") != "Agreements":
+		return "border_agreements label"
+	if EvidenceClass.label_for_overlay("border_patterns") != "Patterns":
+		return "border_patterns label"
 	if EvidenceClass.OBJECTIVE == EvidenceClass.SUBJECTIVE:
 		return "evidence classes must remain distinct"
 	return ""

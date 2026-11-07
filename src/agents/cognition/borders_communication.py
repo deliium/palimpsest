@@ -424,6 +424,11 @@ def _frames_from_communications(
             if type(speaker) is EntityId
             else None
         )
+        if speaker_owner is None:
+            _LOG.warning(
+                "borders_frame_dropped reason_code=unresolved_speaker count=1"
+            )
+            continue
         try:
             parsed = _group_frames(
                 relations,
@@ -484,6 +489,11 @@ def _deliveries_from_inbox(
             if type(speaker) is EntityId
             else None
         )
+        if speaker_owner is None:
+            _LOG.warning(
+                "borders_frame_dropped reason_code=unresolved_speaker count=1"
+            )
+            continue
         try:
             parsed = _group_frames(
                 relations,

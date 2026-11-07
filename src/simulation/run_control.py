@@ -834,13 +834,18 @@ class AgentRuntimeCheckpoint:
             self.agent_id,
             field_name="AgentRuntimeCheckpoint.organized_conflict",
         )
-        from agents.cognition.borders import require_owner_borders
+        from agents.cognition.borders import (
+            require_owner_borders,
+            validate_border_ledger_caps,
+        )
 
         require_owner_borders(
             self.borders,
             self.agent_id,
             field_name="AgentRuntimeCheckpoint.borders",
         )
+        if self.borders is not None:
+            validate_border_ledger_caps(self.borders)  # type: ignore[arg-type]
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
         )

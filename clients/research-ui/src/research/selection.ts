@@ -53,6 +53,7 @@ export const RUN_SCOPED_VIEWS: ReadonlySet<ResearchUiView> = new Set<ResearchUiV
   'evidence',
   'representation',
   'diplomacy',
+  'borders',
   'institutions',
   'contact',
   'traces',
