@@ -13,6 +13,12 @@ from analysis.specifications import (
 )
 
 LAST_FOUR = (
+    "border_claim_structure",
+    "border_overlap_contest",
+    "border_agreement_recognition",
+    "border_control_alignment",
+)
+V4_12_FAMILIES = (
     "organized_conflict_participation",
     "organized_conflict_persistence",
     "organized_conflict_outcomes",
@@ -20,12 +26,15 @@ LAST_FOUR = (
 )
 
 
-def test_catalog_is_exactly_172_with_four_appended() -> None:
+def test_catalog_is_exactly_176_with_four_appended() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 172
-    assert len(specs) == 172
+    assert METRIC_FAMILY_COUNT == 176
+    assert len(specs) == 176
     assert tuple(spec.family_id.value for spec in specs[-4:]) == LAST_FOUR
     assert tuple(item.value for item in tuple(MetricFamilyId)[-4:]) == LAST_FOUR
+    assert (
+        tuple(spec.family_id.value for spec in specs[-8:-4]) == V4_12_FAMILIES
+    )
 
 
 def test_first_168_keep_their_order_versions_and_value_keys() -> None:

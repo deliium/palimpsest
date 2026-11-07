@@ -27,6 +27,16 @@ func _labels_and_mapping() -> String:
 		return "communication_flows must be OBJECTIVE"
 	if not EvidenceClass.is_valid(EvidenceClass.ANALYTICAL):
 		return "analytical should be valid"
+	if EvidenceClass.for_overlay("border_physical") != EvidenceClass.OBJECTIVE:
+		return "border_physical must be OBJECTIVE"
+	if EvidenceClass.for_overlay("border_claims") != EvidenceClass.SUBJECTIVE:
+		return "border_claims must be SUBJECTIVE"
+	if EvidenceClass.for_overlay("border_agreements") != EvidenceClass.SUBJECTIVE:
+		return "border_agreements must be SUBJECTIVE"
+	if EvidenceClass.for_overlay("border_patterns") != EvidenceClass.ANALYTICAL:
+		return "border_patterns must be ANALYTICAL"
+	if EvidenceClass.OBJECTIVE == EvidenceClass.SUBJECTIVE:
+		return "evidence classes must remain distinct"
 	return ""
 
 

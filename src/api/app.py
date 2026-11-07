@@ -26,6 +26,7 @@ from api.presentation_static import mount_presentation
 from api.research_cultural_cursor import CulturalCursorCodec
 from api.research_static import mount_research_ui
 from api.routes import (
+    borders_router,
     branches_router,
     civilization_router,
     debugger_router,
@@ -379,6 +380,28 @@ def _attach_organized_conflict_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_borders_reader(app: FastAPI) -> None:
+    from api.borders_cursor import BordersCursorCodec
+    from persistence.borders_filesystem import create_borders_reader
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.borders_cursor_codec = None
+        app.state.borders_reader = None
+        return
+    secret = (
+        settings.borders_cursor_key.get_secret_value().encode("utf-8")
+        if settings.borders_cursor_key is not None
+        else None
+    )
+    if settings.borders_root is None or secret is None:
+        app.state.borders_cursor_codec = None
+        app.state.borders_reader = None
+        return
+    app.state.borders_cursor_codec = BordersCursorCodec.from_secret(secret)
+    app.state.borders_reader = create_borders_reader(settings.borders_root)
+
+
 def _attach_diplomacy_reader(app: FastAPI) -> None:
     from api.diplomacy_cursor import DiplomacyCursorCodec
     from persistence.diplomacy_filesystem import create_diplomacy_reader
@@ -499,6 +522,7 @@ def create_app(
     _attach_delegation_representation_reader(app)
     _attach_diplomacy_reader(app)
     _attach_organized_conflict_reader(app)
+    _attach_borders_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -531,6 +555,7 @@ def create_app(
     app.include_router(delegation_representation_router)
     app.include_router(diplomacy_router)
     app.include_router(organized_conflict_router)
+    app.include_router(borders_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

@@ -476,3 +476,11 @@ Read-only publication is opt-in:
   32 UTF-8 bytes when set.
 - `--diplomacy-max-publications` defaults to 16 (1..1024).
 - `--diplomacy-max-bytes` defaults to 8 MiB (1..268435456).
+
+## Border publication (V4-13)
+
+`PALIMPSEST_BORDERS_ROOT` and `PALIMPSEST_BORDERS_CURSOR_KEY` are optional. The
+cursor key must be at least 32 UTF-8 bytes. Publication is opt-in and
+post-completion; snapshots are written atomically under `borders-store-v1` with
+per-run publication and byte quotas. A missing root yields a `disabled` receipt,
+and storage failure changes only the receipt, never the scientific result.

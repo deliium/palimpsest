@@ -14,6 +14,10 @@ from enum import StrEnum
 from typing import Final
 
 from agents.cognition.artifacts import ArtifactInterpretationMode
+from agents.cognition.borders import (
+    BordersPolicy,
+    default_borders_policy,
+)
 from agents.cognition.budget import (
     CognitiveBudgetPolicy,
     default_cognitive_budget_policy,
@@ -325,6 +329,17 @@ class CognitionTerritorialClaimMode(StrEnum):
 
     Lockstep with ``simulation.TerritorialClaimMode``. This is not a
     ``V2CapabilityFlags`` slot. ``DISABLED`` does not allocate a ledger.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
+class CognitionBordersMode(StrEnum):
+    """Owner-scoped domain beliefs. Disabled allocates no ledger.
+
+    Internal to the cognition factory. It is not a runner key, a capability
+    flag, or a schema version.
     """
 
     DISABLED = "disabled"
@@ -650,6 +665,8 @@ class CognitionLoopConfig:
         CognitionTerritorialClaimMode.DISABLED
     )
     territorial_claim_policy: TerritorialClaimPolicy | None = None
+    borders_mode: CognitionBordersMode = CognitionBordersMode.DISABLED
+    borders_policy: BordersPolicy | None = None
     group_formation_mode: CognitionGroupFormationMode = (
         CognitionGroupFormationMode.DISABLED
     )
@@ -938,6 +955,18 @@ class CognitionLoopConfig:
             raise TypeError(
                 "territorial_claim_policy must be TerritorialClaimPolicy or None"
             )
+        if type(self.borders_mode) is not CognitionBordersMode:
+            _LOG.error("invalid_enum path=borders_mode reason_code=invalid_mode")
+            raise TypeError("borders_mode must be CognitionBordersMode")
+        if self.borders_mode is CognitionBordersMode.DISABLED:
+            object.__setattr__(self, "borders_policy", None)
+        elif self.borders_policy is None:
+            object.__setattr__(self, "borders_policy", default_borders_policy())
+        elif type(self.borders_policy) is not BordersPolicy:
+            _LOG.error(
+                "invalid_enum path=borders_policy reason_code=invalid_type"
+            )
+            raise TypeError("borders_policy must be BordersPolicy or None")
         if type(self.group_formation_mode) is not CognitionGroupFormationMode:
             _LOG.error(
                 "invalid_enum path=group_formation_mode reason_code=invalid_mode"
@@ -1560,6 +1589,7 @@ class CognitionLoopConfig:
                 else self.reputation_policy.version
             ),
             "territorial_claim_mode": self.territorial_claim_mode.value,
+            "borders_mode": self.borders_mode.value,
             "group_formation_mode": self.group_formation_mode.value,
             "social_norm_mode": self.social_norm_mode.value,
             "social_convention_mode": self.social_convention_mode.value,
@@ -1620,6 +1650,9 @@ class CognitionLoopConfig:
                 None
                 if self.territorial_claim_policy is None
                 else self.territorial_claim_policy.version
+            ),
+            "borders_policy_version": (
+                None if self.borders_policy is None else self.borders_policy.version
             ),
             "skill_learning_mode": self.skill_learning_mode.value,
             "teaching_interaction_mode": self.teaching_interaction_mode.value,
@@ -1951,6 +1984,8 @@ def build_cognitive_loop(
         bounded_experimentation_spec=bounded_experimentation_spec,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
+        borders_mode=resolved.borders_mode,
+        borders_policy=resolved.borders_policy,
         group_formation_mode=resolved.group_formation_mode,
         group_formation_policy=resolved.group_formation_policy,
         social_norm_mode=resolved.social_norm_mode,

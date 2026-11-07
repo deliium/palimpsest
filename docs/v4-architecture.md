@@ -376,3 +376,14 @@ terminations compile only to existing commands through the deterministic
 events. `organized-conflict-snapshot-v1` and `organized-conflict-store-v1` are
 additive; diplomacy v1/v2 and its store are unchanged. See
 [organized conflict](organized-conflict.md).
+
+## V4-13 — Borders and claims
+
+V4-13 deepens the owned `organizations` context with owner-scoped domain claims
+over logical location sets, observed boundary edges, access expectations, border
+agreements, and disputes. It adds no flag, context, `runner-config-v57`, runner
+root field, per-agent runner key, command, event, write pair, observer semantic
+type, `/v2` route, or migration. Detached analysis adds four layers and four
+metric families (172 -> 176), `borders-snapshot-v1`, `borders-store-v1`, six GET
+routes, a Research UI panel, and four presentation overlays. See
+[borders and claims](borders-and-claims.md).

@@ -282,3 +282,10 @@ Publication is opt-in and atomic as `diplomacy-snapshot-v2` under the unchanged
 byte-verifiable. Eight GET-only `/v1/simulations/{run_id}/diplomacy` routes
 require `SUBJECTIVE_DEBUG`, return 503 `diplomacy_disabled` when unconfigured,
 and 404 for unknown published records.
+
+## Border anchors (V4-13)
+
+Border agreements may reference a treaty anchor read-only from the owner's own
+diplomacy ledger. The treaty contract is never rewritten, and an absent
+diplomacy ledger leaves anchors unresolved. See
+[borders and claims](borders-and-claims.md).

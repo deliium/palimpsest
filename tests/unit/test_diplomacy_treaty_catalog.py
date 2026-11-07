@@ -14,11 +14,11 @@ from analysis.specifications import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_catalog_is_172_and_treaty_families_are_last() -> None:
+def test_catalog_is_176_and_treaty_families_are_last() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 172
-    assert len(specs) == 172
-    assert [spec.family_id for spec in specs[-8:-4]] == [
+    assert METRIC_FAMILY_COUNT == 176
+    assert len(specs) == 176
+    assert [spec.family_id for spec in specs[-12:-8]] == [
         MetricFamilyId.TREATY_STRUCTURE,
         MetricFamilyId.TREATY_VERSION_LINEAGE,
         MetricFamilyId.TREATY_RECOLLECTION,

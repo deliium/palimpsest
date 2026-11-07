@@ -427,6 +427,7 @@ class AgentRuntime:
         "_artifact_interpretations",
         "_belief_reader",
         "_belief_writer",
+        "_borders",
         "_causal_world_model",
         "_cognition_trace_repository",
         "_cognition_trace_spec",
@@ -632,6 +633,7 @@ class AgentRuntime:
         self._representation: object | None = None
         self._diplomacy: object | None = None
         self._organized_conflict: object | None = None
+        self._borders: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1563,6 +1565,38 @@ class AgentRuntime:
             tick,
         )
 
+    def _commit_borders(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.borders import BorderLedger
+        from agents.cognition.configuration import CognitionBordersMode
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_borders_mode",
+            CognitionBordersMode.DISABLED,
+        )
+        if mode is not CognitionBordersMode.DETERMINISTIC:
+            self._borders = None
+            _LOG.debug("cognition_borders_mode disabled")
+            return
+        if ledger is None:
+            _LOG.warning("borders_pending_ledger_missing tick=%s", tick)
+            return
+        if type(ledger) is not BorderLedger:
+            raise TypeError("borders must be BorderLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._borders = ledger
+        _LOG.debug(
+            "borders_ledger_carried domains=%s agreements=%s tick=%s",
+            len(ledger.domains),
+            len(ledger.agreements),
+            tick,
+        )
+
     def _commit_collective_decisions(self, ledger: object | None, tick: int) -> None:
         from agents.cognition.collective_decisions import CollectiveDecisionLedger
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
@@ -2466,6 +2500,7 @@ class AgentRuntime:
                 representation=self._representation,
                 diplomacy=self._diplomacy,
                 organized_conflict=self._organized_conflict,
+                borders=self._borders,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -2980,6 +3015,10 @@ class AgentRuntime:
         )
         self._commit_organized_conflict(
             getattr(pending.loop_result, "organized_conflict", None),
+            pending.tick,
+        )
+        self._commit_borders(
+            getattr(pending.loop_result, "borders", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3584,6 +3623,7 @@ class AgentRuntime:
         self._representation = getattr(checkpoint, "representation", None)
         self._diplomacy = getattr(checkpoint, "diplomacy", None)
         self._organized_conflict = getattr(checkpoint, "organized_conflict", None)
+        self._borders = getattr(checkpoint, "borders", None)
         if (
             self._representation is not None
             and getattr(self._representation, "owner_id", None)
@@ -3710,6 +3750,7 @@ class AgentRuntime:
             representation=self._representation,
             diplomacy=self._diplomacy,
             organized_conflict=self._organized_conflict,
+            borders=self._borders,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,

@@ -5,6 +5,7 @@ const Playback := preload("res://scripts/protocol/playback.gd")
 const ReducerScript := preload("res://scripts/protocol/reducer.gd")
 const Router := preload("res://scripts/protocol/event_router.gd")
 const CivilizationPlan := preload("res://scripts/presentation/civilization_plan.gd")
+const BorderOverlay := preload("res://scripts/view/border_overlay.gd")
 
 var playback_speed := 1.0
 
@@ -40,6 +41,7 @@ var presentation_detail := "full"
 @onready var _civilization: Node2D = get_node_or_null("CivilizationFacilities")
 @onready var _civilization_flows: Node2D = get_node_or_null("CivilizationFlows")
 @onready var _civilization_beliefs: Node2D = get_node_or_null("CivilizationBeliefs")
+var _border: Node2D = null
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
@@ -47,6 +49,11 @@ signal location_selected(location_id: String)
 signal civilization_inspect_requested(summary: Dictionary)
 
 func _ready() -> void:
+	_border = get_node_or_null("BorderOverlay")
+	if _border == null:
+		_border = BorderOverlay.new()
+		_border.name = "BorderOverlay"
+		add_child(_border)
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
 	if _locations != null and _locations.has_signal("location_selected"):
@@ -122,6 +129,22 @@ func show_world(world: Variant) -> void:
 	if _generational != null:
 		_generational.set_positions(agent_points)
 	_rebuild_civilization()
+
+func set_border_overlay(data: Variant, enabled_value: bool = true) -> void:
+	if _border != null:
+		_border.set_enabled(enabled_value)
+		_border.apply_payload(data)
+
+func clear_border_overlay() -> void:
+	if _border != null:
+		_border.clear()
+		_border.set_enabled(false)
+
+func set_border_overlay_enabled(enabled_value: bool) -> void:
+	if _border != null:
+		_border.set_enabled(enabled_value)
+		if not enabled_value:
+			_border.clear()
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
 	if _claims != null:

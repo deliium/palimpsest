@@ -195,3 +195,17 @@ no commit, push, or deployment was performed.
 - [Lineage explorer](lineage-explorer.md) — related capture/cursor/availability semantics
 - [Cultural evolution metrics](cultural-evolution-metrics.md) — culture denominators and windows
 - [Configuration](configuration.md) — civilization reader settings and deployment
+
+## Border overlays (V4-13)
+
+Four default-off overlay kinds preserve the three evidence classes:
+
+| Overlay kind | Evidence class | Visual |
+| --- | --- | --- |
+| `border_physical` | `OBJECTIVE` | solid marker |
+| `border_claims` | `SUBJECTIVE_TO_SELECTED_AGENT` | dashed outline |
+| `border_agreements` | `SUBJECTIVE_TO_SELECTED_AGENT` | double outline plus badge |
+| `border_patterns` | `ANALYTICAL_INFERRED` | dotted marker |
+
+Agreement remains a distinct subjective overlay, not a fourth evidence class.
+Tokens never appear in a URL; the debug capability travels in the header.

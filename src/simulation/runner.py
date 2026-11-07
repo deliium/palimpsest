@@ -1154,7 +1154,9 @@ def _cognition_config_for(
         skill_mode.value,
         None if belief_policy is None else belief_policy.version,
     )
+    from agents.cognition.borders import default_borders_policy
     from agents.cognition.configuration import (
+        CognitionBordersMode,
         CognitionGroupFormationMode,
         CognitionTerritorialClaimMode,
     )
@@ -1192,6 +1194,25 @@ def _cognition_config_for(
         "cognition_config_territorial_claim_mode mode=%s policy_version=%s",
         territorial_mode.value,
         None if territorial_policy is None else territorial_policy.version,
+    )
+    borders_mode = (
+        CognitionBordersMode.DETERMINISTIC
+        if organizations_enabled
+        and territorial_mode is CognitionTerritorialClaimMode.DETERMINISTIC
+        else CognitionBordersMode.DISABLED
+    )
+    borders_policy = (
+        default_borders_policy()
+        if borders_mode is CognitionBordersMode.DETERMINISTIC
+        else None
+    )
+    _LOG.debug(
+        "cognition_config_borders_mode mode=%s policy_version=%s "
+        "organizations=%s territorial_mode=%s",
+        borders_mode.value,
+        None if borders_policy is None else borders_policy.version,
+        organizations_enabled,
+        territorial_mode.value,
     )
     group_mode = CognitionGroupFormationMode(spec.group_formation_mode.value)
     group_policy = None
@@ -1614,6 +1635,8 @@ def _cognition_config_for(
         teaching_claim_policy=teaching_policy,
         territorial_claim_mode=territorial_mode,
         territorial_claim_policy=territorial_policy,
+        borders_mode=borders_mode,
+        borders_policy=borders_policy,
         group_formation_mode=group_mode,
         group_formation_policy=group_policy,
         social_norm_mode=norm_mode,
@@ -5199,6 +5222,7 @@ class SimulationRunner:
             representation_ledgers=(self.export_representation_ledgers()),
             diplomacy_ledgers=(self.export_diplomacy_ledgers()),
             organized_conflict_ledgers=(self.export_organized_conflict_ledgers()),
+            border_ledgers=(self.export_border_ledgers()),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5680,6 +5704,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "organized_conflict_ledger_exported owners=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_border_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered border ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "borders", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "border_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)

@@ -765,6 +765,7 @@ class SubjectiveSnapshot:
     representation: object | None = None
     diplomacy: object | None = None
     organized_conflict: object | None = None
+    borders: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -998,6 +999,13 @@ class SubjectiveSnapshot:
             self.organized_conflict,
             self.owner_id,
             field_name="SubjectiveSnapshot.organized_conflict",
+        )
+        from agents.cognition.borders import require_owner_borders
+
+        require_owner_borders(
+            self.borders,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.borders",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -4002,6 +4010,7 @@ class CognitiveLoopProposal:
     representation: object | None = None
     diplomacy: object | None = None
     organized_conflict: object | None = None
+    borders: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4234,6 +4243,13 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.organized_conflict",
         )
+        from agents.cognition.borders import require_owner_borders
+
+        require_owner_borders(
+            self.borders,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.borders",
+        )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:
@@ -4346,6 +4362,7 @@ class CognitiveLoopResult:
     representation: object | None = None
     diplomacy: object | None = None
     organized_conflict: object | None = None
+    borders: object | None = None
     organized_conflict_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -4564,6 +4581,13 @@ class CognitiveLoopResult:
             self.organized_conflict,
             self.agent_id,
             field_name="CognitiveLoopResult.organized_conflict",
+        )
+        from agents.cognition.borders import require_owner_borders
+
+        require_owner_borders(
+            self.borders,
+            self.agent_id,
+            field_name="CognitiveLoopResult.borders",
         )
         if self.organized_conflict_audits is not None:
             from agents.cognition.organized_conflict import ConflictActionAudit

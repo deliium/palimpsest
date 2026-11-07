@@ -52,7 +52,7 @@ uv run --frozen --python 3.12.14 pytest
 | `PALIMPSEST_TEST_DATABASE_URL=... PALIMPSEST_RETIREMENT_TICKS=10000 uv run --frozen --python 3.12.14 pytest -m "integration and scale" tests/benchmarks/test_retirement_composition.py -q` | Opt-in retirement off/on composition pair: identical scientific counters, resident vs retired owner counts, capped frozen-state estimate; writes `task5-retirement/composition/`. |
 | `PALIMPSEST_SCALE_BENCH_OUTPUT=... uv run --frozen --python 3.12.14 pytest -m "integration and scale" tests/integration/test_long_run_checkpoints.py::test_checkpoint_cadences_measure_identical_histories -q` | Checkpoint cadence sweep at 600 ticks; writes `task9-cadence/checkpoint-cadence.json`. |
 | `uv run --frozen --python 3.12.14 pytest -m compose` | Compose file checks and optional stack smoke |
-| `"${GODOT_BIN}" --headless --path clients/godot-observer --script res://tests/run_protocol.gd` | Pinned Godot 4.7.2 protocol suite (48 suites, expects `godot_protocol_tests failed=0`) |
+| `"${GODOT_BIN}" --headless --path clients/godot-observer --script res://tests/run_protocol.gd` | Pinned Godot 4.7.2 protocol suite (49 suites, expects `godot_protocol_tests failed=0`) |
 | `cd clients/research-ui && pnpm test && pnpm check && pnpm build` | Research UI tests, type/Svelte checks, production build |
 | `uv run --frozen --python 3.12.14 ruff check src tests` | Lint |
 | `uv run --frozen --python 3.12.14 mypy src tests` | Strict typing |

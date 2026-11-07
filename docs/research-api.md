@@ -278,3 +278,25 @@ runs. Cursor mismatch is `400 organized_conflict_cursor_invalid`; expiry is
 `410 organized_conflict_cursor_expired`. The six purposes are `summary`,
 `episodes`, `episode`, `plans`, `plan`, and `interpretations`. No `/v2` route
 exists.
+
+## Border routes (V4-13)
+
+Six GET-only routes under `/v1/simulations/{run_id}/borders` require
+`SUBJECTIVE_DEBUG`:
+
+| Route | Result |
+| --- | --- |
+| `GET .../borders` | summary |
+| `GET .../borders/claims` | paged claims |
+| `GET .../borders/claims/{claim_id}` | claim detail |
+| `GET .../borders/agreements` | paged agreements |
+| `GET .../borders/agreements/{agreement_id}` | agreement detail |
+| `GET .../borders/control` | physical and/or analytical rows via `layer=physical|analytical|all` |
+
+`PALIMPSEST_BORDERS_ROOT` and `PALIMPSEST_BORDERS_CURSOR_KEY` enable the read
+model. An unconfigured deployment returns 503 `borders_disabled`; unknown
+published runs return 404 `borders_publication_not_found`; unknown records return
+404 `borders_record_not_found`; cursor mismatch is 400 `borders_cursor_invalid`
+and expiry is 410 `borders_cursor_expired`. A corrupt published store fails with
+500 `borders_store_corrupt` rather than a false not-found response. Responses
+contain hashed tokens and closed labels only.

@@ -1035,6 +1035,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.borders_composition import (
+                borders_producer_options_from_args,
+            )
+
+            borders_options = borders_producer_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_borders_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1488,6 +1500,27 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 "organized_conflict_publication_reason="
                 f"{organized_conflict_receipt.get('reason')}"
             )
+        if borders_options.enabled:
+            from research_runner.borders_composition import (
+                publish_borders_harvest,
+                write_borders_receipt,
+            )
+
+            borders_receipt = publish_borders_harvest(
+                arm.runner_result,
+                borders_options,
+                committed_events=arm.committed_events or (),
+                run_id=assignment.run_id.value,
+            )
+            write_borders_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                borders_receipt,
+            )
+            print(f"borders_publication_status={borders_receipt['status']}")
+            print(f"borders_publication_reason={borders_receipt.get('reason')}")
+            if borders_receipt.get("publication_id"):
+                print(f"borders_publication_id={borders_receipt['publication_id']}")
         if lineage_options is not None:
             import json
 
@@ -1676,6 +1709,9 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--organized-conflict-root", default=None)
     gen_p.add_argument("--organized-conflict-max-publications", type=int, default=16)
     gen_p.add_argument("--organized-conflict-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--borders-root", default=None)
+    gen_p.add_argument("--borders-max-publications", type=int, default=16)
+    gen_p.add_argument("--borders-max-bytes", type=int, default=8_388_608)
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

@@ -287,6 +287,8 @@ class CognitiveLoop:
     __slots__ = (
         "_acceptance_window_ticks",
         "_artifact_interpretation_mode",
+        "_borders_mode",
+        "_borders_policy",
         "_bounded_experimentation_caps",
         "_care_action_policy",
         "_caregiving_cognition_mode",
@@ -368,6 +370,7 @@ class CognitiveLoop:
         "_perception",
         "_planner",
         "_possession_succession_active",
+        "_prepared_borders",
         "_prepared_diplomacy",
         "_prepared_disputes",
         "_prepared_evidence",
@@ -485,6 +488,8 @@ class CognitiveLoop:
         bounded_experimentation_spec: object | None = None,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
+        borders_mode: object | None = None,
+        borders_policy: object | None = None,
         group_formation_mode: object | None = None,
         group_formation_policy: object | None = None,
         social_norm_mode: object | None = None,
@@ -724,6 +729,24 @@ class CognitiveLoop:
             territorial_policy = territorial_claim_policy
         self._territorial_claim_mode = territorial
         self._territorial_claim_policy = territorial_policy
+        from agents.cognition.borders import BordersPolicy
+        from agents.cognition.configuration import CognitionBordersMode
+
+        borders = (
+            CognitionBordersMode.DISABLED if borders_mode is None else borders_mode
+        )
+        if type(borders) is not CognitionBordersMode:
+            raise TypeError("borders_mode must be CognitionBordersMode")
+        if borders is CognitionBordersMode.DISABLED:
+            borders_policy = None
+        elif borders_policy is None:
+            from agents.cognition.borders import default_borders_policy
+
+            borders_policy = default_borders_policy()
+        elif type(borders_policy) is not BordersPolicy:
+            raise TypeError("borders_policy must be BordersPolicy")
+        self._borders_mode = borders
+        self._borders_policy = borders_policy
         from agents.cognition.configuration import CognitionGroupFormationMode
         from agents.cognition.group_formation import GroupFormationPolicy
 
@@ -1109,6 +1132,7 @@ class CognitiveLoop:
         self._organized_conflict_mode = organized_conflict
         self._organized_conflict_policy = organized_conflict_policy
         self._prepared_organized_conflict: object | None = None
+        self._prepared_borders: object | None = None
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1593,6 +1617,7 @@ class CognitiveLoop:
             prepared_representation=self._prepared_representation,
             prepared_diplomacy=self._prepared_diplomacy,
             prepared_organized_conflict=self._prepared_organized_conflict,
+            prepared_borders=self._prepared_borders,
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1645,6 +1670,7 @@ class CognitiveLoop:
         self._prepared_representation = state.prepared_representation
         self._prepared_diplomacy = state.prepared_diplomacy
         self._prepared_organized_conflict = state.prepared_organized_conflict
+        self._prepared_borders = state.prepared_borders
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -3117,6 +3143,58 @@ class CognitiveLoop:
             self._organized_conflict_mode.value,
             len(updated.plans),
             len(updated.observations),
+        )
+        return updated
+
+    def _prepare_borders(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        territorial_claims: object | None,
+        organization_concepts: object | None,
+        diplomacy: object | None,
+    ) -> object | None:
+        """Refresh one owner's border beliefs from visible local inputs."""
+        from agents.cognition.borders import (
+            BorderLedger,
+            BordersPolicy,
+            apply_borders_update,
+            empty_border_ledger,
+        )
+        from agents.cognition.configuration import CognitionBordersMode
+
+        if self._borders_mode is not CognitionBordersMode.DETERMINISTIC:
+            self._prepared_borders = None
+            return None
+        policy = self._borders_policy
+        if type(policy) is not BordersPolicy:
+            raise TypeError("borders_policy must be BordersPolicy")
+        snapshot = loop_input.snapshot
+        tick = loop_input.observation.tick
+        carried = None if snapshot is None else getattr(snapshot, "borders", None)
+        prior = (
+            carried
+            if type(carried) is BorderLedger
+            else empty_border_ledger(loop_input.agent_id)
+        )
+        updated = apply_borders_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            observation=loop_input.observation,
+            territorial_claims=territorial_claims,
+            prior=prior,
+            identity=None if snapshot is None else snapshot.social_identity,
+            organization_concepts=organization_concepts,
+            diplomacy=diplomacy,
+            policy=policy,
+            inbox=None if snapshot is None else snapshot.inbox,
+        )
+        self._prepared_borders = updated
+        _LOG.debug(
+            "borders_prepare mode=%s domains=%s agreements=%s",
+            self._borders_mode.value,
+            len(updated.domains),
+            len(updated.agreements),
         )
         return updated
 
@@ -5225,6 +5303,12 @@ class CognitiveLoop:
             representation=representation,
             diplomacy=diplomacy,
         )
+        borders = self._prepare_borders(
+            loop_input,
+            territorial_claims=territorial_claims,
+            organization_concepts=organization_concepts,
+            diplomacy=diplomacy,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -5602,6 +5686,7 @@ class CognitiveLoop:
             representation=representation,
             diplomacy=diplomacy,
             organized_conflict=organized_conflict,
+            borders=borders,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -6055,6 +6140,7 @@ class CognitiveLoop:
             representation=representation,
             diplomacy=diplomacy,
             organized_conflict=proposal.organized_conflict,
+            borders=proposal.borders,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

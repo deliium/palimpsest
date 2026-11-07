@@ -1573,6 +1573,31 @@ func request_analytics_overlay(_metric_set_id: String = "") -> void:
 	request_metric_family_overlay("spatial_control", "spatial_control")
 
 
+func request_border_summary() -> void:
+	var path := "/v1/simulations/%s/borders" % run_id
+	_request_path("border_physical", path, {"capability": "debug"})
+
+
+func request_border_claims() -> void:
+	var path := "/v1/simulations/%s/borders/claims" % run_id
+	_request_path("border_claims", path, {"capability": "debug"})
+
+
+func request_border_agreements() -> void:
+	var path := "/v1/simulations/%s/borders/agreements" % run_id
+	_request_path("border_agreements", path, {"capability": "debug"})
+
+
+func request_border_control(layer: String = "all") -> void:
+	var path := "/v1/simulations/%s/borders/control" % run_id
+	_request_path(
+		"border_physical" if layer == "physical" else "border_patterns",
+		path,
+		{"capability": "debug"},
+		{"layer": layer},
+	)
+
+
 func request_strategy_audit_overlay() -> void:
 	## Research/debug ANALYTICAL payload. Ordinary speech must not read this.
 	var path := "/v1/simulations/%s/observer/communication-strategy-audit" % run_id

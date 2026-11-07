@@ -913,6 +913,18 @@ def assemble_arm_metric_bundle(
             organized_conflict_rows=harvested,
             organized_conflict_objective_rows=harvested.objective_events,
         )
+    border_ledgers = getattr(arm.runner_result, "border_ledgers", None)
+    if border_ledgers:
+        from analysis.borders_policy import default_borders_analysis_policy
+        from analysis.borders_rows import harvest_border_rows
+        from simulation.borders_export import export_border_rows
+
+        harvested_borders = harvest_border_rows(
+            tuple(export_border_rows(ledger) for ledger in border_ledgers),
+            events or (),
+            policy=default_borders_analysis_policy(),
+        )
+        inputs = replace(inputs, border_rows=harvested_borders)
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
     if dispute_ledgers:
         from analysis.dispute_evidence import (

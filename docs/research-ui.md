@@ -294,3 +294,11 @@ Institutions tab and a direct `conflict` view URL. It renders published episode
 classifications, participant counts, plans, interpretations, alignment, and
 coverage. It derives no authority, legitimacy, enforcement, score, winner, or
 war status.
+
+## Borders and claims panel (V4-13)
+
+The read-only **Borders and claims** run tab renders four epistemic sections:
+physical control (objective), claims (subjective), agreements (subjective), and
+control patterns (analytical). It fetches the six border GET routes, maps
+`borders_disabled`/503 to an explicit unavailable state, and derives no
+authority, legitimacy, enforcement, score, winner, or sovereignty wording.

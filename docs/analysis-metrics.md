@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **172** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **176** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -551,10 +551,11 @@ Researcher-only scope alignment is never a legitimacy finding or a revocation.
 owner's self-support are excluded from independent roots. Missing anchors stay
 `unresolved`, never `inconsistent`.
 
-## Diplomacy families (catalog 172)
+## Diplomacy families (V4-10)
 
-Four families append after the delegation-representation families. They are
-detached and read-only, and none exposes a bilateral score or composite.
+Four families append after the delegation-representation families, raising the
+catalog from 160 to 164. They are detached and read-only, and none exposes a
+bilateral score or composite.
 
 ### `diplomatic_contact_structure@1`
 
@@ -592,7 +593,7 @@ There is no aggregate or composite key.
 ## Treaty families (V4-11)
 
 Four detached families append after the V4-10 set, raising the catalog from 164
-to **172**: `treaty_structure@1`, `treaty_version_lineage@1`,
+to **168**: `treaty_structure@1`, `treaty_version_lineage@1`,
 `treaty_recollection@1`, and `treaty_anchor_coverage@1`. They cover treaty and
 participant counts, closed subject/participant histograms, immutable version
 change counts, forward-only parent-link depth, recollection stance/basis
@@ -610,3 +611,17 @@ Four families append after the treaty families, raising the catalog from 168 to
 closed labels only; there is no war score, violence score, escalation index,
 legitimacy score, winner, loser, or composite. See
 [organized conflict](organized-conflict.md).
+
+## Border families (V4-13)
+
+Four families append after the organized-conflict set, raising the catalog from
+172 to **176**: `border_claim_structure@1`, `border_overlap_contest@1`,
+`border_agreement_recognition@1`, and `border_control_alignment@1`. They report
+detached claim-row counts, observed boundary edges, overlap pairs and overlap
+locations, retained dispute statuses, agreement/access/provision distributions,
+recognition ratios, closed control-pattern distributions, and researcher-only
+alignment counts. Physical control is derived from committed presence, use,
+hostile, and assistance events; it is not ownership or a control score. There is
+no winner, sovereignty, legitimacy, composite, or border score. The first 172
+families keep their IDs, order, versions, and value keys. See
+[borders and claims](borders-and-claims.md).

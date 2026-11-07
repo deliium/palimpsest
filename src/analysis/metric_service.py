@@ -325,6 +325,13 @@ class MetricComputationInputs:
     organized_conflict_rows: object | None = None
     organized_conflict_objective_rows: Sequence[object] | None = None
     organized_conflict_interpretation_alignment: Sequence[object] | None = None
+    border_rows: object | None = None
+    border_claim_rows: Sequence[object] | None = None
+    border_agreement_rows: Sequence[object] | None = None
+    border_physical_rows: Sequence[object] | None = None
+    border_pattern_rows: Sequence[object] | None = None
+    border_alignment_rows: Sequence[object] | None = None
+    border_overlap_rows: Sequence[object] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2126,6 +2133,118 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 conflict_candidates,
                 conflict_alignment,
                 conflict_summary,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+
+    if inputs.border_rows is not None or inputs.border_claim_rows is not None:
+        from analysis.borders_alignment import align_border_interpretations
+        from analysis.borders_contract import (
+            BorderAgreementRow,
+            BorderAlignmentRow,
+            BorderClaimRow,
+            BorderOverlapRow,
+            BorderPatternRow,
+        )
+        from analysis.borders_detection import (
+            detect_border_disputes,
+            detect_border_overlaps,
+            detect_control_patterns,
+        )
+        from analysis.borders_events import BorderPhysicalRow
+        from analysis.borders_metrics import (
+            compute_border_agreement_recognition,
+            compute_border_claim_structure,
+            compute_border_control_alignment,
+            compute_border_overlap_contest,
+        )
+        from analysis.borders_policy import default_borders_analysis_policy
+        from analysis.borders_rows import BorderHarvestRows
+
+        border_policy = default_borders_analysis_policy()
+        if type(inputs.border_rows) is BorderHarvestRows:
+            border_rows = inputs.border_rows
+        else:
+            border_rows = BorderHarvestRows(
+                physical=tuple(
+                    cast(
+                        "Sequence[BorderPhysicalRow]",
+                        inputs.border_physical_rows or (),
+                    )
+                ),
+                claims=tuple(
+                    cast("Sequence[BorderClaimRow]", inputs.border_claim_rows or ())
+                ),
+                agreements=tuple(
+                    cast(
+                        "Sequence[BorderAgreementRow]",
+                        inputs.border_agreement_rows or (),
+                    )
+                ),
+                coverage="partial",
+            )
+        overlaps = (
+            tuple(cast("Sequence[BorderOverlapRow]", inputs.border_overlap_rows))
+            if inputs.border_overlap_rows is not None
+            else detect_border_disputes(
+                detect_border_overlaps(border_rows.claims, policy=border_policy),
+                border_rows.agreements,
+                policy=border_policy,
+            )
+        )
+        patterns = (
+            tuple(cast("Sequence[BorderPatternRow]", inputs.border_pattern_rows))
+            if inputs.border_pattern_rows is not None
+            else detect_control_patterns(
+                border_rows.physical,
+                border_rows.claims,
+                border_rows.agreements,
+                border_rows.disputes,
+                policy=border_policy,
+            )
+        )
+        alignment = (
+            tuple(cast("Sequence[BorderAlignmentRow]", inputs.border_alignment_rows))
+            if inputs.border_alignment_rows is not None
+            else align_border_interpretations(
+                border_rows.claims,
+                border_rows.agreements,
+                patterns,
+                disputes=border_rows.disputes,
+            )
+        )
+        _safe(
+            "border_claim_structure",
+            lambda: compute_border_claim_structure(
+                border_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "border_overlap_contest",
+            lambda: compute_border_overlap_contest(
+                border_rows,
+                overlaps,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "border_agreement_recognition",
+            lambda: compute_border_agreement_recognition(
+                border_rows,
+                run_id=run_id,
+                input_revision=revision,
+            ),
+        )
+        _safe(
+            "border_control_alignment",
+            lambda: compute_border_control_alignment(
+                border_rows,
+                patterns,
+                alignment,
                 run_id=run_id,
                 input_revision=revision,
             ),

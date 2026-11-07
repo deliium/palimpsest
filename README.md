@@ -51,6 +51,9 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 ## Documentation
 
+| Borders and claims | `docs/borders-and-claims.md` | Owner-scoped domain beliefs, bdr_v1, four layers, snapshot/store/routes |
+
+
 | Page | Contents |
 | --- | --- |
 | [Architecture](docs/architecture.md) | Bounded packages, `WorldEngine` lifecycle, perception boundary, eleven invariants, V2/V3 seams + downstream plan contracts |

@@ -239,3 +239,10 @@ composite civilization score.
 - [Research API](research-api.md)
 
 See also: [Diplomacy](diplomacy.md) composes organization concepts read-only for organization and coalition party anchors; organizations are participant sources, not treaty authorities.
+
+## Border sidecar (V4-13)
+
+When the owned `organizations` context and deterministic territorial mode are
+both active, an owner keeps a private border ledger. Organization anchors are
+resolved read-only from the owner's own concept ledger and are never rewritten.
+See [borders and claims](borders-and-claims.md).

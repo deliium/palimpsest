@@ -32,10 +32,10 @@ def test_canonical_contract_names_all_operations_and_bounds() -> None:
     assert "No `world.at_war`" in text
 
 
-def test_current_pins_are_172_and_five_owned() -> None:
-    assert "172" in _read("docs/analysis-metrics.md")
-    assert "172" in _read("docs/architecture.md")
-    assert "172" in _read(".ai-factory/ARCHITECTURE.md")
+def test_current_pins_are_176_and_five_owned() -> None:
+    assert "176" in _read("docs/analysis-metrics.md")
+    assert "176" in _read("docs/architecture.md")
+    assert "176" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/DESCRIPTION.md")
     assert "five owned V4 flags" in _read("docs/configuration.md")

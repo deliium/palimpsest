@@ -389,7 +389,7 @@ raising the metric catalog from 157 to **160** (V4-10 raises it to **164**), plu
 filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 172, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 176, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -418,7 +418,7 @@ catalog from 160 to **164**. `diplomacy-snapshot-v1` and
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG` and fail
 closed with `diplomacy_disabled`; the Research UI adds a read-only panel.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-172 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+176 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -443,7 +443,7 @@ canonical, v1 remains decodable, `diplomacy-store-v1` is unchanged, and eight
 GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine`, perception,
 admission, stop selectors, memory, prompts, observer semantics, and Godot never
 read a treaty ledger. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 172 metric families, 14 V4 contexts, 12 V4 flags,
+observer semantic types, 176 metric families, 14 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
 
@@ -467,6 +467,29 @@ and `organized-conflict-store-v1` publish opt-in and atomically; six GET-only
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`
 and fail closed with `organized_conflict_disabled`; the Research UI adds a
 read-only conflict view. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 172 metric families, 14 V4 contexts, 12 V4 flags,
+observer semantic types, 176 metric families, 14 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
+
+
+Borders and claims (V4-13) deepen the owned `organizations` context on the
+accepted `runner-config-v56` seam without a new flag, context, runner schema,
+command, event, observer semantic type, write pair, `/v2` route, or migration.
+With deterministic territorial claims, one owner keeps a private
+`borders-claims.v1` ledger over 1-8 sorted logical locations: domain claims,
+observed boundary edges, boundary recognitions, access expectations, border
+agreements, and retained disputes. Overlap is legal; agreements and access
+expectations bind no command; no objective border, country owner, grid, polygon,
+or registry exists. Bounded `bdr_v1` relations travel inside existing
+`Talk`/`Ask`/`Tell`. Detached analysis keeps physical control, subjective claim,
+agreement, and analytical control pattern in four separated layers, derives
+forward-only `bord-` lineage, joins `org-`/`msoc-` read-only, and classifies
+researcher-only alignment. Four families append (catalog 172 -> 176).
+`borders-snapshot-v1` and `borders-store-v1` publish opt-in and atomically; six
+GET-only `/v1/simulations/{run_id}/borders` routes require `SUBJECTIVE_DEBUG` and
+fail closed with `borders_disabled`; the Research UI adds four read-only
+sections; the presentation client adds four border overlays. Pins: runner
+v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 176 metric
+families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; five V4 flags are owned and seven remain
+unowned.

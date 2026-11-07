@@ -408,3 +408,10 @@ Rules:
 - Outbound Research links preserve source, class, native/identity/scope owners,
   family/row and distinct publication namespaces. Credentials are entered
   independently in each application.
+
+## Border overlay (V4-13)
+
+The `border_*` toggle group displays physical control, border claims, border
+agreements, and analytical control patterns. Toggling off clears all border
+markers. Payloads with unknown layers or forbidden authority/raw-id fields are
+rejected without affecting playback or physics.

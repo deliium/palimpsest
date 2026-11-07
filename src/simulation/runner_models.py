@@ -6392,6 +6392,7 @@ class SimulationRunnerResult:
     representation_ledgers: tuple[object, ...] = ()
     diplomacy_ledgers: tuple[object, ...] = ()
     organized_conflict_ledgers: tuple[object, ...] = ()
+    border_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6783,6 +6784,25 @@ class SimulationRunnerResult:
         ] != sorted(owner.value for owner in conflict_owners):
             raise ValueError("organized_conflict_ledgers: invalid_order")
         object.__setattr__(self, "organized_conflict_ledgers", conflict_ledgers)
+        if isinstance(self.border_ledgers, (set, frozenset)):
+            raise TypeError("border_ledgers must be ordered")
+        if type(self.border_ledgers) is not tuple:
+            raise TypeError("border_ledgers must be ordered")
+        from agents.cognition.borders import BorderLedger, require_owner_borders
+
+        border_ledgers = tuple(self.border_ledgers)
+        for ledger in border_ledgers:
+            if type(ledger) is not BorderLedger:
+                raise TypeError("border_ledgers: invalid_item")
+            require_owner_borders(ledger, ledger.owner_id, field_name="border_ledgers")
+        border_owners: list[Any] = [
+            cast(BorderLedger, ledger).owner_id for ledger in border_ledgers
+        ]
+        if len(set(border_owners)) != len(border_owners) or [
+            owner.value for owner in border_owners
+        ] != sorted(owner.value for owner in border_owners):
+            raise ValueError("border_ledgers: invalid_order")
+        object.__setattr__(self, "border_ledgers", border_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

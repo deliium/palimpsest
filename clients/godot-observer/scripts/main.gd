@@ -492,6 +492,12 @@ func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) ->
 			_world.set_relationship_overlay_enabled(enabled)
 			if enabled and agent_id != "":
 				_session.request_relationship_overlay(agent_id)
+		"border_physical", "border_claims", "border_agreements", "border_patterns":
+			_world.set_border_overlay_enabled(enabled)
+			if enabled:
+				_session.request_border_control("all")
+			else:
+				_world.clear_border_overlay()
 		"spatial_control":
 			_world.set_analytics_overlay_enabled(enabled)
 			if enabled:
@@ -529,6 +535,8 @@ func _on_overlay_payload(kind: String, payload: Variant) -> void:
 		_world.apply_narrative_hops(payload)
 		var ids: Array = _world.narrative_variant_ids()
 		_ui.set_narrative_variants(ids)
+	elif kind in ["border_physical", "border_claims", "border_agreements", "border_patterns"]:
+		_world.set_border_overlay(payload, true)
 	elif kind == "spatial_control":
 		_world.apply_research_analytics(payload)
 	elif kind in [

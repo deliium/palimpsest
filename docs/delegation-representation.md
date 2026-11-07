@@ -134,7 +134,7 @@ The catalog appends three families, raising the count from 157 to **160**:
 
 The first 157 families keep their ids, order, versions, and value keys. Pins
 remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-172 metric families, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and
+176 metric families, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and
 Alembic `0017`.
 
 ## Publication and inspection
@@ -202,3 +202,6 @@ or macro-society behavior.
 - [Research UI](research-ui.md)
 
 See also: [Diplomacy](diplomacy.md) derives envoy standing from this owner-scoped representation ledger and never treats accreditation as authority.
+
+V4-13 adds four border families on the accepted catalog, now **176** families.
+See [borders and claims](borders-and-claims.md).

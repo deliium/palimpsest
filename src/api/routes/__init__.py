@@ -1,5 +1,6 @@
 """HTTP route modules."""
 
+from api.routes.borders import router as borders_router
 from api.routes.branches import router as branches_router
 from api.routes.civilization import router as civilization_router
 from api.routes.debugger import router as debugger_router
@@ -26,6 +27,7 @@ from api.routes.streams import router as streams_router
 from api.routes.version import router as version_router
 
 __all__ = [
+    "borders_router",
     "branches_router",
     "civilization_router",
     "debugger_router",

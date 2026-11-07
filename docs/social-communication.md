@@ -193,3 +193,7 @@ other party. There is no free-text parsing: only the closed predicate and its
 token fields are read. A dispute-disabled recipient treats `dsp_v1` as ordinary
 unparsed communication and mutates no ledger. See
 [Disputes](disputes.md).
+
+Border beliefs extend the territorial-claim model from one location to sorted
+logical location sets. `bdr_v1` frames travel inside existing `Talk`/`Ask`/`Tell`
+delivery only; see [borders and claims](borders-and-claims.md).

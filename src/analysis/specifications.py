@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 172
+METRIC_FAMILY_COUNT: Final[int] = 176
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -247,6 +247,10 @@ class MetricFamilyId(StrEnum):
     ORGANIZED_CONFLICT_PERSISTENCE = "organized_conflict_persistence"
     ORGANIZED_CONFLICT_OUTCOMES = "organized_conflict_outcomes"
     ORGANIZED_CONFLICT_INTERPRETATION = "organized_conflict_interpretation"
+    BORDER_CLAIM_STRUCTURE = "border_claim_structure"
+    BORDER_OVERLAP_CONTEST = "border_overlap_contest"
+    BORDER_AGREEMENT_RECOGNITION = "border_agreement_recognition"
+    BORDER_CONTROL_ALIGNMENT = "border_control_alignment"
 
 
 class DenominatorKind(StrEnum):
@@ -8024,6 +8028,156 @@ def _spec_organized_conflict_interpretation() -> MetricSpecification:
     )
 
 
+def _spec_border_claim_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BORDER_CLAIM_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_border_claim_rows",
+        denominator="candidate_domains",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="6_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each claim row is counted once",
+        censoring_policy="right_censored",
+        formulas={
+            "domain_count": "detached claim rows",
+            "location_count": "sum of distinct location tokens",
+            "boundary_edge_count": "sum of observed boundary edges",
+            "claimed_count": "claimed status rows",
+            "recognized_count": "recognized status rows",
+            "disputed_count": "disputed status rows",
+            "anchor_resolved_ratio": "anchor-resolved claims / domain_count",
+        },
+        value_keys=(
+            "domain_count",
+            "location_count",
+            "boundary_edge_count",
+            "claimed_count",
+            "recognized_count",
+            "disputed_count",
+            "anchor_resolved_ratio",
+        ),
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_not_applicable",
+    )
+
+
+def _spec_border_overlap_contest() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BORDER_OVERLAP_CONTEST,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_border_overlap_rows",
+        denominator="claim_pairs",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="6_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each unordered pair is counted once",
+        censoring_policy="right_censored",
+        formulas={
+            "overlap_pair_count": "detected overlap pairs",
+            "overlap_location_count": "sum of shared locations",
+            "dispute_count": "disputed overlap rows",
+            "reciprocal_claim_count": "overlaps with both claims retained",
+            "dispute_status_distribution": "closed dispute status counts",
+        },
+        value_keys=(
+            "overlap_pair_count",
+            "overlap_location_count",
+            "dispute_count",
+            "reciprocal_claim_count",
+            "dispute_status_distribution",
+        ),
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_not_applicable",
+    )
+
+
+def _spec_border_agreement_recognition() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BORDER_AGREEMENT_RECOGNITION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_border_agreement_rows",
+        denominator="agreement_domains",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="6_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each agreement row is counted once",
+        censoring_policy="right_censored",
+        formulas={
+            "agreement_count": "detached agreement rows",
+            "agreement_status_distribution": "closed agreement status counts",
+            "recognition_count": "recognition rows",
+            "access_mode_distribution": "closed access mode counts",
+            "provision_distribution": "closed provision counts",
+            "recognized_edge_ratio": "recognized edges / all boundary edges",
+        },
+        value_keys=(
+            "agreement_count",
+            "agreement_status_distribution",
+            "recognition_count",
+            "access_mode_distribution",
+            "provision_distribution",
+            "recognized_edge_ratio",
+        ),
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_not_applicable",
+    )
+
+
+def _spec_border_control_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.BORDER_CONTROL_ALIGNMENT,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_border_pattern_rows",
+        denominator="observed_domains",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="6_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each domain is counted once",
+        censoring_policy="right_censored",
+        formulas={
+            "pattern_distribution": "closed control pattern counts",
+            "physical_use_ratio": "domains with physical actions / observed domains",
+            "claim_alignment_ratio": "claim-aligned patterns / observed domains",
+            "agreement_alignment_ratio": (
+                "agreement-aligned patterns / observed domains"
+            ),
+            "alignment_distribution": "researcher-only alignment counts",
+            "coverage_ratio": "observed domains / candidate domains",
+        },
+        value_keys=(
+            "pattern_distribution",
+            "physical_use_ratio",
+            "claim_alignment_ratio",
+            "agreement_alignment_ratio",
+            "alignment_distribution",
+            "coverage_ratio",
+        ),
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_not_applicable",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -8197,6 +8351,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_organized_conflict_persistence,
     _spec_organized_conflict_outcomes,
     _spec_organized_conflict_interpretation,
+    _spec_border_claim_structure,
+    _spec_border_overlap_contest,
+    _spec_border_agreement_recognition,
+    _spec_border_control_alignment,
 )
 
 
