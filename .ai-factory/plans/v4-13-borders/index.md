@@ -384,10 +384,10 @@ implementation-session results.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | executed_passed | Pre-remediation run: `uv run --frozen --python 3.12.14 pytest --cov --cov-report=term tests/unit tests/architecture -q` → 9398 passed, 78% coverage, 2222.56s. Post-remediation rerun is in progress. |
+| Python unit + architecture with coverage | executed_passed | Post-remediation run: `uv run --frozen --python 3.12.14 pytest --cov --cov-report=term tests/unit tests/architecture -q` → 9415 passed, 78% coverage, 2257.98s. |
 | Focused V4-13 suite | executed_passed | `tests/unit/test_borders_*.py` + `tests/architecture/test_borders_boundaries.py` → 224 passed after verification remediation. |
 | Focused in-process border E2E | executed_passed | `tests/unit/test_borders_e2e.py` → 3 passed with real `WorldEngine` ticks/commands, six routes, and a no-frame no-telepathy case; no PostgreSQL. |
-| V1/V2/V3/V4 regression selection | executed_passed | Included in the full unit+architecture run; post-remediation rerun is in progress. |
+| V1/V2/V3/V4 regression selection | executed_passed | Included in the post-remediation full unit+architecture run; 9415 passed. |
 | Documentation parity | executed_passed | `tests/unit/test_borders_docs.py tests/unit/test_*_docs.py` → 68 passed. |
 | Ruff | executed_passed | `uv run --frozen --python 3.12.14 ruff check src tests` → All checks passed. |
 | Mypy | executed_passed | `uv run --frozen --python 3.12.14 mypy src tests` → no issues in 2180 files. |
@@ -402,12 +402,11 @@ implementation-session results.
 | Research UI type/static checks | executed_passed | `npx pnpm@10.34.9 check` → 0 errors, 0 warnings. |
 | Research UI build | executed_passed | `npx pnpm@10.34.9 build` → built successfully. |
 
-Certification outcome: **not certified** — implementation, focused tests, static
+Certification outcome: **not certified** — implementation, focused tests, the
+post-remediation full unit+architecture run (9415 passed, 78% coverage), static
 gates, documentation parity, Compose configuration, and all Research UI lanes
-pass; the verification blockers were remediated, but integration,
-integration-scale, Compose/browser, Godot, and benchmark/scale remain
-`unexecuted` with the prerequisites recorded above. The post-remediation full
-unit+architecture rerun is still in progress at the time of this receipt update.
+pass; integration, integration-scale, Compose/browser, Godot, and benchmark/scale
+remain `unexecuted` with the prerequisites recorded above.
 
 Follow-up issue remediation (2026-11-07): removed raw owner identifiers from
 border DEBUG logs, clarified the `bdr_v1` ten-relation-field wire shape,
@@ -426,10 +425,10 @@ adaptation, and short labels; registered `borders` in `RUN_SCOPED_VIEWS`;
 exported border snapshot symbols; added the missing codec/ports/alignment/
 publication tests and boundary assertions; corrected the
 `docs/v4-architecture.md` baseline to 176 families and six border routes.
-Focused suite: 224 passed. Documentation parity: 68 passed. Ruff, Mypy
-(2180 files), import-linter, Compose config, and all Research UI lanes pass.
-The post-remediation full unit+architecture run and the external qualification
-lanes are recorded below; the external lanes remain `unexecuted`.
+Focused suite: 224 passed. Full unit+architecture: 9415 passed at 78% coverage
+(2257.98s). Documentation parity: 68 passed. Ruff, Mypy (2180 files),
+import-linter, Compose config, and all Research UI lanes pass. The external
+qualification lanes remain `unexecuted`.
 
 ## Commit Plan
 
