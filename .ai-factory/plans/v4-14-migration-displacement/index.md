@@ -387,8 +387,8 @@ are unchanged.
 - [x] Task 22: Add the four-layer Godot migration overlays ([details](phase-06-read-only-surfaces.md#task-22-add-the-four-layer-godot-migration-overlays)) (depends on 20)
 
 ### Phase 7: Invariants, End-to-End Migration, and Regression
-- [ ] Task 23: Add the migration-displacement boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-23-add-the-migration-displacement-boundary-and-determinism-suite)) (depends on 2-22)
-- [ ] Task 24: Add the in-process migration end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-24-add-the-in-process-migration-end-to-end-scenario)) (depends on 8-22)
+- [x] Task 23: Add the migration-displacement boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-23-add-the-migration-displacement-boundary-and-determinism-suite)) (depends on 2-22)
+- [x] Task 24: Add the in-process migration end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-24-add-the-in-process-migration-end-to-end-scenario)) (depends on 8-22)
 - [ ] Task 25: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-25-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 23, 24)
 
 ### Phase 8: Documentation and Final Verification
