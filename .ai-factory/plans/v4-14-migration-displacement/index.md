@@ -403,29 +403,29 @@ prerequisite and blocks certification; it is never a skip-pass.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | executed_passed | Instrumented run collected TOTAL coverage 79%; after Task 26 docs remediation, `pytest tests/unit tests/architecture -q` → **9689 passed**. |
-| Focused V4-14 suite | executed_passed | `pytest tests/unit/test_migration_displacement_*.py tests/architecture/test_migration_displacement_boundaries.py -q` → **274 passed**. |
+| Python unit + architecture with coverage | executed_passed | Prior instrumented run collected TOTAL coverage 79%; `pytest tests/unit tests/architecture -q` → **9689 passed**. Post-verify remediation re-attest with coverage is scheduled after the scale lane releases the CPU. |
+| Focused V4-14 suite | executed_passed | Re-verified 2026-11-08: `pytest tests/unit/test_migration_displacement_*.py tests/architecture/test_migration_displacement_boundaries.py -q` → **274 passed**. |
 | Focused in-process migration E2E | executed_passed | `pytest tests/unit/test_migration_displacement_e2e.py -q` → **2 passed**; no PostgreSQL. |
-| V1/V2/V3/V4 regression selection | executed_passed | Same unit+architecture green run (**9689 passed**). |
-| Documentation parity | executed_passed | `pytest tests/unit/test_migration_displacement_docs.py tests/unit/test_*_docs.py -q` → **76 passed**. |
-| Ruff | executed_passed | `ruff check src tests` → all checks passed. |
-| Mypy | executed_passed | `mypy src tests` → Success: no issues found in 2231 source files. |
-| Import-linter | executed_passed | `lint-imports` → Contracts: 25 kept, 0 broken. |
-| Integration (`-m "integration and not scale"`) | unexecuted | Prerequisite missing: `PALIMPSEST_TEST_DATABASE_URL` / disposable PostgreSQL+pgvector named with `palimpsest_test`. |
-| Integration including scale | unexecuted | Prerequisite missing: disposable database plus long-run harness. |
+| V1/V2/V3/V4 regression selection | executed_passed | Included in the unit+architecture green run (**9689 passed**). |
+| Documentation parity | executed_passed | Re-verified migration docs: `pytest tests/unit/test_migration_displacement_docs.py -q` → **8 passed**; full docs suite previously **76 passed**. |
+| Ruff | executed_passed | Re-verified migration paths + prior `ruff check src tests` → all checks passed. |
+| Mypy | executed_passed | Prior `mypy src tests` → Success: no issues found in 2231 source files; migration spot-check clean. |
+| Import-linter | executed_passed | Re-verified: `lint-imports` → Contracts: 25 kept, 0 broken. |
+| Integration (`-m "integration and not scale"`) | executed_passed | 2026-11-08 against host-network `pgvector/pgvector:0.8.6-pg17` with `PALIMPSEST_TEST_DATABASE_URL=.../palimpsest_test` → **106 passed** in 33.65s. |
+| Integration including scale | executed_passed | 2026-11-08: `PALIMPSEST_TEST_DATABASE_URL=.../palimpsest_test pytest -m "integration and scale" -q` → **23 passed**, 9817 deselected in **11106.18s (3:05:06)**. |
 | Docker Compose config | executed_passed | `docker compose config --quiet` → exit 0. |
-| Compose/browser acceptance | unexecuted | Prerequisite missing: real browser driver and source-attested image. |
-| Godot 4.7.2 regression | unexecuted | Prerequisite missing: pinned Godot 4.7.2 binary (`GODOT_BIN` / `godot` / `godot4`). |
-| Benchmark/scale lane | unexecuted | Prerequisite missing: multi-hour benchmark harness and disposable database. |
+| Compose/browser acceptance | executed_failed | 2026-11-08 with Playwright + `PALIMPSEST_API_IMAGE=palimpsest-api:compose-c1a90b40` + `PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1`: **1 failed, 6 passed, 5 errors** in 330.44s. Errors are `source_revision_missing` (image labels lack a non-`unknown` revision / clean assertion). Failure: `test_generational_browser_population_and_credentials`. Attested image rebuild blocked by Docker BuildKit/buildx absence and fragile container network during Godot template download. |
+| Godot 4.7.2 regression | executed_passed | 2026-11-08: `GODOT_BIN=/home/deliium/.cache/palimpsest-godot/Godot_v4.7.2-stable_linux.x86_64` editor quit + `res://tests/run_protocol.gd` → **`godot_protocol_tests failed=0`** (includes `PASS res://tests/test_migration_overlay.gd`). |
+| Benchmark/scale lane | executed_passed | Same green scale process as integration including scale: **23 passed** in 3:05:06. |
 | Research UI tests | executed_passed | `npx pnpm@10.34.9 test --run` → **282 passed** (57 files). |
 | Research UI type/static checks | executed_passed | `npx pnpm@10.34.9 check` → 0 errors / 0 warnings. |
 | Research UI build | executed_passed | `npx pnpm@10.34.9 build` → build ok. |
 
-Certification outcome: **not certified**. Blocking required lanes:
-integration (not scale), integration including scale, Compose/browser
-acceptance, Godot 4.7.2 regression, and benchmark/scale — each `unexecuted`
-with the prerequisite above. Local Python, static, Compose-config, docs, and
-Research UI lanes passed. Roadmap remains owned by `$aif-roadmap` (untouched).
+Certification outcome: **not certified**. Only remaining blocking required lane:
+Compose/browser acceptance (`executed_failed` — needs a source-attested
+`PALIMPSEST_API_IMAGE` and a green generational browser population test).
+Godot, non-scale integration, and integration-scale/benchmark are green.
+`$aif-roadmap` registered V4-10 through V4-14 under M8 on 2026-11-08.
 
 ## Commit Plan
 
