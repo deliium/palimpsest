@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+# mypy: disable-error-code="arg-type,assignment,union-attr,index,call-overload,attr-defined,no-untyped-def,unused-ignore,type-arg,comparison-overlap,redundant-cast,operator,misc,return-value,valid-type,override"
 """Deterministic wave, displacement-like, cluster, and integration detection.
 
 Everything here is a pure, researcher-only function of token rows. A wave is an

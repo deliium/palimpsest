@@ -52,6 +52,8 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 ## Documentation
 
 | Borders and claims | `docs/borders-and-claims.md` | Owner-scoped domain beliefs, bdr_v1, four layers, snapshot/store/routes |
+| Migration and displacement | `docs/migration-displacement.md` | Owner-scoped migration beliefs, mdp_v1, four layers, snapshot/store/routes |
+| Regions and migration | `docs/regions-migration.md` | V3 regional travel substrate and V4-14 belief deepening |
 
 
 | Page | Contents |

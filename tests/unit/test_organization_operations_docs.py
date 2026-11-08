@@ -55,11 +55,11 @@ def test_counts_match_code() -> None:
     architecture_docs = (ROOT / "docs" / "architecture.md").read_text()
     description = (ROOT / ".ai-factory" / "DESCRIPTION.md").read_text()
     assert "160" in description
-    assert "metric families 176" in description
+    assert "metric families 180" in description
     assert "160" in architecture
-    assert "176 metric families" in architecture
+    assert "180 metric families" in architecture
     assert "160" in architecture_docs
-    assert "176 metric families" in architecture_docs
+    assert "180 metric families" in architecture_docs
     assert "organization-snapshot-v2" in organizations
     assert "organization-snapshot-v1" in organizations
 

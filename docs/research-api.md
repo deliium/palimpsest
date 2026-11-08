@@ -322,5 +322,11 @@ published runs or wave tokens return 404 `migration_displacement_not_found`;
 cursor mismatch is 400 `migration_displacement_cursor_invalid` and expiry is 410
 `migration_displacement_cursor_expired`. A corrupt published store fails with
 500 `migration_displacement_store_corrupt` rather than a false not-found
-response. Responses contain hashed tokens and closed labels only; no raw
-identities, route bodies, cause text, or refugee/asylum/forced status fields.
+response. The six cursor purposes are `summary`, `waves`, `wave`, `routes`,
+`causes`, and `outcomes`. Page `limit` defaults to 100 and is capped at 500.
+Optional filters include wave `classification` / `origin_token` /
+`destination_token` / `cluster_token`, route `origin_token` /
+`destination_token`, cause `cause_kind`, and outcome `outcome` /
+`destination_token`. Responses contain hashed tokens and closed labels only; no
+raw identities, route bodies, cause text, or refugee/asylum/forced status
+fields.

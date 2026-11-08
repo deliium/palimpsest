@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-13
+### Current baseline through V4-14
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 176 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, four V4-11 treaty families, and four V4-12 organized-conflict families, and four V4-13 border families) |
+| Metric families | 180 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, four V4-11 treaty families, four V4-12 organized-conflict families, four V4-13 border families, and four V4-14 migration-displacement families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -842,7 +842,7 @@ cognition. `simulation.delegation_representation_*` owns canonical
 Three families append (`representation_mandate_structure@1`,
 `representation_recognition_support@1`, `representation_scope_alignment@1`),
 raising the catalog 157 -> 160. Pins: runner v4/v55/v56, result v2/v3, 43
-commands, 73 observer semantic types, 176 metric families, 14 V4 contexts, 12 V4
+commands, 73 observer semantic types, 180 metric families, 14 V4 contexts, 12 V4
 flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
 
@@ -873,7 +873,7 @@ researcher-only envoy alignment. Four families append (catalog 160 -> 164).
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG`; V4-11
 adds two treaty routes for eight total; the Research UI adds a read-only panel.
 Pins:
-runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 176
+runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 180
 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; five V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`,
@@ -963,3 +963,35 @@ UI adds a four-section read-only border view; the presentation client adds four
 border overlay kinds on the existing three evidence classes. `WorldEngine`,
 perception, admission, stop selectors, memory, prompts, observer semantics, and
 Godot never read a border ledger. See `docs/borders-and-claims.md`.
+
+### V4-14 migration-displacement seam
+
+V4-14 deepens the owned `organizations` context and the V3
+`multi_polity_migration` / `regions_migration` seam; it adds no flag, context,
+`runner-config-v57`, runner root field, or per-agent runner key. On
+`runner-config-v56` with `organizations`, `multi_polity_migration`, and
+deterministic regional migration cognition, one owner keeps a private
+`migration-displacement.v1` ledger: intents, route beliefs, cause evidence,
+social clusters, integration beliefs, and wave observations. Routes are ordered
+sequences of two to four logical locations. Physical movement remains ordinary
+`Move`/`Transport`/`Flee` admission; beliefs never bind commands, never mint
+refugee or asylum status, and never control permission, enforcement,
+legitimacy, score, or sovereignty. Bounded `mdp_v1` relations (256 characters,
+at most four per group, thirteen semantic fields / fourteen parts) travel inside
+existing `Talk`/`Ask`/`Tell` and drop malformed, oversize, or speaker-mismatched
+groups. Detached `analysis.migration_displacement_*` harvests committed movement
+rows and exported owner rows, keeps objective movement, subjective cause,
+analytical wave, and integration outcome in four separated layers with a hard
+leakage guard, derives forward-only `mig-` candidates, joins `org-`/`msoc-`
+read-only, and classifies researcher-only alignment plus closed
+`displacement_like` labels. Four families append (catalog 176 -> 180).
+`simulation.migration_displacement_*` owns canonical
+`migration-displacement-snapshot-v1`; `experiments` and `persistence` publish
+`migration-displacement-store-v1` atomically with quotas; six GET-only
+`/v1/simulations/{run_id}/migration` routes require `SUBJECTIVE_DEBUG` and fail
+closed with `migration_displacement_disabled`; the Research UI adds a
+four-section read-only migration view; the presentation client adds four
+migration overlay kinds on the existing three evidence classes. `WorldEngine`,
+perception, admission, stop selectors, memory, prompts, observer semantics, and
+Godot never read a migration-displacement ledger. See
+`docs/migration-displacement.md`.

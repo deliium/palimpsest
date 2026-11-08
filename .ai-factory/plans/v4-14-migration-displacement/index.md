@@ -389,43 +389,43 @@ are unchanged.
 ### Phase 7: Invariants, End-to-End Migration, and Regression
 - [x] Task 23: Add the migration-displacement boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-23-add-the-migration-displacement-boundary-and-determinism-suite)) (depends on 2-22)
 - [x] Task 24: Add the in-process migration end-to-end scenario ([details](phase-07-invariants-and-regression.md#task-24-add-the-in-process-migration-end-to-end-scenario)) (depends on 8-22)
-- [ ] Task 25: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-25-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 23, 24)
+- [x] Task 25: Execute the full V1-V4 regression and qualification lanes ([details](phase-07-invariants-and-regression.md#task-25-execute-the-full-v1-v4-regression-and-qualification-lanes)) (depends on 23, 24)
 
 ### Phase 8: Documentation and Final Verification
-- [ ] Task 26: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-26-execute-the-documentation-checkpoint)) (depends on 2-25)
-- [ ] Task 27: Perform final V4-14 verification ([details](phase-08-docs-and-verification.md#task-27-perform-final-v4-14-verification)) (depends on 24-26)
+- [x] Task 26: Execute the documentation checkpoint ([details](phase-08-docs-and-verification.md#task-26-execute-the-documentation-checkpoint)) (depends on 2-25)
+- [x] Task 27: Perform final V4-14 verification ([details](phase-08-docs-and-verification.md#task-27-perform-final-v4-14-verification)) (depends on 24-26)
 
 ## Verification Receipt (Tasks 25 and 27)
 
-To be completed by Task 25 and audited by Task 27. Every required lane must be
-recorded as exactly one of `executed_passed`, `executed_failed`, or
-`unexecuted`. An `unexecuted` lane carries its missing prerequisite and blocks
-certification; it is never a skip-pass. The plan is created before
-implementation, so every lane starts `unexecuted`.
+Every required lane is recorded as exactly one of `executed_passed`,
+`executed_failed`, or `unexecuted`. An `unexecuted` lane carries its missing
+prerequisite and blocks certification; it is never a skip-pass.
 
 | Lane | State | Evidence |
 | --- | --- | --- |
-| Python unit + architecture with coverage | unexecuted | Requires implementation; command recorded in Task 25. |
-| Focused V4-14 suite | unexecuted | Requires `tests/unit/test_migration_displacement_*.py` and `tests/architecture/test_migration_displacement_boundaries.py`. |
-| Focused in-process migration E2E | unexecuted | Requires the Task 24 scenario; no PostgreSQL. |
-| V1/V2/V3/V4 regression selection | unexecuted | Requires the full unit+architecture run. |
-| Documentation parity | unexecuted | Requires Task 26 docs and `test_migration_displacement_docs.py`. |
-| Ruff | unexecuted | `uv run --frozen --python 3.12.14 ruff check src tests`. |
-| Mypy | unexecuted | `uv run --frozen --python 3.12.14 mypy src tests`. |
-| Import-linter | unexecuted | `uv run --frozen --python 3.12.14 lint-imports`. |
-| Integration (`-m "integration and not scale"`) | unexecuted | Requires a disposable PostgreSQL/pgvector instance named with `palimpsest_test`; `PALIMPSEST_TEST_DATABASE_URL`. |
-| Integration including scale | unexecuted | Requires the same disposable database plus the long-run harness. |
-| Docker Compose config | unexecuted | `docker compose config --quiet`. |
-| Compose/browser acceptance | unexecuted | Requires a real browser driver and source-attested image. |
-| Godot 4.7.2 regression | unexecuted | Requires the pinned Godot 4.7.2 binary (`GODOT_BIN` or `godot`/`godot4`). |
-| Benchmark/scale lane | unexecuted | Requires the multi-hour benchmark harness and a disposable database. |
-| Research UI tests | unexecuted | `npx pnpm@10.34.9 test --run`. |
-| Research UI type/static checks | unexecuted | `npx pnpm@10.34.9 check`. |
-| Research UI build | unexecuted | `npx pnpm@10.34.9 build`. |
+| Python unit + architecture with coverage | executed_passed | Instrumented run collected TOTAL coverage 79%; after Task 26 docs remediation, `pytest tests/unit tests/architecture -q` → **9689 passed**. |
+| Focused V4-14 suite | executed_passed | `pytest tests/unit/test_migration_displacement_*.py tests/architecture/test_migration_displacement_boundaries.py -q` → **274 passed**. |
+| Focused in-process migration E2E | executed_passed | `pytest tests/unit/test_migration_displacement_e2e.py -q` → **2 passed**; no PostgreSQL. |
+| V1/V2/V3/V4 regression selection | executed_passed | Same unit+architecture green run (**9689 passed**). |
+| Documentation parity | executed_passed | `pytest tests/unit/test_migration_displacement_docs.py tests/unit/test_*_docs.py -q` → **76 passed**. |
+| Ruff | executed_passed | `ruff check src tests` → all checks passed. |
+| Mypy | executed_passed | `mypy src tests` → Success: no issues found in 2231 source files. |
+| Import-linter | executed_passed | `lint-imports` → Contracts: 25 kept, 0 broken. |
+| Integration (`-m "integration and not scale"`) | unexecuted | Prerequisite missing: `PALIMPSEST_TEST_DATABASE_URL` / disposable PostgreSQL+pgvector named with `palimpsest_test`. |
+| Integration including scale | unexecuted | Prerequisite missing: disposable database plus long-run harness. |
+| Docker Compose config | executed_passed | `docker compose config --quiet` → exit 0. |
+| Compose/browser acceptance | unexecuted | Prerequisite missing: real browser driver and source-attested image. |
+| Godot 4.7.2 regression | unexecuted | Prerequisite missing: pinned Godot 4.7.2 binary (`GODOT_BIN` / `godot` / `godot4`). |
+| Benchmark/scale lane | unexecuted | Prerequisite missing: multi-hour benchmark harness and disposable database. |
+| Research UI tests | executed_passed | `npx pnpm@10.34.9 test --run` → **282 passed** (57 files). |
+| Research UI type/static checks | executed_passed | `npx pnpm@10.34.9 check` → 0 errors / 0 warnings. |
+| Research UI build | executed_passed | `npx pnpm@10.34.9 build` → build ok. |
 
-Certification outcome: **not yet executed (planning only)**. Tasks 25 and 27
-must replace each lane with a truthful result and record any missing
-prerequisite; an `unexecuted` required lane blocks certification.
+Certification outcome: **not certified**. Blocking required lanes:
+integration (not scale), integration including scale, Compose/browser
+acceptance, Godot 4.7.2 regression, and benchmark/scale — each `unexecuted`
+with the prerequisite above. Local Python, static, Compose-config, docs, and
+Research UI lanes passed. Roadmap remains owned by `$aif-roadmap` (untouched).
 
 ## Commit Plan
 

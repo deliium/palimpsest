@@ -208,5 +208,4 @@ account is true, who is guilty or liable, or which party should win.
 - [Configuration](configuration.md)
 
 Current catalog note: the evidence families remain in place, and the current
-closed catalog is **176** families after the V4-09 representation and V4-10
-diplomacy appends.
+closed catalog is **180** families after the V4-09 through V4-14 appends.

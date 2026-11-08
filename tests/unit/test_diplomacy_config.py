@@ -215,17 +215,14 @@ def test_diplomacy_seam_is_derived_from_the_owned_flag() -> None:
     ),
 )
 def test_only_the_diplomacy_flag_activates_the_seam(flag_name: str) -> None:
-    kwargs = {
-        "organizations_enabled": flag_name == "organizations",
-        "formal_rules_enabled": flag_name == "formal_rules",
-        "legal_disputes_enabled": flag_name == "legal_disputes",
-        "diplomacy_enabled": flag_name == "diplomacy",
-    }
     config = _cognition_config_for(
         AgentCognitionSpec(agent_id=AgentId("agent-1")),
         mortality_mode=MortalityMode.DISABLED,
         capability_flags=V2CapabilityFlags(),
-        **kwargs,
+        organizations_enabled=flag_name == "organizations",
+        formal_rules_enabled=flag_name == "formal_rules",
+        legal_disputes_enabled=flag_name == "legal_disputes",
+        diplomacy_enabled=flag_name == "diplomacy",
     )
     expected = (
         CognitionDiplomacyMode.DETERMINISTIC

@@ -246,3 +246,12 @@ When the owned `organizations` context and deterministic territorial mode are
 both active, an owner keeps a private border ledger. Organization anchors are
 resolved read-only from the owner's own concept ledger and are never rewritten.
 See [borders and claims](borders-and-claims.md).
+
+## Migration-displacement sidecar (V4-14)
+
+When `organizations`, `multi_polity_migration`, and deterministic
+`regions_migration` cognition are all active on `runner-config-v56`, an owner
+keeps a private migration-displacement ledger. Organization and related anchors
+resolve read-only from the owner's own ledgers and are never rewritten. Physical
+movement stays ordinary world admission. See
+[migration and displacement](migration-displacement.md).

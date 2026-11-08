@@ -15,8 +15,12 @@ from persistence.migration_displacement_filesystem import (
     create_migration_displacement_publisher,
     create_migration_displacement_reader,
 )
-from simulation.migration_displacement_codec import finalize_migration_displacement_snapshot
-from simulation.migration_displacement_models import empty_migration_displacement_snapshot
+from simulation.migration_displacement_codec import (
+    finalize_migration_displacement_snapshot,
+)
+from simulation.migration_displacement_models import (
+    empty_migration_displacement_snapshot,
+)
 
 
 def _snapshot(run_id: str = "run-1", *, tag: str = "a"):

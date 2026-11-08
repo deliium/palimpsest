@@ -6819,16 +6819,18 @@ class SimulationRunnerResult:
             validate_migration_displacement_ledger_caps,
         )
 
-        migration_ledgers = tuple(self.migration_displacement_ledgers)
-        for ledger in migration_ledgers:
-            if type(ledger) is not MigrationDisplacementLedger:
+        typed_migration: list[MigrationDisplacementLedger] = []
+        for migration_ledger in self.migration_displacement_ledgers:
+            if type(migration_ledger) is not MigrationDisplacementLedger:
                 raise TypeError("migration_displacement_ledgers: invalid_item")
             require_owner_migration_displacement(
-                ledger,
-                ledger.owner_id,
+                migration_ledger,
+                migration_ledger.owner_id,
                 field_name="migration_displacement_ledgers",
             )
-            validate_migration_displacement_ledger_caps(ledger)
+            validate_migration_displacement_ledger_caps(migration_ledger)
+            typed_migration.append(migration_ledger)
+        migration_ledgers = tuple(typed_migration)
         migration_owners = [ledger.owner_id.value for ledger in migration_ledgers]
         if len(set(migration_owners)) != len(migration_owners) or (
             migration_owners != sorted(migration_owners)

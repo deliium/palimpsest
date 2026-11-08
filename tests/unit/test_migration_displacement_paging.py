@@ -126,7 +126,9 @@ def test_rows_are_sorted_by_stable_keys() -> None:
         ),
     )
     # Snapshot construction requires waves sorted already.
-    ordered_waves = tuple(sorted(waves, key=lambda row: (row.start_tick, row.wave_token)))
+    ordered_waves = tuple(
+        sorted(waves, key=lambda row: (row.start_tick, row.wave_token))
+    )
     snapshot = _snapshot(
         waves=ordered_waves,
         summary=_summary(wave_count=2, unknown_count=2),

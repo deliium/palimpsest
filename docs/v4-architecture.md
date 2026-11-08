@@ -264,8 +264,9 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 176 families (V4-13 appends four border families) | `analysis.specifications` |
+| Metric catalog | 180 families (V4-14 appends four migration families) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
+| Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | HTTP API | `/v1` | `api` |
 
 ## Compatibility and deprecation policy
@@ -388,3 +389,16 @@ type, `/v2` route, or migration. Detached analysis adds four layers and four
 metric families (172 -> 176), `borders-snapshot-v1`, `borders-store-v1`, six GET
 routes, a Research UI panel, and four presentation overlays. See
 [borders and claims](borders-and-claims.md).
+
+## V4-14 — Migration and displacement
+
+V4-14 deepens the owned `organizations` context and the V3 regional-migration
+seam with owner-scoped migration intents, routes, causes, clusters, integration
+beliefs, and wave observations. It adds no flag, context, `runner-config-v57`,
+runner root field, per-agent runner key, command, event, write pair, observer
+semantic type, `/v2` route, or SQL migration. Physical movement stays ordinary
+`Move`/`Transport`/`Flee` admission. Detached analysis adds four layers and four
+metric families (176 -> 180), `migration-displacement-snapshot-v1`,
+`migration-displacement-store-v1`, six GET routes, a Research UI panel, and four
+presentation overlays. See
+[migration and displacement](migration-displacement.md).

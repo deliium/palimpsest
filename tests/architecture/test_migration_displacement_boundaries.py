@@ -25,7 +25,9 @@ from simulation.compatibility import (
     ALEMBIC_HEAD_REVISION,
     V4_OWNED_CAPABILITY_FLAGS,
 )
-from simulation.migration_displacement_ports import MIGRATION_DISPLACEMENT_CURSOR_PURPOSES
+from simulation.migration_displacement_ports import (
+    MIGRATION_DISPLACEMENT_CURSOR_PURPOSES,
+)
 from simulation.persistence import ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 from simulation.v4_architecture import V4_CAPABILITY_FLAGS, V4_CONTEXTS
 from world._rules import COMMAND_RULE_MATRIX

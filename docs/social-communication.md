@@ -197,3 +197,9 @@ unparsed communication and mutates no ledger. See
 Border beliefs extend the territorial-claim model from one location to sorted
 logical location sets. `bdr_v1` frames travel inside existing `Talk`/`Ask`/`Tell`
 delivery only; see [borders and claims](borders-and-claims.md).
+
+Migration-displacement beliefs report intents, routes, causes, clusters, and
+outcomes. `mdp_v1` frames travel inside existing `Talk`/`Ask`/`Tell` delivery
+only (thirteen semantic fields, fourteen parts, 256 characters, at most four
+relations); delivery proves the speaker and declared provenance is untrusted.
+See [migration and displacement](migration-displacement.md).

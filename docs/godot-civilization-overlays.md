@@ -209,3 +209,18 @@ Four default-off overlay kinds preserve the three evidence classes:
 
 Agreement remains a distinct subjective overlay, not a fourth evidence class.
 Tokens never appear in a URL; the debug capability travels in the header.
+
+## Migration overlays (V4-14)
+
+Four default-off overlay kinds preserve the same three evidence classes:
+
+| Overlay kind | Evidence class | Role |
+| --- | --- | --- |
+| `migration_route` | `OBJECTIVE` | published route tokens |
+| `migration_cause` | `SUBJECTIVE_TO_SELECTED_AGENT` | owner cause evidence |
+| `migration_wave` | `ANALYTICAL_INFERRED` | wave / displacement_like classification |
+| `migration_integration` | `ANALYTICAL_INFERRED` | integration outcome counts |
+
+Cause and wave stay visually distinct. Integration is analytical, not a fourth
+evidence class. The observer protocol, capabilities, `/version`, and three-class
+evidence model are unchanged.

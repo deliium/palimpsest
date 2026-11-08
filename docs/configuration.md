@@ -484,3 +484,16 @@ cursor key must be at least 32 UTF-8 bytes. Publication is opt-in and
 post-completion; snapshots are written atomically under `borders-store-v1` with
 per-run publication and byte quotas. A missing root yields a `disabled` receipt,
 and storage failure changes only the receipt, never the scientific result.
+
+## Migration-displacement publication (V4-14)
+
+`PALIMPSEST_MIGRATION_DISPLACEMENT_ROOT` and
+`PALIMPSEST_MIGRATION_DISPLACEMENT_CURSOR_KEY` are optional. The cursor key must
+be at least 32 UTF-8 bytes. Publication is opt-in and post-completion; snapshots
+are written atomically under `migration-displacement-store-v1` with per-run
+publication and byte quotas. A missing root yields a `disabled` receipt, and
+storage failure changes only the receipt, never the scientific result.
+Migration-displacement cognition activates only when `organizations`,
+`multi_polity_migration`, and deterministic `regions_migration` cognition are
+all enabled on `runner-config-v56`; see
+[migration and displacement](migration-displacement.md).

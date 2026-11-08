@@ -26,7 +26,6 @@ from agents.cognition.migration_displacement import (
     migration_cause_id,
     migration_cluster_id,
     migration_displacement_action_biases,
-    migration_displacement_ledger_digest,
     migration_intent_id,
     migration_route_id,
     migration_wave_observation_id,
@@ -38,22 +37,23 @@ from agents.cognition.migration_displacement_communication import (
     migration_frame_root_key,
     parse_migration_displacement_claim,
 )
-from agents.models import AgentId
 from analysis.migration_displacement_detection import detect_migration_waves
 from analysis.migration_displacement_identity import migration_candidate_row
 from simulation.migration_displacement_codec import (
     encode_migration_displacement_snapshot,
     finalize_migration_displacement_snapshot,
 )
-from simulation.migration_displacement_models import empty_migration_displacement_snapshot
+from simulation.migration_displacement_models import (
+    empty_migration_displacement_snapshot,
+)
 from tests.unit.migration_displacement_analysis_helpers import POLICY, movement
 from tests.unit.migration_displacement_helpers import (
-    A,
-    B,
-    C,
     OWNER,
     PEER,
     PEER3,
+    A,
+    B,
+    C,
     cause,
     cluster,
     integration,
@@ -63,7 +63,6 @@ from tests.unit.migration_displacement_helpers import (
     route,
     wave,
 )
-from world.identifiers import EntityId
 
 pytestmark = __import__("pytest").mark.unit
 
@@ -366,7 +365,10 @@ def test_bias_helper_is_mapping_only() -> None:
         policy=default_migration_displacement_policy(),
     )
     assert isinstance(biases, dict)
-    assert all(isinstance(key, str) and isinstance(value, float) for key, value in biases.items())
+    assert all(
+        isinstance(key, str) and isinstance(value, float)
+        for key, value in biases.items()
+    )
 
 
 def test_canonical_snapshot_bytes_are_stable() -> None:

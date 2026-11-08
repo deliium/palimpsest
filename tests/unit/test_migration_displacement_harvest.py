@@ -15,8 +15,12 @@ from experiments.migration_displacement_publication import (
     migration_displacement_publication_document,
     publish_migration_displacement_snapshot,
 )
-from simulation.migration_displacement_codec import finalize_migration_displacement_snapshot
-from simulation.migration_displacement_models import empty_migration_displacement_snapshot
+from simulation.migration_displacement_codec import (
+    finalize_migration_displacement_snapshot,
+)
+from simulation.migration_displacement_models import (
+    empty_migration_displacement_snapshot,
+)
 from tests.unit.migration_displacement_analysis_helpers import move
 from tests.unit.migration_displacement_helpers import (
     OWNER,
@@ -234,7 +238,11 @@ def test_publication_failure_does_not_change_scientific_status() -> None:
             return None
 
     runner = _runner(ledgers=(_rich_ledger(),))
-    before = (runner.stop_reason.value, runner.migration_displacement_ledgers, runner.status)
+    before = (
+        runner.stop_reason.value,
+        runner.migration_displacement_ledgers,
+        runner.status,
+    )
     receipt = publish_migration_displacement_snapshot(
         runner,
         _Boom(),

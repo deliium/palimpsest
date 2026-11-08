@@ -302,3 +302,21 @@ physical control (objective), claims (subjective), agreements (subjective), and
 control patterns (analytical). It fetches the six border GET routes, maps
 `borders_disabled`/503 to an explicit unavailable state, and derives no
 authority, legitimacy, enforcement, score, winner, or sovereignty wording.
+
+## Migration and displacement panel (V4-14)
+
+The read-only **Migration and displacement** run tab renders four epistemic
+sections with badges:
+
+1. Movement and routes (`objective`)
+2. Cause evidence (`subjective`)
+3. Waves and clusters (`analytical`)
+4. Integration outcomes (`integration`)
+
+It fetches the six migration GET routes, maps
+`migration_displacement_disabled`/503 to an explicit unavailable state, and
+labels `displacement_like` as analytical with the caveat that it is a
+researcher-only classification from independent causal evidence, not a legal or
+social status. The panel never renders `Refugee`, `Asylum`, `Forced`, or
+`Displaced person` as a status label, and it derives no wellbeing,
+assimilation, score, winner, or sovereignty wording.

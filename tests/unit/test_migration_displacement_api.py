@@ -40,7 +40,6 @@ from simulation.migration_displacement_models import (
     MIGRATION_DISPLACEMENT_SNAPSHOT_VERSION,
     MigrationCauseSnapshotRow,
     MigrationDisplacementSnapshot,
-    MigrationDisplacementSummaryRow,
     MigrationOutcomeSnapshotRow,
     MigrationRouteSnapshotRow,
     MigrationWaveSnapshotRow,
@@ -74,7 +73,9 @@ FORBIDDEN_FIELD_NAMES = {
 }
 
 
-def _wave(token: str, *, start: int = 0, classification: str = "unknown") -> MigrationWaveSnapshotRow:
+def _wave(
+    token: str, *, start: int = 0, classification: str = "unknown"
+) -> MigrationWaveSnapshotRow:
     return MigrationWaveSnapshotRow(
         wave_token=f"mig-{token}",
         origin_token="mdl-origin",
@@ -83,9 +84,13 @@ def _wave(token: str, *, start: int = 0, classification: str = "unknown") -> Mig
         route_tokens=("mdl-origin", "mdl-dest"),
         start_tick=start,
         end_tick=start + 2,
-        cause_support_counts=(("conflict", 1),) if classification == "displacement_like" else (),
+        cause_support_counts=(
+            (("conflict", 1),) if classification == "displacement_like" else ()
+        ),
         displacement_classification=classification,
-        displacement_bases=("conflict",) if classification == "displacement_like" else (),
+        displacement_bases=(
+            ("conflict",) if classification == "displacement_like" else ()
+        ),
         independent_cause_count=1 if classification == "displacement_like" else 0,
         cluster_tokens=("mdc-1",),
         coverage="complete",
@@ -108,7 +113,9 @@ def _route(token: str, *, tick: int = 0) -> MigrationRouteSnapshotRow:
     )
 
 
-def _cause(token: str, *, tick: int = 0, kind: str = "conflict") -> MigrationCauseSnapshotRow:
+def _cause(
+    token: str, *, tick: int = 0, kind: str = "conflict"
+) -> MigrationCauseSnapshotRow:
     return MigrationCauseSnapshotRow(
         owner_token=f"mown-{token}",
         cause_token=f"mdcse-{token}",
@@ -121,7 +128,9 @@ def _cause(token: str, *, tick: int = 0, kind: str = "conflict") -> MigrationCau
     )
 
 
-def _outcome(token: str, *, classification: str = "settled") -> MigrationOutcomeSnapshotRow:
+def _outcome(
+    token: str, *, classification: str = "settled"
+) -> MigrationOutcomeSnapshotRow:
     return MigrationOutcomeSnapshotRow(
         outcome_token=f"mdo-{token}",
         participant_token=f"mdp-{token}",
@@ -195,7 +204,11 @@ def _client(root: Path | None, *, clock: list[float]) -> httpx.AsyncClient:
     app.include_router(router)
     settings = Settings(api_debug_enabled=True, api_debug_credential=SecretStr(TOKEN))
     app.dependency_overrides[get_settings] = lambda: settings
-    reader = None if root is None else create_migration_displacement_reader(root / "store")
+    reader = (
+        None
+        if root is None
+        else create_migration_displacement_reader(root / "store")
+    )
     app.dependency_overrides[get_migration_displacement_reader] = lambda: reader
     app.state.migration_displacement_reader = reader
     app.state.migration_displacement_cursor_codec = (

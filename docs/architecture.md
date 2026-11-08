@@ -236,9 +236,12 @@ authority. Hidden-world changes alone cannot supply destination knowledge.
 Read-only regional metrics reconstruct crossings, living populations, and
 dwell-qualified migrations from detached events and evidence. They never add a
 world `is_migrant` field or feed truth into agents. AY stays off the V1 gate.
-See [Physical simulation](physical-simulation.md#discrete-regional-journeys),
+See [Regions and migration](regions-migration.md),
+[Physical simulation](physical-simulation.md#discrete-regional-journeys),
 [Configuration](configuration.md#optional-regions-and-migration-runner-config-v44),
-and [Experiments](experiments.md#experiment-ay-regional-migration).
+and [Experiments](experiments.md#experiment-ay-regional-migration). Owner-scoped
+migration-displacement beliefs deepen this seam under V4-14; see
+[Migration and displacement](migration-displacement.md).
 
 ### Downstream V3 plan contract
 
@@ -562,7 +565,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 176 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 180 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -593,7 +596,7 @@ Detached analysis may classify objective alignment as `supported`, `unresolved`,
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 `dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
 independent; publication is opt-in and post-completion. Six GET-only `/v1`
-dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **176** metric
+dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **180** metric
 families, with 14 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
@@ -656,7 +659,7 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 176 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 180 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
 V4-10/V4-11.
 
@@ -708,7 +711,7 @@ GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 176 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 180 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
 
@@ -727,7 +730,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 176 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
+types, 180 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
 
@@ -736,5 +739,16 @@ replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 V4-13 deepens the owned `organizations` context with owner-scoped domain beliefs
 over logical location sets, observed boundary edges, access expectations, border
 agreements, and disputes. It adds no flag, context, runner schema, command,
-event, write pair, `/v2` route, or migration. See
-[borders and claims](borders-and-claims.md).
+event, write pair, `/v2` route, or migration. Four families append (catalog
+172 -> 176). See [borders and claims](borders-and-claims.md).
+
+## V4-14 migration and displacement
+
+V4-14 deepens the owned `organizations` context and the V3 regional-migration
+seam with owner-scoped migration intents, routes, causes, clusters, integration
+beliefs, and wave observations. Beliefs never control world admission,
+permission, refugee status, enforcement, legitimacy, score, or sovereignty.
+Physical movement remains ordinary `Move`/`Transport`/`Flee`. Four families
+append (catalog 176 -> 180). See
+[migration and displacement](migration-displacement.md) and
+[regions and migration](regions-migration.md).

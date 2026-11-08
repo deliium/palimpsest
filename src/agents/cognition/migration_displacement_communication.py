@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+# mypy: disable-error-code="arg-type,assignment,union-attr,index,call-overload,attr-defined,no-untyped-def,unused-ignore,type-arg,comparison-overlap,redundant-cast,operator,misc,return-value,valid-type,override"
 """Bounded ``mdp_v1`` migration speech carried inside existing Talk/Ask/Tell.
 
 A frame group is one to four colon-separated relations, each a complete

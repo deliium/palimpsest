@@ -15,7 +15,11 @@ from persistence.migration_displacement_filesystem import (
 )
 
 
-def test_root_and_cursor_key_default_none() -> None:
+def test_root_and_cursor_key_default_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PALIMPSEST_MIGRATION_DISPLACEMENT_ROOT", raising=False)
+    monkeypatch.delenv("PALIMPSEST_MIGRATION_DISPLACEMENT_CURSOR_KEY", raising=False)
     settings = Settings()
     assert settings.migration_displacement_root is None
     assert settings.migration_displacement_cursor_key is None
@@ -61,7 +65,11 @@ def test_safe_summary_never_exposes_the_key(tmp_path: Path) -> None:
     assert status["migration_displacement_cursor_enabled"] is True
 
 
-def test_unset_root_disables_the_reader(tmp_path: Path) -> None:
+def test_unset_root_disables_the_reader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("PALIMPSEST_MIGRATION_DISPLACEMENT_ROOT", raising=False)
+    monkeypatch.delenv("PALIMPSEST_MIGRATION_DISPLACEMENT_CURSOR_KEY", raising=False)
     settings = Settings()
     assert settings.migration_displacement_root is None
     reader = create_migration_displacement_reader(tmp_path)

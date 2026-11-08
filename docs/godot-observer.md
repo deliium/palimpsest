@@ -415,3 +415,12 @@ The `border_*` toggle group displays physical control, border claims, border
 agreements, and analytical control patterns. Toggling off clears all border
 markers. Payloads with unknown layers or forbidden authority/raw-id fields are
 rejected without affecting playback or physics.
+
+## Migration overlay (V4-14)
+
+The `migration_*` toggle group displays objective routes, subjective cause
+evidence, analytical waves, and analytical integration outcomes. Toggling off
+clears all migration markers. The observer protocol, capabilities, `/version`,
+and three-class evidence model remain unchanged. Payloads with unknown layers or
+forbidden authority/raw-id fields are rejected without affecting playback or
+physics.

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import os
 from types import SimpleNamespace
 
 import httpx
@@ -397,7 +396,6 @@ def _publish_and_read(tmp_path, ledgers, events):
     assert snapshot.summary.wave_count >= 1
 
     root = tmp_path / "store"
-    os.environ["PALIMPSEST_MIGRATION_DISPLACEMENT_ROOT"] = str(root)
     create_migration_displacement_publisher(root).publish(snapshot)
 
     app = FastAPI()

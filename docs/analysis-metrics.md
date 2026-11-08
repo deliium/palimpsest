@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **176** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **180** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -625,3 +625,52 @@ hostile, and assistance events; it is not ownership or a control score. There is
 no winner, sovereignty, legitimacy, composite, or border score. The first 172
 families keep their IDs, order, versions, and value keys. See
 [borders and claims](borders-and-claims.md).
+
+## Migration-displacement families (V4-14)
+
+Four families append after the border set, raising the catalog from 176 to
+**180**: `migration_wave_structure@1`, `migration_cause_evidence@1`,
+`migration_cluster_cohesion@1`, and `migration_integration_outcome@1`. The first
+176 families keep their IDs, order, versions, and value keys.
+
+### `migration_wave_structure@1`
+
+Population `detached_migration_wave_rows`; denominator `detected_waves`. Values:
+`wave_count`, `participant_count`, `distinct_origin_count`,
+`distinct_destination_count`, `wave_participant_mean`, `wave_participant_max`,
+`route_length_counts`, `wave_duration_ticks`, `return_count`, `onward_count`,
+`same_origin_share`, `same_destination_share`, `cluster_overlap_count`,
+`coverage_complete`, `coverage_partial`, `coverage_missing`.
+
+### `migration_cause_evidence@1`
+
+Population `detached_migration_cause_rows`; denominator `owner_cause_rows`.
+Values: `cause_count:<kind>` for each closed cause kind, `source_count:<source>`
+for each closed source kind, `owner_coverage_ratio`, `wave_with_cause_count`,
+`wave_without_cause_count`, `contradicted_cause_count`,
+`unresolved_anchor_count`, `same_root_suppressed_count`,
+`displacement_like_count`, `mixed_count`, `not_displacement_like_count`,
+`unknown_count`, `independent_cause_mean`. Labels are researcher-only; there is
+no refugee, asylum, forced, wellbeing, or composite key.
+
+### `migration_cluster_cohesion@1`
+
+Population `detached_migration_cluster_rows`; denominator `detected_clusters`.
+Values: `cluster_count`, `cluster_size:<bucket>` for `2`, `3`, `4`, `5_to_8`,
+`9_plus`, `co_movement_pair_count`, `kinship_supported_pair_count`,
+`organization_supported_pair_count`, `communication_supported_pair_count`,
+`relationship_supported_pair_count`, `independent_support_ratio`,
+`cluster_wave_overlap_count`, `unknown_cluster_count`, `coverage_complete`,
+`coverage_partial`.
+
+### `migration_integration_outcome@1`
+
+Population `detached_migration_outcome_rows`; denominator
+`wave_participant_destinations`. Values: `outcome:<label>` for
+`settled` / `transient` / `returned` / `onward` / `unknown`,
+`residence_ticks:<bucket>` for `0` / `1_to_3` / `4_to_15` / `16_to_31` /
+`32_plus`, `access_evidence_count`, `participation_evidence_count`,
+`relationship_evidence_count`, `conflict_evidence_count`, `censored_count`,
+`unknown_count`, `complete_coverage_count`, `partial_coverage_count`,
+`missing_coverage_count`. Counts and coverage only; no assimilation or
+integration score. See [migration and displacement](migration-displacement.md).

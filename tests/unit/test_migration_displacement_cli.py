@@ -17,9 +17,7 @@ from research_runner.migration_displacement_composition import (
 )
 from tests.unit.migration_displacement_analysis_helpers import move
 from tests.unit.migration_displacement_helpers import (
-    OWNER,
     OWNER_ENTITY,
-    PEER,
     PEER_ENTITY,
     cause,
     cluster,
@@ -93,7 +91,11 @@ def test_published_run_prints_publication_id(tmp_path: Path) -> None:
 
 def test_storage_failure_does_not_fail_scientific_run(tmp_path: Path) -> None:
     runner = _runner(ledgers=(_rich_ledger(),))
-    before = (runner.stop_reason.value, runner.status, runner.migration_displacement_ledgers)
+    before = (
+        runner.stop_reason.value,
+        runner.status,
+        runner.migration_displacement_ledgers,
+    )
     # Tiny byte quota forces a receipt-only failure.
     result = publish_migration_displacement_harvest(
         runner,

@@ -2227,11 +2227,11 @@ def _migration_displacement_future_bias(
         if future.direction is not ActionDirection.MOVE:
             continue
         target = future.target_entity_id
-        value = bias.get(future.future_id)
-        if value is None and target is not None:
-            value = bias.get(target)
-        if value:
-            projected[future.future_id] = float(value)
+        bias_value: float | None = bias.get(future.future_id)
+        if bias_value is None and target is not None:
+            bias_value = bias.get(target)
+        if bias_value is not None and bias_value:
+            projected[future.future_id] = float(bias_value)
     _LOG.debug(
         "migration_displacement_bias candidates=%s active_intents=%s applied=%s",
         len(futures),
