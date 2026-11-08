@@ -15,6 +15,10 @@ const OVERLAY_LABELS := {
 	"border_claims": "Claims",
 	"border_agreements": "Agreements",
 	"border_patterns": "Patterns",
+	"migration_route": "Migration route",
+	"migration_cause": "Migration cause",
+	"migration_wave": "Migration wave",
+	"migration_integration": "Migration integration",
 }
 
 ## Overlay kind → evidence class. Presentation-only; never invents world facts.
@@ -27,6 +31,10 @@ const OVERLAY_CLASSES := {
 	"border_claims": SUBJECTIVE,
 	"border_agreements": SUBJECTIVE,
 	"border_patterns": ANALYTICAL,
+	"migration_route": OBJECTIVE,
+	"migration_cause": SUBJECTIVE,
+	"migration_wave": ANALYTICAL,
+	"migration_integration": ANALYTICAL,
 	"narrative_hops": SUBJECTIVE,
 	"spatial_control": ANALYTICAL,
 	"emergent_group_formation": ANALYTICAL,

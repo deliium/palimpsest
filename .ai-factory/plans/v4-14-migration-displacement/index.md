@@ -382,9 +382,9 @@ are unchanged.
 - [x] Task 19: Add the filesystem store, settings, and CLI producer ([details](phase-05-composition-publication.md#task-19-add-the-filesystem-store-settings-and-cli-producer)) (depends on 16-18)
 
 ### Phase 6: Read-Only API, Research UI, and Godot Overlays
-- [ ] Task 20: Add six GET migration routes, schemas, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-migration-routes-schemas-and-app-wiring)) (depends on 19)
-- [ ] Task 21: Add the read-only Research UI migration view ([details](phase-06-read-only-surfaces.md#task-21-add-the-read-only-research-ui-migration-view)) (depends on 20)
-- [ ] Task 22: Add the four-layer Godot migration overlays ([details](phase-06-read-only-surfaces.md#task-22-add-the-four-layer-godot-migration-overlays)) (depends on 20)
+- [x] Task 20: Add six GET migration routes, schemas, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-migration-routes-schemas-and-app-wiring)) (depends on 19)
+- [x] Task 21: Add the read-only Research UI migration view ([details](phase-06-read-only-surfaces.md#task-21-add-the-read-only-research-ui-migration-view)) (depends on 20)
+- [x] Task 22: Add the four-layer Godot migration overlays ([details](phase-06-read-only-surfaces.md#task-22-add-the-four-layer-godot-migration-overlays)) (depends on 20)
 
 ### Phase 7: Invariants, End-to-End Migration, and Regression
 - [ ] Task 23: Add the migration-displacement boundary and determinism suite ([details](phase-07-invariants-and-regression.md#task-23-add-the-migration-displacement-boundary-and-determinism-suite)) (depends on 2-22)

@@ -79,7 +79,7 @@ def test_ui_and_overlay_docs_cover_four_layers() -> None:
     ):
         assert kind in overlays
     assert "not a fourth evidence class" in overlays
-    assert "49 suites" in _read("docs/development.md")
+    assert "50 suites" in _read("docs/development.md")
 
 
 def test_v4_architecture_baseline_uses_current_pins() -> None:

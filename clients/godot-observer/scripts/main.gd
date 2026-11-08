@@ -516,6 +516,30 @@ func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) ->
 				_session.request_border_control("all")
 			else:
 				_world.clear_border_overlay("border_patterns")
+		"migration_route":
+			_world.set_migration_overlay_enabled(enabled, "migration_route")
+			if enabled:
+				_session.fetch_migration_routes()
+			else:
+				_world.clear_migration_overlay("migration_route")
+		"migration_cause":
+			_world.set_migration_overlay_enabled(enabled, "migration_cause")
+			if enabled:
+				_session.fetch_migration_causes()
+			else:
+				_world.clear_migration_overlay("migration_cause")
+		"migration_wave":
+			_world.set_migration_overlay_enabled(enabled, "migration_wave")
+			if enabled:
+				_session.fetch_migration_waves()
+			else:
+				_world.clear_migration_overlay("migration_wave")
+		"migration_integration":
+			_world.set_migration_overlay_enabled(enabled, "migration_integration")
+			if enabled:
+				_session.fetch_migration_outcomes()
+			else:
+				_world.clear_migration_overlay("migration_integration")
 		"spatial_control":
 			_world.set_analytics_overlay_enabled(enabled)
 			if enabled:
@@ -555,6 +579,8 @@ func _on_overlay_payload(kind: String, payload: Variant) -> void:
 		_ui.set_narrative_variants(ids)
 	elif kind in ["border_physical", "border_claims", "border_agreements", "border_patterns"]:
 		_world.set_border_overlay(payload, true, kind)
+	elif kind in ["migration_route", "migration_cause", "migration_wave", "migration_integration"]:
+		_world.set_migration_overlay(payload, true, kind)
 	elif kind == "spatial_control":
 		_world.apply_research_analytics(payload)
 	elif kind in [

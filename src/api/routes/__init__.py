@@ -16,6 +16,9 @@ from api.routes.inspection import research_router as research_router
 from api.routes.inspection import router as inspection_router
 from api.routes.lineage import router as lineage_router
 from api.routes.macro_society import router as macro_society_router
+from api.routes.migration_displacement import (
+    router as migration_displacement_router,
+)
 from api.routes.observer import router as observer_router
 from api.routes.observer_stream import router as observer_stream_router
 from api.routes.organization import router as organization_router
@@ -40,6 +43,7 @@ __all__ = [
     "inspection_router",
     "lineage_router",
     "macro_society_router",
+    "migration_displacement_router",
     "observer_router",
     "observer_stream_router",
     "organization_router",

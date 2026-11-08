@@ -44,6 +44,7 @@
   import DiplomacyPanel from './DiplomacyPanel.svelte'
   import OrganizedConflictPanel from './OrganizedConflictPanel.svelte'
   import BordersPanel from './BordersPanel.svelte'
+  import MigrationDisplacementPanel from './MigrationDisplacementPanel.svelte'
   import OrganizationsPanel from './OrganizationsPanel.svelte'
   import ProjectsPanel from './ProjectsPanel.svelte'
 
@@ -111,6 +112,7 @@
           { id: 'representation', label: 'Representation' },
           { id: 'conflict', label: 'Organized conflict' },
           { id: 'borders', label: 'Borders and claims' },
+          { id: 'migration-displacement', label: 'Migration and displacement' },
           { id: 'contact', label: 'Contact' },
         ],
       },
@@ -338,6 +340,8 @@
     <OrganizedConflictPanel {runId} {selection} />
   {:else if view === 'borders'}
     <BordersPanel {runId} {selection} />
+  {:else if view === 'migration-displacement'}
+    <MigrationDisplacementPanel {runId} {selection} />
   {:else if view === 'institutions'}
     <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}

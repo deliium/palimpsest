@@ -39,6 +39,7 @@ from api.routes import (
     inspection_router,
     lineage_router,
     macro_society_router,
+    migration_displacement_router,
     observer_router,
     observer_stream_router,
     organization_router,
@@ -402,6 +403,36 @@ def _attach_borders_reader(app: FastAPI) -> None:
     app.state.borders_reader = create_borders_reader(settings.borders_root)
 
 
+def _attach_migration_displacement_reader(app: FastAPI) -> None:
+    from api.migration_displacement_cursor import MigrationDisplacementCursorCodec
+    from persistence.migration_displacement_filesystem import (
+        create_migration_displacement_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.migration_displacement_cursor_codec = None
+        app.state.migration_displacement_reader = None
+        return
+    secret = (
+        settings.migration_displacement_cursor_key.get_secret_value().encode(
+            "utf-8"
+        )
+        if settings.migration_displacement_cursor_key is not None
+        else None
+    )
+    if settings.migration_displacement_root is None or secret is None:
+        app.state.migration_displacement_cursor_codec = None
+        app.state.migration_displacement_reader = None
+        return
+    app.state.migration_displacement_cursor_codec = (
+        MigrationDisplacementCursorCodec.from_secret(secret)
+    )
+    app.state.migration_displacement_reader = create_migration_displacement_reader(
+        settings.migration_displacement_root
+    )
+
+
 def _attach_diplomacy_reader(app: FastAPI) -> None:
     from api.diplomacy_cursor import DiplomacyCursorCodec
     from persistence.diplomacy_filesystem import create_diplomacy_reader
@@ -523,6 +554,7 @@ def create_app(
     _attach_diplomacy_reader(app)
     _attach_organized_conflict_reader(app)
     _attach_borders_reader(app)
+    _attach_migration_displacement_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -556,6 +588,7 @@ def create_app(
     app.include_router(diplomacy_router)
     app.include_router(organized_conflict_router)
     app.include_router(borders_router)
+    app.include_router(migration_displacement_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

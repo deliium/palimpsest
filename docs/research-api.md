@@ -300,3 +300,27 @@ published runs return 404 `borders_publication_not_found`; unknown records retur
 and expiry is 410 `borders_cursor_expired`. A corrupt published store fails with
 500 `borders_store_corrupt` rather than a false not-found response. Responses
 contain hashed tokens and closed labels only.
+
+## Migration-displacement routes (V4-14)
+
+Six GET-only routes under `/v1/simulations/{run_id}/migration` require
+`SUBJECTIVE_DEBUG`:
+
+| Route | Result |
+| --- | --- |
+| `GET .../migration` | summary |
+| `GET .../migration/waves` | paged analytical waves |
+| `GET .../migration/waves/{wave_id}` | wave detail with lineage/alignment tokens |
+| `GET .../migration/routes` | paged route beliefs |
+| `GET .../migration/causes` | paged cause evidence |
+| `GET .../migration/outcomes` | paged integration outcomes |
+
+`PALIMPSEST_MIGRATION_DISPLACEMENT_ROOT` and
+`PALIMPSEST_MIGRATION_DISPLACEMENT_CURSOR_KEY` enable the read model. An
+unconfigured deployment returns 503 `migration_displacement_disabled`; unknown
+published runs or wave tokens return 404 `migration_displacement_not_found`;
+cursor mismatch is 400 `migration_displacement_cursor_invalid` and expiry is 410
+`migration_displacement_cursor_expired`. A corrupt published store fails with
+500 `migration_displacement_store_corrupt` rather than a false not-found
+response. Responses contain hashed tokens and closed labels only; no raw
+identities, route bodies, cause text, or refugee/asylum/forced status fields.

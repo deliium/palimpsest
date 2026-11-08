@@ -6,6 +6,7 @@ const ReducerScript := preload("res://scripts/protocol/reducer.gd")
 const Router := preload("res://scripts/protocol/event_router.gd")
 const CivilizationPlan := preload("res://scripts/presentation/civilization_plan.gd")
 const BorderOverlay := preload("res://scripts/view/border_overlay.gd")
+const MigrationOverlay := preload("res://scripts/view/migration_overlay.gd")
 
 var playback_speed := 1.0
 
@@ -47,7 +48,14 @@ const BORDER_OVERLAY_KINDS := [
 	"border_agreements",
 	"border_patterns",
 ]
+const MIGRATION_OVERLAY_KINDS := [
+	"migration_route",
+	"migration_cause",
+	"migration_wave",
+	"migration_integration",
+]
 var _borders: Dictionary = {}
+var _migrations: Dictionary = {}
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
@@ -63,6 +71,14 @@ func _ready() -> void:
 			overlay.name = node_name
 			add_child(overlay)
 		_borders[kind] = overlay
+	for kind in MIGRATION_OVERLAY_KINDS:
+		var migration_name := "MigrationOverlay_%s" % kind
+		var migration: Node2D = get_node_or_null(migration_name)
+		if migration == null:
+			migration = MigrationOverlay.new()
+			migration.name = migration_name
+			add_child(migration)
+		_migrations[kind] = migration
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
 	if _locations != null and _locations.has_signal("location_selected"):
@@ -112,6 +128,8 @@ func show_world(world: Variant) -> void:
 	if _claims != null:
 		_claims.set_centers(_centers)
 	for overlay in _borders.values():
+		overlay.set_centers(_centers)
+	for overlay in _migrations.values():
 		overlay.set_centers(_centers)
 	if _analytics != null:
 		_analytics.set_centers(_centers)
@@ -165,6 +183,37 @@ func clear_border_overlay(kind: String = "") -> void:
 
 func set_border_overlay_enabled(enabled_value: bool, kind: String = "") -> void:
 	var overlay := _border_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		if not enabled_value:
+			overlay.clear()
+		elif kind != "":
+			overlay.apply_payload(null, kind)
+
+func _migration_for(kind: String) -> Node2D:
+	if _migrations.has(kind):
+		return _migrations[kind]
+	return _migrations.get("migration_route", null)
+
+func set_migration_overlay(data: Variant, enabled_value: bool = true, kind: String = "") -> void:
+	var overlay := _migration_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		overlay.apply_payload(data, kind)
+
+func clear_migration_overlay(kind: String = "") -> void:
+	if kind == "":
+		for overlay in _migrations.values():
+			overlay.clear()
+			overlay.set_enabled(false)
+		return
+	var overlay := _migration_for(kind)
+	if overlay != null:
+		overlay.clear()
+		overlay.set_enabled(false)
+
+func set_migration_overlay_enabled(enabled_value: bool, kind: String = "") -> void:
+	var overlay := _migration_for(kind)
 	if overlay != null:
 		overlay.set_enabled(enabled_value)
 		if not enabled_value:

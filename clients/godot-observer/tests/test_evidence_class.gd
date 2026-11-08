@@ -35,6 +35,14 @@ func _labels_and_mapping() -> String:
 		return "border_agreements must be SUBJECTIVE"
 	if EvidenceClass.for_overlay("border_patterns") != EvidenceClass.ANALYTICAL:
 		return "border_patterns must be ANALYTICAL"
+	if EvidenceClass.for_overlay("migration_route") != EvidenceClass.OBJECTIVE:
+		return "migration_route must be OBJECTIVE"
+	if EvidenceClass.for_overlay("migration_cause") != EvidenceClass.SUBJECTIVE:
+		return "migration_cause must be SUBJECTIVE"
+	if EvidenceClass.for_overlay("migration_wave") != EvidenceClass.ANALYTICAL:
+		return "migration_wave must be ANALYTICAL"
+	if EvidenceClass.for_overlay("migration_integration") != EvidenceClass.ANALYTICAL:
+		return "migration_integration must be ANALYTICAL"
 	if EvidenceClass.label_for_overlay("border_physical") != "Physical":
 		return "border_physical label"
 	if EvidenceClass.label_for_overlay("border_claims") != "Claims":

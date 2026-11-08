@@ -1598,6 +1598,31 @@ func request_border_control(layer: String = "all") -> void:
 	)
 
 
+func fetch_migration_summary() -> void:
+	var path := "/v1/simulations/%s/migration" % run_id
+	_request_path("migration_route", path, {"capability": "debug"})
+
+
+func fetch_migration_waves() -> void:
+	var path := "/v1/simulations/%s/migration/waves" % run_id
+	_request_path("migration_wave", path, {"capability": "debug"})
+
+
+func fetch_migration_routes() -> void:
+	var path := "/v1/simulations/%s/migration/routes" % run_id
+	_request_path("migration_route", path, {"capability": "debug"})
+
+
+func fetch_migration_causes() -> void:
+	var path := "/v1/simulations/%s/migration/causes" % run_id
+	_request_path("migration_cause", path, {"capability": "debug"})
+
+
+func fetch_migration_outcomes() -> void:
+	var path := "/v1/simulations/%s/migration/outcomes" % run_id
+	_request_path("migration_integration", path, {"capability": "debug"})
+
+
 func request_strategy_audit_overlay() -> void:
 	## Research/debug ANALYTICAL payload. Ordinary speech must not read this.
 	var path := "/v1/simulations/%s/observer/communication-strategy-audit" % run_id

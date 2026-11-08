@@ -179,6 +179,10 @@ def get_borders_reader(request: Request) -> object | None:
     return getattr(request.app.state, "borders_reader", None)
 
 
+def get_migration_displacement_reader(request: Request) -> object | None:
+    return getattr(request.app.state, "migration_displacement_reader", None)
+
+
 def get_delegation_representation_reader(request: Request) -> object | None:
     """Return the read-only representation reader, or ``None`` when disabled."""
     return getattr(request.app.state, "representation_reader", None)
