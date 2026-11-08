@@ -123,6 +123,7 @@ __all__ = [
     "artifact_interpretation_rows_from_ledgers",
     "artifact_memory_rows_from_traces",
     "artifact_objective_rows_from_artifacts",
+    "build_completed_run_migration_displacement_harvest",
     "calibration_rows_from_world_model_audits",
     "claim_rows_from_ledgers",
     "constrain_snapshot_to_manifest",
@@ -791,6 +792,91 @@ def regional_population_rows_from_events(
         len(rows),
     )
     return tuple(rows)
+
+
+def build_completed_run_migration_displacement_harvest(
+    runner_result: object,
+    committed_events: Sequence[object],
+    *,
+    run_id: str,
+    input_revision: str,
+    entity_to_agent: Mapping[str, str] | None = None,
+    regions_spec: object | None = None,
+    window_end: int | None = None,
+    complete_through_boundary: int | None = None,
+) -> object | None:
+    """Harvest one completed run's detached migration-displacement rows once.
+
+    Returns ``None`` when the feature is inactive (no owner ledgers). The result
+    is a normalized ``MigrationDisplacementHarvestRows`` that the metric service
+    accepts idempotently, so raw ledgers are never projected twice. Detached
+    analysis only: nothing here reaches cognition, prompts, memory, or world
+    state, and logging is metadata-only.
+    """
+    from analysis.migration_displacement_events import (
+        migration_communication_pairs_from_events,
+        migration_integration_rows_from_events,
+        migration_kinship_pairs_from_events,
+        migration_movement_rows_with_coverage,
+    )
+    from analysis.migration_displacement_policy import (
+        default_migration_displacement_analysis_policy,
+    )
+    from analysis.migration_displacement_rows import (
+        harvest_migration_displacement_rows,
+    )
+    from simulation.migration_displacement_export import (
+        migration_displacement_owner_export,
+    )
+
+    ledgers = tuple(getattr(runner_result, "migration_displacement_ledgers", ()) or ())
+    if not ledgers:
+        _LOG.debug("migration_displacement_harvest_inactive")
+        return None
+    policy = default_migration_displacement_analysis_policy()
+    events = tuple(committed_events or ())
+    topology: dict[str, str] | None = None
+    locations = getattr(regions_spec, "location_regions", None)
+    if locations is not None:
+        topology = {item.location_id.value: item.region_id for item in locations}
+    exported = migration_displacement_owner_export(ledgers)
+    movements, _coverage = migration_movement_rows_with_coverage(
+        events,
+        run_id=run_id,
+        input_revision=input_revision,
+        region_topology=topology,
+        max_pairs=policy.max_pairs_per_run,
+        entity_to_agent=entity_to_agent,
+        window_end=window_end,
+        complete_through_boundary=complete_through_boundary,
+    )
+    evidence = migration_integration_rows_from_events(
+        events,
+        run_id=run_id,
+        input_revision=input_revision,
+        region_topology=topology,
+        max_pairs=policy.max_pairs_per_run,
+        entity_to_agent=entity_to_agent,
+        window_end=window_end,
+        complete_through_boundary=complete_through_boundary,
+    )
+    harvest = harvest_migration_displacement_rows(
+        exported,
+        movements,
+        evidence,
+        kinship_pairs=migration_kinship_pairs_from_events(events),
+        communication_pairs=migration_communication_pairs_from_events(
+            events, entity_to_agent=entity_to_agent
+        ),
+        policy=policy,
+    )
+    _LOG.debug(
+        "migration_displacement_harvest_built owners=%s movements=%s waves=%s",
+        len(ledgers),
+        len(movements),
+        len(harvest.waves),
+    )
+    return harvest
 
 
 def regional_population_input_from_snapshot(

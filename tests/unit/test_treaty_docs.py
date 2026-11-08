@@ -72,7 +72,7 @@ def test_docs_state_non_enforcement_and_forbidden_objects() -> None:
 
 
 def test_current_counts_and_routes_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 176
+    assert METRIC_FAMILY_COUNT == 180
     assert "176" in _read("docs/analysis-metrics.md")
     assert "176" in _read("docs/architecture.md")
     assert "176" in _read(".ai-factory/ARCHITECTURE.md")

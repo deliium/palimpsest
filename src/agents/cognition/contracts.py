@@ -198,6 +198,7 @@ class Perspective:
     diplomacy: object | None = None
     organized_conflict: object | None = None
     borders: object | None = None
+    migration_displacement: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -462,6 +463,15 @@ class Perspective:
         require_owner_borders(
             self.borders, self.agent_id, field_name="Perspective.borders"
         )
+        from agents.cognition.migration_displacement import (
+            require_owner_migration_displacement,
+        )
+
+        require_owner_migration_displacement(
+            self.migration_displacement,
+            self.agent_id,
+            field_name="Perspective.migration_displacement",
+        )
         from agents.cognition.mediation import require_owner_mediation
 
         require_owner_mediation(
@@ -651,6 +661,7 @@ class Perspective:
             diplomacy=self.diplomacy,
             organized_conflict=self.organized_conflict,
             borders=self.borders,
+            migration_displacement=self.migration_displacement,
         )
 
     def __repr__(self) -> str:

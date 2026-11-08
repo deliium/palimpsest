@@ -8,6 +8,7 @@ planner compiles it into exactly one fresh closed ``AgentCommand``.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -170,6 +171,7 @@ class MultiCriteriaIntentionSelector:
         regional_migration_cognition_mode: str | None = None,
         regional_migration_hop_limit: int = 1,
         regional_memory: RetrievedMemoryContext | None = None,
+        migration_displacement_bias: Mapping[str, float] | None = None,
         office_concepts: object | None = None,
         office_succession_mode: object | None = None,
         collective_decisions: object | None = None,
@@ -676,6 +678,14 @@ class MultiCriteriaIntentionSelector:
                 ),
                 hop_limit=regional_migration_hop_limit,
             )
+        migration_bias = _migration_displacement_future_bias(
+            migration_displacement_bias,
+            tuple(
+                futures_by_id[item.future_id]
+                for item in undominated
+                if item.future_id in futures_by_id
+            ),
+        )
         winner, tie_break = _pairwise_select(
             undominated,
             futures_by_id,
@@ -698,6 +708,7 @@ class MultiCriteriaIntentionSelector:
             mentorship_bias or None,
             cultural_bias or None,
             regional_migration_bias,
+            migration_bias,
         )
         future = futures_by_id.get(winner.future_id)
         direction = ActionDirection.WAIT if future is None else future.direction
@@ -2193,6 +2204,43 @@ def _select_formal_rule_claim(ledger: object) -> object | None:
     return None
 
 
+def _migration_displacement_future_bias(
+    bias: Mapping[str, float] | None,
+    futures: Sequence[ImaginedFuture],
+) -> Mapping[str, float] | None:
+    """Project the owner's destination-keyed bias onto candidate ``Move`` futures.
+
+    Keys may be destination tokens or future ids. Keys that match no candidate
+    ``Move`` future are ignored; the bias never creates a candidate.
+    """
+    if bias is None:
+        return None
+    for value in bias.values():
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+        ):
+            raise ValueError("migration_displacement: bias")
+    projected: dict[str, float] = {}
+    for future in futures:
+        if future.direction is not ActionDirection.MOVE:
+            continue
+        target = future.target_entity_id
+        value = bias.get(future.future_id)
+        if value is None and target is not None:
+            value = bias.get(target)
+        if value:
+            projected[future.future_id] = float(value)
+    _LOG.debug(
+        "migration_displacement_bias candidates=%s active_intents=%s applied=%s",
+        len(futures),
+        len(bias),
+        len(projected),
+    )
+    return projected or None
+
+
 def _pairwise_select(
     appraisals: Sequence[FutureAppraisal],
     futures_by_id: Mapping[str, ImaginedFuture],
@@ -2215,6 +2263,7 @@ def _pairwise_select(
     mentorship_bias: Mapping[str, float] | None = None,
     cultural_feature_bias: Mapping[str, float] | None = None,
     regional_migration_bias: Mapping[str, float] | None = None,
+    migration_displacement_bias: Mapping[str, float] | None = None,
 ) -> tuple[FutureAppraisal, str]:
     if len(appraisals) == 1:
         return appraisals[0], _TIE_BREAK_NONE
@@ -2245,6 +2294,7 @@ def _pairwise_select(
                 mentorship_bias,
                 cultural_feature_bias,
                 regional_migration_bias,
+                migration_displacement_bias,
             )
             if cmp > 0:
                 scores[left.future_id] += 1
@@ -2295,6 +2345,7 @@ def _pairwise_compare(
     mentorship_bias: Mapping[str, float] | None = None,
     cultural_feature_bias: Mapping[str, float] | None = None,
     regional_migration_bias: Mapping[str, float] | None = None,
+    migration_displacement_bias: Mapping[str, float] | None = None,
 ) -> int:
     """Return positive if left preferred, negative if right preferred, else 0."""
     active_drives = set(motivation.active_drive_kinds)
@@ -2470,6 +2521,9 @@ def _pairwise_compare(
     if regional_migration_bias is not None:
         total += regional_migration_bias.get(left.future_id, 0.0)
         total -= regional_migration_bias.get(right.future_id, 0.0)
+    if migration_displacement_bias is not None:
+        total += migration_displacement_bias.get(left.future_id, 0.0)
+        total -= migration_displacement_bias.get(right.future_id, 0.0)
     if total > 0:
         return 1
     if total < 0:

@@ -925,6 +925,32 @@ def assemble_arm_metric_bundle(
             policy=default_borders_analysis_policy(),
         )
         inputs = replace(inputs, border_rows=harvested_borders)
+    migration_ledgers = getattr(
+        arm.runner_result, "migration_displacement_ledgers", None
+    )
+    if migration_ledgers:
+        from experiments.composition import (
+            build_completed_run_migration_displacement_harvest,
+        )
+
+        migration_entity_to_agent = {
+            agent.entity_id.value: agent.agent_id.value
+            for agent in arm.assignment.runner_config.agents
+        }
+        migration_harvest = build_completed_run_migration_displacement_harvest(
+            arm.runner_result,
+            events or (),
+            run_id=arm.assignment.run_id.value,
+            input_revision=arm.config_fingerprint[:32] or "rev-run",
+            entity_to_agent=migration_entity_to_agent,
+            regions_spec=getattr(
+                arm.assignment.runner_config, "regions_migration", None
+            ),
+            window_end=ticks,
+            complete_through_boundary=ticks,
+        )
+        if migration_harvest is not None:
+            inputs = replace(inputs, migration_displacement_rows=migration_harvest)
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
     if dispute_ledgers:
         from analysis.dispute_evidence import (

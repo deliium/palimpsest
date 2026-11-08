@@ -20,14 +20,14 @@ BORDER_FAMILIES = (
 
 def test_catalog_count_is_176_and_validates() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 176
-    assert len(specs) == 176
+    assert METRIC_FAMILY_COUNT == 180
+    assert len(specs) == 180
     validate_metric_catalog()
 
 
 def test_border_families_are_appended_last() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id.value for spec in specs[-4:]) == BORDER_FAMILIES
+    assert tuple(spec.family_id.value for spec in specs[-8:-4]) == BORDER_FAMILIES
     assert all(spec.family_id.value not in BORDER_FAMILIES for spec in specs[:172])
 
 

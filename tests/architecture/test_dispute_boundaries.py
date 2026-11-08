@@ -453,7 +453,7 @@ def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(COMMAND_RULE_MATRIX) == 43
-    assert METRIC_FAMILY_COUNT == 176
+    assert METRIC_FAMILY_COUNT == 180
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"

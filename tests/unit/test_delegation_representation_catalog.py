@@ -53,15 +53,15 @@ ALIGNMENT_KEYS = (
 
 def test_catalog_is_164_with_diplomacy_last() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 176
-    assert len(specs) == 176
-    assert len(validate_metric_catalog()) == 176
-    assert [spec.family_id for spec in specs[-19:-16]] == [
+    assert METRIC_FAMILY_COUNT == 180
+    assert len(specs) == 180
+    assert len(validate_metric_catalog()) == 180
+    assert [spec.family_id for spec in specs[-23:-20]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
     ]
-    assert [spec.family_id for spec in specs[-16:-12]] == [
+    assert [spec.family_id for spec in specs[-20:-16]] == [
         MetricFamilyId.DIPLOMATIC_CONTACT_STRUCTURE,
         MetricFamilyId.DIPLOMATIC_INSTRUMENT_OUTCOMES,
         MetricFamilyId.DIPLOMATIC_ENVOY_ALIGNMENT,

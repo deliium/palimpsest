@@ -766,6 +766,7 @@ class SubjectiveSnapshot:
     diplomacy: object | None = None
     organized_conflict: object | None = None
     borders: object | None = None
+    migration_displacement: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -1006,6 +1007,15 @@ class SubjectiveSnapshot:
             self.borders,
             self.owner_id,
             field_name="SubjectiveSnapshot.borders",
+        )
+        from agents.cognition.migration_displacement import (
+            require_owner_migration_displacement,
+        )
+
+        require_owner_migration_displacement(
+            self.migration_displacement,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.migration_displacement",
         )
         from agents.cognition.social_conventions import require_owner_social_conventions
 
@@ -4011,6 +4021,7 @@ class CognitiveLoopProposal:
     diplomacy: object | None = None
     organized_conflict: object | None = None
     borders: object | None = None
+    migration_displacement: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4250,6 +4261,15 @@ class CognitiveLoopProposal:
             self.agent_id,
             field_name="CognitiveLoopProposal.borders",
         )
+        from agents.cognition.migration_displacement import (
+            require_owner_migration_displacement,
+        )
+
+        require_owner_migration_displacement(
+            self.migration_displacement,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.migration_displacement",
+        )
         if type(self.futures) is not PossibleFutures:
             raise TypeError("futures must be PossibleFutures")
         if type(self.motivation) is not MotivationEvaluation:
@@ -4363,6 +4383,7 @@ class CognitiveLoopResult:
     diplomacy: object | None = None
     organized_conflict: object | None = None
     borders: object | None = None
+    migration_displacement: object | None = None
     organized_conflict_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -4588,6 +4609,15 @@ class CognitiveLoopResult:
             self.borders,
             self.agent_id,
             field_name="CognitiveLoopResult.borders",
+        )
+        from agents.cognition.migration_displacement import (
+            require_owner_migration_displacement,
+        )
+
+        require_owner_migration_displacement(
+            self.migration_displacement,
+            self.agent_id,
+            field_name="CognitiveLoopResult.migration_displacement",
         )
         if self.organized_conflict_audits is not None:
             from agents.cognition.organized_conflict import ConflictActionAudit

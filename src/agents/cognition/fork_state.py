@@ -67,6 +67,8 @@ class CognitiveLoopForkState:
     prepared_diplomacy: object | None = None
     prepared_organized_conflict: object | None = None
     prepared_borders: object | None = None
+    prepared_migration_displacement: object | None = None
+    prepared_migration_displacement_biases: tuple[tuple[str, float], ...] = ()
     state_format_version: str = COGNITIVE_LOOP_FORK_STATE_VERSION
 
     def __post_init__(self) -> None:
@@ -119,6 +121,45 @@ class CognitiveLoopForkState:
                 seen.add(key)
                 cleaned.append((key, float(rate)))
             object.__setattr__(self, name, tuple(cleaned))
+        from agents.cognition.migration_displacement import (
+            MigrationDisplacementLedger,
+        )
+
+        prepared = self.prepared_migration_displacement
+        if prepared is not None and type(prepared) is not MigrationDisplacementLedger:
+            raise CognitiveLoopForkStateError(
+                "fork_state_invalid", "invalid prepared migration displacement"
+            )
+        biases = _tuple(
+            "prepared_migration_displacement_biases",
+            self.prepared_migration_displacement_biases,
+        )
+        cleaned_biases: list[tuple[str, float]] = []
+        seen_bias: set[str] = set()
+        for entry in biases:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise CognitiveLoopForkStateError(
+                    "fork_state_invalid", "invalid migration displacement bias entry"
+                )
+            key, value = entry
+            if (
+                type(key) is not str
+                or key in seen_bias
+                or isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or value != value
+                or value in (float("inf"), float("-inf"))
+            ):
+                raise CognitiveLoopForkStateError(
+                    "fork_state_invalid", "invalid migration displacement bias"
+                )
+            seen_bias.add(key)
+            cleaned_biases.append((key, float(value)))
+        object.__setattr__(
+            self,
+            "prepared_migration_displacement_biases",
+            tuple(sorted(cleaned_biases)),
+        )
 
 
 __all__ = [

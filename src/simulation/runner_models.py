@@ -6393,6 +6393,7 @@ class SimulationRunnerResult:
     diplomacy_ledgers: tuple[object, ...] = ()
     organized_conflict_ledgers: tuple[object, ...] = ()
     border_ledgers: tuple[object, ...] = ()
+    migration_displacement_ledgers: tuple[object, ...] = ()
     cultural_narrative_ledgers: tuple[object, ...] = ()
     initial_lifecycle_records: tuple[object, ...] = ()
     generational_progress: PopulationProgress | None = None
@@ -6808,6 +6809,34 @@ class SimulationRunnerResult:
         ] != sorted(owner.value for owner in border_owners):
             raise ValueError("border_ledgers: invalid_order")
         object.__setattr__(self, "border_ledgers", border_ledgers)
+        if isinstance(self.migration_displacement_ledgers, (set, frozenset)):
+            raise TypeError("migration_displacement_ledgers must be ordered")
+        if type(self.migration_displacement_ledgers) is not tuple:
+            raise TypeError("migration_displacement_ledgers must be ordered")
+        from agents.cognition.migration_displacement import (
+            MigrationDisplacementLedger,
+            require_owner_migration_displacement,
+            validate_migration_displacement_ledger_caps,
+        )
+
+        migration_ledgers = tuple(self.migration_displacement_ledgers)
+        for ledger in migration_ledgers:
+            if type(ledger) is not MigrationDisplacementLedger:
+                raise TypeError("migration_displacement_ledgers: invalid_item")
+            require_owner_migration_displacement(
+                ledger,
+                ledger.owner_id,
+                field_name="migration_displacement_ledgers",
+            )
+            validate_migration_displacement_ledger_caps(ledger)
+        migration_owners = [ledger.owner_id.value for ledger in migration_ledgers]
+        if len(set(migration_owners)) != len(migration_owners) or (
+            migration_owners != sorted(migration_owners)
+        ):
+            raise ValueError("migration_displacement_ledgers: invalid_order")
+        object.__setattr__(
+            self, "migration_displacement_ledgers", migration_ledgers
+        )
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

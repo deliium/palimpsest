@@ -1032,6 +1032,8 @@ def _cognition_config_for(
     legal_disputes_enabled: bool = False,
     diplomacy_enabled: bool = False,
     organized_conflict_enabled: bool = False,
+    regional_migration_mode: str | None = None,
+    multi_polity_migration_enabled: bool = False,
 ) -> CognitionLoopConfig:
     emotional_flag = capability_flags.short_term_emotional_state
     emotional_mode = (
@@ -1158,9 +1160,13 @@ def _cognition_config_for(
     from agents.cognition.configuration import (
         CognitionBordersMode,
         CognitionGroupFormationMode,
+        CognitionMigrationDisplacementMode,
         CognitionTerritorialClaimMode,
     )
     from agents.cognition.group_formation import default_group_formation_policy
+    from agents.cognition.migration_displacement import (
+        default_migration_displacement_policy,
+    )
     from agents.cognition.production import (
         ProductionKnowledgeMode as CognitionProductionKnowledgeMode,
     )
@@ -1213,6 +1219,32 @@ def _cognition_config_for(
         None if borders_policy is None else borders_policy.version,
         organizations_enabled,
         territorial_mode.value,
+    )
+    migration_displacement_mode = (
+        CognitionMigrationDisplacementMode.DETERMINISTIC
+        if organizations_enabled
+        and multi_polity_migration_enabled
+        and regional_migration_mode == "deterministic"
+        else CognitionMigrationDisplacementMode.DISABLED
+    )
+    migration_displacement_policy = (
+        default_migration_displacement_policy()
+        if migration_displacement_mode
+        is CognitionMigrationDisplacementMode.DETERMINISTIC
+        else None
+    )
+    _LOG.debug(
+        "cognition_config_migration_displacement_mode mode=%s policy_version=%s "
+        "organizations=%s multi_polity_migration=%s regional_migration_mode=%s",
+        migration_displacement_mode.value,
+        (
+            None
+            if migration_displacement_policy is None
+            else migration_displacement_policy.version
+        ),
+        organizations_enabled,
+        multi_polity_migration_enabled,
+        regional_migration_mode,
     )
     group_mode = CognitionGroupFormationMode(spec.group_formation_mode.value)
     group_policy = None
@@ -1637,6 +1669,8 @@ def _cognition_config_for(
         territorial_claim_policy=territorial_policy,
         borders_mode=borders_mode,
         borders_policy=borders_policy,
+        migration_displacement_mode=migration_displacement_mode,
+        migration_displacement_policy=migration_displacement_policy,
         group_formation_mode=group_mode,
         group_formation_policy=group_policy,
         social_norm_mode=norm_mode,
@@ -2826,6 +2860,14 @@ class SimulationRunner:
                     diplomacy_enabled=(config.v4_capability_flags.diplomacy),
                     organized_conflict_enabled=(
                         config.v4_capability_flags.organized_conflict
+                    ),
+                    regional_migration_mode=(
+                        None
+                        if config.regions_migration is None
+                        else config.regions_migration.cognition_mode.value
+                    ),
+                    multi_polity_migration_enabled=(
+                        config.v3_capability_flags.multi_polity_migration
                     ),
                 )
                 memory_retriever = _memory_retriever_for(
@@ -5223,6 +5265,9 @@ class SimulationRunner:
             diplomacy_ledgers=(self.export_diplomacy_ledgers()),
             organized_conflict_ledgers=(self.export_organized_conflict_ledgers()),
             border_ledgers=(self.export_border_ledgers()),
+            migration_displacement_ledgers=(
+                self.export_migration_displacement_ledgers()
+            ),
             cultural_narrative_ledgers=self.export_cultural_narrative_ledgers(),
             initial_lifecycle_records=self.export_initial_lifecycle_records(),
             generational_progress=generational_progress,
@@ -5719,6 +5764,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "border_ledger_exported owners=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_migration_displacement_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered migration-displacement ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "migration_displacement", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "migration_displacement_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6578,6 +6638,14 @@ class SimulationRunner:
                 organized_conflict_enabled=(
                     self._config.v4_capability_flags.organized_conflict
                 ),
+                regional_migration_mode=(
+                    None
+                    if self._config.regions_migration is None
+                    else self._config.regions_migration.cognition_mode.value
+                ),
+                multi_polity_migration_enabled=(
+                    self._config.v3_capability_flags.multi_polity_migration
+                ),
             )
             memory_retriever = _memory_retriever_for(
                 agent_spec.cognition.memory_mode,
@@ -6954,6 +7022,14 @@ def _construct_agent_bundle(
         legal_disputes_enabled=config.v4_capability_flags.legal_disputes,
         diplomacy_enabled=config.v4_capability_flags.diplomacy,
         organized_conflict_enabled=config.v4_capability_flags.organized_conflict,
+        regional_migration_mode=(
+            None
+            if config.regions_migration is None
+            else config.regions_migration.cognition_mode.value
+        ),
+        multi_polity_migration_enabled=(
+            config.v3_capability_flags.multi_polity_migration
+        ),
     )
     memory_retriever = _memory_retriever_for(
         agent_spec.cognition.memory_mode,

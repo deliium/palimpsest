@@ -96,6 +96,10 @@ from agents.cognition.mediation import (
     MediationPolicy,
     default_mediation_policy,
 )
+from agents.cognition.migration_displacement import (
+    MigrationDisplacementPolicy,
+    default_migration_displacement_policy,
+)
 from agents.cognition.offices import (
     OfficeConceptPolicy,
     default_office_concept_policy,
@@ -339,6 +343,19 @@ class CognitionBordersMode(StrEnum):
     """Owner-scoped domain beliefs. Disabled allocates no ledger.
 
     Internal to the cognition factory. It is not a runner key, a capability
+    flag, or a schema version.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
+class CognitionMigrationDisplacementMode(StrEnum):
+    """Owner-scoped migration-displacement beliefs. Disabled allocates no ledger.
+
+    Internal to the cognition factory. It is derived from the owned
+    ``organizations`` V4 context, the owned ``multi_polity_migration`` V3 flag,
+    and deterministic regional migration. It is not a runner key, a capability
     flag, or a schema version.
     """
 
@@ -667,6 +684,10 @@ class CognitionLoopConfig:
     territorial_claim_policy: TerritorialClaimPolicy | None = None
     borders_mode: CognitionBordersMode = CognitionBordersMode.DISABLED
     borders_policy: BordersPolicy | None = None
+    migration_displacement_mode: CognitionMigrationDisplacementMode = (
+        CognitionMigrationDisplacementMode.DISABLED
+    )
+    migration_displacement_policy: MigrationDisplacementPolicy | None = None
     group_formation_mode: CognitionGroupFormationMode = (
         CognitionGroupFormationMode.DISABLED
     )
@@ -967,6 +988,38 @@ class CognitionLoopConfig:
                 "invalid_enum path=borders_policy reason_code=invalid_type"
             )
             raise TypeError("borders_policy must be BordersPolicy or None")
+        if (
+            type(self.migration_displacement_mode)
+            is not CognitionMigrationDisplacementMode
+        ):
+            _LOG.error(
+                "invalid_enum path=migration_displacement_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "migration_displacement_mode must be CognitionMigrationDisplacementMode"
+            )
+        if (
+            self.migration_displacement_mode
+            is CognitionMigrationDisplacementMode.DISABLED
+        ):
+            _LOG.debug("cognition_migration_displacement_mode disabled")
+            object.__setattr__(self, "migration_displacement_policy", None)
+        elif self.migration_displacement_policy is None:
+            object.__setattr__(
+                self,
+                "migration_displacement_policy",
+                default_migration_displacement_policy(),
+            )
+        elif (
+            type(self.migration_displacement_policy) is not MigrationDisplacementPolicy
+        ):
+            _LOG.error(
+                "invalid_enum path=migration_displacement_policy "
+                "reason_code=invalid_type"
+            )
+            raise TypeError(
+                "migration_displacement_policy must be MigrationDisplacementPolicy"
+            )
         if type(self.group_formation_mode) is not CognitionGroupFormationMode:
             _LOG.error(
                 "invalid_enum path=group_formation_mode reason_code=invalid_mode"
@@ -1590,6 +1643,7 @@ class CognitionLoopConfig:
             ),
             "territorial_claim_mode": self.territorial_claim_mode.value,
             "borders_mode": self.borders_mode.value,
+            "migration_displacement_mode": self.migration_displacement_mode.value,
             "group_formation_mode": self.group_formation_mode.value,
             "social_norm_mode": self.social_norm_mode.value,
             "social_convention_mode": self.social_convention_mode.value,
@@ -1653,6 +1707,11 @@ class CognitionLoopConfig:
             ),
             "borders_policy_version": (
                 None if self.borders_policy is None else self.borders_policy.version
+            ),
+            "migration_displacement_policy_version": (
+                None
+                if self.migration_displacement_policy is None
+                else self.migration_displacement_policy.version
             ),
             "skill_learning_mode": self.skill_learning_mode.value,
             "teaching_interaction_mode": self.teaching_interaction_mode.value,
@@ -1986,6 +2045,8 @@ def build_cognitive_loop(
         territorial_claim_policy=resolved.territorial_claim_policy,
         borders_mode=resolved.borders_mode,
         borders_policy=resolved.borders_policy,
+        migration_displacement_mode=resolved.migration_displacement_mode,
+        migration_displacement_policy=resolved.migration_displacement_policy,
         group_formation_mode=resolved.group_formation_mode,
         group_formation_policy=resolved.group_formation_policy,
         social_norm_mode=resolved.social_norm_mode,

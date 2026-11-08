@@ -621,6 +621,7 @@ class AgentRuntimeCheckpoint:
     diplomacy: object | None = None
     organized_conflict: object | None = None
     borders: object | None = None
+    migration_displacement: object | None = None
     collective_decisions: object | None = None
     mediation: object | None = None
     institutional_memory: object | None = None
@@ -846,6 +847,20 @@ class AgentRuntimeCheckpoint:
         )
         if self.borders is not None:
             validate_border_ledger_caps(self.borders)  # type: ignore[arg-type]
+        from agents.cognition.migration_displacement import (
+            require_owner_migration_displacement,
+            validate_migration_displacement_ledger_caps,
+        )
+
+        require_owner_migration_displacement(
+            self.migration_displacement,
+            self.agent_id,
+            field_name="AgentRuntimeCheckpoint.migration_displacement",
+        )
+        if self.migration_displacement is not None:
+            validate_migration_displacement_ledger_caps(
+                self.migration_displacement  # type: ignore[arg-type]
+            )
         from agents.cognition.collective_decisions import (
             require_owner_collective_decisions,
         )

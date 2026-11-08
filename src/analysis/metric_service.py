@@ -332,6 +332,12 @@ class MetricComputationInputs:
     border_pattern_rows: Sequence[object] | None = None
     border_alignment_rows: Sequence[object] | None = None
     border_overlap_rows: Sequence[object] | None = None
+    migration_displacement_rows: object | None = None
+    migration_displacement_movement_rows: Sequence[object] | None = None
+    migration_displacement_evidence_rows: Sequence[object] | None = None
+    migration_displacement_kinship_pairs: Sequence[tuple[str, str]] | None = None
+    migration_displacement_communication_pairs: Sequence[tuple[str, str]] | None = None
+    migration_displacement_organization_pairs: Sequence[tuple[str, str]] | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2249,6 +2255,76 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 input_revision=revision,
             ),
         )
+    if inputs.migration_displacement_rows is not None:
+        from analysis.migration_displacement_events import (
+            MigrationIntegrationEvidenceRow,
+            MigrationMovementRow,
+        )
+        from analysis.migration_displacement_metrics import (
+            compute_migration_cause_evidence,
+            compute_migration_cluster_cohesion,
+            compute_migration_integration_outcome,
+            compute_migration_wave_structure,
+        )
+        from analysis.migration_displacement_policy import (
+            default_migration_displacement_analysis_policy,
+        )
+        from analysis.migration_displacement_rows import (
+            harvest_migration_displacement_rows,
+        )
+
+        # An already-normalized collector harvest is accepted idempotently; the
+        # raw owner rows are never projected a second time.
+        migration_rows = harvest_migration_displacement_rows(
+            inputs.migration_displacement_rows,
+            tuple(
+                cast(
+                    "Sequence[MigrationMovementRow]",
+                    inputs.migration_displacement_movement_rows or (),
+                )
+            ),
+            tuple(
+                cast(
+                    "Sequence[MigrationIntegrationEvidenceRow]",
+                    inputs.migration_displacement_evidence_rows or (),
+                )
+            ),
+            kinship_pairs=tuple(inputs.migration_displacement_kinship_pairs or ()),
+            organization_pairs=tuple(
+                inputs.migration_displacement_organization_pairs or ()
+            ),
+            communication_pairs=tuple(
+                inputs.migration_displacement_communication_pairs or ()
+            ),
+            policy=default_migration_displacement_analysis_policy(),
+        )
+        _safe(
+            "migration_wave_structure",
+            lambda: compute_migration_wave_structure(
+                migration_rows, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "migration_cause_evidence",
+            lambda: compute_migration_cause_evidence(
+                migration_rows, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "migration_cluster_cohesion",
+            lambda: compute_migration_cluster_cohesion(
+                migration_rows, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "migration_integration_outcome",
+            lambda: compute_migration_integration_outcome(
+                migration_rows, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("migration_metrics_emitted families=4")
+    else:
+        _LOG.debug("migration_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

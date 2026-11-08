@@ -358,6 +358,8 @@ class CognitiveLoop:
         "_memory",
         "_memory_updates",
         "_mentorship_spec",
+        "_migration_displacement_mode",
+        "_migration_displacement_policy",
         "_motivation",
         "_office_concept_policy",
         "_office_succession_mode",
@@ -376,6 +378,8 @@ class CognitiveLoop:
         "_prepared_evidence",
         "_prepared_formal_rules",
         "_prepared_institutional_decay",
+        "_prepared_migration_displacement",
+        "_prepared_migration_displacement_biases",
         "_prepared_organization_agency",
         "_prepared_organization_concepts",
         "_prepared_organization_operations",
@@ -490,6 +494,8 @@ class CognitiveLoop:
         territorial_claim_policy: object | None = None,
         borders_mode: object | None = None,
         borders_policy: object | None = None,
+        migration_displacement_mode: object | None = None,
+        migration_displacement_policy: object | None = None,
         group_formation_mode: object | None = None,
         group_formation_policy: object | None = None,
         social_norm_mode: object | None = None,
@@ -747,6 +753,34 @@ class CognitiveLoop:
             raise TypeError("borders_policy must be BordersPolicy")
         self._borders_mode = borders
         self._borders_policy = borders_policy
+        from agents.cognition.configuration import (
+            CognitionMigrationDisplacementMode,
+        )
+        from agents.cognition.migration_displacement import (
+            MigrationDisplacementPolicy,
+            default_migration_displacement_policy,
+        )
+
+        migration_displacement = (
+            CognitionMigrationDisplacementMode.DISABLED
+            if migration_displacement_mode is None
+            else migration_displacement_mode
+        )
+        if type(migration_displacement) is not CognitionMigrationDisplacementMode:
+            raise TypeError(
+                "migration_displacement_mode must be "
+                "CognitionMigrationDisplacementMode"
+            )
+        if migration_displacement is CognitionMigrationDisplacementMode.DISABLED:
+            migration_displacement_policy = None
+        elif migration_displacement_policy is None:
+            migration_displacement_policy = default_migration_displacement_policy()
+        elif type(migration_displacement_policy) is not MigrationDisplacementPolicy:
+            raise TypeError(
+                "migration_displacement_policy must be MigrationDisplacementPolicy"
+            )
+        self._migration_displacement_mode = migration_displacement
+        self._migration_displacement_policy = migration_displacement_policy
         from agents.cognition.configuration import CognitionGroupFormationMode
         from agents.cognition.group_formation import GroupFormationPolicy
 
@@ -1133,6 +1167,8 @@ class CognitiveLoop:
         self._organized_conflict_policy = organized_conflict_policy
         self._prepared_organized_conflict: object | None = None
         self._prepared_borders: object | None = None
+        self._prepared_migration_displacement: object | None = None
+        self._prepared_migration_displacement_biases: dict[str, float] = {}
         from agents.cognition.collective_decisions import CollectiveDecisionPolicy
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
 
@@ -1618,6 +1654,10 @@ class CognitiveLoop:
             prepared_diplomacy=self._prepared_diplomacy,
             prepared_organized_conflict=self._prepared_organized_conflict,
             prepared_borders=self._prepared_borders,
+            prepared_migration_displacement=self._prepared_migration_displacement,
+            prepared_migration_displacement_biases=tuple(
+                sorted(self._prepared_migration_displacement_biases.items())
+            ),
             symbolic_translation_applications=tuple(
                 tuple(sorted(item.items()))
                 for item in self._symbolic_translation_applications
@@ -1671,6 +1711,10 @@ class CognitiveLoop:
         self._prepared_diplomacy = state.prepared_diplomacy
         self._prepared_organized_conflict = state.prepared_organized_conflict
         self._prepared_borders = state.prepared_borders
+        self._prepared_migration_displacement = state.prepared_migration_displacement
+        self._prepared_migration_displacement_biases = dict(
+            state.prepared_migration_displacement_biases
+        )
         self._symbolic_translation_applications = [
             dict(cast("Sequence[tuple[str, object]]", item))
             for item in state.symbolic_translation_applications
@@ -3195,6 +3239,92 @@ class CognitiveLoop:
             self._borders_mode.value,
             len(updated.domains),
             len(updated.agreements),
+        )
+        return updated
+
+    def _prepare_migration_displacement(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        organization_concepts: object | None,
+        institution_concepts: object | None,
+        formal_rules: object | None,
+        disputes: object | None,
+        evidence: object | None,
+        diplomacy: object | None,
+        organized_conflict: object | None,
+        borders: object | None,
+    ) -> object | None:
+        """Refresh one owner's migration beliefs and the next-step route bias."""
+        from agents.cognition.configuration import CognitionMigrationDisplacementMode
+        from agents.cognition.migration_displacement import (
+            MigrationDisplacementLedger,
+            MigrationDisplacementPolicy,
+            apply_migration_displacement_update,
+            empty_migration_displacement_ledger,
+            migration_displacement_action_biases,
+        )
+
+        if (
+            self._migration_displacement_mode
+            is not CognitionMigrationDisplacementMode.DETERMINISTIC
+        ):
+            self._prepared_migration_displacement = None
+            self._prepared_migration_displacement_biases = {}
+            return None
+        policy = self._migration_displacement_policy
+        if type(policy) is not MigrationDisplacementPolicy:
+            raise TypeError("migration_displacement_policy must be policy")
+        snapshot = loop_input.snapshot
+        observation = loop_input.observation
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "migration_displacement", None)
+        )
+        prior = (
+            carried
+            if type(carried) is MigrationDisplacementLedger
+            else empty_migration_displacement_ledger(loop_input.agent_id)
+        )
+        updated = apply_migration_displacement_update(
+            owner_id=loop_input.agent_id,
+            tick=observation.tick,
+            observation=observation,
+            prior=prior,
+            identity=None if snapshot is None else snapshot.social_identity,
+            relationships=() if snapshot is None else tuple(snapshot.relationships),
+            organization_concepts=organization_concepts,
+            institution_concepts=institution_concepts,
+            formal_rules=formal_rules,
+            disputes=disputes,
+            evidence=evidence,
+            diplomacy=diplomacy,
+            organized_conflict=organized_conflict,
+            borders=borders,
+            inbox=None if snapshot is None else snapshot.inbox,
+            policy=policy,
+        )
+        known_destinations = tuple(
+            item.destination_id
+            for item in observation.exits
+            if item.travel_duration_ticks is not None
+        )
+        biases = migration_displacement_action_biases(
+            updated,
+            observation=observation,
+            known_destinations=known_destinations,
+            policy=policy,
+        )
+        self._prepared_migration_displacement = updated
+        self._prepared_migration_displacement_biases = dict(sorted(biases.items()))
+        _LOG.debug(
+            "migration_displacement_prepare_done mode=%s intents=%s routes=%s "
+            "biases=%s",
+            self._migration_displacement_mode.value,
+            len(updated.intents),
+            len(updated.routes),
+            len(self._prepared_migration_displacement_biases),
         )
         return updated
 
@@ -5309,6 +5439,17 @@ class CognitiveLoop:
             organization_concepts=organization_concepts,
             diplomacy=diplomacy,
         )
+        migration_displacement = self._prepare_migration_displacement(
+            loop_input,
+            organization_concepts=organization_concepts,
+            institution_concepts=institution_concepts,
+            formal_rules=formal_rules,
+            disputes=disputes,
+            evidence=evidence,
+            diplomacy=diplomacy,
+            organized_conflict=organized_conflict,
+            borders=borders,
+        )
         mediation = self._prepare_mediation(loop_input, memory)
         mediation_authority = self._prepare_mediation_authority(
             loop_input,
@@ -5514,6 +5655,12 @@ class CognitiveLoop:
                     ),
                     regional_migration_hop_limit=self._regional_migration_hop_limit,
                     regional_memory=memory,
+                    migration_displacement_bias=(
+                        dict(self._prepared_migration_displacement_biases)
+                        if migration_displacement is not None
+                        and self._prepared_migration_displacement_biases
+                        else None
+                    ),
                     office_concepts=office_concepts,
                     office_succession_mode=self._office_succession_mode,
                     collective_decisions=collective_decisions,
@@ -5687,6 +5834,7 @@ class CognitiveLoop:
             diplomacy=diplomacy,
             organized_conflict=organized_conflict,
             borders=borders,
+            migration_displacement=migration_displacement,
             collective_decisions=collective_decisions,
             collective_decision_audit=tuple(decision_audit),
             mediation=mediation,
@@ -6141,6 +6289,7 @@ class CognitiveLoop:
             diplomacy=diplomacy,
             organized_conflict=proposal.organized_conflict,
             borders=proposal.borders,
+            migration_displacement=proposal.migration_displacement,
             collective_decisions=collective_decisions,
             mediation=mediation,
             mediation_authority=proposal.mediation_authority,

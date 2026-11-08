@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 176
+METRIC_FAMILY_COUNT: Final[int] = 180
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -251,6 +251,10 @@ class MetricFamilyId(StrEnum):
     BORDER_OVERLAP_CONTEST = "border_overlap_contest"
     BORDER_AGREEMENT_RECOGNITION = "border_agreement_recognition"
     BORDER_CONTROL_ALIGNMENT = "border_control_alignment"
+    MIGRATION_WAVE_STRUCTURE = "migration_wave_structure"
+    MIGRATION_CAUSE_EVIDENCE = "migration_cause_evidence"
+    MIGRATION_CLUSTER_COHESION = "migration_cluster_cohesion"
+    MIGRATION_INTEGRATION_OUTCOME = "migration_integration_outcome"
 
 
 class DenominatorKind(StrEnum):
@@ -8178,6 +8182,305 @@ def _spec_border_control_alignment() -> MetricSpecification:
     )
 
 
+MIGRATION_CAUSE_KINDS: Final[tuple[str, ...]] = (
+    "resource_scarcity",
+    "environmental_hazard",
+    "conflict",
+    "opportunity",
+    "social_network",
+    "institution",
+    "unknown",
+)
+MIGRATION_CAUSE_SOURCES: Final[tuple[str, ...]] = (
+    "direct_observation",
+    "own_need",
+    "own_journey",
+    "own_relationship",
+    "own_kinship",
+    "organization_belief",
+    "institution_belief",
+    "formal_rule_belief",
+    "dispute_belief",
+    "evidence_belief",
+    "diplomacy_belief",
+    "conflict_belief",
+    "border_belief",
+    "testimony",
+    "inference",
+    "unknown",
+)
+MIGRATION_CLUSTER_SIZE_BUCKETS: Final[tuple[str, ...]] = (
+    "2",
+    "3",
+    "4",
+    "5_to_8",
+    "9_plus",
+)
+MIGRATION_OUTCOME_LABELS: Final[tuple[str, ...]] = (
+    "settled",
+    "transient",
+    "returned",
+    "onward",
+    "unknown",
+)
+MIGRATION_RESIDENCE_BUCKETS: Final[tuple[str, ...]] = (
+    "0",
+    "1_to_3",
+    "4_to_15",
+    "16_to_31",
+    "32_plus",
+)
+MIGRATION_WAVE_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "wave_count",
+    "participant_count",
+    "distinct_origin_count",
+    "distinct_destination_count",
+    "wave_participant_mean",
+    "wave_participant_max",
+    "route_length_counts",
+    "wave_duration_ticks",
+    "return_count",
+    "onward_count",
+    "same_origin_share",
+    "same_destination_share",
+    "cluster_overlap_count",
+    "coverage_complete",
+    "coverage_partial",
+    "coverage_missing",
+)
+MIGRATION_CAUSE_EVIDENCE_KEYS: Final[tuple[str, ...]] = (
+    *(f"cause_count:{kind}" for kind in MIGRATION_CAUSE_KINDS),
+    *(f"source_count:{kind}" for kind in MIGRATION_CAUSE_SOURCES),
+    "owner_coverage_ratio",
+    "wave_with_cause_count",
+    "wave_without_cause_count",
+    "contradicted_cause_count",
+    "unresolved_anchor_count",
+    "same_root_suppressed_count",
+    "displacement_like_count",
+    "mixed_count",
+    "not_displacement_like_count",
+    "unknown_count",
+    "independent_cause_mean",
+)
+MIGRATION_CLUSTER_COHESION_KEYS: Final[tuple[str, ...]] = (
+    "cluster_count",
+    *(f"cluster_size:{bucket}" for bucket in MIGRATION_CLUSTER_SIZE_BUCKETS),
+    "co_movement_pair_count",
+    "kinship_supported_pair_count",
+    "organization_supported_pair_count",
+    "communication_supported_pair_count",
+    "relationship_supported_pair_count",
+    "independent_support_ratio",
+    "cluster_wave_overlap_count",
+    "unknown_cluster_count",
+    "coverage_complete",
+    "coverage_partial",
+)
+MIGRATION_INTEGRATION_OUTCOME_KEYS: Final[tuple[str, ...]] = (
+    *(f"outcome:{label}" for label in MIGRATION_OUTCOME_LABELS),
+    *(f"residence_ticks:{bucket}" for bucket in MIGRATION_RESIDENCE_BUCKETS),
+    "access_evidence_count",
+    "participation_evidence_count",
+    "relationship_evidence_count",
+    "conflict_evidence_count",
+    "censored_count",
+    "unknown_count",
+    "complete_coverage_count",
+    "partial_coverage_count",
+    "missing_coverage_count",
+)
+
+
+def _migration_formulas(
+    keys: tuple[str, ...], fixed: Mapping[str, str], generic: Mapping[str, str]
+) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key in keys:
+        if key in fixed:
+            out[key] = fixed[key]
+        else:
+            out[key] = generic[key.split(":", 1)[0]]
+    return out
+
+
+def _spec_migration_wave_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MIGRATION_WAVE_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_migration_wave_rows",
+        denominator="detected_waves",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="12_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each participant is counted once per wave",
+        censoring_policy="right_censored",
+        formulas=_migration_formulas(
+            MIGRATION_WAVE_STRUCTURE_KEYS,
+            {
+                "wave_count": "detected analytical wave candidates",
+                "participant_count": "distinct wave participant tokens",
+                "distinct_origin_count": "distinct wave origin tokens",
+                "distinct_destination_count": "distinct wave destination tokens",
+                "wave_participant_mean": "mean participants per wave",
+                "wave_participant_max": "maximum participants in one wave",
+                "route_length_counts": "route token length counts",
+                "wave_duration_ticks": "maximum wave end tick minus start tick",
+                "return_count": "wave participants with a returned outcome",
+                "onward_count": "wave participants with an onward outcome",
+                "same_origin_share": "single-origin waves / wave_count",
+                "same_destination_share": (
+                    "participants at the modal destination / wave participants"
+                ),
+                "cluster_overlap_count": "waves overlapping a social cluster",
+                "coverage_complete": "waves with complete coverage",
+                "coverage_partial": "waves with partial coverage",
+                "coverage_missing": "waves with missing coverage",
+            },
+            {},
+        ),
+        value_keys=MIGRATION_WAVE_STRUCTURE_KEYS,
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_movements",
+    )
+
+
+def _spec_migration_cause_evidence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MIGRATION_CAUSE_EVIDENCE,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_migration_cause_rows",
+        denominator="owner_cause_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="16_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="same-root testimony is counted once",
+        censoring_policy="right_censored",
+        formulas=_migration_formulas(
+            MIGRATION_CAUSE_EVIDENCE_KEYS,
+            {
+                "owner_coverage_ratio": (
+                    "wave participants with a cause row / wave participants"
+                ),
+                "wave_with_cause_count": "waves with an independent cause",
+                "wave_without_cause_count": "waves without an independent cause",
+                "contradicted_cause_count": "contradicted owner cause rows",
+                "unresolved_anchor_count": "owner cause rows with unresolved anchors",
+                "same_root_suppressed_count": "same-root rows suppressed in waves",
+                "displacement_like_count": "waves labelled displacement_like",
+                "mixed_count": "waves labelled mixed",
+                "not_displacement_like_count": "waves labelled not_displacement_like",
+                "unknown_count": "waves labelled unknown",
+                "independent_cause_mean": "mean independent causes per wave",
+            },
+            {
+                "cause_count": "owner cause rows by closed cause kind",
+                "source_count": "owner cause rows by closed source kind",
+            },
+        ),
+        value_keys=MIGRATION_CAUSE_EVIDENCE_KEYS,
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_owner_rows",
+    )
+
+
+def _spec_migration_cluster_cohesion() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MIGRATION_CLUSTER_COHESION,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_migration_cluster_rows",
+        denominator="detected_clusters",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="32_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each unordered member pair is counted once",
+        censoring_policy="right_censored",
+        formulas=_migration_formulas(
+            MIGRATION_CLUSTER_COHESION_KEYS,
+            {
+                "cluster_count": "detected analytical cluster candidates",
+                "co_movement_pair_count": "co-movement supported member pairs",
+                "kinship_supported_pair_count": "kinship supported member pairs",
+                "organization_supported_pair_count": (
+                    "organization supported member pairs"
+                ),
+                "communication_supported_pair_count": (
+                    "communication supported member pairs"
+                ),
+                "relationship_supported_pair_count": (
+                    "relationship supported member pairs"
+                ),
+                "independent_support_ratio": (
+                    "clusters with two or more bases / cluster_count"
+                ),
+                "cluster_wave_overlap_count": "clusters referenced by a wave",
+                "unknown_cluster_count": "clusters with missing coverage",
+                "coverage_complete": "clusters with complete coverage",
+                "coverage_partial": "clusters with partial coverage",
+            },
+            {"cluster_size": "clusters by member-count bucket"},
+        ),
+        value_keys=MIGRATION_CLUSTER_COHESION_KEYS,
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_movements",
+    )
+
+
+def _spec_migration_integration_outcome() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.MIGRATION_INTEGRATION_OUTCOME,
+        evidence_inputs=frozenset({EvidenceStage.AGENT_VISIBLE_PROJECTION}),
+        population="detached_migration_outcome_rows",
+        denominator="wave_participant_destinations",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="32_ticks",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="emit_zero",
+        opportunity_vs_occurrence="occurrence",
+        self_edge_policy="each participant destination arrival is counted once",
+        censoring_policy="right_censored",
+        formulas=_migration_formulas(
+            MIGRATION_INTEGRATION_OUTCOME_KEYS,
+            {
+                "access_evidence_count": "resource access evidence count",
+                "participation_evidence_count": "participation evidence count",
+                "relationship_evidence_count": "relationship evidence count",
+                "conflict_evidence_count": "conflict evidence count",
+                "censored_count": "outcomes censored by the run boundary",
+                "unknown_count": "outcomes labelled unknown",
+                "complete_coverage_count": "outcomes with complete coverage",
+                "partial_coverage_count": "outcomes with partial coverage",
+                "missing_coverage_count": "outcomes with missing coverage",
+            },
+            {
+                "outcome": "outcomes by closed integration label",
+                "residence_ticks": "outcomes by residence tick bucket",
+            },
+        ),
+        value_keys=MIGRATION_INTEGRATION_OUTCOME_KEYS,
+        empty_case="emit_zero",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_movements",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -8355,6 +8658,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_border_overlap_contest,
     _spec_border_agreement_recognition,
     _spec_border_control_alignment,
+    _spec_migration_wave_structure,
+    _spec_migration_cause_evidence,
+    _spec_migration_cluster_cohesion,
+    _spec_migration_integration_outcome,
 )
 
 

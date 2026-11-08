@@ -469,6 +469,7 @@ class AgentRuntime:
         "_memory_writer",
         "_mentorship",
         "_mentorship_audits",
+        "_migration_displacement",
         "_mind_audits",
         "_office_concepts",
         "_offline_consolidation_audits",
@@ -634,6 +635,7 @@ class AgentRuntime:
         self._diplomacy: object | None = None
         self._organized_conflict: object | None = None
         self._borders: object | None = None
+        self._migration_displacement: object | None = None
         self._collective_decisions: object | None = None
         self._mediation: object | None = None
         self._institutional_memory: object | None = None
@@ -1597,6 +1599,49 @@ class AgentRuntime:
             tick,
         )
 
+    def _commit_migration_displacement(
+        self, ledger: object | None, tick: int
+    ) -> None:
+        from agents.cognition.configuration import CognitionMigrationDisplacementMode
+        from agents.cognition.migration_displacement import (
+            MigrationDisplacementLedger,
+        )
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_migration_displacement_mode",
+            CognitionMigrationDisplacementMode.DISABLED,
+        )
+        if mode is not CognitionMigrationDisplacementMode.DETERMINISTIC:
+            self._migration_displacement = None
+            _LOG.debug("cognition_migration_displacement_mode disabled")
+            return
+        if ledger is None:
+            _LOG.warning("migration_displacement_pending_ledger_missing tick=%s", tick)
+            return
+        if type(ledger) is not MigrationDisplacementLedger:
+            raise TypeError(
+                "migration_displacement must be MigrationDisplacementLedger"
+            )
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._migration_displacement = ledger
+        _LOG.debug(
+            "migration_displacement_ledger_carried intents=%s routes=%s causes=%s "
+            "clusters=%s integrations=%s waves=%s tick=%s",
+            len(ledger.intents),
+            len(ledger.routes),
+            len(ledger.causes),
+            len(ledger.clusters),
+            len(ledger.integrations),
+            len(ledger.waves),
+            tick,
+        )
+
     def _commit_collective_decisions(self, ledger: object | None, tick: int) -> None:
         from agents.cognition.collective_decisions import CollectiveDecisionLedger
         from agents.cognition.configuration import CognitionCollectiveDecisionMode
@@ -2501,6 +2546,7 @@ class AgentRuntime:
                 diplomacy=self._diplomacy,
                 organized_conflict=self._organized_conflict,
                 borders=self._borders,
+                migration_displacement=self._migration_displacement,
                 collective_decisions=self._collective_decisions,
                 mediation=self._mediation,
                 institutional_memory=self._institutional_memory,
@@ -3019,6 +3065,10 @@ class AgentRuntime:
         )
         self._commit_borders(
             getattr(pending.loop_result, "borders", None),
+            pending.tick,
+        )
+        self._commit_migration_displacement(
+            getattr(pending.loop_result, "migration_displacement", None),
             pending.tick,
         )
         self._commit_collective_decisions(
@@ -3624,6 +3674,16 @@ class AgentRuntime:
         self._diplomacy = getattr(checkpoint, "diplomacy", None)
         self._organized_conflict = getattr(checkpoint, "organized_conflict", None)
         self._borders = getattr(checkpoint, "borders", None)
+        restored_migration = getattr(checkpoint, "migration_displacement", None)
+        if (
+            restored_migration is not None
+            and getattr(restored_migration, "owner_id", None) != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+        self._migration_displacement = restored_migration
         if (
             self._representation is not None
             and getattr(self._representation, "owner_id", None)
@@ -3751,6 +3811,7 @@ class AgentRuntime:
             diplomacy=self._diplomacy,
             organized_conflict=self._organized_conflict,
             borders=self._borders,
+            migration_displacement=self._migration_displacement,
             collective_decisions=self._collective_decisions,
             mediation=self._mediation,
             institutional_memory=self._institutional_memory,
