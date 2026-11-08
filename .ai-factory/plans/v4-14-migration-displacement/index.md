@@ -374,12 +374,12 @@ are unchanged.
 - [x] Task 15: Add four metric families and raise the catalog to 180 ([details](phase-03-detached-analysis.md#task-15-add-four-metric-families-and-raise-the-catalog-to-180)) (depends on 11-14)
 
 ### Phase 4: Migration-Displacement Snapshot
-- [ ] Task 16: Define migration-displacement-snapshot-v1 and its canonical codec ([details](phase-04-snapshot.md#task-16-define-migration-displacement-snapshot-v1-and-its-canonical-codec)) (depends on 10-15)
-- [ ] Task 17: Add migration-displacement ports, cursor purposes, and bounded paging ([details](phase-04-snapshot.md#task-17-add-migration-displacement-ports-cursor-purposes-and-bounded-paging)) (depends on 16)
+- [x] Task 16: Define migration-displacement-snapshot-v1 and its canonical codec ([details](phase-04-snapshot.md#task-16-define-migration-displacement-snapshot-v1-and-its-canonical-codec)) (depends on 10-15)
+- [x] Task 17: Add migration-displacement ports, cursor purposes, and bounded paging ([details](phase-04-snapshot.md#task-17-add-migration-displacement-ports-cursor-purposes-and-bounded-paging)) (depends on 16)
 
 ### Phase 5: Composition and Durable Publication
-- [ ] Task 18: Compose completed-run migration-displacement views and receipts ([details](phase-05-composition-publication.md#task-18-compose-completed-run-migration-displacement-views-and-receipts)) (depends on 10, 13, 15, 17)
-- [ ] Task 19: Add the filesystem store, settings, and CLI producer ([details](phase-05-composition-publication.md#task-19-add-the-filesystem-store-settings-and-cli-producer)) (depends on 16-18)
+- [x] Task 18: Compose completed-run migration-displacement views and receipts ([details](phase-05-composition-publication.md#task-18-compose-completed-run-migration-displacement-views-and-receipts)) (depends on 10, 13, 15, 17)
+- [x] Task 19: Add the filesystem store, settings, and CLI producer ([details](phase-05-composition-publication.md#task-19-add-the-filesystem-store-settings-and-cli-producer)) (depends on 16-18)
 
 ### Phase 6: Read-Only API, Research UI, and Godot Overlays
 - [ ] Task 20: Add six GET migration routes, schemas, and app wiring ([details](phase-06-read-only-surfaces.md#task-20-add-six-get-migration-routes-schemas-and-app-wiring)) (depends on 19)

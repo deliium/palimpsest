@@ -233,6 +233,10 @@ class Settings(BaseSettings):
     organized_conflict_cursor_key: SecretStr | None = Field(default=None, repr=False)
     borders_root: Path | None = None
     borders_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    migration_displacement_root: Path | None = None
+    migration_displacement_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -370,6 +374,15 @@ class Settings(BaseSettings):
     def validate_borders_cursor_key(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError("borders cursor key must be at least 32 UTF-8 bytes")
+        return value
+
+    @field_validator("migration_displacement_cursor_key")
+    @classmethod
+    def validate_migration_displacement_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and not value.get_secret_value():
+            raise ValueError("migration_displacement cursor key must be non-empty")
         return value
 
     @field_validator("civilization_cursor_key")
@@ -687,6 +700,15 @@ class Settings(BaseSettings):
                 and self.borders_cursor_key is not None
             ),
             "borders_cursor_enabled": self.borders_cursor_key is not None,
+            "has_migration_displacement_root": (
+                self.migration_displacement_root is not None
+            ),
+            "has_migration_displacement_cursor_key": (
+                self.migration_displacement_cursor_key is not None
+            ),
+            "migration_displacement_cursor_enabled": (
+                self.migration_displacement_cursor_key is not None
+            ),
             "has_revision": bool(self.revision),
         }
 

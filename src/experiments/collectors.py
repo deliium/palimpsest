@@ -929,7 +929,7 @@ def assemble_arm_metric_bundle(
         arm.runner_result, "migration_displacement_ledgers", None
     )
     if migration_ledgers:
-        from experiments.composition import (
+        from experiments.migration_displacement_harvest import (
             build_completed_run_migration_displacement_harvest,
         )
 
@@ -939,7 +939,7 @@ def assemble_arm_metric_bundle(
         }
         migration_harvest = build_completed_run_migration_displacement_harvest(
             arm.runner_result,
-            events or (),
+            committed_events=events or (),
             run_id=arm.assignment.run_id.value,
             input_revision=arm.config_fingerprint[:32] or "rev-run",
             entity_to_agent=migration_entity_to_agent,
@@ -949,8 +949,7 @@ def assemble_arm_metric_bundle(
             window_end=ticks,
             complete_through_boundary=ticks,
         )
-        if migration_harvest is not None:
-            inputs = replace(inputs, migration_displacement_rows=migration_harvest)
+        inputs = replace(inputs, migration_displacement_rows=migration_harvest.rows)
     dispute_ledgers = getattr(arm.runner_result, "dispute_ledgers", None)
     if dispute_ledgers:
         from analysis.dispute_evidence import (

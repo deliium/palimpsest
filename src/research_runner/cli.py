@@ -1047,6 +1047,20 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.migration_displacement_composition import (
+                migration_displacement_producer_options_from_args,
+            )
+
+            migration_displacement_options = (
+                migration_displacement_producer_options_from_args(args)
+            )
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_migration_displacement_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1521,6 +1535,36 @@ def _cmd_generational(args: argparse.Namespace) -> int:
             print(f"borders_publication_reason={borders_receipt.get('reason')}")
             if borders_receipt.get("publication_id"):
                 print(f"borders_publication_id={borders_receipt['publication_id']}")
+        if migration_displacement_options.enabled:
+            from research_runner.migration_displacement_composition import (
+                publish_migration_displacement_harvest,
+                write_migration_displacement_receipt,
+            )
+
+            migration_displacement_receipt = publish_migration_displacement_harvest(
+                arm.runner_result,
+                migration_displacement_options,
+                committed_events=arm.committed_events or (),
+                run_id=assignment.run_id.value,
+            )
+            write_migration_displacement_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                migration_displacement_receipt,
+            )
+            print(
+                "migration_displacement_publication_status="
+                f"{migration_displacement_receipt['status']}"
+            )
+            print(
+                "migration_displacement_publication_reason="
+                f"{migration_displacement_receipt.get('reason')}"
+            )
+            if migration_displacement_receipt.get("publication_id"):
+                print(
+                    "migration_displacement_publication_id="
+                    f"{migration_displacement_receipt['publication_id']}"
+                )
         if lineage_options is not None:
             import json
 
@@ -1712,6 +1756,13 @@ def build_parser() -> argparse.ArgumentParser:
     gen_p.add_argument("--borders-root", default=None)
     gen_p.add_argument("--borders-max-publications", type=int, default=16)
     gen_p.add_argument("--borders-max-bytes", type=int, default=8_388_608)
+    gen_p.add_argument("--migration-displacement-root", default=None)
+    gen_p.add_argument(
+        "--migration-displacement-max-publications", type=int, default=16
+    )
+    gen_p.add_argument(
+        "--migration-displacement-max-bytes", type=int, default=8_388_608
+    )
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)
     gen_p.add_argument("--lineage-max-publications", type=int, default=1000)

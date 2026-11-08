@@ -813,70 +813,25 @@ def build_completed_run_migration_displacement_harvest(
     analysis only: nothing here reaches cognition, prompts, memory, or world
     state, and logging is metadata-only.
     """
-    from analysis.migration_displacement_events import (
-        migration_communication_pairs_from_events,
-        migration_integration_rows_from_events,
-        migration_kinship_pairs_from_events,
-        migration_movement_rows_with_coverage,
-    )
-    from analysis.migration_displacement_policy import (
-        default_migration_displacement_analysis_policy,
-    )
-    from analysis.migration_displacement_rows import (
-        harvest_migration_displacement_rows,
-    )
-    from simulation.migration_displacement_export import (
-        migration_displacement_owner_export,
+    from experiments.migration_displacement_harvest import (
+        build_completed_run_migration_displacement_harvest as build_harvest,
     )
 
     ledgers = tuple(getattr(runner_result, "migration_displacement_ledgers", ()) or ())
     if not ledgers:
         _LOG.debug("migration_displacement_harvest_inactive")
         return None
-    policy = default_migration_displacement_analysis_policy()
-    events = tuple(committed_events or ())
-    topology: dict[str, str] | None = None
-    locations = getattr(regions_spec, "location_regions", None)
-    if locations is not None:
-        topology = {item.location_id.value: item.region_id for item in locations}
-    exported = migration_displacement_owner_export(ledgers)
-    movements, _coverage = migration_movement_rows_with_coverage(
-        events,
+    harvest = build_harvest(
+        runner_result,
+        committed_events=committed_events,
         run_id=run_id,
         input_revision=input_revision,
-        region_topology=topology,
-        max_pairs=policy.max_pairs_per_run,
         entity_to_agent=entity_to_agent,
+        regions_spec=regions_spec,
         window_end=window_end,
         complete_through_boundary=complete_through_boundary,
     )
-    evidence = migration_integration_rows_from_events(
-        events,
-        run_id=run_id,
-        input_revision=input_revision,
-        region_topology=topology,
-        max_pairs=policy.max_pairs_per_run,
-        entity_to_agent=entity_to_agent,
-        window_end=window_end,
-        complete_through_boundary=complete_through_boundary,
-    )
-    harvest = harvest_migration_displacement_rows(
-        exported,
-        movements,
-        evidence,
-        kinship_pairs=migration_kinship_pairs_from_events(events),
-        communication_pairs=migration_communication_pairs_from_events(
-            events, entity_to_agent=entity_to_agent
-        ),
-        policy=policy,
-    )
-    _LOG.debug(
-        "migration_displacement_harvest_built owners=%s movements=%s waves=%s",
-        len(ledgers),
-        len(movements),
-        len(harvest.waves),
-    )
-    return harvest
+    return harvest.rows
 
 
 def regional_population_input_from_snapshot(
