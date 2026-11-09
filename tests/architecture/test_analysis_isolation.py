@@ -245,6 +245,36 @@ def test_phenomenon_panel_and_matrix_summary_not_imported_by_cognition() -> None
     assert hits == []
 
 
+def test_inter_society_relations_analysis_never_feeds_live_packages() -> None:
+    """V4-15 ISR harvest/metrics stay detached from cognition and world authority."""
+    hits: list[str] = []
+    for package in ("agents", "memory", "social", "world", "observer"):
+        root = SRC / package
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            hits.extend(
+                _module_imports_forbidden(
+                    path,
+                    (
+                        "analysis.inter_society_relations_contract",
+                        "analysis.inter_society_relations_detection",
+                        "analysis.inter_society_relations_metrics",
+                        "analysis.inter_society_relations_timeseries",
+                    ),
+                )
+            )
+            text = path.read_text(encoding="utf-8")
+            for symbol in (
+                "InterSocietyRelationsAnalysis",
+                "harvest_inter_society_relations",
+                "derive_inter_society_pair_id",
+            ):
+                if symbol in text:
+                    hits.append(f"{path.relative_to(SRC)}:{symbol}")
+    assert hits == [], hits
+
+
 def test_evidence_composition_lives_in_experiments_without_persistence() -> None:
     composition = SRC / "experiments" / "composition.py"
     assert composition.is_file()

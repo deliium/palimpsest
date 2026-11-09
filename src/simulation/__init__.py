@@ -619,6 +619,18 @@ from simulation.inspection import (
     clamp_inspection_page_limit,
     project_replay_for_inspection,
 )
+from simulation.inter_society_relations_codec import (
+    decode_inter_society_relations_snapshot,
+    encode_inter_society_relations_snapshot,
+    finalize_inter_society_relations_snapshot,
+)
+from simulation.inter_society_relations_models import InterSocietyRelationsSnapshot
+from simulation.inter_society_relations_ports import (
+    INTER_SOCIETY_RELATIONS_CURSOR_PURPOSES,
+    InterSocietyRelationsCursor,
+    InterSocietyRelationsPublication,
+    InterSocietyRelationsSummary,
+)
 from simulation.journal import (
     PersistenceSerializationError,
     compute_commit_hash,
@@ -1292,6 +1304,7 @@ __all__ = [
     "GENERATIONAL_RUN_POLICY_VERSION",
     "GOAL_REVISION_SCHEMA_VERSION",
     "INHERIT_SEED_STREAM_TOKEN",
+    "INTER_SOCIETY_RELATIONS_CURSOR_PURPOSES",
     "LINEAGE_ADJACENCY_PAGE_MAX_EDGES",
     "LINEAGE_CONTROL_SCHEMA_VERSION",
     "LINEAGE_DESCRIPTOR_MAX_BYTES",
@@ -1715,6 +1728,10 @@ __all__ = [
     "InspectionReplayProjection",
     "InspectionSurface",
     "InstitutionGroundingWitness",
+    "InterSocietyRelationsCursor",
+    "InterSocietyRelationsPublication",
+    "InterSocietyRelationsSnapshot",
+    "InterSocietyRelationsSummary",
     "InterventionApplicationResult",
     "InvocationResolveResult",
     "JournalBranchCompare",
@@ -2000,6 +2017,7 @@ __all__ = [
     "decode_finalization_command",
     "decode_formal_rule_snapshot",
     "decode_formal_rule_value",
+    "decode_inter_society_relations_snapshot",
     "decode_lineage_adjacency_page",
     "decode_lineage_control_record",
     "decode_lineage_manifest",
@@ -2074,6 +2092,7 @@ __all__ = [
     "encode_formal_rule_snapshot",
     "encode_formal_rule_value",
     "encode_goal_transition_receipt",
+    "encode_inter_society_relations_snapshot",
     "encode_lineage_adjacency_page",
     "encode_lineage_control_record",
     "encode_lineage_manifest",
@@ -2104,6 +2123,7 @@ __all__ = [
     "finalize_delegation_representation_snapshot",
     "finalize_dispute_snapshot",
     "finalize_evidence_testimony_snapshot",
+    "finalize_inter_society_relations_snapshot",
     "fingerprint_physical_rules",
     "fork_state_digest",
     "formal_rule_cursor_matches",
