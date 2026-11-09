@@ -318,10 +318,10 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 )
 
 # V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
-# V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, and V4-12 owns
-# ``organized_conflict``; the remaining seven V4 flags stay unowned and fail
-# closed at runtime construction until their behavior plans land and claim
-# ownership.
+# V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, V4-12 owns
+# ``organized_conflict``, and V4-16 owns ``infrastructure_networks``; the
+# remaining six V4 flags stay unowned and fail closed at runtime construction
+# until their behavior plans land and claim ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
         "organizations",
@@ -329,6 +329,7 @@ _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "legal_disputes",
         "diplomacy",
         "organized_conflict",
+        "infrastructure_networks",
     }
 )
 
@@ -1124,8 +1125,9 @@ class V4CapabilityFlags:
     """Run-level reserved V4 capability identifiers (configuration only).
 
     Defaults are all off. V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns
-    ``formal_rules``, V4-07 owns ``legal_disputes``, and V4-10 owns
-    ``diplomacy``. Enabling an unowned flag fails closed at
+    ``formal_rules``, V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``,
+    V4-12 owns ``organized_conflict``, and V4-16 owns
+    ``infrastructure_networks``. Enabling an unowned flag fails closed at
     ``SimulationRunner.from_config`` with ``capability_unimplemented`` and
     ``stage="v4_capability_flags"`` until an owning plan lands. Wire key
     ``v4_capability_flags`` is a sibling of ``capability_flags`` and
@@ -8091,6 +8093,38 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "V4 capability flags require runner-config-v56 "
                 "(code=v4_capability_requires_v56)"
+            )
+        if self.v4_capability_flags.infrastructure_networks:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V56:
+                _LOGGER.error(
+                    "infrastructure_requires_v56 schema_version=%s "
+                    "reason_code=infrastructure_requires_v56",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "infrastructure_networks requires runner-config-v56 "
+                    "(code=infrastructure_requires_v56)"
+                )
+            if self.collective_projects is None:
+                _LOGGER.error(
+                    "infrastructure_requires_collective_projects "
+                    "schema_version=%s "
+                    "reason_code=infrastructure_requires_collective_projects",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "infrastructure_networks requires collective_projects "
+                    "(code=infrastructure_requires_collective_projects)"
+                )
+            _LOGGER.info(
+                "infrastructure_networks_enabled policy_id=%s",
+                "infrastructure-networks.v1",
+            )
+            _LOGGER.debug(
+                "infrastructure_networks_bind schema_v56=%s "
+                "collective_projects=%s",
+                self.schema_version == RUNNER_SCHEMA_VERSION_V56,
+                self.collective_projects is not None,
             )
         _lifecycle_schemas = {
             RUNNER_SCHEMA_VERSION_V24,

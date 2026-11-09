@@ -10,6 +10,7 @@ from world.artifacts import (
     MAX_HELD_ARTIFACTS_PER_BODY,
     InformationArtifact,
 )
+from world._infrastructure import index_infrastructure
 from world.collective_projects import (
     MAX_COLLECTIVE_PROJECTS,
     CollectiveProject,
@@ -21,6 +22,7 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
+from world.infrastructure import InfrastructureAsset
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 from world.regions import Journey, RegionsMigrationSpec
@@ -50,6 +52,7 @@ def rebuild_world_state(
     corpse_custody_item_ids: frozenset[EntityId] | None = None,
     exchange_offers: tuple[ExchangeOffer, ...] | None = None,
     collective_projects: Mapping[EntityId, CollectiveProject] | None = None,
+    infrastructure: Mapping[EntityId, InfrastructureAsset] | None = None,
     regions_migration: RegionsMigrationSpec | None = None,
     journeys: Sequence[Journey] | None = None,
 ) -> WorldState:
@@ -80,6 +83,12 @@ def rebuild_world_state(
         if collective_projects is None
         else collective_projects
     )
+    if infrastructure is None:
+        infrastructure_src: Mapping[EntityId, InfrastructureAsset] | Sequence[
+            InfrastructureAsset
+        ] | None = state.infrastructure
+    else:
+        infrastructure_src = infrastructure
     region_spec = (
         state.regions_migration if regions_migration is None else regions_migration
     )
@@ -127,6 +136,15 @@ def rebuild_world_state(
         exchange_offers=offer_src,
         collective_projects=tuple(
             sorted(project_src.values(), key=lambda value: value.project_id.value)
+        ),
+        infrastructure=(
+            None
+            if infrastructure_src is None
+            else (
+                tuple(infrastructure_src.values())
+                if isinstance(infrastructure_src, Mapping)
+                else tuple(infrastructure_src)
+            )
         ),
         regions_migration=region_spec,
         journeys=(
@@ -310,6 +328,7 @@ class WorldState:
         "_collective_projects",
         "_corpse_custody_item_ids",
         "_exchange_offers",
+        "_infrastructure",
         "_items",
         "_journeys",
         "_locations",
@@ -341,6 +360,9 @@ class WorldState:
         corpse_custody_item_ids: frozenset[EntityId] | Sequence[EntityId] = frozenset(),
         exchange_offers: tuple[ExchangeOffer, ...] | Sequence[ExchangeOffer] = (),
         collective_projects: Sequence[CollectiveProject] = (),
+        infrastructure: Sequence[InfrastructureAsset]
+        | Mapping[EntityId, InfrastructureAsset]
+        | None = None,
         regions_migration: RegionsMigrationSpec | None = None,
         journeys: Sequence[Journey] | None = None,
     ) -> None:
@@ -422,6 +444,9 @@ class WorldState:
         )
         self._collective_projects = _index_collective_projects(
             collective_projects, location_index=location_index
+        )
+        self._infrastructure = index_infrastructure(
+            infrastructure, location_ids=location_index
         )
         if (
             regions_migration is not None
@@ -535,6 +560,10 @@ class WorldState:
     @property
     def collective_projects(self) -> Mapping[EntityId, CollectiveProject]:
         return self._collective_projects
+
+    @property
+    def infrastructure(self) -> Mapping[EntityId, InfrastructureAsset] | None:
+        return self._infrastructure
 
     @property
     def regions_migration(self) -> RegionsMigrationSpec | None:

@@ -21,6 +21,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     CognitionTraceSpec,
+    CollectiveProjectsSpec,
     SimulationRunnerConfig,
     V4CapabilityFlags,
     WorldScenarioSpec,
@@ -91,10 +92,12 @@ def test_v56_all_flags_off_passes_both_profiles_unchanged() -> None:
 
 @pytest.mark.parametrize("flag_name", V4_FLAG_NAMES)
 def test_each_enabled_flag_fails_the_profile(flag_name: str) -> None:
-    config = replace(
-        _v56_config(),
-        v4_capability_flags=V4CapabilityFlags(**{flag_name: True}),
-    )
+    extras: dict[str, object] = {
+        "v4_capability_flags": V4CapabilityFlags(**{flag_name: True}),
+    }
+    if flag_name == "infrastructure_networks":
+        extras["collective_projects"] = CollectiveProjectsSpec()
+    config = replace(_v56_config(), **extras)
     decoded = decode_runner_config(encode_runner_config(config))
     assert getattr(decoded.v4_capability_flags, flag_name) is True
 
@@ -122,6 +125,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }
     ),
 )
@@ -185,3 +189,21 @@ async def test_organized_conflict_constructs_with_diplomacy() -> None:
         "diplomacy",
         "organized_conflict",
     )
+
+
+@pytest.mark.asyncio
+async def test_infrastructure_networks_constructs_with_collective_projects() -> None:
+    config = replace(
+        _v56_config(),
+        collective_projects=CollectiveProjectsSpec(),
+        v4_capability_flags=V4CapabilityFlags(infrastructure_networks=True),
+    )
+    with pytest.raises(ValueError, match="code=v4_scaffolding_flags_enabled"):
+        v4_scaffolding_profile(config)
+    runner = await SimulationRunner.from_config(
+        config, run_id=RunId("run-v4-profile-infrastructure-networks")
+    )
+    assert runner.config.v4_capability_flags.owned_enabled_names() == (
+        "infrastructure_networks",
+    )
+    assert runner.config.collective_projects is not None
