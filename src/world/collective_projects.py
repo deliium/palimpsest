@@ -388,7 +388,11 @@ class CollectiveProject:
             raise _fail("CollectiveProject.kind", "invalid_kind")
         if type(self.status) is not CollectiveProjectStatus:
             raise _fail("CollectiveProject.status", "invalid_status")
-        for name in ("target_structure_id", "linked_structure_id", "target_location_id"):
+        for name in (
+            "target_structure_id",
+            "linked_structure_id",
+            "target_location_id",
+        ):
             value = getattr(self, name)
             if value is not None and type(value) is not EntityId:
                 raise _fail(

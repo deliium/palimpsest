@@ -132,6 +132,7 @@ _FROZEN_OBSERVATION_FIELDS: frozenset[str] = frozenset(
         "artifacts",
         "repositories",
         "collective_projects",
+        "infrastructure",
         "occurrences",
         "communications",
         "hour",

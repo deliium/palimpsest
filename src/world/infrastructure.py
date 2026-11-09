@@ -101,9 +101,15 @@ class InfrastructureCatalogRow:
         if type(self.kind) is not InfrastructureKind:
             raise _fail("InfrastructureCatalogRow.kind", "infrastructure_unknown_kind")
         if type(self.topology) is not InfrastructureTopology:
-            raise _fail("InfrastructureCatalogRow.topology", "infrastructure_invalid_topology")
+            raise _fail(
+                "InfrastructureCatalogRow.topology",
+                "infrastructure_invalid_topology",
+            )
         if type(self.collective_kind) is not str or not self.collective_kind:
-            raise _fail("InfrastructureCatalogRow.collective_kind", "invalid_collective_kind")
+            raise _fail(
+                "InfrastructureCatalogRow.collective_kind",
+                "invalid_collective_kind",
+            )
         if type(self.structure_kind) is not StructureKind:
             raise _fail("InfrastructureCatalogRow.structure_kind", "invalid_structure")
         if type(self.material_kind) is not ItemKind:
@@ -121,7 +127,10 @@ class InfrastructureCatalogRow:
             or type(self.materials_required) is not int
             or self.materials_required < 1
         ):
-            raise _fail("InfrastructureCatalogRow.materials_required", "count_below_one")
+            raise _fail(
+                "InfrastructureCatalogRow.materials_required",
+                "count_below_one",
+            )
         if (
             isinstance(self.decay_per_tick, bool)
             or type(self.decay_per_tick) is not float
@@ -258,7 +267,9 @@ def catalog_row(kind: InfrastructureKind) -> InfrastructureCatalogRow:
         raise _fail("catalog_row.kind", "infrastructure_unknown_kind") from exc
 
 
-def effects_active(*, status: InfrastructureStatus, integrity: float, kind: InfrastructureKind) -> bool:
+def effects_active(
+    *, status: InfrastructureStatus, integrity: float, kind: InfrastructureKind
+) -> bool:
     """Effects apply only while operational and above the catalog integrity floor."""
     if type(status) is not InfrastructureStatus:
         raise _fail("effects_active.status", "invalid_status")
@@ -317,7 +328,10 @@ def mint_infrastructure_id(
     row = catalog_row(kind)
     if row.topology is InfrastructureTopology.EDGE:
         if endpoint_location_id is None:
-            raise _fail("mint_infrastructure_id.endpoint_location_id", "infrastructure_edge_endpoints")
+            raise _fail(
+                "mint_infrastructure_id.endpoint_location_id",
+                "infrastructure_edge_endpoints",
+            )
         left, right = normalize_edge_endpoints(location_id, endpoint_location_id)
         endpoints = f"{left.value}|{right.value}"
     else:
@@ -357,18 +371,30 @@ class InfrastructureAsset:
         if type(self.kind) is not InfrastructureKind:
             raise _fail("InfrastructureAsset.kind", "infrastructure_unknown_kind")
         if type(self.topology) is not InfrastructureTopology:
-            raise _fail("InfrastructureAsset.topology", "infrastructure_invalid_topology")
+            raise _fail(
+                "InfrastructureAsset.topology",
+                "infrastructure_invalid_topology",
+            )
         if type(self.status) is not InfrastructureStatus:
             raise _fail("InfrastructureAsset.status", "invalid_status")
         if type(self.location_id) is not EntityId:
             raise _fail("InfrastructureAsset.location_id", "invalid_location")
         if type(self.linked_project_id) is not EntityId:
             raise _fail("InfrastructureAsset.linked_project_id", "invalid_project")
-        if self.linked_structure_id is not None and type(self.linked_structure_id) is not EntityId:
-            raise _fail("InfrastructureAsset.linked_structure_id", "invalid_structure")
+        if (
+            self.linked_structure_id is not None
+            and type(self.linked_structure_id) is not EntityId
+        ):
+            raise _fail(
+                "InfrastructureAsset.linked_structure_id",
+                "invalid_structure",
+            )
         expected = catalog_row(self.kind).topology
         if self.topology is not expected:
-            raise _fail("InfrastructureAsset.topology", "infrastructure_invalid_topology")
+            raise _fail(
+                "InfrastructureAsset.topology",
+                "infrastructure_invalid_topology",
+            )
         integrity = _require_integrity("InfrastructureAsset.integrity", self.integrity)
         if self.status is InfrastructureStatus.DESTROYED and integrity != 0.0:
             raise _fail(

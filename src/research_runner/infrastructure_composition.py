@@ -43,12 +43,9 @@ class InfrastructureNetworksProducerOptions:
 def infrastructure_networks_producer_options_from_args(
     args: object,
 ) -> InfrastructureNetworksProducerOptions:
+    root_value = getattr(args, "infrastructure_networks_root", None)
     return InfrastructureNetworksProducerOptions(
-        root=(
-            Path(args.infrastructure_networks_root)
-            if getattr(args, "infrastructure_networks_root", None)
-            else None
-        ),
+        root=Path(root_value) if root_value else None,
         max_publications=int(
             getattr(args, "infrastructure_networks_max_publications", 16)
         ),

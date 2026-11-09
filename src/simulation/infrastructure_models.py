@@ -191,7 +191,9 @@ class InfrastructureAssetRecord:
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "topology", topology)
         object.__setattr__(self, "status", status)
-        object.__setattr__(self, "location_id", _stable("location_id", self.location_id))
+        object.__setattr__(
+            self, "location_id", _stable("location_id", self.location_id)
+        )
         if self.endpoint_location_id is not None:
             object.__setattr__(
                 self,
@@ -202,7 +204,9 @@ class InfrastructureAssetRecord:
             raise InfrastructureNetworksArtifactError(
                 "infrastructure_networks_invalid_value"
             )
-        object.__setattr__(self, "created_tick", _tick("created_tick", self.created_tick))
+        object.__setattr__(
+            self, "created_tick", _tick("created_tick", self.created_tick)
+        )
         object.__setattr__(
             self,
             "last_maintained_tick",
@@ -214,7 +218,9 @@ class InfrastructureAssetRecord:
             _tick("ticks_since_maintained", self.ticks_since_maintained),
         )
         object.__setattr__(
-            self, "linked_project_id", _stable("linked_project_id", self.linked_project_id)
+            self,
+            "linked_project_id",
+            _stable("linked_project_id", self.linked_project_id),
         )
         if self.linked_structure_id is not None:
             object.__setattr__(

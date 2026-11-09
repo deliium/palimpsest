@@ -62,24 +62,24 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
 
     specs = all_metric_specifications()
     assert len(specs) == 188
-    assert [spec.family_id.value for spec in specs[-36:-33]] == [
+    assert [spec.family_id.value for spec in specs[148:151]] == [
         "formal_rule_development",
         "formal_rule_authority",
         "formal_rule_response",
     ]
-    assert [spec.family_id.value for spec in specs[-33:-30]] == [
+    assert [spec.family_id.value for spec in specs[151:154]] == [
         "dispute_claim_structure",
         "dispute_testimony_independence",
         "dispute_resolution_alignment",
     ]
-    assert [spec.family_id.value for spec in specs[-30:-27]] == [
+    assert [spec.family_id.value for spec in specs[154:157]] == [
         "evidence_source_structure",
         "evidence_provenance_continuity",
         "evidence_objective_alignment",
     ]
 
 
-def test_formal_rules_flag_is_owned_and_eight_flags_remain_unowned() -> None:
+def test_formal_rules_flag_is_owned_and_six_flags_remain_unowned() -> None:
     assert Flags(formal_rules=True).owned_enabled_names() == ("formal_rules",)
     assert Flags(legal_disputes=True).owned_enabled_names() == ("legal_disputes",)
     assert (
@@ -87,7 +87,6 @@ def test_formal_rules_flag_is_owned_and_eight_flags_remain_unowned() -> None:
             [
                 name
                 for name in (
-                    "infrastructure_networks",
                     "supply_chains",
                     "markets_credit",
                     "science",
@@ -98,7 +97,7 @@ def test_formal_rules_flag_is_owned_and_eight_flags_remain_unowned() -> None:
                 if Flags(**{name: True}).unimplemented_enabled_names()
             ]
         )
-        == 7
+        == 6
     )
 
 

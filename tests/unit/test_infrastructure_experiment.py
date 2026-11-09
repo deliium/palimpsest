@@ -37,7 +37,12 @@ from world._skills import (
     SkillDomain,
     default_objective_skill_policy,
 )
-from world.actions import ContributeCollectiveProject, StartCollectiveProject, Wait
+from world.actions import (
+    AgentCommand,
+    ContributeCollectiveProject,
+    StartCollectiveProject,
+    Wait,
+)
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.infrastructure import InfrastructureKind
 from world.models import non_lethal_physical_rules
@@ -162,7 +167,7 @@ def test_treatment_completes_road_with_travel_effect() -> None:
     )
     agent = AgentId("agent-1")
 
-    def step(command: object) -> None:
+    def step(command: AgentCommand) -> None:
         batch = engine.observe()
         engine.resolve_tick(
             (ActionSubmission(token=batch.token, agent_id=agent, command=command),)

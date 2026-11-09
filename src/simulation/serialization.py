@@ -173,7 +173,8 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V19,
     EVENT_SCHEMA_REPLAY_V20,
     EVENT_SCHEMA_REPLAY_V21,
-    EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V22,
+    EVENT_SCHEMA_REPLAY_V23,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -190,11 +191,6 @@ from world.events import (
     CommitmentDeclared,
     ContactRecorded,
     CorpseCustodyOpened,
-    InfrastructureConstructed,
-    InfrastructureDamaged,
-    InfrastructureDecayed,
-    InfrastructureDestroyed,
-    InfrastructureRepaired,
     CraftStarted,
     Died,
     Dropped,
@@ -211,6 +207,11 @@ from world.events import (
     Fled,
     Given,
     Helped,
+    InfrastructureConstructed,
+    InfrastructureDamaged,
+    InfrastructureDecayed,
+    InfrastructureDestroyed,
+    InfrastructureRepaired,
     ItemCrafted,
     ItemStored,
     JourneyArrived,
@@ -6284,7 +6285,7 @@ def _decode_event_details(
                 "infrastructure_decayed": InfrastructureDecayed,
                 "infrastructure_destroyed": InfrastructureDestroyed,
             }[kind]
-            return cls(**payload)
+            return cast(Any, cls)(**payload)
         if kind == "contact_recorded":
             if schema_version != EVENT_SCHEMA_REPLAY_V22:
                 raise DomainSerializationError("invalid_event_schema_version", path)
@@ -6363,7 +6364,11 @@ def _decode_event_details(
                 ),
             )
         if kind == "journey_started":
-            if schema_version not in {EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V21,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             _require_keys(
                 fields,
@@ -6454,7 +6459,11 @@ def _decode_event_details(
                 ),
             )
         if kind in {"journey_arrived", "journey_ended"}:
-            if schema_version not in {EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V21,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
                 "destination_location_id",

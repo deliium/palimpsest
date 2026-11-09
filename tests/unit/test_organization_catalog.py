@@ -27,8 +27,8 @@ def test_catalog_validates_at_154() -> None:
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
     assert len({spec.family_id for spec in specs}) == 188
-    assert tuple(spec.family_id for spec in specs[-44:-40]) == ORGANIZATION_FAMILIES
-    assert tuple(spec.family_id for spec in specs[-48:-44]) == (
+    assert tuple(spec.family_id for spec in specs[140:144]) == ORGANIZATION_FAMILIES
+    assert tuple(spec.family_id for spec in specs[136:140]) == (
         MetricFamilyId.MACRO_SOCIETY_STRUCTURE,
         MetricFamilyId.MACRO_SOCIETY_IDENTITY_ALIGNMENT,
         MetricFamilyId.MACRO_SOCIETY_LINEAGE,
@@ -95,7 +95,7 @@ def test_organization_families_are_exact() -> None:
         assert spec.unknown_case
 
     versions = [spec.version_identifier for spec in all_metric_specifications()]
-    assert versions[-44:-40] == [
+    assert versions[140:144] == [
         "organization_formation@1",
         "organization_membership@1",
         "organization_structure@1",

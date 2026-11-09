@@ -110,9 +110,10 @@ Recorded 2026-11-09 during `$aif-implement` completion (`commit and continue`).
 
 | Lane | Result |
 | --- | --- |
-| Unit + architecture (infra suites, docs parity, V4 invariants, scaffolding, V1/V2 gates, metric pin 188, Alembic `0017`) | passed (`191` focused selection) |
-| Static: ruff on infra-touched modules/tests | passed |
-| Static: mypy `world._infrastructure` / infrastructure models / scenario | passed |
+| Unit + architecture (full `tests/unit tests/architecture`) | passed (`9843 passed`) |
+| Static: `ruff check src tests` | passed (0 errors) |
+| Static: `mypy src tests` | passed (2296 files) |
+| Static: `lint-imports` | passed (25 kept, 0 broken) |
 | Research UI vitest (`InfrastructureNetworksPanel`) | passed (`3`) |
 | Docker Compose / browser acceptance | `unexecuted` — prerequisite: attested Compose/browser image stack |
 | Integration (PostgreSQL) | `unexecuted` — prerequisite: `PALIMPSEST_TEST_DATABASE_URL` |
@@ -121,6 +122,15 @@ Recorded 2026-11-09 during `$aif-implement` completion (`commit and continue`).
 
 **Certification:** local required evidence green; full required-gate certification
 **withheld** while the four env-gated lanes above remain `unexecuted`.
+
+Re-verified 2026-11-09 after remediation of import-boundary allowlists, static
+gate errors, and the full pin/docs/test sweep: the full unit+architecture suite,
+ruff, mypy, import-linter, Research UI, and focused infrastructure/V1/V2 gates
+are green. Destroyed linked assets now reject maintain/repair admission with
+`infrastructure_destroyed`, and cognition road targets skip adjacent exits that
+already carry an edge. `.ai-factory/ROADMAP.md` now records V4-16 under M8 as
+the sixth owned V4 flag, write pair 23/`v21`, catalog 188, and six owned / six
+unowned flags.
 
 **Pins certified in code/docs:** runner v56, commands 43, observer semantic types
 73, metric families **188**, six owned V4 flags, write pair replay-v23 / codec

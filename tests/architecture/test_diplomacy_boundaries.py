@@ -47,6 +47,7 @@ _OWNED_FLAGS = frozenset(
         "legal_disputes",
         "diplomacy",
         "organized_conflict",
+        "infrastructure_networks",
     }
 )
 

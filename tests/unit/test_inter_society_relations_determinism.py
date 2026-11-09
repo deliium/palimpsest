@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import asdict
+from typing import Any, cast
 
 import pytest
 from hypothesis import given, settings
@@ -56,10 +57,10 @@ def _harvest(
     exchange: int = 2,
     left_tick: int = 0,
     right_tick: int = 1,
-):
+) -> Any:
     left = _msoc(left_label, tick=left_tick)
     right = _msoc(right_label, tick=right_tick)
-    ordered = tuple(sorted((left, right)))
+    ordered = cast(tuple[str, str], tuple(sorted((left, right))))
     candidates = [
         InterSocietyMacroCandidate(
             society_id=left,
@@ -76,7 +77,7 @@ def _harvest(
     return harvest_inter_society_relations(candidates, evidence_by_pair=evidence)
 
 
-def _fingerprint(analysis) -> tuple[object, ...]:
+def _fingerprint(analysis: Any) -> tuple[object, ...]:
     return (
         analysis.pair_count,
         tuple(
@@ -105,7 +106,7 @@ def _fingerprint(analysis) -> tuple[object, ...]:
 def test_candidate_order_permutation_never_changes_pair_ids(seed: int) -> None:
     left = _msoc("alpha")
     right = _msoc("beta", tick=1)
-    ordered = tuple(sorted((left, right)))
+    ordered = cast(tuple[str, str], tuple(sorted((left, right))))
     candidates = [
         InterSocietyMacroCandidate(
             society_id=left,

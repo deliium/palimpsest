@@ -762,3 +762,19 @@ domains, windowed time series, vectorial comparison, four metric families
 UI panel. It adds no flag, context, runner schema, command, event, write pair,
 Godot overlay, `/v2` route, or migration, and never exposes a civilization
 relationship score. See [inter-society relations](inter-society-relations.md).
+
+## V4-16 infrastructure networks
+
+V4-16 owns `infrastructure_networks` on the accepted `runner-config-v56` seam
+and claims the reserved write pair event 23 / codec `v21` when the channel is
+active. Eight locked catalog kinds persist as location-based `infra-` assets
+after collective-project completion, with operational effects on travel,
+capacity, production, storage, and exposure plus damage, repair, decay, and
+destruction. Explicit public-good frozensets keep infra-only kinds out of the
+Use/Maintain/Oppose sets. Four metric families append (catalog 184 -> 188);
+observer semantic types stay 73 through aliases; commands stay 43; Alembic
+stays `0017`. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
+semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags, six owned
+flags, replay-v23/codec `v21` when selected, `/v1`, `observer-protocol-v1`,
+and Alembic `0017`. See
+[infrastructure networks](infrastructure-networks.md).

@@ -6,7 +6,10 @@ import logging
 from dataclasses import dataclass
 from typing import Final
 
-from simulation.infrastructure_models import InfrastructureNetworksSnapshot
+from simulation.infrastructure_models import (
+    InfrastructureAssetRecord,
+    InfrastructureNetworksSnapshot,
+)
 
 __all__ = [
     "MAX_PAGE_LIMIT",
@@ -27,7 +30,7 @@ class InfrastructureNetworksRowSelection:
     purpose: str
     after_key: str | None
     limit: int
-    rows: tuple[object, ...] = ()
+    rows: tuple[InfrastructureAssetRecord, ...] = ()
     next_key: str | None = None
 
 
@@ -37,13 +40,13 @@ def _clamp_limit(limit: object) -> int:
     return limit
 
 
-def _row_key(row: object) -> str:
-    return str(getattr(row, "asset_id"))
+def _row_key(row: InfrastructureAssetRecord) -> str:
+    return str(row.asset_id)
 
 
 def _ordered_rows(
     snapshot: InfrastructureNetworksSnapshot, purpose: str
-) -> tuple[object, ...]:
+) -> tuple[InfrastructureAssetRecord, ...]:
     assets = tuple(sorted(snapshot.assets, key=lambda row: row.asset_id))
     if purpose == "assets":
         return assets

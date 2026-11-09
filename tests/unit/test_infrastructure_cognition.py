@@ -11,7 +11,12 @@ from agents.models import AgentId
 from world.actions import StartCollectiveProject, Wait
 from world.identifiers import EntityId
 from world.models import LifeStatus
-from world.observations import ObservedItem, ObservedItemPlacement, VisibleExit
+from world.observations import (
+    ObservedInfrastructure,
+    ObservedItem,
+    ObservedItemPlacement,
+    VisibleExit,
+)
 from world.values import ItemKind, ItemLoad
 
 pytestmark = pytest.mark.unit
@@ -27,13 +32,22 @@ def _item(entity_id: str, name: str) -> ObservedItem:
     )
 
 
-def _observation(*, exits: tuple[VisibleExit, ...] = ()) -> SimpleNamespace:
+def _observation(
+    *,
+    exits: tuple[VisibleExit, ...] = (),
+    infrastructure: tuple[ObservedInfrastructure, ...] = (),
+    location_id: str = "loc-a",
+) -> SimpleNamespace:
     return SimpleNamespace(
-        self_body=SimpleNamespace(life_status=LifeStatus.ALIVE),
+        self_body=SimpleNamespace(
+            life_status=LifeStatus.ALIVE,
+            location_id=EntityId(location_id),
+        ),
         collective_projects=(),
         structures=(),
         items=(_item("item-wood", "wood"), _item("item-stone", "stone")),
         exits=exits,
+        infrastructure=infrastructure,
     )
 
 
@@ -79,6 +93,32 @@ def test_road_includes_sorted_adjacent_target() -> None:
     assert isinstance(proposed, StartCollectiveProject)
     assert proposed.project_kind == "road"
     assert proposed.target_location_id == EntityId("loc-b")
+
+
+def test_road_skips_existing_edge_target() -> None:
+    exits = (
+        VisibleExit(destination_id=EntityId("loc-b"), name="B"),
+        VisibleExit(destination_id=EntityId("loc-c"), name="C"),
+    )
+    existing_edge = ObservedInfrastructure(
+        asset_id=EntityId("infra-edge"),
+        kind="road",
+        status="operational",
+        integrity=1.0,
+        topology="edge",
+        endpoint_present=True,
+        location_id=EntityId("loc-a"),
+        endpoint_location_id=EntityId("loc-b"),
+    )
+    proposed = propose_collective_project_command(
+        Wait(),
+        _observation(exits=exits, infrastructure=(existing_edge,)),
+        _board("collective_project:start:road"),
+        channel_on=True,
+        owner_id=AgentId("agent-1"),
+    )
+    assert isinstance(proposed, StartCollectiveProject)
+    assert proposed.target_location_id == EntityId("loc-c")
 
 
 def test_road_skips_without_adjacent() -> None:

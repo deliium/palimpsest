@@ -801,13 +801,22 @@ class StartCollectiveProject:
         }
         if self.project_kind not in allowed:
             raise ValueError("StartCollectiveProject.project_kind")
-        if self.target_location_id is not None and type(self.target_location_id) is not EntityId:
-            raise TypeError("StartCollectiveProject.target_location_id must be EntityId")
+        if (
+            self.target_location_id is not None
+            and type(self.target_location_id) is not EntityId
+        ):
+            raise TypeError(
+                "StartCollectiveProject.target_location_id must be EntityId"
+            )
         if self.project_kind == "road":
             if self.target_location_id is None:
-                raise ValueError("StartCollectiveProject.target_location_id: target_required")
+                raise ValueError(
+                    "StartCollectiveProject.target_location_id: target_required"
+                )
         elif self.target_location_id is not None:
-            raise ValueError("StartCollectiveProject.target_location_id: target_forbidden")
+            raise ValueError(
+                "StartCollectiveProject.target_location_id: target_forbidden"
+            )
 
 
 @dataclass(frozen=True, slots=True)

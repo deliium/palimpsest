@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Iterable
 from dataclasses import asdict
-from typing import Final
+from typing import Any, Final, cast
 
 from simulation.infrastructure_models import (
     INFRASTRUCTURE_MAX_BYTES,
@@ -59,7 +60,7 @@ def infrastructure_networks_snapshot_digest(
     payload = canonical_infrastructure_networks_payload(snapshot)
     payload["digest"] = ""
     payload["publication_id"] = ""
-    summary = dict(payload["summary"])  # type: ignore[arg-type]
+    summary = dict(cast(dict[str, object], payload["summary"]))
     summary["digest"] = ""
     summary["publication_id"] = ""
     payload["summary"] = summary
@@ -178,7 +179,8 @@ def decode_infrastructure_networks_snapshot(
             data = json.loads(text)
         if not isinstance(data, dict):
             raise TypeError("payload")
-        summary_raw = data["summary"]
+        parsed = cast(dict[str, Any], data)
+        summary_raw = cast(dict[str, Any], parsed["summary"])
         assets = tuple(
             InfrastructureAssetRecord(
                 asset_id=item["asset_id"],
@@ -195,7 +197,9 @@ def decode_infrastructure_networks_snapshot(
                 linked_project_id=item["linked_project_id"],
                 linked_structure_id=item.get("linked_structure_id"),
             )
-            for item in data.get("assets") or ()
+            for item in cast(
+                Iterable[dict[str, Any]], parsed.get("assets") or ()
+            )
         )
         summary = InfrastructureNetworksSummaryRecord(
             run_id=summary_raw["run_id"],
@@ -215,11 +219,11 @@ def decode_infrastructure_networks_snapshot(
         snapshot = InfrastructureNetworksSnapshot(
             summary=summary,
             assets=assets,
-            digest=data.get("digest") or "",
-            publication_id=data.get("publication_id") or "",
-            schema_version=data.get("schema_version")
+            digest=parsed.get("digest") or "",
+            publication_id=parsed.get("publication_id") or "",
+            schema_version=parsed.get("schema_version")
             or INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION,
-            policy_version=data.get("policy_version")
+            policy_version=parsed.get("policy_version")
             or INFRASTRUCTURE_NETWORKS_SNAPSHOT_POLICY,
         )
     except InfrastructureNetworksArtifactError:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -92,7 +93,7 @@ def test_v56_all_flags_off_passes_both_profiles_unchanged() -> None:
 
 @pytest.mark.parametrize("flag_name", V4_FLAG_NAMES)
 def test_each_enabled_flag_fails_the_profile(flag_name: str) -> None:
-    extras: dict[str, object] = {
+    extras: dict[str, Any] = {
         "v4_capability_flags": V4CapabilityFlags(**{flag_name: True}),
     }
     if flag_name == "infrastructure_networks":

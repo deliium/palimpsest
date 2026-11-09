@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from itertools import pairwise
+from typing import Any, cast
 
 import pytest
 
@@ -32,7 +33,7 @@ def _msoc(label: str, *, tick: int = 0) -> str:
     )
 
 
-def _analysis(*, pairs: int = 1):
+def _analysis(*, pairs: int = 1) -> Any:
     candidates = []
     evidence = {}
     societies = []
@@ -47,7 +48,7 @@ def _analysis(*, pairs: int = 1):
             )
         )
     for left, right in pairwise(societies):
-        key = tuple(sorted((left, right)))
+        key = cast(tuple[str, str], tuple(sorted((left, right))))
         evidence[key] = InterSocietyEvidenceInputs(exchange_event_count=1)
     return harvest_inter_society_relations(candidates, evidence_by_pair=evidence)
 
@@ -82,7 +83,7 @@ def test_timeseries_and_comparison_metrics() -> None:
     series = compute_inter_society_relation_timeseries(
         analysis, run_id="run", input_revision="rev"
     )
-    assert series.values["pair_series_count"] >= 1
+    assert cast(int, series.values["pair_series_count"]) >= 1
     comparison = compute_inter_society_pair_comparison(
         analysis, run_id="run", input_revision="rev"
     )

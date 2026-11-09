@@ -366,6 +366,7 @@ protected_modules = [
     "world._physical",
     "world._experiment_laws",
     "world._experiment_apply",
+    "world._infrastructure",
 ]
 allowed_importers = [
     "world._collective_projects",
@@ -384,6 +385,7 @@ allowed_importers = [
     "world._physical",
     "world._experiment_laws",
     "world._experiment_apply",
+    "world._infrastructure",
 ]
 as_packages = true
 

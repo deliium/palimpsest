@@ -132,7 +132,7 @@ async def test_diplomacy_runs_without_organizations() -> None:
 
 @pytest.mark.asyncio
 async def test_unowned_v4_flag_still_fails_closed() -> None:
-    config = _v56_config(flags=V4CapabilityFlags(infrastructure_networks=True))
+    config = _v56_config(flags=V4CapabilityFlags(supply_chains=True))
     with pytest.raises(RunnerConstructionError) as exc:
         await SimulationRunner.from_config(
             config, run_id=RunId("run-v4-treaty-unowned")

@@ -101,7 +101,7 @@ def test_catalog_appends_two_agency_families() -> None:
     specs = validate_metric_catalog()
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
-    assert [spec.family_id for spec in specs[-38:-36]] == [
+    assert [spec.family_id for spec in specs[146:148]] == [
         MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
         MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
     ]
@@ -110,8 +110,8 @@ def test_catalog_appends_two_agency_families() -> None:
 
 def test_first_146_families_are_unchanged() -> None:
     specs = all_metric_specifications()
-    assert len(specs[:-38]) == 146
-    assert specs[-39].family_id is MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY
+    assert len(specs[:146]) == 146
+    assert specs[145].family_id is MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY
 
 
 def test_agency_documents_are_present_with_expected_keys() -> None:

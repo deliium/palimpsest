@@ -329,6 +329,15 @@ def _availability(
                 for asset in infra.values()
             ):
                 return "materials_unavailable"
+        if state.infrastructure is not None:
+            from world.infrastructure import InfrastructureStatus
+
+            if any(
+                asset.linked_structure_id == structure.entity_id
+                and asset.status is InfrastructureStatus.DESTROYED
+                for asset in state.infrastructure.values()
+            ):
+                return "infrastructure_destroyed"
         if structure.integrity >= 1.0:
             return "structure_intact"
         return None

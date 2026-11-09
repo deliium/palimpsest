@@ -6,11 +6,11 @@ import logging
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
+from world._infrastructure import index_infrastructure
 from world.artifacts import (
     MAX_HELD_ARTIFACTS_PER_BODY,
     InformationArtifact,
 )
-from world._infrastructure import index_infrastructure
 from world.collective_projects import (
     MAX_COLLECTIVE_PROJECTS,
     CollectiveProject,

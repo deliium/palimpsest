@@ -18,7 +18,7 @@ def test_catalog_is_176_and_treaty_families_are_last() -> None:
     specs = all_metric_specifications()
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
-    assert [spec.family_id for spec in specs[-20:-16]] == [
+    assert [spec.family_id for spec in specs[164:168]] == [
         MetricFamilyId.TREATY_STRUCTURE,
         MetricFamilyId.TREATY_VERSION_LINEAGE,
         MetricFamilyId.TREATY_RECOLLECTION,

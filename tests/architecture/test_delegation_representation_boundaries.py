@@ -83,6 +83,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         "legal_disputes",
         "diplomacy",
         "organized_conflict",
+        "infrastructure_networks",
     }
 
     organizations = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS]
@@ -253,7 +254,7 @@ def test_snapshot_store_and_catalog_pins() -> None:
     assert DELEGATION_REPRESENTATION_STORE_SCHEMA == (
         "delegation-representation-store-v1"
     )
-    assert [spec.family_id for spec in all_metric_specifications()[-23:-20]] == [
+    assert [spec.family_id for spec in all_metric_specifications()[157:160]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,

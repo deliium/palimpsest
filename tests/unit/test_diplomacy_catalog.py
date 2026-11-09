@@ -77,13 +77,13 @@ def test_catalog_is_176_with_four_diplomacy_families_before_treaties() -> None:
     specs = all_metric_specifications()
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
-    assert [spec.family_id for spec in specs[-24:-20]] == [
+    assert [spec.family_id for spec in specs[160:164]] == [
         MetricFamilyId.DIPLOMATIC_CONTACT_STRUCTURE,
         MetricFamilyId.DIPLOMATIC_INSTRUMENT_OUTCOMES,
         MetricFamilyId.DIPLOMATIC_ENVOY_ALIGNMENT,
         MetricFamilyId.INTER_SOCIETY_RELATION_LANES,
     ]
-    assert [spec.family_id for spec in specs[-20:-16]] == [
+    assert [spec.family_id for spec in specs[164:168]] == [
         MetricFamilyId.TREATY_STRUCTURE,
         MetricFamilyId.TREATY_VERSION_LINEAGE,
         MetricFamilyId.TREATY_RECOLLECTION,

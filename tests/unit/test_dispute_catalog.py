@@ -48,13 +48,13 @@ def test_first_154_families_are_unchanged() -> None:
 
 def test_three_dispute_families_precede_the_evidence_families() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-33:-30]) == NEW_FAMILIES
-    assert tuple(spec.family_id.value for spec in specs[-30:-27]) == (
+    assert tuple(spec.family_id for spec in specs[151:154]) == NEW_FAMILIES
+    assert tuple(spec.family_id.value for spec in specs[154:157]) == (
         "evidence_source_structure",
         "evidence_provenance_continuity",
         "evidence_objective_alignment",
     )
-    assert [spec.version_identifier for spec in specs[-33:-30]] == [
+    assert [spec.version_identifier for spec in specs[151:154]] == [
         "dispute_claim_structure@1",
         "dispute_testimony_independence@1",
         "dispute_resolution_alignment@1",

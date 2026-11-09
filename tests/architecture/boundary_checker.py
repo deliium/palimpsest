@@ -96,6 +96,7 @@ PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
         "world._teaching",
         "world._experiment_laws",
         "world._experiment_apply",
+        "world._infrastructure",
     }
 )
 PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
@@ -107,6 +108,7 @@ PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
         "world._rules",
         "world._replay",
         "world._physical",
+        "world._infrastructure",
         "simulation.engine",
         "simulation.bootstrap",
     }

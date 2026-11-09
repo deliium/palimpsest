@@ -115,8 +115,8 @@ def test_dispute_doc_covers_resolution_and_alignment_semantics() -> None:
 
 def test_dispute_doc_metric_and_wire_counts_match_the_code() -> None:
     text = _doc_text()
-    assert str(METRIC_FAMILY_COUNT) == "184"
-    assert "184" in text or "180" in text
+    assert str(METRIC_FAMILY_COUNT) == "188"
+    assert "188" in text or "180" in text
     assert "43 commands" in text or str(len(COMMAND_RULE_MATRIX)) in text
     assert "73" in text or str(len(SEMANTIC_EVENT_TYPES)) in text
     assert "0017" in text

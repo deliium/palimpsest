@@ -25,6 +25,10 @@ def test_each_kind_has_locked_labor_and_materials() -> None:
         CollectiveProjectKind.RECORD_SITE: (3, ItemKind.MATERIAL, "wood", 2),
         CollectiveProjectKind.WELL: (3, ItemKind.MATERIAL, "stone", 2),
         CollectiveProjectKind.WARNING_POST: (2, ItemKind.MATERIAL, "wood", 1),
+        CollectiveProjectKind.ROAD: (5, ItemKind.MATERIAL, "stone", 3),
+        CollectiveProjectKind.IRRIGATION: (4, ItemKind.MATERIAL, "stone", 2),
+        CollectiveProjectKind.TRADE_POST: (4, ItemKind.MATERIAL, "wood", 2),
+        CollectiveProjectKind.LARGE_SHELTER: (5, ItemKind.MATERIAL, "wood", 3),
     }
     assert set(COLLECTIVE_PROJECT_CATALOG) == set(expected)
     for kind, (labor, material, name, count) in expected.items():
@@ -38,6 +42,11 @@ def test_each_kind_has_locked_labor_and_materials() -> None:
             labor_required=row.labor_required,
             materials_done=0,
             materials_required=row.materials_required,
+            target_location_id=(
+                EntityId("loc-2")
+                if kind is CollectiveProjectKind.ROAD
+                else None
+            ),
             opened_tick=0,
             last_accepted_tick=0,
             shortage_count=0,

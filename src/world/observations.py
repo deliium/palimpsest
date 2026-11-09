@@ -1308,6 +1308,8 @@ class ObservedInfrastructure:
     integrity: float
     topology: str
     endpoint_present: bool | None = None
+    location_id: EntityId | None = None
+    endpoint_location_id: EntityId | None = None
 
     def __post_init__(self) -> None:
         if type(self.asset_id) is not EntityId:
@@ -1330,9 +1332,23 @@ class ObservedInfrastructure:
         if number != number or number < 0.0 or number > 1.0:
             raise ValueError("ObservedInfrastructure.integrity must be in [0, 1]")
         object.__setattr__(self, "integrity", 0.0 if number == 0.0 else number)
-        if self.endpoint_present is not None and type(self.endpoint_present) is not bool:
+        if (
+            self.endpoint_present is not None
+            and type(self.endpoint_present) is not bool
+        ):
             raise TypeError(
                 "ObservedInfrastructure.endpoint_present must be bool or None"
+            )
+        if self.location_id is not None and type(self.location_id) is not EntityId:
+            raise TypeError(
+                "ObservedInfrastructure.location_id must be EntityId or None"
+            )
+        if (
+            self.endpoint_location_id is not None
+            and type(self.endpoint_location_id) is not EntityId
+        ):
+            raise TypeError(
+                "ObservedInfrastructure.endpoint_location_id must be EntityId or None"
             )
         for forbidden in (
             "score",

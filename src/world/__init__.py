@@ -215,19 +215,23 @@ from world.infrastructure import (
     INFRASTRUCTURE_FORBIDDEN_FIELDS,
     INFRASTRUCTURE_ID_PREFIX,
     INFRASTRUCTURE_NETWORKS_POLICY_ID,
-    MAX_INFRASTRUCTURE_ASSETS,
     MAX_INFRA_BODY_BONUS,
     MAX_INFRA_ITEM_BONUS,
+    MAX_INFRASTRUCTURE_ASSETS,
     REPAIR_INTEGRITY_DELTA,
     InfrastructureAsset,
     InfrastructureCatalogRow,
     InfrastructureKind,
     InfrastructureStatus,
     InfrastructureTopology,
-    catalog_row as infrastructure_catalog_row,
-    effects_active as infrastructure_effects_active,
     mint_infrastructure_id,
     normalize_edge_endpoints,
+)
+from world.infrastructure import (
+    catalog_row as infrastructure_catalog_row,
+)
+from world.infrastructure import (
+    effects_active as infrastructure_effects_active,
 )
 from world.lifecycle import (
     AgentLifecycleRecord,
@@ -622,12 +626,12 @@ __all__ = [
     "infrastructure_catalog_row",
     "infrastructure_effects_active",
     "interpolate_continuous_factors",
-    "mint_infrastructure_id",
-    "normalize_edge_endpoints",
     "legacy_text_utterance",
     "make_physical_replayable_event",
     "make_replayable_event",
+    "mint_infrastructure_id",
     "non_lethal_physical_rules",
+    "normalize_edge_endpoints",
     "observation_allows_communication_target",
     "observed_self_from_body",
     "origin_utterance",

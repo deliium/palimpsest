@@ -32,7 +32,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Final, Literal, cast
+from typing import Any, Final, Literal, cast
 
 from world.artifacts import (
     ArtifactKind,
@@ -2865,7 +2865,7 @@ class InfrastructureDestroyed:
         _validate_infrastructure_event(self, "InfrastructureDestroyed")
 
 
-def _validate_infrastructure_event(event: object, type_name: str) -> None:
+def _validate_infrastructure_event(event: Any, type_name: str) -> None:
     asset_id = event.asset_id
     location_id = event.location_id
     linked_project_id = event.linked_project_id
@@ -2903,7 +2903,7 @@ def _validate_infrastructure_event(event: object, type_name: str) -> None:
     tick = event.tick
     if type(tick) is not int or isinstance(tick, bool) or tick < 0:
         raise ValueError(f"{type_name}.tick")
-    _reject_presentation_fields(event.kind, event.__slots__)  # type: ignore[attr-defined]
+    _reject_presentation_fields(event.kind, event.__slots__)
 
 
 EventDetails = (

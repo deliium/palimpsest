@@ -393,6 +393,7 @@ def test_no_new_flag_context_or_v57() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }
     )
     offenders = [

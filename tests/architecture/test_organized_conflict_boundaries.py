@@ -43,6 +43,7 @@ def test_v4_12_owns_organized_conflict_without_new_context() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }
     )
     spec = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZED_CONFLICT]

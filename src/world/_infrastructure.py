@@ -5,14 +5,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
-from typing import Final
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from world.identifiers import EntityId
 from world.infrastructure import (
     MAX_INFRASTRUCTURE_ASSETS,
-    REPAIR_INTEGRITY_DELTA,
     InfrastructureAsset,
     InfrastructureKind,
     InfrastructureStatus,
@@ -68,7 +65,11 @@ def _fail(code: str) -> ValueError:
 
 
 def index_infrastructure(
-    assets: Sequence[InfrastructureAsset] | Mapping[EntityId, InfrastructureAsset] | None,
+    assets: (
+        Sequence[InfrastructureAsset]
+        | Mapping[EntityId, InfrastructureAsset]
+        | None
+    ),
     *,
     location_ids: Mapping[EntityId, object] | None = None,
 ) -> Mapping[EntityId, InfrastructureAsset] | None:
@@ -255,8 +256,8 @@ def effective_travel_fatigue(
     result = max(0.0, fatigue)
     _LOG.debug(
         "infrastructure_travel_fatigue base=%s effective=%s",
-        int(round(base_fatigue * 1000)),
-        int(round(result * 1000)),
+        round(base_fatigue * 1000),
+        round(result * 1000),
     )
     return result
 
@@ -366,7 +367,7 @@ def effective_exposure_scale(
         scale = 0.0
     if scale > 1.0:
         scale = 1.0
-    _LOG.debug("infrastructure_exposure_scale=%s", int(round(scale * 1000)))
+    _LOG.debug("infrastructure_exposure_scale=%s", round(scale * 1000))
     return scale
 
 
@@ -458,10 +459,11 @@ def adjust_linked_infrastructure(
             event_detail_for_asset(updated, tick=tick, event_kind=event_kind)
         )
         _LOG.debug(
-            "infrastructure_integrity_adjusted kind=%s before_millis=%s after_millis=%s",
+            "infrastructure_integrity_adjusted kind=%s "
+            "before_millis=%s after_millis=%s",
             asset.kind.value,
-            int(round(before * 1000)),
-            int(round(integrity * 1000)),
+            round(before * 1000),
+            round(integrity * 1000),
         )
     if not changed:
         return state, ()

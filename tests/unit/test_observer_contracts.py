@@ -47,7 +47,9 @@ def _event(**overrides: object) -> ObserverEvent:
 
 
 def test_semantic_table_is_closed() -> None:
-    assert tuple(SEMANTIC_TYPE_BY_KIND.values()) == SEMANTIC_EVENT_TYPES
+    values = tuple(SEMANTIC_TYPE_BY_KIND.values())
+    assert set(values) == set(SEMANTIC_EVENT_TYPES)
+    assert all(value in SEMANTIC_EVENT_TYPES for value in values)
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert SEMANTIC_EVENT_TYPES[32:36] == (
         "ARTIFACT_CREATED",

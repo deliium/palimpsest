@@ -316,6 +316,7 @@ def test_compatibility_pins_are_exact() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }
     )
     assert "runner-config-v57" not in (

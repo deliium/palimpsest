@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from analysis.inter_society_relations_contract import (
@@ -32,7 +34,7 @@ def _msoc(label: str, *, tick: int = 0) -> str:
     )
 
 
-def _pair(*, tick: int, exchange: int) -> object:
+def _pair(*, tick: int, exchange: int) -> Any:
     left = _msoc("l", tick=0)
     right = _msoc("r", tick=1)
     analysis = harvest_inter_society_relations(
@@ -49,8 +51,8 @@ def _pair(*, tick: int, exchange: int) -> object:
             ),
         ],
         evidence_by_pair={
-            tuple(sorted((left, right))): InterSocietyEvidenceInputs(
-                exchange_event_count=exchange
+            cast(tuple[str, str], tuple(sorted((left, right)))): (
+                InterSocietyEvidenceInputs(exchange_event_count=exchange)
             )
         },
     )
@@ -70,7 +72,7 @@ def test_three_window_series_deterministic() -> None:
         _pair(tick=32, exchange=2),
         _pair(tick=64, exchange=3),
     ]
-    series = build_pair_window_series(pairs)  # type: ignore[arg-type]
+    series = build_pair_window_series(pairs)
     assert len(series) == 1
     assert len(series[0].points) == 3
     assert [point.window_index for point in series[0].points] == [0, 1, 2]
@@ -79,7 +81,7 @@ def test_three_window_series_deterministic() -> None:
 def test_compare_pairs_vectorial_no_composite() -> None:
     left = _pair(tick=0, exchange=1)
     right = _pair(tick=32, exchange=4)
-    view = compare_inter_society_pairs(left, right)  # type: ignore[arg-type]
+    view = compare_inter_society_pairs(left, right)
     exchange = next(item for item in view.domain_deltas if item[0] == "exchange")
     assert exchange[1] == 3
     payload_keys = {item[0] for item in view.domain_deltas}
@@ -105,12 +107,12 @@ def test_compare_windows_and_mixed_absent() -> None:
             ),
         ],
         evidence_by_pair={
-            tuple(sorted((right_society_l, right_society_r))): (
+            cast(tuple[str, str], tuple(sorted((right_society_l, right_society_r)))): (
                 InterSocietyEvidenceInputs()
             )
         },
     ).pairs[0]
-    series = build_pair_window_series([left, right])  # type: ignore[arg-type]
+    series = build_pair_window_series([left, right])
     view = compare_inter_society_windows(series[0].points[0], series[0].points[1])
     exchange = next(item for item in view.domain_deltas if item[0] == "exchange")
     assert exchange[2] == "present"

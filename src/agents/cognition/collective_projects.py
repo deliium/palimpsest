@@ -286,13 +286,26 @@ def _start_block(observation: object, kind: str) -> str | None:
 
 
 def _first_adjacent_target(observation: object) -> EntityId | None:
+    current = getattr(getattr(observation, "self_body", None), "location_id", None)
+    blocked: set[EntityId] = set()
+    for asset in getattr(observation, "infrastructure", ()):
+        if getattr(asset, "topology", None) != "edge":
+            continue
+        asset_location = getattr(asset, "location_id", None)
+        endpoint = getattr(asset, "endpoint_location_id", None)
+        if type(asset_location) is not EntityId or type(endpoint) is not EntityId:
+            continue
+        if asset_location == current:
+            blocked.add(endpoint)
+        elif endpoint == current:
+            blocked.add(asset_location)
     exits = sorted(
         getattr(observation, "exits", ()),
-        key=lambda item: getattr(item, "destination_id").value,
+        key=lambda item: item.destination_id.value,
     )
     for exit_view in exits:
         destination = getattr(exit_view, "destination_id", None)
-        if type(destination) is EntityId:
+        if type(destination) is EntityId and destination not in blocked:
             return destination
     return None
 

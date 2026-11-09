@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import cast
 
 import pytest
 
@@ -56,7 +57,7 @@ def test_fewer_than_two_candidates_yield_empty_pairs() -> None:
 def test_two_societies_with_exchange_form_one_pair() -> None:
     left = _msoc("alpha")
     right = _msoc("beta", tick=1)
-    ordered = tuple(sorted((left, right)))
+    ordered = cast(tuple[str, str], tuple(sorted((left, right))))
     evidence = {
         ordered: InterSocietyEvidenceInputs(exchange_event_count=2),
     }
@@ -165,9 +166,10 @@ def test_objective_isr_token_leaks_fail() -> None:
             ),
         ],
         evidence_by_pair={
-            tuple(sorted((_msoc("a"), _msoc("b", tick=1)))): InterSocietyEvidenceInputs(
-                exchange_event_count=1
-            )
+            cast(
+                tuple[str, str],
+                tuple(sorted((_msoc("a"), _msoc("b", tick=1)))),
+            ): InterSocietyEvidenceInputs(exchange_event_count=1)
         },
     )
     leaked = list(analysis.layers.objective_rows)

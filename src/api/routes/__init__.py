@@ -12,11 +12,11 @@ from api.routes.dispute import router as dispute_router
 from api.routes.evidence_testimony import router as evidence_testimony_router
 from api.routes.formal_rule import router as formal_rule_router
 from api.routes.health import router as health_router
-from api.routes.inspection import research_router as research_router
-from api.routes.inspection import router as inspection_router
 from api.routes.infrastructure_networks import (
     router as infrastructure_networks_router,
 )
+from api.routes.inspection import research_router as research_router
+from api.routes.inspection import router as inspection_router
 from api.routes.inter_society_relations import (
     router as inter_society_relations_router,
 )
@@ -46,8 +46,8 @@ __all__ = [
     "evidence_testimony_router",
     "formal_rule_router",
     "health_router",
-    "inspection_router",
     "infrastructure_networks_router",
+    "inspection_router",
     "inter_society_relations_router",
     "lineage_router",
     "macro_society_router",

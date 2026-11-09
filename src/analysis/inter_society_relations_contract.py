@@ -4,8 +4,8 @@ V4-15 deepens the analysis-only ``macro_society_identity`` context. It adds no
 V4 capability flag, no new context, and does not change
 ``V4_CONTEXT_MAP_VERSION`` or the fourteen-context registry. Society-pair
 panels are researcher labels over ordered ``msoc-`` endpoints; they never feed
-cognition, prompts, memory, world state, stop selectors, Observation, or Godot
-physics. No authoritative civilization relationship score exists.
+cognition, prompts, memory, world state, stop selectors, Observation, or
+presentation physics. No authoritative civilization relationship score exists.
 """
 
 from __future__ import annotations

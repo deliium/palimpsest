@@ -1239,7 +1239,10 @@ def _sorted_infrastructure(
     for asset in sorted(assets.values(), key=lambda row: row.asset_id.value):
         endpoint_present: bool | None = None
         if asset.topology.value == "edge":
-            if asset.location_id != location_id and asset.endpoint_location_id != location_id:
+            if (
+                asset.location_id != location_id
+                and asset.endpoint_location_id != location_id
+            ):
                 continue
             endpoint_present = asset.endpoint_location_id is not None
         elif asset.location_id != location_id:
@@ -1252,6 +1255,8 @@ def _sorted_infrastructure(
                 integrity=asset.integrity,
                 topology=asset.topology.value,
                 endpoint_present=endpoint_present,
+                location_id=asset.location_id,
+                endpoint_location_id=asset.endpoint_location_id,
             )
         )
     return tuple(selected)

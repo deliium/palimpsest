@@ -31,7 +31,9 @@ INFRASTRUCTURE_NETWORKS_ANALYSIS_POLICY_VERSION: Final[str] = (
     INFRASTRUCTURE_NETWORKS_POLICY_ID
 )
 
-_KIND_VALUES: Final[frozenset[str]] = frozenset(kind.value for kind in InfrastructureKind)
+_KIND_VALUES: Final[frozenset[str]] = frozenset(
+    kind.value for kind in InfrastructureKind
+)
 _TOPOLOGY_VALUES: Final[frozenset[str]] = frozenset(
     topology.value for topology in InfrastructureTopology
 )

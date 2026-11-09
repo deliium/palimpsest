@@ -72,7 +72,7 @@ def test_first_151_families_are_unchanged() -> None:
 
 def test_three_formal_rule_families_precede_later_appends() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-36:-33]) == NEW_FAMILIES
+    assert tuple(spec.family_id for spec in specs[148:151]) == NEW_FAMILIES
 
 
 def test_each_family_has_exact_value_keys() -> None:

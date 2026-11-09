@@ -63,17 +63,17 @@ def test_catalog_is_160_unique_and_validated() -> None:
 
 def test_evidence_families_are_retained_before_representation() -> None:
     specs = all_metric_specifications()
-    assert [spec.family_id for spec in specs[-30:-27]] == [
+    assert [spec.family_id for spec in specs[154:157]] == [
         MetricFamilyId.EVIDENCE_SOURCE_STRUCTURE,
         MetricFamilyId.EVIDENCE_PROVENANCE_CONTINUITY,
         MetricFamilyId.EVIDENCE_OBJECTIVE_ALIGNMENT,
     ]
-    assert [spec.family_id for spec in specs[-27:-24]] == [
+    assert [spec.family_id for spec in specs[157:160]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
     ]
-    for spec in specs[-27:-20]:
+    for spec in specs[157:164]:
         assert spec.algorithm_version == "1"
         assert set(spec.formula_ids) == set(spec.value_keys)
 

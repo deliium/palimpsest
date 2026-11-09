@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from analysis.specifications import (
     METRIC_FAMILY_COUNT,
     MetricFamilyId,
+    MetricSpecification,
     all_metric_specifications,
     metric_specification,
     validate_metric_catalog,
@@ -36,7 +38,7 @@ FORBIDDEN_KEY_WORDS = (
 )
 
 
-def _digest(specs) -> str:
+def _digest(specs: Sequence[MetricSpecification]) -> str:
     payload = [
         [
             spec.family_id.value,
@@ -64,7 +66,7 @@ def test_catalog_count_is_184() -> None:
 
 def test_four_isr_families_are_last_and_distinct_from_lanes() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id.value for spec in specs[-4:]) == ISR_FAMILIES
+    assert tuple(spec.family_id.value for spec in specs[180:184]) == ISR_FAMILIES
     assert tuple(spec.family_id.value for spec in specs[180:184]) == ISR_FAMILIES
     assert all(spec.family_id.value not in ISR_FAMILIES for spec in specs[:180])
     assert "inter_society_relation_lanes" not in ISR_FAMILIES

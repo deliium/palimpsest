@@ -30,10 +30,10 @@ def test_catalog_is_exactly_176_with_four_appended() -> None:
     specs = validate_metric_catalog()
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
-    assert tuple(spec.family_id.value for spec in specs[-12:-8]) == LAST_FOUR
-    assert tuple(item.value for item in tuple(MetricFamilyId)[-12:-8]) == LAST_FOUR
+    assert tuple(spec.family_id.value for spec in specs[172:176]) == LAST_FOUR
+    assert tuple(item.value for item in tuple(MetricFamilyId)[172:176]) == LAST_FOUR
     assert (
-        tuple(spec.family_id.value for spec in specs[-16:-12]) == V4_12_FAMILIES
+        tuple(spec.family_id.value for spec in specs[168:172]) == V4_12_FAMILIES
     )
 
 

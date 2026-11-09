@@ -11,7 +11,7 @@ import logging
 from collections.abc import AsyncIterable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from agents.models import AgentId
 from simulation._history import HistorySequence
@@ -4385,8 +4385,9 @@ class WorldEngine:
                     ),
                 )
             )
-        for family_ordinal, infra_detail in enumerate(infrastructure_details):
-            asset_id = infra_detail.asset_id  # type: ignore[attr-defined]
+        for family_ordinal, raw_infra_detail in enumerate(infrastructure_details):
+            infra_detail = cast(Any, raw_infra_detail)
+            asset_id = infra_detail.asset_id
             cause_id = derive_system_cause_id(
                 self._config,
                 run_id=self._run_id,
@@ -4407,7 +4408,7 @@ class WorldEngine:
                     details=infra_detail,
                     occurrence=build_occurrence_context(
                         infra_detail,
-                        origin_location_id=infra_detail.location_id,  # type: ignore[attr-defined]
+                        origin_location_id=infra_detail.location_id,
                     ),
                 )
             )

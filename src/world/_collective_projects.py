@@ -484,7 +484,10 @@ def _complete_project(
         collective_projects=projects,
     )
     infra_raw: tuple[object, ...] = ()
-    if infrastructure_networks_active and project.kind in INFRASTRUCTURE_COLLECTIVE_KINDS:
+    if (
+        infrastructure_networks_active
+        and project.kind in INFRASTRUCTURE_COLLECTIVE_KINDS
+    ):
         next_state, infra_raw = register_from_completed_project(
             next_state,
             project=completed
@@ -628,6 +631,15 @@ def classify_public_good(
     structure = _linked_structure(state, project)
     if structure is None:
         return "public_good_not_ready"
+    if state.infrastructure is not None:
+        from world.infrastructure import InfrastructureStatus
+
+        if any(
+            asset.linked_structure_id == structure.entity_id
+            and asset.status is InfrastructureStatus.DESTROYED
+            for asset in state.infrastructure.values()
+        ):
+            return "infrastructure_destroyed"
     if structure.integrity <= 0.0:
         return "public_good_inert"
     if action == "use":

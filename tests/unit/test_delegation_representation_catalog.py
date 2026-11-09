@@ -56,12 +56,12 @@ def test_catalog_is_164_with_diplomacy_last() -> None:
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
     assert len(validate_metric_catalog()) == 188
-    assert [spec.family_id for spec in specs[-27:-24]] == [
+    assert [spec.family_id for spec in specs[157:160]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
     ]
-    assert [spec.family_id for spec in specs[-24:-20]] == [
+    assert [spec.family_id for spec in specs[160:164]] == [
         MetricFamilyId.DIPLOMATIC_CONTACT_STRUCTURE,
         MetricFamilyId.DIPLOMATIC_INSTRUMENT_OUTCOMES,
         MetricFamilyId.DIPLOMATIC_ENVOY_ALIGNMENT,

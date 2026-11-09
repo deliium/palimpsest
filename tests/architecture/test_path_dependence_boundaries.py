@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from analysis.specifications import METRIC_FAMILY_COUNT
-from observer.version import SEMANTIC_TYPE_BY_KIND
+from observer.version import SEMANTIC_EVENT_TYPES, SEMANTIC_TYPE_BY_KIND
 from simulation.compatibility import ALEMBIC_HEAD_REVISION
 from simulation.runner_models import RUNNER_SCHEMA_VERSION_V4, RUNNER_SCHEMA_VERSION_V55
 
@@ -78,7 +78,8 @@ def test_research_runner_path_dependence_never_imports_api_or_tests() -> None:
 
 def test_v3_38_preserves_current_contract_pins() -> None:
     assert METRIC_FAMILY_COUNT == 188
-    assert len(SEMANTIC_TYPE_BY_KIND) == 73
+    assert len(SEMANTIC_EVENT_TYPES) == 73
+    assert len(set(SEMANTIC_TYPE_BY_KIND.values())) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert RUNNER_SCHEMA_VERSION_V4 == "runner-config-v4"
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
