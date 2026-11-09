@@ -237,6 +237,10 @@ class Settings(BaseSettings):
     migration_displacement_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    inter_society_relations_root: Path | None = None
+    inter_society_relations_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -383,6 +387,17 @@ class Settings(BaseSettings):
     ) -> SecretStr | None:
         if value is not None and not value.get_secret_value():
             raise ValueError("migration_displacement cursor key must be non-empty")
+        return value
+
+    @field_validator("inter_society_relations_cursor_key")
+    @classmethod
+    def validate_inter_society_relations_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "inter_society_relations cursor key must be at least 32 UTF-8 bytes"
+            )
         return value
 
     @field_validator("civilization_cursor_key")
@@ -708,6 +723,19 @@ class Settings(BaseSettings):
             ),
             "migration_displacement_cursor_enabled": (
                 self.migration_displacement_cursor_key is not None
+            ),
+            "has_inter_society_relations_root": (
+                self.inter_society_relations_root is not None
+            ),
+            "has_inter_society_relations_cursor_key": (
+                self.inter_society_relations_cursor_key is not None
+            ),
+            "inter_society_relations_enabled": (
+                self.inter_society_relations_root is not None
+                and self.inter_society_relations_cursor_key is not None
+            ),
+            "inter_society_relations_cursor_enabled": (
+                self.inter_society_relations_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

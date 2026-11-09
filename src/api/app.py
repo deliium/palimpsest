@@ -37,6 +37,7 @@ from api.routes import (
     formal_rule_router,
     health_router,
     inspection_router,
+    inter_society_relations_router,
     lineage_router,
     macro_society_router,
     migration_displacement_router,
@@ -433,6 +434,46 @@ def _attach_migration_displacement_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_inter_society_relations_reader(app: FastAPI) -> None:
+    from api.inter_society_relations_cursor import InterSocietyRelationsCursorCodec
+    from persistence.inter_society_relations_filesystem import (
+        create_inter_society_relations_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.inter_society_relations_cursor_codec = None
+        app.state.inter_society_relations_reader = None
+        return
+    secret = (
+        settings.inter_society_relations_cursor_key.get_secret_value().encode(
+            "utf-8"
+        )
+        if settings.inter_society_relations_cursor_key is not None
+        else None
+    )
+    if settings.inter_society_relations_root is None or secret is None:
+        app.state.inter_society_relations_cursor_codec = None
+        app.state.inter_society_relations_reader = None
+        _LOGGER.debug(
+            "inter_society_relations_attach enabled=false root=%s cursor=%s",
+            False,
+            False,
+        )
+        return
+    app.state.inter_society_relations_cursor_codec = (
+        InterSocietyRelationsCursorCodec.from_secret(secret)
+    )
+    app.state.inter_society_relations_reader = create_inter_society_relations_reader(
+        settings.inter_society_relations_root
+    )
+    _LOGGER.debug(
+        "inter_society_relations_attach enabled=true root=%s cursor=%s",
+        True,
+        True,
+    )
+
+
 def _attach_diplomacy_reader(app: FastAPI) -> None:
     from api.diplomacy_cursor import DiplomacyCursorCodec
     from persistence.diplomacy_filesystem import create_diplomacy_reader
@@ -555,6 +596,7 @@ def create_app(
     _attach_organized_conflict_reader(app)
     _attach_borders_reader(app)
     _attach_migration_displacement_reader(app)
+    _attach_inter_society_relations_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -589,6 +631,7 @@ def create_app(
     app.include_router(organized_conflict_router)
     app.include_router(borders_router)
     app.include_router(migration_displacement_router)
+    app.include_router(inter_society_relations_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

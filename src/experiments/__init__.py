@@ -289,6 +289,17 @@ from experiments.generational_comparison_models import (
 from experiments.generational_comparison_scenario import (
     generational_comparison_scenario,
 )
+from experiments.inter_society_relations_completed_run import (
+    build_completed_run_inter_society_relations_analysis,
+    compose_inter_society_relations_snapshot,
+)
+from experiments.inter_society_relations_publication import (
+    InterSocietyRelationsHarvestResult,
+    InterSocietyRelationsReceipt,
+    build_inter_society_relations_harvest_result,
+    inter_society_relations_publication_document,
+    publish_inter_society_relations_snapshot,
+)
 from experiments.interventions import (
     DEFAULT_OVERRIDE_BUDGET,
     MILESTONE_ARBITER_POLICY_VERSION,
@@ -525,6 +536,8 @@ __all__ = [
     "GenerationalComparisonSpec",
     "GroupRole",
     "InMemoryExperimentRecordRepository",
+    "InterSocietyRelationsHarvestResult",
+    "InterSocietyRelationsReceipt",
     "MacroSocietyHarvest",
     "MacroSocietyHarvestResult",
     "MatrixAggregateDocument",
@@ -619,11 +632,13 @@ __all__ = [
     "build_completed_run_dispute_harvest",
     "build_completed_run_evidence_harvest",
     "build_completed_run_harvest",
+    "build_completed_run_inter_society_relations_analysis",
     "build_completed_run_organization_harvest",
     "build_completed_run_representation_harvest",
     "build_dispute_harvest_result",
     "build_evidence_testimony_harvest_result",
     "build_generational_comparison",
+    "build_inter_society_relations_harvest_result",
     "build_macro_society_harvest_result",
     "build_matrix_aggregate",
     "build_observer_graphical_scenario",
@@ -649,6 +664,7 @@ __all__ = [
     "collect_trajectory_stats",
     "compare_compatible_bundles",
     "compare_grouped_benchmark_outcomes",
+    "compose_inter_society_relations_snapshot",
     "condition_fingerprint",
     "config_fingerprint_for_cell",
     "count_environmental_dynamics",
@@ -751,6 +767,7 @@ __all__ = [
     "historical_memory_layers_profile",
     "inputs_with_opt_in_metric_rows",
     "inputs_with_spatial_rows",
+    "inter_society_relations_publication_document",
     "intergenerational_mentorship_profile",
     "kinship_genealogy_profile",
     "knowledge_genealogy_profile",
@@ -774,6 +791,7 @@ __all__ = [
     "persist_metric_bundle",
     "publish_dispute_snapshot",
     "publish_evidence_testimony_snapshot",
+    "publish_inter_society_relations_snapshot",
     "publish_macro_society_snapshot",
     "publish_organization_snapshot",
     "publish_representation_snapshot",

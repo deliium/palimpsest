@@ -14,6 +14,9 @@ from api.routes.formal_rule import router as formal_rule_router
 from api.routes.health import router as health_router
 from api.routes.inspection import research_router as research_router
 from api.routes.inspection import router as inspection_router
+from api.routes.inter_society_relations import (
+    router as inter_society_relations_router,
+)
 from api.routes.lineage import router as lineage_router
 from api.routes.macro_society import router as macro_society_router
 from api.routes.migration_displacement import (
@@ -41,6 +44,7 @@ __all__ = [
     "formal_rule_router",
     "health_router",
     "inspection_router",
+    "inter_society_relations_router",
     "lineage_router",
     "macro_society_router",
     "migration_displacement_router",
