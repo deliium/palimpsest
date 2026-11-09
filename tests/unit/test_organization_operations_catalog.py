@@ -24,9 +24,9 @@ V4_03_FAMILIES = (
 
 
 def test_catalog_is_exactly_154() -> None:
-    assert METRIC_FAMILY_COUNT == 184
+    assert METRIC_FAMILY_COUNT == 188
     specs = all_metric_specifications()
-    assert len(specs) == 184
+    assert len(specs) == 188
     assert len(validate_metric_catalog()) == 184
 
 

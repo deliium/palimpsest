@@ -7,6 +7,7 @@ const Router := preload("res://scripts/protocol/event_router.gd")
 const CivilizationPlan := preload("res://scripts/presentation/civilization_plan.gd")
 const BorderOverlay := preload("res://scripts/view/border_overlay.gd")
 const MigrationOverlay := preload("res://scripts/view/migration_overlay.gd")
+const InfrastructureOverlay := preload("res://scripts/view/infrastructure_overlay.gd")
 
 var playback_speed := 1.0
 
@@ -54,8 +55,15 @@ const MIGRATION_OVERLAY_KINDS := [
 	"migration_wave",
 	"migration_integration",
 ]
+const INFRASTRUCTURE_OVERLAY_KINDS := [
+	"infrastructure_node",
+	"infrastructure_edge",
+	"infrastructure_damaged",
+	"infrastructure_destroyed",
+]
 var _borders: Dictionary = {}
 var _migrations: Dictionary = {}
+var _infrastructure: Dictionary = {}
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
@@ -79,6 +87,14 @@ func _ready() -> void:
 			migration.name = migration_name
 			add_child(migration)
 		_migrations[kind] = migration
+	for kind in INFRASTRUCTURE_OVERLAY_KINDS:
+		var infra_name := "InfrastructureOverlay_%s" % kind
+		var infra: Node2D = get_node_or_null(infra_name)
+		if infra == null:
+			infra = InfrastructureOverlay.new()
+			infra.name = infra_name
+			add_child(infra)
+		_infrastructure[kind] = infra
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
 	if _locations != null and _locations.has_signal("location_selected"):
@@ -130,6 +146,8 @@ func show_world(world: Variant) -> void:
 	for overlay in _borders.values():
 		overlay.set_centers(_centers)
 	for overlay in _migrations.values():
+		overlay.set_centers(_centers)
+	for overlay in _infrastructure.values():
 		overlay.set_centers(_centers)
 	if _analytics != null:
 		_analytics.set_centers(_centers)
@@ -214,6 +232,37 @@ func clear_migration_overlay(kind: String = "") -> void:
 
 func set_migration_overlay_enabled(enabled_value: bool, kind: String = "") -> void:
 	var overlay := _migration_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		if not enabled_value:
+			overlay.clear()
+		elif kind != "":
+			overlay.apply_payload(null, kind)
+
+func _infrastructure_for(kind: String) -> Node2D:
+	if _infrastructure.has(kind):
+		return _infrastructure[kind]
+	return _infrastructure.get("infrastructure_node", null)
+
+func set_infrastructure_overlay(data: Variant, enabled_value: bool = true, kind: String = "") -> void:
+	var overlay := _infrastructure_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		overlay.apply_payload(data, kind)
+
+func clear_infrastructure_overlay(kind: String = "") -> void:
+	if kind == "":
+		for overlay in _infrastructure.values():
+			overlay.clear()
+			overlay.set_enabled(false)
+		return
+	var overlay := _infrastructure_for(kind)
+	if overlay != null:
+		overlay.clear()
+		overlay.set_enabled(false)
+
+func set_infrastructure_overlay_enabled(enabled_value: bool, kind: String = "") -> void:
+	var overlay := _infrastructure_for(kind)
 	if overlay != null:
 		overlay.set_enabled(enabled_value)
 		if not enabled_value:

@@ -57,8 +57,8 @@ EXPECTED_KEYS = {
 
 def test_catalog_validates_at_160() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 184
-    assert len(specs) == 184
+    assert METRIC_FAMILY_COUNT == 188
+    assert len(specs) == 188
     assert len({spec.family_id for spec in specs}) == 184
 
 

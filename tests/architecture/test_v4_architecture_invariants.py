@@ -52,7 +52,7 @@ from simulation.versioning import (
     validate_write_pair_reservations,
 )
 from world._rules import COMMAND_RULE_MATRIX
-from world.events import EVENT_SCHEMA_REPLAY_V22
+from world.events import EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23
 
 pytestmark = pytest.mark.architecture
 
@@ -123,10 +123,12 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 22
+    assert EVENT_SCHEMA_REPLAY_V23 == 23
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 23
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 184
+    assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert METRIC_FAMILY_COUNT == 188
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -176,6 +178,7 @@ def test_context_registry_and_capability_ownership() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
@@ -197,6 +200,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }
     )
     assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
@@ -368,6 +372,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
             "legal_disputes",
             "diplomacy",
             "organized_conflict",
+            "infrastructure_networks",
         }
     )
     assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (

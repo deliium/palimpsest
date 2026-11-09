@@ -257,11 +257,11 @@ No new entries in `SEMANTIC_EVENT_TYPES`.
 - [x] Task 17: Observation projection for colocated assets ([details](phase-06-write-pair-replay.md#task-17-observation-projection-for-colocated-assets)) (depends on 3, 6, 9)
 
 ### Phase 7: Metrics and read-only surfaces
-- [ ] Task 18: Four metric families (184→188) ([details](phase-07-metrics-and-surfaces.md#task-18-four-metric-families-184188)) (depends on 14)
-- [ ] Task 19: Snapshot, ports, paging, filesystem store ([details](phase-07-metrics-and-surfaces.md#task-19-snapshot-ports-paging-filesystem-store)) (depends on 18)
-- [ ] Task 20: Settings dual-gate, CLI, publication ([details](phase-07-metrics-and-surfaces.md#task-20-settings-dual-gate-cli-publication)) (depends on 19)
-- [ ] Task 21: API routes and Research UI panel ([details](phase-07-metrics-and-surfaces.md#task-21-api-routes-and-research-ui-panel)) (depends on 20)
-- [ ] Task 22: Godot infrastructure overlays ([details](phase-07-metrics-and-surfaces.md#task-22-godot-infrastructure-overlays)) (depends on 19)
+- [x] Task 18: Four metric families (184→188) ([details](phase-07-metrics-and-surfaces.md#task-18-four-metric-families-184188)) (depends on 14)
+- [x] Task 19: Snapshot, ports, paging, filesystem store ([details](phase-07-metrics-and-surfaces.md#task-19-snapshot-ports-paging-filesystem-store)) (depends on 18)
+- [x] Task 20: Settings dual-gate, CLI, publication ([details](phase-07-metrics-and-surfaces.md#task-20-settings-dual-gate-cli-publication)) (depends on 19)
+- [x] Task 21: API routes and Research UI panel ([details](phase-07-metrics-and-surfaces.md#task-21-api-routes-and-research-ui-panel)) (depends on 20)
+- [x] Task 22: Godot infrastructure overlays ([details](phase-07-metrics-and-surfaces.md#task-22-godot-infrastructure-overlays)) (depends on 19)
 
 ### Phase 8: Invariants, E2E, experiment
 - [ ] Task 23: Architecture invariants and pin sweeps ([details](phase-08-invariants-and-e2e.md#task-23-architecture-invariants-and-pin-sweeps)) (depends on 1-22)

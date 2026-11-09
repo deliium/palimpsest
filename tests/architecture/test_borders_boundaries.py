@@ -264,12 +264,13 @@ def test_pins_are_unchanged() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert METRIC_FAMILY_COUNT == 184
+    assert METRIC_FAMILY_COUNT == 188
     assert ALEMBIC_HEAD_REVISION == "0017"
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 5
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 6
     assert BORDERS_CURSOR_PURPOSES == {
         "summary",
         "claims",

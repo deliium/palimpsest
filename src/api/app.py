@@ -37,6 +37,7 @@ from api.routes import (
     formal_rule_router,
     health_router,
     inspection_router,
+    infrastructure_networks_router,
     inter_society_relations_router,
     lineage_router,
     macro_society_router,
@@ -474,6 +475,46 @@ def _attach_inter_society_relations_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_infrastructure_networks_reader(app: FastAPI) -> None:
+    from api.infrastructure_networks_cursor import InfrastructureNetworksCursorCodec
+    from persistence.infrastructure_filesystem import (
+        create_infrastructure_networks_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.infrastructure_networks_cursor_codec = None
+        app.state.infrastructure_networks_reader = None
+        return
+    secret = (
+        settings.infrastructure_networks_cursor_key.get_secret_value().encode(
+            "utf-8"
+        )
+        if settings.infrastructure_networks_cursor_key is not None
+        else None
+    )
+    if settings.infrastructure_networks_root is None or secret is None:
+        app.state.infrastructure_networks_cursor_codec = None
+        app.state.infrastructure_networks_reader = None
+        _LOGGER.info(
+            "infrastructure_networks_attach enabled=false root=%s cursor=%s",
+            settings.infrastructure_networks_root is not None,
+            secret is not None,
+        )
+        return
+    app.state.infrastructure_networks_cursor_codec = (
+        InfrastructureNetworksCursorCodec.from_secret(secret)
+    )
+    app.state.infrastructure_networks_reader = create_infrastructure_networks_reader(
+        settings.infrastructure_networks_root
+    )
+    _LOGGER.info(
+        "infrastructure_networks_attach enabled=true root=%s cursor=%s",
+        True,
+        True,
+    )
+
+
 def _attach_diplomacy_reader(app: FastAPI) -> None:
     from api.diplomacy_cursor import DiplomacyCursorCodec
     from persistence.diplomacy_filesystem import create_diplomacy_reader
@@ -597,6 +638,7 @@ def create_app(
     _attach_borders_reader(app)
     _attach_migration_displacement_reader(app)
     _attach_inter_society_relations_reader(app)
+    _attach_infrastructure_networks_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -632,6 +674,7 @@ def create_app(
     app.include_router(borders_router)
     app.include_router(migration_displacement_router)
     app.include_router(inter_society_relations_router)
+    app.include_router(infrastructure_networks_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

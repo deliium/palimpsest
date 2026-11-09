@@ -98,9 +98,9 @@ def test_analysis_agency_module_imports_no_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 184
+    assert METRIC_FAMILY_COUNT == 188
     families = all_metric_specifications()
-    assert len(families) == 184
+    assert len(families) == 188
     assert families[-34].family_id.value == "organization_collective_agency"
     assert families[-33].family_id.value == "organization_collective_implementation"
     assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
@@ -212,8 +212,9 @@ def test_v4_reservations_observer_and_migration_are_unchanged() -> None:
     assert SUPPORTED_OBSERVER_PROTOCOLS == ("observer-protocol-v1",)
     assert ObserverCapability.ORGANIZATION_ROWS in RESERVED_OBSERVER_CAPABILITIES
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 22
+    assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 23
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert next_revision() == "0018"
 

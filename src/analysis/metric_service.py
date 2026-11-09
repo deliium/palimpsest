@@ -67,6 +67,13 @@ from analysis.historical_memory_metrics import (
     compute_historical_memory_queries,
     compute_historical_memory_transitions,
 )
+from analysis.infrastructure_metrics import (
+    InfrastructureNetworksAnalysis,
+    compute_infrastructure_condition_lifecycle,
+    compute_infrastructure_effect_coverage,
+    compute_infrastructure_maintenance_burden,
+    compute_infrastructure_network_structure,
+)
 from analysis.inter_society_relations_detection import InterSocietyRelationsAnalysis
 from analysis.inter_society_relations_metrics import (
     compute_inter_society_domain_evidence,
@@ -346,6 +353,7 @@ class MetricComputationInputs:
     migration_displacement_communication_pairs: Sequence[tuple[str, str]] | None = None
     migration_displacement_organization_pairs: Sequence[tuple[str, str]] | None = None
     inter_society_relations_analysis: InterSocietyRelationsAnalysis | None = None
+    infrastructure_networks_analysis: InfrastructureNetworksAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2362,6 +2370,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("inter_society_relations_metrics_emitted families=4")
     else:
         _LOG.debug("inter_society_relations_metrics_disabled")
+    if inputs.infrastructure_networks_analysis is not None:
+        infra_analysis = inputs.infrastructure_networks_analysis
+        _safe(
+            "infrastructure_network_structure",
+            lambda: compute_infrastructure_network_structure(
+                infra_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "infrastructure_condition_lifecycle",
+            lambda: compute_infrastructure_condition_lifecycle(
+                infra_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "infrastructure_effect_coverage",
+            lambda: compute_infrastructure_effect_coverage(
+                infra_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "infrastructure_maintenance_burden",
+            lambda: compute_infrastructure_maintenance_burden(
+                infra_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("infrastructure_networks_metrics_emitted families=4")
+    else:
+        _LOG.debug("infrastructure_networks_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

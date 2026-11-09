@@ -19,6 +19,10 @@ const OVERLAY_LABELS := {
 	"migration_cause": "Migration cause",
 	"migration_wave": "Migration wave",
 	"migration_integration": "Migration integration",
+	"infrastructure_node": "Infrastructure node",
+	"infrastructure_edge": "Infrastructure edge",
+	"infrastructure_damaged": "Infrastructure damaged",
+	"infrastructure_destroyed": "Infrastructure destroyed",
 }
 
 ## Overlay kind → evidence class. Presentation-only; never invents world facts.
@@ -35,6 +39,10 @@ const OVERLAY_CLASSES := {
 	"migration_cause": SUBJECTIVE,
 	"migration_wave": ANALYTICAL,
 	"migration_integration": ANALYTICAL,
+	"infrastructure_node": OBJECTIVE,
+	"infrastructure_edge": OBJECTIVE,
+	"infrastructure_damaged": OBJECTIVE,
+	"infrastructure_destroyed": OBJECTIVE,
 	"narrative_hops": SUBJECTIVE,
 	"spatial_control": ANALYTICAL,
 	"emergent_group_formation": ANALYTICAL,

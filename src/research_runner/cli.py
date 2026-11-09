@@ -1075,6 +1075,20 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.infrastructure_composition import (
+                infrastructure_networks_producer_options_from_args,
+            )
+
+            infrastructure_networks_options = (
+                infrastructure_networks_producer_options_from_args(args)
+            )
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_infrastructure_networks_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1609,6 +1623,36 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                     "inter_society_relations_publication_id="
                     f"{inter_society_relations_receipt['publication_id']}"
                 )
+        if infrastructure_networks_options.enabled:
+            from research_runner.infrastructure_composition import (
+                publish_infrastructure_networks_harvest,
+                write_infrastructure_networks_receipt,
+            )
+
+            infrastructure_networks_receipt = publish_infrastructure_networks_harvest(
+                arm.runner_result,
+                infrastructure_networks_options,
+                committed_events=arm.committed_events or (),
+                run_id=assignment.run_id.value,
+            )
+            write_infrastructure_networks_receipt(
+                Path(args.artifact_root),
+                assignment.run_id.value,
+                infrastructure_networks_receipt,
+            )
+            print(
+                "infrastructure_networks_publication_status="
+                f"{infrastructure_networks_receipt['status']}"
+            )
+            print(
+                "infrastructure_networks_publication_reason="
+                f"{infrastructure_networks_receipt.get('reason')}"
+            )
+            if infrastructure_networks_receipt.get("publication_id"):
+                print(
+                    "infrastructure_networks_publication_id="
+                    f"{infrastructure_networks_receipt['publication_id']}"
+                )
         if lineage_options is not None:
             import json
 
@@ -1813,6 +1857,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen_p.add_argument(
         "--inter-society-relations-max-bytes", type=int, default=8_388_608
+    )
+    gen_p.add_argument("--infrastructure-networks-root", default=None)
+    gen_p.add_argument(
+        "--infrastructure-networks-max-publications", type=int, default=16
+    )
+    gen_p.add_argument(
+        "--infrastructure-networks-max-bytes", type=int, default=8_388_608
     )
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)

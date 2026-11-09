@@ -294,7 +294,7 @@ def test_vocabulary_parity_matches_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 184
+    assert METRIC_FAMILY_COUNT == 188
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA == "evidence-testimony-snapshot-v1"
     assert DISPUTE_SNAPSHOT_SCHEMA == "dispute-resolution-snapshot-v1"
     assert FORMAL_RULE_SNAPSHOT_SCHEMA == "formal-rule-snapshot-v1"
@@ -302,7 +302,8 @@ def test_compatibility_pins_are_exact() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V22 in ACCEPTED_EVENT_SCHEMA_VERSIONS
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

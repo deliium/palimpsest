@@ -540,6 +540,30 @@ func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) ->
 				_session.fetch_migration_outcomes()
 			else:
 				_world.clear_migration_overlay("migration_integration")
+		"infrastructure_node":
+			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_node")
+			if enabled:
+				_session.fetch_infrastructure_assets("infrastructure_node")
+			else:
+				_world.clear_infrastructure_overlay("infrastructure_node")
+		"infrastructure_edge":
+			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_edge")
+			if enabled:
+				_session.fetch_infrastructure_assets("infrastructure_edge")
+			else:
+				_world.clear_infrastructure_overlay("infrastructure_edge")
+		"infrastructure_damaged":
+			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_damaged")
+			if enabled:
+				_session.fetch_infrastructure_assets("infrastructure_damaged")
+			else:
+				_world.clear_infrastructure_overlay("infrastructure_damaged")
+		"infrastructure_destroyed":
+			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_destroyed")
+			if enabled:
+				_session.fetch_infrastructure_assets("infrastructure_destroyed")
+			else:
+				_world.clear_infrastructure_overlay("infrastructure_destroyed")
 		"spatial_control":
 			_world.set_analytics_overlay_enabled(enabled)
 			if enabled:
@@ -581,6 +605,8 @@ func _on_overlay_payload(kind: String, payload: Variant) -> void:
 		_world.set_border_overlay(payload, true, kind)
 	elif kind in ["migration_route", "migration_cause", "migration_wave", "migration_integration"]:
 		_world.set_migration_overlay(payload, true, kind)
+	elif kind in ["infrastructure_node", "infrastructure_edge", "infrastructure_damaged", "infrastructure_destroyed"]:
+		_world.set_infrastructure_overlay(payload, true, kind)
 	elif kind == "spatial_control":
 		_world.apply_research_analytics(payload)
 	elif kind in [

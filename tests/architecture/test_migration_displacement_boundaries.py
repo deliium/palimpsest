@@ -385,7 +385,7 @@ def test_exactly_six_get_routes_require_subjective_debug() -> None:
 def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 5
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 6
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -407,15 +407,16 @@ def test_no_new_flag_context_or_v57() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert METRIC_FAMILY_COUNT == 184
+    assert METRIC_FAMILY_COUNT == 188
     specs = all_metric_specifications()
-    assert len(specs) == 184
+    assert len(specs) == 188
     assert tuple(spec.family_id.value for spec in specs[176:180]) == MIGRATION_FAMILIES
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert MIGRATION_DISPLACEMENT_CURSOR_PURPOSES == (

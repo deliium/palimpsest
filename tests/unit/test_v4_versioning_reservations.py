@@ -21,7 +21,7 @@ from simulation.versioning import (
     reservation_for_context,
     validate_write_pair_reservations,
 )
-from world.events import EVENT_SCHEMA_REPLAY_V22
+from world.events import EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23
 
 pytestmark = pytest.mark.unit
 
@@ -43,10 +43,12 @@ def test_reservations_validate_and_span_23_to_26() -> None:
 
 
 def test_current_wire_maxima_are_unchanged() -> None:
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V22 == 22
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V23 == 23
+    assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert not hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
+    assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
 
 
 def test_contexts_are_exactly_covered_and_disjoint() -> None:

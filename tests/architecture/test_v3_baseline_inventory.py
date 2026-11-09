@@ -22,7 +22,11 @@ from experiments import (
     registered_benchmark_scenario_ids,
     registered_v3_benchmark_scenario_ids,
 )
-from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
+from observer.version import (
+    OBSERVER_PROTOCOL_VERSION,
+    SEMANTIC_EVENT_TYPES,
+    SEMANTIC_TYPE_BY_KIND,
+)
 from simulation.compatibility import (
     ALEMBIC_HEAD_REVISION,
     compatibility_entry,
@@ -41,7 +45,10 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V56,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
-from world.events import EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V22,
+    EVENT_SCHEMA_REPLAY_V23,
+)
 
 V3_BASELINE: Final[dict[str, object]] = {
     "default_runner_schema": "runner-config-v4",
@@ -49,11 +56,11 @@ V3_BASELINE: Final[dict[str, object]] = {
     "accepted_scaffolding_runner_schema": "runner-config-v56",
     "default_result_schema": RESULT_SCHEMA_VERSION,
     "generational_result_schema": "runner-result-v3",
-    "latest_event_schema": 22,
-    "previous_event_schema": 21,
-    "latest_codec": "v20",
-    "next_codec": "v21",
-    "metric_family_count": 184,
+    "latest_event_schema": 23,
+    "previous_event_schema": 22,
+    "latest_codec": "v21",
+    "next_codec": "v22",
+    "metric_family_count": 188,
     "observer_semantic_type_count": 73,
     "observer_protocol": "observer-protocol-v1",
     "alembic_head": "0017",
@@ -79,16 +86,18 @@ def test_v3_baseline_runner_and_result_pins() -> None:
 
 
 def test_v3_baseline_event_and_codec_pins() -> None:
-    assert EVENT_SCHEMA_REPLAY_V22 == V3_BASELINE["latest_event_schema"]
-    assert EVENT_SCHEMA_REPLAY_V21 == V3_BASELINE["previous_event_schema"]
-    assert EVENT_SCHEMA_REPLAY_V22 in ACCEPTED_EVENT_SCHEMA_VERSIONS
+    assert EVENT_SCHEMA_REPLAY_V23 == V3_BASELINE["latest_event_schema"]
+    assert EVENT_SCHEMA_REPLAY_V22 == V3_BASELINE["previous_event_schema"]
+    assert EVENT_SCHEMA_REPLAY_V23 in ACCEPTED_EVENT_SCHEMA_VERSIONS
     assert V3_BASELINE["latest_codec"] in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert V3_BASELINE["next_codec"] not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_v3_baseline_catalog_and_presentation_pins() -> None:
     assert METRIC_FAMILY_COUNT == V3_BASELINE["metric_family_count"]
-    assert len(SEMANTIC_TYPE_BY_KIND) == V3_BASELINE["observer_semantic_type_count"]
+    assert len(SEMANTIC_EVENT_TYPES) == V3_BASELINE["observer_semantic_type_count"]
+    # Alias map may exceed semantic type count; every mapped value stays in the pin.
+    assert set(SEMANTIC_TYPE_BY_KIND.values()) <= set(SEMANTIC_EVENT_TYPES)
     assert OBSERVER_PROTOCOL_VERSION == V3_BASELINE["observer_protocol"]
     assert ALEMBIC_HEAD_REVISION == V3_BASELINE["alembic_head"]
 

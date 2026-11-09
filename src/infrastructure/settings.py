@@ -241,6 +241,10 @@ class Settings(BaseSettings):
     inter_society_relations_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    infrastructure_networks_root: Path | None = None
+    infrastructure_networks_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -397,6 +401,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "inter_society_relations cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("infrastructure_networks_cursor_key")
+    @classmethod
+    def validate_infrastructure_networks_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "infrastructure_networks cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -736,6 +751,19 @@ class Settings(BaseSettings):
             ),
             "inter_society_relations_cursor_enabled": (
                 self.inter_society_relations_cursor_key is not None
+            ),
+            "has_infrastructure_networks_root": (
+                self.infrastructure_networks_root is not None
+            ),
+            "has_infrastructure_networks_cursor_key": (
+                self.infrastructure_networks_cursor_key is not None
+            ),
+            "infrastructure_networks_enabled": (
+                self.infrastructure_networks_root is not None
+                and self.infrastructure_networks_cursor_key is not None
+            ),
+            "infrastructure_networks_cursor_enabled": (
+                self.infrastructure_networks_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

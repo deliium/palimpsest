@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 184
+METRIC_FAMILY_COUNT: Final[int] = 188
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -259,6 +259,10 @@ class MetricFamilyId(StrEnum):
     INTER_SOCIETY_DOMAIN_EVIDENCE = "inter_society_domain_evidence"
     INTER_SOCIETY_RELATION_TIMESERIES = "inter_society_relation_timeseries"
     INTER_SOCIETY_PAIR_COMPARISON = "inter_society_pair_comparison"
+    INFRASTRUCTURE_NETWORK_STRUCTURE = "infrastructure_network_structure"
+    INFRASTRUCTURE_CONDITION_LIFECYCLE = "infrastructure_condition_lifecycle"
+    INFRASTRUCTURE_EFFECT_COVERAGE = "infrastructure_effect_coverage"
+    INFRASTRUCTURE_MAINTENANCE_BURDEN = "infrastructure_maintenance_burden"
 
 
 class DenominatorKind(StrEnum):
@@ -8524,6 +8528,169 @@ INTER_SOCIETY_PAIR_COMPARISON_KEYS: Final[tuple[str, ...]] = (
     *(f"{domain}_right_availability" for domain in ISR_DOMAIN_KEYS),
 )
 
+INFRASTRUCTURE_KIND_KEYS: Final[tuple[str, ...]] = tuple(
+    sorted(
+        (
+            "road",
+            "bridge",
+            "storage",
+            "well",
+            "irrigation",
+            "communication_marker",
+            "trade_post",
+            "large_shelter",
+        )
+    )
+)
+INFRASTRUCTURE_NETWORK_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "asset_count",
+    "node_count",
+    "edge_count",
+    "distinct_location_count",
+    "window_tick",
+    *(f"kind_count_{kind}" for kind in INFRASTRUCTURE_KIND_KEYS),
+)
+INFRASTRUCTURE_CONDITION_LIFECYCLE_KEYS: Final[tuple[str, ...]] = (
+    "asset_count",
+    "operational_count",
+    "damaged_count",
+    "destroyed_count",
+    "mean_integrity",
+    "integrity_below_operational_floor_count",
+    "repair_eligible_count",
+)
+INFRASTRUCTURE_EFFECT_COVERAGE_KEYS: Final[tuple[str, ...]] = (
+    "asset_count",
+    "effects_active_count",
+    "effects_inactive_count",
+    "effects_active_ratio",
+    "travel_effect_asset_count",
+    "capacity_effect_asset_count",
+    "resource_effect_asset_count",
+    "exposure_effect_asset_count",
+)
+INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS: Final[tuple[str, ...]] = (
+    "asset_count",
+    "mean_maintenance_lag_ticks",
+    "max_maintenance_lag_ticks",
+    "assets_never_maintained_count",
+    "damaged_unrepaired_count",
+    "maintenance_opportunity_count",
+)
+
+
+def _spec_infrastructure_network_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="objective_infrastructure_assets",
+        denominator="registered_infrastructure_assets",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="infrastructure_window_tick",
+        deceased_policy="retain_destroyed_tombstones",
+        zero_holding_policy="empty_inventory_unknown",
+        opportunity_vs_occurrence=(
+            "topology inventory counts only; no civilization infrastructure score"
+        ),
+        self_edge_policy="edge endpoints are unordered location pairs",
+        censoring_policy="destroyed assets remain in inventory counts",
+        formulas={
+            key: key.replace("_", " ")
+            for key in INFRASTRUCTURE_NETWORK_STRUCTURE_KEYS
+        },
+        value_keys=INFRASTRUCTURE_NETWORK_STRUCTURE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_assets",
+    )
+
+
+def _spec_infrastructure_condition_lifecycle() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INFRASTRUCTURE_CONDITION_LIFECYCLE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="objective_infrastructure_assets",
+        denominator="registered_infrastructure_assets",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="infrastructure_window_tick",
+        deceased_policy="retain_destroyed_tombstones",
+        zero_holding_policy="empty_inventory_unknown",
+        opportunity_vs_occurrence="status histograms only; no composite health score",
+        self_edge_policy="n/a",
+        censoring_policy="partial when all assets destroyed",
+        formulas={
+            key: key.replace("_", " ")
+            for key in INFRASTRUCTURE_CONDITION_LIFECYCLE_KEYS
+        },
+        value_keys=INFRASTRUCTURE_CONDITION_LIFECYCLE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_assets",
+    )
+
+
+def _spec_infrastructure_effect_coverage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INFRASTRUCTURE_EFFECT_COVERAGE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="objective_infrastructure_assets",
+        denominator="registered_infrastructure_assets",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        cohort_window="infrastructure_window_tick",
+        deceased_policy="destroyed assets contribute zero coverage",
+        zero_holding_policy="empty_inventory_unknown",
+        opportunity_vs_occurrence=(
+            "operational effect eligibility counts; never an effect magnitude score"
+        ),
+        self_edge_policy="n/a",
+        censoring_policy="partial when some assets are non-operational",
+        formulas={
+            key: key.replace("_", " ") for key in INFRASTRUCTURE_EFFECT_COVERAGE_KEYS
+        },
+        value_keys=INFRASTRUCTURE_EFFECT_COVERAGE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_assets",
+    )
+
+
+def _spec_infrastructure_maintenance_burden() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INFRASTRUCTURE_MAINTENANCE_BURDEN,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="objective_infrastructure_assets",
+        denominator="registered_infrastructure_assets",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="infrastructure_window_tick",
+        deceased_policy="destroyed assets remain in burden counts",
+        zero_holding_policy="empty_inventory_unknown",
+        opportunity_vs_occurrence=(
+            "unmaintained counts and spans only; no auto-maintenance policy score"
+        ),
+        self_edge_policy="n/a",
+        censoring_policy="retain destroyed tombstones in burden",
+        formulas={
+            key: key.replace("_", " ")
+            for key in INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS
+        },
+        value_keys=INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_assets",
+    )
+
 
 def _isr_formulas(
     keys: tuple[str, ...], descriptions: Mapping[str, str]
@@ -8891,6 +9058,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_inter_society_domain_evidence,
     _spec_inter_society_relation_timeseries,
     _spec_inter_society_pair_comparison,
+    _spec_infrastructure_network_structure,
+    _spec_infrastructure_condition_lifecycle,
+    _spec_infrastructure_effect_coverage,
+    _spec_infrastructure_maintenance_burden,
 )
 
 

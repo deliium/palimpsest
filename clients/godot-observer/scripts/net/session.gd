@@ -1623,6 +1623,11 @@ func fetch_migration_outcomes() -> void:
 	_request_path("migration_integration", path, {"capability": "debug"})
 
 
+func fetch_infrastructure_assets(overlay_kind: String = "infrastructure_node") -> void:
+	var path := "/v1/simulations/%s/infrastructure-networks/assets" % run_id
+	_request_path(overlay_kind, path, {"capability": "debug"})
+
+
 func request_strategy_audit_overlay() -> void:
 	## Research/debug ANALYTICAL payload. Ordinary speech must not read this.
 	var path := "/v1/simulations/%s/observer/communication-strategy-audit" % run_id
@@ -1930,6 +1935,14 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		or kind == "border_claims"
 		or kind == "border_agreements"
 		or kind == "border_patterns"
+		or kind == "migration_route"
+		or kind == "migration_cause"
+		or kind == "migration_wave"
+		or kind == "migration_integration"
+		or kind == "infrastructure_node"
+		or kind == "infrastructure_edge"
+		or kind == "infrastructure_damaged"
+		or kind == "infrastructure_destroyed"
 		or kind == "causal_debugger"
 		or kind == "causal_debugger_lineage"
 	):
