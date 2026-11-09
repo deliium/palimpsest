@@ -7163,6 +7163,7 @@ def _engine_snapshot(
         public_goods_active=engine._public_goods_active,
         regions_migration_active=state.regions_migration is not None,
         cultural_contact_active=engine.cultural_contact_active,
+        infrastructure_networks_active=engine.infrastructure_networks_active,
     )
     production_rows: SnapshotExtensions = {}
     if codec_version in {
@@ -7183,7 +7184,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows = {
             "structures": tuple(state.structures.values()),
@@ -7207,7 +7208,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
     if codec_version in {
@@ -7226,7 +7227,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
     if codec_version in {
@@ -7244,7 +7245,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     if codec_version in {
@@ -7260,7 +7261,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
@@ -7279,7 +7280,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
@@ -7294,7 +7295,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows["repositories"] = tuple(state.repositories.values())
     if codec_version in {
@@ -7305,21 +7306,34 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20",
+        "v20", "v21",
     }:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20"}:
+    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version in {"v17", "v18", "v19", "v20"}:
+    if codec_version in {"v17", "v18", "v19", "v20", "v21"}:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
         )
-    if codec_version in {"v19", "v20"}:
+    if codec_version in {"v19", "v20"} or (
+        codec_version == "v21" and state.regions_migration is not None
+    ):
         production_rows["regions_migration"] = state.regions_migration
         production_rows["journeys"] = (
             None if state.journeys is None else tuple(state.journeys.values())
+        )
+    if codec_version == "v21":
+        production_rows["infrastructure"] = (
+            ()
+            if state.infrastructure is None
+            else tuple(
+                sorted(
+                    state.infrastructure.values(),
+                    key=lambda asset: asset.asset_id.value,
+                )
+            )
         )
     draft = WorldSnapshot(
         snapshot_id=snapshot_id,
@@ -7377,6 +7391,7 @@ def _engine_snapshot(
         collective_projects=getattr(draft, "collective_projects", ()),
         regions_migration=draft.regions_migration,
         journeys=draft.journeys,
+        infrastructure=getattr(draft, "infrastructure", None),
     )
 
 

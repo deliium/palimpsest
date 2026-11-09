@@ -85,6 +85,7 @@ from world.observations import (
     ObservedCollectiveProject,
     ObservedCommunication,
     ObservedDependencyNeeds,
+    ObservedInfrastructure,
     ObservedItem,
     ObservedItemPlacement,
     ObservedJourney,
@@ -150,6 +151,7 @@ class PerceptionService:
         subjective_valuation_active: bool = False,
         collective_projects_active: bool = False,
         public_goods_active: bool = False,
+        infrastructure_networks_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -177,6 +179,8 @@ class PerceptionService:
             raise TypeError("collective_projects_active must be bool")
         if type(public_goods_active) is not bool:
             raise TypeError("public_goods_active must be bool")
+        if type(infrastructure_networks_active) is not bool:
+            raise TypeError("infrastructure_networks_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
         self._possession_succession_active = possession_succession_active
@@ -184,6 +188,7 @@ class PerceptionService:
         self._subjective_valuation_active = subjective_valuation_active
         self._collective_projects_active = collective_projects_active
         self._public_goods_active = public_goods_active
+        self._infrastructure_networks_active = infrastructure_networks_active
 
     def project(
         self,
@@ -232,6 +237,7 @@ class PerceptionService:
                 subjective_valuation_active=self._subjective_valuation_active,
                 collective_projects_active=self._collective_projects_active,
                 public_goods_active=self._public_goods_active,
+                infrastructure_networks_active=self._infrastructure_networks_active,
             )
             for observer_id in observers
         )
@@ -286,6 +292,7 @@ def _project_one(
     subjective_valuation_active: bool = False,
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
+    infrastructure_networks_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -364,6 +371,15 @@ def _project_one(
             _LOG.debug("public_goods_hidden reason=content_hidden")
     else:
         collective_projects = ()
+    if infrastructure_networks_active and content_visible:
+        infrastructure = _sorted_infrastructure(state, location_id)
+        _LOG.debug(
+            "infrastructure_perceived location_id=%s count=%s",
+            location_id.value,
+            len(infrastructure),
+        )
+    else:
+        infrastructure = ()
     season, band, kinds = _present_environment(
         state=state,
         location_id=location_id,
@@ -396,6 +412,7 @@ def _project_one(
         artifacts=artifacts,
         repositories=repositories,
         collective_projects=collective_projects,
+        infrastructure=infrastructure,
         exits=_sorted_exits(state, location_id, physical_rules=context.physical_rules),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id, context=context)
@@ -1210,6 +1227,34 @@ def _public_facts_for_role(
             facts["item_kind"],
         )
     return facts
+
+
+def _sorted_infrastructure(
+    state: WorldState, location_id: EntityId
+) -> tuple[ObservedInfrastructure, ...]:
+    assets = state.infrastructure
+    if assets is None:
+        return ()
+    selected: list[ObservedInfrastructure] = []
+    for asset in sorted(assets.values(), key=lambda row: row.asset_id.value):
+        endpoint_present: bool | None = None
+        if asset.topology.value == "edge":
+            if asset.location_id != location_id and asset.endpoint_location_id != location_id:
+                continue
+            endpoint_present = asset.endpoint_location_id is not None
+        elif asset.location_id != location_id:
+            continue
+        selected.append(
+            ObservedInfrastructure(
+                asset_id=asset.asset_id,
+                kind=asset.kind.value,
+                status=asset.status.value,
+                integrity=asset.integrity,
+                topology=asset.topology.value,
+                endpoint_present=endpoint_present,
+            )
+        )
+    return tuple(selected)
 
 
 def _sorted_collective_projects(

@@ -100,6 +100,7 @@ __all__ = [
     "ObservedCommunication",
     "ObservedDependencyNeed",
     "ObservedDependencyNeeds",
+    "ObservedInfrastructure",
     "ObservedItem",
     "ObservedItemPlacement",
     "ObservedKinshipVisible",
@@ -1298,6 +1299,53 @@ class ObservedCollectiveProject:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservedInfrastructure:
+    """Colocated or endpoint-visible infrastructure fact without effect scores."""
+
+    asset_id: EntityId
+    kind: str
+    status: str
+    integrity: float
+    topology: str
+    endpoint_present: bool | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.asset_id) is not EntityId:
+            raise TypeError("ObservedInfrastructure.asset_id must be EntityId")
+        if type(self.kind) is not str or not self.kind:
+            raise TypeError("ObservedInfrastructure.kind must be a non-empty str")
+        if type(self.status) is not str or self.status not in {
+            "operational",
+            "damaged",
+            "destroyed",
+        }:
+            raise ValueError("ObservedInfrastructure.status")
+        if type(self.topology) is not str or self.topology not in {"node", "edge"}:
+            raise ValueError("ObservedInfrastructure.topology")
+        if isinstance(self.integrity, bool) or not isinstance(
+            self.integrity, (int, float)
+        ):
+            raise TypeError("ObservedInfrastructure.integrity must be a finite float")
+        number = float(self.integrity)
+        if number != number or number < 0.0 or number > 1.0:
+            raise ValueError("ObservedInfrastructure.integrity must be in [0, 1]")
+        object.__setattr__(self, "integrity", 0.0 if number == 0.0 else number)
+        if self.endpoint_present is not None and type(self.endpoint_present) is not bool:
+            raise TypeError(
+                "ObservedInfrastructure.endpoint_present must be bool or None"
+            )
+        for forbidden in (
+            "score",
+            "infrastructure_score",
+            "civilization_score",
+            "planner",
+            "auto_maintain",
+        ):
+            if forbidden in self.__slots__:
+                raise ValueError(f"ObservedInfrastructure forbids {forbidden}")
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     """Immutable tick-scoped agent observation with redacted projections only."""
 
@@ -1315,6 +1363,7 @@ class Observation:
     collective_projects: Sequence[ObservedCollectiveProject] = field(
         default_factory=tuple
     )
+    infrastructure: Sequence[ObservedInfrastructure] = field(default_factory=tuple)
     exits: Sequence[VisibleExit] = field(default_factory=tuple)
     visible_bodies: Sequence[VisibleBody] = field(default_factory=tuple)
     occurrences: Sequence[ObservedOccurrence] = field(default_factory=tuple)
@@ -1403,6 +1452,15 @@ class Observation:
                 "Observation.collective_projects",
                 self.collective_projects,
                 model_type=ObservedCollectiveProject,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "infrastructure",
+            _copy_models(
+                "Observation.infrastructure",
+                self.infrastructure,
+                model_type=ObservedInfrastructure,
             ),
         )
         object.__setattr__(

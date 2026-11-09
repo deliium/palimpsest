@@ -51,6 +51,7 @@ __all__ = [
     "effective_store_capacity_delta",
     "effective_travel_duration",
     "effective_travel_fatigue",
+    "event_detail_for_asset",
     "index_infrastructure",
     "insert_infrastructure_asset",
     "operational_assets_at",
@@ -369,6 +370,46 @@ def effective_exposure_scale(
     return scale
 
 
+def event_detail_for_asset(
+    asset: InfrastructureAsset,
+    *,
+    tick: int,
+    event_kind: str,
+) -> object:
+    from world.events import (
+        InfrastructureConstructed,
+        InfrastructureDamaged,
+        InfrastructureDecayed,
+        InfrastructureDestroyed,
+        InfrastructureRepaired,
+    )
+
+    payload = {
+        "asset_id": asset.asset_id,
+        "asset_kind": asset.kind.value,
+        "topology": asset.topology.value,
+        "status": asset.status.value,
+        "integrity": asset.integrity,
+        "location_id": asset.location_id,
+        "endpoint_location_id": asset.endpoint_location_id,
+        "linked_structure_id": asset.linked_structure_id,
+        "linked_project_id": asset.linked_project_id,
+        "tick": tick,
+    }
+    mapping = {
+        "infrastructure_constructed": InfrastructureConstructed,
+        "infrastructure_repaired": InfrastructureRepaired,
+        "infrastructure_damaged": InfrastructureDamaged,
+        "infrastructure_decayed": InfrastructureDecayed,
+        "infrastructure_destroyed": InfrastructureDestroyed,
+    }
+    try:
+        cls = mapping[event_kind]
+    except KeyError as exc:
+        raise _fail("infrastructure_unknown_event_kind") from exc
+    return cls(**payload)
+
+
 def adjust_linked_infrastructure(
     state: WorldState,
     *,
@@ -376,7 +417,7 @@ def adjust_linked_infrastructure(
     delta: float,
     tick: int,
     allow_destroyed: bool = False,
-) -> WorldState:
+) -> tuple[WorldState, tuple[object, ...]]:
     """Apply a maintain/oppose/repair delta to assets linked to ``structure_id``."""
     from dataclasses import replace as dc_replace
 
@@ -384,9 +425,10 @@ def adjust_linked_infrastructure(
 
     current = state.infrastructure
     if current is None:
-        return state
+        return state, ()
     changed = False
     merged = dict(current)
+    details: list[object] = []
     for asset_id, asset in current.items():
         if asset.linked_structure_id != structure_id:
             continue
@@ -407,6 +449,15 @@ def adjust_linked_infrastructure(
         )
         merged[asset_id] = updated
         changed = True
+        if status is InfrastructureStatus.DESTROYED and before > 0.0:
+            event_kind = "infrastructure_destroyed"
+        elif delta >= 0.0:
+            event_kind = "infrastructure_repaired"
+        else:
+            event_kind = "infrastructure_damaged"
+        details.append(
+            event_detail_for_asset(updated, tick=tick, event_kind=event_kind)
+        )
         _LOG.debug(
             "infrastructure_integrity_adjusted kind=%s before_millis=%s after_millis=%s",
             asset.kind.value,
@@ -414,8 +465,9 @@ def adjust_linked_infrastructure(
             int(round(integrity * 1000)),
         )
     if not changed:
-        return state
-    return rebuild_world_state(state, infrastructure=merged)
+        return state, ()
+    _LOG.debug("infrastructure_lifecycle_events count=%s", len(details))
+    return rebuild_world_state(state, infrastructure=merged), tuple(details)
 
 
 def sync_infrastructure_with_structures(state: WorldState) -> WorldState:
@@ -447,7 +499,9 @@ def sync_infrastructure_with_structures(state: WorldState) -> WorldState:
     return rebuild_world_state(state, infrastructure=merged)
 
 
-def decay_infrastructure(state: WorldState, *, tick: int) -> WorldState:
+def decay_infrastructure(
+    state: WorldState, *, tick: int
+) -> tuple[WorldState, tuple[object, ...]]:
     """Apply catalog decay; never auto-repairs. Destroyed tombstones remain."""
     from dataclasses import replace as dc_replace
 
@@ -455,8 +509,9 @@ def decay_infrastructure(state: WorldState, *, tick: int) -> WorldState:
 
     current = state.infrastructure
     if current is None:
-        return state
+        return state, ()
     merged = dict(current)
+    details: list[object] = []
     decayed = 0
     destroyed = 0
     for asset_id, asset in current.items():
@@ -468,22 +523,34 @@ def decay_infrastructure(state: WorldState, *, tick: int) -> WorldState:
         status = _status_for(asset.kind, integrity)
         if integrity == before and status is asset.status:
             continue
-        merged[asset_id] = dc_replace(asset, integrity=integrity, status=status)
+        updated = dc_replace(asset, integrity=integrity, status=status)
+        merged[asset_id] = updated
         decayed += 1
         if status is InfrastructureStatus.DESTROYED:
             destroyed += 1
+            details.append(
+                event_detail_for_asset(
+                    updated, tick=tick, event_kind="infrastructure_destroyed"
+                )
+            )
             _LOG.warning(
                 "infrastructure_destroyed kind=%s tick=%s",
                 asset.kind.value,
                 tick,
             )
+        else:
+            details.append(
+                event_detail_for_asset(
+                    updated, tick=tick, event_kind="infrastructure_decayed"
+                )
+            )
     if decayed == 0:
-        return state
+        return state, ()
     _LOG.debug("infrastructure_decayed_count=%s tick=%s", decayed, tick)
     if destroyed:
         _LOG.info("infrastructure_destroyed_count=%s tick=%s", destroyed, tick)
     next_state = rebuild_world_state(state, infrastructure=merged)
-    return sync_infrastructure_with_structures(next_state)
+    return sync_infrastructure_with_structures(next_state), tuple(details)
 
 
 def register_from_completed_project(
@@ -491,13 +558,14 @@ def register_from_completed_project(
     *,
     project: CollectiveProject,
     structure_id: EntityId | None,
-) -> WorldState:
+    tick: int | None = None,
+) -> tuple[WorldState, tuple[object, ...]]:
     """Mint an operational asset after project completion; never blocks completion."""
     from world._state import rebuild_world_state
 
     infra_kind = _COLLECTIVE_TO_INFRA.get(project.kind.value)
     if infra_kind is None:
-        return state
+        return state, ()
     current = state.infrastructure
     if current is None:
         current = MappingProxyType({})
@@ -507,7 +575,7 @@ def register_from_completed_project(
             len(current),
             infra_kind.value,
         )
-        return state
+        return state, ()
     linked_structure = structure_id
     structures = dict(state.structures)
     if infra_kind is InfrastructureKind.ROAD:
@@ -543,14 +611,14 @@ def register_from_completed_project(
             infra_kind.value,
             project.project_id.value,
         )
-        return state
+        return state, ()
     if asset_id in current:
         _LOG.error(
             "infrastructure_id_collision kind=%s asset=%s",
             infra_kind.value,
             asset_id.value,
         )
-        return state
+        return state, ()
     asset = InfrastructureAsset(
         asset_id=asset_id,
         kind=infra_kind,
@@ -569,14 +637,22 @@ def register_from_completed_project(
         last_maintained_tick=project.opened_tick,
     )
     merged = insert_infrastructure_asset(current, asset)
+    emit_tick = project.opened_tick if tick is None else tick
+    detail = event_detail_for_asset(
+        asset, tick=emit_tick, event_kind="infrastructure_constructed"
+    )
     _LOG.info(
         "infrastructure_constructed kind=%s topology=%s count=%s",
         asset.kind.value,
         asset.topology.value,
         len(merged),
     )
-    return rebuild_world_state(
-        state,
-        structures=structures,
-        infrastructure=merged,
+    _LOG.debug("infrastructure_lifecycle_events count=1")
+    return (
+        rebuild_world_state(
+            state,
+            structures=structures,
+            infrastructure=merged,
+        ),
+        (detail,),
     )

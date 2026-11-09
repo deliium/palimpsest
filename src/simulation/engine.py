@@ -829,6 +829,7 @@ class WorldEngine:
             subjective_valuation_active=subjective_valuation_active,
             collective_projects_active=collective_projects_active,
             public_goods_active=public_goods_active,
+            infrastructure_networks_active=infrastructure_networks_active,
             repository_perception_mode=(
                 None
                 if knowledge_repositories_spec is None
@@ -1320,6 +1321,7 @@ class WorldEngine:
             subjective_valuation_active=engine._subjective_valuation_active,
             collective_projects_active=engine._collective_projects_active,
             public_goods_active=engine._public_goods_active,
+            infrastructure_networks_active=engine._infrastructure_networks_active,
         )
         engine._engine_id = derive_scoped_id(
             snapshot.config,
@@ -1416,6 +1418,7 @@ class WorldEngine:
                 "v18",
                 "v19",
                 "v20",
+            "v21",
             }
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
@@ -1435,6 +1438,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
+        "v21",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -1479,6 +1483,7 @@ class WorldEngine:
                 "v18",
                 "v19",
                 "v20",
+            "v21",
             } and snapshot.event_schema_version in {
                 10,
                 11,
@@ -1544,6 +1549,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
+        "v21",
         }:
             from simulation.runner_models import DurableRecordsSpec
 
@@ -1575,6 +1581,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
+        "v21",
         }:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
@@ -1611,6 +1618,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
+        "v21",
         }:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
@@ -1631,6 +1639,7 @@ class WorldEngine:
                     subjective_valuation_active=engine._subjective_valuation_active,
                     collective_projects_active=engine._collective_projects_active,
                     public_goods_active=engine._public_goods_active,
+                    infrastructure_networks_active=engine._infrastructure_networks_active,
                 )
         if snapshot.persistence_codec_version in {
             "v8",
@@ -1646,6 +1655,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
+        "v21",
         }:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
@@ -1720,6 +1730,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
+        "v21",
         }:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
@@ -4212,12 +4223,22 @@ class WorldEngine:
             completion_state = decay_linked_structures(
                 completion_state, decay_millis=self._public_goods_decay_millis
             )
+        infrastructure_details: tuple[EventDetails, ...] = ()
         if self._infrastructure_networks_active:
             from world._infrastructure import decay_infrastructure
+            from world.events import require_event_details
 
-            completion_state = decay_infrastructure(
+            completion_state, infra_raw = decay_infrastructure(
                 completion_state, tick=snap.tick.value
             )
+            infrastructure_details = tuple(
+                require_event_details(item) for item in infra_raw
+            )
+            if infrastructure_details:
+                _LOGGER.debug(
+                    "infrastructure_events_emitted count=%s",
+                    len(infrastructure_details),
+                )
 
         system_effects = self._resolve_system_effects(
             snap=snap,
@@ -4333,6 +4354,32 @@ class WorldEngine:
                         origin_location_id=completion_state.collective_projects[
                             abandoned_detail.project_id
                         ].location_id,
+                    ),
+                )
+            )
+        for family_ordinal, infra_detail in enumerate(infrastructure_details):
+            asset_id = infra_detail.asset_id  # type: ignore[attr-defined]
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=snap.tick.value,
+                effect_family=SystemEffectFamily.COLLECTIVE_PROJECT.value,
+                entity_id=asset_id,
+                family_ordinal=family_ordinal + 10_000,
+            )
+            production_pending.append(
+                PendingEvent(
+                    cause=SystemCause(
+                        cause_id=cause_id,
+                        effect_family=SystemEffectFamily.COLLECTIVE_PROJECT,
+                        entity_id=asset_id,
+                        family_ordinal=family_ordinal + 10_000,
+                    ),
+                    details=infra_detail,
+                    occurrence=build_occurrence_context(
+                        infra_detail,
+                        origin_location_id=infra_detail.location_id,  # type: ignore[attr-defined]
                     ),
                 )
             )
@@ -6565,6 +6612,7 @@ def select_checkpoint_schema(
     public_goods_active: bool = False,
     regions_migration_active: bool = False,
     cultural_contact_active: bool = False,
+    infrastructure_networks_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -6590,6 +6638,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -6611,7 +6660,19 @@ def select_checkpoint_schema(
         public_goods_active=public_goods_active,
         regions_migration_active=regions_migration_active,
         cultural_contact_active=cultural_contact_active,
+        infrastructure_networks_active=infrastructure_networks_active,
     )
+    if infrastructure_networks_active:
+        if schema_version != EVENT_SCHEMA_REPLAY_V23 or codec != "v21":
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=v21 "
+                "reason=infrastructure_networks_active",
+                schema_version,
+                codec,
+                EVENT_SCHEMA_REPLAY_V23,
+            )
+        return schema_version, codec
     if cultural_contact_active:
         if schema_version != EVENT_SCHEMA_REPLAY_V22 or codec != "v20":
             _LOGGER.warning(

@@ -615,11 +615,12 @@ def _apply_repair(
     next_state = rebuild_world_state(
         state, items=items, bodies=bodies, structures=structures
     )
+    infra_extras: tuple[object, ...] = ()
     if state.infrastructure is not None:
         from world._infrastructure import adjust_linked_infrastructure
         from world.infrastructure import REPAIR_INTEGRITY_DELTA as INFRA_REPAIR_DELTA
 
-        next_state = adjust_linked_infrastructure(
+        next_state, infra_extras = adjust_linked_infrastructure(
             next_state,
             structure_id=prior.entity_id,
             delta=INFRA_REPAIR_DELTA,
@@ -634,7 +635,7 @@ def _apply_repair(
             duration,
             consumed,
         ),
-        None,
+        None if not infra_extras else infra_extras,
     )
 
 

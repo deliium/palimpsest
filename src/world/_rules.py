@@ -2916,7 +2916,10 @@ def _apply_production(
 
     extra: tuple[EventDetails, ...] = ()
     if witness is not None:
-        extra = (require_event_details(witness),)
+        if isinstance(witness, tuple):
+            extra = tuple(require_event_details(item) for item in witness)
+        else:
+            extra = (require_event_details(witness),)
     return RuleApplication(
         result=result,
         next_state=next_state,

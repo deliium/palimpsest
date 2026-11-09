@@ -87,6 +87,7 @@ EVENT_SCHEMA_REPLAY_V19: Final[int] = 19
 EVENT_SCHEMA_REPLAY_V20: Final[int] = 20
 EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
 EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
+EVENT_SCHEMA_REPLAY_V23: Final[int] = 23
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -111,6 +112,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -136,6 +138,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -160,6 +163,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -181,6 +185,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -201,6 +206,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -220,6 +226,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -238,6 +245,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -255,6 +263,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -271,6 +280,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -286,6 +296,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -2752,12 +2763,160 @@ class PublicGoodOpposed:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class InfrastructureConstructed:
+    """Effect-complete registration of a completed infrastructure asset."""
+
+    asset_id: EntityId
+    asset_kind: str
+    topology: str
+    status: str
+    integrity: float
+    location_id: EntityId
+    endpoint_location_id: EntityId | None
+    linked_structure_id: EntityId | None
+    linked_project_id: EntityId
+    tick: int
+    kind: Literal["infrastructure_constructed"] = field(
+        default="infrastructure_constructed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _validate_infrastructure_event(self, "InfrastructureConstructed")
+
+
+@dataclass(frozen=True, slots=True)
+class InfrastructureRepaired:
+    asset_id: EntityId
+    asset_kind: str
+    topology: str
+    status: str
+    integrity: float
+    location_id: EntityId
+    endpoint_location_id: EntityId | None
+    linked_structure_id: EntityId | None
+    linked_project_id: EntityId
+    tick: int
+    kind: Literal["infrastructure_repaired"] = field(
+        default="infrastructure_repaired", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _validate_infrastructure_event(self, "InfrastructureRepaired")
+
+
+@dataclass(frozen=True, slots=True)
+class InfrastructureDamaged:
+    asset_id: EntityId
+    asset_kind: str
+    topology: str
+    status: str
+    integrity: float
+    location_id: EntityId
+    endpoint_location_id: EntityId | None
+    linked_structure_id: EntityId | None
+    linked_project_id: EntityId
+    tick: int
+    kind: Literal["infrastructure_damaged"] = field(
+        default="infrastructure_damaged", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _validate_infrastructure_event(self, "InfrastructureDamaged")
+
+
+@dataclass(frozen=True, slots=True)
+class InfrastructureDecayed:
+    asset_id: EntityId
+    asset_kind: str
+    topology: str
+    status: str
+    integrity: float
+    location_id: EntityId
+    endpoint_location_id: EntityId | None
+    linked_structure_id: EntityId | None
+    linked_project_id: EntityId
+    tick: int
+    kind: Literal["infrastructure_decayed"] = field(
+        default="infrastructure_decayed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _validate_infrastructure_event(self, "InfrastructureDecayed")
+
+
+@dataclass(frozen=True, slots=True)
+class InfrastructureDestroyed:
+    asset_id: EntityId
+    asset_kind: str
+    topology: str
+    status: str
+    integrity: float
+    location_id: EntityId
+    endpoint_location_id: EntityId | None
+    linked_structure_id: EntityId | None
+    linked_project_id: EntityId
+    tick: int
+    kind: Literal["infrastructure_destroyed"] = field(
+        default="infrastructure_destroyed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _validate_infrastructure_event(self, "InfrastructureDestroyed")
+
+
+def _validate_infrastructure_event(event: object, type_name: str) -> None:
+    asset_id = getattr(event, "asset_id")
+    location_id = getattr(event, "location_id")
+    linked_project_id = getattr(event, "linked_project_id")
+    endpoint = getattr(event, "endpoint_location_id")
+    linked_structure = getattr(event, "linked_structure_id")
+    if type(asset_id) is not EntityId:
+        raise TypeError(f"{type_name}.asset_id must be EntityId")
+    if type(location_id) is not EntityId:
+        raise TypeError(f"{type_name}.location_id must be EntityId")
+    if type(linked_project_id) is not EntityId:
+        raise TypeError(f"{type_name}.linked_project_id must be EntityId")
+    if endpoint is not None and type(endpoint) is not EntityId:
+        raise TypeError(f"{type_name}.endpoint_location_id must be EntityId or None")
+    if linked_structure is not None and type(linked_structure) is not EntityId:
+        raise TypeError(f"{type_name}.linked_structure_id must be EntityId or None")
+    asset_kind = getattr(event, "asset_kind")
+    topology = getattr(event, "topology")
+    status = getattr(event, "status")
+    if type(asset_kind) is not str or not asset_kind:
+        raise ValueError(f"{type_name}.asset_kind")
+    if type(topology) is not str or topology not in {"node", "edge"}:
+        raise ValueError(f"{type_name}.topology")
+    if type(status) is not str or status not in {
+        "operational",
+        "damaged",
+        "destroyed",
+    }:
+        raise ValueError(f"{type_name}.status")
+    integrity = _require_finite_float(
+        f"{type_name}.integrity", getattr(event, "integrity")
+    )
+    if not 0.0 <= integrity <= 1.0:
+        raise ValueError(f"{type_name}.integrity")
+    object.__setattr__(event, "integrity", integrity)
+    tick = getattr(event, "tick")
+    if type(tick) is not int or isinstance(tick, bool) or tick < 0:
+        raise ValueError(f"{type_name}.tick")
+    _reject_presentation_fields(getattr(event, "kind"), event.__slots__)  # type: ignore[attr-defined]
+
+
 EventDetails = (
     Moved
     | JourneyStarted
     | JourneyArrived
     | JourneyEnded
     | ContactRecorded
+    | InfrastructureConstructed
+    | InfrastructureRepaired
+    | InfrastructureDamaged
+    | InfrastructureDecayed
+    | InfrastructureDestroyed
     | Searched
     | Taken
     | Dropped
@@ -2903,7 +3062,25 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         PublicGoodBenefit,
         PublicGoodMaintained,
         PublicGoodOpposed,
+        InfrastructureConstructed,
+        InfrastructureRepaired,
+        InfrastructureDamaged,
+        InfrastructureDecayed,
+        InfrastructureDestroyed,
     }
+)
+
+_INFRASTRUCTURE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {
+        InfrastructureConstructed,
+        InfrastructureRepaired,
+        InfrastructureDamaged,
+        InfrastructureDecayed,
+        InfrastructureDestroyed,
+    }
+)
+_INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V23}
 )
 
 _KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
@@ -2929,6 +3106,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -2941,6 +3119,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -2952,6 +3131,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2965,6 +3145,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
@@ -2975,6 +3156,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -2992,22 +3174,23 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}
 )
 _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22}
+    {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}
 )
 _JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {JourneyStarted, JourneyArrived, JourneyEnded}
 )
 _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22}
+    {EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}
 )
 _CONTACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({ContactRecorded})
-_CONTACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V22})
+_CONTACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23})
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
 )
@@ -3068,6 +3251,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }
 )
 
@@ -3189,6 +3373,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
                 return True
     if type(details) in _CONTACT_DETAIL_TYPES:
         return schema_version in _CONTACT_EVENT_SCHEMAS
+    if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
+        return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
         return schema_version in _PUBLIC_GOOD_EVENT_SCHEMAS
     if type(details) in _PROJECT_DETAIL_TYPES:
@@ -3374,6 +3560,14 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return destination_id
         case JourneyStarted() | JourneyArrived() | JourneyEnded() | ContactRecorded():
             return None
+        case (
+            InfrastructureConstructed(asset_id=asset_id)
+            | InfrastructureRepaired(asset_id=asset_id)
+            | InfrastructureDamaged(asset_id=asset_id)
+            | InfrastructureDecayed(asset_id=asset_id)
+            | InfrastructureDestroyed(asset_id=asset_id)
+        ):
+            return asset_id
         case Searched(target_id=target_id):
             return target_id
         case Taken(item_id=item_id) | Dropped(item_id=item_id) | Eaten(item_id=item_id):
@@ -3653,6 +3847,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=cultural_contact_requires_v22",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _INFRASTRUCTURE_DETAIL_TYPES:
+            if self.schema_version not in _INFRASTRUCTURE_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=infrastructure_networks_requires_v23",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -4249,6 +4452,29 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=(project_id,),
+                private_recipient_ids=(),
+            )
+        case (
+            InfrastructureConstructed(
+                asset_id=asset_id, location_id=infra_location_id
+            )
+            | InfrastructureRepaired(
+                asset_id=asset_id, location_id=infra_location_id
+            )
+            | InfrastructureDamaged(
+                asset_id=asset_id, location_id=infra_location_id
+            )
+            | InfrastructureDecayed(
+                asset_id=asset_id, location_id=infra_location_id
+            )
+            | InfrastructureDestroyed(
+                asset_id=asset_id, location_id=infra_location_id
+            )
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id or infra_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(asset_id,),
                 private_recipient_ids=(),
             )
         case _:

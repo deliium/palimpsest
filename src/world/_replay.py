@@ -55,7 +55,14 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V19,
     EVENT_SCHEMA_REPLAY_V20,
     EVENT_SCHEMA_REPLAY_V21,
+    EVENT_SCHEMA_REPLAY_V22,
+    EVENT_SCHEMA_REPLAY_V23,
     AgentCreated,
+    InfrastructureConstructed,
+    InfrastructureDamaged,
+    InfrastructureDecayed,
+    InfrastructureDestroyed,
+    InfrastructureRepaired,
     AgentEnteredWorld,
     AgentInitializationRecorded,
     ArtifactAnnotated,
@@ -411,6 +418,8 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V19,
             EVENT_SCHEMA_REPLAY_V20,
             EVENT_SCHEMA_REPLAY_V21,
+            EVENT_SCHEMA_REPLAY_V22,
+            EVENT_SCHEMA_REPLAY_V23,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -734,6 +743,14 @@ def _apply_event_effect(
             )
         case PublicGoodOpposed() as opposed:
             return _project_public_good_integrity(state, event, opposed), True
+        case (
+            InfrastructureConstructed()
+            | InfrastructureRepaired()
+            | InfrastructureDamaged()
+            | InfrastructureDecayed()
+            | InfrastructureDestroyed()
+        ) as infra:
+            return _project_infrastructure_event(state, infra), True
         case _:
             raise ProjectionError(ProjectionErrorCode.PRECONDITION_FAILED)
 
@@ -2837,3 +2854,41 @@ def _project_public_good_decay(
     if not changed:
         return state
     return rebuild_world_state(state, structures=structures)
+
+
+def _project_infrastructure_event(state: WorldState, details: object) -> WorldState:
+    """Upsert an infrastructure asset from an effect-complete detail payload."""
+    from types import MappingProxyType
+
+    from world._infrastructure import (
+        insert_infrastructure_asset,
+        replace_infrastructure_asset,
+    )
+    from world.infrastructure import (
+        InfrastructureAsset,
+        InfrastructureKind,
+        InfrastructureStatus,
+        InfrastructureTopology,
+    )
+
+    asset = InfrastructureAsset(
+        asset_id=details.asset_id,  # type: ignore[attr-defined]
+        kind=InfrastructureKind(details.asset_kind),  # type: ignore[attr-defined]
+        topology=InfrastructureTopology(details.topology),  # type: ignore[attr-defined]
+        status=InfrastructureStatus(details.status),  # type: ignore[attr-defined]
+        integrity=details.integrity,  # type: ignore[attr-defined]
+        location_id=details.location_id,  # type: ignore[attr-defined]
+        endpoint_location_id=details.endpoint_location_id,  # type: ignore[attr-defined]
+        linked_structure_id=details.linked_structure_id,  # type: ignore[attr-defined]
+        linked_project_id=details.linked_project_id,  # type: ignore[attr-defined]
+        created_tick=details.tick,  # type: ignore[attr-defined]
+        last_maintained_tick=details.tick,  # type: ignore[attr-defined]
+    )
+    current = state.infrastructure
+    if current is None:
+        current = MappingProxyType({})
+    if asset.asset_id in current:
+        merged = replace_infrastructure_asset(current, asset)
+    else:
+        merged = insert_infrastructure_asset(current, asset)
+    return rebuild_world_state(state, infrastructure=merged)

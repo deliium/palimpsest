@@ -409,7 +409,7 @@ def mutate_collective_contribute(
             collective_projects=projects,
         )
         return next_state, (contributed,)
-    completed_state, completed = _complete_project(
+    completed_state, completed, infra_details = _complete_project(
         state,
         updated,
         items=items,
@@ -418,7 +418,7 @@ def mutate_collective_contribute(
         decay_millis=decay_millis,
         infrastructure_networks_active=infrastructure_networks_active,
     )
-    return completed_state, (contributed, completed)
+    return completed_state, (contributed, completed, *infra_details)
 
 
 def _complete_project(
@@ -430,11 +430,11 @@ def _complete_project(
     public_goods_active: bool = False,
     decay_millis: int = 0,
     infrastructure_networks_active: bool = False,
-) -> tuple[WorldState, ProjectCompleted]:
+) -> tuple[WorldState, ProjectCompleted, tuple[EventDetails, ...]]:
     """Write the catalog result when both counters are full."""
     from world._infrastructure import register_from_completed_project
     from world._state import rebuild_world_state
-    from world.events import ProjectCompleted
+    from world.events import ProjectCompleted, require_event_details
     from world.production import Structure
 
     row = catalog_row(project.kind)
@@ -483,21 +483,24 @@ def _complete_project(
         structures=structures,
         collective_projects=projects,
     )
+    infra_raw: tuple[object, ...] = ()
     if infrastructure_networks_active and project.kind in INFRASTRUCTURE_COLLECTIVE_KINDS:
-        next_state = register_from_completed_project(
+        next_state, infra_raw = register_from_completed_project(
             next_state,
             project=completed
             if completed.linked_structure_id is not None
             else replace(completed, linked_structure_id=structure_id),
             structure_id=structure_id,
         )
-    return next_state, ProjectCompleted(
+    completed_detail = ProjectCompleted(
         project.project_id,
         project.kind.value,
         structure_id,
         stored_delta,
         decay_millis if public_goods_active else None,
     )
+    infra_details = tuple(require_event_details(item) for item in infra_raw)
+    return next_state, completed_detail, infra_details
 
 
 def abandon_idle_projects(
@@ -828,17 +831,20 @@ def mutate_public_maintain(
         structures=structures,
         collective_projects=projects,
     )
+    infra_details: tuple[EventDetails, ...] = ()
     if state.infrastructure is not None:
         from world._infrastructure import adjust_linked_infrastructure
+        from world.events import require_event_details
         from world.infrastructure import REPAIR_INTEGRITY_DELTA as INFRA_REPAIR_DELTA
 
-        next_state = adjust_linked_infrastructure(
+        next_state, infra_raw = adjust_linked_infrastructure(
             next_state,
             structure_id=structure.entity_id,
             delta=INFRA_REPAIR_DELTA,
             tick=tick,
         )
-    return next_state, (detail,)
+        infra_details = tuple(require_event_details(item) for item in infra_raw)
+    return next_state, (detail, *infra_details)
 
 
 def mutate_public_oppose(
@@ -880,21 +886,24 @@ def mutate_public_oppose(
     next_state = rebuild_world_state(
         state, structures=structures, collective_projects=projects
     )
+    infra_details: tuple[EventDetails, ...] = ()
     if (
         state.infrastructure is not None
         and project.linked_structure_id is not None
         and structures is not None
     ):
         from world._infrastructure import adjust_linked_infrastructure
+        from world.events import require_event_details
         from world.infrastructure import REPAIR_INTEGRITY_DELTA as INFRA_REPAIR_DELTA
 
-        next_state = adjust_linked_infrastructure(
+        next_state, infra_raw = adjust_linked_infrastructure(
             next_state,
             structure_id=project.linked_structure_id,
             delta=-INFRA_REPAIR_DELTA,
             tick=tick,
         )
-    return next_state, (detail,)
+        infra_details = tuple(require_event_details(item) for item in infra_raw)
+    return next_state, (detail, *infra_details)
 
 
 def presence_relief(state: WorldState, location_id: EntityId) -> tuple[float, float]:

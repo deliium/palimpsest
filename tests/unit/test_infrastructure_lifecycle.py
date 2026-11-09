@@ -78,47 +78,52 @@ def _world_with_asset(
 
 def test_adjust_raises_and_lowers_integrity() -> None:
     state, asset, structure_id = _world_with_asset(integrity=0.5)
-    repaired = adjust_linked_infrastructure(
+    repaired, repaired_details = adjust_linked_infrastructure(
         state, structure_id=structure_id, delta=REPAIR_INTEGRITY_DELTA, tick=5
     )
     updated = repaired.infrastructure[asset.asset_id]
     assert updated.integrity == pytest.approx(0.65)
     assert updated.last_maintained_tick == 5
-    damaged = adjust_linked_infrastructure(
+    assert len(repaired_details) == 1
+    damaged, damaged_details = adjust_linked_infrastructure(
         repaired, structure_id=structure_id, delta=-REPAIR_INTEGRITY_DELTA, tick=6
     )
     again = damaged.infrastructure[asset.asset_id]
     assert again.integrity == pytest.approx(0.5)
+    assert len(damaged_details) == 1
 
 
 def test_destroyed_rejects_repair() -> None:
     state, asset, structure_id = _world_with_asset(
         integrity=0.0, status=InfrastructureStatus.DESTROYED
     )
-    next_state = adjust_linked_infrastructure(
+    next_state, details = adjust_linked_infrastructure(
         state, structure_id=structure_id, delta=REPAIR_INTEGRITY_DELTA, tick=9
     )
     assert next_state.infrastructure[asset.asset_id].status is InfrastructureStatus.DESTROYED
     assert next_state.infrastructure[asset.asset_id].integrity == 0.0
+    assert details == ()
 
 
 def test_decay_flips_status_and_destroys() -> None:
     state, asset, _ = _world_with_asset(integrity=0.36)
     row = catalog_row(InfrastructureKind.BRIDGE)
     # One tick stays operational at 0.35.
-    after_one = decay_infrastructure(state, tick=2)
+    after_one, details_one = decay_infrastructure(state, tick=2)
     one = after_one.infrastructure[asset.asset_id]
     assert one.integrity == pytest.approx(0.35)
     assert one.status is InfrastructureStatus.OPERATIONAL
+    assert len(details_one) == 1
     # Next tick falls below min ⇒ damaged.
-    after_two = decay_infrastructure(after_one, tick=3)
+    after_two, details_two = decay_infrastructure(after_one, tick=3)
     two = after_two.infrastructure[asset.asset_id]
     assert two.status is InfrastructureStatus.DAMAGED
     assert two.integrity < row.operational_integrity_min
+    assert len(details_two) == 1
     # Drive to destroyed without auto-repair.
     current = after_two
     for tick in range(4, 50):
-        current = decay_infrastructure(current, tick=tick)
+        current, _ = decay_infrastructure(current, tick=tick)
         if current.infrastructure[asset.asset_id].status is InfrastructureStatus.DESTROYED:
             break
     final = current.infrastructure[asset.asset_id]
@@ -140,5 +145,6 @@ def test_sync_takes_min_with_structure() -> None:
 
 def test_no_auto_repair_on_decay() -> None:
     state, asset, _ = _world_with_asset(integrity=0.2, status=InfrastructureStatus.DAMAGED)
-    after = decay_infrastructure(state, tick=10)
+    after, details = decay_infrastructure(state, tick=10)
     assert after.infrastructure[asset.asset_id].integrity < 0.2
+    assert len(details) == 1

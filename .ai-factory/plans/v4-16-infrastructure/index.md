@@ -251,10 +251,10 @@ No new entries in `SEMANTIC_EVENT_TYPES`.
 - [x] Task 13: Risk and exposure modifiers ([details](phase-05-objective-rule-effects.md#task-13-risk-and-exposure-modifiers)) (depends on 3, 9)
 
 ### Phase 6: Write pair, replay, observation
-- [ ] Task 14: Event schema replay-v23 and semantic aliases ([details](phase-06-write-pair-replay.md#task-14-event-schema-replay-v23-and-semantic-aliases)) (depends on 7, 8, 9)
-- [ ] Task 15: Codec v21, gates, and checkpoint selection ([details](phase-06-write-pair-replay.md#task-15-codec-v21-gates-and-checkpoint-selection)) (depends on 14)
-- [ ] Task 16: Replay projection for infrastructure events ([details](phase-06-write-pair-replay.md#task-16-replay-projection-for-infrastructure-events)) (depends on 14, 15)
-- [ ] Task 17: Observation projection for colocated assets ([details](phase-06-write-pair-replay.md#task-17-observation-projection-for-colocated-assets)) (depends on 3, 6, 9)
+- [x] Task 14: Event schema replay-v23 and semantic aliases ([details](phase-06-write-pair-replay.md#task-14-event-schema-replay-v23-and-semantic-aliases)) (depends on 7, 8, 9)
+- [x] Task 15: Codec v21, gates, and checkpoint selection ([details](phase-06-write-pair-replay.md#task-15-codec-v21-gates-and-checkpoint-selection)) (depends on 14)
+- [x] Task 16: Replay projection for infrastructure events ([details](phase-06-write-pair-replay.md#task-16-replay-projection-for-infrastructure-events)) (depends on 14, 15)
+- [x] Task 17: Observation projection for colocated assets ([details](phase-06-write-pair-replay.md#task-17-observation-projection-for-colocated-assets)) (depends on 3, 6, 9)
 
 ### Phase 7: Metrics and read-only surfaces
 - [ ] Task 18: Four metric families (184→188) ([details](phase-07-metrics-and-surfaces.md#task-18-four-metric-families-184188)) (depends on 14)
