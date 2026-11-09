@@ -290,6 +290,13 @@ class RuleReason(StrEnum):
     PUBLIC_GOOD_PRESENCE_ONLY = "public_good_presence_only"
     WELL_ALREADY_PRESENT = "well_already_present"
     WARNING_POST_ALREADY_PRESENT = "warning_post_already_present"
+    INFRASTRUCTURE_NETWORKS_INACTIVE = "infrastructure_networks_inactive"
+    TARGET_REQUIRED = "target_required"
+    TARGET_FORBIDDEN = "target_forbidden"
+    INFRASTRUCTURE_EDGE_EXISTS = "infrastructure_edge_exists"
+    ROAD_ALREADY_PRESENT = "road_already_present"
+    IRRIGATION_ALREADY_PRESENT = "irrigation_already_present"
+    TRADE_POST_ALREADY_PRESENT = "trade_post_already_present"
     EXCHANGE_OFFER_OPEN = "exchange_offer_open"
     EXCHANGE_EMPTY_SIDE = "exchange_empty_side"
     EXCHANGE_BUNDLE_LIMIT = "exchange_bundle_limit"
@@ -744,6 +751,7 @@ def evaluate_operation(
     subjective_valuation_context: object | None = None,
     collective_projects_context: object | None = None,
     public_goods_context: object | None = None,
+    infrastructure_networks_active: bool = False,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -1038,6 +1046,7 @@ def evaluate_operation(
                 kind,
                 context=collective_projects_context,
                 public_goods=public_goods_context,
+                infrastructure_networks_active=infrastructure_networks_active,
             )
         case _UsePublicGoodOp() | _MaintainPublicGoodOp() | _OpposePublicGoodOp():
             return _evaluate_public_good(
@@ -1100,9 +1109,8 @@ def find_eligible_search_resource(
     actor = state.bodies.get(actor_id)
     if actor is None or actor.life_status is LifeStatus.DEAD:
         return None
-    if (
-        _ground_item_count(state, actor.location_id)
-        >= state.locations[actor.location_id].item_capacity.value
+    if _ground_item_count(state, actor.location_id) >= _location_item_capacity(
+        state, actor.location_id
     ):
         return None
     if target_id is not None:
@@ -1134,8 +1142,9 @@ def find_eligible_flee_destinations(
         route = _route_spec_for_edge(state, actor.location_id, destination_id)
         if route is not None and route.duration_ticks != 1:
             continue
-        destination = state.locations[destination_id]
-        if _body_count(state, destination_id) < destination.body_capacity.value:
+        if _body_count(state, destination_id) < _location_body_capacity(
+            state, destination_id
+        ):
             eligible.append(destination_id)
     return tuple(eligible)
 
@@ -1161,7 +1170,43 @@ def _body_is_travelling(state: WorldState, body_id: EntityId) -> bool:
 
 def _travel_duration(state: WorldState, origin: EntityId, destination: EntityId) -> int:
     route = _route_spec_for_edge(state, origin, destination)
-    return 1 if route is None else route.duration_ticks
+    base = 1 if route is None else route.duration_ticks
+    if state.infrastructure is None:
+        return base
+    from world._infrastructure import effective_travel_duration
+
+    return effective_travel_duration(
+        state.infrastructure,
+        origin_id=origin,
+        destination_id=destination,
+        base_duration=base,
+    )
+
+
+def _location_body_capacity(state: WorldState, location_id: EntityId) -> int:
+    base = state.locations[location_id].body_capacity.value
+    if state.infrastructure is None:
+        return base
+    from world._infrastructure import effective_body_capacity
+
+    return effective_body_capacity(
+        state.infrastructure,
+        location_id=location_id,
+        base_capacity=base,
+    )
+
+
+def _location_item_capacity(state: WorldState, location_id: EntityId) -> int:
+    base = state.locations[location_id].item_capacity.value
+    if state.infrastructure is None:
+        return base
+    from world._infrastructure import effective_item_capacity
+
+    return effective_item_capacity(
+        state.infrastructure,
+        location_id=location_id,
+        base_capacity=base,
+    )
 
 
 def _evaluate_move(
@@ -1184,8 +1229,9 @@ def _evaluate_move(
             mutates_state=True,
             action_kind=kind,
         )
-    destination = state.locations[destination_id]
-    if _body_count(state, destination_id) >= destination.body_capacity.value:
+    if _body_count(state, destination_id) >= _location_body_capacity(
+        state, destination_id
+    ):
         return _reject(kind, RuleReason.NO_BODY_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
@@ -1219,9 +1265,8 @@ def _evaluate_search(
     if target_id is not None and effect.resource_id != target_id:
         raise ValueError("resolved search resource_id must match Search target")
     actor = state.bodies[actor_id]
-    if (
-        _ground_item_count(state, actor.location_id)
-        >= state.locations[actor.location_id].item_capacity.value
+    if _ground_item_count(state, actor.location_id) >= _location_item_capacity(
+        state, actor.location_id
     ):
         return _reject(kind, RuleReason.NO_ITEM_CAPACITY)
     resource_reject = _search_resource_reject(state, actor, effect.resource_id, kind)
@@ -1251,8 +1296,9 @@ def _search_structural_reject(
     kind: str,
 ) -> RuleResult | None:
     actor = state.bodies[actor_id]
-    location = state.locations[actor.location_id]
-    if _ground_item_count(state, actor.location_id) >= location.item_capacity.value:
+    if _ground_item_count(state, actor.location_id) >= _location_item_capacity(
+        state, actor.location_id
+    ):
         return _reject(kind, RuleReason.NO_ITEM_CAPACITY)
     if target_id is None:
         if find_eligible_search_resource(state, actor_id, None) is None:
@@ -1360,8 +1406,9 @@ def _evaluate_drop(
     item = state.items[item_id]
     if item.holder_id != actor_id or item_id not in actor.inventory:
         return _reject(kind, RuleReason.NOT_HELD)
-    location = state.locations[actor.location_id]
-    if _ground_item_count(state, actor.location_id) >= location.item_capacity.value:
+    if _ground_item_count(state, actor.location_id) >= _location_item_capacity(
+        state, actor.location_id
+    ):
         return _reject(kind, RuleReason.NO_ITEM_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
@@ -1553,12 +1600,13 @@ def _evaluate_transport(
     location = state.locations[actor.location_id]
     if destination_id not in location.adjacent:
         return _reject(kind, RuleReason.NOT_ADJACENT)
-    destination = state.locations[destination_id]
     # Both caregiver and dependent relocate together.
     if (
         state.regions_migration is None
         or _travel_duration(state, actor.location_id, destination_id) == 1
-    ) and _body_count(state, destination_id) + 2 > destination.body_capacity.value:
+    ) and _body_count(state, destination_id) + 2 > _location_body_capacity(
+        state, destination_id
+    ):
         return _reject(kind, RuleReason.NO_BODY_CAPACITY)
     return RuleResult(
         disposition=RuleDisposition.MUTATE,
@@ -2948,6 +2996,7 @@ def apply_operation(
     public_goods_context: object | None = None,
     public_good_maintain_success: bool | None = None,
     contact_enabled: bool = False,
+    infrastructure_networks_active: bool = False,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -2982,6 +3031,7 @@ def apply_operation(
         subjective_valuation_context=subjective_valuation_context,
         collective_projects_context=collective_projects_context,
         public_goods_context=public_goods_context,
+        infrastructure_networks_active=infrastructure_networks_active,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -3105,6 +3155,7 @@ def apply_operation(
             decay_millis=0
             if public_goods_context is None
             else int(getattr(public_goods_context, "decay_millis", 0)),
+            infrastructure_networks_active=infrastructure_networks_active,
         )
     if type(operation) in {
         _UsePublicGoodOp,
@@ -3208,6 +3259,24 @@ def _apply_regional_travel_command(
     else:
         fatigue_cost = rules.transport_fatigue + max(
             0.0, route.fatigue_cost - rules.move_fatigue
+        )
+    if state.infrastructure is not None:
+        from world._infrastructure import (
+            effective_travel_duration,
+            effective_travel_fatigue,
+        )
+
+        duration = effective_travel_duration(
+            state.infrastructure,
+            origin_id=origin_id,
+            destination_id=destination_id,
+            base_duration=duration,
+        )
+        fatigue_cost = effective_travel_fatigue(
+            state.infrastructure,
+            origin_id=origin_id,
+            destination_id=destination_id,
+            base_fatigue=fatigue_cost,
         )
     if skill_efficiency is not None:
         multiplier = skill_efficiency.movement_fatigue_multiplier
@@ -3882,6 +3951,15 @@ def _mutate_move(
 ) -> WorldState:
     actor = state.bodies[actor_id]
     fatigue_cost = rules.move_fatigue if move_fatigue is None else move_fatigue
+    if state.infrastructure is not None:
+        from world._infrastructure import effective_travel_fatigue
+
+        fatigue_cost = effective_travel_fatigue(
+            state.infrastructure,
+            origin_id=actor.location_id,
+            destination_id=destination_id,
+            base_fatigue=fatigue_cost,
+        )
     fatigue = Fatigue(clamp_need(round_physical(actor.fatigue.value + fatigue_cost)))
     bodies = dict(state.bodies)
     bodies[actor_id] = copy_body(actor, location_id=destination_id, fatigue=fatigue)
@@ -5356,6 +5434,7 @@ def _evaluate_collective_project(
     *,
     context: object | None,
     public_goods: object | None = None,
+    infrastructure_networks_active: bool = False,
 ) -> RuleResult:
     from world._collective_projects import (
         classify_collective_contribute,
@@ -5371,6 +5450,8 @@ def _evaluate_collective_project(
             project_kind=operation.project_kind,
             context=typed,
             public_goods=goods,
+            infrastructure_networks_active=infrastructure_networks_active,
+            target_location_id=operation.target_location_id,
         )
     else:
         assert isinstance(operation, _ContributeCollectiveProjectOp)
@@ -5407,7 +5488,15 @@ def _evaluate_collective_project(
         "store_already_present": RuleReason.STORE_ALREADY_PRESENT,
         "well_already_present": RuleReason.WELL_ALREADY_PRESENT,
         "warning_post_already_present": RuleReason.WARNING_POST_ALREADY_PRESENT,
+        "road_already_present": RuleReason.ROAD_ALREADY_PRESENT,
+        "irrigation_already_present": RuleReason.IRRIGATION_ALREADY_PRESENT,
+        "trade_post_already_present": RuleReason.TRADE_POST_ALREADY_PRESENT,
         "public_goods_channel_off": RuleReason.PUBLIC_GOODS_CHANNEL_OFF,
+        "infrastructure_networks_inactive": RuleReason.INFRASTRUCTURE_NETWORKS_INACTIVE,
+        "target_required": RuleReason.TARGET_REQUIRED,
+        "target_forbidden": RuleReason.TARGET_FORBIDDEN,
+        "infrastructure_edge_exists": RuleReason.INFRASTRUCTURE_EDGE_EXISTS,
+        "not_adjacent": RuleReason.NOT_ADJACENT,
         "not_at_location": RuleReason.NOT_AT_LOCATION,
         "not_held": RuleReason.NOT_HELD,
         "wrong_kind": RuleReason.WRONG_KIND,
@@ -5427,6 +5516,7 @@ def _apply_collective_project(
     success: bool | None,
     public_goods_active: bool = False,
     decay_millis: int = 0,
+    infrastructure_networks_active: bool = False,
 ) -> RuleApplication:
     from world._collective_projects import (
         mutate_collective_contribute,
@@ -5441,6 +5531,7 @@ def _apply_collective_project(
             project_kind=operation.project_kind,
             project_id=operation.project_id,
             tick=tick,
+            target_location_id=operation.target_location_id,
         )
         return RuleApplication(
             result=result,
@@ -5471,6 +5562,7 @@ def _apply_collective_project(
         success=drawn,
         public_goods_active=public_goods_active,
         decay_millis=decay_millis,
+        infrastructure_networks_active=infrastructure_networks_active,
     )
     return RuleApplication(
         result=result,

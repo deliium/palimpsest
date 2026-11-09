@@ -357,6 +357,15 @@ def apply_autonomous_physical_step(
             rate = round_physical(resource.regeneration_per_tick * multiplier)
             if spec.shortage_suppresses(resource.kind, tick_value):
                 rate = 0.0
+        if working.infrastructure is not None:
+            from world._infrastructure import effective_resource_regen_delta
+
+            regen_delta = effective_resource_regen_delta(
+                working.infrastructure,
+                location_id=resource.location_id,
+            )
+            if regen_delta != 0.0:
+                rate = round_physical(rate + regen_delta)
         if rate == 0.0:
             continue
         uncapped = round_physical(resource.quantity + rate)
@@ -583,6 +592,16 @@ def apply_autonomous_physical_step(
                 )
                 hazard_extra = hazard_extra * warning_scale
             exposure_damage += hazard_extra
+        if working.infrastructure is not None and exposure_damage != 0.0:
+            from world._infrastructure import effective_exposure_scale
+
+            exposure_damage = round_physical(
+                exposure_damage
+                * effective_exposure_scale(
+                    working.infrastructure,
+                    location_id=body.location_id,
+                )
+            )
         exposed_health = clamp_need(
             round_physical(next_body.health.value - exposure_damage)
         )
