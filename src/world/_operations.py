@@ -497,6 +497,7 @@ class _StartCollectiveProjectOp:
     base_revision: WorldRevision
     project_kind: str
     project_id: EntityId
+    target_location_id: EntityId | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1062,12 +1063,15 @@ def validate_action_request(
                     ),
                 )
             )
-        case StartCollectiveProject(project_kind=project_kind):
+        case StartCollectiveProject(
+            project_kind=project_kind, target_location_id=target_location_id
+        ):
             return OperationAccepted(
                 _StartCollectiveProjectOp(
                     *base,
                     project_kind=project_kind,
                     project_id=EntityId(f"project-{request.request_id.value}"),
+                    target_location_id=target_location_id,
                 )
             )
         case ContributeCollectiveProject(project_id=project_id, item_id=item_id):
@@ -1340,6 +1344,7 @@ def prepare_action_batch(
     deferred_regional_flee_effect: (
         Callable[[ActionRequest, WorldState], ResolvedFleeEffect | None] | None
     ) = None,
+    infrastructure_networks_active: bool = False,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1536,6 +1541,7 @@ def prepare_action_batch(
             subjective_valuation_context=subjective_valuation_context,
             collective_projects_context=collective_projects_context,
             public_goods_context=public_goods_context,
+            infrastructure_networks_active=infrastructure_networks_active,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1632,6 +1638,7 @@ def prepare_action_batch(
                 subjective_valuation_context=subjective_valuation_context,
                 collective_projects_context=collective_projects_context,
                 public_goods_context=public_goods_context,
+                infrastructure_networks_active=infrastructure_networks_active,
             )
             if working_rule.disposition is not RuleDisposition.EVENT_ONLY:
                 outcomes.append(
@@ -1725,6 +1732,7 @@ def prepare_action_batch(
             public_goods_context=public_goods_context,
             public_good_maintain_success=maintain_success,
             contact_enabled=contact_enabled,
+            infrastructure_networks_active=infrastructure_networks_active,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             status = BatchItemStatus.CONFLICTED

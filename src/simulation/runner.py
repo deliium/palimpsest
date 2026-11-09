@@ -2658,6 +2658,9 @@ class SimulationRunner:
                     config.cultural_contact is not None
                     and config.cultural_contact.enabled
                 ),
+                infrastructure_networks_active=(
+                    config.v4_capability_flags.infrastructure_networks
+                ),
                 skill_policy=skill_kwargs.get("skill_policy"),
                 skill_entity_ids=skill_ids or None,
                 teaching_policy=teaching_kwargs.get("teaching_policy"),

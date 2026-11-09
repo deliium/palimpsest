@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 
 from world.collective_projects import (
     DRAW_PUBLIC_KINDS,
+    INFRASTRUCTURE_COLLECTIVE_KINDS,
+    INFRASTRUCTURE_EDGE_KINDS,
+    INFRASTRUCTURE_ONLY_KINDS,
     MAX_COLLECTIVE_PROJECTS,
     MAX_SHORTAGE_COUNT,
     PRESENCE_PUBLIC_KINDS,
@@ -95,6 +98,8 @@ def classify_collective_start(
     project_kind: str,
     context: CollectiveProjectsRuleContext | None,
     public_goods: PublicGoodsRuleContext | None = None,
+    infrastructure_networks_active: bool = False,
+    target_location_id: EntityId | None = None,
 ) -> str | None:
     """Return a reject reason, or None when the start may proceed."""
     if context is None or not context.active:
@@ -103,9 +108,16 @@ def classify_collective_start(
         kind = CollectiveProjectKind(project_kind)
     except ValueError:
         return "wrong_kind"
+    if kind in INFRASTRUCTURE_ONLY_KINDS and not infrastructure_networks_active:
+        return "infrastructure_networks_inactive"
     if kind in {CollectiveProjectKind.WELL, CollectiveProjectKind.WARNING_POST}:
         if public_goods is None or not public_goods.active:
             return "public_goods_channel_off"
+    if kind in INFRASTRUCTURE_EDGE_KINDS:
+        if target_location_id is None:
+            return "target_required"
+    elif target_location_id is not None:
+        return "target_forbidden"
     row = catalog_row(kind)
     projects = getattr(state, "collective_projects", {})
     if len(projects) >= MAX_COLLECTIVE_PROJECTS:
@@ -113,6 +125,13 @@ def classify_collective_start(
     body = state.bodies[actor_id]
     if _open_at(state, body.location_id):
         return "collective_project_location_busy"
+    if kind in INFRASTRUCTURE_EDGE_KINDS:
+        assert target_location_id is not None
+        location = state.locations.get(body.location_id)
+        if location is None or target_location_id not in location.adjacent:
+            return "not_adjacent"
+        if _edge_exists(state, body.location_id, target_location_id):
+            return "infrastructure_edge_exists"
     if row.completion_structure_kind is not None and _structure_present(
         state, body.location_id, row.completion_structure_kind
     ):
@@ -127,6 +146,33 @@ def classify_collective_start(
         if not stores:
             return row.start_blocked_reason
     return None
+
+
+def _edge_exists(
+    state: WorldState, location_id: EntityId, endpoint_location_id: EntityId
+) -> bool:
+    from world.infrastructure import normalize_edge_endpoints
+
+    left, right = normalize_edge_endpoints(location_id, endpoint_location_id)
+    assets = getattr(state, "infrastructure", None) or {}
+    for asset in assets.values():
+        if asset.endpoint_location_id is None:
+            continue
+        ends = normalize_edge_endpoints(asset.location_id, asset.endpoint_location_id)
+        if ends == (left, right):
+            return True
+    projects = getattr(state, "collective_projects", {})
+    for project in projects.values():
+        if project.kind not in INFRASTRUCTURE_EDGE_KINDS:
+            continue
+        if project.status is not CollectiveProjectStatus.OPEN:
+            continue
+        if project.target_location_id is None:
+            continue
+        ends = normalize_edge_endpoints(project.location_id, project.target_location_id)
+        if ends == (left, right):
+            return True
+    return False
 
 
 def classify_collective_contribute(
@@ -180,6 +226,7 @@ def mutate_collective_start(
     project_kind: str,
     project_id: EntityId,
     tick: int,
+    target_location_id: EntityId | None = None,
 ) -> tuple[WorldState, tuple[EventDetails, ...]]:
     """Open a site and record the starter as the first tail row."""
     from world.events import ProjectCreated
@@ -211,6 +258,7 @@ def mutate_collective_start(
         shortage_count=0,
         contributions=(starter,),
         target_structure_id=target,
+        target_location_id=target_location_id,
     )
     projects = dict(state.collective_projects)
     projects[project_id] = project
@@ -220,6 +268,7 @@ def mutate_collective_start(
         project_id.value,
         actor_id.value,
     )
+    _LOG.info("collective_project_start_accepted kind=%s", kind.value)
     _LOG.debug(
         "collective_project_progress project_id=%s labor_done=%s materials_done=%s",
         project_id.value,
@@ -267,6 +316,7 @@ def mutate_collective_contribute(
     success: bool,
     public_goods_active: bool = False,
     decay_millis: int = 0,
+    infrastructure_networks_active: bool = False,
 ) -> tuple[WorldState, tuple[EventDetails, ...]]:
     """Apply a drawn contribution. A miss leaves items and counters unchanged."""
     from world.events import ProjectContributed
@@ -366,6 +416,7 @@ def mutate_collective_contribute(
         bodies=bodies,
         public_goods_active=public_goods_active,
         decay_millis=decay_millis,
+        infrastructure_networks_active=infrastructure_networks_active,
     )
     return completed_state, (contributed, completed)
 
@@ -378,8 +429,10 @@ def _complete_project(
     bodies: Mapping[EntityId, AgentBody] | None,
     public_goods_active: bool = False,
     decay_millis: int = 0,
+    infrastructure_networks_active: bool = False,
 ) -> tuple[WorldState, ProjectCompleted]:
     """Write the catalog result when both counters are full."""
+    from world._infrastructure import register_from_completed_project
     from world._state import rebuild_world_state
     from world.events import ProjectCompleted
     from world.production import Structure
@@ -430,6 +483,14 @@ def _complete_project(
         structures=structures,
         collective_projects=projects,
     )
+    if infrastructure_networks_active and project.kind in INFRASTRUCTURE_COLLECTIVE_KINDS:
+        next_state = register_from_completed_project(
+            next_state,
+            project=completed
+            if completed.linked_structure_id is not None
+            else replace(completed, linked_structure_id=structure_id),
+            structure_id=structure_id,
+        )
     return next_state, ProjectCompleted(
         project.project_id,
         project.kind.value,
@@ -760,16 +821,24 @@ def mutate_public_maintain(
     detail = PublicGoodMaintained(
         project_id, actor_id, True, _integrity_millis(integrity)
     )
-    return (
-        rebuild_world_state(
-            state,
-            items=items,
-            bodies=bodies,
-            structures=structures,
-            collective_projects=projects,
-        ),
-        (detail,),
+    next_state = rebuild_world_state(
+        state,
+        items=items,
+        bodies=bodies,
+        structures=structures,
+        collective_projects=projects,
     )
+    if state.infrastructure is not None:
+        from world._infrastructure import adjust_linked_infrastructure
+        from world.infrastructure import REPAIR_INTEGRITY_DELTA as INFRA_REPAIR_DELTA
+
+        next_state = adjust_linked_infrastructure(
+            next_state,
+            structure_id=structure.entity_id,
+            delta=INFRA_REPAIR_DELTA,
+            tick=tick,
+        )
+    return next_state, (detail,)
 
 
 def mutate_public_oppose(
@@ -808,10 +877,24 @@ def mutate_public_oppose(
     detail = PublicGoodOpposed(
         project_id, actor_id, project.status.value, integrity_millis
     )
-    return (
-        rebuild_world_state(state, structures=structures, collective_projects=projects),
-        (detail,),
+    next_state = rebuild_world_state(
+        state, structures=structures, collective_projects=projects
     )
+    if (
+        state.infrastructure is not None
+        and project.linked_structure_id is not None
+        and structures is not None
+    ):
+        from world._infrastructure import adjust_linked_infrastructure
+        from world.infrastructure import REPAIR_INTEGRITY_DELTA as INFRA_REPAIR_DELTA
+
+        next_state = adjust_linked_infrastructure(
+            next_state,
+            structure_id=project.linked_structure_id,
+            delta=-INFRA_REPAIR_DELTA,
+            tick=tick,
+        )
+    return next_state, (detail,)
 
 
 def presence_relief(state: WorldState, location_id: EntityId) -> tuple[float, float]:

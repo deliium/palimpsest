@@ -34,6 +34,10 @@ class CollectiveProjectKind(StrEnum):
     RECORD_SITE = "record_site"
     WELL = "well"
     WARNING_POST = "warning_post"
+    ROAD = "road"
+    IRRIGATION = "irrigation"
+    TRADE_POST = "trade_post"
+    LARGE_SHELTER = "large_shelter"
 
 
 class PublicGoodActKind(StrEnum):
@@ -205,20 +209,94 @@ COLLECTIVE_PROJECT_CATALOG: Final[
         StructureKind.WARNING_POST,
         0,
     ),
+    CollectiveProjectKind.ROAD: CollectiveProjectCatalogRow(
+        CollectiveProjectKind.ROAD,
+        5,
+        ItemKind.MATERIAL,
+        "stone",
+        3,
+        SkillDomain.BUILDING,
+        "road_already_present",
+        StructureKind.ROAD,
+        0,
+    ),
+    CollectiveProjectKind.IRRIGATION: CollectiveProjectCatalogRow(
+        CollectiveProjectKind.IRRIGATION,
+        4,
+        ItemKind.MATERIAL,
+        "stone",
+        2,
+        SkillDomain.BUILDING,
+        "irrigation_already_present",
+        StructureKind.IRRIGATION,
+        0,
+    ),
+    CollectiveProjectKind.TRADE_POST: CollectiveProjectCatalogRow(
+        CollectiveProjectKind.TRADE_POST,
+        4,
+        ItemKind.MATERIAL,
+        "wood",
+        2,
+        SkillDomain.BUILDING,
+        "trade_post_already_present",
+        StructureKind.TRADE_POST,
+        0,
+    ),
+    CollectiveProjectKind.LARGE_SHELTER: CollectiveProjectCatalogRow(
+        CollectiveProjectKind.LARGE_SHELTER,
+        5,
+        ItemKind.MATERIAL,
+        "wood",
+        3,
+        SkillDomain.BUILDING,
+        "shelter_already_present",
+        StructureKind.SHELTER,
+        0,
+    ),
 }
-PUBLIC_GOOD_KINDS: Final = frozenset(
-    kind
-    for kind in CollectiveProjectKind
-    if kind is not CollectiveProjectKind.RECORD_SITE
+
+INFRASTRUCTURE_COLLECTIVE_KINDS: Final[frozenset[CollectiveProjectKind]] = frozenset(
+    {
+        CollectiveProjectKind.ROAD,
+        CollectiveProjectKind.BRIDGE,
+        CollectiveProjectKind.STORAGE,
+        CollectiveProjectKind.WELL,
+        CollectiveProjectKind.IRRIGATION,
+        CollectiveProjectKind.WARNING_POST,
+        CollectiveProjectKind.TRADE_POST,
+        CollectiveProjectKind.LARGE_SHELTER,
+    }
 )
-DRAW_PUBLIC_KINDS: Final = frozenset(
+INFRASTRUCTURE_EDGE_KINDS: Final[frozenset[CollectiveProjectKind]] = frozenset(
+    {CollectiveProjectKind.ROAD}
+)
+INFRASTRUCTURE_ONLY_KINDS: Final[frozenset[CollectiveProjectKind]] = frozenset(
+    {
+        CollectiveProjectKind.ROAD,
+        CollectiveProjectKind.IRRIGATION,
+        CollectiveProjectKind.TRADE_POST,
+        CollectiveProjectKind.LARGE_SHELTER,
+    }
+)
+# Explicit membership — new CollectiveProjectKind values must not auto-join.
+PUBLIC_GOOD_KINDS: Final[frozenset[CollectiveProjectKind]] = frozenset(
+    {
+        CollectiveProjectKind.SHARED_SHELTER,
+        CollectiveProjectKind.BRIDGE,
+        CollectiveProjectKind.STORAGE,
+        CollectiveProjectKind.WINTER_RESERVE,
+        CollectiveProjectKind.WELL,
+        CollectiveProjectKind.WARNING_POST,
+    }
+)
+DRAW_PUBLIC_KINDS: Final[frozenset[CollectiveProjectKind]] = frozenset(
     {
         CollectiveProjectKind.WELL,
         CollectiveProjectKind.STORAGE,
         CollectiveProjectKind.WINTER_RESERVE,
     }
 )
-PRESENCE_PUBLIC_KINDS: Final = frozenset(
+PRESENCE_PUBLIC_KINDS: Final[frozenset[CollectiveProjectKind]] = frozenset(
     {
         CollectiveProjectKind.SHARED_SHELTER,
         CollectiveProjectKind.BRIDGE,
@@ -298,6 +376,7 @@ class CollectiveProject:
     contributions: tuple[ProjectContribution, ...] = ()
     target_structure_id: EntityId | None = None
     linked_structure_id: EntityId | None = None
+    target_location_id: EntityId | None = None
     public_acts: tuple[PublicGoodAct, ...] = ()
 
     def __post_init__(self) -> None:
@@ -309,10 +388,20 @@ class CollectiveProject:
             raise _fail("CollectiveProject.kind", "invalid_kind")
         if type(self.status) is not CollectiveProjectStatus:
             raise _fail("CollectiveProject.status", "invalid_status")
-        for name in ("target_structure_id", "linked_structure_id"):
+        for name in ("target_structure_id", "linked_structure_id", "target_location_id"):
             value = getattr(self, name)
             if value is not None and type(value) is not EntityId:
-                raise _fail(f"CollectiveProject.{name}", "invalid_structure")
+                raise _fail(
+                    f"CollectiveProject.{name}",
+                    "invalid_structure"
+                    if name != "target_location_id"
+                    else "invalid_location",
+                )
+        if self.kind in INFRASTRUCTURE_EDGE_KINDS:
+            if self.target_location_id is None:
+                raise _fail("CollectiveProject.target_location_id", "target_required")
+        elif self.target_location_id is not None:
+            raise _fail("CollectiveProject.target_location_id", "target_forbidden")
         for name in (
             "labor_done",
             "materials_done",

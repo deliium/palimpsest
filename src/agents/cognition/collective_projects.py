@@ -31,6 +31,12 @@ _START_KIND: Final[dict[str, str]] = {
     "collective_project:start:storage": "storage",
     "collective_project:start:winter_store": "winter_reserve",
     "collective_project:start:record_site": "record_site",
+    "collective_project:start:well": "well",
+    "collective_project:start:warning_post": "warning_post",
+    "collective_project:start:road": "road",
+    "collective_project:start:irrigation": "irrigation",
+    "collective_project:start:trade_post": "trade_post",
+    "collective_project:start:large_shelter": "large_shelter",
 }
 
 
@@ -60,13 +66,23 @@ def propose_collective_project_command(
                 owner_id.value,
             )
             return command
+        target: EntityId | None = None
+        if kind == "road":
+            target = _first_adjacent_target(observation)
+            if target is None:
+                _LOG.debug(
+                    "collective_project_command_skipped reason=no_adjacent_target "
+                    "owner_id=%s",
+                    owner_id.value,
+                )
+                return command
         _LOG.debug(
             "collective_project_command_proposed owner_id=%s action=%s project_id=%s",
             owner_id.value,
             "start_collective_project",
             "-",
         )
-        return StartCollectiveProject(kind)
+        return StartCollectiveProject(kind, target_location_id=target)
     if not code.startswith("collective_project:"):
         _LOG.debug(
             "collective_project_command_skipped reason=unmatched_focus owner_id=%s",
@@ -266,6 +282,18 @@ def _start_block(observation: object, kind: str) -> str | None:
         return row.start_blocked_reason
     if _held_material(observation, row.material_kind, row.material_name) is None:
         return "not_held"
+    return None
+
+
+def _first_adjacent_target(observation: object) -> EntityId | None:
+    exits = sorted(
+        getattr(observation, "exits", ()),
+        key=lambda item: getattr(item, "destination_id").value,
+    )
+    for exit_view in exits:
+        destination = getattr(exit_view, "destination_id", None)
+        if type(destination) is EntityId:
+            return destination
     return None
 
 

@@ -612,8 +612,21 @@ def _apply_repair(
         stored_quantity=prior.stored_quantity,
     )
     _log_resolved(recipe.recipe_id, True, duration, "repaired")
+    next_state = rebuild_world_state(
+        state, items=items, bodies=bodies, structures=structures
+    )
+    if state.infrastructure is not None:
+        from world._infrastructure import adjust_linked_infrastructure
+        from world.infrastructure import REPAIR_INTEGRITY_DELTA as INFRA_REPAIR_DELTA
+
+        next_state = adjust_linked_infrastructure(
+            next_state,
+            structure_id=prior.entity_id,
+            delta=INFRA_REPAIR_DELTA,
+            tick=0,
+        )
     return (
-        rebuild_world_state(state, items=items, bodies=bodies, structures=structures),
+        next_state,
         StructureRepaired(
             recipe.recipe_id,
             prior.entity_id,
@@ -656,6 +669,16 @@ def _apply_store(
         resulting = existing.stored_quantity + (
             recipe.output.quantity_delta or STORE_QUANTITY_DELTA
         )
+        if state.infrastructure is not None:
+            from world._infrastructure import effective_store_capacity
+
+            ceiling = effective_store_capacity(
+                state.infrastructure,
+                location_id=actor.location_id,
+                linked_structure_id=existing.entity_id,
+            )
+            if ceiling is not None and resulting > ceiling:
+                resulting = ceiling
         structures[existing.entity_id] = Structure(
             entity_id=existing.entity_id,
             location_id=existing.location_id,

@@ -778,6 +778,7 @@ class StartCollectiveProject:
     """Open a world-owned work site. The actor does not name an id or a leader."""
 
     project_kind: str
+    target_location_id: EntityId | None = None
     kind: Literal["start_collective_project"] = field(
         default="start_collective_project", init=False
     )
@@ -793,9 +794,20 @@ class StartCollectiveProject:
             "record_site",
             "well",
             "warning_post",
+            "road",
+            "irrigation",
+            "trade_post",
+            "large_shelter",
         }
         if self.project_kind not in allowed:
             raise ValueError("StartCollectiveProject.project_kind")
+        if self.target_location_id is not None and type(self.target_location_id) is not EntityId:
+            raise TypeError("StartCollectiveProject.target_location_id must be EntityId")
+        if self.project_kind == "road":
+            if self.target_location_id is None:
+                raise ValueError("StartCollectiveProject.target_location_id: target_required")
+        elif self.target_location_id is not None:
+            raise ValueError("StartCollectiveProject.target_location_id: target_forbidden")
 
 
 @dataclass(frozen=True, slots=True)

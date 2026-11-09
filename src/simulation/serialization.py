@@ -2590,8 +2590,13 @@ def _encode_command(value: object) -> dict[str, Any]:
             if now_item_kind is not None:
                 payload["now_item_kind"] = now_item_kind.value
             return payload
-        case StartCollectiveProject(project_kind=project_kind):
-            return {"project_kind": project_kind}
+        case StartCollectiveProject(
+            project_kind=project_kind, target_location_id=target_location_id
+        ):
+            payload = {"project_kind": project_kind}
+            if target_location_id is not None:
+                payload["target_location_id"] = target_location_id.value
+            return payload
         case ContributeCollectiveProject(project_id=project_id, item_id=item_id):
             payload = {"project_id": project_id.value}
             if item_id is not None:
@@ -2921,8 +2926,16 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
                 None if now_raw is None else ItemKind(now_raw),
             )
         if tag == "start_collective_project":
-            _require_keys(data, {"project_kind"}, path=path)
-            return StartCollectiveProject(_str_field(data, "project_kind", path=path))
+            _require_keys(
+                data, {"project_kind"}, path=path, optional={"target_location_id"}
+            )
+            target_raw = data.get("target_location_id")
+            return StartCollectiveProject(
+                _str_field(data, "project_kind", path=path),
+                None
+                if target_raw is None
+                else EntityId(_str_field(data, "target_location_id", path=path)),
+            )
         if tag == "contribute_collective_project":
             _require_keys(data, {"project_id"}, path=path, optional={"item_id"})
             item_raw = data.get("item_id")

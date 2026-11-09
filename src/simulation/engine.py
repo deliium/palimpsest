@@ -734,6 +734,7 @@ class WorldEngine:
         "_engine_id",
         "_environmental_dynamics",
         "_experiment_catalog",
+        "_infrastructure_networks_active",
         "_kinship_graph",
         "_kinship_spec",
         "_knowledge_repositories_spec",
@@ -801,6 +802,7 @@ class WorldEngine:
         public_goods_active: bool = False,
         public_goods_decay_millis: int = 0,
         cultural_contact_active: bool = False,
+        infrastructure_networks_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -923,6 +925,11 @@ class WorldEngine:
             raise ValueError("public_goods requires collective_projects")
         self._public_goods_active = public_goods_active
         self._public_goods_decay_millis = public_goods_decay_millis
+        if type(infrastructure_networks_active) is not bool:
+            raise TypeError("infrastructure_networks_active must be bool")
+        if infrastructure_networks_active and not collective_projects_active:
+            raise ValueError("infrastructure_networks requires collective_projects")
+        self._infrastructure_networks_active = infrastructure_networks_active
         if public_goods_active:
             _LOGGER.info(
                 "public_goods_active=%s decay_millis=%s",
@@ -934,6 +941,26 @@ class WorldEngine:
                 "collective_projects_channel active=%s idle_ticks=%s",
                 True,
                 collective_projects_idle_ticks,
+            )
+        if infrastructure_networks_active:
+            _LOGGER.info(
+                "infrastructure_networks_enabled policy_id=%s",
+                "infrastructure-networks.v1",
+            )
+            from world._state import World, rebuild_world_state
+
+            seeded = rebuild_world_state(
+                self._snapshot.world.state, infrastructure={}
+            )
+            self._snapshot = _EngineSnapshot(
+                world=World(self._snapshot.world.world_id, seeded),
+                tick=self._snapshot.tick,
+                phase=self._snapshot.phase,
+                token=self._snapshot.token,
+                observation_batch=self._snapshot.observation_batch,
+                resolution_history=self._snapshot.resolution_history,
+                event_history=self._snapshot.event_history,
+                prior_event_window=self._snapshot.prior_event_window,
             )
         if subjective_valuation_active:
             _LOGGER.debug(
@@ -1925,6 +1952,10 @@ class WorldEngine:
     @property
     def public_goods_active(self) -> bool:
         return self._public_goods_active
+
+    @property
+    def infrastructure_networks_active(self) -> bool:
+        return self._infrastructure_networks_active
 
     @property
     def knowledge_repositories_spec(self) -> object | None:
@@ -4034,6 +4065,7 @@ class WorldEngine:
             collective_projects_context=self._collective_projects_rule_context(),
             public_goods_context=self._public_goods_rule_context(),
             contact_enabled=self._cultural_contact_active,
+            infrastructure_networks_active=self._infrastructure_networks_active,
             public_good_maintain_draw=(
                 (
                     lambda request, working: self._public_good_maintain_success(
@@ -4179,6 +4211,12 @@ class WorldEngine:
 
             completion_state = decay_linked_structures(
                 completion_state, decay_millis=self._public_goods_decay_millis
+            )
+        if self._infrastructure_networks_active:
+            from world._infrastructure import decay_infrastructure
+
+            completion_state = decay_infrastructure(
+                completion_state, tick=snap.tick.value
             )
 
         system_effects = self._resolve_system_effects(
