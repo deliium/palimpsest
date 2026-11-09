@@ -80,7 +80,7 @@ def _asset(
 
 def test_schema_and_store_versions() -> None:
     assert INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION == (
-        "infrastructure-networks-snapshot-v1"
+        "infrastructure-networks-snapshot-v2"
     )
     assert INFRASTRUCTURE_NETWORKS_STORE_VERSION == "infrastructure-networks-store-v1"
     assert INFRASTRUCTURE_MAX_BYTES == 4 * 1024 * 1024

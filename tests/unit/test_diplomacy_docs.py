@@ -58,9 +58,9 @@ def test_docs_state_four_owned_and_eight_unowned() -> None:
 
 
 def test_catalog_and_families_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 188
+    assert METRIC_FAMILY_COUNT == 192
     metrics = (ROOT / "docs" / "analysis-metrics.md").read_text(encoding="utf-8")
-    assert "Closed catalog cardinality: **188**" in metrics
+    assert "Closed catalog cardinality: **192**" in metrics
     for family in (
         "diplomatic_contact_structure@1",
         "diplomatic_instrument_outcomes@1",

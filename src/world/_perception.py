@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from world._state import WorldState
 from world.artifacts import InformationArtifact, RecordIntegrity
@@ -152,6 +152,7 @@ class PerceptionService:
         collective_projects_active: bool = False,
         public_goods_active: bool = False,
         infrastructure_networks_active: bool = False,
+        travel_network_active: bool = False,
     ) -> None:
         if durable_perception_mode is not None and durable_perception_mode not in {
             "marks_and_meta",
@@ -181,6 +182,8 @@ class PerceptionService:
             raise TypeError("public_goods_active must be bool")
         if type(infrastructure_networks_active) is not bool:
             raise TypeError("infrastructure_networks_active must be bool")
+        if type(travel_network_active) is not bool:
+            raise TypeError("travel_network_active must be bool")
         self._durable_perception_mode = durable_perception_mode
         self._repository_perception_mode = repository_perception_mode
         self._possession_succession_active = possession_succession_active
@@ -189,6 +192,7 @@ class PerceptionService:
         self._collective_projects_active = collective_projects_active
         self._public_goods_active = public_goods_active
         self._infrastructure_networks_active = infrastructure_networks_active
+        self._travel_network_active = travel_network_active
 
     def project(
         self,
@@ -238,6 +242,7 @@ class PerceptionService:
                 collective_projects_active=self._collective_projects_active,
                 public_goods_active=self._public_goods_active,
                 infrastructure_networks_active=self._infrastructure_networks_active,
+                travel_network_active=self._travel_network_active,
             )
             for observer_id in observers
         )
@@ -257,6 +262,7 @@ def project_observations(
     subjective_valuation_active: bool = False,
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
+    travel_network_active: bool = False,
 ) -> tuple[Observation, ...]:
     """Compatibility wrapper around :class:`PerceptionService`."""
     resolved = context if context is not None else ObservationContext(tick=0)
@@ -267,6 +273,7 @@ def project_observations(
         subjective_valuation_active=subjective_valuation_active,
         collective_projects_active=collective_projects_active,
         public_goods_active=public_goods_active,
+        travel_network_active=travel_network_active,
     ).project(
         world_id=world_id,
         state=state,
@@ -293,6 +300,7 @@ def _project_one(
     collective_projects_active: bool = False,
     public_goods_active: bool = False,
     infrastructure_networks_active: bool = False,
+    travel_network_active: bool = False,
 ) -> Observation:
     body = state.bodies[observer_id]
     location_id = body.location_id
@@ -413,7 +421,18 @@ def _project_one(
         repositories=repositories,
         collective_projects=collective_projects,
         infrastructure=infrastructure,
-        exits=_sorted_exits(state, location_id, physical_rules=context.physical_rules),
+        exits=_sorted_exits(
+            state,
+            location_id,
+            physical_rules=context.physical_rules,
+            season=(
+                None
+                if environmental_dynamics is None
+                else cast(Any, environmental_dynamics).season_at(context.tick)
+            ),
+            tick=context.tick,
+            travel_network_active=travel_network_active,
+        ),
         visible_bodies=(
             _sorted_visible_bodies(state, location_id, observer_id, context=context)
             if content_visible
@@ -574,7 +593,13 @@ def _observed_journey(
 
 
 def _sorted_exits(
-    state: WorldState, location_id: EntityId, *, physical_rules: object
+    state: WorldState,
+    location_id: EntityId,
+    *,
+    physical_rules: object,
+    season: object | None = None,
+    tick: int = 0,
+    travel_network_active: bool = False,
 ) -> tuple[VisibleExit, ...]:
     location = state.locations.get(location_id)
     if location is None:
@@ -607,17 +632,51 @@ def _sorted_exits(
             else default_physical_rules()
         )
         memberships = {row.location_id: row.region_id for row in spec.location_regions}
-        exits.append(
-            VisibleExit(
-                destination_id=destination_id,
-                name=destination.name,
-                travel_duration_ticks=1 if route is None else route.duration_ticks,
-                fatigue_cost=(
-                    rules.move_fatigue if route is None else route.fatigue_cost
-                ),
-                destination_region_id=memberships.get(destination_id),
+        if travel_network_active:
+            from world.travel_network import effective_route_condition
+
+            condition = effective_route_condition(
+                state,
+                location_id,
+                destination_id,
+                season=season,  # type: ignore[arg-type]
+                tick=tick,
             )
-        )
+            _LOG.debug(
+                "exit_projected status=%s capacity=%s risk_milli=%s",
+                condition.status.value,
+                condition.capacity,
+                round(condition.risk * 1000),
+            )
+            exits.append(
+                VisibleExit(
+                    destination_id=destination_id,
+                    name=destination.name,
+                    travel_duration_ticks=condition.duration_ticks,
+                    fatigue_cost=condition.fatigue_cost,
+                    destination_region_id=memberships.get(destination_id),
+                    route_status=condition.status.value,
+                    route_seasonal_availability=condition.seasonal_availability.value,
+                    route_blockage_cause=condition.blockage_cause.value,
+                    route_capacity=condition.capacity,
+                    route_risk=condition.risk,
+                    route_infrastructure_quality=condition.infrastructure_quality,
+                )
+            )
+        else:
+            exits.append(
+                VisibleExit(
+                    destination_id=destination_id,
+                    name=destination.name,
+                    travel_duration_ticks=(
+                        1 if route is None else route.duration_ticks
+                    ),
+                    fatigue_cost=(
+                        rules.move_fatigue if route is None else route.fatigue_cost
+                    ),
+                    destination_region_id=memberships.get(destination_id),
+                )
+            )
     exits.sort(key=lambda value: value.destination_id.value)
     return tuple(exits)
 

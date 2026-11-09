@@ -18,6 +18,7 @@ from simulation.infrastructure_models import (
     InfrastructureNetworksArtifactError,
     InfrastructureNetworksSnapshot,
     InfrastructureNetworksSummaryRecord,
+    TravelRouteRecord,
 )
 
 __all__ = [
@@ -85,6 +86,7 @@ def infrastructure_networks_publication_id(*, run_id: str, digest: str) -> str:
 
 def _summary_counts(
     assets: tuple[InfrastructureAssetRecord, ...],
+    routes: tuple[TravelRouteRecord, ...] = (),
 ) -> dict[str, int]:
     return {
         "asset_count": len(assets),
@@ -96,24 +98,41 @@ def _summary_counts(
         "damaged_count": sum(1 for asset in assets if asset.status == "damaged"),
         "destroyed_count": sum(1 for asset in assets if asset.status == "destroyed"),
         "effects_active_count": sum(1 for asset in assets if asset.effects_active),
+        "route_count": len(routes),
+        "route_open_count": sum(1 for route in routes if route.status == "open"),
+        "route_restricted_count": sum(
+            1 for route in routes if route.status == "restricted"
+        ),
+        "route_closed_count": sum(1 for route in routes if route.status == "closed"),
+        "route_weather_count": sum(
+            1 for route in routes if route.blockage_cause == "weather"
+        ),
+        "route_seasonal_count": sum(
+            1 for route in routes if route.blockage_cause == "seasonal"
+        ),
+        "route_hazard_count": sum(
+            1 for route in routes if route.blockage_cause == "hazard"
+        ),
     }
 
 
 def finalize_infrastructure_networks_snapshot(
     snapshot: InfrastructureNetworksSnapshot,
 ) -> InfrastructureNetworksSnapshot:
-    counts = _summary_counts(snapshot.assets)
+    counts = _summary_counts(snapshot.assets, snapshot.routes)
     staged = InfrastructureNetworksSnapshot(
         summary=InfrastructureNetworksSummaryRecord(
             run_id=snapshot.summary.run_id,
             publication_id="",
             digest="",
-            schema_version=INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION,
+            schema_version=snapshot.summary.schema_version,
             policy_version=INFRASTRUCTURE_NETWORKS_SNAPSHOT_POLICY,
             coverage=snapshot.summary.coverage,
             **counts,
         ),
         assets=snapshot.assets,
+        routes=snapshot.routes,
+        schema_version=snapshot.summary.schema_version,
         digest="",
         publication_id="",
     )
@@ -125,7 +144,7 @@ def finalize_infrastructure_networks_snapshot(
         run_id=staged.summary.run_id,
         publication_id=publication_id,
         digest=digest,
-        schema_version=INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION,
+        schema_version=staged.summary.schema_version,
         policy_version=INFRASTRUCTURE_NETWORKS_SNAPSHOT_POLICY,
         coverage=staged.summary.coverage,
         **counts,
@@ -133,6 +152,8 @@ def finalize_infrastructure_networks_snapshot(
     finalized = InfrastructureNetworksSnapshot(
         summary=summary,
         assets=staged.assets,
+        routes=staged.routes,
+        schema_version=staged.schema_version,
         digest=digest,
         publication_id=publication_id,
     )
@@ -197,9 +218,23 @@ def decode_infrastructure_networks_snapshot(
                 linked_project_id=item["linked_project_id"],
                 linked_structure_id=item.get("linked_structure_id"),
             )
-            for item in cast(
-                Iterable[dict[str, Any]], parsed.get("assets") or ()
+            for item in cast(Iterable[dict[str, Any]], parsed.get("assets") or ())
+        )
+        routes = tuple(
+            TravelRouteRecord(
+                origin_location_id=item["origin_location_id"],
+                destination_location_id=item["destination_location_id"],
+                status=item["status"],
+                seasonal_availability=item["seasonal_availability"],
+                blockage_cause=item["blockage_cause"],
+                duration_ticks=item["duration_ticks"],
+                fatigue_cost=float(item["fatigue_cost"]),
+                capacity=item["capacity"],
+                risk=float(item["risk"]),
+                infrastructure_quality=float(item["infrastructure_quality"]),
+                as_of_tick=item["as_of_tick"],
             )
+            for item in cast(Iterable[dict[str, Any]], parsed.get("routes") or ())
         )
         summary = InfrastructureNetworksSummaryRecord(
             run_id=summary_raw["run_id"],
@@ -215,10 +250,18 @@ def decode_infrastructure_networks_snapshot(
             destroyed_count=summary_raw["destroyed_count"],
             effects_active_count=summary_raw["effects_active_count"],
             coverage=summary_raw.get("coverage") or "not_applicable",
+            route_count=summary_raw.get("route_count", 0),
+            route_open_count=summary_raw.get("route_open_count", 0),
+            route_restricted_count=summary_raw.get("route_restricted_count", 0),
+            route_closed_count=summary_raw.get("route_closed_count", 0),
+            route_weather_count=summary_raw.get("route_weather_count", 0),
+            route_seasonal_count=summary_raw.get("route_seasonal_count", 0),
+            route_hazard_count=summary_raw.get("route_hazard_count", 0),
         )
         snapshot = InfrastructureNetworksSnapshot(
             summary=summary,
             assets=assets,
+            routes=routes,
             digest=parsed.get("digest") or "",
             publication_id=parsed.get("publication_id") or "",
             schema_version=parsed.get("schema_version")

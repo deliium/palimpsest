@@ -138,6 +138,7 @@ from world.events import (
     KinshipEdgeRecorded,
     LifecycleStageChanged,
     OccurrenceContext,
+    RouteConditionChanged,
     WorldEvent,
     build_occurrence_context,
     make_physical_replayable_event,
@@ -396,13 +397,35 @@ def _bind_infrastructure_networks_channel(
     infrastructure: object | None,
 ) -> None:
     """Restore infrastructure_networks from codec v21 or projected asset map."""
-    active = codec_version == "v21" or infrastructure is not None
+    active = codec_version in {"v21", "v25"} or infrastructure is not None
     engine._infrastructure_networks_active = active
     if active:
         _LOGGER.info(
             "infrastructure_networks_enabled policy_id=%s",
             "infrastructure-networks.v1",
         )
+
+
+def _bind_travel_network_channel(
+    engine: WorldEngine,
+    *,
+    codec_version: str | None,
+    projected: object,
+) -> None:
+    """Restore the travel-network channel from codec v25 or projected rows."""
+    active = codec_version == "v25" or bool(
+        getattr(projected, "travel_network", ())
+    )
+    if active and not engine._infrastructure_networks_active:
+        active = False
+    if active and getattr(projected, "regions_migration", None) is None:
+        raise ValueError("travel_network_requires_regions")
+    engine._travel_network_active = active
+    _LOGGER.info(
+        "travel_network_active enabled=%s reason=%s",
+        active,
+        "restored" if active else "inactive",
+    )
 
 
 def _bind_resource_exchange_profile_channel(
@@ -779,6 +802,7 @@ class WorldEngine:
         "_teaching_entity_ids",
         "_teaching_policy",
         "_translator",
+        "_travel_network_active",
     )
 
     def __init__(
@@ -819,6 +843,7 @@ class WorldEngine:
         public_goods_decay_millis: int = 0,
         cultural_contact_active: bool = False,
         infrastructure_networks_active: bool = False,
+        travel_network_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -846,6 +871,7 @@ class WorldEngine:
             collective_projects_active=collective_projects_active,
             public_goods_active=public_goods_active,
             infrastructure_networks_active=infrastructure_networks_active,
+            travel_network_active=travel_network_active,
             repository_perception_mode=(
                 None
                 if knowledge_repositories_spec is None
@@ -947,6 +973,22 @@ class WorldEngine:
         if infrastructure_networks_active and not collective_projects_active:
             raise ValueError("infrastructure_networks requires collective_projects")
         self._infrastructure_networks_active = infrastructure_networks_active
+        if type(travel_network_active) is not bool:
+            raise TypeError("travel_network_active must be bool")
+        if travel_network_active and not infrastructure_networks_active:
+            raise ValueError("travel_network_requires_infrastructure")
+        if (
+            travel_network_active
+            and getattr(self._snapshot.world.state, "regions_migration", None) is None
+        ):
+            raise ValueError("travel_network_requires_regions")
+        self._travel_network_active = travel_network_active
+        _LOGGER.info(
+            "travel_network_active enabled=%s infrastructure=%s regions=%s",
+            travel_network_active,
+            infrastructure_networks_active,
+            getattr(self._snapshot.world.state, "regions_migration", None) is not None,
+        )
         if public_goods_active:
             _LOGGER.info(
                 "public_goods_active=%s decay_millis=%s",
@@ -989,6 +1031,38 @@ class WorldEngine:
         self._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
+        if travel_network_active:
+            from world._state import World, rebuild_world_state
+            from world.travel_network import derive_initial_route_conditions
+
+            initial_season = (
+                None
+                if self._environmental_dynamics is None
+                else self._environmental_dynamics.season_at(tick.value)
+            )
+            initial_routes = derive_initial_route_conditions(
+                self._snapshot.world.state,
+                season=initial_season,
+                tick=tick.value,
+            )
+            seeded_state = rebuild_world_state(
+                self._snapshot.world.state, travel_network=initial_routes
+            )
+            self._snapshot = _EngineSnapshot(
+                world=World(self._snapshot.world.world_id, seeded_state),
+                tick=self._snapshot.tick,
+                phase=self._snapshot.phase,
+                token=self._snapshot.token,
+                observation_batch=self._snapshot.observation_batch,
+                resolution_history=self._snapshot.resolution_history,
+                event_history=self._snapshot.event_history,
+                prior_event_window=self._snapshot.prior_event_window,
+            )
+            _LOGGER.info(
+                "travel_network_routes_seeded count=%s tick=%s",
+                len(initial_routes),
+                tick.value,
+            )
         if type(artifacts_enabled) is not bool:
             raise TypeError("artifacts_enabled must be bool")
         # Seeds alone activate artifact admission; explicit flag covers
@@ -1255,6 +1329,8 @@ class WorldEngine:
             collective_projects=tuple(snapshot.collective_projects),
             regions_migration=getattr(snapshot, "regions_migration", None),
             journeys=getattr(snapshot, "journeys", None),
+            infrastructure=getattr(snapshot, "infrastructure", None),
+            travel_network=getattr(snapshot, "travel_network", None),
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -1336,6 +1412,11 @@ class WorldEngine:
             codec_version=snapshot.persistence_codec_version,
             infrastructure=getattr(projected, "infrastructure", None),
         )
+        _bind_travel_network_channel(
+            engine,
+            codec_version=snapshot.persistence_codec_version,
+            projected=projected,
+        )
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
             structured_commitments_active=engine._structured_commitments_active,
@@ -1343,6 +1424,7 @@ class WorldEngine:
             collective_projects_active=engine._collective_projects_active,
             public_goods_active=engine._public_goods_active,
             infrastructure_networks_active=engine._infrastructure_networks_active,
+            travel_network_active=engine._travel_network_active,
         )
         engine._engine_id = derive_scoped_id(
             snapshot.config,
@@ -1445,6 +1527,7 @@ class WorldEngine:
                 "v19",
                 "v20",
             "v21",
+            "v25",
             }
             or bool(getattr(engine._bootstrap, "artifacts", ()))
         )
@@ -1465,6 +1548,7 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v25",
         }:
             if population_lifecycle is None and snapshot.lifecycle_records:
                 raise ValueError(
@@ -1510,6 +1594,7 @@ class WorldEngine:
                 "v19",
                 "v20",
             "v21",
+            "v25",
             } and snapshot.event_schema_version in {
                 10,
                 11,
@@ -1576,6 +1661,7 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v25",
         }:
             from simulation.runner_models import DurableRecordsSpec
 
@@ -1608,6 +1694,7 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v25",
         }:
             from simulation.runner_models import KnowledgeRepositoriesSpec
 
@@ -1645,6 +1732,7 @@ class WorldEngine:
             "v19",
             "v20",
             "v21",
+            "v25",
         }:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
@@ -1666,6 +1754,7 @@ class WorldEngine:
                     collective_projects_active=engine._collective_projects_active,
                     public_goods_active=engine._public_goods_active,
                     infrastructure_networks_active=engine._infrastructure_networks_active,
+                    travel_network_active=engine._travel_network_active,
                 )
         if snapshot.persistence_codec_version in {
             "v8",
@@ -1682,6 +1771,7 @@ class WorldEngine:
             "v19",
             "v20",
             "v21",
+            "v25",
         }:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
@@ -1757,6 +1847,7 @@ class WorldEngine:
             "v19",
             "v20",
         "v21",
+            "v25",
         }:
             from simulation.runner_models import DependencyCareSpec
             from world.dependency_care import DependencyNeedRegister
@@ -1995,6 +2086,10 @@ class WorldEngine:
         return self._infrastructure_networks_active
 
     @property
+    def travel_network_active(self) -> bool:
+        return self._travel_network_active
+
+    @property
     def knowledge_repositories_spec(self) -> object | None:
         return self._knowledge_repositories_spec
 
@@ -2089,6 +2184,7 @@ class WorldEngine:
                 ),
                 cultural_contact_active=self._cultural_contact_active,
                 infrastructure_networks_active=self._infrastructure_networks_active,
+                travel_network_active=self._travel_network_active,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2334,6 +2430,7 @@ class WorldEngine:
             ),
             cultural_contact_active=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
+            travel_network_active=self._travel_network_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4076,6 +4173,11 @@ class WorldEngine:
         self._log_skill_efficiency(
             snap=snap, requests=batch_requests, rules=physical_rules
         )
+        action_season = (
+            None
+            if self._environmental_dynamics is None
+            else self._environmental_dynamics.season_at(snap.tick.value)
+        )
         pending = prepare_action_batch(
             world_id=self.world_id,
             starting_state=snap.world.state,
@@ -4105,6 +4207,8 @@ class WorldEngine:
             public_goods_context=self._public_goods_rule_context(),
             contact_enabled=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
+            season=action_season,
+            travel_network_active=self._travel_network_active,
             public_good_maintain_draw=(
                 (
                     lambda request, working: self._public_good_maintain_success(
@@ -4304,6 +4408,21 @@ class WorldEngine:
                     "duplicate_shortage_window reason_code=duplicate_shortage_window"
                 )
             raise
+        routes_state = physical.working_state
+        route_transitions: tuple[RouteConditionChanged, ...] = ()
+        if self._travel_network_active:
+            from world._travel_network import advance_route_conditions
+
+            route_season = (
+                None
+                if self._environmental_dynamics is None
+                else self._environmental_dynamics.season_at(snap.tick.value)
+            )
+            routes_state, route_transitions = advance_route_conditions(
+                physical.working_state,
+                season=route_season,
+                tick=snap.tick.value,
+            )
         family_counts = {family.value: 0 for family in SystemEffectFamily}
         system_pending: list[PendingEvent] = []
         for detail in physical.pending_details:
@@ -4329,6 +4448,33 @@ class WorldEngine:
                     occurrence=detail.occurrence,
                 )
             )
+        if route_transitions:
+            journey_offset = len(journey_transitions)
+            for index, route_detail in enumerate(route_transitions):
+                ordinal = journey_offset + index
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=snap.tick.value,
+                    effect_family=SystemEffectFamily.TRAVEL.value,
+                    entity_id=route_detail.origin_location_id,
+                    family_ordinal=ordinal,
+                )
+                system_pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id=cause_id,
+                            effect_family=SystemEffectFamily.TRAVEL,
+                            entity_id=route_detail.origin_location_id,
+                            family_ordinal=ordinal,
+                        ),
+                        details=route_detail,
+                        occurrence=build_occurrence_context(
+                            route_detail, origin_location_id=None
+                        ),
+                    )
+                )
         _LOGGER.debug(
             "%s tick=%s family_weather=%s family_regeneration=%s "
             "family_combined_needs=%s family_exposure=%s "
@@ -4441,11 +4587,12 @@ class WorldEngine:
                 )
             )
 
-        working_state = physical.working_state
+        working_state = routes_state
         semantic_mutation = (
             action_pending.semantic_mutation
             or physical.semantic_mutation
             or completion_state is not action_pending.working_state
+            or bool(route_transitions)
         )
         lifecycle_pending: list[PendingEvent] = []
         next_registrations = tuple(self._registrations)
@@ -4483,7 +4630,7 @@ class WorldEngine:
         working_state, death_journey_transitions = cancel_dead_journeys(working_state)
         journey_cleanup_pending = _prepare_journey_events(
             death_journey_transitions,
-            ordinal_offset=len(journey_transitions),
+            ordinal_offset=len(journey_transitions) + len(route_transitions),
         )
         semantic_mutation = semantic_mutation or bool(death_journey_transitions)
         working_state.validate_finalized_boundary(snap.tick.value)
@@ -4593,6 +4740,7 @@ class WorldEngine:
             regions_migration_active=(snap.world.state.regions_migration is not None),
             cultural_contact_active=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
+            travel_network_active=self._travel_network_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -6643,6 +6791,7 @@ def select_checkpoint_schema(
     regions_migration_active: bool = False,
     cultural_contact_active: bool = False,
     infrastructure_networks_active: bool = False,
+    travel_network_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -6691,7 +6840,28 @@ def select_checkpoint_schema(
         regions_migration_active=regions_migration_active,
         cultural_contact_active=cultural_contact_active,
         infrastructure_networks_active=infrastructure_networks_active,
+        travel_network_active=travel_network_active,
     )
+    if travel_network_active:
+        from simulation.versioning import (
+            TRAVEL_NETWORK_WRITE_PAIR_CODEC,
+            TRAVEL_NETWORK_WRITE_PAIR_EVENT,
+        )
+
+        if (
+            schema_version != TRAVEL_NETWORK_WRITE_PAIR_EVENT
+            or codec != TRAVEL_NETWORK_WRITE_PAIR_CODEC
+        ):
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=%s "
+                "reason=travel_network_active",
+                schema_version,
+                codec,
+                TRAVEL_NETWORK_WRITE_PAIR_EVENT,
+                TRAVEL_NETWORK_WRITE_PAIR_CODEC,
+            )
+        return schema_version, codec
     if infrastructure_networks_active:
         if schema_version != EVENT_SCHEMA_REPLAY_V23 or codec != "v21":
             _LOGGER.warning(

@@ -335,6 +335,15 @@ score, trust score, or rank chrome.
 
 The read-only **Infrastructure networks** run tab (view id
 `infrastructure-networks`) renders published objective asset inventory, edges,
-and condition counts. It fetches the six infrastructure-networks GET routes,
+and condition counts. It fetches the seven infrastructure-networks GET routes
+(including the objective route-condition page),
 maps `infrastructure_networks_disabled`/503 to an explicit unavailable state,
 and never invents an infrastructure health score or civilization score.
+
+## Travel network (V4-17)
+
+The Infrastructure networks panel adds an objective Routes table fed by
+`GET .../infrastructure-networks/routes`. It shows status, seasonal
+availability, blockage cause, duration, capacity, risk, quality, and as-of tick.
+The panel maps 503 to the existing disabled state and never renders a score or
+action control.

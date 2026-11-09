@@ -45,6 +45,7 @@ PATHS = {
     "/v1/simulations/{run_id}/infrastructure-networks/condition",
     "/v1/simulations/{run_id}/infrastructure-networks/effects",
     "/v1/simulations/{run_id}/infrastructure-networks/maintenance",
+    "/v1/simulations/{run_id}/infrastructure-networks/routes",
 }
 
 
@@ -123,14 +124,14 @@ def _client(root: Path | None, *, clock: list[float]) -> httpx.AsyncClient:
     )
 
 
-def test_six_get_routes_exist() -> None:
+def test_seven_get_routes_exist() -> None:
     routes = [
         cast(Any, route)
         for route in router.routes
         if getattr(route, "methods", None) is not None
     ]
-    assert INFRASTRUCTURE_NETWORKS_ROUTE_COUNT == 6
-    assert len(routes) == 6
+    assert INFRASTRUCTURE_NETWORKS_ROUTE_COUNT == 7
+    assert len(routes) == 7
     assert {route.path for route in routes} == PATHS
     assert all(route.methods == {"GET"} for route in routes)
 

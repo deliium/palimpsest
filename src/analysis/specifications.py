@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 188
+METRIC_FAMILY_COUNT: Final[int] = 192
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -263,6 +263,10 @@ class MetricFamilyId(StrEnum):
     INFRASTRUCTURE_CONDITION_LIFECYCLE = "infrastructure_condition_lifecycle"
     INFRASTRUCTURE_EFFECT_COVERAGE = "infrastructure_effect_coverage"
     INFRASTRUCTURE_MAINTENANCE_BURDEN = "infrastructure_maintenance_burden"
+    TRAVEL_ROUTE_STRUCTURE = "travel_route_structure"
+    TRAVEL_ROUTE_CONDITION = "travel_route_condition"
+    TRAVEL_ROUTE_BLOCKAGE = "travel_route_blockage"
+    TRAVEL_ROUTE_BELIEF_ALIGNMENT = "travel_route_belief_alignment"
 
 
 class DenominatorKind(StrEnum):
@@ -8577,6 +8581,137 @@ INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS: Final[tuple[str, ...]] = (
     "damaged_unrepaired_count",
     "maintenance_opportunity_count",
 )
+TRAVEL_ROUTE_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "route_count",
+    "adjacency_coverage_ratio",
+    "road_edge_count",
+    "bridge_node_count",
+    "capacity_min",
+    "capacity_max",
+    "capacity_mean_milli",
+)
+TRAVEL_ROUTE_CONDITION_KEYS: Final[tuple[str, ...]] = (
+    "open_count",
+    "restricted_count",
+    "closed_count",
+    "availability_open_count",
+    "availability_restricted_count",
+    "availability_closed_count",
+    "risk_mean_milli",
+    "quality_mean_milli",
+)
+TRAVEL_ROUTE_BLOCKAGE_KEYS: Final[tuple[str, ...]] = (
+    "none_count",
+    "weather_count",
+    "seasonal_count",
+    "hazard_count",
+    "blocked_edge_count",
+    "blockage_coverage_ratio",
+)
+TRAVEL_ROUTE_BELIEF_ALIGNMENT_KEYS: Final[tuple[str, ...]] = (
+    "belief_count",
+    "unknown_count",
+    "stale_count",
+    "contradicted_count",
+    "consistent_count",
+    "unresolved_count",
+    "inconsistent_count",
+    "not_applicable_count",
+)
+
+
+def _spec_travel_route_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TRAVEL_ROUTE_STRUCTURE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="objective_travel_routes",
+        denominator="adjacent_route_edges",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="travel_network_window_tick",
+        deceased_policy="retain_closed_routes",
+        zero_holding_policy="edgeless_world_unknown",
+        opportunity_vs_occurrence="route counts and capacity only; no route score",
+        self_edge_policy="route endpoints are ordered location pairs",
+        censoring_policy="closed routes remain in structural counts",
+        formulas={key: key.replace("_", " ") for key in TRAVEL_ROUTE_STRUCTURE_KEYS},
+        value_keys=TRAVEL_ROUTE_STRUCTURE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_routes",
+    )
+
+
+def _spec_travel_route_condition() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TRAVEL_ROUTE_CONDITION,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="objective_travel_routes",
+        denominator="adjacent_route_edges",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="travel_network_window_tick",
+        deceased_policy="retain_closed_routes",
+        zero_holding_policy="edgeless_world_unknown",
+        opportunity_vs_occurrence="status and availability histograms; no composite",
+        self_edge_policy="n/a",
+        censoring_policy="closed routes remain in condition counts",
+        formulas={key: key.replace("_", " ") for key in TRAVEL_ROUTE_CONDITION_KEYS},
+        value_keys=TRAVEL_ROUTE_CONDITION_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_routes",
+    )
+
+
+def _spec_travel_route_blockage() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TRAVEL_ROUTE_BLOCKAGE,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="objective_travel_routes",
+        denominator="adjacent_route_edges",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        cohort_window="travel_network_window_tick",
+        deceased_policy="retain_closed_routes",
+        zero_holding_policy="edgeless_world_unknown",
+        opportunity_vs_occurrence="blockage cause counts only; never a severity score",
+        self_edge_policy="n/a",
+        censoring_policy="blocked routes remain in cause counts",
+        formulas={key: key.replace("_", " ") for key in TRAVEL_ROUTE_BLOCKAGE_KEYS},
+        value_keys=TRAVEL_ROUTE_BLOCKAGE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_routes",
+    )
+
+
+def _spec_travel_route_belief_alignment() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.TRAVEL_ROUTE_BELIEF_ALIGNMENT,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population="owner_scoped_route_beliefs",
+        denominator="evaluable_route_beliefs",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        cohort_window="travel_network_window_tick",
+        deceased_policy="retain_stale_beliefs",
+        zero_holding_policy="no_beliefs_unknown",
+        opportunity_vs_occurrence="researcher-only alignment; never truth",
+        self_edge_policy="n/a",
+        censoring_policy="unresolved beliefs remain counted",
+        formulas={
+            key: key.replace("_", " ") for key in TRAVEL_ROUTE_BELIEF_ALIGNMENT_KEYS
+        },
+        value_keys=TRAVEL_ROUTE_BELIEF_ALIGNMENT_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="owner beliefs remain fallible",
+    )
 
 
 def _spec_infrastructure_network_structure() -> MetricSpecification:
@@ -9062,6 +9197,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_infrastructure_condition_lifecycle,
     _spec_infrastructure_effect_coverage,
     _spec_infrastructure_maintenance_burden,
+    _spec_travel_route_structure,
+    _spec_travel_route_condition,
+    _spec_travel_route_blockage,
+    _spec_travel_route_belief_alignment,
 )
 
 

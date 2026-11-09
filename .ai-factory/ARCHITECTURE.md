@@ -174,15 +174,15 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-16
+### Current baseline through V4-17
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 188 (V4-15's 184 plus four V4-16 infrastructure-network families) |
-| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V23` / `v21` when `infrastructure_networks` is active; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
+| Metric families | 192 (V4-15's 184 plus four V4-16 infrastructure-network families and four V4-17 travel-network families) |
+| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
@@ -1016,3 +1016,24 @@ both `PALIMPSEST_INTER_SOCIETY_RELATIONS_ROOT` and
 `PALIMPSEST_INTER_SOCIETY_RELATIONS_CURSOR_KEY` (≥32 UTF-8 bytes) are set; the
 Research UI adds a read-only panel. No authoritative civilization relationship
 score exists anywhere. See `docs/inter-society-relations.md`.
+
+### V4-17 travel-network seam
+
+V4-17 deepens the owned `infrastructure_networks` context and the V3
+`multi_polity_migration` / `regions_migration` seam; it adds no V4 context or
+flag and no `runner-config-v57`. `world.travel_network` owns the locked
+`travel-network.v1` route-condition contract and derivation;
+`world._travel_network` owns private transition and rule-facing helpers and is
+allowlisted only for simulation and private-world importers. `WorldState`
+stores a bounded ordered `travel_network` tuple seeded at bootstrap and
+recomputed at tick boundaries; `Move`, `Transport`, and `Flee` enforce closed,
+restricted, capacity, and risk through one condition. Adjacent `VisibleExit`
+rows expose local route facts only. Owner-scoped route-quality beliefs reuse
+destination memories and existing `regional_migration` biases; they remain
+fallible and never become objective truth.
+
+Travel-network runs write event **27** / codec **`v25`**; infrastructure-only
+runs keep 23/`v21` and regions-only runs keep 21/`v19`. Infrastructure snapshot
+v2 carries bounded route rows while v1 stays decodable. Four detached metric
+families raise the catalog to 192 metric families; observer semantics stay **73**, commands
+**43**, and Alembic **0017**. The off-gate experiment is `travel_network@1`.

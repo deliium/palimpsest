@@ -47,8 +47,10 @@ from simulation.v4_architecture import (
     validate_v4_contexts,
 )
 from simulation.versioning import (
+    V4_DEEPENING_WRITE_PAIRS,
     V4_EVENT_REUSING_CONTEXTS,
     V4_WRITE_PAIR_RESERVATIONS,
+    validate_deepening_write_pairs,
     validate_write_pair_reservations,
 )
 from world._rules import COMMAND_RULE_MATRIX
@@ -125,11 +127,12 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V23 == 23
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 23
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 188
+    assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert METRIC_FAMILY_COUNT == 192
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -219,6 +222,9 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
 
 def test_reservations_and_prerequisite_graph() -> None:
     validate_write_pair_reservations()
+    validate_deepening_write_pairs()
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27]
+    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == ["v25"]
     reserved = {item.context_id for item in V4_WRITE_PAIR_RESERVATIONS}
     assert not reserved & V4_EVENT_REUSING_CONTEXTS
     assert reserved | V4_EVENT_REUSING_CONTEXTS == set(V4ContextId)

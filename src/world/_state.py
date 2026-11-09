@@ -28,6 +28,11 @@ from world.production import ProductionJob, Structure, ToolMark
 from world.regions import Journey, RegionsMigrationSpec
 from world.repositories import KnowledgeRepository, index_repositories
 from world.subjective_value import ExchangeOffer
+from world.travel_network import (
+    MAX_ROUTE_CONDITIONS,
+    RouteCondition,
+    require_route_conditions,
+)
 
 _LOG = logging.getLogger("world.state")
 
@@ -55,6 +60,9 @@ def rebuild_world_state(
     infrastructure: Mapping[EntityId, InfrastructureAsset] | None = None,
     regions_migration: RegionsMigrationSpec | None = None,
     journeys: Sequence[Journey] | None = None,
+    travel_network: Sequence[RouteCondition]
+    | Mapping[tuple[str, str], RouteCondition]
+    | None = None,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -93,6 +101,9 @@ def rebuild_world_state(
         state.regions_migration if regions_migration is None else regions_migration
     )
     journey_src = state.journeys if journeys is None else journeys
+    travel_network_src = (
+        state.travel_network if travel_network is None else travel_network
+    )
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -156,6 +167,7 @@ def rebuild_world_state(
                 else tuple(journey_src)
             )
         ),
+        travel_network=travel_network_src,
     )
 
 
@@ -318,6 +330,55 @@ def _index_by_entity_id[T](
     return indexed
 
 
+def _index_travel_network(
+    rows: Sequence[RouteCondition]
+    | Mapping[tuple[str, str], RouteCondition]
+    | None,
+    *,
+    location_index: Mapping[EntityId, Location],
+) -> tuple[RouteCondition, ...]:
+    if rows is None:
+        return ()
+    source: Sequence[RouteCondition]
+    if isinstance(rows, Mapping):
+        source = tuple(rows.values())
+    else:
+        source = rows
+    conditions = require_route_conditions(source)
+    indexed: dict[tuple[str, str], RouteCondition] = {}
+    for condition in conditions:
+        key = condition.edge_key
+        if key in indexed:
+            _LOG.error(
+                "travel_network_invalid reason_code=travel_network_duplicate_route"
+            )
+            raise ValueError("travel_network_duplicate_route")
+        origin = location_index.get(condition.origin_id)
+        destination = location_index.get(condition.destination_id)
+        if (
+            origin is None
+            or destination is None
+            or destination.entity_id not in origin.adjacent
+        ):
+            _LOG.error(
+                "travel_network_invalid reason_code=travel_network_non_adjacent"
+            )
+            raise ValueError("travel_network_non_adjacent")
+        indexed[key] = condition
+    if len(indexed) > MAX_ROUTE_CONDITIONS:
+        _LOG.error(
+            "travel_network_invalid reason_code=travel_network_route_cap_exceeded"
+        )
+        raise ValueError("travel_network_route_cap_exceeded")
+    ordered = tuple(sorted(indexed.values(), key=lambda item: item.edge_key))
+    _LOG.debug(
+        "world_state_route_conditions count=%s channel=%s",
+        len(ordered),
+        "on" if ordered else "off",
+    )
+    return ordered
+
+
 class WorldState:
     """Authoritative immutable world snapshot. Not visible to agents."""
 
@@ -339,6 +400,7 @@ class WorldState:
         "_revision",
         "_structures",
         "_tool_marks",
+        "_travel_network",
         "_weather",
     )
 
@@ -365,6 +427,9 @@ class WorldState:
         | None = None,
         regions_migration: RegionsMigrationSpec | None = None,
         journeys: Sequence[Journey] | None = None,
+        travel_network: Sequence[RouteCondition]
+        | Mapping[tuple[str, str], RouteCondition]
+        | None = None,
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -447,6 +512,9 @@ class WorldState:
         )
         self._infrastructure = index_infrastructure(
             infrastructure, location_ids=location_index
+        )
+        self._travel_network = _index_travel_network(
+            travel_network, location_index=location_index
         )
         if (
             regions_migration is not None
@@ -564,6 +632,21 @@ class WorldState:
     @property
     def infrastructure(self) -> Mapping[EntityId, InfrastructureAsset] | None:
         return self._infrastructure
+
+    @property
+    def travel_network(self) -> tuple[RouteCondition, ...]:
+        return self._travel_network
+
+    def route_condition(
+        self, origin_id: EntityId, destination_id: EntityId
+    ) -> RouteCondition | None:
+        if type(origin_id) is not EntityId or type(destination_id) is not EntityId:
+            raise TypeError("route_condition endpoints must be EntityId")
+        key = tuple(sorted((origin_id.value, destination_id.value)))
+        for condition in self._travel_network:
+            if condition.edge_key == key:
+                return condition
+        return None
 
     @property
     def regions_migration(self) -> RegionsMigrationSpec | None:

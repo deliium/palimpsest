@@ -66,6 +66,7 @@ from world.identifiers import (
     require_bounded_text,
     require_stable_id,
 )
+from world.infrastructure import InfrastructureAsset
 from world.lifecycle import (
     AgentLifecycleRecord,
     LifecycleStageId,
@@ -88,6 +89,7 @@ from world.models import (
 )
 from world.production import ToolRole
 from world.regions import RegionsMigrationSpec
+from world.travel_network import MAX_ROUTE_CONDITIONS, RouteCondition
 from world.values import ItemKind, ResourceKind
 
 _LOGGER = logging.getLogger("simulation.runner_models")
@@ -6357,6 +6359,9 @@ class SimulationRunnerResult:
     goal_transition_receipts: tuple[GoalTransitionReceipt, ...] = ()
     cognition_counters: CognitionCounters = CognitionCounters()
     final_objective_projection: DetachedObjectiveProjection | None = None
+    # Bounded detached rows for collectors/publication; empty when the channel is off.
+    final_travel_network: tuple[RouteCondition, ...] = ()
+    final_infrastructure_assets: tuple[InfrastructureAsset, ...] = ()
     objective_state_hash: str | None = None
     memory_dynamics_audits: tuple[object, ...] = ()
     offline_consolidation_audits: tuple[object, ...] = ()
@@ -6450,6 +6455,24 @@ class SimulationRunnerResult:
             raise TypeError(
                 "final_objective_projection must be DetachedObjectiveProjection or None"
             )
+        travel_network = tuple(self.final_travel_network)
+        if len(travel_network) > MAX_ROUTE_CONDITIONS:
+            raise ValueError("final_travel_network exceeds route cap")
+        if any(type(item) is not RouteCondition for item in travel_network):
+            raise TypeError("final_travel_network entries must be RouteCondition")
+        if travel_network != tuple(
+            sorted(travel_network, key=lambda item: item.edge_key)
+        ):
+            raise ValueError("final_travel_network must be ordered")
+        object.__setattr__(self, "final_travel_network", travel_network)
+        infrastructure_assets = tuple(self.final_infrastructure_assets)
+        if any(type(item) is not InfrastructureAsset for item in infrastructure_assets):
+            raise TypeError(
+                "final_infrastructure_assets entries must be InfrastructureAsset"
+            )
+        object.__setattr__(
+            self, "final_infrastructure_assets", infrastructure_assets
+        )
         if self.objective_state_hash is not None:
             require_stable_id("objective_state_hash", self.objective_state_hash)
         if isinstance(self.memory_dynamics_audits, (set, frozenset)):
@@ -8125,6 +8148,20 @@ class SimulationRunnerConfig:
                 "collective_projects=%s",
                 self.schema_version == RUNNER_SCHEMA_VERSION_V56,
                 self.collective_projects is not None,
+            )
+        if (
+            self.v4_capability_flags.infrastructure_networks
+            and self.regions_migration is None
+        ):
+            _LOGGER.info(
+                "travel_network_inactive reason=missing_regions"
+            )
+        elif (
+            self.regions_migration is not None
+            and not self.v4_capability_flags.infrastructure_networks
+        ):
+            _LOGGER.info(
+                "travel_network_inactive reason=infrastructure_off"
             )
         _lifecycle_schemas = {
             RUNNER_SCHEMA_VERSION_V24,

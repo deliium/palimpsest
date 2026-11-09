@@ -187,7 +187,13 @@ def _reject_objective(value: object, name: str) -> None:
     type_name = type(value).__name__
     module = type(value).__module__
     if type_name in _OBJECTIVE_TYPE_NAMES or module.startswith(
-        ("world.models", "world.events", "world._")
+        (
+            "world.models",
+            "world.events",
+            "world.travel_network",
+            "world.infrastructure",
+            "world._",
+        )
     ):
         raise TypeError(f"{name} is not a subjective input")
 

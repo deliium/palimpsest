@@ -565,7 +565,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 184 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 192 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -659,7 +659,7 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 184 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 192 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
 V4-10/V4-11.
 
@@ -711,7 +711,7 @@ GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 192 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
 
@@ -730,7 +730,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 184 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
+types, 192 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
 
@@ -773,8 +773,8 @@ capacity, production, storage, and exposure plus damage, repair, decay, and
 destruction. Explicit public-good frozensets keep infra-only kinds out of the
 Use/Maintain/Oppose sets. Four metric families append (catalog 184 -> 188);
 observer semantic types stay 73 through aliases; commands stay 43; Alembic
-stays `0017`. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags, six owned
+stays `0017`. Landing pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
+observer semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags, six owned
 flags, replay-v23/codec `v21` when selected, `/v1`, `observer-protocol-v1`,
 and Alembic `0017`. See
 [infrastructure networks](infrastructure-networks.md).

@@ -65,6 +65,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V27,
     WorldEvent,
     normalize_events,
 )
@@ -81,6 +82,7 @@ from world.production import ProductionJob, Structure, ToolMark
 from world.regions import Journey, RegionsMigrationSpec
 from world.repositories import KnowledgeRepository
 from world.subjective_value import ExchangeOffer
+from world.travel_network import RouteCondition
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.persistence")
 
@@ -103,6 +105,7 @@ class SnapshotExtensions(TypedDict, total=False):
     regions_migration: RegionsMigrationSpec | None
     journeys: Sequence[Journey] | None
     infrastructure: Sequence[InfrastructureAsset] | None
+    travel_network: Sequence[RouteCondition] | None
 
 
 # New-write versions for physical replay-v5 runs (structured communication).
@@ -136,6 +139,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
@@ -160,7 +164,9 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20",
+        "v21",
+        "v25",
     }
 )
 
@@ -275,6 +281,7 @@ def checkpoint_schema_for_production(
     regions_migration_active: bool = False,
     cultural_contact_active: bool = False,
     infrastructure_networks_active: bool = False,
+    travel_network_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
@@ -285,6 +292,20 @@ def checkpoint_schema_for_production(
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
+    if travel_network_active:
+        from simulation.versioning import (
+            TRAVEL_NETWORK_WRITE_PAIR_CODEC,
+            TRAVEL_NETWORK_WRITE_PAIR_EVENT,
+        )
+
+        pair = TRAVEL_NETWORK_WRITE_PAIR_EVENT, TRAVEL_NETWORK_WRITE_PAIR_CODEC
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=travel_network_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if infrastructure_networks_active:
         pair = EVENT_SCHEMA_REPLAY_V23, "v21"
         _LOG.info(
@@ -476,6 +497,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }:
         return projector_version == "v2"
     return False
@@ -657,6 +679,7 @@ class WorldSnapshot:
     regions_migration: RegionsMigrationSpec | None = None
     journeys: Sequence[Journey] | None = None
     infrastructure: Sequence[InfrastructureAsset] | None = None
+    travel_network: Sequence[RouteCondition] | None = None
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -736,13 +759,21 @@ class WorldSnapshot:
             journey_rows = tuple(raw_journeys)
             if any(type(item) is not Journey for item in journey_rows):
                 raise TypeError("journeys entries must be Journey")
-        if self.persistence_codec_version == "v21":
-            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V23:
-                raise ValueError("codec v21 requires event schema 23")
+        if self.persistence_codec_version in {"v21", "v25"}:
+            expected_schema = (
+                EVENT_SCHEMA_REPLAY_V23
+                if self.persistence_codec_version == "v21"
+                else EVENT_SCHEMA_REPLAY_V27
+            )
+            if self.event_schema_version != expected_schema:
+                raise ValueError(
+                    f"codec {self.persistence_codec_version} requires event schema "
+                    f"{expected_schema}"
+                )
             if (self.regions_migration is None) != (journey_rows is None):
                 raise ValueError(
-                    "codec v21 regions_migration and journeys must both be set "
-                    "or both absent"
+                    f"codec {self.persistence_codec_version} regions_migration and "
+                    "journeys must both be set or both absent"
                 )
         elif self.persistence_codec_version in {"v19", "v20"}:
             expected = (
@@ -773,12 +804,57 @@ class WorldSnapshot:
             infra_rows = tuple(self.infrastructure)
             if any(type(item) is not InfrastructureAsset for item in infra_rows):
                 raise TypeError("infrastructure entries must be InfrastructureAsset")
-        if self.persistence_codec_version == "v21":
+        if self.persistence_codec_version in {"v21", "v25"}:
             if infra_rows is None:
-                raise ValueError("codec v21 requires infrastructure channel rows")
+                raise ValueError(
+                    f"codec {self.persistence_codec_version} requires "
+                    "infrastructure channel rows"
+                )
         elif infra_rows is not None:
             raise ValueError("infrastructure checkpoint fields require codec v21")
         object.__setattr__(self, "infrastructure", infra_rows)
+        route_rows: tuple[RouteCondition, ...] | None
+        if self.travel_network is None:
+            route_rows = None
+        else:
+            if isinstance(self.travel_network, (str, bytes, Mapping)) or not isinstance(
+                self.travel_network, Sequence
+            ):
+                raise TypeError("travel_network must be an ordered sequence or None")
+            from world.travel_network import (
+                MAX_ROUTE_CONDITIONS,
+                require_route_conditions,
+            )
+
+            route_rows = require_route_conditions(
+                self.travel_network, max_items=MAX_ROUTE_CONDITIONS
+            )
+            if any(type(item) is not RouteCondition for item in route_rows):
+                raise TypeError("travel_network entries must be RouteCondition")
+        if self.persistence_codec_version == "v25":
+            if route_rows is None:
+                raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
+            if self.regions_migration is None:
+                raise ValueError("travel_network_checkpoint_requires_regions")
+        elif route_rows is not None:
+            raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
+        if route_rows is not None:
+            if route_rows != tuple(
+                sorted(route_rows, key=lambda row: row.edge_key)
+            ):
+                raise ValueError("travel_network_checkpoint_invalid_rows")
+            adjacency = {
+                location.entity_id: set(location.adjacent)
+                for location in self.locations
+            }
+            seen_edges: set[tuple[str, str]] = set()
+            for row in route_rows:
+                if row.edge_key in seen_edges:
+                    raise ValueError("travel_network_checkpoint_invalid_rows")
+                seen_edges.add(row.edge_key)
+                if row.destination_id not in adjacency.get(row.origin_id, set()):
+                    raise ValueError("travel_network_checkpoint_invalid_rows")
+        object.__setattr__(self, "travel_network", route_rows)
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
         bootstrap = WorldBootstrap(
@@ -929,6 +1005,12 @@ class WorldSnapshot:
                     "codec_schema_mismatch reason_code=codec_v21_requires_schema_23"
                 )
                 raise ValueError("codec v21 requires event schema 23")
+        elif self.persistence_codec_version == "v25":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V27:
+                _LOG.error(
+                    "codec_schema_mismatch reason_code=codec_v25_requires_schema_27"
+                )
+                raise ValueError("codec v25 requires event schema 27")
         elif self.persistence_codec_version == "v17":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V19:
                 _LOG.error(
@@ -962,7 +1044,9 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
-                "v20", "v21",
+                "v20",
+                "v21",
+                "v25",
             }
             and self.active_hazards
         ):
@@ -985,7 +1069,9 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
-                "v20", "v21",
+                "v20",
+                "v21",
+                "v25",
             }
             and self.artifacts
         ):
@@ -1018,7 +1104,9 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
-                "v20", "v21",
+                "v20",
+                "v21",
+                "v25",
             }
             and records
         ):
@@ -1049,7 +1137,9 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
-                "v20", "v21",
+                "v20",
+                "v21",
+                "v25",
             }
             and kinship_rows
         ):
@@ -1081,7 +1171,9 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
-                "v20", "v21",
+                "v20",
+                "v21",
+                "v25",
             }
             and need_rows
         ):
@@ -1108,7 +1200,9 @@ class WorldSnapshot:
                 "v17",
                 "v18",
                 "v19",
-                "v20", "v21",
+                "v20",
+                "v21",
+                "v25",
             }
             and repo_rows
         ):
@@ -1126,7 +1220,18 @@ class WorldSnapshot:
         object.__setattr__(self, "corpse_custody_item_ids", tuple(custody_ids))
         if (
             self.persistence_codec_version
-            not in {"v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21"}
+            not in {
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+                "v20",
+                "v21",
+                "v25",
+            }
             and custody_ids
         ):
             _LOG.error(
@@ -1143,7 +1248,7 @@ class WorldSnapshot:
         object.__setattr__(self, "exchange_offers", tuple(offer_rows))
         if (
             self.persistence_codec_version
-            not in {"v15", "v16", "v17", "v18", "v19", "v20", "v21"}
+            not in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25"}
             and offer_rows
         ):
             _LOG.error(
@@ -1160,7 +1265,8 @@ class WorldSnapshot:
             project_rows.append(raw)
         object.__setattr__(self, "collective_projects", tuple(project_rows))
         if (
-            self.persistence_codec_version not in {"v17", "v18", "v19", "v20", "v21"}
+            self.persistence_codec_version
+            not in {"v17", "v18", "v19", "v20", "v21", "v25"}
             and project_rows
         ):
             _LOG.warning(
@@ -1170,7 +1276,14 @@ class WorldSnapshot:
                 len(project_rows),
             )
             raise ValueError("collective_projects require codec v17")
-        if self.persistence_codec_version not in {"v17", "v18", "v19", "v20", "v21"}:
+        if self.persistence_codec_version not in {
+            "v17",
+            "v18",
+            "v19",
+            "v20",
+            "v21",
+            "v25",
+        }:
             for structure in self.structures:
                 if structure.kind in {StructureKind.BRIDGE, StructureKind.RECORD_SITE}:
                     _LOG.warning(
@@ -1179,7 +1292,7 @@ class WorldSnapshot:
                         structure.kind.value,
                     )
                     raise ValueError("bridge and record_site require codec v17")
-        if self.persistence_codec_version not in {"v18", "v19", "v20", "v21"}:
+        if self.persistence_codec_version not in {"v18", "v19", "v20", "v21", "v25"}:
             for structure in self.structures:
                 if structure.kind in {StructureKind.WELL, StructureKind.WARNING_POST}:
                     _LOG.warning(
@@ -1189,7 +1302,7 @@ class WorldSnapshot:
                     )
                     raise ValueError("well and warning_post require codec v18")
 
-        if self.persistence_codec_version not in {"v21"}:
+        if self.persistence_codec_version not in {"v21", "v25"}:
             for structure in self.structures:
                 if structure.kind in {
                     StructureKind.ROAD,
@@ -1217,7 +1330,9 @@ class WorldSnapshot:
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             custody_count = sum(
                 1
@@ -1330,7 +1445,7 @@ class RunCreateRequest:
             EVENT_SCHEMA_REPLAY_V21,
             EVENT_SCHEMA_REPLAY_V22,
             EVENT_SCHEMA_REPLAY_V23,
-        } and self.persistence_codec_version in {"v19", "v20", "v21"}
+        } and self.persistence_codec_version in {"v19", "v20", "v21", "v25"}
         production_checkpoint = (
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V6
             and self.persistence_codec_version == "v3"
@@ -1776,8 +1891,6 @@ class ReplayCommitPage:
             raise TypeError("next_from_tick must be Tick or None")
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class DurableHead:
     """Detached verified durable run head; no retained engine or cache."""
@@ -1799,13 +1912,15 @@ class DurableHead:
             raise TypeError("DurableHead.next_tick must be Tick")
         if type(self.revision) is not WorldRevision:
             raise TypeError("DurableHead.revision must be WorldRevision")
-        if self.last_commit_hash is not None and type(
-            self.last_commit_hash
-        ) is not CommitHash:
+        if (
+            self.last_commit_hash is not None
+            and type(self.last_commit_hash) is not CommitHash
+        ):
             raise TypeError("DurableHead.last_commit_hash must be CommitHash or None")
-        if self.latest_event_tick is not None and type(
-            self.latest_event_tick
-        ) is not Tick:
+        if (
+            self.latest_event_tick is not None
+            and type(self.latest_event_tick) is not Tick
+        ):
             raise TypeError("DurableHead.latest_event_tick must be Tick or None")
         if self.latest_event_sequence is not None:
             object.__setattr__(
@@ -1938,9 +2053,7 @@ async def resolve_durable_head(
         )
         latest_commit = commits[-1] if commits else None
     if hasattr(journal, "get_latest_event"):
-        latest_event = await journal.get_latest_event(
-            run_id, through_tick=through_tick
-        )
+        latest_event = await journal.get_latest_event(run_id, through_tick=through_tick)
     else:
         latest_event = None
     if latest_commit is None:
@@ -1960,12 +2073,8 @@ async def resolve_durable_head(
         next_tick=Tick(latest_commit.tick.value + 1),
         revision=latest_commit.resulting_revision,
         last_commit_hash=latest_commit.commit_hash,
-        latest_event_tick=(
-            None if latest_event is None else Tick(latest_event.tick)
-        ),
-        latest_event_sequence=(
-            None if latest_event is None else latest_event.sequence
-        ),
+        latest_event_tick=(None if latest_event is None else Tick(latest_event.tick)),
+        latest_event_sequence=(None if latest_event is None else latest_event.sequence),
         event_schema_version=manifest.event_schema_version,
         projector_version=manifest.projector_version,
         persistence_codec_version=manifest.persistence_codec_version,

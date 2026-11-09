@@ -13,6 +13,9 @@ modify travel, capacity, production, storage, and risk while the asset stays
 Assets are content-addressed `infra-` ids. Topology is **node** or **edge** only
 (`Location.adjacent`); there is no grid, coordinate, polygon, or planner.
 
+V4-17 deepens this contract with route-level travel conditions and snapshot v2
+route rows; see [travel network](travel-network.md).
+
 ## Ownership and activation
 
 | Surface | Pin |
@@ -25,7 +28,7 @@ Assets are content-addressed `infra-` ids. Topology is **node** or **edge** only
 | Alembic | head stays **`0017`** |
 | Commands | **43** |
 | Observer semantics | **73** types (new event kinds alias existing semantic strings) |
-| Metrics | **188** families (four infrastructure families append after 184) |
+| Metrics | **188** families at V4-16 landing; **192** with the V4-17 travel-network append |
 
 Fail closed:
 
@@ -104,12 +107,15 @@ New event detail kinds alias existing observer semantics (pin 73):
 
 ## Metrics and research surfaces
 
-Four detached families raise the catalog 184 → **188**:
+Four detached families raise the catalog 184 → **188** at V4-16 landing:
 
 - `infrastructure_network_structure@1`
 - `infrastructure_condition_lifecycle@1`
 - `infrastructure_effect_coverage@1`
 - `infrastructure_maintenance_burden@1`
+
+V4-17 appends four travel-network families (catalog **192**); see
+[travel network](travel-network.md).
 
 Emit only when `MetricComputationInputs.infrastructure_networks_analysis` is
 supplied. Value keys are counts, availability, and quantized ratios — never a
@@ -119,10 +125,11 @@ Dual-gate research surfaces:
 
 - env `PALIMPSEST_INFRASTRUCTURE_NETWORKS_ROOT` /
   `PALIMPSEST_INFRASTRUCTURE_NETWORKS_CURSOR_KEY` (≥32 UTF-8 bytes);
-- snapshot `infrastructure-networks-snapshot-v1` / store-v1;
-- six SUBJECTIVE_DEBUG GET routes under
+- snapshot `infrastructure-networks-snapshot-v2` / store-v1 (v1 remains
+  decodable); v2 carries bounded objective route rows;
+- seven SUBJECTIVE_DEBUG GET routes under
   `/v1/simulations/{run_id}/infrastructure-networks`
-  (summary, assets, edges, condition, effects, maintenance);
+  (summary, assets, edges, condition, effects, maintenance, routes);
 - Research UI view `infrastructure-networks`;
 - Godot overlays for node / edge / damaged / destroyed (objective only).
 

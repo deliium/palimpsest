@@ -132,8 +132,8 @@ The catalog appends three families, raising the count from 157 to **160**:
 - `representation_recognition_support@1`
 - `representation_scope_alignment@1`
 
-The first 157 families keep their ids, order, versions, and value keys. Pins
-remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
+The first 157 families keep their ids, order, versions, and value keys. Landing
+pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
 188 metric families, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and
 Alembic `0017`.
 

@@ -72,13 +72,14 @@ def test_owned_flags_include_infrastructure_and_stay_equal() -> None:
 
 
 def test_wire_pins_for_infrastructure_landing() -> None:
-    assert METRIC_FAMILY_COUNT == 188
+    assert METRIC_FAMILY_COUNT == 192
     assert EVENT_SCHEMA_REPLAY_V23 == 23
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V23 in ACCEPTED_EVENT_SCHEMA_VERSIONS
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 23
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"

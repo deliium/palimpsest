@@ -13,7 +13,9 @@ from simulation.infrastructure_models import InfrastructureNetworksSnapshot
 from simulation.infrastructure_paging import (
     MAX_PAGE_LIMIT,
     InfrastructureNetworksRowSelection,
+    TravelRouteRowSelection,
     page_infrastructure_networks_rows,
+    page_travel_routes,
 )
 
 __all__ = [
@@ -24,6 +26,7 @@ __all__ = [
     "InfrastructureNetworksPublisherPort",
     "InfrastructureNetworksReadPort",
     "InfrastructureNetworksSummary",
+    "bounded_travel_route_rows",
     "infrastructure_networks_cursor_matches",
     "infrastructure_networks_query_fingerprint",
 ]
@@ -37,6 +40,7 @@ INFRASTRUCTURE_NETWORKS_CURSOR_PURPOSES: Final[tuple[str, ...]] = (
     "condition",
     "effects",
     "maintenance",
+    "infrastructure_networks_routes",
 )
 _PURPOSE_SET: Final[frozenset[str]] = frozenset(INFRASTRUCTURE_NETWORKS_CURSOR_PURPOSES)
 
@@ -55,6 +59,13 @@ class InfrastructureNetworksSummary:
     destroyed_count: int = 0
     effects_active_count: int = 0
     coverage: str = "not_applicable"
+    route_count: int = 0
+    route_open_count: int = 0
+    route_restricted_count: int = 0
+    route_closed_count: int = 0
+    route_weather_count: int = 0
+    route_seasonal_count: int = 0
+    route_hazard_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +118,7 @@ def infrastructure_networks_query_fingerprint(
         "after_key": after_key,
         "digest": digest,
         "filters": {
-            str(key): (filters or {})[key]
-            for key in sorted((filters or {}), key=str)
+            str(key): (filters or {})[key] for key in sorted((filters or {}), key=str)
         },
         "limit": limit,
         "publication_id": publication_id,
@@ -161,6 +171,14 @@ def bounded_infrastructure_networks_rows(
     return selection
 
 
+def bounded_travel_route_rows(
+    snapshot: InfrastructureNetworksSnapshot,
+    after_key: str | None,
+    limit: int,
+) -> TravelRouteRowSelection:
+    return page_travel_routes(snapshot, after_key=after_key, limit=limit)
+
+
 @runtime_checkable
 class InfrastructureNetworksReadPort(Protocol):
     def summary(self, run_id: str) -> InfrastructureNetworksSummary | None: ...
@@ -168,6 +186,14 @@ class InfrastructureNetworksReadPort(Protocol):
     def read_snapshot(
         self, run_id: str, publication_id: str | None = None
     ) -> InfrastructureNetworksSnapshot | None: ...
+
+    def routes(
+        self,
+        run_id: str,
+        *,
+        after_key: str | None = None,
+        limit: int | None = None,
+    ) -> TravelRouteRowSelection | None: ...
 
     def list_publications(self, run_id: str) -> tuple[str, ...]: ...
 

@@ -241,7 +241,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "Wire shape change for WorldEvent / occurrence details; "
             "requires new ACCEPTED_* member and replay fixtures. "
             "Lifecycle channel writes replay-v9; scaffolding write stays "
-            "replay-v5 when lifecycle off. Regional migration writes replay-v21."
+            "replay-v5 when lifecycle off. Regional migration writes replay-v21, "
+            "infrastructure networks replay-v23, and the V4-17 travel network "
+            "writes replay-v27; infrastructure-only runs keep replay-v23."
         ),
         owner_package="world.events / simulation.persistence",
         v1_fixture_impact=(
@@ -264,7 +266,10 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "Canonical JSON codec for manifests/snapshots/commits changes. "
             "Write stays v2. Codec v3 is an accepted restore written only when "
             "the production catalog is non-empty. Codec v19 carries optional "
-            "regions, routes, and pending journeys with replay-v21."
+            "regions, routes, and pending journeys with replay-v21; codec v21 "
+            "carries infrastructure networks with replay-v23; codec v25 adds "
+            "the V4-17 travel-network rows with replay-v27 while v21/v19 "
+            "restores remain accepted."
         ),
         owner_package="simulation.persistence / simulation.journal",
         v1_fixture_impact="Codec v1 and v2 restores remain accepted",
@@ -532,11 +537,14 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "restores DISABLED; "
             "v9 omits reputation_mode and restores DISABLED; "
             f"{RUNNER_SCHEMA_VERSION_V56} is accepted for V4 scaffolding and "
-            "carries the closed v4_capability_flags sibling; organizations is "
-            "owned by V4-03 and formal_rules is owned by V4-06 while the other "
-            "ten V4 flags are unowned, and any "
-            "enabled unowned flag fails closed at "
+            "carries the closed v4_capability_flags sibling; six V4 flags are "
+            "owned (V4-03/V4-06/V4-07/V4-10/V4-12/V4-16) while the remaining "
+            "six are unowned, and any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with capability_unimplemented; "
+            "V4-17 deepens infrastructure_networks without adding a flag, "
+            "context, or v57, and activates the separate deepening pair "
+            "event 27 / codec v25 only when the travel-network channel is "
+            "active; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
             f"feature runner remains {RUNNER_SCHEMA_VERSION_V55})."
         ),
@@ -774,9 +782,11 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{V4_CAPABILITY_FLAGS_WIRE_KEY} is a sibling of capability_flags and "
             f"{V3_CAPABILITY_FLAGS_WIRE_KEY}; organizations is owned by "
             f"V4-03/V4-04/V4-05, formal_rules is owned by V4-06, legal_disputes "
-            f"is owned by V4-07, diplomacy is owned by V4-10, and "
-            f"organized_conflict is owned by V4-12 on "
-            f"{RUNNER_SCHEMA_VERSION_V56}; the other seven flags are unowned, "
+            f"is owned by V4-07, diplomacy is owned by V4-10, "
+            f"organized_conflict is owned by V4-12, and infrastructure_networks "
+            f"is owned by V4-16 on "
+            f"{RUNNER_SCHEMA_VERSION_V56}; V4-17 deepens infrastructure_networks "
+            "without adding a V4 flag or v57; the other six flags are unowned, "
             "so any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"

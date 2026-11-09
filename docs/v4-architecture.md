@@ -127,7 +127,7 @@ ledger, a socially disputed but physically possible command is still admitted,
 and a physically impossible command is still rejected by existing world rules.
 Detached analysis may classify researcher-only objective alignment
 (`supported`, `unresolved`, `inconsistent`, `not_applicable`) and publishes
-`dispute-resolution-snapshot-v1`; six GET-only routes serve it under
+`dispute-resolution-snapshot-v1`; seven GET-only routes serve it under
 `SUBJECTIVE_DEBUG`. No court, judge, verdict, binding settlement, forced
 transfer, or global dispute registry exists.
 
@@ -265,10 +265,10 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 188 families (V4-16 appends four infrastructure families after V4-15's 184) | `analysis.specifications` |
+| Metric catalog | 192 families (V4-16 184 → 188; V4-17 188 → 192) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
-| Infrastructure routes | six GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
+| Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
 | HTTP API | `/v1` | `api` |
 
 ## Compatibility and deprecation policy
@@ -353,7 +353,7 @@ terminations, and conflicts are retained owner beliefs. There is no polity,
 border, citizenship, treaty store, treaty authority, envoy registry, army, war
 state, or bilateral score. Detached analysis derives six independent lanes and
 four metric families (catalog 160 -> 164). Canonical `diplomacy-snapshot-v1` and
-`diplomacy-store-v1` publications are served by six GET-only routes under
+`diplomacy-store-v1` publications are served by seven GET-only routes under
 `SUBJECTIVE_DEBUG`. See `docs/diplomacy.md`.
 
 ## V4-11 treaties and ceasefires seam
@@ -404,3 +404,17 @@ metric families (176 -> 180), `migration-displacement-snapshot-v1`,
 `migration-displacement-store-v1`, six GET routes, a Research UI panel, and four
 presentation overlays. See
 [migration and displacement](migration-displacement.md).
+
+## V4-17 travel network
+
+V4-17 deepens the owned `infrastructure_networks` context and the V3
+`multi_polity_migration` / `regions_migration` seam. It adds no V4 context or
+flag; the registry stays 14 contexts / 12 flags / six owned. The travel-network
+channel is active only when `infrastructure_networks` and `regions_migration`
+are both present; it writes replay-v27 / codec `v25`. Reserved pairs 23–26 /
+`v21`–`v24` are unchanged. Infrastructure-only runs keep `(23, "v21")` and
+regions-only runs keep `(21, "v19")`. Route conditions are objective facts under
+locked policy `travel-network.v1`; `Move`, `Transport`, and `Flee` enforce them,
+adjacent `VisibleExit` rows expose local facts only, and owner-scoped route
+beliefs remain fallible. Four metric families append the catalog to **192**;
+observer semantics stay **73**, commands **43**, and Alembic **0017**.

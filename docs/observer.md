@@ -210,3 +210,11 @@ Participants see themselves as targets and living agents already present see
 the occurrence as witnesses. Non-present agents receive nothing. The Godot
 client registers the type in `KNOWN_TYPES`, routes it as an activity event, and
 does not gain any write authority.
+
+## Travel-network route status (V4-17)
+
+The Godot infrastructure layer maps objective route status onto existing
+objective infrastructure styling: open routes use the edge style, restricted
+routes the damaged style, and closed routes the destroyed style. Unknown status
+falls back to neutral. No new overlay kind, evidence class, or write path is
+added.

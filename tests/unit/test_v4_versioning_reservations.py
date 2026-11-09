@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -15,13 +15,20 @@ from simulation.persistence import (
 )
 from simulation.v4_architecture import V4_CONTEXTS, V4ContextId
 from simulation.versioning import (
+    TRAVEL_NETWORK_WRITE_PAIR_CODEC,
+    TRAVEL_NETWORK_WRITE_PAIR_EVENT,
+    V4_DEEPENING_WRITE_PAIRS,
     V4_EVENT_REUSING_CONTEXTS,
     V4_WRITE_PAIR_RESERVATIONS,
     WritePairReservation,
     reservation_for_context,
+    validate_deepening_write_pairs,
     validate_write_pair_reservations,
 )
-from world.events import EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V22,
+    EVENT_SCHEMA_REPLAY_V27,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -43,12 +50,68 @@ def test_reservations_validate_and_span_23_to_26() -> None:
 
 
 def test_current_wire_maxima_are_unchanged() -> None:
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V23 == 23
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V27 == 27
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
+
+
+def test_deepening_pair_is_separate_and_contiguous() -> None:
+    validate_deepening_write_pairs()
+    assert [item.event_schema for item in V4_WRITE_PAIR_RESERVATIONS] == [
+        23,
+        24,
+        25,
+        26,
+    ]
+    assert [item.codec_version for item in V4_WRITE_PAIR_RESERVATIONS] == [
+        "v21",
+        "v22",
+        "v23",
+        "v24",
+    ]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27]
+    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == ["v25"]
+    assert TRAVEL_NETWORK_WRITE_PAIR_EVENT == 27
+    assert TRAVEL_NETWORK_WRITE_PAIR_CODEC == "v25"
+    reserved_events = {item.event_schema for item in V4_WRITE_PAIR_RESERVATIONS}
+    reserved_codecs = {item.codec_version for item in V4_WRITE_PAIR_RESERVATIONS}
+    assert reserved_events.isdisjoint(
+        {item.event_schema for item in V4_DEEPENING_WRITE_PAIRS}
+    )
+    assert reserved_codecs.isdisjoint(
+        {item.codec_version for item in V4_DEEPENING_WRITE_PAIRS}
+    )
+
+
+def test_deepening_pair_mutations_are_rejected() -> None:
+    pair = V4_DEEPENING_WRITE_PAIRS[0]
+    with pytest.raises(ValueError, match="v4_deepening_pair_overlap"):
+        validate_deepening_write_pairs((replace(pair, event_schema=23),))
+    with pytest.raises(ValueError, match="v4_deepening_pair_overlap"):
+        validate_deepening_write_pairs((replace(pair, codec_version="v21"),))
+    with pytest.raises(ValueError, match="v4_deepening_pair_noncontiguous_event"):
+        validate_deepening_write_pairs(
+            (pair, replace(pair, event_schema=29, codec_version="v27"))
+        )
+    with pytest.raises(ValueError, match="v4_deepening_pair_noncontiguous_codec"):
+        validate_deepening_write_pairs(
+            (pair, replace(pair, event_schema=28, codec_version="v27"))
+        )
+    with pytest.raises(ValueError, match="v4_deepening_pair_unknown_context"):
+        validate_deepening_write_pairs(
+            (replace(pair, context_id=cast(V4ContextId, "not_a_context")),)
+        )
+    with pytest.raises(ValueError, match="v4_deepening_pair_unowned_context"):
+        validate_deepening_write_pairs(
+            (replace(pair, context_id=V4ContextId.SOCIETAL_RESILIENCE),)
+        )
+    with pytest.raises(ValueError, match="v4_deepening_pair_unowned_context"):
+        validate_deepening_write_pairs(
+            (replace(pair, context_id=V4ContextId.MARKETS_CREDIT),)
+        )
 
 
 def test_contexts_are_exactly_covered_and_disjoint() -> None:

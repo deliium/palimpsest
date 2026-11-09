@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -20,6 +21,7 @@ __all__ = [
     "INFRASTRUCTURE_NETWORKS_ANALYSIS_POLICY_VERSION",
     "InfrastructureAssetAnalysisRow",
     "InfrastructureNetworksAnalysis",
+    "TravelRouteAnalysisRow",
     "harvest_infrastructure_networks_analysis",
 ]
 
@@ -98,10 +100,72 @@ class InfrastructureAssetAnalysisRow:
 
 
 @dataclass(frozen=True, slots=True)
+class TravelRouteAnalysisRow:
+    """Detached objective route condition row plus optional belief counts."""
+
+    origin_id: str
+    destination_id: str
+    status: str
+    seasonal_availability: str
+    blockage_cause: str
+    duration_ticks: int
+    fatigue_cost: float
+    capacity: int
+    risk: float
+    infrastructure_quality: float
+    as_of_tick: int
+    observed_belief_count: int = 0
+    believed_closed_count: int = 0
+    believed_restricted_count: int = 0
+
+    def __post_init__(self) -> None:
+        for name in ("origin_id", "destination_id"):
+            value = getattr(self, name)
+            if type(value) is not str or not value:
+                raise ValueError(f"travel_network_analysis: invalid_{name}")
+        for name in ("status", "seasonal_availability", "blockage_cause"):
+            value = getattr(self, name)
+            if type(value) is not str or not value:
+                raise ValueError(f"travel_network_analysis: invalid_{name}")
+        if self.status not in {"open", "restricted", "closed"}:
+            raise ValueError("travel_network_analysis: invalid_status")
+        if self.seasonal_availability not in {"open", "restricted", "closed"}:
+            raise ValueError("travel_network_analysis: invalid_availability")
+        if self.blockage_cause not in {"none", "weather", "seasonal", "hazard"}:
+            raise ValueError("travel_network_analysis: invalid_blockage")
+        for name in (
+            "duration_ticks",
+            "capacity",
+            "as_of_tick",
+            "observed_belief_count",
+            "believed_closed_count",
+            "believed_restricted_count",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or type(value) is not int or value < 0:
+                raise ValueError(f"travel_network_analysis: invalid_{name}")
+        if self.duration_ticks < 1 or not 1 <= self.capacity <= 24:
+            raise ValueError("travel_network_analysis: invalid_capacity")
+        for name in ("fatigue_cost", "risk", "infrastructure_quality"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"travel_network_analysis: invalid_{name}")
+            number = float(value)
+            if not math.isfinite(number) or number < 0.0:
+                raise ValueError(f"travel_network_analysis: invalid_{name}")
+        if not 0.0 <= float(self.risk) <= 1.0:
+            raise ValueError("travel_network_analysis: invalid_risk")
+        if not 0.0 <= float(self.infrastructure_quality) <= 1.0:
+            raise ValueError("travel_network_analysis: invalid_quality")
+
+
+@dataclass(frozen=True, slots=True)
 class InfrastructureNetworksAnalysis:
     """Optional emit-gate payload for the four infrastructure metric families."""
 
     assets: tuple[InfrastructureAssetAnalysisRow, ...]
+    routes: tuple[TravelRouteAnalysisRow, ...] = ()
+    route_coverage_expected: int = 0
     window_tick: int = 0
     policy_version: str = INFRASTRUCTURE_NETWORKS_ANALYSIS_POLICY_VERSION
 
@@ -129,15 +193,44 @@ class InfrastructureNetworksAnalysis:
             "assets",
             tuple(sorted(self.assets, key=lambda row: row.asset_id)),
         )
+        if type(self.routes) is not tuple:
+            raise ValueError("travel_network_analysis: invalid_routes")
+        if any(type(row) is not TravelRouteAnalysisRow for row in self.routes):
+            raise ValueError("travel_network_analysis: invalid_routes")
+        if (
+            isinstance(self.route_coverage_expected, bool)
+            or type(self.route_coverage_expected) is not int
+            or self.route_coverage_expected < 0
+        ):
+            raise ValueError("travel_network_analysis: invalid_coverage")
+        object.__setattr__(
+            self,
+            "routes",
+            tuple(
+                sorted(
+                    self.routes,
+                    key=lambda row: (
+                        min(row.origin_id, row.destination_id),
+                        max(row.origin_id, row.destination_id),
+                    ),
+                )
+            ),
+        )
 
     @property
     def asset_count(self) -> int:
         return len(self.assets)
 
+    @property
+    def route_count(self) -> int:
+        return len(self.routes)
+
 
 def harvest_infrastructure_networks_analysis(
     assets: Mapping[object, InfrastructureAsset] | Sequence[InfrastructureAsset] | None,
     *,
+    routes: Sequence[TravelRouteAnalysisRow] = (),
+    route_coverage_expected: int = 0,
     window_tick: int = 0,
 ) -> InfrastructureNetworksAnalysis:
     """Build analysis rows from objective ``InfrastructureAsset`` records."""
@@ -152,7 +245,12 @@ def harvest_infrastructure_networks_analysis(
         rows = tuple(
             _row_from_asset(asset, window_tick=window_tick) for asset in assets
         )
-    analysis = InfrastructureNetworksAnalysis(assets=rows, window_tick=window_tick)
+    analysis = InfrastructureNetworksAnalysis(
+        assets=rows,
+        routes=tuple(routes),
+        route_coverage_expected=route_coverage_expected,
+        window_tick=window_tick,
+    )
     _LOG.debug(
         "infrastructure_networks_harvest asset_count=%s window_tick=%s",
         analysis.asset_count,

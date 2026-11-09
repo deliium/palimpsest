@@ -22,6 +22,13 @@ class InfrastructureNetworksSummaryOut(BaseModel):
     destroyed_count: int
     effects_active_count: int
     coverage: str
+    route_count: int = 0
+    route_open_count: int = 0
+    route_restricted_count: int = 0
+    route_closed_count: int = 0
+    route_weather_count: int = 0
+    route_seasonal_count: int = 0
+    route_hazard_count: int = 0
 
 
 class InfrastructureAssetOut(BaseModel):
@@ -47,3 +54,28 @@ class InfrastructureAssetPageOut(BaseModel):
 
     items: tuple[InfrastructureAssetOut, ...]
     next_cursor: str | None = None
+
+
+class TravelRouteOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    origin_location_id: str
+    destination_location_id: str
+    status: str
+    seasonal_availability: str
+    blockage_cause: str
+    duration_ticks: int
+    fatigue_cost: float
+    capacity: int
+    risk: float
+    infrastructure_quality: float
+    as_of_tick: int
+
+
+class TravelRoutePageOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: tuple[TravelRouteOut, ...]
+    next_cursor: str | None = None
+    fingerprint: str
+    publication: str

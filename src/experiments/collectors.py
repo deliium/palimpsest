@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Final, cast
 
@@ -102,6 +102,88 @@ def generation_index_from_lifecycle_records(
     return derived or None
 
 
+def _travel_route_belief_counts(
+    arm: Any,
+) -> dict[tuple[str, str], tuple[int, int, int]]:
+    """Count owner-scoped destination route beliefs per believed edge."""
+    from memory.models import MemoryTrace
+
+    counts: dict[tuple[str, str], list[int]] = {}
+    evidence_rows = getattr(arm, "regional_destination_evidence", None)
+    if isinstance(evidence_rows, Sequence):
+        for row in tuple(evidence_rows):
+            origin_id = getattr(row, "origin_id", None)
+            destination_id = getattr(row, "destination_id", None)
+            if type(origin_id) is not str or type(destination_id) is not str:
+                continue
+            key = origin_id, destination_id
+            counts_row = counts.setdefault(key, [0, 0, 0])
+            counts_row[0] += 1
+            status = getattr(row, "route_status", None)
+            if status == "closed":
+                counts_row[1] += 1
+            elif status == "restricted":
+                counts_row[2] += 1
+        if counts:
+            return {key: (row[0], row[1], row[2]) for key, row in counts.items()}
+
+    traces = getattr(arm.runner_result, "regional_destination_traces", None)
+    if traces is None:
+        traces = getattr(arm, "regional_destination_traces", None)
+    if not isinstance(traces, Sequence):
+        return {}
+    counts = {}
+    for trace in tuple(traces):
+        if type(trace) is not MemoryTrace:
+            continue
+        if "destination" not in trace.context.tags:
+            continue
+        origin = next(
+            (
+                item.entity_id
+                for item in trace.entities
+                if item.label == "origin" and item.entity_id is not None
+            ),
+            None,
+        )
+        destination = next(
+            (
+                item.entity_id
+                for item in trace.entities
+                if item.label == "destination" and item.entity_id is not None
+            ),
+            None,
+        )
+        if origin is None or destination is None:
+            continue
+        status = _trace_route_value(trace.concepts, "c-status", "route_status")
+        key = origin.value, destination.value
+        row = counts.setdefault(key, [0, 0, 0])
+        row[0] += 1
+        if status == "closed":
+            row[1] += 1
+        elif status == "restricted":
+            row[2] += 1
+    return {key: (row[0], row[1], row[2]) for key, row in counts.items()}
+
+
+def _trace_route_value(
+    concepts: Sequence[object],
+    mention_id: str,
+    prefix: str,
+) -> str | None:
+    for concept in concepts:
+        concept_id = getattr(concept, "mention_id", None)
+        if getattr(concept_id, "value", None) != mention_id:
+            continue
+        value = getattr(concept, "concept", None)
+        if type(value) is not str:
+            return None
+        marker = f"{prefix}:"
+        return value[len(marker) :] if value.startswith(marker) else value
+    return None
+
+
 def assemble_arm_metric_bundle(
     arm: Any,
     *,
@@ -154,6 +236,34 @@ def assemble_arm_metric_bundle(
             offline_consolidation_report
         ),
         reflection_report=_optional_reflection_report(reflection_report),
+    )
+    travel_analysis = getattr(
+        arm.runner_result, "infrastructure_networks_analysis", None
+    )
+    if travel_analysis is None:
+        from experiments.infrastructure_completed_run import (
+            build_completed_run_infrastructure_networks_analysis,
+        )
+
+        travel_assets = (
+            getattr(arm.runner_result, "final_infrastructure_assets", None)
+            or getattr(arm.runner_result, "infrastructure_assets", ())
+            or ()
+        )
+        travel_routes = (
+            getattr(arm.runner_result, "final_travel_network", ()) or ()
+        )
+        if travel_assets or travel_routes:
+            travel_analysis = build_completed_run_infrastructure_networks_analysis(
+                travel_assets,
+                routes=travel_routes,
+                belief_counts=_travel_route_belief_counts(arm),
+                window_tick=ticks,
+            )
+    inputs = replace(
+        inputs,
+        travel_network_analysis=travel_analysis,
+        infrastructure_networks_analysis=travel_analysis,
     )
     regional_input = None
     naming_ledgers = getattr(arm, "terminology_ledgers", None)

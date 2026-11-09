@@ -27,12 +27,16 @@ from world.observations import Observation, VisibleExit
 
 REGIONAL_DESTINATION_MEMORY_POLICY_VERSION = "regional-destination-memory.v1"
 REGIONAL_MIGRATION_COGNITION_POLICY_VERSION = "regional-migration-cognition.v1"
+REGIONAL_ROUTE_QUALITY_POLICY_VERSION = "regional-route-quality.v1"
+MAX_DESTINATION_ROUTE_CONCEPTS = 6
 _DESTINATION_PREDICATE = "destination_accessible"
 _LOG = logging.getLogger("agents.cognition.regional_migration")
 
 __all__ = [
+    "MAX_DESTINATION_ROUTE_CONCEPTS",
     "REGIONAL_DESTINATION_MEMORY_POLICY_VERSION",
     "REGIONAL_MIGRATION_COGNITION_POLICY_VERSION",
+    "REGIONAL_ROUTE_QUALITY_POLICY_VERSION",
     "destination_action_biases",
     "destination_lane_id",
     "destination_memory_trace",
@@ -104,6 +108,77 @@ def destination_memory_trace(
                 f"region_id:{exit_view.destination_region_id}",
             )
         )
+    route_pairs = (
+        ("c-status", "route_status", exit_view.route_status),
+        (
+            "c-availability",
+            "route_seasonal_availability",
+            exit_view.route_seasonal_availability,
+        ),
+        ("c-blockage", "route_blockage_cause", exit_view.route_blockage_cause),
+        ("c-capacity", "route_capacity", exit_view.route_capacity),
+        ("c-risk", "route_risk", exit_view.route_risk),
+        (
+            "c-quality",
+            "route_infrastructure_quality",
+            exit_view.route_infrastructure_quality,
+        ),
+    )
+    route_concepts: list[ConceptMention] = []
+    route_relations: list[MemoryRelation] = []
+    predicates = {
+        "route_status": "destination_route_status",
+        "route_seasonal_availability": "destination_route_availability",
+        "route_blockage_cause": "destination_route_blockage",
+        "route_capacity": "destination_route_capacity",
+        "route_risk": "destination_route_risk",
+        "route_infrastructure_quality": "destination_route_quality",
+    }
+    for mention, field_name, value in route_pairs:
+        if value is None:
+            continue
+        rendered = (
+            f"{value:.6f}"
+            if field_name
+            in {
+                "route_risk",
+                "route_infrastructure_quality",
+            }
+            else str(value)
+        )
+        route_concepts.append(
+            ConceptMention(MentionId(mention), f"{field_name}:{rendered}")
+        )
+        route_relations.append(
+            MemoryRelation(
+                relation_id=MentionId(f"r-{mention.removeprefix('c-')}"),
+                subject=RelationEndpoint(
+                    kind=RelationEndpointKind.ENTITY,
+                    mention_id=MentionId("e-destination"),
+                ),
+                predicate=predicates[field_name],
+                object=RelationEndpoint(
+                    kind=RelationEndpointKind.CONCEPT,
+                    mention_id=MentionId(mention),
+                ),
+            )
+        )
+    if len(route_concepts) > MAX_DESTINATION_ROUTE_CONCEPTS:
+        _LOG.warning(
+            "destination_route_concepts_truncated count=%s cap=%s",
+            len(route_concepts),
+            MAX_DESTINATION_ROUTE_CONCEPTS,
+        )
+        route_concepts = route_concepts[:MAX_DESTINATION_ROUTE_CONCEPTS]
+        kept_mentions = {
+            concept.mention_id.value for concept in route_concepts
+        }
+        route_relations = [
+            relation
+            for relation in route_relations
+            if relation.object.mention_id.value in kept_mentions
+        ]
+    concepts.extend(route_concepts)
     entities = (
         EntityMention(
             MentionId("e-origin"), "origin", observation.self_body.location_id
@@ -112,7 +187,7 @@ def destination_memory_trace(
             MentionId("e-destination"), "destination", exit_view.destination_id
         ),
     )
-    relations = (
+    relations: tuple[MemoryRelation, ...] = (
         MemoryRelation(
             relation_id=MentionId("r-access"),
             subject=RelationEndpoint(
@@ -162,9 +237,17 @@ def destination_memory_trace(
             ),
         ),
     )
+    relations = (*relations, *route_relations)
     revision = observation.revision
     if type(revision) is not WorldRevision:
         raise TypeError("observation revision must be WorldRevision")
+    _LOG.debug(
+        "destination_route_belief_persisted owner_id=%s destination=%s "
+        "route_fields=%s",
+        owner_id.value,
+        exit_view.destination_id.value,
+        len(route_concepts),
+    )
     return MemoryTrace(
         memory_id=MemoryId(
             destination_lane_id(
@@ -311,6 +394,7 @@ def destination_action_biases(
         return biases
 
     route_edges: dict[EntityId, list[tuple[EntityId, float]]] = {}
+    believed_capacity_by_destination: dict[EntityId, int] = {}
     for trace in memories:
         if "destination" not in trace.context.tags:
             continue
@@ -332,28 +416,86 @@ def destination_action_biases(
             ),
             0.0,
         )
+        believed_status = _concept_value(
+            trace.concepts, "c-status", prefix="route_status"
+        )
+        believed_availability = _concept_value(
+            trace.concepts,
+            "c-availability",
+            prefix="route_seasonal_availability",
+        )
+        believed_blockage = _concept_value(
+            trace.concepts,
+            "c-blockage",
+            prefix="route_blockage_cause",
+        )
+        believed_capacity = _number_after_prefix_text(
+            _concept_value(
+                trace.concepts, "c-capacity", prefix="route_capacity"
+            ),
+            8.0,
+        )
+        believed_risk = _number_after_prefix_text(
+            _concept_value(trace.concepts, "c-risk", prefix="route_risk"), 0.0
+        )
+        believed_quality = _number_after_prefix_text(
+            _concept_value(
+                trace.concepts,
+                "c-quality",
+                prefix="route_infrastructure_quality",
+            ),
+            0.0,
+        )
         age = max(0, observation.tick - trace.provenance.source_tick)
         edge_confidence = trace.confidence / (1.0 + age / 64.0)
         if trace.provenance.kind is MemorySourceKind.COMMUNICATED:
             edge_confidence *= 0.7
         edge_cost = (
-            1.0 + duration / 20.0 + fatigue / 100.0 + (1.0 - edge_confidence) * 0.5
+            1.0
+            + duration / 20.0
+            + fatigue / 100.0
+            + believed_risk * 3.0
+            + (1.0 - believed_quality) * 0.5
+            + (1.0 - edge_confidence) * 0.5
         )
+        if believed_status == "restricted" or believed_availability == "restricted":
+            edge_cost += 1.0
+        if believed_status == "closed" or believed_availability == "closed":
+            continue
+        if believed_blockage not in {None, "none"}:
+            edge_cost += 1.0
+        if believed_capacity < 2:
+            edge_cost += 2.0
         for origin in origins:
             for destination in destinations:
                 if origin.entity_id is not None and destination.entity_id is not None:
                     route_edges.setdefault(origin.entity_id, []).append(
                         (destination.entity_id, edge_cost)
                     )
+                    prior_capacity = believed_capacity_by_destination.get(
+                        destination.entity_id
+                    )
+                    capacity_value = int(believed_capacity)
+                    believed_capacity_by_destination[destination.entity_id] = (
+                        capacity_value
+                        if prior_capacity is None
+                        else min(prior_capacity, capacity_value)
+                    )
 
     for exit_view in observation.exits:
         if exit_view.travel_duration_ticks is None:
+            continue
+        if exit_view.route_status == "closed":
             continue
         edge_cost = (
             1.0
             + exit_view.travel_duration_ticks / 20.0
             + float(exit_view.fatigue_cost or 0.0) / 100.0
+            + float(exit_view.route_risk or 0.0) * 3.0
+            + (1.0 - float(exit_view.route_infrastructure_quality or 0.0)) * 0.5
         )
+        if exit_view.route_status == "restricted":
+            edge_cost += 1.0
         route_edges.setdefault(observation.self_body.location_id, []).append(
             (exit_view.destination_id, edge_cost)
         )
@@ -393,7 +535,7 @@ def destination_action_biases(
             not hasattr(future, "future_id")
             or not hasattr(future, "direction")
             or not hasattr(future, "target_entity_id")
-            or future.direction.value != "move"
+            or future.direction.value not in {"move", "transport"}
             or future.target_entity_id is None
         ):
             continue
@@ -408,7 +550,15 @@ def destination_action_biases(
             1.0
             + selected_exit.travel_duration_ticks / 20.0
             + float(selected_exit.fatigue_cost or 0.0) / 100.0
+            + float(selected_exit.route_risk or 0.0) * 3.0
+            + (1.0 - float(selected_exit.route_infrastructure_quality or 0.0)) * 0.5
         )
+        if selected_exit.route_status == "restricted":
+            first_cost += 1.0
+        if selected_exit.route_seasonal_availability == "restricted":
+            first_cost += 0.5
+        if selected_exit.route_blockage_cause not in {None, "none"}:
+            first_cost += 1.0
         best = 0.0
         for resource_kind, need in need_by_resource.items():
             if need < 0.35:
@@ -449,6 +599,16 @@ def destination_action_biases(
             * 0.25,
         )
         score = max(-0.25, min(0.75, best - cost_penalty))
+        if selected_exit.route_status == "closed":
+            score -= 2.0
+        elif selected_exit.route_status == "restricted":
+            score -= 0.5
+        if future.direction.value == "transport":
+            capacity = selected_exit.route_capacity
+            if capacity is None:
+                capacity = believed_capacity_by_destination.get(first_hop)
+            if capacity is not None and capacity < 2:
+                score -= 2.0
         if score:
             biases[future.future_id] = score
 
@@ -464,6 +624,31 @@ def destination_action_biases(
         hop_limit,
     )
     return biases
+
+
+def _concept_value(
+    concepts: Sequence[ConceptMention],
+    mention_id: str,
+    *,
+    prefix: str | None = None,
+) -> str | None:
+    for concept in concepts:
+        if concept.mention_id.value != mention_id:
+            continue
+        if prefix is not None and concept.concept.startswith(f"{prefix}:"):
+            return concept.concept[len(prefix) + 1 :]
+        return concept.concept
+    return None
+
+
+def _number_after_prefix_text(value: str | None, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        number = float(value)
+    except ValueError:
+        return default
+    return number if number >= 0.0 else default
 
 
 def _number_after_prefix(value: str, prefix: str) -> float:

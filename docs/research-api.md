@@ -27,7 +27,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
 - Metric catalog and immutable metric documents
 - Subjective **projections** under `subjective_debug`: goals, emotional-state, self-model (identity/goals projection — not a second belief store), theory-of-mind, group-formation, social-norms, social-conventions, cultural-narratives; plus metadata-safe `memories/summary` and `beliefs/summary` for graphs (count-only `SubjectivePageOut` pages stay for existing clients)
 - Read-only matrix filesystem under `PALIMPSEST_RESEARCH_MATRIX_ROOT`: `GET /v1/research/matrices` and allowlisted `manifest.json` / `cells/*` / `aggregate.json` / `metric-summary.json` (path traversal fail-closed; no `analysis` import; no batch starts)
-- Formal-rule reads require `subjective_debug`; six GET-only routes serve a published `formal-rule-snapshot-v1`, return `503 formal_rule_disabled` when `PALIMPSEST_FORMAL_RULE_ROOT` is unset, and use purpose-bound cursors bound to the publication digest:
+- Formal-rule reads require `subjective_debug`; seven GET-only routes serve a published `formal-rule-snapshot-v1`, return `503 formal_rule_disabled` when `PALIMPSEST_FORMAL_RULE_ROOT` is unset, and use purpose-bound cursors bound to the publication digest:
   - `GET /v1/simulations/{run_id}/formal-rules`
   - `GET /v1/simulations/{run_id}/formal-rules/candidates`
   - `GET /v1/simulations/{run_id}/formal-rules/candidates/{candidate_id}`
@@ -36,7 +36,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
   - `GET /v1/simulations/{run_id}/formal-rules/lineage`
 
   A changed run, filter, publication, or digest yields `400 formal_rule_cursor_invalid`; an expired cursor yields `410 formal_rule_cursor_expired`.
-- Dispute-resolution reads require `SUBJECTIVE_DEBUG` (the `subjective_debug` capability); six GET-only routes serve a published `dispute-resolution-snapshot-v1`, return `503 dispute_disabled` when `PALIMPSEST_DISPUTE_ROOT` is unset, and never expose capability flags:
+- Dispute-resolution reads require `SUBJECTIVE_DEBUG` (the `subjective_debug` capability); seven GET-only routes serve a published `dispute-resolution-snapshot-v1`, return `503 dispute_disabled` when `PALIMPSEST_DISPUTE_ROOT` is unset, and never expose capability flags:
   - `GET /v1/simulations/{run_id}/disputes`
   - `GET /v1/simulations/{run_id}/disputes/candidates`
   - `GET /v1/simulations/{run_id}/disputes/candidates/{candidate_id}`
@@ -45,7 +45,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
   - `GET /v1/simulations/{run_id}/disputes/lineage`
 
   Every paged route uses a purpose-bound cursor bound to the publication digest; a changed run, filter, publication, or digest yields `400 dispute_cursor_invalid`, and an expired cursor yields `410 dispute_cursor_expired`. `PALIMPSEST_DISPUTE_CURSOR_KEY` keeps cursors restart-stable. See [Disputes](disputes.md).
-- Evidence-testimony reads require `SUBJECTIVE_DEBUG` (the `subjective_debug` capability); six GET-only routes serve a published `evidence-testimony-snapshot-v1`, return `503 evidence_testimony_disabled` when `PALIMPSEST_EVIDENCE_ROOT` is unset, and never expose capability flags or owner ids:
+- Evidence-testimony reads require `SUBJECTIVE_DEBUG` (the `subjective_debug` capability); seven GET-only routes serve a published `evidence-testimony-snapshot-v1`, return `503 evidence_testimony_disabled` when `PALIMPSEST_EVIDENCE_ROOT` is unset, and never expose capability flags or owner ids:
   - `GET /v1/simulations/{run_id}/evidence`
   - `GET /v1/simulations/{run_id}/evidence/candidates`
   - `GET /v1/simulations/{run_id}/evidence/candidates/{candidate_id}`
@@ -54,7 +54,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
   - `GET /v1/simulations/{run_id}/evidence/lineage`
 
   Cursor purposes are exactly `summary`, `candidates`, `candidate`, `sources`, `contradictions`, and `lineage`; TTL is 900 seconds. A changed run, filter, publication, or digest yields `400 evidence_testimony_cursor_invalid`, and an expired cursor yields `410 evidence_testimony_cursor_expired`. Each response is charged against a 2 MiB budget. `PALIMPSEST_EVIDENCE_CURSOR_KEY` keeps cursors restart-stable. See [Evidence and testimony](evidence-testimony.md).
-- Delegation-representation reads require `SUBJECTIVE_DEBUG`; six GET-only routes serve a published `delegation-representation-snapshot-v1`, return `503 representation_disabled` when `PALIMPSEST_REPRESENTATION_ROOT` is unset, and expose only hashed owner/principal/representative/actor tokens:
+- Delegation-representation reads require `SUBJECTIVE_DEBUG`; seven GET-only routes serve a published `delegation-representation-snapshot-v1`, return `503 representation_disabled` when `PALIMPSEST_REPRESENTATION_ROOT` is unset, and expose only hashed owner/principal/representative/actor tokens:
   - `GET /v1/simulations/{run_id}/representation`
   - `GET /v1/simulations/{run_id}/representation/mandates`
   - `GET /v1/simulations/{run_id}/representation/mandates/{mandate_id}`
@@ -62,7 +62,7 @@ Secrets use strong `SecretStr` values. Query-string secrets are rejected. Prefer
   - `GET /v1/simulations/{run_id}/representation/mandates/{mandate_id}/revocations`
   - `GET /v1/simulations/{run_id}/representation/lineage`
   Cursor purposes are exactly `summary`, `mandates`, `mandate`, `positions`, `revocations`, and `lineage`; TTL is 900 seconds. A changed run, filter, publication, or digest yields `400 representation_cursor_invalid`, and an expired cursor yields `410 representation_cursor_expired`. Each response is charged against a 2 MiB budget. See [Delegation and representation](delegation-representation.md).
-- Organization reads under `/v1/simulations/{run_id}/organizations[/candidates|/lineage|/operations|/collective-agency]` require `subjective_debug`; six GET-only routes serve a published `organization-snapshot-v3` (v1/v2 remain readable), return `503 organization_disabled` when `PALIMPSEST_ORGANIZATION_ROOT` is unset, and never expose capability flags. The operations route filters by `domain` and `organization_id`; the collective-agency route filters by `recognition` and `organization_id`. Every paged route uses a purpose-bound cursor bound to the publication digest; a changed filter, run, publication, or digest yields `400 organization_cursor_invalid`, and an expired cursor yields `410 organization_cursor_expired`. `PALIMPSEST_ORGANIZATION_CURSOR_KEY` keeps cursors restart-stable.
+- Organization reads under `/v1/simulations/{run_id}/organizations[/candidates|/lineage|/operations|/collective-agency]` require `subjective_debug`; seven GET-only routes serve a published `organization-snapshot-v3` (v1/v2 remain readable), return `503 organization_disabled` when `PALIMPSEST_ORGANIZATION_ROOT` is unset, and never expose capability flags. The operations route filters by `domain` and `organization_id`; the collective-agency route filters by `recognition` and `organization_id`. Every paged route uses a purpose-bound cursor bound to the publication digest; a changed filter, run, publication, or digest yields `400 organization_cursor_invalid`, and an expired cursor yields `410 organization_cursor_expired`. `PALIMPSEST_ORGANIZATION_CURSOR_KEY` keeps cursors restart-stable.
 - Macro-society reads under `/v1/simulations/{run_id}/macro-societies[/candidates|/lineage]` require `subjective_debug`; four GET-only routes serve a published `macro-society-snapshot-v1`, return `503 macro_society_disabled` when `PALIMPSEST_MACRO_SOCIETY_ROOT` is unset, and never expose capability flags. `PALIMPSEST_MACRO_SOCIETY_CURSOR_KEY` keeps cursors restart-stable; when absent a per-process key is used. See [Macro-societies](macro-societies.md).
 - Replay-to-tick endpoints (detached projection; never live `WorldEngine`)
 - Read-only observer manifest, state, events, ticks, run metadata, and live stream. See [Read-only observer](observer.md). Presentation coordinates are not simulation coordinates. Researcher relationship summaries stay on the debug capability.
@@ -241,7 +241,7 @@ cell IDs; legacy exports exclude `.completion.json`, `.metrics.json`,
 
 ## Diplomacy routes
 
-Six GET-only routes require `SUBJECTIVE_DEBUG`:
+Seven GET-only routes require `SUBJECTIVE_DEBUG`:
 
 | Route | Result |
 | --- | --- |
@@ -271,7 +271,7 @@ composer-derived status labels only. The diplomacy GET route total is eight.
 
 ## Organized-conflict routes (V4-12)
 
-Six GET-only routes under `/v1/simulations/{run_id}/organized-conflict` require
+Seven GET-only routes under `/v1/simulations/{run_id}/organized-conflict` require
 `SUBJECTIVE_DEBUG`, return `503 organized_conflict_disabled` when publication is
 not configured, and `404 organized_conflict_not_found` for unknown published
 runs. Cursor mismatch is `400 organized_conflict_cursor_invalid`; expiry is
@@ -281,7 +281,7 @@ exists.
 
 ## Border routes (V4-13)
 
-Six GET-only routes under `/v1/simulations/{run_id}/borders` require
+Seven GET-only routes under `/v1/simulations/{run_id}/borders` require
 `SUBJECTIVE_DEBUG`:
 
 | Route | Result |
@@ -303,7 +303,7 @@ contain hashed tokens and closed labels only.
 
 ## Migration-displacement routes (V4-14)
 
-Six GET-only routes under `/v1/simulations/{run_id}/migration` require
+Seven GET-only routes under `/v1/simulations/{run_id}/migration` require
 `SUBJECTIVE_DEBUG`:
 
 | Route | Result |
@@ -333,7 +333,7 @@ fields.
 
 ## Inter-society relations routes (V4-15)
 
-Six GET-only routes under `/v1/simulations/{run_id}/inter-society-relations`
+Seven GET-only routes under `/v1/simulations/{run_id}/inter-society-relations`
 require `SUBJECTIVE_DEBUG`:
 
 | Route | Result |
@@ -361,7 +361,7 @@ relationship score. See [inter-society relations](inter-society-relations.md).
 
 ## Infrastructure networks routes (V4-16)
 
-Six GET-only routes under `/v1/simulations/{run_id}/infrastructure-networks`
+Seven GET-only routes under `/v1/simulations/{run_id}/infrastructure-networks`
 require `SUBJECTIVE_DEBUG`:
 
 | Route | Result |
@@ -372,6 +372,10 @@ require `SUBJECTIVE_DEBUG`:
 | `GET .../infrastructure-networks/condition` | paged condition rows |
 | `GET .../infrastructure-networks/effects` | paged effect coverage rows |
 | `GET .../infrastructure-networks/maintenance` | paged maintenance rows |
+| `GET .../infrastructure-networks/routes` | paged travel-network objective route-condition rows; includes `fingerprint` and `publication` and a purpose-bound `next_cursor` |
+
+The routes page is the only infrastructure page that exposes `fingerprint` and
+`publication`; the other six retain their existing page shape.
 
 Both `PALIMPSEST_INFRASTRUCTURE_NETWORKS_ROOT` and
 `PALIMPSEST_INFRASTRUCTURE_NETWORKS_CURSOR_KEY` (≥32 UTF-8 bytes) are required to

@@ -15,6 +15,7 @@ from typing import Final
 from analysis.infrastructure_networks_analysis import (
     INFRASTRUCTURE_NETWORKS_ANALYSIS_POLICY_VERSION,
     InfrastructureNetworksAnalysis,
+    TravelRouteAnalysisRow,
     harvest_infrastructure_networks_analysis,
 )
 from analysis.models import (
@@ -43,6 +44,10 @@ __all__ = [
     "compute_infrastructure_effect_coverage",
     "compute_infrastructure_maintenance_burden",
     "compute_infrastructure_network_structure",
+    "compute_travel_route_belief_alignment",
+    "compute_travel_route_blockage",
+    "compute_travel_route_condition",
+    "compute_travel_route_structure",
     "harvest_infrastructure_networks_analysis",
 ]
 
@@ -357,6 +362,220 @@ def compute_infrastructure_maintenance_burden(
         state=state,
         observed=rows.asset_count,
         expected=rows.asset_count,
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+    )
+
+
+def _route_rows(
+    analysis: InfrastructureNetworksAnalysis,
+) -> tuple[TravelRouteAnalysisRow, ...]:
+    return analysis.routes
+
+
+def _route_state(analysis: InfrastructureNetworksAnalysis) -> str:
+    if analysis.route_count == 0:
+        return "unknown"
+    return "present"
+
+
+def compute_travel_route_structure(
+    analysis: object, *, run_id: str, input_revision: str
+) -> MetricDocument:
+    """Route structure counts and capacity distribution; never a route score."""
+    rows = _require(analysis)
+    state = _route_state(rows)
+    if state == "unknown":
+        return _document(
+            MetricFamilyId.TRAVEL_ROUTE_STRUCTURE,
+            state=state,
+            observed=0,
+            expected=rows.route_coverage_expected,
+            run_id=run_id,
+            input_revision=input_revision,
+            values={},
+        )
+    route_rows = _route_rows(rows)
+    capacity = [row.capacity for row in route_rows]
+    values: dict[str, object] = {
+        "route_count": len(route_rows),
+        "adjacency_coverage_ratio": _ratio(
+            len(route_rows),
+            max(rows.route_coverage_expected, len(route_rows)),
+        ),
+        "road_edge_count": sum(
+            1
+            for asset in rows.assets
+            if asset.kind == "road"
+            and asset.topology == "edge"
+            and asset.effects_active
+        ),
+        "bridge_node_count": sum(
+            1
+            for asset in rows.assets
+            if asset.kind == "bridge"
+            and asset.topology == "node"
+            and asset.effects_active
+        ),
+        "capacity_min": min(capacity),
+        "capacity_max": max(capacity),
+        "capacity_mean_milli": round(sum(capacity) * 1000 / len(capacity)),
+    }
+    _reject_score_fields(values)
+    return _document(
+        MetricFamilyId.TRAVEL_ROUTE_STRUCTURE,
+        state=state,
+        observed=len(route_rows),
+        expected=max(rows.route_coverage_expected, len(route_rows)),
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+    )
+
+
+def compute_travel_route_condition(
+    analysis: object, *, run_id: str, input_revision: str
+) -> MetricDocument:
+    """Status and availability histograms; never a composite condition score."""
+    rows = _require(analysis)
+    state = _route_state(rows)
+    if state == "unknown":
+        return _document(
+            MetricFamilyId.TRAVEL_ROUTE_CONDITION,
+            state=state,
+            observed=0,
+            expected=rows.route_coverage_expected,
+            run_id=run_id,
+            input_revision=input_revision,
+            values={},
+        )
+    route_rows = _route_rows(rows)
+    status = Counter(row.status for row in route_rows)
+    availability = Counter(row.seasonal_availability for row in route_rows)
+    values: dict[str, object] = {
+        "open_count": status.get("open", 0),
+        "restricted_count": status.get("restricted", 0),
+        "closed_count": status.get("closed", 0),
+        "availability_open_count": availability.get("open", 0),
+        "availability_restricted_count": availability.get("restricted", 0),
+        "availability_closed_count": availability.get("closed", 0),
+        "risk_mean_milli": round(
+            sum(row.risk for row in route_rows) * 1000 / len(route_rows)
+        ),
+        "quality_mean_milli": round(
+            sum(row.infrastructure_quality for row in route_rows)
+            * 1000
+            / len(route_rows)
+        ),
+    }
+    _reject_score_fields(values)
+    return _document(
+        MetricFamilyId.TRAVEL_ROUTE_CONDITION,
+        state=state,
+        observed=len(route_rows),
+        expected=max(rows.route_coverage_expected, len(route_rows)),
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+    )
+
+
+def compute_travel_route_blockage(
+    analysis: object, *, run_id: str, input_revision: str
+) -> MetricDocument:
+    """Blockage cause counts and blocked-edge coverage; never a severity score."""
+    rows = _require(analysis)
+    state = _route_state(rows)
+    if state == "unknown":
+        return _document(
+            MetricFamilyId.TRAVEL_ROUTE_BLOCKAGE,
+            state=state,
+            observed=0,
+            expected=rows.route_coverage_expected,
+            run_id=run_id,
+            input_revision=input_revision,
+            values={},
+        )
+    route_rows = _route_rows(rows)
+    causes = Counter(row.blockage_cause for row in route_rows)
+    blocked = sum(1 for row in route_rows if row.status == "closed")
+    values: dict[str, object] = {
+        "none_count": causes.get("none", 0),
+        "weather_count": causes.get("weather", 0),
+        "seasonal_count": causes.get("seasonal", 0),
+        "hazard_count": causes.get("hazard", 0),
+        "blocked_edge_count": blocked,
+        "blockage_coverage_ratio": _ratio(blocked, len(route_rows)),
+    }
+    _reject_score_fields(values)
+    return _document(
+        MetricFamilyId.TRAVEL_ROUTE_BLOCKAGE,
+        state=state,
+        observed=blocked,
+        expected=len(route_rows),
+        run_id=run_id,
+        input_revision=input_revision,
+        values=values,
+    )
+
+
+def compute_travel_route_belief_alignment(
+    analysis: object, *, run_id: str, input_revision: str
+) -> MetricDocument:
+    """Researcher-only belief alignment counts; beliefs are never truth."""
+    rows = _require(analysis)
+    state = _route_state(rows)
+    if state == "unknown":
+        return _document(
+            MetricFamilyId.TRAVEL_ROUTE_BELIEF_ALIGNMENT,
+            state=state,
+            observed=0,
+            expected=0,
+            run_id=run_id,
+            input_revision=input_revision,
+            values={},
+        )
+    route_rows = _route_rows(rows)
+    window_tick = getattr(rows, "window_tick", 0)
+    belief_count = sum(row.observed_belief_count for row in route_rows)
+    unknown = stale = contradicted = consistent = unresolved = inconsistent = 0
+    for row in route_rows:
+        if row.observed_belief_count == 0:
+            unknown += 1
+            continue
+        if row.as_of_tick < window_tick:
+            stale += row.observed_belief_count
+        if row.believed_closed_count:
+            if row.status == "closed":
+                consistent += row.observed_belief_count
+            else:
+                contradicted += row.observed_belief_count
+                inconsistent += row.observed_belief_count
+        elif row.believed_restricted_count:
+            if row.status in {"restricted", "closed"}:
+                consistent += row.observed_belief_count
+            else:
+                contradicted += row.observed_belief_count
+                inconsistent += row.observed_belief_count
+        else:
+            unresolved += row.observed_belief_count
+    values: dict[str, object] = {
+        "belief_count": belief_count,
+        "unknown_count": unknown,
+        "stale_count": stale,
+        "contradicted_count": contradicted,
+        "consistent_count": consistent,
+        "unresolved_count": unresolved,
+        "inconsistent_count": inconsistent,
+        "not_applicable_count": 0 if belief_count else len(route_rows),
+    }
+    _reject_score_fields(values)
+    return _document(
+        MetricFamilyId.TRAVEL_ROUTE_BELIEF_ALIGNMENT,
+        state=state,
+        observed=belief_count,
+        expected=belief_count,
         run_id=run_id,
         input_revision=input_revision,
         values=values,

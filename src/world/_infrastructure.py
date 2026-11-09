@@ -40,6 +40,7 @@ _COLLECTIVE_TO_INFRA: Final[dict[str, InfrastructureKind]] = {
 __all__ = [
     "adjust_linked_infrastructure",
     "decay_infrastructure",
+    "edge_road_quality",
     "effective_body_capacity",
     "effective_exposure_scale",
     "effective_item_capacity",
@@ -51,10 +52,15 @@ __all__ = [
     "event_detail_for_asset",
     "index_infrastructure",
     "insert_infrastructure_asset",
+    "node_bridge_quality",
     "operational_assets_at",
+    "operational_bridge_capacity_bonus",
     "operational_edge_assets",
+    "operational_road_capacity_bonus",
     "register_from_completed_project",
     "replace_infrastructure_asset",
+    "route_capacity_bonus",
+    "route_quality",
     "sync_infrastructure_with_structures",
 ]
 
@@ -158,6 +164,8 @@ def operational_assets_at(
     """Sorted operational node assets anchored at ``location_id``."""
     if assets is None:
         return ()
+    if not isinstance(assets, Mapping):
+        raise TypeError("assets must be a mapping or None")
     if type(location_id) is not EntityId:
         raise TypeError("location_id must be EntityId")
     selected = [
@@ -181,6 +189,8 @@ def operational_edge_assets(
 ) -> tuple[InfrastructureAsset, ...]:
     if assets is None:
         return ()
+    if not isinstance(assets, Mapping):
+        raise TypeError("assets must be a mapping or None")
     if type(origin_id) is not EntityId or type(destination_id) is not EntityId:
         raise TypeError("origin and destination must be EntityId")
     left, right = sorted((origin_id.value, destination_id.value))
@@ -199,6 +209,129 @@ def operational_edge_assets(
             continue
         selected.append(asset)
     return tuple(selected)
+
+
+def _mean_integrity(assets: Sequence[InfrastructureAsset]) -> float:
+    if not assets:
+        return 0.0
+    mean = sum(asset.integrity for asset in assets) / len(assets)
+    return 1.0 if mean >= 1.0 else (0.0 if mean <= 0.0 else mean)
+
+
+def edge_road_quality(
+    assets: Mapping[EntityId, InfrastructureAsset] | None,
+    origin_id: EntityId,
+    destination_id: EntityId,
+) -> float:
+    """Mean integrity of operational ROAD assets on one undirected edge."""
+    roads = tuple(
+        asset
+        for asset in operational_edge_assets(
+            assets, origin_id=origin_id, destination_id=destination_id
+        )
+        if asset.kind is InfrastructureKind.ROAD
+    )
+    quality = _mean_integrity(roads)
+    _LOG.debug(
+        "infrastructure_route_quality edge_quality_milli=%s kind=road",
+        round(quality * 1000),
+    )
+    return quality
+
+
+def node_bridge_quality(
+    assets: Mapping[EntityId, InfrastructureAsset] | None, location_id: EntityId
+) -> float:
+    """Mean integrity of operational BRIDGE assets anchored at ``location_id``."""
+    bridges = operational_assets_at(
+        assets, location_id, kind=InfrastructureKind.BRIDGE
+    )
+    quality = _mean_integrity(bridges)
+    _LOG.debug(
+        "infrastructure_route_quality node_quality_milli=%s kind=bridge",
+        round(quality * 1000),
+    )
+    return quality
+
+
+def operational_road_capacity_bonus(
+    assets: Mapping[EntityId, InfrastructureAsset] | None,
+    origin_id: EntityId,
+    destination_id: EntityId,
+) -> int:
+    from world.travel_network import ROAD_CAPACITY_BONUS
+
+    roads = operational_edge_assets(
+        assets, origin_id=origin_id, destination_id=destination_id
+    )
+    return ROAD_CAPACITY_BONUS if any(
+        asset.kind is InfrastructureKind.ROAD for asset in roads
+    ) else 0
+
+
+def operational_bridge_capacity_bonus(
+    assets: Mapping[EntityId, InfrastructureAsset] | None,
+    location_id: EntityId,
+) -> int:
+    from world.travel_network import BRIDGE_CAPACITY_BONUS
+
+    bridges = operational_assets_at(
+        assets, location_id, kind=InfrastructureKind.BRIDGE
+    )
+    return BRIDGE_CAPACITY_BONUS if bridges else 0
+
+
+def _route_contributors(
+    assets: Mapping[EntityId, InfrastructureAsset] | None,
+    origin_id: EntityId,
+    destination_id: EntityId,
+) -> tuple[InfrastructureAsset, ...]:
+    roads = tuple(
+        asset
+        for asset in operational_edge_assets(
+            assets, origin_id=origin_id, destination_id=destination_id
+        )
+        if asset.kind is InfrastructureKind.ROAD
+    )
+    bridges = tuple(
+        asset
+        for location_id in (origin_id, destination_id)
+        for asset in operational_assets_at(
+            assets, location_id, kind=InfrastructureKind.BRIDGE
+        )
+    )
+    return tuple(sorted((*roads, *bridges), key=lambda row: row.asset_id.value))
+
+
+def route_quality(
+    assets: Mapping[EntityId, InfrastructureAsset] | None,
+    origin_id: EntityId,
+    destination_id: EntityId,
+) -> float:
+    """Mean integrity across all operational road/bridge contributors."""
+    quality = _mean_integrity(
+        _route_contributors(assets, origin_id, destination_id)
+    )
+    _LOG.debug(
+        "infrastructure_route_quality quality_milli=%s",
+        round(quality * 1000),
+    )
+    return quality
+
+
+def route_capacity_bonus(
+    assets: Mapping[EntityId, InfrastructureAsset] | None,
+    origin_id: EntityId,
+    destination_id: EntityId,
+) -> int:
+    from world.travel_network import BRIDGE_CAPACITY_BONUS, ROAD_CAPACITY_BONUS
+
+    roads = operational_road_capacity_bonus(assets, origin_id, destination_id)
+    bridge_bonus = BRIDGE_CAPACITY_BONUS if (
+        operational_bridge_capacity_bonus(assets, origin_id)
+        or operational_bridge_capacity_bonus(assets, destination_id)
+    ) else 0
+    return min(roads, ROAD_CAPACITY_BONUS) + bridge_bonus
 
 
 def _clamp_integrity(value: float) -> float:

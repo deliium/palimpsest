@@ -7,8 +7,10 @@
     fetchInfrastructureEffects,
     fetchInfrastructureMaintenance,
     fetchInfrastructureNetworksSummary,
+    fetchTravelRoutes,
     type InfrastructureAsset,
     type InfrastructureNetworksSummary,
+    type TravelRoute,
   } from '../api/infrastructureNetworks'
   import EpistemicBadge from '../components/EpistemicBadge.svelte'
   import type { ResearchSelection } from '../research/selection'
@@ -29,6 +31,7 @@
   let condition = $state<InfrastructureAsset[]>([])
   let effects = $state<InfrastructureAsset[]>([])
   let maintenance = $state<InfrastructureAsset[]>([])
+  let routes = $state<TravelRoute[]>([])
 
   function label(value: string | null | undefined): string {
     return value ? value.replaceAll('_', ' ') : 'unknown'
@@ -39,25 +42,34 @@
     reason = null
     try {
       summary = await fetchInfrastructureNetworksSummary(runId)
-      const [assetPage, edgePage, conditionPage, effectsPage, maintenancePage] =
-        await Promise.all([
-          fetchInfrastructureAssets(runId),
-          fetchInfrastructureEdges(runId),
-          fetchInfrastructureCondition(runId),
-          fetchInfrastructureEffects(runId),
-          fetchInfrastructureMaintenance(runId),
-        ])
+      const [
+        assetPage,
+        edgePage,
+        conditionPage,
+        effectsPage,
+        maintenancePage,
+        routePage,
+      ] = await Promise.all([
+        fetchInfrastructureAssets(runId),
+        fetchInfrastructureEdges(runId),
+        fetchInfrastructureCondition(runId),
+        fetchInfrastructureEffects(runId),
+        fetchInfrastructureMaintenance(runId),
+        fetchTravelRoutes(runId),
+      ])
       assets = assetPage.items
       edges = edgePage.items
       condition = conditionPage.items
       effects = effectsPage.items
       maintenance = maintenancePage.items
+      routes = routePage.items
       const empty =
         assets.length === 0 &&
         edges.length === 0 &&
         condition.length === 0 &&
         effects.length === 0 &&
-        maintenance.length === 0
+        maintenance.length === 0 &&
+        routes.length === 0
       status = empty ? 'empty' : 'ready'
     } catch (error) {
       if (error instanceof ApiClientError) {
@@ -188,6 +200,47 @@
         <li>empty</li>
       {/each}
     </ul>
+
+    <h3>
+      Routes
+      <span class="epistemic-word">objective</span>
+      <EpistemicBadge epistemic="objective_world" />
+    </h3>
+    <p class="epistemic-word">Objective route condition</p>
+    <table>
+      <thead>
+        <tr>
+          <th>origin</th>
+          <th>destination</th>
+          <th>status</th>
+          <th>availability</th>
+          <th>blockage</th>
+          <th>duration</th>
+          <th>capacity</th>
+          <th>risk</th>
+          <th>quality</th>
+          <th>as of</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each routes as row (`${row.origin_location_id}:${row.destination_location_id}`)}
+          <tr>
+            <td>{row.origin_location_id}</td>
+            <td>{row.destination_location_id}</td>
+            <td>{label(row.status)}</td>
+            <td>{label(row.seasonal_availability)}</td>
+            <td>{label(row.blockage_cause)}</td>
+            <td>{row.duration_ticks}</td>
+            <td>{row.capacity}</td>
+            <td>{row.risk.toFixed(3)}</td>
+            <td>{row.infrastructure_quality.toFixed(3)}</td>
+            <td>{row.as_of_tick}</td>
+          </tr>
+        {:else}
+          <tr><td colspan="10">empty</td></tr>
+        {/each}
+      </tbody>
+    </table>
   {/if}
 </section>
 

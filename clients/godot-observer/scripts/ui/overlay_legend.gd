@@ -42,6 +42,12 @@ const _TOGGLE_ROWS: Array = [
 	{"kind": "mentorship_analytical", "caption": "Mentorship (analytical)", "class": EvidenceClass.ANALYTICAL},
 ]
 
+const ROUTE_STATUS_LEGEND := [
+	{"status": "open", "caption": "Route open", "layer": "infrastructure_edge"},
+	{"status": "restricted", "caption": "Route restricted", "layer": "infrastructure_damaged"},
+	{"status": "closed", "caption": "Route closed", "layer": "infrastructure_destroyed"},
+]
+
 var _enabled := {}
 var _buttons := {}
 
@@ -92,6 +98,17 @@ func _build_legend() -> void:
 		badge.modulate = Themes.evidence_color(str(entry[0]))
 		badge.set_meta("evidence_class", entry[0])
 		row.add_child(badge)
+	var route_row := HBoxContainer.new()
+	route_row.add_theme_constant_override("separation", 8)
+	add_child(route_row)
+	for entry in ROUTE_STATUS_LEGEND:
+		var label := Label.new()
+		label.text = str(entry["caption"])
+		label.modulate = Themes.evidence_color(EvidenceClass.OBJECTIVE)
+		label.set_meta("route_status", entry["status"])
+		label.set_meta("overlay_kind", entry["layer"])
+		label.set_meta("evidence_class", EvidenceClass.OBJECTIVE)
+		route_row.add_child(label)
 
 
 func _build_toggles() -> void:

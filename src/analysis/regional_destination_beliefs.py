@@ -48,6 +48,11 @@ class RegionalDestinationEvidenceRow:
     source_kind: str
     source_tick: int
     confidence: float
+    origin_id: str | None = None
+    route_status: str | None = None
+    route_seasonal_availability: str | None = None
+    route_blockage_cause: str | None = None
+    route_capacity: int | None = None
 
     def __post_init__(self) -> None:
         for name in ("owner_id", "destination_id", "source_kind"):
@@ -56,6 +61,36 @@ class RegionalDestinationEvidenceRow:
             object.__setattr__(
                 self, "region_id", require_stable_id("region_id", self.region_id)
             )
+        if self.origin_id is not None:
+            object.__setattr__(
+                self, "origin_id", require_stable_id("origin_id", self.origin_id)
+            )
+        if self.route_status is not None and self.route_status not in {
+            "open",
+            "restricted",
+            "closed",
+        }:
+            raise ValueError("unknown_destination_route_status")
+        if (
+            self.route_seasonal_availability is not None
+            and self.route_seasonal_availability
+            not in {"open", "restricted", "closed"}
+        ):
+            raise ValueError("unknown_destination_route_availability")
+        if self.route_blockage_cause is not None and self.route_blockage_cause not in {
+            "none",
+            "weather",
+            "seasonal",
+            "hazard",
+        }:
+            raise ValueError("unknown_destination_route_blockage")
+        if self.route_capacity is not None:
+            if (
+                isinstance(self.route_capacity, bool)
+                or type(self.route_capacity) is not int
+                or not 1 <= self.route_capacity <= 24
+            ):
+                raise ValueError("invalid_destination_route_capacity")
         object.__setattr__(
             self,
             "source_tick",

@@ -33,12 +33,12 @@ def test_canonical_contract_names_all_operations_and_bounds() -> None:
 
 
 def test_current_pins_are_176_and_five_owned() -> None:
-    assert "Closed catalog cardinality: **188**" in _read("docs/analysis-metrics.md")
-    assert "172 to **176**" in _read("docs/analysis-metrics.md")
-    assert "184 metric families" in _read("docs/architecture.md")
-    assert "172 -> 176" in _read("docs/architecture.md")
-    assert "184 metric families" in _read(".ai-factory/ARCHITECTURE.md")
-    assert "172 -> 176" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "Closed catalog cardinality: **192**" in _read("docs/analysis-metrics.md")
+    assert "192" in _read("docs/analysis-metrics.md")
+    assert "192 metric families" in _read("docs/architecture.md")
+    assert "192" in _read("docs/architecture.md")
+    assert "192 metric families" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "192" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/DESCRIPTION.md")
     assert "five owned V4 flags" in _read("docs/configuration.md")

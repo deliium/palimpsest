@@ -48,6 +48,20 @@ const asset = {
   linked_structure_id: null,
 }
 
+const route = {
+  origin_location_id: 'loc-a',
+  destination_location_id: 'loc-b',
+  status: 'restricted',
+  seasonal_availability: 'restricted',
+  blockage_cause: 'seasonal',
+  duration_ticks: 3,
+  fatigue_cost: 4.5,
+  capacity: 6,
+  risk: 0.3,
+  infrastructure_quality: 0.4,
+  as_of_tick: 1,
+}
+
 const edge = {
   ...asset,
   asset_id: 'infra-edge0123456789abcdef01234567',
@@ -78,6 +92,9 @@ function stubFetch(override?: (path: string) => Response | null): void {
       if (path.endsWith('/infrastructure-networks/maintenance')) {
         return json({ items: [asset], next_cursor: null })
       }
+      if (path.endsWith('/infrastructure-networks/routes')) {
+        return json({ items: [route], next_cursor: null })
+      }
       return json({ code: 'not_found' }, 404)
     }),
   )
@@ -105,7 +122,13 @@ describe('InfrastructureNetworksPanel', () => {
     expect(text).toContain('condition')
     expect(text).toContain('effects')
     expect(text).toContain('maintenance')
+    expect(text).toContain('route')
     expect(text).toContain('objective')
+    expect(text).toContain('loc-a')
+    expect(text).toContain('loc-b')
+    expect(text).toContain('restricted')
+    expect(text).toContain('0.300')
+    expect(text).toContain('0.400')
     expect(text).not.toContain('score')
     expect(text).not.toContain('civilization')
     expect(text).not.toContain('composite')
@@ -134,7 +157,8 @@ describe('InfrastructureNetworksPanel', () => {
         path.endsWith('/infrastructure-networks/edges') ||
         path.endsWith('/infrastructure-networks/condition') ||
         path.endsWith('/infrastructure-networks/effects') ||
-        path.endsWith('/infrastructure-networks/maintenance')
+        path.endsWith('/infrastructure-networks/maintenance') ||
+        path.endsWith('/infrastructure-networks/routes')
       ) {
         return json({ items: [], next_cursor: null })
       }

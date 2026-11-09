@@ -24,6 +24,7 @@ from simulation.bootstrap import AgentRegistration
 from simulation.clock import Tick
 from simulation.models import RunId, SimulationRunConfig, StochasticIdentity
 from simulation.persistence import (
+    ACCEPTED_EVENT_SCHEMA_VERSIONS,
     ACCEPTED_PERSISTENCE_CODEC_VERSIONS,
     PERSISTENCE_CODEC_VERSION,
     CommitHash,
@@ -66,7 +67,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V3,
     EVENT_SCHEMA_REPLAY_V4,
     EVENT_SCHEMA_REPLAY_V5,
-    EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V27,
     OccurrenceContext,
     WorldEvent,
     event_is_replayable,
@@ -90,6 +91,7 @@ from world.repositories import (
     RepositoryIndexEntry,
     RepositoryStatus,
 )
+from world.travel_network import RouteCondition
 
 _LOGGER: Final[logging.Logger] = logging.getLogger("simulation.journal")
 
@@ -433,6 +435,7 @@ def verify_tick_events(
             EVENT_SCHEMA_REPLAY_V3,
             EVENT_SCHEMA_REPLAY_V4,
             EVENT_SCHEMA_REPLAY_V5,
+            EVENT_SCHEMA_REPLAY_V27,
         }:
             raise PersistenceSerializationError(
                 "unsupported_version",
@@ -529,6 +532,7 @@ def bind_snapshot_commit_hash(
         regions_migration=snapshot.regions_migration,
         journeys=snapshot.journeys,
         infrastructure=snapshot.infrastructure,
+        travel_network=snapshot.travel_network,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -565,6 +569,7 @@ def bind_snapshot_commit_hash(
         regions_migration=draft.regions_migration,
         journeys=draft.journeys,
         infrastructure=draft.infrastructure,
+        travel_network=draft.travel_network,
     )
 
 
@@ -867,7 +872,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
@@ -895,7 +902,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
@@ -916,7 +925,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
@@ -936,7 +947,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
@@ -954,7 +967,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
@@ -971,7 +986,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["dependency_need_registers"] = [
                 _encode_dependency_need_register(item)
@@ -987,7 +1004,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["repositories"] = [
                 _encode_knowledge_repository(item) for item in value.repositories
@@ -1010,7 +1029,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["corpse_custody_item_ids"] = sorted(
                 item.value for item in value.corpse_custody_item_ids
@@ -1025,7 +1046,9 @@ def _encode_world_snapshot(
             "v17",
             "v18",
             "v19",
-            "v20", "v21",
+            "v20",
+            "v21",
+            "v25",
         }:
             payload["exchange_offers"] = [
                 {
@@ -1041,7 +1064,14 @@ def _encode_world_snapshot(
                 "exchange_offer_snapshot_encode offer_count=%s",
                 len(value.exchange_offers),
             )
-        if value.persistence_codec_version in {"v17", "v18", "v19", "v20", "v21"}:
+        if value.persistence_codec_version in {
+            "v17",
+            "v18",
+            "v19",
+            "v20",
+            "v21",
+            "v25",
+        }:
             payload["collective_projects"] = [
                 _encode_collective_project(
                     item, codec_version=value.persistence_codec_version
@@ -1062,7 +1092,7 @@ def _encode_world_snapshot(
             assert value.journeys is not None
             payload["regions_migration"] = value.regions_migration.canonical()
             payload["journeys"] = [_encode_journey(item) for item in value.journeys]
-        elif value.persistence_codec_version == "v21":
+        elif value.persistence_codec_version in {"v21", "v25"}:
             if value.regions_migration is not None:
                 assert value.journeys is not None
                 payload["regions_migration"] = value.regions_migration.canonical()
@@ -1075,6 +1105,15 @@ def _encode_world_snapshot(
                 "infrastructure_snapshot_encode asset_count=%s",
                 len(value.infrastructure),
             )
+            if value.persistence_codec_version == "v25":
+                assert value.travel_network is not None
+                payload["travel_network"] = [
+                    _encode_route_condition(item) for item in value.travel_network
+                ]
+                _LOGGER.debug(
+                    "travel_network_snapshot_encode route_count=%s",
+                    len(value.travel_network),
+                )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
     if include_integrity_hash:
@@ -1210,7 +1249,7 @@ def _decode_journey(data: dict[str, Any], *, path: str) -> Journey:
 
 def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     wire_codec = data.get("persistence_codec_version")
-    codec = "v18" if wire_codec in {"v19", "v20", "v21"} else wire_codec
+    codec = "v18" if wire_codec in {"v19", "v20", "v21", "v25"} else wire_codec
     keys = {
         "snapshot_id",
         "run_id",
@@ -1356,8 +1395,10 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         )
     if wire_codec in {"v19", "v20"}:
         keys |= {"regions_migration", "journeys"}
-    elif wire_codec == "v21":
+    elif wire_codec in {"v21", "v25"}:
         keys.add("infrastructure")
+        if wire_codec == "v25":
+            keys.add("travel_network")
         if "regions_migration" in data or "journeys" in data:
             keys |= {"regions_migration", "journeys"}
     _require_keys(data, keys, path=path)
@@ -1367,8 +1408,9 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     regions_migration = None
     journeys = None
     infrastructure = None
+    travel_network = None
     if wire_codec in {"v19", "v20"} or (
-        wire_codec == "v21" and "regions_migration" in data
+        wire_codec in {"v21", "v25"} and "regions_migration" in data
     ):
         from simulation.runner_serialization import (
             RunnerSerializationError,
@@ -1389,11 +1431,17 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         journeys = _decode_object_list(
             data["journeys"], _decode_journey, path=f"{path}.journeys"
         )
-    if wire_codec == "v21":
+    if wire_codec in {"v21", "v25"}:
         infrastructure = _decode_object_list(
             data["infrastructure"],
             _decode_infrastructure_asset,
             path=f"{path}.infrastructure",
+        )
+    if wire_codec == "v25":
+        travel_network = _decode_object_list(
+            data["travel_network"],
+            _decode_route_condition,
+            path=f"{path}.travel_network",
         )
     try:
         predecessor_raw = data["predecessor_commit_hash"]
@@ -1647,6 +1695,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             regions_migration=regions_migration,
             journeys=journeys,
             infrastructure=infrastructure,
+            travel_network=travel_network,
         )
     except PersistenceSerializationError:
         raise
@@ -2306,7 +2355,6 @@ def _decode_collective_projects(
     return tuple(rows)
 
 
-
 def _encode_infrastructure_asset(value: object) -> dict[str, Any]:
     from world.infrastructure import InfrastructureAsset
 
@@ -2389,6 +2437,80 @@ def _decode_infrastructure_asset(data: dict[str, Any], *, path: str) -> object:
         )
     except PersistenceSerializationError:
         raise
+    except (TypeError, ValueError) as exc:
+        raise PersistenceSerializationError("invalid_model", path) from exc
+
+
+def _encode_route_condition(value: object) -> dict[str, Any]:
+    assert type(value) is RouteCondition
+    return {
+        "as_of_tick": value.as_of_tick,
+        "blockage_cause": value.blockage_cause.value,
+        "capacity": value.capacity,
+        "destination_id": value.destination_id.value,
+        "duration_ticks": value.duration_ticks,
+        "fatigue_cost": value.fatigue_cost,
+        "infrastructure_quality": value.infrastructure_quality,
+        "origin_id": value.origin_id.value,
+        "reason_codes": list(value.reason_codes),
+        "risk": value.risk,
+        "seasonal_availability": value.seasonal_availability.value,
+        "status": value.status.value,
+    }
+
+
+def _decode_route_condition(data: dict[str, Any], *, path: str) -> object:
+    from world.travel_network import (
+        RouteBlockageCause,
+        RouteCondition,
+        RouteStatus,
+        SeasonalAvailability,
+    )
+
+    _require_keys(
+        data,
+        {
+            "as_of_tick",
+            "blockage_cause",
+            "capacity",
+            "destination_id",
+            "duration_ticks",
+            "fatigue_cost",
+            "infrastructure_quality",
+            "origin_id",
+            "reason_codes",
+            "risk",
+            "seasonal_availability",
+            "status",
+        },
+        path=path,
+    )
+    raw_codes = data["reason_codes"]
+    if not isinstance(raw_codes, list) or any(
+        not isinstance(code, str) for code in raw_codes
+    ):
+        raise PersistenceSerializationError("invalid_array", f"{path}.reason_codes")
+    try:
+        return RouteCondition(
+            origin_id=EntityId(_str_field(data, "origin_id", path=path)),
+            destination_id=EntityId(_str_field(data, "destination_id", path=path)),
+            status=RouteStatus(_str_field(data, "status", path=path)),
+            seasonal_availability=SeasonalAvailability(
+                _str_field(data, "seasonal_availability", path=path)
+            ),
+            blockage_cause=RouteBlockageCause(
+                _str_field(data, "blockage_cause", path=path)
+            ),
+            duration_ticks=_nonneg_int_field(data, "duration_ticks", path=path),
+            fatigue_cost=_float_field(data, "fatigue_cost", path=path),
+            capacity=_nonneg_int_field(data, "capacity", path=path),
+            risk=_float_field(data, "risk", path=path),
+            infrastructure_quality=_float_field(
+                data, "infrastructure_quality", path=path
+            ),
+            reason_codes=tuple(raw_codes),
+            as_of_tick=_nonneg_int_field(data, "as_of_tick", path=path),
+        )
     except (TypeError, ValueError) as exc:
         raise PersistenceSerializationError("invalid_model", path) from exc
 
@@ -2662,7 +2784,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
         raise PersistenceSerializationError("invalid_object", f"{path}.details")
     try:
         schema_version = _nonneg_int_field(data, "schema_version", path=path)
-        if not EVENT_SCHEMA_REPLAY_V2 <= schema_version <= EVENT_SCHEMA_REPLAY_V23:
+        if schema_version not in ACCEPTED_EVENT_SCHEMA_VERSIONS:
             raise PersistenceSerializationError(
                 "unsupported_version",
                 f"{path}.schema_version",

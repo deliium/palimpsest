@@ -23,6 +23,8 @@ from api.infrastructure_networks_schemas import (
     InfrastructureAssetOut,
     InfrastructureAssetPageOut,
     InfrastructureNetworksSummaryOut,
+    TravelRouteOut,
+    TravelRoutePageOut,
 )
 from api.security import ApiCapability, require_http_capability
 from infrastructure.logging import get_logger
@@ -30,6 +32,7 @@ from infrastructure.settings import Settings
 from simulation.infrastructure_paging import (
     InfrastructureNetworksRowSelection,
     page_infrastructure_networks_rows,
+    page_travel_routes,
 )
 from simulation.infrastructure_ports import infrastructure_networks_query_fingerprint
 
@@ -38,7 +41,7 @@ router = APIRouter(
     tags=["infrastructure-networks"],
 )
 _LOGGER = get_logger("api.routes.infrastructure_networks")
-INFRASTRUCTURE_NETWORKS_ROUTE_COUNT: Final[int] = 6
+INFRASTRUCTURE_NETWORKS_ROUTE_COUNT: Final[int] = 7
 
 
 def _reader(reader: object | None) -> Any:
@@ -237,6 +240,13 @@ def get_infrastructure_networks_summary(
         destroyed_count=summary.destroyed_count,
         effects_active_count=summary.effects_active_count,
         coverage=summary.coverage,
+        route_count=summary.route_count,
+        route_open_count=summary.route_open_count,
+        route_restricted_count=summary.route_restricted_count,
+        route_closed_count=summary.route_closed_count,
+        route_weather_count=summary.route_weather_count,
+        route_seasonal_count=summary.route_seasonal_count,
+        route_hazard_count=summary.route_hazard_count,
     )
 
 
@@ -352,4 +362,67 @@ def get_infrastructure_networks_maintenance(
         limit=limit,
         reader=reader,
         settings=settings,
+    )
+
+
+@router.get(
+    "/{run_id}/infrastructure-networks/routes",
+    response_model=TravelRoutePageOut,
+)
+def get_infrastructure_networks_routes(
+    run_id: str,
+    request: Request,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=MAX_PAGE_LIMIT),
+    reader: object | None = Depends(get_infrastructure_networks_reader),
+    settings: Settings = Depends(get_settings),
+) -> TravelRoutePageOut:
+    _authorize(request, settings)
+    snapshot = _snapshot(_reader(reader), run_id)
+    codec = _codec(request)
+    from api.infrastructure_networks_cursor import (
+        INFRASTRUCTURE_NETWORKS_ROUTES_CURSOR_PURPOSE,
+    )
+
+    purpose = INFRASTRUCTURE_NETWORKS_ROUTES_CURSOR_PURPOSE
+    filters: dict[str, object] = {}
+    after = _after_key(
+        codec,
+        cursor,
+        snapshot=snapshot,
+        purpose=purpose,
+        filters=filters,
+        limit=limit,
+    )
+    selection = page_travel_routes(snapshot, after_key=after, limit=limit)
+    _LOGGER.debug(
+        "infrastructure_networks_api purpose=routes rows=%s", len(selection.rows)
+    )
+    return TravelRoutePageOut(
+        fingerprint=snapshot.digest,
+        publication=snapshot.publication_id,
+        items=tuple(
+            TravelRouteOut(
+                origin_location_id=row.origin_location_id,
+                destination_location_id=row.destination_location_id,
+                status=row.status,
+                seasonal_availability=row.seasonal_availability,
+                blockage_cause=row.blockage_cause,
+                duration_ticks=row.duration_ticks,
+                fatigue_cost=row.fatigue_cost,
+                capacity=row.capacity,
+                risk=row.risk,
+                infrastructure_quality=row.infrastructure_quality,
+                as_of_tick=row.as_of_tick,
+            )
+            for row in selection.rows
+        ),
+        next_cursor=_next_cursor(
+            codec,
+            snapshot=snapshot,
+            purpose=purpose,
+            filters=filters,
+            limit=limit,
+            next_key=selection.next_key,
+        ),
     )

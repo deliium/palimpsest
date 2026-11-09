@@ -1633,6 +1633,11 @@ func fetch_infrastructure_edges() -> void:
 	_request_path("infrastructure_edge", path, {"capability": "debug"})
 
 
+func fetch_infrastructure_routes() -> void:
+	var path := "/v1/simulations/%s/infrastructure-networks/routes?limit=500" % run_id
+	_request_path("infrastructure_edge", path, {"capability": "debug"})
+
+
 func fetch_infrastructure_damaged() -> void:
 	var path := "/v1/simulations/%s/infrastructure-networks/condition" % run_id
 	_request_path("infrastructure_damaged", path, {"capability": "debug"})

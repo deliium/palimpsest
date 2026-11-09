@@ -152,6 +152,10 @@ class PersistentSimulationService:
             public_goods_active=self._engine.public_goods_active,
             regions_migration_active=state.regions_migration is not None,
             cultural_contact_active=self._engine.cultural_contact_active,
+            infrastructure_networks_active=(
+                self._engine.infrastructure_networks_active
+            ),
+            travel_network_active=self._engine.travel_network_active,
         )
         production_rows: SnapshotExtensions = {}
         if codec_version in {
@@ -173,6 +177,8 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             production_rows = {
                 "structures": tuple(state.structures.values()),
@@ -197,6 +203,8 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             production_rows["active_hazards"] = tuple(state.active_hazards)
         if codec_version in {
@@ -216,6 +224,8 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             production_rows["artifacts"] = tuple(state.artifacts.values())
         if codec_version in {
@@ -234,6 +244,8 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             production_rows["lifecycle_records"] = tuple(self._engine.lifecycle_records)
         if codec_version in {
@@ -250,6 +262,8 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             graph = self._engine.kinship_graph
             from world.kinship import KinshipGraph
@@ -269,6 +283,8 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             production_rows["dependency_need_registers"] = tuple(
                 self._engine._dependency_need_registers.values()
@@ -284,23 +300,44 @@ class PersistentSimulationService:
             "v18",
             "v19",
             "v20",
+            "v21",
+            "v25",
         }:
             production_rows["repositories"] = tuple(state.repositories.values())
-        if codec_version in {"v13", "v14", "v15", "v16", "v17", "v18", "v19"}:
+        if codec_version in {
+            "v13",
+            "v14",
+            "v15",
+            "v16",
+            "v17",
+            "v18",
+            "v19",
+            "v20",
+            "v21",
+            "v25",
+        }:
             production_rows["corpse_custody_item_ids"] = tuple(
                 sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
             )
-        if codec_version in {"v15", "v16", "v17", "v18", "v19"}:
+        if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25"}:
             production_rows["exchange_offers"] = tuple(state.exchange_offers)
-        if codec_version in {"v17", "v18", "v19"}:
+        if codec_version in {"v17", "v18", "v19", "v20", "v21", "v25"}:
             production_rows["collective_projects"] = tuple(
                 state.collective_projects.values()
             )
-        if codec_version == "v19":
+        if codec_version in {"v19", "v20", "v21", "v25"}:
             production_rows["regions_migration"] = state.regions_migration
             production_rows["journeys"] = (
                 None if state.journeys is None else tuple(state.journeys.values())
             )
+        if codec_version in {"v21", "v25"}:
+            production_rows["infrastructure"] = tuple(
+                state.infrastructure.values()
+                if state.infrastructure is not None
+                else ()
+            )
+        if codec_version == "v25":
+            production_rows["travel_network"] = tuple(state.travel_network)
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -354,6 +391,8 @@ class PersistentSimulationService:
             collective_projects=draft.collective_projects,
             regions_migration=draft.regions_migration,
             journeys=draft.journeys,
+            infrastructure=draft.infrastructure,
+            travel_network=draft.travel_network,
         )
 
     async def resolve_tick(

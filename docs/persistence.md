@@ -238,3 +238,11 @@ subjective snapshot paths without a new store, table, codec, or migration.
 The versioned runner result document is unchanged; the tuple is available to
 detached analysis and researcher tooling only. Event/replay/codec documents and
 Alembic head `0017` are unaffected.
+
+## Travel-network checkpoints (V4-17)
+
+Travel-network runs write event schema **27** / codec **`v25`**. Codec `v25` is
+cumulative over v21: it carries infrastructure rows, optional regions/journeys,
+and bounded `travel_network` route rows. Route rows are required under v25 (an
+empty tuple is valid for an edgeless world) and rejected under v21. Old v21 and
+v19 checkpoints remain decodable. Alembic head stays **0017**.

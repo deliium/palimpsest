@@ -77,6 +77,7 @@ from world.effects import (
     ResolvedFleeEffect,
     require_event_cause,
 )
+from world.environment import Season
 from world.events import (
     CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION,
     EventDetails,
@@ -1345,6 +1346,8 @@ def prepare_action_batch(
         Callable[[ActionRequest, WorldState], ResolvedFleeEffect | None] | None
     ) = None,
     infrastructure_networks_active: bool = False,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1542,6 +1545,8 @@ def prepare_action_batch(
             collective_projects_context=collective_projects_context,
             public_goods_context=public_goods_context,
             infrastructure_networks_active=infrastructure_networks_active,
+            season=season,
+            travel_network_active=travel_network_active,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1639,6 +1644,8 @@ def prepare_action_batch(
                 collective_projects_context=collective_projects_context,
                 public_goods_context=public_goods_context,
                 infrastructure_networks_active=infrastructure_networks_active,
+                season=season,
+                travel_network_active=travel_network_active,
             )
             if working_rule.disposition is not RuleDisposition.EVENT_ONLY:
                 outcomes.append(
@@ -1733,6 +1740,8 @@ def prepare_action_batch(
             public_good_maintain_success=maintain_success,
             contact_enabled=contact_enabled,
             infrastructure_networks_active=infrastructure_networks_active,
+            season=season,
+            travel_network_active=travel_network_active,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             status = BatchItemStatus.CONFLICTED

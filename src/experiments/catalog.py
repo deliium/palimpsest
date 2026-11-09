@@ -2827,6 +2827,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "generational_runner@1",
         "generational_comparison@1",
         "infrastructure_networks@1",
+        "travel_network@1",
     }
 )
 
@@ -5622,6 +5623,25 @@ def experiment_infrastructure_networks(
     )
     _LOG.info(
         "experiment_registered experiment_id=infrastructure_networks@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_travel_network(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 24,
+) -> ExperimentDefinition:
+    """Off-gate V4-17 experiment: travel-network channel vs control."""
+    from experiments.travel_network_scenario import travel_network_scenario
+
+    definition = travel_network_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=travel_network@1 arms=%s",
         len(definition.conditions),
     )
     return definition

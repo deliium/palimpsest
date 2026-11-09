@@ -11,5 +11,6 @@ __all__ = [
 ]
 
 INFRASTRUCTURE_NETWORKS_CURSOR_TTL_SECONDS = 900
+INFRASTRUCTURE_NETWORKS_ROUTES_CURSOR_PURPOSE = "infrastructure_networks_routes"
 InfrastructureNetworksCursorCodec = DiplomacyCursorCodec
 InfrastructureNetworksCursorError = DiplomacyCursorError

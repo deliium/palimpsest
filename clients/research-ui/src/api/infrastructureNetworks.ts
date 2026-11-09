@@ -15,6 +15,27 @@ export type InfrastructureNetworksSummary = {
   destroyed_count: number
   effects_active_count: number
   coverage: string
+  route_count?: number
+  route_open_count?: number
+  route_restricted_count?: number
+  route_closed_count?: number
+  route_weather_count?: number
+  route_seasonal_count?: number
+  route_hazard_count?: number
+}
+
+export type TravelRoute = {
+  origin_location_id: string
+  destination_location_id: string
+  status: string
+  seasonal_availability: string
+  blockage_cause: string
+  duration_ticks: number
+  fatigue_cost: number
+  capacity: number
+  risk: number
+  infrastructure_quality: number
+  as_of_tick: number
 }
 
 export type InfrastructureAsset = {
@@ -102,4 +123,17 @@ export function fetchInfrastructureMaintenance(
   options: InfrastructureListOptions = {},
 ): Promise<Page<InfrastructureAsset>> {
   return fetchPage(runId, 'maintenance', options)
+}
+
+export function fetchTravelRoutes(
+  runId: string,
+  options: InfrastructureListOptions = {},
+): Promise<Page<TravelRoute>> {
+  return apiFetch<Page<TravelRoute>>(`${base(runId)}/routes`, {
+    capability: CAPABILITY,
+    query: {
+      cursor: options.cursor,
+      limit: options.limit ?? 200,
+    },
+  })
 }

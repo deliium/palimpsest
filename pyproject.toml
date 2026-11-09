@@ -367,6 +367,7 @@ protected_modules = [
     "world._experiment_laws",
     "world._experiment_apply",
     "world._infrastructure",
+    "world._travel_network",
 ]
 allowed_importers = [
     "world._collective_projects",
@@ -386,6 +387,8 @@ allowed_importers = [
     "world._experiment_laws",
     "world._experiment_apply",
     "world._infrastructure",
+    "world._travel_network",
+    "world.travel_network",
 ]
 as_packages = true
 

@@ -57,6 +57,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V27,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -122,6 +123,7 @@ from world.events import (
     ResourceNodeDepleted,
     ResourceNodeRecovered,
     ResourceRegenerated,
+    RouteConditionChanged,
     Searched,
     SeasonChanged,
     Slept,
@@ -420,6 +422,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V21,
             EVENT_SCHEMA_REPLAY_V22,
             EVENT_SCHEMA_REPLAY_V23,
+            EVENT_SCHEMA_REPLAY_V27,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -743,6 +746,8 @@ def _apply_event_effect(
             )
         case PublicGoodOpposed() as opposed:
             return _project_public_good_integrity(state, event, opposed), True
+        case RouteConditionChanged() as route_changed:
+            return _project_route_condition_changed(state, route_changed), True
         case (
             InfrastructureConstructed()
             | InfrastructureRepaired()
@@ -2854,6 +2859,53 @@ def _project_public_good_decay(
     if not changed:
         return state
     return rebuild_world_state(state, structures=structures)
+
+
+def _project_route_condition_changed(
+    state: WorldState, details: RouteConditionChanged
+) -> WorldState:
+    """Upsert one route condition from an effect-complete route event."""
+    from world.travel_network import (
+        RouteBlockageCause,
+        RouteCondition,
+        RouteStatus,
+        SeasonalAvailability,
+    )
+
+    origin = state.locations.get(details.origin_location_id)
+    destination = state.locations.get(details.destination_location_id)
+    if (
+        origin is None
+        or destination is None
+        or destination.entity_id not in origin.adjacent
+    ):
+        raise ValueError("route_condition_changed_non_adjacent")
+    condition = RouteCondition(
+        origin_id=details.origin_location_id,
+        destination_id=details.destination_location_id,
+        status=RouteStatus(details.current_status),
+        seasonal_availability=SeasonalAvailability(
+            details.current_seasonal_availability
+        ),
+        blockage_cause=RouteBlockageCause(details.blockage_cause),
+        duration_ticks=details.duration_ticks,
+        fatigue_cost=details.fatigue_cost,
+        capacity=details.capacity,
+        risk=details.risk,
+        infrastructure_quality=details.infrastructure_quality,
+        reason_codes=details.reason_codes,
+        as_of_tick=details.as_of_tick,
+    )
+    rows = {row.edge_key: row for row in state.travel_network}
+    rows[condition.edge_key] = condition
+    _LOG.debug(
+        "route_condition_replayed status=%s",
+        condition.status.value,
+    )
+    return rebuild_world_state(
+        state,
+        travel_network=tuple(rows[key] for key in sorted(rows)),
+    )
 
 
 def _project_infrastructure_event(state: WorldState, details: object) -> WorldState:

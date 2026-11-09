@@ -97,6 +97,7 @@ PRIVATE_WORLD_MODULES: Final[frozenset[str]] = frozenset(
         "world._experiment_laws",
         "world._experiment_apply",
         "world._infrastructure",
+        "world._travel_network",
     }
 )
 PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
@@ -109,6 +110,7 @@ PRIVATE_WORLD_IMPORTERS: Final[frozenset[str]] = frozenset(
         "world._replay",
         "world._physical",
         "world._infrastructure",
+        "world.travel_network",
         "simulation.engine",
         "simulation.bootstrap",
     }
@@ -820,6 +822,8 @@ def _importer_may_use_private_world(module: str) -> bool:
     if module in PRIVATE_WORLD_MODULES or any(
         module.startswith(f"{private}.") for private in PRIVATE_WORLD_MODULES
     ):
+        return True
+    if module in PRIVATE_WORLD_IMPORTERS:
         return True
     if (
         module.startswith("world._state.")

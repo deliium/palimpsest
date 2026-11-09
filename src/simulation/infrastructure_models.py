@@ -29,9 +29,13 @@ __all__ = [
     "require_infrastructure_asset_id",
 ]
 
-INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION: Final[str] = (
+INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION_V1: Final[str] = (
     "infrastructure-networks-snapshot-v1"
 )
+INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION: Final[str] = (
+    "infrastructure-networks-snapshot-v2"
+)
+INFRASTRUCTURE_ROUTE_MAX_ROWS: Final[int] = 512
 INFRASTRUCTURE_NETWORKS_STORE_VERSION: Final[str] = "infrastructure-networks-store-v1"
 INFRASTRUCTURE_NETWORKS_SNAPSHOT_POLICY: Final[str] = "infrastructure-networks.v1"
 INFRASTRUCTURE_NETWORKS_PUBLICATION_PREFIX: Final[str] = "infra-pub-"
@@ -239,6 +243,69 @@ class InfrastructureAssetRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class TravelRouteRecord:
+    origin_location_id: str
+    destination_location_id: str
+    status: str
+    seasonal_availability: str
+    blockage_cause: str
+    duration_ticks: int
+    fatigue_cost: float
+    capacity: int
+    risk: float
+    infrastructure_quality: float
+    as_of_tick: int
+
+    def __post_init__(self) -> None:
+        origin = _stable("origin_location_id", self.origin_location_id)
+        destination = _stable("destination_location_id", self.destination_location_id)
+        if origin == destination:
+            raise InfrastructureNetworksArtifactError(
+                "infrastructure_networks_invalid_value"
+            )
+        first, second = sorted((origin, destination))
+        status = _stable("status", self.status)
+        availability = _stable("seasonal_availability", self.seasonal_availability)
+        blockage = _stable("blockage_cause", self.blockage_cause)
+        if status not in {"open", "restricted", "closed"}:
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if availability not in {"open", "restricted", "closed"}:
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if blockage not in {"none", "weather", "seasonal", "hazard"}:
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if (
+            isinstance(self.duration_ticks, bool)
+            or type(self.duration_ticks) is not int
+            or self.duration_ticks < 1
+        ):
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if (
+            isinstance(self.capacity, bool)
+            or type(self.capacity) is not int
+            or not 1 <= self.capacity <= 24
+        ):
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        for name in ("fatigue_cost", "risk", "infrastructure_quality"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or type(value) is not float:
+                raise InfrastructureNetworksArtifactError("travel_route_invalid")
+            if value != value or value < 0.0:
+                raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if self.risk > 1.0 or self.infrastructure_quality > 1.0:
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        object.__setattr__(self, "origin_location_id", first)
+        object.__setattr__(self, "destination_location_id", second)
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "seasonal_availability", availability)
+        object.__setattr__(self, "blockage_cause", blockage)
+        object.__setattr__(self, "as_of_tick", _tick("as_of_tick", self.as_of_tick))
+
+    @property
+    def edge_key(self) -> tuple[str, str]:
+        return self.origin_location_id, self.destination_location_id
+
+
+@dataclass(frozen=True, slots=True)
 class InfrastructureNetworksSummaryRecord:
     run_id: str
     publication_id: str
@@ -253,6 +320,13 @@ class InfrastructureNetworksSummaryRecord:
     destroyed_count: int
     effects_active_count: int
     coverage: str = "not_applicable"
+    route_count: int = 0
+    route_open_count: int = 0
+    route_restricted_count: int = 0
+    route_closed_count: int = 0
+    route_weather_count: int = 0
+    route_seasonal_count: int = 0
+    route_hazard_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "run_id", _stable("run_id", self.run_id))
@@ -264,7 +338,10 @@ class InfrastructureNetworksSummaryRecord:
             raise InfrastructureNetworksArtifactError(
                 "infrastructure_networks_invalid_digest"
             )
-        if self.schema_version != INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION:
+        if self.schema_version not in {
+            INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION_V1,
+            INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION,
+        }:
             raise InfrastructureNetworksArtifactError(
                 "infrastructure_networks_unsupported_schema"
             )
@@ -280,6 +357,13 @@ class InfrastructureNetworksSummaryRecord:
             "damaged_count",
             "destroyed_count",
             "effects_active_count",
+            "route_count",
+            "route_open_count",
+            "route_restricted_count",
+            "route_closed_count",
+            "route_weather_count",
+            "route_seasonal_count",
+            "route_hazard_count",
         ):
             object.__setattr__(self, name, _tick(name, getattr(self, name)))
         coverage = _stable("coverage", self.coverage)
@@ -294,6 +378,7 @@ class InfrastructureNetworksSummaryRecord:
 class InfrastructureNetworksSnapshot:
     summary: InfrastructureNetworksSummaryRecord
     assets: tuple[InfrastructureAssetRecord, ...]
+    routes: tuple[TravelRouteRecord, ...] = ()
     digest: str = ""
     publication_id: str = ""
     schema_version: str = INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION
@@ -314,7 +399,29 @@ class InfrastructureNetworksSnapshot:
             "assets",
             tuple(sorted(self.assets, key=lambda asset: asset.asset_id)),
         )
-        if self.schema_version != INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION:
+        if type(self.routes) is not tuple:
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if any(type(route) is not TravelRouteRecord for route in self.routes):
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if len(self.routes) > INFRASTRUCTURE_ROUTE_MAX_ROWS:
+            raise InfrastructureNetworksArtifactError("travel_route_cap_exceeded")
+        edge_keys = [route.edge_key for route in self.routes]
+        if len(set(edge_keys)) != len(edge_keys):
+            raise InfrastructureNetworksArtifactError("travel_route_duplicate")
+        object.__setattr__(
+            self,
+            "routes",
+            tuple(sorted(self.routes, key=lambda route: route.edge_key)),
+        )
+        if (
+            self.schema_version == INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION_V1
+            and self.routes
+        ):
+            raise InfrastructureNetworksArtifactError("travel_route_invalid")
+        if self.schema_version not in {
+            INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION_V1,
+            INFRASTRUCTURE_NETWORKS_SNAPSHOT_VERSION,
+        }:
             raise InfrastructureNetworksArtifactError(
                 "infrastructure_networks_unsupported_schema"
             )

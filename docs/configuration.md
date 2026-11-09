@@ -525,3 +525,11 @@ Publication is opt-in and post-completion under
 `--infrastructure-networks-max-bytes`. Storage failure changes only the
 receipt, never the scientific result. See
 [infrastructure networks](infrastructure-networks.md).
+
+## Travel network (V4-17)
+
+The travel-network channel is not a new flag or runner schema. It activates only
+when `v4_capability_flags.infrastructure_networks` is on and a
+`regions_migration` spec is present. There is no `runner-config-v57`.
+Infrastructure-only runs keep replay-v23 / codec v21; active travel-network runs
+use replay-v27 / codec v25.

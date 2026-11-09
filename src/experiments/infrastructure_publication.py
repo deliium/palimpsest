@@ -123,14 +123,19 @@ def _resolve_analysis(
         return existing
     resolved_assets = assets
     if resolved_assets is None:
-        resolved_assets = getattr(runner_result, "infrastructure_assets", ()) or ()
+        resolved_assets = (
+            getattr(runner_result, "final_infrastructure_assets", None)
+            or getattr(runner_result, "infrastructure_assets", ())
+            or ()
+        )
+    routes = getattr(runner_result, "final_travel_network", ()) or ()
     tick = (
         window_tick
         if window_tick is not None
         else int(getattr(runner_result, "window_end", 0) or 0)
     )
     return build_completed_run_infrastructure_networks_analysis(
-        resolved_assets, window_tick=tick
+        resolved_assets, routes=routes, window_tick=tick
     )
 
 

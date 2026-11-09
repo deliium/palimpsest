@@ -88,6 +88,7 @@ EVENT_SCHEMA_REPLAY_V20: Final[int] = 20
 EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
 EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
 EVENT_SCHEMA_REPLAY_V23: Final[int] = 23
+EVENT_SCHEMA_REPLAY_V27: Final[int] = 27
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -113,6 +114,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -139,6 +141,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -164,6 +167,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -186,6 +190,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -207,6 +212,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -227,6 +233,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -246,6 +253,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -264,6 +272,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -281,6 +290,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -297,6 +307,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -2906,12 +2917,189 @@ def _validate_infrastructure_event(event: Any, type_name: str) -> None:
     _reject_presentation_fields(event.kind, event.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class RouteConditionChanged:
+    """Effect-complete route-condition transition for one adjacent edge."""
+
+    origin_location_id: EntityId
+    destination_location_id: EntityId
+    previous_status: str
+    current_status: str
+    previous_seasonal_availability: str
+    current_seasonal_availability: str
+    duration_ticks: int
+    fatigue_cost: float
+    capacity: int
+    risk: float
+    infrastructure_quality: float
+    blockage_cause: str
+    reason_codes: tuple[str, ...]
+    season: str | None
+    as_of_tick: int
+    previous_duration_ticks: int | None = None
+    previous_fatigue_cost: float | None = None
+    previous_capacity: int | None = None
+    previous_risk: float | None = None
+    previous_infrastructure_quality: float | None = None
+    previous_blockage_cause: str | None = None
+    previous_reason_codes: tuple[str, ...] | None = None
+    kind: Literal["route_condition_changed"] = field(
+        default="route_condition_changed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        _validate_route_condition_event(self)
+
+
+def _validate_route_condition_event(event: Any) -> None:
+    origin = event.origin_location_id
+    destination = event.destination_location_id
+    if type(origin) is not EntityId or type(destination) is not EntityId:
+        raise TypeError("RouteConditionChanged endpoints must be EntityId")
+    if origin == destination:
+        raise ValueError("RouteConditionChanged endpoints must differ")
+    first, second = sorted((origin, destination), key=lambda item: item.value)
+    object.__setattr__(event, "origin_location_id", first)
+    object.__setattr__(event, "destination_location_id", second)
+
+    statuses = {"open", "restricted", "closed"}
+    availabilities = {"open", "restricted", "closed"}
+    blockages = {"none", "weather", "seasonal", "hazard"}
+    seasons = {"spring", "summer", "autumn", "winter"}
+    for field_name, allowed in (
+        ("previous_status", statuses),
+        ("current_status", statuses),
+        ("previous_seasonal_availability", availabilities),
+        ("current_seasonal_availability", availabilities),
+        ("blockage_cause", blockages),
+    ):
+        value = getattr(event, field_name)
+        if type(value) is not str or value not in allowed:
+            raise ValueError(f"route_condition_changed_{field_name}")
+    if event.season is not None and (
+        type(event.season) is not str or event.season not in seasons
+    ):
+        raise ValueError("route_condition_changed_season")
+    duration = event.duration_ticks
+    if isinstance(duration, bool) or type(duration) is not int or duration < 1:
+        raise ValueError("route_condition_changed_duration")
+    fatigue = _require_finite_float(
+        "route_condition_changed_fatigue", event.fatigue_cost
+    )
+    if fatigue < 0.0:
+        raise ValueError("route_condition_changed_fatigue")
+    object.__setattr__(event, "fatigue_cost", fatigue)
+    capacity = event.capacity
+    if (
+        isinstance(capacity, bool)
+        or type(capacity) is not int
+        or not 1 <= capacity <= 24
+    ):
+        raise ValueError("route_condition_changed_capacity")
+    for field_name in ("risk", "infrastructure_quality"):
+        value = _require_finite_float(
+            f"route_condition_changed_{field_name}",
+            getattr(event, field_name),
+        )
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"route_condition_changed_{field_name}")
+        object.__setattr__(event, field_name, value)
+    codes = event.reason_codes
+    if isinstance(codes, (str, bytes)) or not isinstance(codes, tuple):
+        raise TypeError("route_condition_changed_reason_codes")
+    if len(codes) > 8:
+        raise ValueError("route_condition_changed_reason_codes")
+    if any(type(code) is not str or not code for code in codes):
+        raise ValueError("route_condition_changed_reason_codes")
+    tick = event.as_of_tick
+    if isinstance(tick, bool) or type(tick) is not int or tick < 0:
+        raise ValueError("route_condition_changed_tick")
+    previous_duration = event.previous_duration_ticks
+    if previous_duration is not None and (
+        isinstance(previous_duration, bool)
+        or type(previous_duration) is not int
+        or previous_duration < 1
+    ):
+        raise ValueError("route_condition_changed_previous_duration_ticks")
+    previous_fatigue = event.previous_fatigue_cost
+    if previous_fatigue is not None:
+        previous_fatigue = _require_finite_float(
+            "route_condition_changed_previous_fatigue", previous_fatigue
+        )
+        if previous_fatigue < 0.0:
+            raise ValueError("route_condition_changed_previous_fatigue")
+        object.__setattr__(event, "previous_fatigue_cost", previous_fatigue)
+    previous_capacity = event.previous_capacity
+    if previous_capacity is not None and (
+        isinstance(previous_capacity, bool)
+        or type(previous_capacity) is not int
+        or not 1 <= previous_capacity <= 24
+    ):
+        raise ValueError("route_condition_changed_previous_capacity")
+    for field_name in ("previous_risk", "previous_infrastructure_quality"):
+        value = getattr(event, field_name)
+        if value is None:
+            continue
+        value = _require_finite_float(f"route_condition_changed_{field_name}", value)
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"route_condition_changed_{field_name}")
+        object.__setattr__(event, field_name, value)
+    previous_blockage = event.previous_blockage_cause
+    if previous_blockage is not None and previous_blockage not in blockages:
+        raise ValueError("route_condition_changed_previous_blockage_cause")
+    previous_codes = event.previous_reason_codes
+    if previous_codes is not None:
+        if isinstance(previous_codes, (str, bytes)) or not isinstance(
+            previous_codes, tuple
+        ):
+            raise TypeError("route_condition_changed_previous_reason_codes")
+        if len(previous_codes) > 8 or any(
+            type(code) is not str or not code for code in previous_codes
+        ):
+            raise ValueError("route_condition_changed_previous_reason_codes")
+    changed = (
+        event.previous_status != event.current_status
+        or event.previous_seasonal_availability
+        != event.current_seasonal_availability
+        or (
+            previous_duration is not None
+            and previous_duration != event.duration_ticks
+        )
+        or (
+            previous_fatigue is not None
+            and previous_fatigue != event.fatigue_cost
+        )
+        or (
+            previous_capacity is not None
+            and previous_capacity != event.capacity
+        )
+        or (
+            event.previous_risk is not None
+            and event.previous_risk != event.risk
+        )
+        or (
+            event.previous_infrastructure_quality is not None
+            and event.previous_infrastructure_quality
+            != event.infrastructure_quality
+        )
+        or (
+            previous_blockage is not None
+            and previous_blockage != event.blockage_cause
+        )
+        or (previous_codes is not None and previous_codes != event.reason_codes)
+    )
+    if not changed:
+        raise ValueError("route_condition_changed_no_change")
+    _reject_presentation_fields(event.kind, event.__slots__)
+
+
 EventDetails = (
     Moved
     | JourneyStarted
     | JourneyArrived
     | JourneyEnded
     | ContactRecorded
+    | RouteConditionChanged
     | InfrastructureConstructed
     | InfrastructureRepaired
     | InfrastructureDamaged
@@ -2994,6 +3182,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         JourneyArrived,
         JourneyEnded,
         ContactRecorded,
+        RouteConditionChanged,
         Searched,
         Taken,
         Dropped,
@@ -3080,7 +3269,14 @@ _INFRASTRUCTURE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V23}
+    {EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27}
+)
+
+_TRAVEL_NETWORK_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {RouteConditionChanged}
+)
+_TRAVEL_NETWORK_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V27}
 )
 
 _KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
@@ -3107,6 +3303,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -3120,6 +3317,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -3132,6 +3330,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3146,6 +3345,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
@@ -3157,6 +3357,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3175,6 +3376,7 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3186,6 +3388,7 @@ _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3196,11 +3399,12 @@ _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 _CONTACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({ContactRecorded})
 _CONTACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}
+    {EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27}
 )
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
@@ -3263,6 +3467,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
     }
 )
 
@@ -3384,6 +3589,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
                 return True
     if type(details) in _CONTACT_DETAIL_TYPES:
         return schema_version in _CONTACT_EVENT_SCHEMAS
+    if type(details) in _TRAVEL_NETWORK_DETAIL_TYPES:
+        return schema_version in _TRAVEL_NETWORK_EVENT_SCHEMAS
     if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
         return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
@@ -3569,7 +3776,13 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
     match details:
         case Moved(destination_id=destination_id):
             return destination_id
-        case JourneyStarted() | JourneyArrived() | JourneyEnded() | ContactRecorded():
+        case (
+            JourneyStarted()
+            | JourneyArrived()
+            | JourneyEnded()
+            | ContactRecorded()
+            | RouteConditionChanged()
+        ):
             return None
         case (
             InfrastructureConstructed(asset_id=asset_id)
@@ -3862,6 +4075,15 @@ class WorldEvent:
                     self.schema_version,
                 )
                 raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _TRAVEL_NETWORK_DETAIL_TYPES:
+            if self.schema_version not in _TRAVEL_NETWORK_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=travel_network_requires_v27",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
         if type(self.details) in _INFRASTRUCTURE_DETAIL_TYPES:
             if self.schema_version not in _INFRASTRUCTURE_EVENT_SCHEMAS:
                 _LOG.error(
@@ -3908,6 +4130,7 @@ class WorldEvent:
                     EVENT_SCHEMA_REPLAY_V21,
                     EVENT_SCHEMA_REPLAY_V22,
                     EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
                 }
             ):
                 _LOG.warning(
@@ -4165,6 +4388,19 @@ def build_occurrence_context(
                 affected_entity_ids=tuple(
                     sorted(participant_ids, key=lambda item: item.value)
                 ),
+                private_recipient_ids=(),
+            )
+        case RouteConditionChanged(
+            origin_location_id=origin_id,
+            destination_location_id=destination_id,
+        ):
+            endpoints = tuple(
+                sorted((origin_id, destination_id), key=lambda item: item.value)
+            )
+            return OccurrenceContext(
+                origin_location_id=origin_id,
+                destination_location_id=destination_id,
+                affected_entity_ids=endpoints,
                 private_recipient_ids=(),
             )
         case Moved(destination_id=destination_id, resulting_location_id=resulting):

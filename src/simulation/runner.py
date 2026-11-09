@@ -2582,6 +2582,10 @@ class SimulationRunner:
                     run_id=resolved_run_id.value,
                     world_id=config.scenario.world_id.value,
                 )
+            travel_network_active = (
+                config.v4_capability_flags.infrastructure_networks
+                and config.regions_migration is not None
+            )
             engine = WorldEngine(
                 config=run_config,
                 bootstrap=bootstrap,
@@ -2661,6 +2665,7 @@ class SimulationRunner:
                 infrastructure_networks_active=(
                     config.v4_capability_flags.infrastructure_networks
                 ),
+                travel_network_active=travel_network_active,
                 skill_policy=skill_kwargs.get("skill_policy"),
                 skill_entity_ids=skill_ids or None,
                 teaching_policy=teaching_kwargs.get("teaching_policy"),
@@ -5226,6 +5231,19 @@ class SimulationRunner:
             goal_transition_receipts=tuple(self._goal_transition_receipts),
             cognition_counters=self._cognition_counters,
             final_objective_projection=projection,
+            final_travel_network=tuple(
+                self._engine._snapshot.world.state.travel_network
+            ),
+            final_infrastructure_assets=(
+                ()
+                if self._engine._snapshot.world.state.infrastructure is None
+                else tuple(
+                    sorted(
+                        self._engine._snapshot.world.state.infrastructure.values(),
+                        key=lambda asset: asset.asset_id.value,
+                    )
+                )
+            ),
             objective_state_hash=objective_hash,
             memory_dynamics_audits=audits,
             offline_consolidation_audits=consolidation_audits,
@@ -7164,6 +7182,7 @@ def _engine_snapshot(
         regions_migration_active=state.regions_migration is not None,
         cultural_contact_active=engine.cultural_contact_active,
         infrastructure_networks_active=engine.infrastructure_networks_active,
+        travel_network_active=engine.travel_network_active,
     )
     production_rows: SnapshotExtensions = {}
     if codec_version in {
@@ -7184,7 +7203,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows = {
             "structures": tuple(state.structures.values()),
@@ -7208,7 +7227,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
     if codec_version in {
@@ -7227,7 +7246,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
     if codec_version in {
@@ -7245,7 +7264,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     if codec_version in {
@@ -7261,7 +7280,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
@@ -7280,7 +7299,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
@@ -7295,7 +7314,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows["repositories"] = tuple(state.repositories.values())
     if codec_version in {
@@ -7306,25 +7325,25 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21",
+        "v20", "v21", "v25",
     }:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21"}:
+    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version in {"v17", "v18", "v19", "v20", "v21"}:
+    if codec_version in {"v17", "v18", "v19", "v20", "v21", "v25"}:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
         )
     if codec_version in {"v19", "v20"} or (
-        codec_version == "v21" and state.regions_migration is not None
+        codec_version in {"v21", "v25"} and state.regions_migration is not None
     ):
         production_rows["regions_migration"] = state.regions_migration
         production_rows["journeys"] = (
             None if state.journeys is None else tuple(state.journeys.values())
         )
-    if codec_version == "v21":
+    if codec_version in {"v21", "v25"}:
         production_rows["infrastructure"] = (
             ()
             if state.infrastructure is None
@@ -7335,6 +7354,8 @@ def _engine_snapshot(
                 )
             )
         )
+    if codec_version == "v25":
+        production_rows["travel_network"] = tuple(state.travel_network)
     draft = WorldSnapshot(
         snapshot_id=snapshot_id,
         run_id=engine.run_id,
@@ -7392,6 +7413,7 @@ def _engine_snapshot(
         regions_migration=draft.regions_migration,
         journeys=draft.journeys,
         infrastructure=getattr(draft, "infrastructure", None),
+        travel_network=getattr(draft, "travel_network", None),
     )
 
 

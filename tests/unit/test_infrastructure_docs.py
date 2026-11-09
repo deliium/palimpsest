@@ -35,9 +35,9 @@ def test_canonical_doc_exists_and_is_linked() -> None:
 
 
 def test_metric_and_surface_docs() -> None:
-    assert METRIC_FAMILY_COUNT == 188
+    assert METRIC_FAMILY_COUNT == 192
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **188**" in metrics
+    assert "Closed catalog cardinality: **192**" in metrics
     for family in (
         "infrastructure_network_structure@1",
         "infrastructure_condition_lifecycle@1",
@@ -56,15 +56,15 @@ def test_metric_and_surface_docs() -> None:
     assert "infrastructure-networks" in ui
 
 
-def test_architecture_baseline_through_v4_16() -> None:
+def test_architecture_baseline_through_v4_17() -> None:
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-16" in factory
-    assert "| Metric families | 188" in factory
+    assert "through V4-17" in factory
+    assert "| Metric families | 192" in factory
     assert "infrastructure_networks" in factory
     v4 = _read("docs/v4-architecture.md")
-    assert "188 families" in v4
+    assert "192 families" in v4
     assert "infrastructure-networks" in v4
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Infrastructure networks (V4-16)" in description
-    assert "188 metric families" in description
+    assert "192 metric families" in description
     assert "infrastructure_networks@1" in description

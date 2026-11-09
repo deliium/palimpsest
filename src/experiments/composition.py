@@ -969,6 +969,26 @@ def regional_population_input_from_context(
     )
 
 
+def _trace_route_concept(concepts: Sequence[object], prefix: str) -> str | None:
+    marker = f"{prefix}:"
+    for concept in concepts:
+        value = getattr(concept, "concept", None)
+        if type(value) is str and value.startswith(marker):
+            return value[len(marker) :]
+    return None
+
+
+def _trace_route_capacity(concepts: Sequence[object]) -> int | None:
+    value = _trace_route_concept(concepts, "route_capacity")
+    if value is None:
+        return None
+    try:
+        capacity = int(value)
+    except (TypeError, ValueError):
+        return None
+    return capacity if 1 <= capacity <= 24 else None
+
+
 def regional_destination_evidence_rows_from_traces(
     traces: Sequence[object],
 ) -> tuple[RegionalDestinationEvidenceRow, ...]:
@@ -992,6 +1012,14 @@ def regional_destination_evidence_rows_from_traces(
         )
         if not destination_ids:
             continue
+        origin_id = next(
+            (
+                item.entity_id.value
+                for item in trace.entities
+                if item.label == "origin" and item.entity_id is not None
+            ),
+            None,
+        )
         region_id = next(
             (
                 item.concept.removeprefix("region_id:")
@@ -1000,6 +1028,12 @@ def regional_destination_evidence_rows_from_traces(
             ),
             None,
         )
+        route_status = _trace_route_concept(trace.concepts, "route_status")
+        route_availability = _trace_route_concept(
+            trace.concepts, "route_seasonal_availability"
+        )
+        route_blockage = _trace_route_concept(trace.concepts, "route_blockage_cause")
+        route_capacity = _trace_route_capacity(trace.concepts)
         for destination_id in destination_ids:
             rows.append(
                 RegionalDestinationEvidenceRow(
@@ -1009,6 +1043,11 @@ def regional_destination_evidence_rows_from_traces(
                     source_kind=trace.provenance.kind.value,
                     source_tick=trace.provenance.source_tick,
                     confidence=trace.confidence,
+                    origin_id=origin_id,
+                    route_status=route_status,
+                    route_seasonal_availability=route_availability,
+                    route_blockage_cause=route_blockage,
+                    route_capacity=route_capacity,
                 )
             )
     rows.sort(

@@ -20,6 +20,10 @@ from simulation.infrastructure_codec import (
     encode_infrastructure_networks_snapshot,
 )
 from simulation.infrastructure_models import InfrastructureNetworksSnapshot
+from simulation.infrastructure_paging import (
+    TravelRouteRowSelection,
+    page_travel_routes,
+)
 from simulation.infrastructure_ports import (
     InfrastructureNetworksSummary,
 )
@@ -197,6 +201,15 @@ class _Publisher:
     ) -> InfrastructureNetworksSnapshot | None:
         return _Reader(self._root).read_snapshot(run_id, publication_id)
 
+    def routes(
+        self,
+        run_id: str,
+        *,
+        after_key: str | None = None,
+        limit: int | None = None,
+    ) -> TravelRouteRowSelection | None:
+        return _Reader(self._root).routes(run_id, after_key=after_key, limit=limit)
+
     def list_publications(self, run_id: str) -> tuple[str, ...]:
         return _Reader(self._root).list_publications(run_id)
 
@@ -249,6 +262,18 @@ class _Reader:
         if snapshot.digest != entry.get("digest"):
             raise ValueError("infrastructure_networks_store_corrupt")
         return snapshot
+
+    def routes(
+        self,
+        run_id: str,
+        *,
+        after_key: str | None = None,
+        limit: int | None = None,
+    ) -> TravelRouteRowSelection | None:
+        snapshot = self.read_snapshot(run_id)
+        if snapshot is None:
+            return None
+        return page_travel_routes(snapshot, after_key=after_key, limit=limit)
 
     def summary(self, run_id: str) -> InfrastructureNetworksSummary | None:
         return self.read_summary(run_id)

@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **188** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **192** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -694,7 +694,7 @@ rank. Cultural similarity uses `overlap_count` / `union_count` / `jaccard` /
 ## Infrastructure networks families (V4-16)
 
 Four families append after the inter-society set, raising the catalog from 184
-to **188**: `infrastructure_network_structure@1`,
+to **188** at V4-16 landing: `infrastructure_network_structure@1`,
 `infrastructure_condition_lifecycle@1`, `infrastructure_effect_coverage@1`, and
 `infrastructure_maintenance_burden@1`. The first 184 families keep their IDs,
 order, versions, and value keys. Emit gates on optional
@@ -702,3 +702,12 @@ order, versions, and value keys. Emit gates on optional
 inputs yield empty value maps. Value keys are counts, availability, and
 quantized ratios only — never `score`, `infrastructure_score`, or
 `civilization_score`. See [infrastructure networks](infrastructure-networks.md).
+
+## Travel-network families (V4-17)
+
+Four detached families append the catalog to **192**:
+`travel_route_structure@1`, `travel_route_condition@1`,
+`travel_route_blockage@1`, and `travel_route_belief_alignment@1`. They read
+only the optional detached route analysis input and emit counts, availability,
+coverage, and quantized summaries. There is no route score, civilization score,
+or truth oracle; belief alignment is researcher-only.

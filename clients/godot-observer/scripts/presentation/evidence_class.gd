@@ -23,6 +23,9 @@ const OVERLAY_LABELS := {
 	"infrastructure_edge": "Infrastructure edge",
 	"infrastructure_damaged": "Infrastructure damaged",
 	"infrastructure_destroyed": "Infrastructure destroyed",
+	"route_open": "Route open",
+	"route_restricted": "Route restricted",
+	"route_closed": "Route closed",
 }
 
 ## Overlay kind → evidence class. Presentation-only; never invents world facts.
@@ -43,6 +46,9 @@ const OVERLAY_CLASSES := {
 	"infrastructure_edge": OBJECTIVE,
 	"infrastructure_damaged": OBJECTIVE,
 	"infrastructure_destroyed": OBJECTIVE,
+	"route_open": OBJECTIVE,
+	"route_restricted": OBJECTIVE,
+	"route_closed": OBJECTIVE,
 	"narrative_hops": SUBJECTIVE,
 	"spatial_control": ANALYTICAL,
 	"emergent_group_formation": ANALYTICAL,

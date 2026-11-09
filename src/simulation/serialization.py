@@ -175,6 +175,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V27,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -241,6 +242,7 @@ from world.events import (
     ResourceNodeDepleted,
     ResourceNodeRecovered,
     ResourceRegenerated,
+    RouteConditionChanged,
     Searched,
     SeasonChanged,
     Slept,
@@ -4046,6 +4048,15 @@ def _encode_visible_exit(value: VisibleExit) -> dict[str, Any]:
         payload["travel_duration_ticks"] = value.travel_duration_ticks
         payload["fatigue_cost"] = value.fatigue_cost
         payload["destination_region_id"] = value.destination_region_id
+    if value.route_status is not None:
+        payload["route_status"] = value.route_status
+        payload["route_seasonal_availability"] = value.route_seasonal_availability
+        payload["route_blockage_cause"] = value.route_blockage_cause
+        payload["route_capacity"] = value.route_capacity
+        payload["route_risk"] = value.route_risk
+        payload["route_infrastructure_quality"] = (
+            value.route_infrastructure_quality
+        )
     return payload
 
 
@@ -4055,13 +4066,23 @@ def _decode_visible_exit(data: dict[str, Any], *, path: str) -> VisibleExit:
         "fatigue_cost",
         "destination_region_id",
     }
+    route_fields = {
+        "route_status",
+        "route_seasonal_availability",
+        "route_blockage_cause",
+        "route_capacity",
+        "route_risk",
+        "route_infrastructure_quality",
+    }
     if bool(set(data) & regional_fields) and not regional_fields <= set(data):
+        raise DomainSerializationError("invalid_fields", path)
+    if bool(set(data) & route_fields) and not route_fields <= set(data):
         raise DomainSerializationError("invalid_fields", path)
     _require_keys(
         data,
         {"destination_id", "name"},
         path=path,
-        optional=regional_fields,
+        optional=regional_fields | route_fields,
     )
     destination_region_id = data.get("destination_region_id")
     if destination_region_id is not None and type(destination_region_id) is not str:
@@ -4083,6 +4104,38 @@ def _decode_visible_exit(data: dict[str, Any], *, path: str) -> VisibleExit:
                 else _float_field(data, "fatigue_cost", path=path)
             ),
             destination_region_id=destination_region_id,
+            route_status=(
+                None
+                if "route_status" not in data
+                else _str_field(data, "route_status", path=path)
+            ),
+            route_seasonal_availability=(
+                None
+                if "route_seasonal_availability" not in data
+                else _str_field(data, "route_seasonal_availability", path=path)
+            ),
+            route_blockage_cause=(
+                None
+                if "route_blockage_cause" not in data
+                else _str_field(data, "route_blockage_cause", path=path)
+            ),
+            route_capacity=(
+                None
+                if "route_capacity" not in data
+                else _int_field(data, "route_capacity", path=path)
+            ),
+            route_risk=(
+                None
+                if "route_risk" not in data
+                else _float_field(data, "route_risk", path=path)
+            ),
+            route_infrastructure_quality=(
+                None
+                if "route_infrastructure_quality" not in data
+                else _float_field(
+                    data, "route_infrastructure_quality", path=path
+                )
+            ),
         )
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
@@ -4846,6 +4899,58 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "tick": tick,
                 "topology": topology,
             }
+        case RouteConditionChanged(
+            origin_location_id=origin,
+            destination_location_id=destination,
+            previous_status=previous_status,
+            current_status=current_status,
+            previous_seasonal_availability=previous_availability,
+            current_seasonal_availability=current_availability,
+            duration_ticks=duration_ticks,
+            fatigue_cost=fatigue_cost,
+            capacity=capacity,
+            risk=risk,
+            infrastructure_quality=quality,
+            blockage_cause=blockage_cause,
+            reason_codes=reason_codes,
+            season=season,
+            as_of_tick=as_of_tick,
+        ) as route_detail:
+            payload = {
+                "as_of_tick": as_of_tick,
+                "blockage_cause": blockage_cause,
+                "capacity": capacity,
+                "current_seasonal_availability": current_availability,
+                "current_status": current_status,
+                "destination_location_id": destination.value,
+                "duration_ticks": duration_ticks,
+                "fatigue_cost": fatigue_cost,
+                "infrastructure_quality": quality,
+                "kind": "route_condition_changed",
+                "origin_location_id": origin.value,
+                "previous_seasonal_availability": previous_availability,
+                "previous_status": previous_status,
+                "reason_codes": list(reason_codes),
+                "risk": risk,
+                "season": season,
+            }
+            for name in (
+                "previous_duration_ticks",
+                "previous_fatigue_cost",
+                "previous_capacity",
+                "previous_risk",
+                "previous_infrastructure_quality",
+                "previous_blockage_cause",
+                "previous_reason_codes",
+            ):
+                value = getattr(route_detail, name)
+                if value is not None:
+                    payload[name] = (
+                        list(cast(tuple[str, ...], value))
+                        if name == "previous_reason_codes"
+                        else value
+                    )
+            return payload
         case Searched(
             target_id=target_id,
             success=success,
@@ -6235,6 +6340,112 @@ def _decode_event_details(
     kind = data["kind"]
     fields = {key: value for key, value in data.items() if key != "kind"}
     try:
+        if kind == "route_condition_changed":
+            if schema_version != EVENT_SCHEMA_REPLAY_V27:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            allowed = {
+                "as_of_tick",
+                "blockage_cause",
+                "capacity",
+                "current_seasonal_availability",
+                "current_status",
+                "destination_location_id",
+                "duration_ticks",
+                "fatigue_cost",
+                "infrastructure_quality",
+                "origin_location_id",
+                "previous_seasonal_availability",
+                "previous_status",
+                "previous_blockage_cause",
+                "previous_capacity",
+                "previous_duration_ticks",
+                "previous_fatigue_cost",
+                "previous_infrastructure_quality",
+                "previous_reason_codes",
+                "previous_risk",
+                "reason_codes",
+                "risk",
+                "season",
+            }
+            if set(fields) - allowed:
+                raise DomainSerializationError("invalid_fields", path)
+            raw_codes = fields.get("reason_codes")
+            if not isinstance(raw_codes, list) or any(
+                not isinstance(code, str) for code in raw_codes
+            ):
+                raise DomainSerializationError("invalid_fields", path)
+            raw_season = fields.get("season")
+            if raw_season is not None and not isinstance(raw_season, str):
+                raise DomainSerializationError("invalid_fields", path)
+            return RouteConditionChanged(
+                origin_location_id=EntityId(
+                    _str_field(fields, "origin_location_id", path=path)
+                ),
+                destination_location_id=EntityId(
+                    _str_field(fields, "destination_location_id", path=path)
+                ),
+                previous_status=_str_field(fields, "previous_status", path=path),
+                current_status=_str_field(fields, "current_status", path=path),
+                previous_seasonal_availability=_str_field(
+                    fields, "previous_seasonal_availability", path=path
+                ),
+                current_seasonal_availability=_str_field(
+                    fields, "current_seasonal_availability", path=path
+                ),
+                duration_ticks=_int_field(fields, "duration_ticks", path=path),
+                fatigue_cost=_float_field(fields, "fatigue_cost", path=path),
+                capacity=_int_field(fields, "capacity", path=path),
+                risk=_float_field(fields, "risk", path=path),
+                infrastructure_quality=_float_field(
+                    fields, "infrastructure_quality", path=path
+                ),
+                blockage_cause=_str_field(fields, "blockage_cause", path=path),
+                reason_codes=tuple(raw_codes),
+                season=raw_season,
+                as_of_tick=_int_field(fields, "as_of_tick", path=path),
+                previous_duration_ticks=(
+                    _int_field(fields, "previous_duration_ticks", path=path)
+                    if "previous_duration_ticks" in fields
+                    else None
+                ),
+                previous_fatigue_cost=(
+                    _float_field(fields, "previous_fatigue_cost", path=path)
+                    if "previous_fatigue_cost" in fields
+                    else None
+                ),
+                previous_capacity=(
+                    _int_field(fields, "previous_capacity", path=path)
+                    if "previous_capacity" in fields
+                    else None
+                ),
+                previous_risk=(
+                    _float_field(fields, "previous_risk", path=path)
+                    if "previous_risk" in fields
+                    else None
+                ),
+                previous_infrastructure_quality=(
+                    _float_field(
+                        fields, "previous_infrastructure_quality", path=path
+                    )
+                    if "previous_infrastructure_quality" in fields
+                    else None
+                ),
+                previous_blockage_cause=(
+                    _str_field(fields, "previous_blockage_cause", path=path)
+                    if "previous_blockage_cause" in fields
+                    else None
+                ),
+                previous_reason_codes=(
+                    tuple(fields["previous_reason_codes"])
+                    if "previous_reason_codes" in fields
+                    and isinstance(fields["previous_reason_codes"], list)
+                    and all(
+                        isinstance(code, str)
+                        for code in fields["previous_reason_codes"]
+                    )
+                    else None
+                ),
+            )
         if kind in {
             "infrastructure_constructed",
             "infrastructure_repaired",
@@ -6242,7 +6453,10 @@ def _decode_event_details(
             "infrastructure_decayed",
             "infrastructure_destroyed",
         }:
-            if schema_version != EVENT_SCHEMA_REPLAY_V23:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
                 "asset_id",
@@ -6287,7 +6501,11 @@ def _decode_event_details(
             }[kind]
             return cast(Any, cls)(**payload)
         if kind == "contact_recorded":
-            if schema_version != EVENT_SCHEMA_REPLAY_V22:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
                 "destination_region_id",
@@ -6368,6 +6586,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22,
                 EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             _require_keys(
@@ -6463,6 +6682,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22,
                 EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -6953,6 +7173,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -6981,6 +7202,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -7010,6 +7232,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if kind in {
@@ -7028,6 +7251,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
@@ -7051,6 +7275,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -7069,6 +7294,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -7086,6 +7312,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_possession_details(kind, fields, path=path)
@@ -7097,6 +7324,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 _LOG.error(
                     "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7116,6 +7344,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 _LOG.error(
                     "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7134,6 +7363,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_experiment_resolved(fields, path=path)
@@ -7155,6 +7385,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_repository_details(kind, fields, path=path)
@@ -7174,6 +7405,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_project_or_public_details(
@@ -7188,6 +7420,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
                 EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
             }:
                 _LOG.warning(
                     "public_good event rejected on pre-v20 payload kind=%s",
@@ -7564,6 +7797,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7577,6 +7811,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7606,6 +7841,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7636,6 +7872,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7666,6 +7903,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7687,6 +7925,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7711,6 +7950,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7730,6 +7970,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7753,6 +7994,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7770,6 +8012,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7782,6 +8025,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         _LOG.error(
             "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7802,6 +8046,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         _LOG.error(
             "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7821,15 +8066,17 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
         )
-    if (
-        details_kind == "contact_recorded"
-        and value.schema_version != EVENT_SCHEMA_REPLAY_V22
-    ):
+    if details_kind == "contact_recorded" and value.schema_version not in {
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+    }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
             "$.schema_version",
@@ -7847,6 +8094,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8026,6 +8274,7 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V20,
             EVENT_SCHEMA_REPLAY_V21,
             EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V27,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]

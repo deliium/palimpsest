@@ -290,6 +290,12 @@ class VisibleExit:
     travel_duration_ticks: int | None = None
     fatigue_cost: float | None = None
     destination_region_id: str | None = None
+    route_status: str | None = None
+    route_seasonal_availability: str | None = None
+    route_blockage_cause: str | None = None
+    route_capacity: int | None = None
+    route_risk: float | None = None
+    route_infrastructure_quality: float | None = None
 
     def __post_init__(self) -> None:
         if type(self.destination_id) is not EntityId:
@@ -323,6 +329,55 @@ class VisibleExit:
                     "VisibleExit.destination_region_id", self.destination_region_id
                 ),
             )
+        route_fields = (
+            self.route_status,
+            self.route_seasonal_availability,
+            self.route_blockage_cause,
+            self.route_capacity,
+            self.route_risk,
+            self.route_infrastructure_quality,
+        )
+        present = [value is not None for value in route_fields]
+        if any(present) and not all(present):
+            raise ValueError(
+                "VisibleExit route fields must be all present or all absent"
+            )
+        if all(present):
+            if self.travel_duration_ticks is None or self.fatigue_cost is None:
+                raise ValueError(
+                    "VisibleExit route fields require duration and fatigue"
+                )
+            if self.route_status not in {"open", "restricted", "closed"}:
+                raise ValueError("VisibleExit.route_status")
+            if self.route_seasonal_availability not in {
+                "open",
+                "restricted",
+                "closed",
+            }:
+                raise ValueError("VisibleExit.route_seasonal_availability")
+            if self.route_blockage_cause not in {
+                "none",
+                "weather",
+                "seasonal",
+                "hazard",
+            }:
+                raise ValueError("VisibleExit.route_blockage_cause")
+            if (
+                isinstance(self.route_capacity, bool)
+                or type(self.route_capacity) is not int
+                or not 1 <= self.route_capacity <= 24
+            ):
+                raise ValueError("VisibleExit.route_capacity")
+            for name in ("route_risk", "route_infrastructure_quality"):
+                value = getattr(self, name)
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value))
+                    or not 0.0 <= float(value) <= 1.0
+                ):
+                    raise ValueError(f"VisibleExit.{name}")
+                object.__setattr__(self, name, float(value))
 
 
 class ObservedJourneyPhase(StrEnum):

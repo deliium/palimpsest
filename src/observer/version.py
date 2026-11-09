@@ -163,6 +163,7 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "infrastructure_damaged": "PUBLIC_GOOD_OPPOSED",
     "infrastructure_decayed": "ARTIFACT_DAMAGED",
     "infrastructure_destroyed": "ARTIFACT_DESTROYED",
+    "route_condition_changed": "WEATHER_CHANGED",
 }
 
 RELATIONSHIP_DIMENSION_CODES: Final[tuple[str, ...]] = (

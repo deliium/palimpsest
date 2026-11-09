@@ -11,6 +11,7 @@ func run() -> Array:
 	_expect(failures, _unknown_kind(), "infrastructure unknown kind")
 	_expect(failures, _forbidden(), "infrastructure forbidden payload")
 	_expect(failures, _kind_payload(), "infrastructure kind payload")
+	_expect(failures, _route_payload(), "infrastructure route payload")
 	_expect(failures, _no_write_path(), "infrastructure no write path")
 	return failures
 
@@ -34,6 +35,12 @@ func _mapping() -> String:
 		return "evidence_class damaged mapping"
 	if EvidenceClass.for_overlay("infrastructure_destroyed") != EvidenceClass.OBJECTIVE:
 		return "evidence_class destroyed mapping"
+	if EvidenceClass.for_overlay("route_open") != EvidenceClass.OBJECTIVE:
+		return "evidence_class route open mapping"
+	if EvidenceClass.for_overlay("route_restricted") != EvidenceClass.OBJECTIVE:
+		return "evidence_class route restricted mapping"
+	if EvidenceClass.for_overlay("route_closed") != EvidenceClass.OBJECTIVE:
+		return "evidence_class route closed mapping"
 	return ""
 
 
@@ -166,6 +173,53 @@ func _kind_payload() -> String:
 	if text.find("score") >= 0 or text.find("civilization") >= 0:
 		overlay.free()
 		return "copy must not use score/civilization"
+	overlay.free()
+	return ""
+
+
+func _route_payload() -> String:
+	var overlay = InfrastructureOverlay.new()
+	overlay.set_centers({"loc-a": Vector2.ZERO, "loc-b": Vector2.ZERO, "loc-c": Vector2.ZERO})
+	overlay.set_enabled(true)
+	overlay.apply_payload(
+		{
+			"items": [
+				{"origin_location_id": "loc-a", "destination_location_id": "loc-b", "status": "open"},
+				{"origin_location_id": "loc-b", "destination_location_id": "loc-c", "status": "restricted"},
+				{"origin_location_id": "loc-c", "destination_location_id": "loc-a", "status": "closed"},
+			]
+		},
+		"infrastructure_edge"
+	)
+	if overlay.get_child_count() != 3:
+		overlay.free()
+		return "route rows must render through the objective edge overlay"
+	var kinds := {}
+	for child in overlay.get_children():
+		kinds[str(child.get_meta("overlay_kind", ""))] = true
+	if not kinds.has("infrastructure_edge"):
+		overlay.free()
+		return "open route status mapping"
+	if not kinds.has("infrastructure_damaged"):
+		overlay.free()
+		return "restricted route status mapping"
+	if not kinds.has("infrastructure_destroyed"):
+		overlay.free()
+		return "closed route status mapping"
+	overlay.apply_payload(
+		{"items": [{"origin_location_id": "loc-a", "destination_location_id": "loc-b", "status": "unknown"}]},
+		"infrastructure_edge"
+	)
+	if overlay.get_child_count() != 0:
+		overlay.free()
+		return "unknown route status must stay hidden"
+	overlay.apply_payload(
+		{"items": [{"origin_location_id": "loc-a", "destination_location_id": "loc-b", "status": "open", "score": 1}]},
+		"infrastructure_edge"
+	)
+	if overlay.get_child_count() != 0:
+		overlay.free()
+		return "route score field must be rejected"
 	overlay.free()
 	return ""
 

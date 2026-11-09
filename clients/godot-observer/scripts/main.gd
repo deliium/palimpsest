@@ -549,7 +549,7 @@ func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) ->
 		"infrastructure_edge":
 			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_edge")
 			if enabled:
-				_session.fetch_infrastructure_edges()
+				_session.fetch_infrastructure_routes()
 			else:
 				_world.clear_infrastructure_overlay("infrastructure_edge")
 		"infrastructure_damaged":

@@ -73,6 +73,10 @@ from analysis.infrastructure_metrics import (
     compute_infrastructure_effect_coverage,
     compute_infrastructure_maintenance_burden,
     compute_infrastructure_network_structure,
+    compute_travel_route_belief_alignment,
+    compute_travel_route_blockage,
+    compute_travel_route_condition,
+    compute_travel_route_structure,
 )
 from analysis.inter_society_relations_detection import InterSocietyRelationsAnalysis
 from analysis.inter_society_relations_metrics import (
@@ -354,6 +358,7 @@ class MetricComputationInputs:
     migration_displacement_organization_pairs: Sequence[tuple[str, str]] | None = None
     inter_society_relations_analysis: InterSocietyRelationsAnalysis | None = None
     infrastructure_networks_analysis: InfrastructureNetworksAnalysis | None = None
+    travel_network_analysis: InfrastructureNetworksAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2399,6 +2404,38 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("infrastructure_networks_metrics_emitted families=4")
     else:
         _LOG.debug("infrastructure_networks_metrics_disabled")
+    route_candidate = (
+        inputs.travel_network_analysis or inputs.infrastructure_networks_analysis
+    )
+    if route_candidate is not None:
+        route_analysis = route_candidate
+        _safe(
+            "travel_route_structure",
+            lambda: compute_travel_route_structure(
+                route_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "travel_route_condition",
+            lambda: compute_travel_route_condition(
+                route_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "travel_route_blockage",
+            lambda: compute_travel_route_blockage(
+                route_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "travel_route_belief_alignment",
+            lambda: compute_travel_route_belief_alignment(
+                route_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("travel_network_metrics_emitted families=4 catalog=192")
+    else:
+        _LOG.debug("travel_network_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

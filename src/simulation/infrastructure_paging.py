@@ -9,12 +9,15 @@ from typing import Final
 from simulation.infrastructure_models import (
     InfrastructureAssetRecord,
     InfrastructureNetworksSnapshot,
+    TravelRouteRecord,
 )
 
 __all__ = [
     "MAX_PAGE_LIMIT",
     "InfrastructureNetworksRowSelection",
+    "TravelRouteRowSelection",
     "page_infrastructure_networks_rows",
+    "page_travel_routes",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.infrastructure.paging")
@@ -59,6 +62,46 @@ def _ordered_rows(
     if purpose == "maintenance":
         return assets
     raise ValueError("infrastructure_networks_cursor_purpose")
+
+
+@dataclass(frozen=True, slots=True)
+class TravelRouteRowSelection:
+    purpose: str
+    after_key: str | None
+    limit: int
+    rows: tuple[TravelRouteRecord, ...] = ()
+    next_key: str | None = None
+
+
+def _route_key(row: TravelRouteRecord) -> str:
+    return f"{row.origin_location_id}:{row.destination_location_id}"
+
+
+def page_travel_routes(
+    snapshot: InfrastructureNetworksSnapshot,
+    *,
+    after_key: str | None = None,
+    limit: int | None = None,
+) -> TravelRouteRowSelection:
+    if type(snapshot) is not InfrastructureNetworksSnapshot:
+        raise TypeError("snapshot must be InfrastructureNetworksSnapshot")
+    clamped = _clamp_limit(100 if limit is None else limit)
+    ordered = list(sorted(snapshot.routes, key=_route_key))
+    if after_key is not None:
+        if type(after_key) is not str or not after_key:
+            raise ValueError("infrastructure_networks_cursor_invalid")
+        ordered = [row for row in ordered if _route_key(row) > after_key]
+    page = tuple(ordered[:clamped])
+    next_key = _route_key(page[-1]) if len(ordered) > len(page) and page else None
+    result = TravelRouteRowSelection(
+        purpose="routes",
+        after_key=after_key,
+        limit=clamped,
+        rows=page,
+        next_key=next_key,
+    )
+    _LOG.debug("infrastructure_networks_page purpose=routes rows=%s", len(page))
+    return result
 
 
 def page_infrastructure_networks_rows(

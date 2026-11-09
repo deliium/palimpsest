@@ -13,7 +13,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from world._operations import (
     ValidatedWorldOperation,
@@ -89,6 +89,7 @@ from world.effects import (
     ResolvedRepositoryEstablishEffect,
     ResolvedSearchEffect,
 )
+from world.environment import Season
 from world.events import (
     ArtifactAnnotated,
     ArtifactCopied,
@@ -172,6 +173,9 @@ from world.values import (
 )
 
 _OPS_LOG: Final[logging.Logger] = logging.getLogger("world._operations")
+if TYPE_CHECKING:
+    from world.travel_network import RouteCondition
+
 _RULES_LOG: Final[logging.Logger] = logging.getLogger("world._rules")
 
 __all__: list[str] = [
@@ -303,6 +307,9 @@ class RuleReason(StrEnum):
     EXCHANGE_NO_LIVE_OFFER = "exchange_no_live_offer"
     EXCHANGE_BUNDLE_MISMATCH = "exchange_bundle_mismatch"
     EXCHANGE_NOT_PROPOSER = "exchange_not_proposer"
+    ROUTE_CLOSED = "route_closed"
+    ROUTE_BLOCKED = "route_blocked"
+    ROUTE_CAPACITY_EXCEEDED = "route_capacity_exceeded"
 
 
 @dataclass(frozen=True, slots=True)
@@ -752,6 +759,8 @@ def evaluate_operation(
     collective_projects_context: object | None = None,
     public_goods_context: object | None = None,
     infrastructure_networks_active: bool = False,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -839,7 +848,14 @@ def evaluate_operation(
         )
     match operation:
         case _MoveOp(destination_id=destination_id):
-            return _evaluate_move(state, operation.actor_id, destination_id, kind)
+            return _evaluate_move(
+                state,
+                operation.actor_id,
+                destination_id,
+                kind,
+                season=season,
+                travel_network_active=travel_network_active,
+            )
         case _SearchOp(target_id=target_id):
             return _evaluate_search(
                 state,
@@ -902,6 +918,8 @@ def evaluate_operation(
                 destination_id,
                 kind,
                 care_context=care_context,
+                season=season,
+                travel_network_active=travel_network_active,
             )
         case _AttackOp(target_id=target_id):
             return _evaluate_attack(
@@ -920,6 +938,8 @@ def evaluate_operation(
                 kind,
                 request_id=operation.request_id,
                 resolved=resolved,
+                season=season,
+                travel_network_active=travel_network_active,
             )
         case _TalkOp(actor_id=actor_id, recipient_id=recipient_id, utterance=utterance):
             return _evaluate_communication(
@@ -1124,7 +1144,11 @@ def find_eligible_search_resource(
 
 
 def find_eligible_flee_destinations(
-    state: WorldState, actor_id: EntityId
+    state: WorldState,
+    actor_id: EntityId,
+    *,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> tuple[EntityId, ...]:
     """Return canonically sorted adjacent destinations with free body capacity."""
     if type(state) is not WorldState:
@@ -1139,9 +1163,24 @@ def find_eligible_flee_destinations(
     location = state.locations[actor.location_id]
     eligible: list[EntityId] = []
     for destination_id in sorted(location.adjacent, key=lambda value: value.value):
-        route = _route_spec_for_edge(state, actor.location_id, destination_id)
-        if route is not None and route.duration_ticks != 1:
-            continue
+        condition = _travel_condition(
+            state,
+            actor.location_id,
+            destination_id,
+            season=season,
+            travel_network_active=travel_network_active,
+        )
+        if condition is not None:
+            if (
+                condition.status.value == "closed"
+                or condition.duration_ticks != 1
+                or condition.capacity < 1
+            ):
+                continue
+        else:
+            route = _route_spec_for_edge(state, actor.location_id, destination_id)
+            if route is not None and route.duration_ticks != 1:
+                continue
         if _body_count(state, destination_id) < _location_body_capacity(
             state, destination_id
         ):
@@ -1168,7 +1207,44 @@ def _body_is_travelling(state: WorldState, body_id: EntityId) -> bool:
     )
 
 
-def _travel_duration(state: WorldState, origin: EntityId, destination: EntityId) -> int:
+def _travel_condition(
+    state: WorldState,
+    origin_id: EntityId,
+    destination_id: EntityId,
+    *,
+    season: Season | None,
+    travel_network_active: bool,
+) -> RouteCondition | None:
+    if not travel_network_active:
+        return None
+    from world._travel_network import condition_for_command
+
+    return condition_for_command(
+        state,
+        origin_id,
+        destination_id,
+        season=season,
+        active=True,
+    )
+
+
+def _travel_duration(
+    state: WorldState,
+    origin: EntityId,
+    destination: EntityId,
+    *,
+    season: Season | None = None,
+    travel_network_active: bool = False,
+) -> int:
+    condition = _travel_condition(
+        state,
+        origin,
+        destination,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
+    if condition is not None:
+        return condition.duration_ticks
     route = _route_spec_for_edge(state, origin, destination)
     base = 1 if route is None else route.duration_ticks
     if state.infrastructure is None:
@@ -1210,7 +1286,13 @@ def _location_item_capacity(state: WorldState, location_id: EntityId) -> int:
 
 
 def _evaluate_move(
-    state: WorldState, actor_id: EntityId, destination_id: EntityId, kind: str
+    state: WorldState,
+    actor_id: EntityId,
+    destination_id: EntityId,
+    kind: str,
+    *,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleResult:
     actor = state.bodies[actor_id]
     if destination_id == actor.location_id:
@@ -1218,9 +1300,37 @@ def _evaluate_move(
     location = state.locations[actor.location_id]
     if destination_id not in location.adjacent:
         return _reject(kind, RuleReason.NOT_ADJACENT)
-    if (
+    condition = _travel_condition(
+        state,
+        actor.location_id,
+        destination_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
+    if condition is not None:
+        from world._travel_network import route_rejection_reason
+
+        rejection = route_rejection_reason(condition, 1)
+        if rejection is not None:
+            return _reject(kind, rejection)
+        if condition.duration_ticks > 1:
+            return RuleResult(
+                disposition=RuleDisposition.MUTATE,
+                reason=RuleReason.OCCURRENCE,
+                emits_event=True,
+                mutates_state=True,
+                action_kind=kind,
+            )
+    elif (
         state.regions_migration is not None
-        and _travel_duration(state, actor.location_id, destination_id) > 1
+        and _travel_duration(
+            state,
+            actor.location_id,
+            destination_id,
+            season=season,
+            travel_network_active=travel_network_active,
+        )
+        > 1
     ):
         return RuleResult(
             disposition=RuleDisposition.MUTATE,
@@ -1579,6 +1689,8 @@ def _evaluate_transport(
     kind: str,
     *,
     care_context: object | None,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleResult:
     from world.dependency_care import DependencyCareRuleContext
 
@@ -1600,10 +1712,34 @@ def _evaluate_transport(
     location = state.locations[actor.location_id]
     if destination_id not in location.adjacent:
         return _reject(kind, RuleReason.NOT_ADJACENT)
+    condition = _travel_condition(
+        state,
+        actor.location_id,
+        destination_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
+    if condition is not None:
+        from world._travel_network import route_rejection_reason
+
+        rejection = route_rejection_reason(condition, 2)
+        if rejection is not None:
+            return _reject(kind, rejection)
     # Both caregiver and dependent relocate together.
     if (
         state.regions_migration is None
-        or _travel_duration(state, actor.location_id, destination_id) == 1
+        or (
+            condition.duration_ticks == 1
+            if condition is not None
+            else _travel_duration(
+                state,
+                actor.location_id,
+                destination_id,
+                season=season,
+                travel_network_active=travel_network_active,
+            )
+            == 1
+        )
     ) and _body_count(state, destination_id) + 2 > _location_body_capacity(
         state, destination_id
     ):
@@ -1674,8 +1810,17 @@ def _evaluate_flee(
     *,
     request_id: object,
     resolved: ResolvedActionEffects | None,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleResult:
-    structural = _flee_structural_reject(state, actor_id, threat_id, kind)
+    structural = _flee_structural_reject(
+        state,
+        actor_id,
+        threat_id,
+        kind,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
     if structural is not None:
         return structural
     if resolved is None:
@@ -1686,7 +1831,12 @@ def _evaluate_flee(
         raise TypeError("flee evaluation requires RequestId")
     effect = resolved.require(request_id, ResolvedFleeEffect)
     assert type(effect) is ResolvedFleeEffect
-    eligible = find_eligible_flee_destinations(state, actor_id)
+    eligible = find_eligible_flee_destinations(
+        state,
+        actor_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
     if not eligible:
         return _reject(kind, RuleReason.NO_BODY_CAPACITY)
     if not effect.success:
@@ -1726,6 +1876,9 @@ def _flee_structural_reject(
     actor_id: EntityId,
     threat_id: EntityId | None,
     kind: str,
+    *,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleResult | None:
     actor = state.bodies[actor_id]
     if threat_id is not None:
@@ -1737,7 +1890,35 @@ def _flee_structural_reject(
     location = state.locations[actor.location_id]
     if not location.adjacent:
         return _reject(kind, RuleReason.NOT_ADJACENT)
-    if not find_eligible_flee_destinations(state, actor_id):
+    if travel_network_active:
+        closed_conditions = []
+        for destination_id in location.adjacent:
+            condition = _travel_condition(
+                state,
+                actor.location_id,
+                destination_id,
+                season=season,
+                travel_network_active=True,
+            )
+            if condition is None or condition.status.value != "closed":
+                break
+            closed_conditions.append(condition)
+        else:
+            if closed_conditions:
+                blocked = any(
+                    condition.blockage_cause.value != "none"
+                    for condition in closed_conditions
+                )
+                return _reject(
+                    kind,
+                    RuleReason.ROUTE_BLOCKED if blocked else RuleReason.ROUTE_CLOSED,
+                )
+    if not find_eligible_flee_destinations(
+        state,
+        actor_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    ):
         return _reject(kind, RuleReason.NO_BODY_CAPACITY)
     return None
 
@@ -3000,6 +3181,8 @@ def apply_operation(
     public_good_maintain_success: bool | None = None,
     contact_enabled: bool = False,
     infrastructure_networks_active: bool = False,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -3035,6 +3218,8 @@ def apply_operation(
         collective_projects_context=collective_projects_context,
         public_goods_context=public_goods_context,
         infrastructure_networks_active=infrastructure_networks_active,
+        season=season,
+        travel_network_active=travel_network_active,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -3063,6 +3248,8 @@ def apply_operation(
             tick=0 if tick is None else tick,
             skill_efficiency=skill_efficiency,
             contact_enabled=contact_enabled,
+            season=season,
+            travel_network_active=travel_network_active,
         )
     if type(possession_succession_active) is not bool:
         raise TypeError("possession_succession_active must be bool")
@@ -3190,6 +3377,8 @@ def apply_operation(
             resolved=resolved,
             skill_efficiency=skill_efficiency,
             contact_enabled=contact_enabled,
+            season=season,
+            travel_network_active=travel_network_active,
         )
     details = _event_details_for(state, operation, rules=physical_rules)
     if result.disposition is RuleDisposition.EVENT_ONLY:
@@ -3228,6 +3417,8 @@ def _apply_regional_travel_command(
     tick: int,
     skill_efficiency: object | None,
     contact_enabled: bool = False,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleApplication:
     from world._skills import SkillEfficiencyOverride
     from world._travel import _journey_contact
@@ -3253,34 +3444,47 @@ def _apply_regional_travel_command(
         command_kind = "transport"
     actor = state.bodies[actor_id]
     origin_id = actor.location_id
+    condition = _travel_condition(
+        state,
+        origin_id,
+        destination_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
     route = _route_spec_for_edge(state, origin_id, destination_id)
-    duration = 1 if route is None else route.duration_ticks
-    if type(operation) is _MoveOp:
-        fatigue_cost = rules.move_fatigue if route is None else route.fatigue_cost
-    elif route is None:
-        fatigue_cost = rules.transport_fatigue
+    if condition is not None:
+        duration = condition.duration_ticks
+        fatigue_cost = condition.fatigue_cost
+        if type(operation) is _TransportOp:
+            fatigue_cost += rules.transport_fatigue
     else:
-        fatigue_cost = rules.transport_fatigue + max(
-            0.0, route.fatigue_cost - rules.move_fatigue
-        )
-    if state.infrastructure is not None:
-        from world._infrastructure import (
-            effective_travel_duration,
-            effective_travel_fatigue,
-        )
+        duration = 1 if route is None else route.duration_ticks
+        if type(operation) is _MoveOp:
+            fatigue_cost = rules.move_fatigue if route is None else route.fatigue_cost
+        elif route is None:
+            fatigue_cost = rules.transport_fatigue
+        else:
+            fatigue_cost = rules.transport_fatigue + max(
+                0.0, route.fatigue_cost - rules.move_fatigue
+            )
+        if state.infrastructure is not None:
+            from world._infrastructure import (
+                effective_travel_duration,
+                effective_travel_fatigue,
+            )
 
-        duration = effective_travel_duration(
-            state.infrastructure,
-            origin_id=origin_id,
-            destination_id=destination_id,
-            base_duration=duration,
-        )
-        fatigue_cost = effective_travel_fatigue(
-            state.infrastructure,
-            origin_id=origin_id,
-            destination_id=destination_id,
-            base_fatigue=fatigue_cost,
-        )
+            duration = effective_travel_duration(
+                state.infrastructure,
+                origin_id=origin_id,
+                destination_id=destination_id,
+                base_duration=duration,
+            )
+            fatigue_cost = effective_travel_fatigue(
+                state.infrastructure,
+                origin_id=origin_id,
+                destination_id=destination_id,
+                base_fatigue=fatigue_cost,
+            )
     if skill_efficiency is not None:
         multiplier = skill_efficiency.movement_fatigue_multiplier
         if multiplier is None:
@@ -3545,6 +3749,8 @@ def _apply_flee(
     resolved: ResolvedActionEffects | None,
     skill_efficiency: object | None = None,
     contact_enabled: bool = False,
+    season: Season | None = None,
+    travel_network_active: bool = False,
 ) -> RuleApplication:
     if resolved is None:
         raise ValueError("flee apply requires ResolvedActionEffects")
@@ -3559,7 +3765,12 @@ def _apply_flee(
                 success=False,
             ),
         )
-    eligible = find_eligible_flee_destinations(state, operation.actor_id)
+    eligible = find_eligible_flee_destinations(
+        state,
+        operation.actor_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
     if state.regions_migration is not None:
         destination_id = effect.destination_id
         if destination_id is None or destination_id not in eligible:
@@ -3569,20 +3780,39 @@ def _apply_flee(
         if effect.destination_index >= len(eligible):
             raise ValueError("flee destination_index out of range for eligible set")
         destination_id = eligible[effect.destination_index]
+    condition = _travel_condition(
+        state,
+        state.bodies[operation.actor_id].location_id,
+        destination_id,
+        season=season,
+        travel_network_active=travel_network_active,
+    )
+    condition_fatigue = None if condition is None else condition.fatigue_cost
     if skill_efficiency is None:
-        next_state = _mutate_flee(
-            state, operation.actor_id, destination_id, rules=rules
-        )
-    else:
-        from world._skills import SkillEfficiencyOverride
-
-        assert type(skill_efficiency) is SkillEfficiencyOverride
         next_state = _mutate_flee(
             state,
             operation.actor_id,
             destination_id,
             rules=rules,
-            flee_fatigue=skill_efficiency.flee_fatigue,
+            flee_fatigue=condition_fatigue,
+        )
+    else:
+        from world._skills import SkillEfficiencyOverride
+
+        assert type(skill_efficiency) is SkillEfficiencyOverride
+        fatigue = (
+            skill_efficiency.flee_fatigue
+            if condition_fatigue is None
+            else condition_fatigue * skill_efficiency.movement_fatigue_multiplier
+            if skill_efficiency.movement_fatigue_multiplier is not None
+            else skill_efficiency.flee_fatigue
+        )
+        next_state = _mutate_flee(
+            state,
+            operation.actor_id,
+            destination_id,
+            rules=rules,
+            flee_fatigue=fatigue,
         )
     prior = state.bodies[operation.actor_id]
     resulting = next_state.bodies[operation.actor_id]

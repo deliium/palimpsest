@@ -29,6 +29,7 @@ const FORBIDDEN_FIELDS := [
 	"score",
 	"infrastructure_score",
 	"civilization_score",
+	"route_score",
 	"composite",
 	"planner",
 	"auto_maintain",
@@ -66,6 +67,20 @@ static func evidence_for_layer(layer: String) -> String:
 
 static func is_valid_layer(layer: String) -> bool:
 	return LAYERS.has(layer)
+
+
+static func layer_for_route_status(status: String) -> String:
+	# Route status reuses the existing objective infrastructure layer. It never
+	# adds a new overlay kind or a score.
+	match status:
+		"closed":
+			return INFRASTRUCTURE_DESTROYED
+		"restricted":
+			return INFRASTRUCTURE_DAMAGED
+		"open":
+			return INFRASTRUCTURE_EDGE
+		_:
+			return ""
 
 
 static func _contains_forbidden(value: Variant) -> bool:
@@ -164,10 +179,28 @@ func _rebuild() -> void:
 			continue
 		if not _row_matches_layer(row):
 			continue
-		var location := str(row.get("location_id", row.get("location_token", "")))
-		var endpoint := str(row.get("endpoint_location_id", ""))
+		var route_row := (
+			row.has("origin_location_id") and row.has("destination_location_id")
+		)
+		var row_layer := _layer
+		if route_row:
+			row_layer = layer_for_route_status(str(row.get("status", "")))
+			if row_layer == "":
+				continue
+		var location := str(
+			row.get(
+				"location_id",
+				row.get("origin_location_id", row.get("location_token", "")),
+			)
+		)
+		var endpoint := str(
+			row.get("endpoint_location_id", row.get("destination_location_id", ""))
+		)
 		var key := location
-		if _layer == "infrastructure_edge" and endpoint != "":
+		if (
+			(route_row or _layer == "infrastructure_edge")
+			and endpoint != ""
+		):
 			key = "%s|%s" % [location, endpoint]
 		if key == "" or seen.has(key):
 			continue
@@ -175,12 +208,14 @@ func _rebuild() -> void:
 		var marker := Node2D.new()
 		marker.name = "InfrastructureMarker"
 		marker.position = _centers_by_token.get(location, Vector2.ZERO)
-		marker.set_meta("overlay_kind", _layer)
-		marker.set_meta("evidence_class", evidence_for_layer(_layer))
-		marker.set_meta("layer", _layer)
-		marker.set_meta("style", _marker_style(_layer))
+		marker.set_meta("overlay_kind", row_layer)
+		marker.set_meta("evidence_class", evidence_for_layer(row_layer))
+		marker.set_meta("layer", row_layer)
+		marker.set_meta("style", _marker_style(row_layer))
 		marker.set_meta("location_id", location)
 		marker.set_meta("endpoint_location_id", endpoint)
+		if route_row:
+			marker.set_meta("route_status", str(row.get("status", "")))
 		marker.set_meta("copy", _copy())
 		add_child(marker)
 
@@ -188,6 +223,8 @@ func _rebuild() -> void:
 func _row_matches_layer(row: Dictionary) -> bool:
 	var status := str(row.get("status", ""))
 	var topology := str(row.get("topology", ""))
+	if row.has("origin_location_id") and row.has("destination_location_id"):
+		return layer_for_route_status(status) != ""
 	match _layer:
 		"infrastructure_node":
 			return topology == "node" and status == "operational"

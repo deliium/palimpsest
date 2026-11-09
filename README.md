@@ -55,6 +55,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Migration and displacement | `docs/migration-displacement.md` | Owner-scoped migration beliefs, mdp_v1, four layers, snapshot/store/routes |
 | Inter-society relations | `docs/inter-society-relations.md` | Researcher-only society-pair panels, `isr-` ids, eight domains, time series/comparison, six GET routes |
 | Infrastructure networks | `docs/infrastructure-networks.md` | V4-16 objective `infra-` assets, write pair 23/`v21`, catalog effects, dual-gate research surfaces |
+| Travel network | `docs/travel-network.md` | V4-17 route conditions, write pair 27/`v25`, movement enforcement, fallible route beliefs, snapshot v2 |
 | Regions and migration | `docs/regions-migration.md` | V3 regional travel substrate and V4-14 belief deepening |
 
 

@@ -547,11 +547,32 @@ plus damage/repair/decay/destruction. Explicit public-good frozensets keep
 infra-only kinds out of Use/Maintain/Oppose sets; `well`/`warning_post` still
 need `public_goods` to start. Four metric families raise the catalog 184 → 188;
 observer semantics stay 73 via aliases; Alembic stays `0017`; commands stay 43.
-Dual-gated research surfaces publish `infrastructure-networks-snapshot-v1` with
-six GET routes, a Research UI panel, and Godot objective overlays. Off-gate
-experiment `infrastructure_networks@1` is registered. Non-goals: automatic
-maintenance, grid planner, infrastructure actor, civilization score, and
-`supply_chains` ownership. Pins: runner v4/v55/v56, result v2/v3, 43 commands,
-73 observer semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags,
+At V4-16 landing, dual-gated research surfaces publish
+`infrastructure-networks-snapshot-v1` with six GET routes, a Research UI panel,
+and Godot objective overlays. Off-gate experiment `infrastructure_networks@1`
+is registered. Non-goals: automatic maintenance, grid planner, infrastructure
+actor, civilization score, and `supply_chains` ownership. Landing pins: runner
+v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 188 metric
+families, 14 V4 contexts, 12 V4 flags,
 replay-v23/codec v21 when the channel is active, `/v1`, `observer-protocol-v1`,
 Alembic `0017`; six V4 flags are owned and six remain unowned.
+
+Travel network (V4-17) deepens the owned `infrastructure_networks` context and
+the V3 `multi_polity_migration` / `regions_migration` seam without adding a V4
+context, flag, runner schema, command, or migration. Locked policy
+`travel-network.v1` derives objective route conditions (duration, fatigue,
+capacity, risk, infrastructure quality, seasonal availability, blockage) from
+existing `RouteSpec`, adjacency, season, weather, hazards, and operational
+infrastructure. `WorldState.travel_network` is a bounded ordered channel seeded
+at bootstrap and recomputed at tick boundaries; `Move`, `Transport`, and `Flee`
+enforce closed/restricted/capacity/risk through one condition. Adjacent
+`VisibleExit` rows expose local route facts only, while owner-scoped destination
+memories and `regional_migration` biases provide fallible bounded route-quality
+planning. Travel-network runs activate deepening write pair event **27** / codec
+**`v25`**; infrastructure-only runs keep 23/`v21` and regions-only 21/`v19`.
+Infrastructure snapshot v2 carries route rows while v1 remains decodable, and
+seven GET-only dual-gated infrastructure routes include `/routes`. Four metric
+families append 188 -> 192 metric families (catalog 192); the current pin is metric families 192; observer semantics stay 73, commands 43,
+runner v4/v55/v56, result v2/v3, replay-v27/codec v25 when active, `/v1`,
+`observer-protocol-v1`, and Alembic `0017`. Off-gate experiment
+`travel_network@1` is registered; 14 V4 contexts / 12 flags / six owned remain.

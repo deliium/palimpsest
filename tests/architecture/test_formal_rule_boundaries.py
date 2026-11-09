@@ -201,7 +201,7 @@ def test_snapshot_schema_and_store_schema_are_v1() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 188
+    assert METRIC_FAMILY_COUNT == 192
     assert len(COMMAND_RULE_MATRIX) == 43
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -343,7 +343,7 @@ def test_app_wiring_imports_only_api_and_persistence() -> None:
 
 def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 23
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(COMMAND_RULE_MATRIX) == 43
     assert ALEMBIC_HEAD_REVISION == "0017"
