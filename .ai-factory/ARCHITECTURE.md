@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-14
+### Current baseline through V4-15
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 180 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, four V4-11 treaty families, four V4-12 organized-conflict families, four V4-13 border families, and four V4-14 migration-displacement families) |
+| Metric families | 184 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, four V4-11 treaty families, four V4-12 organized-conflict families, four V4-13 border families, four V4-14 migration-displacement families, and four V4-15 inter-society relation families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -842,7 +842,7 @@ cognition. `simulation.delegation_representation_*` owns canonical
 Three families append (`representation_mandate_structure@1`,
 `representation_recognition_support@1`, `representation_scope_alignment@1`),
 raising the catalog 157 -> 160. Pins: runner v4/v55/v56, result v2/v3, 43
-commands, 73 observer semantic types, 180 metric families, 14 V4 contexts, 12 V4
+commands, 73 observer semantic types, 184 metric families, 14 V4 contexts, 12 V4
 flags, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`;
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned.
 
@@ -995,3 +995,24 @@ migration overlay kinds on the existing three evidence classes. `WorldEngine`,
 perception, admission, stop selectors, memory, prompts, observer semantics, and
 Godot never read a migration-displacement ledger. See
 `docs/migration-displacement.md`.
+
+### V4-15 inter-society relations seam
+
+V4-15 deepens analysis-only `macro_society_identity` without a new flag,
+context, `runner-config-v57`, runner root field, per-agent key, command, event,
+observer semantic type, write pair, `/v2` route, Godot overlay kind, or
+migration. Detached `analysis.inter_society_relations_*` harvests read-only
+evidence over contemporaneous `msoc-` candidates, mints ordered content-addressed
+`isr-` pairs, keeps objective evidence, analytical pairs, and comparison views
+in three separated layers, and appends four metric families (catalog 180 ->
+184) beside the existing `inter_society_relation_lanes@1` family. Domain panels
+expose counts/coverage/availability only; cultural similarity uses Jaccard and
+count keys, never `score`. `simulation.inter_society_relations_*` owns canonical
+`inter-society-relations-snapshot-v1`; `experiments` and `persistence` publish
+`inter-society-relations-store-v1` atomically with quotas; six GET-only
+`/v1/simulations/{run_id}/inter-society-relations` routes require
+`SUBJECTIVE_DEBUG` and fail closed with `inter_society_relations_disabled` unless
+both `PALIMPSEST_INTER_SOCIETY_RELATIONS_ROOT` and
+`PALIMPSEST_INTER_SOCIETY_RELATIONS_CURSOR_KEY` (≥32 UTF-8 bytes) are set; the
+Research UI adds a read-only panel. No authoritative civilization relationship
+score exists anywhere. See `docs/inter-society-relations.md`.

@@ -497,3 +497,17 @@ Migration-displacement cognition activates only when `organizations`,
 `multi_polity_migration`, and deterministic `regions_migration` cognition are
 all enabled on `runner-config-v56`; see
 [migration and displacement](migration-displacement.md).
+
+## Inter-society relations publication (V4-15)
+
+`PALIMPSEST_INTER_SOCIETY_RELATIONS_ROOT` and
+`PALIMPSEST_INTER_SOCIETY_RELATIONS_CURSOR_KEY` form a dual gate: both must be
+set, and the cursor key must be at least 32 UTF-8 bytes, before the API attaches
+the reader. Otherwise routes return `503 inter_society_relations_disabled`.
+Publication is opt-in and post-completion; snapshots are written atomically
+under `inter-society-relations-store-v1` with per-run publication and byte
+quotas. CLI opt-in uses `--inter-society-relations-root` plus
+`--inter-society-relations-max-publications` / `--inter-society-relations-max-bytes`.
+A missing root yields a `disabled` receipt, and storage failure changes only the
+receipt, never the scientific result. See
+[inter-society relations](inter-society-relations.md).

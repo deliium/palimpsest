@@ -565,7 +565,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 180 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 184 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -596,7 +596,7 @@ Detached analysis may classify objective alignment as `supported`, `unresolved`,
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 `dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
 independent; publication is opt-in and post-completion. Six GET-only `/v1`
-dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **180** metric
+dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **184** metric
 families, with 14 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
@@ -659,7 +659,7 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 180 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 184 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
 V4-10/V4-11.
 
@@ -711,7 +711,7 @@ GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 180 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
 
@@ -730,7 +730,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 180 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
+types, 184 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
 
@@ -752,3 +752,13 @@ Physical movement remains ordinary `Move`/`Transport`/`Flee`. Four families
 append (catalog 176 -> 180). See
 [migration and displacement](migration-displacement.md) and
 [regions and migration](regions-migration.md).
+
+## V4-15 inter-society relations
+
+V4-15 deepens analysis-only `macro_society_identity` with researcher-only
+society-pair panels (`isr-` over ordered `msoc-` endpoints), eight evidence
+domains, windowed time series, vectorial comparison, four metric families
+(catalog 180 -> 184), dual-gate publication, six GET-only routes, and a Research
+UI panel. It adds no flag, context, runner schema, command, event, write pair,
+Godot overlay, `/v2` route, or migration, and never exposes a civilization
+relationship score. See [inter-society relations](inter-society-relations.md).

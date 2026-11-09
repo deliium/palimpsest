@@ -330,3 +330,31 @@ Optional filters include wave `classification` / `origin_token` /
 `destination_token`. Responses contain hashed tokens and closed labels only; no
 raw identities, route bodies, cause text, or refugee/asylum/forced status
 fields.
+
+## Inter-society relations routes (V4-15)
+
+Six GET-only routes under `/v1/simulations/{run_id}/inter-society-relations`
+require `SUBJECTIVE_DEBUG`:
+
+| Route | Result |
+| --- | --- |
+| `GET .../inter-society-relations` | summary |
+| `GET .../inter-society-relations/pairs` | paged pairs |
+| `GET .../inter-society-relations/pairs/{pair_id}` | pair detail |
+| `GET .../inter-society-relations/pairs/{pair_id}/series` | pair time series |
+| `GET .../inter-society-relations/comparison` | pair×pair or pair×window comparison |
+| `GET .../inter-society-relations/windows` | paged windows |
+
+Both `PALIMPSEST_INTER_SOCIETY_RELATIONS_ROOT` and
+`PALIMPSEST_INTER_SOCIETY_RELATIONS_CURSOR_KEY` (≥32 UTF-8 bytes) are required to
+attach the reader. An unconfigured deployment returns 503
+`inter_society_relations_disabled`; unknown published runs or pair tokens return
+404; cursor mismatch is 400 `inter_society_relations_cursor_invalid` and expiry
+is 410 `inter_society_relations_cursor_expired`. A corrupt published store fails
+with 500 `inter_society_relations_store_corrupt`. Comparison operands are
+mutually exclusive: either `pair_a`+`pair_b` or `pair_id`+`window_a`+`window_b`;
+mixed or incomplete sets return 400
+`inter_society_relations_comparison_invalid`. Cursor purposes are `summary`,
+`pairs`, `pair`, `series`, `windows`, and `comparison`. Responses expose domain
+counts/availability and vectorial deltas only — never a civilization
+relationship score. See [inter-society relations](inter-society-relations.md).

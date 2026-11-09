@@ -320,3 +320,13 @@ researcher-only classification from independent causal evidence, not a legal or
 social status. The panel never renders `Refugee`, `Asylum`, `Forced`, or
 `Displaced person` as a status label, and it derives no wellbeing,
 assimilation, score, winner, or sovereignty wording.
+
+## Inter-society relations panel (V4-15)
+
+The read-only **Inter-society relations** run tab (view id
+`inter-society-relations`) renders eight domain panels, windowed time series,
+and vectorial pair/window comparison for published `isr-` pairs. It fetches the
+six inter-society-relations GET routes, maps
+`inter_society_relations_disabled`/503 to an explicit unavailable state, and
+never invents a composite civilization relationship score, alliance/enmity
+score, trust score, or rank chrome.

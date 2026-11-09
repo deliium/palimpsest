@@ -389,7 +389,7 @@ raising the metric catalog from 157 to **160** (V4-10 raises it to **164**), plu
 filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 180, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 184, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -418,7 +418,7 @@ catalog from 160 to **164**. `diplomacy-snapshot-v1` and
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG` and fail
 closed with `diplomacy_disabled`; the Research UI adds a read-only panel.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-180 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -443,7 +443,7 @@ canonical, v1 remains decodable, `diplomacy-store-v1` is unchanged, and eight
 GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine`, perception,
 admission, stop selectors, memory, prompts, observer semantics, and Godot never
 read a treaty ledger. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 180 metric families, 14 V4 contexts, 12 V4 flags,
+observer semantic types, 184 metric families, 14 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
 
@@ -467,7 +467,7 @@ and `organized-conflict-store-v1` publish opt-in and atomically; six GET-only
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`
 and fail closed with `organized_conflict_disabled`; the Research UI adds a
 read-only conflict view. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 180 metric families, 14 V4 contexts, 12 V4 flags,
+observer semantic types, 184 metric families, 14 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
 
@@ -515,7 +515,25 @@ publish opt-in and atomically; six GET-only `/v1/simulations/{run_id}/migration`
 routes require `SUBJECTIVE_DEBUG` and fail closed with
 `migration_displacement_disabled`; the Research UI adds four read-only sections;
 the presentation client adds four migration overlays on the existing three
-evidence classes. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 180 metric families, 14 V4 contexts, 12 V4 flags,
+evidence classes. Pins at landing: runner v4/v55/v56, result v2/v3, 43 commands,
+73 observer semantic types, 180 metric families, 14 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
+
+Inter-society relations (V4-15) deepen analysis-only `macro_society_identity`
+without a new flag, context, runner schema, command, event, observer semantic
+type, write pair, `/v2` route, Godot overlay, or migration. Detached analysis
+forms ordered `isr-` society pairs over contemporaneous `msoc-` candidates,
+projects eight domain panels (counts/coverage/availability only), windowed time
+series, and vectorial comparison, and appends four metric families (catalog
+180 -> 184) beside `inter_society_relation_lanes@1`.
+`inter-society-relations-snapshot-v1` and `inter-society-relations-store-v1`
+publish opt-in and atomically; six GET-only
+`/v1/simulations/{run_id}/inter-society-relations` routes require
+`SUBJECTIVE_DEBUG` and fail closed with `inter_society_relations_disabled`
+unless both root and cursor-key settings are present; the Research UI adds a
+read-only panel. No authoritative civilization relationship score exists.
+Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
+184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; five V4 flags are owned and seven remain
+unowned.

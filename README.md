@@ -53,6 +53,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 
 | Borders and claims | `docs/borders-and-claims.md` | Owner-scoped domain beliefs, bdr_v1, four layers, snapshot/store/routes |
 | Migration and displacement | `docs/migration-displacement.md` | Owner-scoped migration beliefs, mdp_v1, four layers, snapshot/store/routes |
+| Inter-society relations | `docs/inter-society-relations.md` | Researcher-only society-pair panels, `isr-` ids, eight domains, time series/comparison, six GET routes |
 | Regions and migration | `docs/regions-migration.md` | V3 regional travel substrate and V4-14 belief deepening |
 
 
@@ -96,6 +97,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Organized conflict](docs/organized-conflict.md) | Owner-scoped coordination beliefs, eight operation-to-command primitives, deterministic `Wait` replacement, `ocf_v1` frames, individual/coordinated/persistent detection, `organized-conflict-snapshot-v1`, six GET-only routes |
 | [Diplomacy](docs/diplomacy.md) | Owner-scoped long-running relations, parties, contacts, envoys, negotiations, proposals, promises, agreement views, disputes, shared projects, retained terminations, `dip_v1` frames, multi-party treaties with versions, lineage, declarations and recollections, `diplomacy-snapshot-v2`, `diplomacy-store-v1`, eight GET-only routes and the Research UI panel |
 | [Macro-societies](docs/macro-societies.md) | Analysis-only overlapping macro-society candidates, stable `msoc-` ids, split/merge lineage, snapshot artifact, read-only routes and Research UI |
+| [Inter-society relations](docs/inter-society-relations.md) | Researcher-only `isr-` society-pair panels over `msoc-` endpoints, eight evidence domains, window time series, vectorial comparison, dual-gate publication, six GET-only routes and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 

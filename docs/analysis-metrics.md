@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **180** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **184** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -674,3 +674,19 @@ Population `detached_migration_outcome_rows`; denominator
 `unknown_count`, `complete_coverage_count`, `partial_coverage_count`,
 `missing_coverage_count`. Counts and coverage only; no assimilation or
 integration score. See [migration and displacement](migration-displacement.md).
+
+## Inter-society relations families (V4-15)
+
+Four families append after the migration-displacement set, raising the catalog
+from 180 to **184**: `inter_society_relation_structure@1`,
+`inter_society_domain_evidence@1`, `inter_society_relation_timeseries@1`, and
+`inter_society_pair_comparison@1`. They are additive beside the earlier diplomacy
+family `inter_society_relation_lanes@1` and must not rename or reuse it. The
+first 180 families keep their IDs, order, versions, and value keys. Emit gates
+on optional `MetricComputationInputs.inter_society_relations_analysis`; empty
+or absent inputs yield empty value maps, never invented pairs. Value keys are
+counts, coverage, availability, and vectorial comparison deltas only — never
+`score`, `*_score`, composite, alliance/enmity, trust score, or relationship
+rank. Cultural similarity uses `overlap_count` / `union_count` / `jaccard` /
+`*_mean_pairwise_similarity` plus availability. See
+[inter-society relations](inter-society-relations.md).

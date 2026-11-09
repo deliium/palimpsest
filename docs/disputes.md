@@ -222,7 +222,7 @@ zero or false.
 field, and no per-agent runner mode.
 
 **Pins:** 14 V4 contexts, 12 capability flags, and **4 owned** flags
-(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`); 180 metric families;
+(`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`); 184 metric families;
 43 commands; 73 observer semantic types; replay `EVENT_SCHEMA_REPLAY_V22`
 (22) / codec `v20`; Alembic head `0017` with **no `0018`**; `/v1`; and
 `observer-protocol-v1`.
