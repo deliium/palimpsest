@@ -291,7 +291,8 @@ def test_no_new_wire_surfaces() -> None:
     codecs = ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
     assert "v20" in codecs
-    assert "v21" not in codecs
+    assert "v21" in codecs
+    assert "v22" not in codecs
 
 
 def test_no_peer_ledger_reads() -> None:

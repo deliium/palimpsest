@@ -1623,9 +1623,24 @@ func fetch_migration_outcomes() -> void:
 	_request_path("migration_integration", path, {"capability": "debug"})
 
 
-func fetch_infrastructure_assets(overlay_kind: String = "infrastructure_node") -> void:
+func fetch_infrastructure_assets() -> void:
 	var path := "/v1/simulations/%s/infrastructure-networks/assets" % run_id
-	_request_path(overlay_kind, path, {"capability": "debug"})
+	_request_path("infrastructure_node", path, {"capability": "debug"})
+
+
+func fetch_infrastructure_edges() -> void:
+	var path := "/v1/simulations/%s/infrastructure-networks/edges" % run_id
+	_request_path("infrastructure_edge", path, {"capability": "debug"})
+
+
+func fetch_infrastructure_damaged() -> void:
+	var path := "/v1/simulations/%s/infrastructure-networks/condition" % run_id
+	_request_path("infrastructure_damaged", path, {"capability": "debug"})
+
+
+func fetch_infrastructure_destroyed() -> void:
+	var path := "/v1/simulations/%s/infrastructure-networks/condition" % run_id
+	_request_path("infrastructure_destroyed", path, {"capability": "debug"})
 
 
 func request_strategy_audit_overlay() -> void:

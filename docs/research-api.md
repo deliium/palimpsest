@@ -358,3 +358,24 @@ mixed or incomplete sets return 400
 `pairs`, `pair`, `series`, `windows`, and `comparison`. Responses expose domain
 counts/availability and vectorial deltas only — never a civilization
 relationship score. See [inter-society relations](inter-society-relations.md).
+
+## Infrastructure networks routes (V4-16)
+
+Six GET-only routes under `/v1/simulations/{run_id}/infrastructure-networks`
+require `SUBJECTIVE_DEBUG`:
+
+| Route | Result |
+| --- | --- |
+| `GET .../infrastructure-networks` | summary |
+| `GET .../infrastructure-networks/assets` | paged assets |
+| `GET .../infrastructure-networks/edges` | paged edge assets |
+| `GET .../infrastructure-networks/condition` | paged condition rows |
+| `GET .../infrastructure-networks/effects` | paged effect coverage rows |
+| `GET .../infrastructure-networks/maintenance` | paged maintenance rows |
+
+Both `PALIMPSEST_INFRASTRUCTURE_NETWORKS_ROOT` and
+`PALIMPSEST_INFRASTRUCTURE_NETWORKS_CURSOR_KEY` (≥32 UTF-8 bytes) are required to
+attach the reader. An unconfigured deployment returns 503
+`infrastructure_networks_disabled`. Responses expose objective asset counts and
+status fields only — never an infrastructure or civilization score. See
+[infrastructure networks](infrastructure-networks.md).

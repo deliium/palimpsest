@@ -200,6 +200,12 @@ owner's journey only. Departure/end witnesses are origin-local; arrival
 witnesses are destination-local. No regional inventories, hidden continuation,
 remote weather, or population reaches cognition.
 
+When `infrastructure_networks` is active, operational `infra-` roads and bridges
+may shorten travel duration and fatigue on exact adjacent edges/locations, and
+other kinds may raise capacity, storage, regen, or exposure relief. Effects
+cease when assets are damaged or destroyed. See
+[infrastructure networks](infrastructure-networks.md).
+
 ## See also
 
 - [Architecture](architecture.md)

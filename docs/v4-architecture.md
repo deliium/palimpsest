@@ -64,7 +64,7 @@ The registry revision is `v4-context-map-v2`.
 | `legal_disputes` | `legal_disputes` | owner-scoped | `agents.cognition`, `simulation` | mediation, formal rules, offices, organizations | reuse | V4-07 implementation |
 | `diplomacy` | `diplomacy` | owner-scoped | `agents.cognition`, `social`, `simulation` | contact, migration, commitments | reuse | V4-10 implementation |
 | `organized_conflict` | `organized_conflict` | objective-world | `world`, `simulation`, `agents.cognition` | physical harm/attack commands | reuse | V4-12 implementation |
-| `infrastructure_networks` | `infrastructure_networks` | objective-world | `world`, `simulation` | new physical network graph | reserve event 23 / codec `v21` | deferred to V4-02+ |
+| `infrastructure_networks` | `infrastructure_networks` | objective-world | `world`, `simulation` | new physical network graph | event 23 / codec `v21` | owned by V4-16 |
 | `supply_chains` | `supply_chains` | objective-world | `world`, `simulation` | production, storage, transport | reuse | deferred to V4-02+ |
 | `markets_credit` | `markets_credit` | owner-scoped | `agents.cognition`, `simulation` | exchange profile, commitments | reuse | deferred to V4-02+ |
 | `science` | `science` | owner-scoped | `agents.cognition`, `simulation` | experimentation, practical knowledge, repositories | reuse | deferred to V4-02+ |
@@ -148,9 +148,10 @@ coordination remains owner-scoped belief plus ordinary speech.
 ### infrastructure_networks
 
 Infrastructure is a physical network of locations, structures, and connections
-owned by the engine. It reserves a future write pair because the network graph is
-new objective state. No abstract "grid" authority, planner, or automatic
-maintenance policy is created in V4-01.
+owned by the engine. V4-16 activates the reserved write pair (event 23 /
+codec `v21`) for persistent `infra-` assets built through collective projects.
+No abstract "grid" authority, planner, or automatic maintenance policy is
+created. See [infrastructure networks](infrastructure-networks.md).
 
 ### supply_chains
 
@@ -257,16 +258,17 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Accepted scaffolding runner | `runner-config-v56` (accepted, never emitted) | `simulation.runner_models` / `simulation.runner_serialization` |
 | Default result write | `runner-result-v2` | `simulation.runner_models` |
 | Generational result | `runner-result-v3` | `simulation.runner_models` |
-| Event schema | `EVENT_SCHEMA_REPLAY_V22` (22) | `world.events` |
-| Persistence codec | `v20` | `simulation.persistence` |
+| Event schema | `EVENT_SCHEMA_REPLAY_V23` (23) when infrastructure channel active; prior maxima remain accepted | `world.events` |
+| Persistence codec | `v21` when infrastructure channel active; `v20` remains accepted; epidemic `v22` unaccepted | `simulation.persistence` |
 | Alembic head | `0017` | `alembic/versions` |
 | Commands | 43 | `world.actions` / `world._rules` |
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 184 families (V4-15 appends four inter-society relation families) | `analysis.specifications` |
+| Metric catalog | 188 families (V4-16 appends four infrastructure families after V4-15's 184) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
+| Infrastructure routes | six GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
 | HTTP API | `/v1` | `api` |
 
 ## Compatibility and deprecation policy

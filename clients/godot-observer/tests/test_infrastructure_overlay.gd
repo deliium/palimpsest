@@ -28,6 +28,12 @@ func _mapping() -> String:
 		return "unknown kind must not guess a class"
 	if EvidenceClass.for_overlay("infrastructure_node") != EvidenceClass.OBJECTIVE:
 		return "evidence_class node mapping"
+	if EvidenceClass.for_overlay("infrastructure_edge") != EvidenceClass.OBJECTIVE:
+		return "evidence_class edge mapping"
+	if EvidenceClass.for_overlay("infrastructure_damaged") != EvidenceClass.OBJECTIVE:
+		return "evidence_class damaged mapping"
+	if EvidenceClass.for_overlay("infrastructure_destroyed") != EvidenceClass.OBJECTIVE:
+		return "evidence_class destroyed mapping"
 	return ""
 
 
@@ -43,7 +49,7 @@ func _styles() -> String:
 		styles[str(overlay._marker_style(layer))] = true
 	overlay.free()
 	if styles.size() != 4:
-		return "four distinct visual styles"
+		return "four distinct visual styles for infrastructure kinds"
 	if styles.has("hidden"):
 		return "known layers must not use hidden style"
 	return ""
@@ -52,7 +58,7 @@ func _styles() -> String:
 func _unknown_kind() -> String:
 	var overlay = InfrastructureOverlay.new()
 	overlay.set_enabled(true)
-	overlay.apply_payload({"items": [{"location_id": "loc-a"}]}, "not_a_kind")
+	overlay.apply_payload({"items": [{"location_id": "loc-a", "topology": "node"}]}, "not_a_kind")
 	if overlay.get_child_count() != 0:
 		overlay.free()
 		return "unknown kind must stay hidden"
@@ -64,70 +70,102 @@ func _forbidden() -> String:
 	var overlay = InfrastructureOverlay.new()
 	overlay.set_enabled(true)
 	overlay.apply_payload(
-		{"items": [{"location_id": "loc-a", "topology": "node", "status": "operational", "score": 1}]},
+		{"items": [{"location_id": "loc-a", "topology": "node", "score": 1}]},
 		"infrastructure_node"
 	)
 	if overlay.get_child_count() != 0:
 		overlay.free()
 		return "forbidden score field must be rejected"
 	overlay.apply_payload(
-		{"items": [{"location_id": "loc-a", "topology": "node", "status": "operational", "civilization_score": 1}]},
+		{"items": [{"location_id": "loc-a", "topology": "node", "composite": true}]},
 		"infrastructure_edge"
 	)
 	if overlay.get_child_count() != 0:
 		overlay.free()
-		return "forbidden civilization_score field must be rejected"
+		return "forbidden composite field must be rejected"
 	overlay.free()
 	return ""
 
 
 func _kind_payload() -> String:
 	var overlay = InfrastructureOverlay.new()
-	overlay.set_centers({"loc-a": Vector2.ZERO, "loc-b": Vector2.ONE})
+	overlay.set_centers({"loc-a": Vector2.ZERO, "loc-b": Vector2.ZERO})
 	overlay.set_enabled(true)
 	overlay.apply_payload(
 		{
 			"items": [
-				{"location_id": "loc-a", "topology": "node", "status": "operational", "asset_id": "infra-1"},
-				{"location_id": "loc-a", "endpoint_location_id": "loc-b", "topology": "edge", "status": "operational", "asset_id": "infra-2"},
-				{"location_id": "loc-a", "topology": "node", "status": "damaged", "asset_id": "infra-3"},
-				{"location_id": "loc-b", "topology": "node", "status": "destroyed", "asset_id": "infra-4"},
+				{
+					"asset_id": "infra-1",
+					"location_id": "loc-a",
+					"topology": "node",
+					"status": "operational",
+				},
+				{
+					"asset_id": "infra-2",
+					"location_id": "loc-b",
+					"topology": "edge",
+					"status": "operational",
+				},
 			]
 		},
 		"infrastructure_node"
 	)
 	if overlay.get_child_count() != 1:
 		overlay.free()
-		return "node overlay should render operational nodes only"
+		return "node topology should render"
 	overlay.apply_payload(
 		{
 			"items": [
-				{"location_id": "loc-a", "endpoint_location_id": "loc-b", "topology": "edge", "status": "operational", "asset_id": "infra-2"},
+				{
+					"asset_id": "infra-2",
+					"location_id": "loc-b",
+					"endpoint_location_id": "loc-a",
+					"topology": "edge",
+					"status": "operational",
+				}
 			]
 		},
 		"infrastructure_edge"
 	)
-	if overlay.get_child_count() < 1:
+	if overlay.get_child_count() != 1:
 		overlay.free()
-		return "edge overlay should render endpoints"
+		return "edge topology should render"
 	overlay.apply_payload(
-		{"items": [{"location_id": "loc-a", "topology": "node", "status": "damaged", "asset_id": "infra-3"}]},
+		{
+			"items": [
+				{
+					"asset_id": "infra-3",
+					"location_id": "loc-a",
+					"topology": "node",
+					"status": "damaged",
+				}
+			]
+		},
 		"infrastructure_damaged"
 	)
 	if overlay.get_child_count() != 1:
 		overlay.free()
-		return "damaged overlay should render"
+		return "damaged status should render"
 	overlay.apply_payload(
-		{"items": [{"location_id": "loc-b", "topology": "node", "status": "destroyed", "asset_id": "infra-4"}]},
+		{
+			"items": [
+				{
+					"asset_id": "infra-4",
+					"location_id": "loc-b",
+					"topology": "node",
+					"status": "destroyed",
+				}
+			]
+		},
 		"infrastructure_destroyed"
 	)
 	if overlay.get_child_count() != 1:
 		overlay.free()
-		return "destroyed overlay should render"
-	var text := str(overlay._copy())
-	if text.to_lower().find("score") >= 0:
+		return "destroyed status should render"
+	var text := str(overlay._copy()).to_lower()
+	if text.find("score") >= 0 or text.find("civilization") >= 0:
 		overlay.free()
-		return "copy must not use score language"
+		return "copy must not use score/civilization"
 	overlay.free()
 	return ""
 

@@ -144,10 +144,10 @@ def apply_resolved(
         )
         return next_state, details, code, None
     if recipe.action is ProductionAction.REPAIR:
-        next_state, details, code = _apply_repair(
+        next_state, details, code, extras = _apply_repair(
             state, actor_id, command, effect, recipe, duration
         )
-        return next_state, details, code, None
+        return next_state, details, code, extras if extras else None
     next_state, details, code = _apply_store(
         state, actor_id, command, effect, recipe, duration
     )
@@ -316,11 +316,19 @@ def _availability(
         structure = state.structures.get(command.structure_id)
         if (
             structure is None
-            or structure.kind is not StructureKind.SHELTER
             or structure.location_id != actor.location_id
             or _held_kind(state, actor, recipe) is None
         ):
             return "materials_unavailable"
+        if structure.kind is not StructureKind.SHELTER:
+            # Infrastructure anchors (including ROAD) stay Repairable without
+            # public_goods when the channel is active and the structure is linked.
+            infra = state.infrastructure
+            if infra is None or not any(
+                asset.linked_structure_id == structure.entity_id
+                for asset in infra.values()
+            ):
+                return "materials_unavailable"
         if structure.integrity >= 1.0:
             return "structure_intact"
         return None
@@ -591,7 +599,7 @@ def _apply_repair(
     effect: ResolvedProductionEffect,
     recipe: ProductionRecipe,
     duration: int,
-) -> tuple[WorldState, StructureRepaired, None]:
+) -> tuple[WorldState, StructureRepaired, None, tuple[object, ...]]:
     del effect
     assert type(command) is Repair
     actor = state.bodies[actor_id]
@@ -635,7 +643,8 @@ def _apply_repair(
             duration,
             consumed,
         ),
-        None if not infra_extras else infra_extras,
+        None,
+        infra_extras,
     )
 
 

@@ -41,7 +41,6 @@ from simulation.run_control import (
 )
 from world.artifacts import InformationArtifact
 from world.collective_projects import CollectiveProject
-from world.infrastructure import InfrastructureAsset
 from world.environment import ActiveHazard
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
@@ -76,6 +75,7 @@ from world.identifiers import (
     require_bounded_text,
     require_stable_id,
 )
+from world.infrastructure import InfrastructureAsset
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 from world.regions import Journey, RegionsMigrationSpec
@@ -475,6 +475,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
     }:
         return projector_version == "v2"
     return False
@@ -1328,7 +1329,7 @@ class RunCreateRequest:
         regions_migration_checkpoint = self.event_schema_version in {
             EVENT_SCHEMA_REPLAY_V21,
             EVENT_SCHEMA_REPLAY_V22,
-            EVENT_SCHEMA_REPLAY_V22,
+            EVENT_SCHEMA_REPLAY_V23,
         } and self.persistence_codec_version in {"v19", "v20", "v21"}
         production_checkpoint = (
             self.event_schema_version == EVENT_SCHEMA_REPLAY_V6

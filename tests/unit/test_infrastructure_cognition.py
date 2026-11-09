@@ -12,7 +12,6 @@ from world.actions import StartCollectiveProject, Wait
 from world.identifiers import EntityId
 from world.models import LifeStatus
 from world.observations import ObservedItem, ObservedItemPlacement, VisibleExit
-from world.production import StructureKind
 from world.values import ItemKind, ItemLoad
 
 pytestmark = pytest.mark.unit

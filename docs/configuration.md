@@ -511,3 +511,17 @@ quotas. CLI opt-in uses `--inter-society-relations-root` plus
 A missing root yields a `disabled` receipt, and storage failure changes only the
 receipt, never the scientific result. See
 [inter-society relations](inter-society-relations.md).
+
+## Infrastructure networks publication (V4-16)
+
+`PALIMPSEST_INFRASTRUCTURE_NETWORKS_ROOT` and
+`PALIMPSEST_INFRASTRUCTURE_NETWORKS_CURSOR_KEY` form a dual gate: both must be
+set, and the cursor key must be at least 32 UTF-8 bytes, before the API attaches
+the reader. Otherwise routes return `503 infrastructure_networks_disabled`.
+Publication is opt-in and post-completion under
+`infrastructure-networks-store-v1`. CLI opt-in uses
+`--infrastructure-networks-root` plus
+`--infrastructure-networks-max-publications` /
+`--infrastructure-networks-max-bytes`. Storage failure changes only the
+receipt, never the scientific result. See
+[infrastructure networks](infrastructure-networks.md).

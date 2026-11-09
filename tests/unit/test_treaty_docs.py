@@ -73,7 +73,7 @@ def test_docs_state_non_enforcement_and_forbidden_objects() -> None:
 
 def test_current_counts_and_routes_match_code() -> None:
     assert METRIC_FAMILY_COUNT == 188
-    assert "Closed catalog cardinality: **184**" in _read("docs/analysis-metrics.md")
+    assert "Closed catalog cardinality: **188**" in _read("docs/analysis-metrics.md")
     assert "172 to **176**" in _read("docs/analysis-metrics.md")
     assert "184 metric families" in _read("docs/architecture.md")
     assert "172 -> 176" in _read("docs/architecture.md")

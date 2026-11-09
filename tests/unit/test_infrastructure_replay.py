@@ -11,13 +11,13 @@ from simulation.persistence import (
 )
 from world.events import (
     EVENT_SCHEMA_REPLAY_V23,
+    REPLAYABLE_EVENT_SCHEMA_VERSIONS,
+    SUPPORTED_EVENT_SCHEMA_VERSIONS,
     InfrastructureConstructed,
     InfrastructureDamaged,
     InfrastructureDecayed,
     InfrastructureDestroyed,
     InfrastructureRepaired,
-    REPLAYABLE_EVENT_SCHEMA_VERSIONS,
-    SUPPORTED_EVENT_SCHEMA_VERSIONS,
 )
 from world.identifiers import EntityId
 from world.production import StructureKind

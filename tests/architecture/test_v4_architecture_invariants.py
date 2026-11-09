@@ -86,6 +86,7 @@ ALLOWED_FLAG_REFERENCES = {
     "simulation/runner_serialization.py",
     "simulation/v4_architecture.py",
     "experiments/catalog.py",
+    "experiments/infrastructure_networks_scenario.py",
     "experiments/matrix_schema.py",
 }
 

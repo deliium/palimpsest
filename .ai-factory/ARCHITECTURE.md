@@ -174,15 +174,15 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-15
+### Current baseline through V4-16
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 184 (including the V3-36 comparison, six V3-37 cultural families, four V4-02 macro-society families, four V4-03 organization families, two V4-04 organization-operation families, two V4-05 collective-agency families, three V4-06 formal-rule families, three V4-07 dispute families, three V4-08 evidence families, three V4-09 representation families, four V4-10 diplomacy families, four V4-11 treaty families, four V4-12 organized-conflict families, four V4-13 border families, four V4-14 migration-displacement families, and four V4-15 inter-society relation families) |
-| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V22` / `v20` for cultural contact; channel-selected, not universal |
+| Metric families | 188 (V4-15's 184 plus four V4-16 infrastructure-network families) |
+| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V23` / `v21` when `infrastructure_networks` is active; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
@@ -202,9 +202,9 @@ those as current pins or silently drop their legacy accepted versions.
   `cultural_historical_memory`, `multi_polity_migration`.
   `institutional_economy` remains unowned and fails closed.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
-  (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and
-  `organized_conflict` (V4-12). The other seven V4 flags remain unowned and fail
-  closed.
+  (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
+  `organized_conflict` (V4-12), and `infrastructure_networks` (V4-16). The other
+  six V4 flags remain unowned and fail closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 

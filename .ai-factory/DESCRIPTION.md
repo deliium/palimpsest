@@ -537,3 +537,21 @@ Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
 184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; five V4 flags are owned and seven remain
 unowned.
+
+Infrastructure networks (V4-16) own `infrastructure_networks` on accepted
+`runner-config-v56` (requires `collective_projects`; no `runner-config-v57`) and
+activate reserved write pair event 23 / codec `v21`. Eight locked catalog kinds
+persist as location-based `infra-` assets after collective-project completion,
+with operational effects on travel, capacity, production, storage, and risk,
+plus damage/repair/decay/destruction. Explicit public-good frozensets keep
+infra-only kinds out of Use/Maintain/Oppose sets; `well`/`warning_post` still
+need `public_goods` to start. Four metric families raise the catalog 184 → 188;
+observer semantics stay 73 via aliases; Alembic stays `0017`; commands stay 43.
+Dual-gated research surfaces publish `infrastructure-networks-snapshot-v1` with
+six GET routes, a Research UI panel, and Godot objective overlays. Off-gate
+experiment `infrastructure_networks@1` is registered. Non-goals: automatic
+maintenance, grid planner, infrastructure actor, civilization score, and
+`supply_chains` ownership. Pins: runner v4/v55/v56, result v2/v3, 43 commands,
+73 observer semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags,
+replay-v23/codec v21 when the channel is active, `/v1`, `observer-protocol-v1`,
+Alembic `0017`; six V4 flags are owned and six remain unowned.

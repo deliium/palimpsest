@@ -2866,11 +2866,11 @@ class InfrastructureDestroyed:
 
 
 def _validate_infrastructure_event(event: object, type_name: str) -> None:
-    asset_id = getattr(event, "asset_id")
-    location_id = getattr(event, "location_id")
-    linked_project_id = getattr(event, "linked_project_id")
-    endpoint = getattr(event, "endpoint_location_id")
-    linked_structure = getattr(event, "linked_structure_id")
+    asset_id = event.asset_id
+    location_id = event.location_id
+    linked_project_id = event.linked_project_id
+    endpoint = event.endpoint_location_id
+    linked_structure = event.linked_structure_id
     if type(asset_id) is not EntityId:
         raise TypeError(f"{type_name}.asset_id must be EntityId")
     if type(location_id) is not EntityId:
@@ -2881,9 +2881,9 @@ def _validate_infrastructure_event(event: object, type_name: str) -> None:
         raise TypeError(f"{type_name}.endpoint_location_id must be EntityId or None")
     if linked_structure is not None and type(linked_structure) is not EntityId:
         raise TypeError(f"{type_name}.linked_structure_id must be EntityId or None")
-    asset_kind = getattr(event, "asset_kind")
-    topology = getattr(event, "topology")
-    status = getattr(event, "status")
+    asset_kind = event.asset_kind
+    topology = event.topology
+    status = event.status
     if type(asset_kind) is not str or not asset_kind:
         raise ValueError(f"{type_name}.asset_kind")
     if type(topology) is not str or topology not in {"node", "edge"}:
@@ -2895,15 +2895,15 @@ def _validate_infrastructure_event(event: object, type_name: str) -> None:
     }:
         raise ValueError(f"{type_name}.status")
     integrity = _require_finite_float(
-        f"{type_name}.integrity", getattr(event, "integrity")
+        f"{type_name}.integrity", event.integrity
     )
     if not 0.0 <= integrity <= 1.0:
         raise ValueError(f"{type_name}.integrity")
     object.__setattr__(event, "integrity", integrity)
-    tick = getattr(event, "tick")
+    tick = event.tick
     if type(tick) is not int or isinstance(tick, bool) or tick < 0:
         raise ValueError(f"{type_name}.tick")
-    _reject_presentation_fields(getattr(event, "kind"), event.__slots__)  # type: ignore[attr-defined]
+    _reject_presentation_fields(event.kind, event.__slots__)  # type: ignore[attr-defined]
 
 
 EventDetails = (
@@ -3181,16 +3181,27 @@ _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {PublicGoodBenefit, PublicGoodMaintained, PublicGoodOpposed}
 )
 _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V20, EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}
+    {
+        EVENT_SCHEMA_REPLAY_V20,
+        EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+    }
 )
 _JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {JourneyStarted, JourneyArrived, JourneyEnded}
 )
 _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V21, EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}
+    {
+        EVENT_SCHEMA_REPLAY_V21,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+    }
 )
 _CONTACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({ContactRecorded})
-_CONTACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset({EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23})
+_CONTACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23}
+)
 _EXCHANGE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {ExchangeProposed, ExchangeWithdrawn, ExchangeCompleted}
 )
@@ -3896,6 +3907,7 @@ class WorldEvent:
                     EVENT_SCHEMA_REPLAY_V20,
                     EVENT_SCHEMA_REPLAY_V21,
                     EVENT_SCHEMA_REPLAY_V22,
+                    EVENT_SCHEMA_REPLAY_V23,
                 }
             ):
                 _LOG.warning(

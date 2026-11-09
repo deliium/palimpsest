@@ -2826,6 +2826,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "institutional_decay@1",
         "generational_runner@1",
         "generational_comparison@1",
+        "infrastructure_networks@1",
     }
 )
 
@@ -5600,6 +5601,27 @@ def experiment_bm_generational_comparison(
     )
     _LOG.info(
         "experiment_registered experiment_id=generational_comparison@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_infrastructure_networks(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 24,
+) -> ExperimentDefinition:
+    """Off-gate V4-16 experiment: infrastructure_networks channel vs control."""
+    from experiments.infrastructure_networks_scenario import (
+        infrastructure_networks_scenario,
+    )
+
+    definition = infrastructure_networks_scenario(
+        base=base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=infrastructure_networks@1 arms=%s",
         len(definition.conditions),
     )
     return definition

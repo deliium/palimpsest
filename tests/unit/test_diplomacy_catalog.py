@@ -89,7 +89,7 @@ def test_catalog_is_176_with_four_diplomacy_families_before_treaties() -> None:
         MetricFamilyId.TREATY_RECOLLECTION,
         MetricFamilyId.TREATY_ANCHOR_COVERAGE,
     ]
-    assert len({spec.family_id for spec in specs}) == 184
+    assert len({spec.family_id for spec in specs}) == 188
 
 
 def test_diplomacy_value_keys_are_exact() -> None:

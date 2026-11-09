@@ -103,3 +103,26 @@ uv run pytest tests/unit/test_v1_regression_gate.py \
 
 ## Phase Completion Checklist
 - Tasks 26-27 done; roadmap not edited.
+
+## Progress notes (Task 27)
+
+Recorded 2026-11-09 during `$aif-implement` completion (`commit and continue`).
+
+| Lane | Result |
+| --- | --- |
+| Unit + architecture (infra suites, docs parity, V4 invariants, scaffolding, V1/V2 gates, metric pin 188, Alembic `0017`) | passed (`191` focused selection) |
+| Static: ruff on infra-touched modules/tests | passed |
+| Static: mypy `world._infrastructure` / infrastructure models / scenario | passed |
+| Research UI vitest (`InfrastructureNetworksPanel`) | passed (`3`) |
+| Docker Compose / browser acceptance | `unexecuted` — prerequisite: attested Compose/browser image stack |
+| Integration (PostgreSQL) | `unexecuted` — prerequisite: `PALIMPSEST_TEST_DATABASE_URL` |
+| Godot 4.7 protocol suite (incl. infrastructure overlays) | `unexecuted` — prerequisite: `GODOT_BIN` (Godot 4.7.x) |
+| Benchmark / integration-scale | `unexecuted` — prerequisite: `PALIMPSEST_TEST_DATABASE_URL` (+ scale markers) |
+
+**Certification:** local required evidence green; full required-gate certification
+**withheld** while the four env-gated lanes above remain `unexecuted`.
+
+**Pins certified in code/docs:** runner v56, commands 43, observer semantic types
+73, metric families **188**, six owned V4 flags, write pair replay-v23 / codec
+`v21`, Alembic `0017` (no `0018` / no `runner-config-v57`). `.ai-factory/ROADMAP.md`
+untouched (owned by `$aif-roadmap`).

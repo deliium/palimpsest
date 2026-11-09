@@ -6,11 +6,11 @@ import pytest
 
 from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 from simulation.runner_models import (
+    _V4_OWNED_CAPABILITY_FLAGS,
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V56,
     CollectiveProjectsSpec,
     V4CapabilityFlags,
-    _V4_OWNED_CAPABILITY_FLAGS,
 )
 from world.collective_projects import (
     COLLECTIVE_PROJECT_CATALOG,
@@ -24,9 +24,9 @@ from world.infrastructure import (
     INFRASTRUCTURE_FORBIDDEN_FIELDS,
     INFRASTRUCTURE_ID_PREFIX,
     INFRASTRUCTURE_NETWORKS_POLICY_ID,
-    MAX_INFRASTRUCTURE_ASSETS,
     MAX_INFRA_BODY_BONUS,
     MAX_INFRA_ITEM_BONUS,
+    MAX_INFRASTRUCTURE_ASSETS,
     REPAIR_INTEGRITY_DELTA,
     InfrastructureKind,
     InfrastructureStatus,

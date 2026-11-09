@@ -543,25 +543,25 @@ func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) ->
 		"infrastructure_node":
 			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_node")
 			if enabled:
-				_session.fetch_infrastructure_assets("infrastructure_node")
+				_session.fetch_infrastructure_assets()
 			else:
 				_world.clear_infrastructure_overlay("infrastructure_node")
 		"infrastructure_edge":
 			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_edge")
 			if enabled:
-				_session.fetch_infrastructure_assets("infrastructure_edge")
+				_session.fetch_infrastructure_edges()
 			else:
 				_world.clear_infrastructure_overlay("infrastructure_edge")
 		"infrastructure_damaged":
 			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_damaged")
 			if enabled:
-				_session.fetch_infrastructure_assets("infrastructure_damaged")
+				_session.fetch_infrastructure_damaged()
 			else:
 				_world.clear_infrastructure_overlay("infrastructure_damaged")
 		"infrastructure_destroyed":
 			_world.set_infrastructure_overlay_enabled(enabled, "infrastructure_destroyed")
 			if enabled:
-				_session.fetch_infrastructure_assets("infrastructure_destroyed")
+				_session.fetch_infrastructure_destroyed()
 			else:
 				_world.clear_infrastructure_overlay("infrastructure_destroyed")
 		"spatial_control":

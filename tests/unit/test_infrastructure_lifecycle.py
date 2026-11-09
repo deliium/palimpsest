@@ -100,7 +100,8 @@ def test_destroyed_rejects_repair() -> None:
     next_state, details = adjust_linked_infrastructure(
         state, structure_id=structure_id, delta=REPAIR_INTEGRITY_DELTA, tick=9
     )
-    assert next_state.infrastructure[asset.asset_id].status is InfrastructureStatus.DESTROYED
+    destroyed = next_state.infrastructure[asset.asset_id]
+    assert destroyed.status is InfrastructureStatus.DESTROYED
     assert next_state.infrastructure[asset.asset_id].integrity == 0.0
     assert details == ()
 
@@ -124,7 +125,8 @@ def test_decay_flips_status_and_destroys() -> None:
     current = after_two
     for tick in range(4, 50):
         current, _ = decay_infrastructure(current, tick=tick)
-        if current.infrastructure[asset.asset_id].status is InfrastructureStatus.DESTROYED:
+        status = current.infrastructure[asset.asset_id].status
+        if status is InfrastructureStatus.DESTROYED:
             break
     final = current.infrastructure[asset.asset_id]
     assert final.status is InfrastructureStatus.DESTROYED
@@ -144,7 +146,9 @@ def test_sync_takes_min_with_structure() -> None:
 
 
 def test_no_auto_repair_on_decay() -> None:
-    state, asset, _ = _world_with_asset(integrity=0.2, status=InfrastructureStatus.DAMAGED)
+    state, asset, _ = _world_with_asset(
+        integrity=0.2, status=InfrastructureStatus.DAMAGED
+    )
     after, details = decay_infrastructure(state, tick=10)
     assert after.infrastructure[asset.asset_id].integrity < 0.2
     assert len(details) == 1

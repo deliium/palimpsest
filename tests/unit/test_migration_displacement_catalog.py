@@ -52,8 +52,8 @@ def test_catalog_count_is_180() -> None:
     specs = all_metric_specifications()
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
-    assert len(validate_metric_catalog()) == 184
-    assert len({spec.family_id for spec in specs}) == 184
+    assert len(validate_metric_catalog()) == 188
+    assert len({spec.family_id for spec in specs}) == 188
 
 
 def test_four_migration_families_are_last() -> None:

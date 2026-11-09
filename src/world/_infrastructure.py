@@ -384,18 +384,6 @@ def event_detail_for_asset(
         InfrastructureRepaired,
     )
 
-    payload = {
-        "asset_id": asset.asset_id,
-        "asset_kind": asset.kind.value,
-        "topology": asset.topology.value,
-        "status": asset.status.value,
-        "integrity": asset.integrity,
-        "location_id": asset.location_id,
-        "endpoint_location_id": asset.endpoint_location_id,
-        "linked_structure_id": asset.linked_structure_id,
-        "linked_project_id": asset.linked_project_id,
-        "tick": tick,
-    }
     mapping = {
         "infrastructure_constructed": InfrastructureConstructed,
         "infrastructure_repaired": InfrastructureRepaired,
@@ -407,7 +395,18 @@ def event_detail_for_asset(
         cls = mapping[event_kind]
     except KeyError as exc:
         raise _fail("infrastructure_unknown_event_kind") from exc
-    return cls(**payload)
+    return cls(
+        asset_id=asset.asset_id,
+        asset_kind=asset.kind.value,
+        topology=asset.topology.value,
+        status=asset.status.value,
+        integrity=asset.integrity,
+        location_id=asset.location_id,
+        endpoint_location_id=asset.endpoint_location_id,
+        linked_structure_id=asset.linked_structure_id,
+        linked_project_id=asset.linked_project_id,
+        tick=tick,
+    )
 
 
 def adjust_linked_infrastructure(

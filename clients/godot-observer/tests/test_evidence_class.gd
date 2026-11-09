@@ -43,6 +43,14 @@ func _labels_and_mapping() -> String:
 		return "migration_wave must be ANALYTICAL"
 	if EvidenceClass.for_overlay("migration_integration") != EvidenceClass.ANALYTICAL:
 		return "migration_integration must be ANALYTICAL"
+	if EvidenceClass.for_overlay("infrastructure_node") != EvidenceClass.OBJECTIVE:
+		return "infrastructure_node must be OBJECTIVE"
+	if EvidenceClass.for_overlay("infrastructure_edge") != EvidenceClass.OBJECTIVE:
+		return "infrastructure_edge must be OBJECTIVE"
+	if EvidenceClass.for_overlay("infrastructure_damaged") != EvidenceClass.OBJECTIVE:
+		return "infrastructure_damaged must be OBJECTIVE"
+	if EvidenceClass.for_overlay("infrastructure_destroyed") != EvidenceClass.OBJECTIVE:
+		return "infrastructure_destroyed must be OBJECTIVE"
 	if EvidenceClass.label_for_overlay("border_physical") != "Physical":
 		return "border_physical label"
 	if EvidenceClass.label_for_overlay("border_claims") != "Claims":

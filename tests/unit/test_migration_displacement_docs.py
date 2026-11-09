@@ -36,7 +36,7 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_180_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **184**" in metrics
+    assert "Closed catalog cardinality: **188**" in metrics
     for family in (
         "migration_wave_structure@1",
         "migration_cause_evidence@1",
@@ -97,7 +97,7 @@ def test_ui_and_overlay_docs_cover_four_layers() -> None:
 
 def test_v4_architecture_baseline_uses_current_pins() -> None:
     v4 = _read("docs/v4-architecture.md")
-    assert "| Metric catalog | 184 families" in v4
+    assert "| Metric catalog | 188 families" in v4
     assert "six GET routes under `/v1/simulations/{run_id}/migration`" in v4
     assert "176 -> 180" in v4
     assert "172 -> 176" in v4
@@ -117,7 +117,7 @@ def test_configuration_and_contract_docs() -> None:
     social = _read("docs/social-communication.md")
     assert "mdp_v1" in social
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-15" in factory
+    assert "through V4-16" in factory
     assert "migration-displacement.md" in factory
     assert "180" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
@@ -142,13 +142,13 @@ def test_no_forbidden_authority_wording_in_canonical_doc() -> None:
 
 def test_current_pin_guard_preserves_historical_176() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **184**" in metrics
+    assert "Closed catalog cardinality: **188**" in metrics
     assert "172 to **176**" in metrics
     assert "from 176 to\n**180**" in metrics or "from 176 to **180**" in metrics
     assert "Closed catalog cardinality: **176**" not in metrics
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-15" in factory
+    assert "through V4-16" in factory
     assert "through V4-13" not in factory
     assert "172 -> 176" in factory
     assert "176 -> 180" in factory
-    assert "| Metric families | 184" in factory
+    assert "| Metric families | 188" in factory

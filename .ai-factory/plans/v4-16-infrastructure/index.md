@@ -264,13 +264,13 @@ No new entries in `SEMANTIC_EVENT_TYPES`.
 - [x] Task 22: Godot infrastructure overlays ([details](phase-07-metrics-and-surfaces.md#task-22-godot-infrastructure-overlays)) (depends on 19)
 
 ### Phase 8: Invariants, E2E, experiment
-- [ ] Task 23: Architecture invariants and pin sweeps ([details](phase-08-invariants-and-e2e.md#task-23-architecture-invariants-and-pin-sweeps)) (depends on 1-22)
-- [ ] Task 24: In-process infrastructure E2E ([details](phase-08-invariants-and-e2e.md#task-24-in-process-infrastructure-e2e)) (depends on 23)
-- [ ] Task 25: Off-gate experiment `infrastructure_networks@1` ([details](phase-08-invariants-and-e2e.md#task-25-off-gate-experiment-infrastructure_networks1)) (depends on 23)
+- [x] Task 23: Architecture invariants and pin sweeps ([details](phase-08-invariants-and-e2e.md#task-23-architecture-invariants-and-pin-sweeps)) (depends on 1-22)
+- [x] Task 24: In-process infrastructure E2E ([details](phase-08-invariants-and-e2e.md#task-24-in-process-infrastructure-e2e)) (depends on 23)
+- [x] Task 25: Off-gate experiment `infrastructure_networks@1` ([details](phase-08-invariants-and-e2e.md#task-25-off-gate-experiment-infrastructure_networks1)) (depends on 23)
 
 ### Phase 9: Docs and verification
-- [ ] Task 26: Documentation via `$aif-docs` ([details](phase-09-docs-and-verification.md#task-26-documentation-via-aif-docs)) (depends on 23)
-- [ ] Task 27: Required-gate verification certification ([details](phase-09-docs-and-verification.md#task-27-required-gate-verification-certification)) (depends on 24, 25, 26)
+- [x] Task 26: Documentation via `$aif-docs` ([details](phase-09-docs-and-verification.md#task-26-documentation-via-aif-docs)) (depends on 23)
+- [x] Task 27: Required-gate verification certification ([details](phase-09-docs-and-verification.md#task-27-required-gate-verification-certification)) (depends on 24, 25, 26)
 
 ## Commit Plan
 

@@ -31,8 +31,8 @@ def test_metric_catalog_count_is_160() -> None:
     specs = validate_metric_catalog()
     assert METRIC_FAMILY_COUNT == 188
     assert len(specs) == 188
-    assert len({spec.family_id for spec in specs}) == 184
-    assert len(all_metric_specifications()) == 184
+    assert len({spec.family_id for spec in specs}) == 188
+    assert len(all_metric_specifications()) == 188
 
 
 def test_first_154_families_are_unchanged() -> None:

@@ -389,6 +389,22 @@ def _bind_public_goods_channel(engine: WorldEngine, config: object) -> None:
         )
 
 
+def _bind_infrastructure_networks_channel(
+    engine: WorldEngine,
+    *,
+    codec_version: str | None,
+    infrastructure: object | None,
+) -> None:
+    """Restore infrastructure_networks from codec v21 or projected asset map."""
+    active = codec_version == "v21" or infrastructure is not None
+    engine._infrastructure_networks_active = active
+    if active:
+        _LOGGER.info(
+            "infrastructure_networks_enabled policy_id=%s",
+            "infrastructure-networks.v1",
+        )
+
+
 def _bind_resource_exchange_profile_channel(
     engine: WorldEngine, config: object
 ) -> None:
@@ -1315,6 +1331,11 @@ class WorldEngine:
         _bind_public_goods_channel(engine, snapshot.config)
         contact = getattr(snapshot.config, "cultural_contact", None)
         engine._cultural_contact_active = bool(contact is not None and contact.enabled)
+        _bind_infrastructure_networks_channel(
+            engine,
+            codec_version=snapshot.persistence_codec_version,
+            infrastructure=getattr(projected, "infrastructure", None),
+        )
         engine._perception = PerceptionService(
             possession_succession_active=engine._possession_succession_active,
             structured_commitments_active=engine._structured_commitments_active,
@@ -1392,6 +1413,11 @@ class WorldEngine:
         _bind_resource_exchange_profile_channel(engine, snapshot.config)
         _bind_collective_projects_channel(engine, snapshot.config)
         _bind_public_goods_channel(engine, snapshot.config)
+        _bind_infrastructure_networks_channel(
+            engine,
+            codec_version=snapshot.persistence_codec_version,
+            infrastructure=engine._snapshot.world.state.infrastructure,
+        )
         engine._environmental_dynamics = _optional_environmental_dynamics(
             environmental_dynamics
         )
@@ -1618,7 +1644,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
-        "v21",
+            "v21",
         }:
             durable_mode = (
                 engine._durable_records_spec.perception_mode
@@ -1655,7 +1681,7 @@ class WorldEngine:
             "v18",
             "v19",
             "v20",
-        "v21",
+            "v21",
         }:
             resolved_kinship = kinship_spec
             if resolved_kinship is None:
@@ -2062,6 +2088,7 @@ class WorldEngine:
                     self._snapshot.world.state.regions_migration is not None
                 ),
                 cultural_contact_active=self._cultural_contact_active,
+                infrastructure_networks_active=self._infrastructure_networks_active,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2306,6 +2333,7 @@ class WorldEngine:
                 self._snapshot.world.state.regions_migration is not None
             ),
             cultural_contact_active=self._cultural_contact_active,
+            infrastructure_networks_active=self._infrastructure_networks_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4563,6 +4591,7 @@ class WorldEngine:
             public_goods_active=self._public_goods_active,
             regions_migration_active=(snap.world.state.regions_migration is not None),
             cultural_contact_active=self._cultural_contact_active,
+            infrastructure_networks_active=self._infrastructure_networks_active,
         )
         prepared = finalize_pending_batch(
             merged,

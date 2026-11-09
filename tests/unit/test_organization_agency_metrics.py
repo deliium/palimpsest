@@ -105,7 +105,7 @@ def test_catalog_appends_two_agency_families() -> None:
         MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
         MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
     ]
-    assert len({spec.family_id for spec in specs}) == 184
+    assert len({spec.family_id for spec in specs}) == 188
 
 
 def test_first_146_families_are_unchanged() -> None:

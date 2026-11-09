@@ -330,3 +330,11 @@ six inter-society-relations GET routes, maps
 `inter_society_relations_disabled`/503 to an explicit unavailable state, and
 never invents a composite civilization relationship score, alliance/enmity
 score, trust score, or rank chrome.
+
+## Infrastructure networks panel (V4-16)
+
+The read-only **Infrastructure networks** run tab (view id
+`infrastructure-networks`) renders published objective asset inventory, edges,
+and condition counts. It fetches the six infrastructure-networks GET routes,
+maps `infrastructure_networks_disabled`/503 to an explicit unavailable state,
+and never invents an infrastructure health score or civilization score.

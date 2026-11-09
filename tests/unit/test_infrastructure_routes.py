@@ -106,7 +106,11 @@ def _client(root: Path | None, *, clock: list[float]) -> httpx.AsyncClient:
     app.include_router(router)
     settings = Settings(api_debug_enabled=True, api_debug_credential=SecretStr(TOKEN))
     app.dependency_overrides[get_settings] = lambda: settings
-    reader = None if root is None else create_infrastructure_networks_reader(root / "store")
+    reader = (
+        None
+        if root is None
+        else create_infrastructure_networks_reader(root / "store")
+    )
     app.dependency_overrides[get_infrastructure_networks_reader] = lambda: reader
     app.state.infrastructure_networks_reader = reader
     app.state.infrastructure_networks_cursor_codec = (
