@@ -77,7 +77,7 @@ def test_research_runner_path_dependence_never_imports_api_or_tests() -> None:
 
 
 def test_v3_38_preserves_current_contract_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 180
+    assert METRIC_FAMILY_COUNT == 184
     assert len(SEMANTIC_TYPE_BY_KIND) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert RUNNER_SCHEMA_VERSION_V4 == "runner-config-v4"

@@ -267,7 +267,7 @@ def test_pins_are_unchanged() -> None:
     assert "v21" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert METRIC_FAMILY_COUNT == 180
+    assert METRIC_FAMILY_COUNT == 184
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 5
     assert BORDERS_CURSOR_PURPOSES == {

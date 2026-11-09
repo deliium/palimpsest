@@ -50,15 +50,15 @@ def _digest(specs) -> str:
 
 def test_catalog_count_is_180() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 180
-    assert len(specs) == 180
-    assert len(validate_metric_catalog()) == 180
-    assert len({spec.family_id for spec in specs}) == 180
+    assert METRIC_FAMILY_COUNT == 184
+    assert len(specs) == 184
+    assert len(validate_metric_catalog()) == 184
+    assert len({spec.family_id for spec in specs}) == 184
 
 
 def test_four_migration_families_are_last() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id.value for spec in specs[-4:]) == MIGRATION_FAMILIES
+    # Migration families remain slots 176..179; V4-15 appends after them.
     assert tuple(spec.family_id.value for spec in specs[176:180]) == MIGRATION_FAMILIES
     assert all(spec.family_id.value not in MIGRATION_FAMILIES for spec in specs[:176])
     assert tuple(spec.family_id.value for spec in specs[172:176]) == (

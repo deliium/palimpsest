@@ -67,6 +67,13 @@ from analysis.historical_memory_metrics import (
     compute_historical_memory_queries,
     compute_historical_memory_transitions,
 )
+from analysis.inter_society_relations_detection import InterSocietyRelationsAnalysis
+from analysis.inter_society_relations_metrics import (
+    compute_inter_society_domain_evidence,
+    compute_inter_society_pair_comparison,
+    compute_inter_society_relation_structure,
+    compute_inter_society_relation_timeseries,
+)
 from analysis.kinship_genealogy_metrics import compute_kinship_genealogy
 from analysis.knowledge_genealogy_metrics import (
     compute_knowledge_genealogy_holders,
@@ -338,6 +345,7 @@ class MetricComputationInputs:
     migration_displacement_kinship_pairs: Sequence[tuple[str, str]] | None = None
     migration_displacement_communication_pairs: Sequence[tuple[str, str]] | None = None
     migration_displacement_organization_pairs: Sequence[tuple[str, str]] | None = None
+    inter_society_relations_analysis: InterSocietyRelationsAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2325,6 +2333,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("migration_metrics_emitted families=4")
     else:
         _LOG.debug("migration_metrics_disabled")
+    if inputs.inter_society_relations_analysis is not None:
+        isr_analysis = inputs.inter_society_relations_analysis
+        _safe(
+            "inter_society_relation_structure",
+            lambda: compute_inter_society_relation_structure(
+                isr_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "inter_society_domain_evidence",
+            lambda: compute_inter_society_domain_evidence(
+                isr_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "inter_society_relation_timeseries",
+            lambda: compute_inter_society_relation_timeseries(
+                isr_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "inter_society_pair_comparison",
+            lambda: compute_inter_society_pair_comparison(
+                isr_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("inter_society_relations_metrics_emitted families=4")
+    else:
+        _LOG.debug("inter_society_relations_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

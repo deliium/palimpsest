@@ -49,7 +49,7 @@ _ENTRIES = (
 def test_known_answer_counts_and_provenance_query(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    assert METRIC_FAMILY_COUNT == 180
+    assert METRIC_FAMILY_COUNT == 184
     with caplog.at_level(logging.DEBUG, logger="analysis.experimentation"):
         trials, discovery, provenance = assemble_bounded_experiment_metrics(
             _TRIALS,

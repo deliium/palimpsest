@@ -55,25 +55,25 @@ ALIGNMENT_KEYS = (
 
 def test_catalog_is_160_unique_and_validated() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 180
-    assert len(specs) == 180
-    assert len({spec.family_id for spec in specs}) == 180
-    assert len(validate_metric_catalog()) == 180
+    assert METRIC_FAMILY_COUNT == 184
+    assert len(specs) == 184
+    assert len({spec.family_id for spec in specs}) == 184
+    assert len(validate_metric_catalog()) == 184
 
 
 def test_evidence_families_are_retained_before_representation() -> None:
     specs = all_metric_specifications()
-    assert [spec.family_id for spec in specs[-26:-23]] == [
+    assert [spec.family_id for spec in specs[-30:-27]] == [
         MetricFamilyId.EVIDENCE_SOURCE_STRUCTURE,
         MetricFamilyId.EVIDENCE_PROVENANCE_CONTINUITY,
         MetricFamilyId.EVIDENCE_OBJECTIVE_ALIGNMENT,
     ]
-    assert [spec.family_id for spec in specs[-23:-20]] == [
+    assert [spec.family_id for spec in specs[-27:-24]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,
         MetricFamilyId.REPRESENTATION_SCOPE_ALIGNMENT,
     ]
-    for spec in specs[-23:-16]:
+    for spec in specs[-27:-20]:
         assert spec.algorithm_version == "1"
         assert set(spec.formula_ids) == set(spec.value_keys)
 

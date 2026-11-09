@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 180
+METRIC_FAMILY_COUNT: Final[int] = 184
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -255,6 +255,10 @@ class MetricFamilyId(StrEnum):
     MIGRATION_CAUSE_EVIDENCE = "migration_cause_evidence"
     MIGRATION_CLUSTER_COHESION = "migration_cluster_cohesion"
     MIGRATION_INTEGRATION_OUTCOME = "migration_integration_outcome"
+    INTER_SOCIETY_RELATION_STRUCTURE = "inter_society_relation_structure"
+    INTER_SOCIETY_DOMAIN_EVIDENCE = "inter_society_domain_evidence"
+    INTER_SOCIETY_RELATION_TIMESERIES = "inter_society_relation_timeseries"
+    INTER_SOCIETY_PAIR_COMPARISON = "inter_society_pair_comparison"
 
 
 class DenominatorKind(StrEnum):
@@ -8481,6 +8485,227 @@ def _spec_migration_integration_outcome() -> MetricSpecification:
     )
 
 
+ISR_DOMAIN_KEYS: Final[tuple[str, ...]] = (
+    "cooperation",
+    "hostility",
+    "exchange",
+    "migration",
+    "trust_proxy",
+    "agreement",
+    "conflict",
+    "cultural_similarity",
+)
+INTER_SOCIETY_RELATION_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "pair_count",
+    "status_observed",
+    "status_partial",
+    "status_empty",
+    "overlap_pair_count",
+    "window_tick",
+)
+INTER_SOCIETY_DOMAIN_EVIDENCE_KEYS: Final[tuple[str, ...]] = (
+    "pair_count",
+    *(f"{domain}_present" for domain in ISR_DOMAIN_KEYS),
+    *(f"{domain}_partial" for domain in ISR_DOMAIN_KEYS),
+    *(f"{domain}_absent" for domain in ISR_DOMAIN_KEYS),
+    *(f"{domain}_event_count" for domain in ISR_DOMAIN_KEYS),
+)
+INTER_SOCIETY_RELATION_TIMESERIES_KEYS: Final[tuple[str, ...]] = (
+    "pair_series_count",
+    "window_point_count",
+    "max_windows_per_pair",
+)
+INTER_SOCIETY_PAIR_COMPARISON_KEYS: Final[tuple[str, ...]] = (
+    "domain_count",
+    "left_window_tick",
+    "right_window_tick",
+    *(f"{domain}_count_delta" for domain in ISR_DOMAIN_KEYS),
+    *(f"{domain}_left_availability" for domain in ISR_DOMAIN_KEYS),
+    *(f"{domain}_right_availability" for domain in ISR_DOMAIN_KEYS),
+)
+
+
+def _isr_formulas(
+    keys: tuple[str, ...], descriptions: Mapping[str, str]
+) -> dict[str, str]:
+    return {key: descriptions.get(key, key) for key in keys}
+
+
+def _spec_inter_society_relation_structure() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INTER_SOCIETY_RELATION_STRUCTURE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="analytical_inter_society_pairs",
+        denominator="contemporaneous_msoc_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        cohort_window="32_tick_relation_windows",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="empty_pair_inventory_unknown",
+        opportunity_vs_occurrence=(
+            "pair inventory counts only; no civilization relationship score"
+        ),
+        self_edge_policy="identical msoc endpoints are rejected",
+        censoring_policy="partial domain coverage remains partial",
+        formulas=_isr_formulas(
+            INTER_SOCIETY_RELATION_STRUCTURE_KEYS,
+            {
+                "pair_count": "analytical isr- pair candidates",
+                "status_observed": "pairs with full domain presence",
+                "status_partial": "pairs with partial domain coverage",
+                "status_empty": "pairs with all domains absent",
+                "overlap_pair_count": "pairs whose msoc members overlap",
+                "window_tick": "harvest window tick",
+            },
+        ),
+        value_keys=INTER_SOCIETY_RELATION_STRUCTURE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_pairs",
+    )
+
+
+def _spec_inter_society_domain_evidence() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INTER_SOCIETY_DOMAIN_EVIDENCE,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="inter_society_domain_panels",
+        denominator="pair_domain_cells",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="32_tick_relation_windows",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="absent_not_zero_hostility",
+        opportunity_vs_occurrence=(
+            "each domain keeps independent availability; never a bilateral score"
+        ),
+        self_edge_policy="cross-membership trust edges only",
+        censoring_policy="missing cultural inventories stay absent",
+        formulas=_isr_formulas(
+            INTER_SOCIETY_DOMAIN_EVIDENCE_KEYS,
+            {
+                "pair_count": "analytical isr- pairs",
+                **{
+                    f"{domain}_present": f"{domain} panels marked present"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+                **{
+                    f"{domain}_partial": f"{domain} panels marked partial"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+                **{
+                    f"{domain}_absent": f"{domain} panels marked absent"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+                **{
+                    f"{domain}_event_count": f"{domain} event count sum"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+            },
+        ),
+        value_keys=INTER_SOCIETY_DOMAIN_EVIDENCE_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_pairs",
+    )
+
+
+def _spec_inter_society_relation_timeseries() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INTER_SOCIETY_RELATION_TIMESERIES,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="inter_society_window_points",
+        denominator="pair_window_series",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="32_tick_relation_windows",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="empty_series_unknown",
+        opportunity_vs_occurrence="forward-only window aggregates; no trajectory score",
+        self_edge_policy="not_applicable",
+        censoring_policy="series truncates at MAX_INTER_SOCIETY_SERIES_WINDOWS",
+        formulas=_isr_formulas(
+            INTER_SOCIETY_RELATION_TIMESERIES_KEYS,
+            {
+                "pair_series_count": "distinct society-pair series",
+                "window_point_count": "total window points across series",
+                "max_windows_per_pair": "longest series length",
+            },
+        ),
+        value_keys=INTER_SOCIETY_RELATION_TIMESERIES_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_pairs",
+    )
+
+
+def _spec_inter_society_pair_comparison() -> MetricSpecification:
+    return _base(
+        family_id=MetricFamilyId.INTER_SOCIETY_PAIR_COMPARISON,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+            }
+        ),
+        population="inter_society_comparison_views",
+        denominator="compared_domain_cells",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        cohort_window="32_tick_relation_windows",
+        deceased_policy="retain_committed_rows",
+        zero_holding_policy="fewer_than_two_pairs_unknown",
+        opportunity_vs_occurrence=(
+            "per-domain deltas and availability only; never a rank or composite"
+        ),
+        self_edge_policy="not_applicable",
+        censoring_policy="mixed-absent domains remain explicit",
+        formulas=_isr_formulas(
+            INTER_SOCIETY_PAIR_COMPARISON_KEYS,
+            {
+                "domain_count": "compared domain cells",
+                "left_window_tick": "left operand window tick",
+                "right_window_tick": "right operand window tick",
+                **{
+                    f"{domain}_count_delta": f"{domain} right-minus-left event count"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+                **{
+                    f"{domain}_left_availability": f"{domain} left availability"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+                **{
+                    f"{domain}_right_availability": f"{domain} right availability"
+                    for domain in ISR_DOMAIN_KEYS
+                },
+            },
+        ),
+        value_keys=INTER_SOCIETY_PAIR_COMPARISON_KEYS,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_two_pairs",
+    )
+
+
 _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_resource_inequality,
     _spec_cooperation,
@@ -8662,6 +8887,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_migration_cause_evidence,
     _spec_migration_cluster_cohesion,
     _spec_migration_integration_outcome,
+    _spec_inter_society_relation_structure,
+    _spec_inter_society_domain_evidence,
+    _spec_inter_society_relation_timeseries,
+    _spec_inter_society_pair_comparison,
 )
 
 

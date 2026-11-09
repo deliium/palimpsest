@@ -246,7 +246,7 @@ def test_snapshot_store_and_catalog_pins() -> None:
     )
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 180
+    assert METRIC_FAMILY_COUNT == 184
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )
