@@ -192,6 +192,9 @@ does not implement diplomacy, organized conflict, markets, supply chains,
 science, infrastructure, epidemics, ecological feedback, disasters, resilience,
 or macro-society behavior.
 
+The current closed metric catalog is **198** families after the V4-18
+trade-network append.
+
 ## See also
 
 - [Organizations](organizations.md)

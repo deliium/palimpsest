@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 192
+METRIC_FAMILY_COUNT: Final[int] = 198
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -267,6 +267,12 @@ class MetricFamilyId(StrEnum):
     TRAVEL_ROUTE_CONDITION = "travel_route_condition"
     TRAVEL_ROUTE_BLOCKAGE = "travel_route_blockage"
     TRAVEL_ROUTE_BELIEF_ALIGNMENT = "travel_route_belief_alignment"
+    TRADE_CORRIDOR_STRUCTURE = "trade_corridor_structure"
+    TRADE_FLOW_COMPOSITION = "trade_flow_composition"
+    TRADE_LOCATION_CENTRALITY = "trade_location_centrality"
+    TRADE_DEPENDENCE = "trade_dependence"
+    CROSS_SOCIETY_TRADE_FLOWS = "cross_society_trade_flows"
+    TRADE_NETWORK_LINEAGE = "trade_network_lineage"
 
 
 class DenominatorKind(StrEnum):
@@ -8714,6 +8720,185 @@ def _spec_travel_route_belief_alignment() -> MetricSpecification:
     )
 
 
+TRADE_CORRIDOR_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "corridor_count",
+    "active_location_count",
+    "major_location_count",
+    "max_corridor_degree",
+    "max_corridor_transfers",
+    "isolated_location_count",
+    "corridor_coverage_ratio_milli",
+)
+TRADE_FLOW_COMPOSITION_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "transfer_count",
+    "cross_location_count",
+    "food_count",
+    "materials_count",
+    "tools_count",
+    "records_count",
+    "durable_exchange_media_count",
+    "other_count",
+    "imported_count",
+    "exported_count",
+    "local_count",
+    "unknown_class_count",
+)
+TRADE_LOCATION_CENTRALITY_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "location_count",
+    "major_location_count",
+    "trade_post_location_count",
+    "major_trade_post_location_count",
+    "max_inflow_count",
+    "max_outflow_count",
+    "max_local_count",
+    "max_corridor_degree",
+    "mean_corridor_degree_milli",
+    "major_share_milli",
+)
+TRADE_DEPENDENCE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "location_count",
+    "class_count",
+    "mean_dependence_milli",
+    "max_dependence_milli",
+    "high_dependence_count",
+    "unresolved_count",
+    "complete_coverage_count",
+    "partial_coverage_count",
+)
+CROSS_SOCIETY_TRADE_FLOWS_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "pair_count",
+    "society_count",
+    "transfer_count",
+    "food_count",
+    "materials_count",
+    "tools_count",
+    "records_count",
+    "durable_exchange_media_count",
+    "other_count",
+    "overlap_pair_count",
+    "anchor_resolved_pair_count",
+    "anchor_unresolved_pair_count",
+    "coverage",
+)
+TRADE_NETWORK_LINEAGE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "network_count",
+    "active_network_count",
+    "emerged_count",
+    "continued_count",
+    "transformed_count",
+    "split_count",
+    "merge_count",
+    "dissolved_count",
+    "rerouted_count",
+    "sustained_transition_count",
+    "sustained_network_count",
+    "coverage",
+)
+
+
+def _trade_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="trade_networks_window_tick",
+        deceased_policy="retain_committed_transfers",
+        zero_holding_policy="no_transfers_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="same-location transfers are local, never corridors",
+        censoring_policy="unresolved origins remain partial",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_transfer_evidence",
+    )
+
+
+def _spec_trade_corridor_structure() -> MetricSpecification:
+    return _trade_spec(
+        family_id=MetricFamilyId.TRADE_CORRIDOR_STRUCTURE,
+        population="objective_trade_corridors",
+        denominator="observed_directed_corridors",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=TRADE_CORRIDOR_STRUCTURE_KEYS,
+        opportunity="directed corridor counts; no route plan or trade score",
+    )
+
+
+def _spec_trade_flow_composition() -> MetricSpecification:
+    return _trade_spec(
+        family_id=MetricFamilyId.TRADE_FLOW_COMPOSITION,
+        population="objective_trade_transfers",
+        denominator="observed_transfers",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=TRADE_FLOW_COMPOSITION_KEYS,
+        opportunity="closed flow classes; import/export roles are non-disjoint",
+    )
+
+
+def _spec_trade_location_centrality() -> MetricSpecification:
+    return _trade_spec(
+        family_id=MetricFamilyId.TRADE_LOCATION_CENTRALITY,
+        population="objective_exchange_locations",
+        denominator="observed_exchange_locations",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=TRADE_LOCATION_CENTRALITY_KEYS,
+        opportunity="major-location booleans and counts; never a ranking",
+    )
+
+
+def _spec_trade_dependence() -> MetricSpecification:
+    return _trade_spec(
+        family_id=MetricFamilyId.TRADE_DEPENDENCE,
+        population="objective_exchange_locations",
+        denominator="observed_exchange_opportunities",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        keys=TRADE_DEPENDENCE_KEYS,
+        opportunity="observed exchange dependence; never consumption or welfare",
+    )
+
+
+def _spec_cross_society_trade_flows() -> MetricSpecification:
+    return _trade_spec(
+        family_id=MetricFamilyId.CROSS_SOCIETY_TRADE_FLOWS,
+        population="analytical_society_pairs",
+        denominator="observed_cross_society_transfers",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CROSS_SOCIETY_TRADE_FLOWS_KEYS,
+        opportunity="analytical pair counts; overlapping membership is legal",
+    )
+
+
+def _spec_trade_network_lineage() -> MetricSpecification:
+    return _trade_spec(
+        family_id=MetricFamilyId.TRADE_NETWORK_LINEAGE,
+        population="analytical_trade_networks",
+        denominator="observed_network_windows",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=TRADE_NETWORK_LINEAGE_KEYS,
+        opportunity="forward-only lineage counts; sustained is counts only",
+    )
+
+
 def _spec_infrastructure_network_structure() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
@@ -8734,8 +8919,7 @@ def _spec_infrastructure_network_structure() -> MetricSpecification:
         self_edge_policy="edge endpoints are unordered location pairs",
         censoring_policy="destroyed assets remain in inventory counts",
         formulas={
-            key: key.replace("_", " ")
-            for key in INFRASTRUCTURE_NETWORK_STRUCTURE_KEYS
+            key: key.replace("_", " ") for key in INFRASTRUCTURE_NETWORK_STRUCTURE_KEYS
         },
         value_keys=INFRASTRUCTURE_NETWORK_STRUCTURE_KEYS,
         empty_case="unavailable_unknown",
@@ -8815,8 +8999,7 @@ def _spec_infrastructure_maintenance_burden() -> MetricSpecification:
         self_edge_policy="n/a",
         censoring_policy="retain destroyed tombstones in burden",
         formulas={
-            key: key.replace("_", " ")
-            for key in INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS
+            key: key.replace("_", " ") for key in INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS
         },
         value_keys=INFRASTRUCTURE_MAINTENANCE_BURDEN_KEYS,
         empty_case="unavailable_unknown",
@@ -9201,6 +9384,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_travel_route_condition,
     _spec_travel_route_blockage,
     _spec_travel_route_belief_alignment,
+    _spec_trade_corridor_structure,
+    _spec_trade_flow_composition,
+    _spec_trade_location_centrality,
+    _spec_trade_dependence,
+    _spec_cross_society_trade_flows,
+    _spec_trade_network_lineage,
 )
 
 

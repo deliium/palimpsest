@@ -200,6 +200,15 @@ from analysis.symbolic_language_metrics import (
 )
 from analysis.technique_lifecycle_metrics import assemble_technique_lifecycle_metrics
 from analysis.territorial_concentration_metrics import compute_territorial_concentration
+from analysis.trade_networks_analysis import TradeNetworksAnalysis
+from analysis.trade_networks_metrics import (
+    compute_cross_society_trade_flows,
+    compute_trade_corridor_structure,
+    compute_trade_dependence,
+    compute_trade_flow_composition,
+    compute_trade_location_centrality,
+    compute_trade_network_lineage,
+)
 from analysis.translation_metrics import (
     compute_cross_group_translation,
     compute_cross_group_translation_metric,
@@ -359,6 +368,7 @@ class MetricComputationInputs:
     inter_society_relations_analysis: InterSocietyRelationsAnalysis | None = None
     infrastructure_networks_analysis: InfrastructureNetworksAnalysis | None = None
     travel_network_analysis: InfrastructureNetworksAnalysis | None = None
+    trade_networks_analysis: TradeNetworksAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2436,6 +2446,47 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("travel_network_metrics_emitted families=4 catalog=192")
     else:
         _LOG.debug("travel_network_metrics_disabled")
+    if inputs.trade_networks_analysis is not None:
+        trade_analysis = inputs.trade_networks_analysis
+        _safe(
+            "trade_corridor_structure",
+            lambda: compute_trade_corridor_structure(
+                trade_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "trade_flow_composition",
+            lambda: compute_trade_flow_composition(
+                trade_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "trade_location_centrality",
+            lambda: compute_trade_location_centrality(
+                trade_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "trade_dependence",
+            lambda: compute_trade_dependence(
+                trade_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "cross_society_trade_flows",
+            lambda: compute_cross_society_trade_flows(
+                trade_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "trade_network_lineage",
+            lambda: compute_trade_network_lineage(
+                trade_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("trade_networks_metrics_emitted families=6")
+    else:
+        _LOG.debug("trade_networks_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

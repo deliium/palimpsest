@@ -1648,6 +1648,45 @@ func fetch_infrastructure_destroyed() -> void:
 	_request_path("infrastructure_destroyed", path, {"capability": "debug"})
 
 
+func fetch_trade_summary() -> void:
+	var path := "/v1/simulations/%s/trade-networks" % run_id
+	_request_path("trade_summary", path, {"capability": "debug"})
+
+
+func _trade_window_query(window_index: int) -> String:
+	if window_index < 0:
+		return ""
+	return "&window_index=%d" % window_index
+
+
+func fetch_trade_corridors(window_index: int = -1) -> void:
+	var path := "/v1/simulations/%s/trade-networks/corridors?limit=500%s" % [
+		run_id, _trade_window_query(window_index)
+	]
+	_request_path("trade_corridors", path, {"capability": "debug"})
+
+
+func fetch_trade_major_locations(window_index: int = -1) -> void:
+	var path := "/v1/simulations/%s/trade-networks/locations?limit=500%s" % [
+		run_id, _trade_window_query(window_index)
+	]
+	_request_path("trade_major_locations", path, {"capability": "debug"})
+
+
+func fetch_trade_cross_society(window_index: int = -1) -> void:
+	var path := "/v1/simulations/%s/trade-networks/cross-society?limit=500%s" % [
+		run_id, _trade_window_query(window_index)
+	]
+	_request_path("trade_cross_society", path, {"capability": "debug"})
+
+
+func fetch_trade_coverage(window_index: int = -1) -> void:
+	var path := "/v1/simulations/%s/trade-networks/networks?limit=500%s" % [
+		run_id, _trade_window_query(window_index)
+	]
+	_request_path("trade_coverage", path, {"capability": "debug"})
+
+
 func request_strategy_audit_overlay() -> void:
 	## Research/debug ANALYTICAL payload. Ordinary speech must not read this.
 	var path := "/v1/simulations/%s/observer/communication-strategy-audit" % run_id
@@ -1963,6 +2002,10 @@ func _on_http(route: String, status: int, body: Variant, reason_code: String) ->
 		or kind == "infrastructure_edge"
 		or kind == "infrastructure_damaged"
 		or kind == "infrastructure_destroyed"
+		or kind == "trade_corridors"
+		or kind == "trade_major_locations"
+		or kind == "trade_cross_society"
+		or kind == "trade_coverage"
 		or kind == "causal_debugger"
 		or kind == "causal_debugger_lineage"
 	):

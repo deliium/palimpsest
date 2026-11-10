@@ -383,3 +383,24 @@ attach the reader. An unconfigured deployment returns 503
 `infrastructure_networks_disabled`. Responses expose objective asset counts and
 status fields only — never an infrastructure or civilization score. See
 [infrastructure networks](infrastructure-networks.md).
+
+## Trade networks (V4-18)
+
+Seven GET-only routes expose a published `trade-networks-snapshot-v1` under
+`SUBJECTIVE_DEBUG`:
+
+```text
+/v1/simulations/{run_id}/trade-networks
+/v1/simulations/{run_id}/trade-networks/corridors
+/v1/simulations/{run_id}/trade-networks/flows
+/v1/simulations/{run_id}/trade-networks/locations
+/v1/simulations/{run_id}/trade-networks/dependence
+/v1/simulations/{run_id}/trade-networks/cross-society
+/v1/simulations/{run_id}/trade-networks/networks
+```
+
+Paged routes accept `cursor`, `limit`, and an optional `window_index` filter
+bound into the 900-second purpose-bound cursor fingerprint. Unconfigured
+storage returns `503 trade_networks_disabled`; a corrupt payload returns
+`500 trade_networks_store_corrupt`; an absent run returns
+`404 trade_networks_run_not_found`. No trade route mutates state.

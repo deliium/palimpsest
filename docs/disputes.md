@@ -257,6 +257,9 @@ classification, not an agent belief. Counts describe detached candidates under
 stated coverage. This feature makes no prevalence, emergence-probability,
 predictive-power, capacity, throughput, or composite-civilization-score claim.
 
+The current closed metric catalog is **198** families after the V4-18
+trade-network append.
+
 ## See also
 
 - [Evidence and testimony](evidence-testimony.md)

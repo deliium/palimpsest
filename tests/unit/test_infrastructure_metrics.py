@@ -66,9 +66,9 @@ def _asset(
 
 
 def test_catalog_count_188() -> None:
-    assert METRIC_FAMILY_COUNT == 192
+    assert METRIC_FAMILY_COUNT == 198
     catalog = validate_metric_catalog()
-    assert len(catalog) == 192
+    assert len(catalog) == 198
 
 
 def test_empty_analysis_unknown() -> None:

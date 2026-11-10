@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-17
+### Current baseline through V4-18
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 192 (V4-15's 184 plus four V4-16 infrastructure-network families and four V4-17 travel-network families) |
+| Metric families | 198 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, and six V4-18 trade-network families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -1035,5 +1035,29 @@ fallible and never become objective truth.
 Travel-network runs write event **27** / codec **`v25`**; infrastructure-only
 runs keep 23/`v21` and regions-only runs keep 21/`v19`. Infrastructure snapshot
 v2 carries bounded route rows while v1 stays decodable. Four detached metric
-families raise the catalog to 192 metric families; observer semantics stay **73**, commands
-**43**, and Alembic **0017**. The off-gate experiment is `travel_network@1`.
+families raise the catalog to 192 metric families; observer semantics stay **73**,
+commands **43**, and Alembic **0017**. The off-gate experiment is `travel_network@1`.
+
+
+### V4-18 trade-network seam
+
+V4-18 deepens the owned `infrastructure_networks` context, the V3
+`multi_polity_migration` / `regions_migration` seam, and the V3 exchange seam;
+it adds no V4 context or flag and no `runner-config-v57`. `analysis.trade_networks_*`
+reconstructs transfer and local-supply evidence from committed events only,
+derives directed corridors, flow composition, observed dependence, major
+exchange locations, cross-society flows over contemporaneous `msoc-`
+candidates, and forward-only network lineage. No centralized routing, planner,
+quota, allocation, price, money, currency, global registry, or composite score
+exists.
+
+`simulation.trade_networks_*` owns canonical `trade-networks-snapshot-v1`,
+purpose-bound paging, and read/publication ports; `experiments.trade_networks_*`
+is the only analysis-to-artifact bridge; `persistence.trade_networks_filesystem`
+stores `trade-networks-store-v1` atomically; seven GET-only
+`/v1/simulations/{run_id}/trade-networks` routes require `SUBJECTIVE_DEBUG` and
+fail closed with `trade_networks_disabled`; the Research UI and Godot observer
+render read-only analytical rows. Six trade-network metric families append the
+catalog to **198 metric families**; observer semantics stay **73**, commands
+**43**, replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate
+experiment is `trade_networks@1`. See `docs/trade-networks.md`.

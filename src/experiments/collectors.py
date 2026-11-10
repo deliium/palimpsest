@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -28,6 +29,8 @@ from simulation.runner_serialization import (
 )
 
 COLLECTOR_SCHEMA_VERSION: Final[str] = "experiment-collector-v2"
+
+_LOG: Final[logging.Logger] = logging.getLogger("experiments.collectors")
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,9 +253,7 @@ def assemble_arm_metric_bundle(
             or getattr(arm.runner_result, "infrastructure_assets", ())
             or ()
         )
-        travel_routes = (
-            getattr(arm.runner_result, "final_travel_network", ()) or ()
-        )
+        travel_routes = getattr(arm.runner_result, "final_travel_network", ()) or ()
         if travel_assets or travel_routes:
             travel_analysis = build_completed_run_infrastructure_networks_analysis(
                 travel_assets,
@@ -286,6 +287,44 @@ def assemble_arm_metric_bundle(
     events = getattr(arm, "committed_events", None)
     if events is None:
         events = getattr(arm.runner_result, "committed_events", None)
+    if events is not None:
+        try:
+            from types import SimpleNamespace
+
+            from experiments.trade_networks_completed_run import (
+                build_completed_run_trade_networks_analysis,
+                trade_network_macro_candidates,
+                trade_network_recipe_item_kinds,
+                trade_network_trade_post_locations,
+            )
+
+            macro_source = getattr(arm, "macro_society_analysis", None)
+            macro_candidates = trade_network_macro_candidates(
+                arm.runner_result
+                if macro_source is None
+                else SimpleNamespace(macro_society_analysis=macro_source)
+            )
+            trade_analysis = build_completed_run_trade_networks_analysis(
+                arm.runner_result,
+                committed_events=events,
+                run_id=arm.assignment.run_id.value,
+                macro_candidates=macro_candidates,
+                window_tick=max(ticks - 1, 0),
+                recipe_item_kinds=trade_network_recipe_item_kinds(
+                    arm.assignment.runner_config
+                ),
+                trade_post_locations=trade_network_trade_post_locations(
+                    arm.runner_result
+                ),
+            )
+            inputs = replace(inputs, trade_networks_analysis=trade_analysis)
+        except Exception as exc:
+            _LOG.error(
+                "trade_networks_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("trade_networks_collector_missing_events")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

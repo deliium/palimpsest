@@ -265,7 +265,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 192 families (V4-16 184 → 188; V4-17 188 → 192) | `analysis.specifications` |
+| Metric catalog | 198 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 198) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -418,3 +418,17 @@ locked policy `travel-network.v1`; `Move`, `Transport`, and `Flee` enforce them,
 adjacent `VisibleExit` rows expose local facts only, and owner-scoped route
 beliefs remain fallible. Four metric families append the catalog to **192**;
 observer semantics stay **73**, commands **43**, and Alembic **0017**.
+
+## V4-18 trade networks
+
+V4-18 deepens `infrastructure_networks`, the V3 `regions_migration` seam, and
+the V3 exchange/valuation seam without adding a V4 context, flag, runner schema,
+command, event, observer semantic type, write pair, or migration. Detached
+`analysis.trade_networks_*` derives directed corridors, flow composition,
+observed dependence, major exchange locations, cross-society flows, and
+forward-only network lineage from committed events only. Six metric families
+raise the catalog to **198 families**. `trade-networks-snapshot-v1` and
+`trade-networks-store-v1` publish opt-in and atomically; seven GET-only routes
+require `SUBJECTIVE_DEBUG`; the Research UI and Godot observer stay read-only.
+`supply_chains` and `markets_credit` remain unowned. Off-gate experiment
+`trade_networks@1` is registered.

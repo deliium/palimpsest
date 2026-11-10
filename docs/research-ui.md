@@ -347,3 +347,12 @@ The Infrastructure networks panel adds an objective Routes table fed by
 availability, blockage cause, duration, capacity, risk, quality, and as-of tick.
 The panel maps 503 to the existing disabled state and never renders a score or
 action control.
+
+## Trade networks panel (V4-18)
+
+The read-only Trade networks view lists corridors, flow composition, exchange
+locations (including major and trade-post flags), observed dependence,
+cross-society flows, and analytical network lineage. It provides a
+`window_index` selector and shows an explicit disabled message on
+`trade_networks_disabled` plus an empty state without inventing a network. It
+never displays price, money, a composite trade score, or a planned route.

@@ -77,7 +77,7 @@ def test_research_runner_path_dependence_never_imports_api_or_tests() -> None:
 
 
 def test_v3_38_preserves_current_contract_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 192
+    assert METRIC_FAMILY_COUNT == 198
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(set(SEMANTIC_TYPE_BY_KIND.values())) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"

@@ -56,6 +56,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Inter-society relations | `docs/inter-society-relations.md` | Researcher-only society-pair panels, `isr-` ids, eight domains, time series/comparison, six GET routes |
 | Infrastructure networks | `docs/infrastructure-networks.md` | V4-16 objective `infra-` assets, write pair 23/`v21`, catalog effects, dual-gate research surfaces |
 | Travel network | `docs/travel-network.md` | V4-17 route conditions, write pair 27/`v25`, movement enforcement, fallible route beliefs, snapshot v2 |
+| Trade networks | `docs/trade-networks.md` | V4-18 event-sourced flows, directed corridors, dependence, major exchange locations, network lineage, snapshot and seven GET routes |
 | Regions and migration | `docs/regions-migration.md` | V3 regional travel substrate and V4-14 belief deepening |
 
 
@@ -100,6 +101,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Diplomacy](docs/diplomacy.md) | Owner-scoped long-running relations, parties, contacts, envoys, negotiations, proposals, promises, agreement views, disputes, shared projects, retained terminations, `dip_v1` frames, multi-party treaties with versions, lineage, declarations and recollections, `diplomacy-snapshot-v2`, `diplomacy-store-v1`, eight GET-only routes and the Research UI panel |
 | [Macro-societies](docs/macro-societies.md) | Analysis-only overlapping macro-society candidates, stable `msoc-` ids, split/merge lineage, snapshot artifact, read-only routes and Research UI |
 | [Inter-society relations](docs/inter-society-relations.md) | Researcher-only `isr-` society-pair panels over `msoc-` endpoints, eight evidence domains, window time series, vectorial comparison, dual-gate publication, six GET-only routes and Research UI panel |
+| [Trade networks](docs/trade-networks.md) | Event-sourced food/material/tool/record/media flows, directed corridors, observed dependence, major exchange locations, cross-society flows, forward-only network lineage, `trade-networks-snapshot-v1`, seven GET-only routes and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 

@@ -26,6 +26,10 @@ const OVERLAY_LABELS := {
 	"route_open": "Route open",
 	"route_restricted": "Route restricted",
 	"route_closed": "Route closed",
+	"trade_corridors": "Trade corridors",
+	"trade_major_locations": "Major exchange locations",
+	"trade_cross_society": "Cross-society flows",
+	"trade_coverage": "Trade coverage",
 }
 
 ## Overlay kind → evidence class. Presentation-only; never invents world facts.
@@ -49,6 +53,10 @@ const OVERLAY_CLASSES := {
 	"route_open": OBJECTIVE,
 	"route_restricted": OBJECTIVE,
 	"route_closed": OBJECTIVE,
+	"trade_corridors": ANALYTICAL,
+	"trade_major_locations": ANALYTICAL,
+	"trade_cross_society": ANALYTICAL,
+	"trade_coverage": ANALYTICAL,
 	"narrative_hops": SUBJECTIVE,
 	"spatial_control": ANALYTICAL,
 	"emergent_group_formation": ANALYTICAL,

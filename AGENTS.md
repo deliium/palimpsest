@@ -77,6 +77,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | --- | --- | --- |
 | README | `README.md` | Project landing page and complete documentation index |
 | Architecture | `docs/architecture.md` | Authority boundaries and regional migration contract |
+| Trade networks | `docs/trade-networks.md` | Event-sourced flows, corridors, dependence, lineage, snapshot and routes |
 | Experiments | `docs/experiments.md` | AY treatments, reproduction, and demographic interpretation |
 | Cultural metrics | `docs/cultural-evolution-metrics.md` | Opt-in capture, six families, seed-block intervals, provenance limits |
 | Historical contingency | `docs/historical-contingency.md` | Experiment BN forked replay, intervention lineage, seven outcome domains, seed-block statistics |

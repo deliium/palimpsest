@@ -8,6 +8,7 @@ const CivilizationPlan := preload("res://scripts/presentation/civilization_plan.
 const BorderOverlay := preload("res://scripts/view/border_overlay.gd")
 const MigrationOverlay := preload("res://scripts/view/migration_overlay.gd")
 const InfrastructureOverlay := preload("res://scripts/view/infrastructure_overlay.gd")
+const TradeOverlay := preload("res://scripts/view/trade_overlay.gd")
 
 var playback_speed := 1.0
 
@@ -61,9 +62,17 @@ const INFRASTRUCTURE_OVERLAY_KINDS := [
 	"infrastructure_damaged",
 	"infrastructure_destroyed",
 ]
+const TRADE_OVERLAY_KINDS := [
+	"trade_corridors",
+	"trade_major_locations",
+	"trade_cross_society",
+	"trade_coverage",
+]
 var _borders: Dictionary = {}
 var _migrations: Dictionary = {}
 var _infrastructure: Dictionary = {}
+var _trade: Dictionary = {}
+var trade_summary: Variant = null
 
 signal inspect_requested(snapshot: Dictionary)
 signal inspect_cleared
@@ -95,6 +104,14 @@ func _ready() -> void:
 			infra.name = infra_name
 			add_child(infra)
 		_infrastructure[kind] = infra
+	for kind in TRADE_OVERLAY_KINDS:
+		var trade_name := "TradeOverlay_%s" % kind
+		var trade: Node2D = get_node_or_null(trade_name)
+		if trade == null:
+			trade = TradeOverlay.new()
+			trade.name = trade_name
+			add_child(trade)
+		_trade[kind] = trade
 	_agents.agent_selected.connect(_on_agent_selected)
 	_agents.selection_cleared.connect(func() -> void: inspect_cleared.emit())
 	if _locations != null and _locations.has_signal("location_selected"):
@@ -269,6 +286,53 @@ func set_infrastructure_overlay_enabled(enabled_value: bool, kind: String = "") 
 			overlay.clear()
 		elif kind != "":
 			overlay.apply_payload(null, kind)
+
+func _trade_for(kind: String) -> Node2D:
+	if _trade.has(kind):
+		return _trade[kind]
+	return _trade.get("trade_corridors", null)
+
+
+func set_trade_overlay(data: Variant, enabled_value: bool = true, kind: String = "") -> void:
+	var overlay := _trade_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		overlay.apply_payload(data, kind)
+
+
+func clear_trade_overlay(kind: String = "") -> void:
+	if kind == "":
+		for overlay in _trade.values():
+			overlay.clear()
+			overlay.set_enabled(false)
+		return
+	var overlay := _trade_for(kind)
+	if overlay != null:
+		overlay.clear()
+		overlay.set_enabled(false)
+
+
+func set_trade_overlay_enabled(enabled_value: bool, kind: String = "") -> void:
+	var overlay := _trade_for(kind)
+	if overlay != null:
+		overlay.set_enabled(enabled_value)
+		if not enabled_value:
+			overlay.clear()
+
+
+func apply_trade_summary(payload: Variant) -> void:
+	trade_summary = payload
+
+
+func set_trade_window_index(value: int) -> void:
+	for overlay in _trade.values():
+		overlay.set_window_index(value)
+
+
+func trade_overlay_window() -> int:
+	var overlay := _trade_for("trade_corridors")
+	return -1 if overlay == null else overlay.selected_window()
+
 
 func set_claim_overlay_enabled(enabled: bool) -> void:
 	if _claims != null:

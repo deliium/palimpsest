@@ -533,3 +533,14 @@ when `v4_capability_flags.infrastructure_networks` is on and a
 `regions_migration` spec is present. There is no `runner-config-v57`.
 Infrastructure-only runs keep replay-v23 / codec v21; active travel-network runs
 use replay-v27 / codec v25.
+
+## Trade networks publication (V4-18)
+
+`PALIMPSEST_TRADE_NETWORKS_ROOT` and
+`PALIMPSEST_TRADE_NETWORKS_CURSOR_KEY` form a dual gate: both must be set, and
+the cursor key must be at least 32 UTF-8 bytes, before the API attaches the
+reader. Otherwise routes return `503 trade_networks_disabled`. Publication is
+opt-in and post-completion under `trade-networks-store-v1`. The seven GET-only
+routes are read-only and bind the optional `window_index` filter into each
+cursor fingerprint. Analysis itself needs no setting. See
+[trade networks](trade-networks.md).

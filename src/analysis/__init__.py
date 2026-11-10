@@ -1144,6 +1144,31 @@ from analysis.theory_of_mind_metrics import (
     THEORY_OF_MIND_METRIC_VERSION,
     compute_theory_of_mind_metrics,
 )
+from analysis.trade_networks_analysis import (
+    TradeNetworksAnalysis,
+    empty_trade_networks_analysis,
+    harvest_trade_networks_analysis,
+)
+from analysis.trade_networks_contract import (
+    TradeCoverage,
+    TradeFlowClass,
+)
+from analysis.trade_networks_events import (
+    TradeLocalSupplyRow,
+    TradeTransferRow,
+)
+from analysis.trade_networks_policy import (
+    default_trade_networks_analysis_policy,
+)
+from analysis.trade_networks_rows import (
+    CrossSocietyTradeRow,
+    TradeCorridorRow,
+    TradeDependenceRow,
+    TradeFlowRow,
+    TradeLineageRow,
+    TradeLocationRow,
+    TradeNetworkRow,
+)
 from analysis.translation_metrics import (
     CROSS_GROUP_TRANSLATION_METRIC_VERSION,
     TRANSLATION_INFLUENCE_METRIC_VERSION,
@@ -1401,6 +1426,7 @@ __all__ = [
     "ContactReputationEvidenceRow",
     "ContactReputationTransferResult",
     "CopyFidelitySummary",
+    "CrossSocietyTradeRow",
     "CulturalAnalysisWindow",
     "CulturalComparisonCell",
     "CulturalComparisonError",
@@ -1731,6 +1757,17 @@ __all__ = [
     "TechniqueLifecycleState",
     "TechniqueLossCause",
     "TerritorialConcentrationRow",
+    "TradeCorridorRow",
+    "TradeCoverage",
+    "TradeDependenceRow",
+    "TradeFlowClass",
+    "TradeFlowRow",
+    "TradeLineageRow",
+    "TradeLocalSupplyRow",
+    "TradeLocationRow",
+    "TradeNetworkRow",
+    "TradeNetworksAnalysis",
+    "TradeTransferRow",
     "TraitPresence",
     "TranslationAnalysisInputs",
     "TranslationInfluenceRow",
@@ -1954,6 +1991,7 @@ __all__ = [
     "cumulative_drift",
     "decode_metric_document",
     "dedupe_traces_by_lineage_root",
+    "default_trade_networks_analysis_policy",
     "derive_community_id",
     "derive_dispute_candidate_id",
     "derive_dispute_lineage",
@@ -1982,6 +2020,7 @@ __all__ = [
     "edges_from_exchanges",
     "edges_from_interaction",
     "edges_from_journeys",
+    "empty_trade_networks_analysis",
     "encode_institution_lineage_graph",
     "encode_metric_document",
     "evaluate_claim_against_truth",
@@ -2007,6 +2046,7 @@ __all__ = [
     "harvest_organization_rows",
     "harvest_organization_snapshot",
     "harvest_representation_rows",
+    "harvest_trade_networks_analysis",
     "institution_decay_rows_from_ledgers",
     "institutional_memory_carrier_rows_from_events",
     "knowledge_provenance_for_experiment",

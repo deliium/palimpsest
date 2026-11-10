@@ -72,7 +72,7 @@ def test_owned_flags_include_infrastructure_and_stay_equal() -> None:
 
 
 def test_wire_pins_for_infrastructure_landing() -> None:
-    assert METRIC_FAMILY_COUNT == 192
+    assert METRIC_FAMILY_COUNT == 198
     assert EVENT_SCHEMA_REPLAY_V23 == 23
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V23 in ACCEPTED_EVENT_SCHEMA_VERSIONS

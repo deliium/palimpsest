@@ -1,100 +1,215 @@
 {
-  "schema_version": "observer-civilization-overlay-v1",
-  "run_id": "run-capture",
-  "world_id": "world-capture",
-  "scope": {
-    "layer": "trade",
-    "evidence_class": "ANALYTICAL",
-    "owner_id": null
-  },
-  "requested_tick": 4,
-  "requested_publication_id": null,
-  "publication": {
-    "publication_id": "pub-1",
-    "digest": "dc53fd54c8051df81fea7502893c97f43907a7f4eeb23641d1e183556986c7fc",
-    "policy_version": "civilization-overlays.v1"
-  },
   "availability": "available",
-  "reason": null,
-  "resolved_cursor": {
-    "run_id": "run-capture",
-    "world_id": "world-capture",
-    "tick": 4,
-    "through_sequence": null,
-    "boundary_tick": 4,
-    "revision": 4
-  },
-  "window": {
-    "start_tick": 3,
-    "end_tick": 4
-  },
+  "corridors": [
+    {
+      "corridor_id": "trd-cor-0000000000000001",
+      "coverage": "complete",
+      "flow_counts": {
+        "food": 2
+      },
+      "from_location_id": "loc-a",
+      "to_location_id": "loc-b",
+      "transfer_count": 2,
+      "window_index": 0
+    },
+    {
+      "corridor_id": "trd-cor-0000000000000002",
+      "coverage": "complete",
+      "flow_counts": {
+        "materials": 1
+      },
+      "from_location_id": "loc-b",
+      "to_location_id": "loc-a",
+      "transfer_count": 1,
+      "window_index": 0
+    }
+  ],
   "coverage": {
-    "state": "complete",
-    "reason": null,
-    "capture_start": null,
     "capture_end": null,
+    "capture_start": null,
+    "expected_count": null,
     "missing_intervals": [],
     "observed_count": null,
-    "expected_count": null
+    "reason": null,
+    "state": "complete"
+  },
+  "cross_society": [
+    {
+      "coverage": "complete",
+      "flow_counts": {
+        "food": 2
+      },
+      "overlap_member_count": 0,
+      "pair_id": "trd-pair-0000000000000001",
+      "society_a": "msoc-aaaaaaaaaaaaaaaa",
+      "society_a_location_id": "loc-a",
+      "society_a_to_b_count": 2,
+      "society_b": "msoc-bbbbbbbbbbbbbbbb",
+      "society_b_location_id": "loc-b",
+      "society_b_to_a_count": 0,
+      "transfer_count": 2,
+      "window_index": 0
+    },
+    {
+      "coverage": "partial",
+      "flow_counts": {
+        "food": 1
+      },
+      "overlap_member_count": 0,
+      "pair_id": "trd-pair-0000000000000002",
+      "society_a": "msoc-cccccccccccccccc",
+      "society_a_location_id": "none",
+      "society_a_to_b_count": 1,
+      "society_b": "msoc-dddddddddddddddd",
+      "society_b_location_id": "loc-b",
+      "society_b_to_a_count": 0,
+      "transfer_count": 1,
+      "window_index": 0
+    }
+  ],
+  "locations": [
+    {
+      "corridor_degree": 2,
+      "coverage": "complete",
+      "flow_counts": {
+        "food": 2
+      },
+      "inflow_count": 2,
+      "is_major": true,
+      "local_count": 0,
+      "location_id": "loc-b",
+      "outflow_count": 1,
+      "trade_post_present": true,
+      "window_index": 0
+    }
+  ],
+  "networks": [
+    {
+      "corridor_ids": [
+        "trd-cor-0000000000000001",
+        "trd-cor-0000000000000002"
+      ],
+      "coverage": "complete",
+      "flow_counts": {
+        "food": 2,
+        "materials": 1
+      },
+      "location_ids": [
+        "loc-a",
+        "loc-b"
+      ],
+      "network_id": "trd-net-0000000000000001",
+      "next_network_ids": [],
+      "previous_network_ids": [
+        "trd-net-0000000000000000"
+      ],
+      "rerouted": false,
+      "status": "continued",
+      "sustained": true,
+      "transfer_count": 3,
+      "window_index": 0
+    }
+  ],
+  "next_cursor": null,
+  "publication": {
+    "digest": "dc53fd54c8051df81fea7502893c97f43907a7f4eeb23641d1e183556986c7fc",
+    "policy_version": "civilization-overlays.v1",
+    "publication_id": "pub-1"
+  },
+  "reason": null,
+  "requested_publication_id": null,
+  "requested_tick": 4,
+  "resolved_cursor": {
+    "boundary_tick": 4,
+    "revision": 4,
+    "run_id": "run-capture",
+    "through_sequence": null,
+    "tick": 4,
+    "world_id": "world-capture"
   },
   "rows": [
     {
+      "completed_exchange_count": 1,
       "context": {
+        "anchors": [],
+        "detail_truncated": false,
         "row_id": "trade:agent-a|agent-b:loc-1",
         "source_refs": [
           {
-            "source_kind": "event",
+            "owner_id": null,
             "source_id": "exchange-1",
-            "tick": 3,
-            "owner_id": null
+            "source_kind": "event",
+            "tick": 3
           }
-        ],
-        "anchors": [],
-        "detail_truncated": false
+        ]
       },
+      "forward_items": [
+        {
+          "count": 1,
+          "kind": "tool"
+        }
+      ],
       "history": {
-        "scope": {
-          "layer": "trade",
-          "evidence_class": "ANALYTICAL",
-          "owner_id": null
-        },
         "boundary_tick": 4,
-        "window": {
-          "start_tick": 3,
-          "end_tick": 4
-        },
-        "policy_version": "civilization-overlays.v1",
         "coverage": {
-          "state": "complete",
-          "reason": null,
-          "capture_start": null,
           "capture_end": null,
+          "capture_start": null,
+          "expected_count": null,
           "missing_intervals": [],
           "observed_count": null,
-          "expected_count": null
+          "reason": null,
+          "state": "complete"
+        },
+        "policy_version": "civilization-overlays.v1",
+        "scope": {
+          "evidence_class": "ANALYTICAL",
+          "layer": "trade",
+          "owner_id": null
+        },
+        "window": {
+          "end_tick": 4,
+          "start_tick": 3
         }
       },
+      "occurrence_location_id": "loc-1",
       "participant_ids": [
         "agent-a",
         "agent-b"
       ],
-      "completed_exchange_count": 1,
-      "forward_items": [
-        {
-          "kind": "tool",
-          "count": 1
-        }
-      ],
       "reverse_items": [
         {
-          "kind": "food",
-          "count": 1
+          "count": 1,
+          "kind": "food"
         }
-      ],
-      "occurrence_location_id": "loc-1"
+      ]
     }
   ],
-  "next_cursor": null,
+  "run_id": "run-capture",
+  "schema_version": "observer-civilization-overlay-v1",
+  "scope": {
+    "evidence_class": "ANALYTICAL",
+    "layer": "trade",
+    "owner_id": null
+  },
+  "source_revision": 4,
+  "summary": {
+    "corridor_count": 2,
+    "coverage": "complete",
+    "cross_society_pair_count": 2,
+    "flow_count": 2,
+    "location_count": 3,
+    "major_location_count": 1,
+    "network_count": 1,
+    "run_id": "run-trade-fixture",
+    "trade_post_location_count": 1,
+    "transfer_count": 4,
+    "truncated": false,
+    "window_tick": 64
+  },
   "truncated": false,
-  "source_revision": 4
+  "window": {
+    "end_tick": 4,
+    "start_tick": 3
+  },
+  "world_id": "world-capture"
 }

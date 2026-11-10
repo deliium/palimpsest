@@ -1826,6 +1826,7 @@ def apply_institutional_memory_update(
 
     candidates.sort(key=lambda item: (item.tick, item.source_ref, item.fact.subject))
     existing_receipts = set(ledger.acquisition_receipt_keys)
+    receipt_order = list(ledger.acquisition_receipt_keys)
     existing_refs: set[tuple[str | None, str | None]] = {
         (entry.channel_id, provenance.occurrence_ref)
         for entry in ledger.entries
@@ -1891,6 +1892,7 @@ def apply_institutional_memory_update(
             next_ordinal += 1
             new_entries.append(entry)
             existing_receipts.add(key)
+            receipt_order.append(key)
 
     channel_list = tuple(sorted(channels.values(), key=lambda item: item.channel_id))
     existing_ids = {entry.entry_id for entry in ledger.entries}
@@ -1951,6 +1953,7 @@ def apply_institutional_memory_update(
         next_ordinal += 1
         new_entries.append(entry)
         existing_receipts.add(item.receipt_key)
+        receipt_order.append(item.receipt_key)
         for provenance in item.provenance:
             existing_refs.add((item.channel_id, provenance.occurrence_ref))
     rebound: list[InstitutionalMemoryEntry] = []
@@ -1972,7 +1975,7 @@ def apply_institutional_memory_update(
         ledger,
         channels=channel_list,
         entries=entries,
-        acquisition_receipt_keys=tuple(existing_receipts),
+        acquisition_receipt_keys=tuple(receipt_order),
         first_observed_tick=first_tick,
         last_observed_tick=observation.tick,
         observation_count=ledger.observation_count + 1,

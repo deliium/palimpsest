@@ -51,6 +51,7 @@ from api.routes import (
     research_router,
     simulations_router,
     streams_router,
+    trade_networks_router,
     version_router,
 )
 from api.simulation_manager import SimulationManager
@@ -475,6 +476,36 @@ def _attach_inter_society_relations_reader(app: FastAPI) -> None:
     )
 
 
+def _attach_trade_networks_reader(app: FastAPI) -> None:
+    from api.trade_networks_cursor import TradeNetworksCursorCodec
+    from persistence.trade_networks_filesystem import (
+        create_trade_networks_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.trade_networks_cursor_codec = None
+        app.state.trade_networks_reader = None
+        return
+    secret = (
+        settings.trade_networks_cursor_key.get_secret_value().encode("utf-8")
+        if settings.trade_networks_cursor_key is not None
+        else None
+    )
+    if settings.trade_networks_root is None or secret is None:
+        app.state.trade_networks_cursor_codec = None
+        app.state.trade_networks_reader = None
+        _LOGGER.info("trade_networks_attach enabled=false")
+        return
+    app.state.trade_networks_cursor_codec = TradeNetworksCursorCodec.from_secret(
+        secret
+    )
+    app.state.trade_networks_reader = create_trade_networks_reader(
+        settings.trade_networks_root
+    )
+    _LOGGER.info("trade_networks_attach enabled=true")
+
+
 def _attach_infrastructure_networks_reader(app: FastAPI) -> None:
     from api.infrastructure_networks_cursor import InfrastructureNetworksCursorCodec
     from persistence.infrastructure_filesystem import (
@@ -639,6 +670,7 @@ def create_app(
     _attach_migration_displacement_reader(app)
     _attach_inter_society_relations_reader(app)
     _attach_infrastructure_networks_reader(app)
+    _attach_trade_networks_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -675,6 +707,7 @@ def create_app(
     app.include_router(migration_displacement_router)
     app.include_router(inter_society_relations_router)
     app.include_router(infrastructure_networks_router)
+    app.include_router(trade_networks_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

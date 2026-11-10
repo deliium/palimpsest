@@ -218,3 +218,16 @@ objective infrastructure styling: open routes use the edge style, restricted
 routes the damaged style, and closed routes the destroyed style. Unknown status
 falls back to neutral. No new overlay kind, evidence class, or write path is
 added.
+
+## Trade overlay (V4-18)
+
+Four analytical overlay layers present a published trade-network snapshot:
+`trade_corridors`, `trade_major_locations`, `trade_cross_society`, and
+`trade_coverage`. Corridors and network rows are analytical presentation only;
+major and trade-post locations use distinct markers; cross-society links render
+only when both society anchors resolve to known locations. Payloads containing
+economic valuation, money, planning, allocation, quota, composite, or ordering
+fields are rejected as a whole rather than partially rendered. Enabling the
+corridor layer also fetches the read-only summary, and every trade fetch forwards
+the overlay's currently selected `window_index` when one is set. The overlay never
+advances the simulation.

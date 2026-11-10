@@ -564,6 +564,31 @@ func _on_overlay_toggled(kind: String, evidence_class: String, enabled: bool) ->
 				_session.fetch_infrastructure_destroyed()
 			else:
 				_world.clear_infrastructure_overlay("infrastructure_destroyed")
+		"trade_corridors":
+			_world.set_trade_overlay_enabled(enabled, "trade_corridors")
+			if enabled:
+				_session.fetch_trade_summary()
+				_session.fetch_trade_corridors(_world.trade_overlay_window())
+			else:
+				_world.clear_trade_overlay("trade_corridors")
+		"trade_major_locations":
+			_world.set_trade_overlay_enabled(enabled, "trade_major_locations")
+			if enabled:
+				_session.fetch_trade_major_locations(_world.trade_overlay_window())
+			else:
+				_world.clear_trade_overlay("trade_major_locations")
+		"trade_cross_society":
+			_world.set_trade_overlay_enabled(enabled, "trade_cross_society")
+			if enabled:
+				_session.fetch_trade_cross_society(_world.trade_overlay_window())
+			else:
+				_world.clear_trade_overlay("trade_cross_society")
+		"trade_coverage":
+			_world.set_trade_overlay_enabled(enabled, "trade_coverage")
+			if enabled:
+				_session.fetch_trade_coverage(_world.trade_overlay_window())
+			else:
+				_world.clear_trade_overlay("trade_coverage")
 		"spatial_control":
 			_world.set_analytics_overlay_enabled(enabled)
 			if enabled:
@@ -607,6 +632,10 @@ func _on_overlay_payload(kind: String, payload: Variant) -> void:
 		_world.set_migration_overlay(payload, true, kind)
 	elif kind in ["infrastructure_node", "infrastructure_edge", "infrastructure_damaged", "infrastructure_destroyed"]:
 		_world.set_infrastructure_overlay(payload, true, kind)
+	elif kind in ["trade_corridors", "trade_major_locations", "trade_cross_society", "trade_coverage"]:
+		_world.set_trade_overlay(payload, true, kind)
+	elif kind == "trade_summary":
+		_world.apply_trade_summary(payload)
 	elif kind == "spatial_control":
 		_world.apply_research_analytics(payload)
 	elif kind in [

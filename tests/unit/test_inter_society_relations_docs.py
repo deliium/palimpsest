@@ -36,9 +36,9 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 
 def test_metric_doc_pins_184_and_four_families() -> None:
-    assert METRIC_FAMILY_COUNT == 192
+    assert METRIC_FAMILY_COUNT == 198
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **192**" in metrics
+    assert "Closed catalog cardinality: **198**" in metrics
     for family in (
         "inter_society_relation_structure@1",
         "inter_society_domain_evidence@1",
@@ -47,10 +47,10 @@ def test_metric_doc_pins_184_and_four_families() -> None:
     ):
         assert family in metrics
     assert "inter_society_relation_lanes@1" in metrics
-    assert "192" in metrics or "from 180 to\n**184**" in metrics
+    assert "198" in metrics or "from 180 to\n**184**" in metrics
     assert (
         "first 180 families" in metrics
-        or "first 192 families" in metrics
+        or "first 198 families" in metrics
         or "first\n180 families" in metrics
     )
 
@@ -82,16 +82,16 @@ def test_api_configuration_and_ui_docs() -> None:
 
 def test_architecture_baseline_and_description() -> None:
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-17" in factory
-    assert "| Metric families | 192" in factory
+    assert "through V4-18" in factory
+    assert "| Metric families | 198" in factory
     assert "V4-15 inter-society relations seam" in factory
     assert "inter-society-relations.md" in factory
     architecture = _read("docs/architecture.md")
     assert "V4-15 inter-society relations" in architecture
-    assert "192 metric families" in architecture
+    assert "198 metric families" in architecture
     v4 = _read("docs/v4-architecture.md")
-    assert "| Metric catalog | 192 families" in v4
+    assert "| Metric catalog | 198 families" in v4
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Inter-society relations (V4-15)" in description
-    assert "192 metric families" in description
-    assert "catalog 192" in description or "192" in description
+    assert "198 metric families" in description
+    assert "catalog 198" in description or "198" in description
