@@ -801,6 +801,7 @@ def _with_production_command(
     beliefs: object | None,
     observation: Observation,
     selected_recipe_id: object | None,
+    supply_chains_active: bool = False,
 ) -> AgentCommand:
     """Replace a non-veto command when the owner supports a visible recipe."""
     if beliefs is None:
@@ -816,6 +817,7 @@ def _with_production_command(
         observation,
         vetoed=type(command) in {Drink, Eat, Sleep, Flee},
         selected_recipe_id=recipe_id,
+        supply_chains_active=supply_chains_active,
     )
     if produced is None:
         return command
@@ -970,6 +972,7 @@ class CommandPlanner:
         teaching_selection: tuple[object, object] | None = None,
         recipe_beliefs: object | None = None,
         selected_recipe_id: object | None = None,
+        supply_chains_active: bool = False,
         territorial_claims: object | None = None,
         territorial_claim_mode: object | None = None,
         organized_conflict: object | None = None,
@@ -1167,6 +1170,7 @@ class CommandPlanner:
             beliefs=recipe_beliefs,
             observation=loop_input.observation,
             selected_recipe_id=selected_recipe_id,
+            supply_chains_active=supply_chains_active,
         )
         from agents.cognition.territorial import territorial_wait_replacement
 

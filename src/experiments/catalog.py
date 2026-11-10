@@ -2829,6 +2829,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "infrastructure_networks@1",
         "travel_network@1",
         "trade_networks@1",
+        "supply_chains@1",
     }
 )
 
@@ -5656,12 +5657,30 @@ def experiment_trade_networks(
 ) -> ExperimentDefinition:
     """Off-gate V4-18 experiment: exchange evidence over travel seams."""
     from experiments.trade_network_scenario import trade_network_scenario
-
     definition = trade_network_scenario(
         base, seed_matrix=seed_matrix, max_ticks=max_ticks
     )
     _LOG.info(
         "experiment_registered experiment_id=trade_networks@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_supply_chains(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 48,
+) -> ExperimentDefinition:
+    """Off-gate V4-19 experiment: multi-stage production chains vs control."""
+    from experiments.supply_chain_scenario import supply_chain_scenario
+
+    definition = supply_chain_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=supply_chains@1 conditions=%s",
         len(definition.conditions),
     )
     return definition

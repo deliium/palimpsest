@@ -48,6 +48,7 @@
   import InterSocietyRelationsPanel from './InterSocietyRelationsPanel.svelte'
   import InfrastructureNetworksPanel from './InfrastructureNetworksPanel.svelte'
   import TradeNetworksPanel from './TradeNetworksPanel.svelte'
+  import SupplyChainsPanel from './SupplyChainsPanel.svelte'
   import OrganizationsPanel from './OrganizationsPanel.svelte'
   import ProjectsPanel from './ProjectsPanel.svelte'
 
@@ -119,6 +120,7 @@
           { id: 'inter-society-relations', label: 'Inter-society relations' },
           { id: 'infrastructure-networks', label: 'Infrastructure networks' },
           { id: 'trade-networks', label: 'Trade networks' },
+          { id: 'supply-chains', label: 'Supply chains' },
           { id: 'contact', label: 'Contact' },
         ],
       },
@@ -354,6 +356,8 @@
     <InfrastructureNetworksPanel {runId} {selection} />
   {:else if view === 'trade-networks'}
     <TradeNetworksPanel {runId} {selection} />
+  {:else if view === 'supply-chains'}
+    <SupplyChainsPanel {runId} />
   {:else if view === 'institutions'}
     <InstitutionsPanel {runId} {selection} {onSelectionChange} />
   {:else if view === 'contact'}

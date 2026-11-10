@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 198 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, and six V4-18 trade-network families) |
+| Metric families | 204 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, and six V4-19 supply-chain families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -203,8 +203,9 @@ those as current pins or silently drop their legacy accepted versions.
   `institutional_economy` remains unowned and fails closed.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
   (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
-  `organized_conflict` (V4-12), and `infrastructure_networks` (V4-16). The other
-  six V4 flags remain unowned and fail closed.
+  `organized_conflict` (V4-12), `infrastructure_networks` (V4-16), and
+  `supply_chains` (V4-19). The other five V4 flags remain unowned and fail
+  closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -1058,6 +1059,38 @@ stores `trade-networks-store-v1` atomically; seven GET-only
 `/v1/simulations/{run_id}/trade-networks` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `trade_networks_disabled`; the Research UI and Godot observer
 render read-only analytical rows. Six trade-network metric families append the
-catalog to **198 metric families**; observer semantics stay **73**, commands
+catalog to **204 metric families**; observer semantics stay **73**, commands
 **43**, replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate
 experiment is `trade_networks@1`. See `docs/trade-networks.md`.
+
+
+### V4-19 supply-chain seam
+
+V4-19 owns the declared `supply_chains` V4 context on the accepted
+`runner-config-v56` seam; it adds no V4 context, flag slot, `runner-config-v57`,
+root field, or per-agent key. Counts are 14 contexts / 12 flags / seven owned /
+five unowned. `world.supply_chain` owns the locked `supply-chains.v1` stage
+contract, `SUPPLY_CHAIN_RECIPES`, catalog validation, and the `STRIKE` harvest
+probability helper. The legacy six-recipe `example_production_catalog()` and its
+digest remain byte-identical; the chain catalog is appended only by
+`supply_chain_production_catalog()`.
+
+`analysis.supply_chain_*` reconstructs bounded stage evidence from committed
+events only, pairs multi-tick craft starts with completions, derives ten closed
+dependency edge kinds over resources, items, structures, storage, transport,
+locations, infrastructure, organizations, tools, and skills, enumerates
+depth-bounded chains, links forward-only lineage including empty windows, and
+reports seven descriptive bottleneck kinds with counts and integer ratios. No
+central planner, optimizer, quota, automatic allocation, price, money, currency,
+score, ranking, severity, or recommendation exists.
+
+`simulation.supply_chain_*` owns canonical `supply-chains-snapshot-v1`,
+purpose-bound paging, and read/publication ports; `experiments.supply_chain_*`
+is the only analysis-to-artifact bridge; `persistence.supply_chain_filesystem`
+stores `supply-chains-store-v1` atomically; seven GET-only
+`/v1/simulations/{run_id}/supply-chains` routes require `SUBJECTIVE_DEBUG` and
+fail closed with `supply_chains_disabled`; the Research UI adds a read-only
+panel and no Godot overlay. Six supply-chain metric families append the catalog
+to **204 metric families**; observer semantics stay **73**, commands **43**,
+replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate experiment is
+`supply_chains@1`. See `docs/supply-chains.md`.

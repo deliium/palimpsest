@@ -76,7 +76,7 @@ Admission remains authoritative.
 
 ## Metrics and surfaces
 
-Four detached families append **188 → 192** at V4-17 landing (V4-18 later appends to **198**): `travel_route_structure@1`,
+Four detached families append **188 → 192** at V4-17 landing (V4-18 later appends to **204**): `travel_route_structure@1`,
 `travel_route_condition@1`, `travel_route_blockage@1`, and
 `travel_route_belief_alignment@1`. No composite route score exists.
 
@@ -104,7 +104,7 @@ civilization-capacity claim.
 ## Pins
 
 Runner v4/v55/v56; result v2/v3; **43** commands; **73** observer semantic types;
-**198** metric families; 14 V4 contexts / 12 V4 flags / six owned; replay-v27 /
+**204** metric families; 14 V4 contexts / 12 V4 flags / six owned; replay-v27 /
 codec `v25` when active; `/v1`; `observer-protocol-v1`; Alembic `0017`.
 
 ## Verification

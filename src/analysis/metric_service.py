@@ -189,6 +189,15 @@ from analysis.structured_commitments_metrics import (
     assemble_structured_commitment_metrics,
 )
 from analysis.subjective_value_metrics import assemble_subjective_value_metrics
+from analysis.supply_chain_analysis import SupplyChainAnalysis
+from analysis.supply_chain_metrics import (
+    compute_supply_bottleneck_pressure,
+    compute_supply_chain_structure,
+    compute_supply_dependency_graph,
+    compute_supply_location_infrastructure_reliance,
+    compute_supply_organization_coordination,
+    compute_supply_resource_tool_dependency,
+)
 from analysis.symbolic_language_metrics import (
     SymbolicAnalysisInputs,
     compute_symbolic_composition,
@@ -369,6 +378,7 @@ class MetricComputationInputs:
     infrastructure_networks_analysis: InfrastructureNetworksAnalysis | None = None
     travel_network_analysis: InfrastructureNetworksAnalysis | None = None
     trade_networks_analysis: TradeNetworksAnalysis | None = None
+    supply_chain_analysis: SupplyChainAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2487,6 +2497,47 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("trade_networks_metrics_emitted families=6")
     else:
         _LOG.debug("trade_networks_metrics_disabled")
+    if inputs.supply_chain_analysis is not None:
+        supply = inputs.supply_chain_analysis
+        _safe(
+            "supply_chain_structure",
+            lambda: compute_supply_chain_structure(
+                supply, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "supply_dependency_graph",
+            lambda: compute_supply_dependency_graph(
+                supply, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "supply_bottleneck_pressure",
+            lambda: compute_supply_bottleneck_pressure(
+                supply, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "supply_resource_tool_dependency",
+            lambda: compute_supply_resource_tool_dependency(
+                supply, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "supply_location_infrastructure_reliance",
+            lambda: compute_supply_location_infrastructure_reliance(
+                supply, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "supply_organization_coordination",
+            lambda: compute_supply_organization_coordination(
+                supply, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("metric_families_assembled source=supply_chain families=6")
+    else:
+        _LOG.debug("supply_chain_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

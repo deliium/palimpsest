@@ -572,7 +572,7 @@ planning. Travel-network runs activate deepening write pair event **27** / codec
 **`v25`**; infrastructure-only runs keep 23/`v21` and regions-only 21/`v19`.
 Infrastructure snapshot v2 carries route rows while v1 remains decodable, and
 seven GET-only dual-gated infrastructure routes include `/routes`. Four metric
-families append 188 -> 192 metric families; V4-18 later appends six families to 198; observer semantics stay 73, commands 43,
+families append 188 -> 192 metric families; V4-18 later appends six families to 204; observer semantics stay 73, commands 43,
 runner v4/v55/v56, result v2/v3, replay-v27/codec v25 when active, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Off-gate experiment
 `travel_network@1` is registered; 14 V4 contexts / 12 flags / six owned remain.
@@ -584,7 +584,7 @@ semantic type, write pair, or migration. Locked `trade-networks.v1` reconstructs
 transfer and local-supply evidence from committed events only; derives directed
 corridors, observed exchange dependence, major exchange locations and venues,
 cross-society flows over contemporaneous `msoc-` candidates, and forward-only
-`trd-net-` network lineage. Six metric families append 192 -> **198**;
+`trd-net-` network lineage. Six metric families append 192 -> **204**;
 `trade-networks-snapshot-v1` and `trade-networks-store-v1` publish opt-in and
 atomically; seven GET-only `/v1/simulations/{run_id}/trade-networks` routes
 require `SUBJECTIVE_DEBUG` and fail closed with `trade_networks_disabled`; the
@@ -592,5 +592,27 @@ Research UI adds a read-only panel and the Godot observer adds four analytical
 overlays. Off-gate experiment `trade_networks@1` is registered. No centralized
 routing, planner, quota, allocation, price, money, currency, or registry exists.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-198 metric families, 14 V4 contexts, 12 V4 flags, six owned, replay-v27/codec
-`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 198; the current catalog is 198 families (catalog 198).
+204 metric families, 14 V4 contexts, 12 V4 flags, seven owned, replay-v27/codec
+`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 204; the current catalog is 204 families (catalog 204).
+
+Supply chains (V4-19) own the declared `supply_chains` V4 context on the
+accepted `runner-config-v56` seam and add no context, flag slot,
+`runner-config-v57`, root field, per-agent key, command, event, observer
+semantic type, write pair, or migration. `world.supply_chain` locks
+`supply-chains.v1`, six chain recipes (`harvest_grain`, `mill_grain`,
+`bake_bread`, `craft_plank`, `craft_tool_head`, `assemble_tool`), catalog
+validation, and a +0.10 held-`STRIKE` harvest probability bonus. The legacy
+six-recipe catalog and digest stay byte-identical. Detached analysis reconstructs
+ten dependency edge kinds over resources, items, structures, storage, transport,
+locations, infrastructure, organizations, tools, and skills, depth-bounded
+chains, forward-only lineage including empty windows, and seven descriptive
+bottleneck kinds. Six metric families append 198 → **204**.
+`supply-chains-snapshot-v1` and `supply-chains-store-v1` publish opt-in and
+atomically; seven GET-only `/v1/simulations/{run_id}/supply-chains` routes
+require `SUBJECTIVE_DEBUG` and fail closed with `supply_chains_disabled`; the
+Research UI adds a read-only panel and no Godot overlay. Off-gate experiment
+`supply_chains@1` is registered. No central planner, optimizer, quota,
+automatic allocation, price, money, currency, score, ranking, severity, or
+recommendation exists. Pins: 43 commands, 73 observer semantic types, 204
+metric families, 14 V4 contexts, 12 V4 flags, seven owned, replay-v27/codec
+`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

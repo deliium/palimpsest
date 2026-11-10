@@ -680,6 +680,11 @@ class ReplayService:
                 teaching_offers=request.teaching_offers,
                 production_catalog=request.production_catalog,
                 environmental_dynamics=request.environmental_dynamics,
+                supply_chains_active=getattr(
+                    getattr(snapshot.config, "v4_capability_flags", None),
+                    "supply_chains",
+                    False,
+                ),
                 population_lifecycle=request.population_lifecycle,
                 new_agent_initialization=request.new_agent_initialization,
                 kinship_spec=request.kinship_spec,
@@ -1079,6 +1084,11 @@ class ReplayService:
                 teaching_offers=request.teaching_offers,
                 production_catalog=request.production_catalog,
                 environmental_dynamics=request.environmental_dynamics,
+                supply_chains_active=getattr(
+                    getattr(snapshot.config, "v4_capability_flags", None),
+                    "supply_chains",
+                    False,
+                ),
                 population_lifecycle=request.population_lifecycle,
                 new_agent_initialization=request.new_agent_initialization,
                 kinship_spec=request.kinship_spec,

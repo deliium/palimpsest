@@ -93,6 +93,7 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
             "diplomacy",
             "organized_conflict",
             "infrastructure_networks",
+        "supply_chains",
         }
     )
 
@@ -114,11 +115,19 @@ def test_no_v57_or_new_flag_reference() -> None:
     assert len(V4_CAPABILITY_FLAGS) == 12
 
 
-def test_metric_catalog_is_198() -> None:
+def test_metric_catalog_is_204() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 198
-    assert len(specs) == 198
-    assert [spec.family_id.value for spec in specs[-6:]] == list(TRADE_FAMILIES)
+    assert METRIC_FAMILY_COUNT == 204
+    assert len(specs) == 204
+    assert [spec.family_id.value for spec in specs[192:198]] == list(TRADE_FAMILIES)
+    assert [spec.family_id.value for spec in specs[-6:]] == [
+        "supply_chain_structure",
+        "supply_dependency_graph",
+        "supply_bottleneck_pressure",
+        "supply_resource_tool_dependency",
+        "supply_location_infrastructure_reliance",
+        "supply_organization_coordination",
+    ]
 
 
 def test_trade_analysis_imports_are_read_only() -> None:

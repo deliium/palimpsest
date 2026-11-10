@@ -156,7 +156,7 @@ def test_invalid_progress_and_version_fail(
 
 def test_catalog_validates_at_136() -> None:
     specs = validate_metric_catalog()
-    assert len(specs) == 198
+    assert len(specs) == 204
     assert GENERATIONAL_COHORT_COMPARISON_METRIC_VERSION == (
         "generational_cohort_comparison@1"
     )

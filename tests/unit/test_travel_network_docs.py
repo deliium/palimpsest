@@ -22,7 +22,7 @@ def test_travel_network_page_and_readme_link() -> None:
     assert "travel-network.v1" in page
     assert "event **27**" in page
     assert "codec **`v25`**" in page
-    assert "198" in page
+    assert "204" in page
     assert "`travel_network@1`" in page
     assert "docs/travel-network.md" in _read("README.md")
 
@@ -44,8 +44,8 @@ def test_pinned_pages_mention_travel_network() -> None:
 
 
 def test_code_and_docs_agree_on_catalog_and_routes() -> None:
-    assert METRIC_FAMILY_COUNT == 198
-    assert "198" in _read("docs/analysis-metrics.md")
+    assert METRIC_FAMILY_COUNT == 204
+    assert "204" in _read("docs/analysis-metrics.md")
     api = _read("docs/research-api.md")
     assert "infrastructure-networks/routes" in api
     infrastructure = _read("docs/infrastructure-networks.md")

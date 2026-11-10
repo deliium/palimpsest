@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 198
+METRIC_FAMILY_COUNT: Final[int] = 204
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -273,6 +273,12 @@ class MetricFamilyId(StrEnum):
     TRADE_DEPENDENCE = "trade_dependence"
     CROSS_SOCIETY_TRADE_FLOWS = "cross_society_trade_flows"
     TRADE_NETWORK_LINEAGE = "trade_network_lineage"
+    SUPPLY_CHAIN_STRUCTURE = "supply_chain_structure"
+    SUPPLY_DEPENDENCY_GRAPH = "supply_dependency_graph"
+    SUPPLY_BOTTLENECK_PRESSURE = "supply_bottleneck_pressure"
+    SUPPLY_RESOURCE_TOOL_DEPENDENCY = "supply_resource_tool_dependency"
+    SUPPLY_LOCATION_INFRASTRUCTURE_RELIANCE = "supply_location_infrastructure_reliance"
+    SUPPLY_ORGANIZATION_COORDINATION = "supply_organization_coordination"
 
 
 class DenominatorKind(StrEnum):
@@ -8800,6 +8806,62 @@ TRADE_NETWORK_LINEAGE_KEYS: Final[tuple[str, ...]] = (
     "sustained_network_count",
     "coverage",
 )
+SUPPLY_CHAIN_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "stage_count",
+    "edge_count",
+    "chain_count",
+    "max_chain_depth",
+    "sustained_chain_count",
+    "window_tick",
+    "coverage",
+)
+SUPPLY_DEPENDENCY_GRAPH_KEYS: Final[tuple[str, ...]] = (
+    "resource_edge_count",
+    "item_edge_count",
+    "structure_edge_count",
+    "storage_edge_count",
+    "transport_edge_count",
+    "location_node_count",
+    "window_tick",
+    "coverage",
+)
+SUPPLY_BOTTLENECK_PRESSURE_KEYS: Final[tuple[str, ...]] = (
+    "upstream_shortfall_count",
+    "single_location_concentration_count",
+    "transport_dependency_count",
+    "tool_dependency_count",
+    "infrastructure_dependency_count",
+    "organization_dependency_count",
+    "skill_constraint_count",
+    "max_ratio_milli",
+    "window_tick",
+    "coverage",
+)
+SUPPLY_RESOURCE_TOOL_DEPENDENCY_KEYS: Final[tuple[str, ...]] = (
+    "harvest_stage_count",
+    "craft_stage_count",
+    "tool_stage_count",
+    "tool_downstream_stage_count",
+    "resource_edge_count",
+    "window_tick",
+    "coverage",
+)
+SUPPLY_LOCATION_INFRASTRUCTURE_RELIANCE_KEYS: Final[tuple[str, ...]] = (
+    "location_count",
+    "infrastructure_backed_stage_count",
+    "infrastructure_location_count",
+    "single_location_stage_count",
+    "window_tick",
+    "coverage",
+)
+SUPPLY_ORGANIZATION_COORDINATION_KEYS: Final[tuple[str, ...]] = (
+    "organization_count",
+    "organization_stage_count",
+    "organization_claim_count",
+    "organization_dependency_count",
+    "window_tick",
+    "coverage",
+)
 
 
 def _trade_spec(
@@ -8896,6 +8958,103 @@ def _spec_trade_network_lineage() -> MetricSpecification:
         denominator_kind=DenominatorKind.ACTIVE_EDGES,
         keys=TRADE_NETWORK_LINEAGE_KEYS,
         opportunity="forward-only lineage counts; sustained is counts only",
+    )
+
+
+def _supply_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="supply_chain_window_tick",
+        deceased_policy="retain_committed_production",
+        zero_holding_policy="no_production_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="resource names never create item self-edges",
+        censoring_policy="unresolved inputs remain partial",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_production_evidence",
+    )
+
+
+def _spec_supply_chain_structure() -> MetricSpecification:
+    return _supply_spec(
+        family_id=MetricFamilyId.SUPPLY_CHAIN_STRUCTURE,
+        population="analytical_supply_chains",
+        denominator="observed_supply_stages",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=SUPPLY_CHAIN_STRUCTURE_KEYS,
+        opportunity="bounded chain counts; never a supply score",
+    )
+
+
+def _spec_supply_dependency_graph() -> MetricSpecification:
+    return _supply_spec(
+        family_id=MetricFamilyId.SUPPLY_DEPENDENCY_GRAPH,
+        population="analytical_dependency_edges",
+        denominator="observed_dependency_edges",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=SUPPLY_DEPENDENCY_GRAPH_KEYS,
+        opportunity="closed edge-kind counts; no shortest path or ranking",
+    )
+
+
+def _spec_supply_bottleneck_pressure() -> MetricSpecification:
+    return _supply_spec(
+        family_id=MetricFamilyId.SUPPLY_BOTTLENECK_PRESSURE,
+        population="analytical_supply_bottlenecks",
+        denominator="observed_supply_stages",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SUPPLY_BOTTLENECK_PRESSURE_KEYS,
+        opportunity="descriptive counts and integer ratios; no severity",
+    )
+
+
+def _spec_supply_resource_tool_dependency() -> MetricSpecification:
+    return _supply_spec(
+        family_id=MetricFamilyId.SUPPLY_RESOURCE_TOOL_DEPENDENCY,
+        population="analytical_supply_stages",
+        denominator="observed_production_stages",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SUPPLY_RESOURCE_TOOL_DEPENDENCY_KEYS,
+        opportunity="resource/tool stage counts only",
+    )
+
+
+def _spec_supply_location_infrastructure_reliance() -> MetricSpecification:
+    return _supply_spec(
+        family_id=MetricFamilyId.SUPPLY_LOCATION_INFRASTRUCTURE_RELIANCE,
+        population="analytical_supply_locations",
+        denominator="observed_supply_locations",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SUPPLY_LOCATION_INFRASTRUCTURE_RELIANCE_KEYS,
+        opportunity="location and infrastructure association counts only",
+    )
+
+
+def _spec_supply_organization_coordination() -> MetricSpecification:
+    return _supply_spec(
+        family_id=MetricFamilyId.SUPPLY_ORGANIZATION_COORDINATION,
+        population="owner_scoped_supply_organizations",
+        denominator="observed_organization_claims",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=SUPPLY_ORGANIZATION_COORDINATION_KEYS,
+        opportunity="owner-local claim attribution only; no organization actor",
     )
 
 
@@ -9390,6 +9549,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_trade_dependence,
     _spec_cross_society_trade_flows,
     _spec_trade_network_lineage,
+    _spec_supply_chain_structure,
+    _spec_supply_dependency_graph,
+    _spec_supply_bottleneck_pressure,
+    _spec_supply_resource_tool_dependency,
+    _spec_supply_location_infrastructure_reliance,
+    _spec_supply_organization_coordination,
 )
 
 

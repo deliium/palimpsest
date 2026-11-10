@@ -195,6 +195,10 @@ def get_trade_networks_reader(request: Request) -> object | None:
     return getattr(request.app.state, "trade_networks_reader", None)
 
 
+def get_supply_chain_reader(request: Request) -> object | None:
+    return getattr(request.app.state, "supply_chain_reader", None)
+
+
 def get_delegation_representation_reader(request: Request) -> object | None:
     """Return the read-only representation reader, or ``None`` when disabled."""
     return getattr(request.app.state, "representation_reader", None)

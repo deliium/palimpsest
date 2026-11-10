@@ -56,6 +56,11 @@ _SKILL_RECIPES: Final[Mapping[str, str]] = {
     "craft_tool": "crafting",
     "build_shelter": "building",
     "repair_shelter": "building",
+    "mill_grain": "crafting",
+    "bake_bread": "crafting",
+    "craft_plank": "crafting",
+    "craft_tool_head": "crafting",
+    "assemble_tool": "crafting",
 }
 
 

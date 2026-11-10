@@ -31,8 +31,8 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_176_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **198**" in metrics
-    assert "198" in metrics
+    assert "Closed catalog cardinality: **204**" in metrics
+    assert "204" in metrics
     for family in (
         "border_claim_structure@1",
         "border_overlap_contest@1",
@@ -42,7 +42,7 @@ def test_metric_doc_pins_176_and_four_families() -> None:
         assert family in metrics
     assert "from 164\nto **168**" in metrics
     assert "from 168 to\n172" in metrics
-    assert "198" in metrics
+    assert "204" in metrics
 
 
 def test_api_doc_covers_six_routes_and_errors() -> None:
@@ -85,7 +85,7 @@ def test_ui_and_overlay_docs_cover_four_layers() -> None:
 
 def test_v4_architecture_baseline_uses_current_pins() -> None:
     v4 = _read("docs/v4-architecture.md")
-    assert "| Metric catalog | 198 families" in v4
+    assert "| Metric catalog | 204 families" in v4
     assert "six GET routes under `/v1/simulations/{run_id}/borders`" in v4
     assert "| Metric catalog | 140 families" not in v4
 
@@ -101,8 +101,8 @@ def test_configuration_and_contract_docs() -> None:
     assert "borders-and-claims.md" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Borders and claims (V4-13)" in description
-    assert "198 metric families" in description or "198 metric families" in description
-    assert "catalog 198" in description
+    assert "204 metric families" in description or "204 metric families" in description
+    assert "catalog 204" in description
 
 
 def test_no_forbidden_authority_wording_in_canonical_doc() -> None:

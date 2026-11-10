@@ -379,6 +379,7 @@ async def _materialize_engine(
         kinship_spec=config.kinship,
         environmental_dynamics=config.environmental_dynamics,
         artifacts_enabled=config.artifacts_enabled,
+        supply_chains_active=config.v4_capability_flags.supply_chains,
     )
 
 

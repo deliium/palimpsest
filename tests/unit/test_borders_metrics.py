@@ -68,9 +68,9 @@ def _patterns() -> tuple[BorderPatternRow, ...]:
 
 def test_catalog_is_176_and_first_172_unchanged() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 198
-    assert len(specs) == 198
-    assert len({spec.family_id for spec in specs}) == 198
+    assert METRIC_FAMILY_COUNT == 204
+    assert len(specs) == 204
+    assert len({spec.family_id for spec in specs}) == 204
     first = specs[:172]
     assert all("border_" not in spec.family_id.value for spec in first)
     assert [spec.family_id for spec in specs[172:176]] == list(BORDER_FAMILIES)

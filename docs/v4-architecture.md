@@ -265,7 +265,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 198 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 198) | `analysis.specifications` |
+| Metric catalog | 204 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 204) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -427,8 +427,30 @@ command, event, observer semantic type, write pair, or migration. Detached
 `analysis.trade_networks_*` derives directed corridors, flow composition,
 observed dependence, major exchange locations, cross-society flows, and
 forward-only network lineage from committed events only. Six metric families
-raise the catalog to **198 families**. `trade-networks-snapshot-v1` and
+raise the catalog to **204 families**. `trade-networks-snapshot-v1` and
 `trade-networks-store-v1` publish opt-in and atomically; seven GET-only routes
 require `SUBJECTIVE_DEBUG`; the Research UI and Godot observer stay read-only.
-`supply_chains` and `markets_credit` remain unowned. Off-gate experiment
+`markets_credit` remains unowned. Off-gate experiment
 `trade_networks@1` is registered.
+
+## V4-19 supply chains
+
+V4-19 owns the declared `supply_chains` context on `runner-config-v56`; the
+registry stays 14 contexts / 12 flags / seven owned. `world.supply_chain` locks
+`supply-chains.v1`, six chain recipes, catalog validation, and a held-`STRIKE`
+harvest probability bonus; the legacy catalog and digest are unchanged.
+Detached analysis reconstructs stages from committed events, derives ten
+dependency edge kinds over resources, items, structures, storage, transport,
+locations, infrastructure, organizations, tools, and skills, enumerates
+depth-bounded chains, links forward-only lineage including empty windows, and
+reports seven descriptive bottleneck kinds with counts and integer ratios. Six
+metric families append the catalog from 198 to **204**. No central planner,
+optimizer, quota, automatic allocation, price, money, currency, score, ranking,
+severity, or recommendation exists. `supply-chains-snapshot-v1` and
+`supply-chains-store-v1` publish opt-in and atomically; seven GET-only routes
+require `SUBJECTIVE_DEBUG` and fail closed with `supply_chains_disabled`; the
+Research UI adds a read-only panel and no Godot overlay. Supply chains activate
+no write pair; infrastructure-channel runs keep 23/`v21` and travel-channel runs
+keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
+commands, 73 observer semantic types, 204 metric families, Alembic `0017`,
+`/v1`, `observer-protocol-v1`.

@@ -51,6 +51,7 @@ from api.routes import (
     research_router,
     simulations_router,
     streams_router,
+    supply_chains_router,
     trade_networks_router,
     version_router,
 )
@@ -506,6 +507,32 @@ def _attach_trade_networks_reader(app: FastAPI) -> None:
     _LOGGER.info("trade_networks_attach enabled=true")
 
 
+def _attach_supply_chain_reader(app: FastAPI) -> None:
+    from api.supply_chain_cursor import SupplyChainCursorCodec
+    from persistence.supply_chain_filesystem import create_supply_chain_reader
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.supply_chain_cursor_codec = None
+        app.state.supply_chain_reader = None
+        return
+    secret = (
+        settings.supply_chains_cursor_key.get_secret_value().encode("utf-8")
+        if settings.supply_chains_cursor_key is not None
+        else None
+    )
+    if settings.supply_chains_root is None or secret is None:
+        app.state.supply_chain_cursor_codec = None
+        app.state.supply_chain_reader = None
+        _LOGGER.info("supply_chain_attach enabled=false")
+        return
+    app.state.supply_chain_cursor_codec = SupplyChainCursorCodec.from_secret(secret)
+    app.state.supply_chain_reader = create_supply_chain_reader(
+        settings.supply_chains_root
+    )
+    _LOGGER.info("supply_chain_attach enabled=true")
+
+
 def _attach_infrastructure_networks_reader(app: FastAPI) -> None:
     from api.infrastructure_networks_cursor import InfrastructureNetworksCursorCodec
     from persistence.infrastructure_filesystem import (
@@ -671,6 +698,7 @@ def create_app(
     _attach_inter_society_relations_reader(app)
     _attach_infrastructure_networks_reader(app)
     _attach_trade_networks_reader(app)
+    _attach_supply_chain_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -708,6 +736,7 @@ def create_app(
     app.include_router(inter_society_relations_router)
     app.include_router(infrastructure_networks_router)
     app.include_router(trade_networks_router)
+    app.include_router(supply_chains_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

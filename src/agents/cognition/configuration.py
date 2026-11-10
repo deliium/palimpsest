@@ -765,6 +765,7 @@ class CognitionLoopConfig:
     production_knowledge_mode: ProductionKnowledgeMode = (
         ProductionKnowledgeMode.DISABLED
     )
+    supply_chains_active: bool = False
     drive_overrides: tuple[CognitionDriveOverride, ...] = ()
     memory_policy_version: str = MEMORY_POLICY_VERSION
     imagination_policy_version: str = IMAGINATION_POLICY_VERSION
@@ -1490,6 +1491,11 @@ class CognitionLoopConfig:
                 "invalid_enum path=production_knowledge_mode reason_code=invalid_mode"
             )
             raise TypeError("production_knowledge_mode must be ProductionKnowledgeMode")
+        if type(self.supply_chains_active) is not bool:
+            _LOG.error(
+                "invalid_type path=supply_chains_active reason_code=invalid_type"
+            )
+            raise TypeError("supply_chains_active must be bool")
         if (
             self.reflection_policy is not None
             and type(self.reflection_policy) is not ReflectionPolicy
@@ -2093,6 +2099,7 @@ def build_cognitive_loop(
         cognitive_budget_mode=resolved.cognitive_budget_mode,
         cognitive_budget_policy=resolved.cognitive_budget_policy,
         production_knowledge_mode=resolved.production_knowledge_mode,
+        supply_chains_active=resolved.supply_chains_active,
         regional_migration_cognition_mode=regional_migration_cognition_mode,
         regional_migration_hop_limit=regional_migration_hop_limit,
     )

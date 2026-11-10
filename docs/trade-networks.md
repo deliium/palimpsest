@@ -143,6 +143,11 @@ Six metric families append the catalog from 192 to **198**:
 - `cross_society_trade_flows@1`
 - `trade_network_lineage@1`
 
+V4-19 later appends six supply-chain families to **204**; the six trade families
+stay at positions 193–198 and the first 198 families keep their IDs, order,
+versions, and value keys. Trade networks are a sibling analytical surface, not a
+dependency of supply chains.
+
 Off-gate experiment `trade_networks@1` composes existing travel and exchange
 seams. It is never on the V1 gate.
 

@@ -294,7 +294,7 @@ def test_vocabulary_parity_matches_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 198
+    assert METRIC_FAMILY_COUNT == 204
     assert EVIDENCE_TESTIMONY_SNAPSHOT_SCHEMA == "evidence-testimony-snapshot-v1"
     assert DISPUTE_SNAPSHOT_SCHEMA == "dispute-resolution-snapshot-v1"
     assert FORMAL_RULE_SNAPSHOT_SCHEMA == "formal-rule-snapshot-v1"
@@ -317,6 +317,7 @@ def test_compatibility_pins_are_exact() -> None:
             "diplomacy",
             "organized_conflict",
             "infrastructure_networks",
+        "supply_chains",
         }
     )
     assert "runner-config-v57" not in (

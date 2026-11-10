@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **198** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **204** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -714,7 +714,7 @@ or truth oracle; belief alignment is researcher-only.
 
 ## Trade-network families (V4-18)
 
-Six detached families append the catalog from 192 to **198**:
+Six detached families append the catalog from 192 to **204**:
 `trade_corridor_structure@1`, `trade_flow_composition@1`,
 `trade_location_centrality@1`, `trade_dependence@1`,
 `cross_society_trade_flows@1`, and `trade_network_lineage@1`. The first 192
@@ -725,3 +725,13 @@ counts are non-disjoint location-role counts; `cross_location_count` is the
 distinct transfer count. Sustained transitions and venue counts are counts
 only; there is no composite trade score, economic valuation, or routing model.
 See [trade networks](trade-networks.md).
+
+Six detached families append the catalog from 198 to **204** at V4-19 landing:
+`supply_chain_structure@1`, `supply_dependency_graph@1`,
+`supply_bottleneck_pressure@1`, `supply_resource_tool_dependency@1`,
+`supply_location_infrastructure_reliance@1`, and
+`supply_organization_coordination@1`. The first 198 families keep their IDs,
+order, versions, and value keys. They read only the optional detached
+`supply_chain_analysis` input and emit counts, integer milli ratios,
+availability, and per-family coverage. No composite supply score, optimizer, or
+planner exists. See [supply chains](supply-chains.md).

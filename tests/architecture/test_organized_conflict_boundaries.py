@@ -44,6 +44,7 @@ def test_v4_12_owns_organized_conflict_without_new_context() -> None:
             "diplomacy",
             "organized_conflict",
             "infrastructure_networks",
+        "supply_chains",
         }
     )
     spec = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZED_CONFLICT]
@@ -202,7 +203,7 @@ def test_conflict_metric_catalog_and_reserved_write_pairs() -> None:
     from analysis.specifications import METRIC_FAMILY_COUNT
     from simulation.versioning import V4_WRITE_PAIR_RESERVATIONS
 
-    assert METRIC_FAMILY_COUNT == 198
+    assert METRIC_FAMILY_COUNT == 204
     assert len(V4_WRITE_PAIR_RESERVATIONS) == 4
 
 

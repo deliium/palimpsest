@@ -38,7 +38,8 @@ Fail closed:
   reader is unset;
 - unowned V4 flags still fail with `capability_unimplemented`.
 
-Does **not** own `supply_chains`. Remaining reservations 24–26 / `v22`–`v24`
+Infrastructure supplies venue and capacity evidence; V4-19 owns
+`supply_chains`. Remaining reservations 24–26 / `v22`–`v24`
 stay reserved; epidemic codec string `v22` stays unaccepted.
 
 ## Locked catalog (`infrastructure-networks.v1`)
@@ -147,8 +148,8 @@ V1 A–E gate.
 ## Non-goals
 
 No automatic maintenance, grid planner, infra actor/crew/owner, nation,
-civilization infrastructure score, `/v2` API, `runner-config-v57`, Alembic
-`0018`, or ownership of `supply_chains`.
+civilization infrastructure score, `/v2` API, `runner-config-v57`, or Alembic
+`0018`. V4-19 owns `supply_chains`.
 
 ## See Also
 

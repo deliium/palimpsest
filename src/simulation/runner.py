@@ -1032,6 +1032,7 @@ def _cognition_config_for(
     legal_disputes_enabled: bool = False,
     diplomacy_enabled: bool = False,
     organized_conflict_enabled: bool = False,
+    supply_chains_active: bool = False,
     regional_migration_mode: str | None = None,
     multi_polity_migration_enabled: bool = False,
 ) -> CognitionLoopConfig:
@@ -1722,6 +1723,7 @@ def _cognition_config_for(
         production_knowledge_mode=CognitionProductionKnowledgeMode(
             spec.production_knowledge_mode.value
         ),
+        supply_chains_active=supply_chains_active,
         drive_overrides=tuple(
             CognitionDriveOverride(
                 kind=item.kind,
@@ -2666,6 +2668,9 @@ class SimulationRunner:
                     config.v4_capability_flags.infrastructure_networks
                 ),
                 travel_network_active=travel_network_active,
+                supply_chains_active=(
+                    config.v4_capability_flags.supply_chains
+                ),
                 skill_policy=skill_kwargs.get("skill_policy"),
                 skill_entity_ids=skill_ids or None,
                 teaching_policy=teaching_kwargs.get("teaching_policy"),
@@ -2868,6 +2873,9 @@ class SimulationRunner:
                     diplomacy_enabled=(config.v4_capability_flags.diplomacy),
                     organized_conflict_enabled=(
                         config.v4_capability_flags.organized_conflict
+                    ),
+                    supply_chains_active=(
+                        config.v4_capability_flags.supply_chains
                     ),
                     regional_migration_mode=(
                         None
@@ -6659,6 +6667,9 @@ class SimulationRunner:
                 organized_conflict_enabled=(
                     self._config.v4_capability_flags.organized_conflict
                 ),
+                supply_chains_active=(
+                    self._config.v4_capability_flags.supply_chains
+                ),
                 regional_migration_mode=(
                     None
                     if self._config.regions_migration is None
@@ -7043,6 +7054,7 @@ def _construct_agent_bundle(
         legal_disputes_enabled=config.v4_capability_flags.legal_disputes,
         diplomacy_enabled=config.v4_capability_flags.diplomacy,
         organized_conflict_enabled=config.v4_capability_flags.organized_conflict,
+        supply_chains_active=config.v4_capability_flags.supply_chains,
         regional_migration_mode=(
             None
             if config.regions_migration is None

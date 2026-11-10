@@ -105,6 +105,7 @@ def test_v4_registry_keeps_fourteen_contexts_and_twelve_flags() -> None:
         "diplomacy",
         "organized_conflict",
         "infrastructure_networks",
+        "supply_chains",
     }
 
 

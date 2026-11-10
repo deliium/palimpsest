@@ -127,6 +127,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
             "diplomacy",
             "organized_conflict",
             "infrastructure_networks",
+            "supply_chains",
         }
     ),
 )

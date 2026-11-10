@@ -565,7 +565,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 198 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 204 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -659,7 +659,7 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 198 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 204 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
 V4-10/V4-11.
 
@@ -711,7 +711,7 @@ GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 198 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 204 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
 
@@ -730,7 +730,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 198 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
+types, 204 metric families, 14 V4 contexts, 12 V4 flags, five owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
 
@@ -778,3 +778,27 @@ observer semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags, six o
 flags, replay-v23/codec `v21` when selected, `/v1`, `observer-protocol-v1`,
 and Alembic `0017`. See
 [infrastructure networks](infrastructure-networks.md).
+
+## V4-19 supply chains
+
+V4-19 owns the declared `supply_chains` V4 context on `runner-config-v56`.
+`world.supply_chain` locks `supply-chains.v1`, six chain recipes, catalog
+validation, and the held-`STRIKE` harvest probability bonus; the legacy
+six-recipe catalog and digest stay byte-identical. Detached
+`analysis.supply_chain_*` reconstructs stages from committed events, pairs
+multi-tick crafts, derives ten dependency edge kinds over resources, items,
+structures, storage, transport, locations, infrastructure, organizations,
+tools, and skills, enumerates depth-bounded chains, links forward-only lineage
+including empty windows, and reports seven descriptive bottleneck kinds. No
+central planner, optimizer, quota, automatic allocation, price, money, currency,
+score, ranking, severity, or recommendation exists.
+
+`simulation.supply_chain_*` owns canonical `supply-chains-snapshot-v1`;
+`experiments.supply_chain_*` and `persistence.supply_chain_filesystem` publish
+`supply-chains-store-v1` opt-in and atomically; seven GET-only
+`/v1/simulations/{run_id}/supply-chains` routes require `SUBJECTIVE_DEBUG` and
+fail closed with `supply_chains_disabled`; the Research UI adds a read-only
+panel and no Godot overlay. Six metric families append 198 → **204**; observer
+semantic types stay 73; commands stay 43; replay-v27/codec `v25` and Alembic
+`0017` remain the pins. Counts are 14 V4 contexts / 12 flags / seven owned.
+See [supply chains](supply-chains.md).

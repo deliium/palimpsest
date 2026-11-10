@@ -412,6 +412,7 @@ class CognitiveLoop:
         "_subjective_valuation_active",
         "_subjective_valuation_horizon",
         "_subjective_valuation_max_bundle",
+        "_supply_chains_active",
         "_symbolic_language_mode",
         "_symbolic_language_policy",
         "_symbolic_translation_applications",
@@ -543,6 +544,7 @@ class CognitiveLoop:
         cognitive_budget_policy: object | None = None,
         production_knowledge_mode: object | None = None,
         production_allow_provider: bool = False,
+        supply_chains_active: bool = False,
         regional_migration_cognition_mode: str | None = None,
         regional_migration_hop_limit: int = 1,
     ) -> None:
@@ -1598,6 +1600,9 @@ class CognitiveLoop:
         if type(production_mode) is not ProductionKnowledgeMode:
             raise TypeError("production_knowledge_mode must be ProductionKnowledgeMode")
         self._production_knowledge_mode = production_mode
+        if type(supply_chains_active) is not bool:
+            raise TypeError("supply_chains_active must be bool")
+        self._supply_chains_active = supply_chains_active
         if regional_migration_cognition_mode is None:
             regional_mode = "disabled"
         elif regional_migration_cognition_mode not in {"disabled", "deterministic"}:
@@ -5700,6 +5705,7 @@ class CognitiveLoop:
                     teaching_selection=teaching_selection,
                     recipe_beliefs=recipe_beliefs,
                     selected_recipe_id=production_recipe_id,
+                    supply_chains_active=self._supply_chains_active,
                     territorial_claims=territorial_claims,
                     territorial_claim_mode=self._territorial_claim_mode,
                     organized_conflict=self._prepared_organized_conflict,

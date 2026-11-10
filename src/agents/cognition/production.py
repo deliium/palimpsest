@@ -222,12 +222,29 @@ def _absorb_relation(communication: object, supported: dict[str, bool]) -> None:
     supported[token] = True
 
 
+def production_stage_priority(recipe_id: RecipeId) -> int:
+    """Closed local stage order. Ties break on the recipe id."""
+    token = recipe_id.value
+    if token.startswith("harvest_"):
+        return 0
+    if token.startswith("craft_"):
+        return 1
+    if token.startswith("build_"):
+        return 2
+    if token.startswith("repair_"):
+        return 3
+    if token.startswith("store_"):
+        return 4
+    return 5
+
+
 def compile_production_command(
     beliefs: object | None,
     observation: object,
     *,
     vetoed: bool = False,
     selected_recipe_id: RecipeId | None = None,
+    supply_chains_active: bool = False,
 ) -> AgentCommand | None:
     """Compile one production command, or leave the existing command alone.
 
@@ -257,10 +274,31 @@ def compile_production_command(
         _log_selected(command)
         return command
     supported = tuple(belief for belief in beliefs.beliefs if belief.supported)
-    for belief in supported:
+    if type(supply_chains_active) is not bool:
+        raise TypeError("supply_chains_active must be bool")
+    if supply_chains_active:
+        ordered: tuple[RecipeBelief, ...] = tuple(
+            sorted(
+                supported,
+                key=lambda belief: (
+                    production_stage_priority(belief.recipe_id),
+                    belief.recipe_id.value,
+                ),
+            )
+        )
+    else:
+        ordered = supported
+    for belief in ordered:
         command = _command_for_recipe(belief.recipe_id, observation)
         if command is None:
             continue
+        if supply_chains_active:
+            _LOG.debug(
+                "production_plan_selected stage=%s recipe_id=%s command_kind=%s",
+                production_stage_priority(belief.recipe_id),
+                belief.recipe_id.value,
+                command.kind,
+            )
         _log_selected(command)
         return command
     if supported:

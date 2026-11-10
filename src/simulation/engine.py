@@ -799,6 +799,7 @@ class WorldEngine:
         "_subjective_valuation_active",
         "_subjective_valuation_horizon",
         "_subjective_valuation_max_bundle",
+        "_supply_chains_active",
         "_teaching_entity_ids",
         "_teaching_policy",
         "_translator",
@@ -844,6 +845,7 @@ class WorldEngine:
         cultural_contact_active: bool = False,
         infrastructure_networks_active: bool = False,
         travel_network_active: bool = False,
+        supply_chains_active: bool = False,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -983,6 +985,42 @@ class WorldEngine:
         ):
             raise ValueError("travel_network_requires_regions")
         self._travel_network_active = travel_network_active
+        if type(supply_chains_active) is not bool:
+            raise TypeError("supply_chains_active must be bool")
+        if supply_chains_active:
+            catalog = self._production_catalog
+            if catalog is None:
+                _LOGGER.error(
+                    "supply_chain_activation_rejected "
+                    "code=supply_chain_catalog_missing"
+                )
+                raise ValueError("supply_chain_catalog_missing")
+            from world.supply_chain import (
+                SupplyChainContractError,
+                validate_production_chain_catalog,
+            )
+
+            try:
+                summary = validate_production_chain_catalog(
+                    catalog, require_chain=True
+                )
+            except SupplyChainContractError as exc:
+                _LOGGER.error(
+                    "supply_chain_activation_rejected code=%s",
+                    exc.code,
+                )
+                raise ValueError(exc.code) from exc
+            if summary.max_depth < 3:
+                _LOGGER.error(
+                    "supply_chain_activation_rejected "
+                    "code=supply_chain_catalog_no_chain"
+                )
+                raise ValueError("supply_chain_catalog_no_chain")
+        self._supply_chains_active = supply_chains_active
+        _LOGGER.debug(
+            "supply_chains_active enabled=%s policy=supply-chains.v1",
+            supply_chains_active,
+        )
         _LOGGER.info(
             "travel_network_active enabled=%s infrastructure=%s regions=%s",
             travel_network_active,
@@ -1260,6 +1298,7 @@ class WorldEngine:
         production_catalog: object | None = None,
         environmental_dynamics: object | None = None,
         artifacts_enabled: bool = False,
+        supply_chains_active: bool = False,
         population_lifecycle: object | None = None,
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
@@ -1276,6 +1315,8 @@ class WorldEngine:
         """
         if type(snapshot) is not WorldSnapshot:
             raise TypeError("restore_from_snapshot requires WorldSnapshot")
+        if type(supply_chains_active) is not bool:
+            raise TypeError("supply_chains_active must be bool")
         if isinstance(events, (set, frozenset)) or not isinstance(events, Sequence):
             raise TypeError("events must be an ordered sequence")
         if committed_through_tick is not None and type(committed_through_tick) is not (
@@ -1476,6 +1517,40 @@ class WorldEngine:
             teaching_entity_ids=teaching_entity_ids,
         )
         engine._production_catalog = _optional_production_catalog(production_catalog)
+        engine._supply_chains_active = supply_chains_active
+        if supply_chains_active:
+            catalog = engine._production_catalog
+            if catalog is None:
+                _LOGGER.error(
+                    "supply_chain_activation_rejected "
+                    "code=supply_chain_catalog_missing"
+                )
+                raise ValueError("supply_chain_catalog_missing")
+            from world.supply_chain import (
+                SupplyChainContractError,
+                validate_production_chain_catalog,
+            )
+
+            try:
+                summary = validate_production_chain_catalog(
+                    catalog, require_chain=True
+                )
+            except SupplyChainContractError as exc:
+                _LOGGER.error(
+                    "supply_chain_activation_rejected code=%s",
+                    exc.code,
+                )
+                raise ValueError(exc.code) from exc
+            if summary.max_depth < 3:
+                _LOGGER.error(
+                    "supply_chain_activation_rejected "
+                    "code=supply_chain_catalog_no_chain"
+                )
+                raise ValueError("supply_chain_catalog_no_chain")
+        _LOGGER.debug(
+            "supply_chains_active enabled=%s policy=supply-chains.v1",
+            supply_chains_active,
+        )
         restored_laws = getattr(snapshot.config, "bounded_experimentation", None)
         engine._experiment_catalog = _optional_experiment_catalog(
             None if restored_laws is None else restored_laws.laws,
@@ -1913,6 +1988,7 @@ class WorldEngine:
         production_catalog: object | None = None,
         environmental_dynamics: object | None = None,
         artifacts_enabled: bool = False,
+        supply_chains_active: bool = False,
         population_lifecycle: object | None = None,
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
@@ -1944,6 +2020,7 @@ class WorldEngine:
             production_catalog=production_catalog,
             environmental_dynamics=environmental_dynamics,
             artifacts_enabled=artifacts_enabled,
+            supply_chains_active=supply_chains_active,
             population_lifecycle=population_lifecycle,
             new_agent_initialization=new_agent_initialization,
             kinship_spec=kinship_spec,
@@ -6697,6 +6774,20 @@ class WorldEngine:
                 level,
                 "production",
             )
+        if self._supply_chains_active:
+            from world.supply_chain import harvest_tool_probability_gain
+
+            gain = harvest_tool_probability_gain(
+                starting_state, request.actor_id, recipe
+            )
+            if gain > 0.0:
+                adjusted = clamp_unit_interval(probability + gain)
+                _LOGGER.debug(
+                    "harvest_tool_assist gain=%s clamped=%s",
+                    gain,
+                    adjusted != probability + gain,
+                )
+                probability = adjusted
         success = True
         if probability < 1.0:
             ordinal, agent_id = request_ordinals[request.request_id]

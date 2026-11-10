@@ -52,15 +52,15 @@ def test_required_sections_and_exact_tokens() -> None:
         "trade_post_present",
         "sustained_network_count",
         "window_index",
-        "198",
+        "204",
     ):
         assert token in page, token
 
 
-def test_metric_catalog_is_198_and_six_trade_families_are_documented() -> None:
+def test_metric_catalog_is_204_and_six_trade_families_are_documented() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert METRIC_FAMILY_COUNT == 198
-    assert "**198**" in metrics
+    assert METRIC_FAMILY_COUNT == 204
+    assert "**204**" in metrics
     for family in (
         "trade_corridor_structure@1",
         "trade_flow_composition@1",

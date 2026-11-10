@@ -33,6 +33,7 @@ from api.routes.replay import router as replay_router
 from api.routes.research_matrix import router as research_matrix_router
 from api.routes.simulations import router as simulations_router
 from api.routes.streams import router as streams_router
+from api.routes.supply_chains import router as supply_chains_router
 from api.routes.trade_networks import (
     router as trade_networks_router,
 )
@@ -64,6 +65,7 @@ __all__ = [
     "research_router",
     "simulations_router",
     "streams_router",
+    "supply_chains_router",
     "trade_networks_router",
     "version_router",
 ]

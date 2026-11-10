@@ -84,6 +84,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         "diplomacy",
         "organized_conflict",
         "infrastructure_networks",
+        "supply_chains",
     }
 
     organizations = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS]
@@ -247,7 +248,7 @@ def test_snapshot_store_and_catalog_pins() -> None:
     )
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 198
+    assert METRIC_FAMILY_COUNT == 204
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )

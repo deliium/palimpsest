@@ -160,6 +160,7 @@ V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "diplomacy",
         "organized_conflict",
         "infrastructure_networks",
+        "supply_chains",
     }
 )
 

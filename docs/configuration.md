@@ -544,3 +544,15 @@ opt-in and post-completion under `trade-networks-store-v1`. The seven GET-only
 routes are read-only and bind the optional `window_index` filter into each
 cursor fingerprint. Analysis itself needs no setting. See
 [trade networks](trade-networks.md).
+
+## Supply chains publication (V4-19)
+
+`PALIMPSEST_SUPPLY_CHAINS_ROOT` and
+`PALIMPSEST_SUPPLY_CHAINS_CURSOR_KEY` form a dual gate: both must be set, and
+the cursor key must be at least 32 UTF-8 bytes, before the API attaches the
+reader. Otherwise routes return `503 supply_chains_disabled`. Publication is
+opt-in and post-completion under `supply-chains-store-v1`. The seven GET-only
+routes are read-only and bind the optional `window_index` filter into each
+cursor fingerprint. `supply_chains` itself activates no write pair:
+infrastructure-channel runs keep 23/`v21` and travel-channel runs keep
+27/`v25`. See [supply chains](supply-chains.md).

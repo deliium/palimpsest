@@ -1089,6 +1089,18 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                 extra={"experiment": {"reason_code": str(exc)}},
             )
             return 2
+        try:
+            from research_runner.supply_chain_composition import (
+                supply_chain_producer_options_from_args,
+            )
+
+            supply_chain_options = supply_chain_producer_options_from_args(args)
+        except (TypeError, ValueError) as exc:
+            _LOG.error(
+                "cli_supply_chain_options_invalid",
+                extra={"experiment": {"reason_code": str(exc)}},
+            )
+            return 2
         lineage_root = getattr(args, "lineage_root", None)
         lineage_cadence = getattr(args, "lineage_cadence", 1)
         lineage_max_publications = getattr(args, "lineage_max_publications", 1000)
@@ -1653,6 +1665,43 @@ def _cmd_generational(args: argparse.Namespace) -> int:
                     "infrastructure_networks_publication_id="
                     f"{infrastructure_networks_receipt['publication_id']}"
                 )
+        if supply_chain_options.enabled:
+            from experiments.supply_chain_publication import (
+                build_supply_chain_harvest_result,
+                supply_chain_publication_document,
+            )
+            from research_runner.supply_chain_composition import (
+                publish_supply_chain_harvest,
+                write_supply_chain_receipt,
+            )
+
+            try:
+                supply_harvest = build_supply_chain_harvest_result(
+                    arm.runner_result,
+                    committed_events=arm.committed_events or (),
+                    run_id=assignment.run_id.value,
+                )
+                stored, reason = publish_supply_chain_harvest(
+                    supply_harvest, options=supply_chain_options
+                )
+                receipt = {
+                    "status": "published" if stored else "missing",
+                    "reason": reason,
+                    **supply_chain_publication_document(supply_harvest),
+                }
+                write_supply_chain_receipt(
+                    Path(args.artifact_root), assignment.run_id.value, receipt
+                )
+                print(
+                    "supply_chain_publication_status="
+                    f"{receipt['status']}"
+                )
+                print(f"supply_chain_publication_reason={receipt.get('reason')}")
+            except Exception as exc:
+                _LOG.error(
+                    "supply_chain_publication_failed code=%s",
+                    getattr(exc, "reason_code", type(exc).__name__),
+                )
         if lineage_options is not None:
             import json
 
@@ -1864,6 +1913,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen_p.add_argument(
         "--infrastructure-networks-max-bytes", type=int, default=8_388_608
+    )
+    gen_p.add_argument("--supply-chains-root", default=None)
+    gen_p.add_argument(
+        "--supply-chains-max-publications", type=int, default=16
+    )
+    gen_p.add_argument(
+        "--supply-chains-max-bytes", type=int, default=8_388_608
     )
     gen_p.add_argument("--lineage-root", default=None)
     gen_p.add_argument("--lineage-cadence", type=int, default=1)

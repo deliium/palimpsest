@@ -321,9 +321,9 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 
 # V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
 # V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, V4-12 owns
-# ``organized_conflict``, and V4-16 owns ``infrastructure_networks``; the
-# remaining six V4 flags stay unowned and fail closed at runtime construction
-# until their behavior plans land and claim ownership.
+# ``organized_conflict``, V4-16 owns ``infrastructure_networks``, and V4-19 owns
+# ``supply_chains``; the remaining five V4 flags stay unowned and fail closed at
+# runtime construction until their behavior plans land and claim ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
         "organizations",
@@ -332,6 +332,7 @@ _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "diplomacy",
         "organized_conflict",
         "infrastructure_networks",
+        "supply_chains",
     }
 )
 
@@ -1128,8 +1129,8 @@ class V4CapabilityFlags:
 
     Defaults are all off. V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns
     ``formal_rules``, V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``,
-    V4-12 owns ``organized_conflict``, and V4-16 owns
-    ``infrastructure_networks``. Enabling an unowned flag fails closed at
+    V4-12 owns ``organized_conflict``, V4-16 owns ``infrastructure_networks``,
+    and V4-19 owns ``supply_chains``. Enabling an unowned flag fails closed at
     ``SimulationRunner.from_config`` with ``capability_unimplemented`` and
     ``stage="v4_capability_flags"`` until an owning plan lands. Wire key
     ``v4_capability_flags`` is a sibling of ``capability_flags`` and
@@ -8162,6 +8163,29 @@ class SimulationRunnerConfig:
         ):
             _LOGGER.info(
                 "travel_network_inactive reason=infrastructure_off"
+            )
+        if self.v4_capability_flags.supply_chains:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V56:
+                _LOGGER.error(
+                    "supply_chains_requires_v56 schema_version=%s "
+                    "reason_code=supply_chains_requires_v56",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "supply_chains requires runner-config-v56 "
+                    "(code=supply_chains_requires_v56)"
+                )
+            _LOGGER.info(
+                "supply_chains_enabled policy_id=%s",
+                "supply-chains.v1",
+            )
+            _LOGGER.debug(
+                "supply_chains_bind schema_v56=%s catalog_present=%s",
+                self.schema_version == RUNNER_SCHEMA_VERSION_V56,
+                any(
+                    agent.cognition.production_catalog.recipe_count > 0
+                    for agent in self.agents
+                ),
             )
         _lifecycle_schemas = {
             RUNNER_SCHEMA_VERSION_V24,

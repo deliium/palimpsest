@@ -93,6 +93,7 @@ def test_organizations_is_owned_and_other_unowned_v4_flags_fail_closed() -> None
             "diplomacy",
             "organized_conflict",
             "infrastructure_networks",
+            "supply_chains",
         }:
             continue
         other = V4CapabilityFlags(**{name: True})

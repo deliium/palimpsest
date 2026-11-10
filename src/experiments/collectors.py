@@ -325,6 +325,30 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("trade_networks_collector_missing_events")
+    if events is not None:
+        try:
+            from experiments.supply_chain_completed_run import (
+                build_completed_run_supply_chain_analysis,
+                supply_chain_recipe_specs,
+            )
+
+            supply_analysis = build_completed_run_supply_chain_analysis(
+                arm.runner_result,
+                committed_events=events,
+                run_id=arm.assignment.run_id.value,
+                recipe_specs=supply_chain_recipe_specs(
+                    arm.assignment.runner_config
+                ),
+                window_tick=max(ticks - 1, 0),
+            )
+            inputs = replace(inputs, supply_chain_analysis=supply_analysis)
+        except Exception as exc:
+            _LOG.error(
+                "supply_chain_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("supply_chain_collector_missing_events")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

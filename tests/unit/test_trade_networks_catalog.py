@@ -34,30 +34,31 @@ TRADE_FAMILIES = (
 )
 
 
-def test_catalog_count_is_198() -> None:
-    assert METRIC_FAMILY_COUNT == 198
+def test_catalog_count_is_204() -> None:
+    assert METRIC_FAMILY_COUNT == 204
     catalog = validate_metric_catalog()
-    assert len(catalog) == 198
-    assert len(all_metric_specifications()) == 198
+    assert len(catalog) == 204
+    assert len(all_metric_specifications()) == 204
 
 
-def test_first_192_ids_order_versions_and_keys_are_unchanged() -> None:
+def test_first_198_ids_order_versions_and_keys_are_unchanged() -> None:
     specs = all_metric_specifications()
-    first = specs[:192]
-    last = specs[192:]
+    first = specs[:198]
+    last = specs[198:]
     trade_values = {family.value for family in TRADE_FAMILIES}
-    assert not any(spec.family_id.value in trade_values for spec in first)
-    assert [spec.family_id for spec in last] == list(TRADE_FAMILIES)
-    assert len({spec.family_id for spec in specs}) == 198
+    assert not any(spec.family_id.value in trade_values for spec in first[:192])
+    assert [spec.family_id for spec in first[192:]] == list(TRADE_FAMILIES)
+    assert len(last) == 6
+    assert len({spec.family_id for spec in specs}) == 204
     for spec in first:
         assert spec.algorithm_version == "1"
         assert spec.value_keys
 
 
-def test_six_trade_families_are_last_and_distinct() -> None:
+def test_six_trade_families_are_the_preceding_block() -> None:
     specs = all_metric_specifications()
-    assert [spec.family_id for spec in specs[-6:]] == list(TRADE_FAMILIES)
-    for spec in specs[-6:]:
+    assert [spec.family_id for spec in specs[192:198]] == list(TRADE_FAMILIES)
+    for spec in specs[192:198]:
         assert spec.algorithm_version == "1"
         assert spec.cohort_window == "trade_networks_window_tick"
 
@@ -93,8 +94,8 @@ def test_trade_family_value_keys_match_documents() -> None:
             assert tuple(document.values) == tuple(sorted(keys))
 
 
-def test_first_192_are_unchanged() -> None:
-    specs = all_metric_specifications()[:192]
+def test_first_198_are_unchanged() -> None:
+    specs = all_metric_specifications()[:198]
     payload = [
         {
             "id": spec.family_id.value,
@@ -107,5 +108,5 @@ def test_first_192_are_unchanged() -> None:
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     assert digest == (
-        "22168409bffc4e8e6bf7794b0cfde783dd122a89e89dba2e38f4b71b94b13965"
+        "c3d280250a65747e90952a82d88fe545d7dd39ca7fae2d7bb29ad9d922302851"
     )
