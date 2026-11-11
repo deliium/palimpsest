@@ -25,8 +25,8 @@ _LAST_SIX = (
 
 
 def test_catalog_count_is_204() -> None:
-    assert METRIC_FAMILY_COUNT == 204
-    assert len(all_metric_specifications()) == 204
+    assert METRIC_FAMILY_COUNT == 208
+    assert len(all_metric_specifications()) == 208
     assert validate_metric_catalog()
     assert METRIC_CATALOG_VERSION == "metric-catalog-v1"
 
@@ -50,11 +50,11 @@ def test_first_198_ids_unchanged() -> None:
 
 def test_last_six_ids_and_order() -> None:
     ids = [spec.family_id.value for spec in all_metric_specifications()]
-    assert tuple(ids[-6:]) == _LAST_SIX
+    assert tuple(ids[198:204]) == _LAST_SIX
 
 
 def test_last_six_versions_and_cohort() -> None:
-    for spec in all_metric_specifications()[-6:]:
+    for spec in all_metric_specifications()[198:204]:
         assert spec.algorithm_version == "1"
         assert spec.cohort_window == "supply_chain_window_tick"
 

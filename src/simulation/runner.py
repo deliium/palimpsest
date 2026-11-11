@@ -1033,6 +1033,7 @@ def _cognition_config_for(
     diplomacy_enabled: bool = False,
     organized_conflict_enabled: bool = False,
     supply_chains_active: bool = False,
+    markets_enabled: bool = False,
     regional_migration_mode: str | None = None,
     multi_polity_migration_enabled: bool = False,
 ) -> CognitionLoopConfig:
@@ -1395,6 +1396,7 @@ def _cognition_config_for(
         CognitionDisputeMode,
         CognitionEvidenceMode,
         CognitionFormalRuleMode,
+        CognitionMarketMode,
         CognitionOrganizationMode,
         CognitionOrganizedConflictMode,
         CognitionRepresentationMode,
@@ -1448,6 +1450,24 @@ def _cognition_config_for(
     )
     organization_agency_policy = (
         default_organization_agency_policy() if organizations_enabled else None
+    )
+    from agents.cognition.market_institutions import (
+        MARKET_INSTITUTIONS_POLICY_VERSION,
+        default_market_institution_policy,
+    )
+
+    market_mode = (
+        CognitionMarketMode.DETERMINISTIC
+        if markets_enabled
+        else CognitionMarketMode.DISABLED
+    )
+    market_policy = (
+        default_market_institution_policy() if markets_enabled else None
+    )
+    _LOG.debug(
+        "cognition_config_market_institution mode=%s policy_version=%s",
+        market_mode.value,
+        MARKET_INSTITUTIONS_POLICY_VERSION if market_policy is not None else None,
     )
     _LOG.debug(
         "cognition_config_organization_mode mode=%s",
@@ -1701,6 +1721,8 @@ def _cognition_config_for(
         organization_concept_policy=organization_policy,
         organization_operation_policy=organization_operation_policy,
         organization_agency_policy=organization_agency_policy,
+        market_institution_mode=market_mode,
+        market_institution_policy=market_policy,
         formal_rule_mode=formal_rule_mode,
         formal_rule_policy=formal_rule_policy,
         dispute_mode=dispute_mode,
@@ -2876,6 +2898,9 @@ class SimulationRunner:
                     ),
                     supply_chains_active=(
                         config.v4_capability_flags.supply_chains
+                    ),
+                    markets_enabled=(
+                        config.v4_capability_flags.markets_credit
                     ),
                     regional_migration_mode=(
                         None
@@ -4998,11 +5023,18 @@ class SimulationRunner:
                     raise ValueError("institutional decay binding group mismatch")
         from agents.cognition.configuration import CognitionOrganizationMode
         from agents.cognition.formal_rules import FormalRuleLedger
+        from agents.cognition.market_institutions import MarketInstitutionLedger
         from agents.cognition.organization_agency import OrganizationAgencyLedger
         from agents.cognition.organization_concepts import OrganizationConceptLedger
         from agents.cognition.organization_operations import OrganizationOperationLedger
 
         for state in checkpoint.runtime_states:
+            market_ledger = getattr(state, "market_institutions", None)
+            if market_ledger is not None:
+                if type(market_ledger) is not MarketInstitutionLedger:
+                    raise TypeError("market institution ledger invalid type")
+                if market_ledger.owner_id != state.agent_id:
+                    raise ValueError("market institution ledger owner_id mismatch")
             agency_ledger = getattr(state, "organization_agency", None)
             if agency_ledger is not None:
                 if type(agency_ledger) is not OrganizationAgencyLedger:
@@ -5287,6 +5319,9 @@ class SimulationRunner:
                 self.export_organization_operation_ledgers()
             ),
             organization_agency_ledgers=(self.export_organization_agency_ledgers()),
+            market_institution_ledgers=(
+                self.export_market_institution_ledgers()
+            ),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
@@ -5808,6 +5843,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "migration_displacement_ledger_exported owners=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_market_institution_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered market institution ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "market_institutions", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "market_institution_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6670,6 +6720,9 @@ class SimulationRunner:
                 supply_chains_active=(
                     self._config.v4_capability_flags.supply_chains
                 ),
+                markets_enabled=(
+                    self._config.v4_capability_flags.markets_credit
+                ),
                 regional_migration_mode=(
                     None
                     if self._config.regions_migration is None
@@ -7055,6 +7108,7 @@ def _construct_agent_bundle(
         diplomacy_enabled=config.v4_capability_flags.diplomacy,
         organized_conflict_enabled=config.v4_capability_flags.organized_conflict,
         supply_chains_active=config.v4_capability_flags.supply_chains,
+        markets_enabled=config.v4_capability_flags.markets_credit,
         regional_migration_mode=(
             None
             if config.regions_migration is None

@@ -128,6 +128,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
             "organized_conflict",
             "infrastructure_networks",
             "supply_chains",
+            "markets_credit",
         }
     ),
 )
@@ -148,7 +149,14 @@ async def test_each_unowned_enabled_flag_fails_closed_at_construction(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "flag_name", ("organizations", "formal_rules", "legal_disputes", "diplomacy")
+    "flag_name",
+    (
+        "organizations",
+        "formal_rules",
+        "legal_disputes",
+        "diplomacy",
+        "markets_credit",
+    ),
 )
 async def test_owned_v4_flag_constructs_but_stays_scaffolding_off(
     flag_name: str,

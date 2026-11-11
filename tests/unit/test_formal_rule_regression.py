@@ -36,7 +36,7 @@ def test_exact_pins() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
-    assert METRIC_FAMILY_COUNT == 204
+    assert METRIC_FAMILY_COUNT == 208
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
@@ -61,7 +61,7 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
     from analysis.specifications import all_metric_specifications
 
     specs = all_metric_specifications()
-    assert len(specs) == 204
+    assert len(specs) == 208
     assert [spec.family_id.value for spec in specs[148:151]] == [
         "formal_rule_development",
         "formal_rule_authority",
@@ -87,7 +87,6 @@ def test_formal_rules_flag_is_owned_and_five_flags_remain_unowned() -> None:
             [
                 name
                 for name in (
-                    "markets_credit",
                     "science",
                     "epidemics",
                     "ecological_feedback",
@@ -96,7 +95,7 @@ def test_formal_rules_flag_is_owned_and_five_flags_remain_unowned() -> None:
                 if Flags(**{name: True}).unimplemented_enabled_names()
             ]
         )
-        == 5
+        == 4
     )
 
 

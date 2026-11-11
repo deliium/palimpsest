@@ -203,3 +203,5 @@ outcomes. `mdp_v1` frames travel inside existing `Talk`/`Ask`/`Tell` delivery
 only (thirteen semantic fields, fourteen parts, 256 characters, at most four
 relations); delivery proves the speaker and declared provenance is untrusted.
 See [migration and displacement](migration-displacement.md).
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

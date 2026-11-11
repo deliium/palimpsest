@@ -14,7 +14,7 @@ conditions are derived objective facts. There is no abstract planner, grid,
 coordinate, owner, crew, nation, or route/civilization score. Agents never read
 `WorldState` or a global route table.
 
-Counts stay **14 V4 contexts / 12 V4 flags / six owned**. `runner-config-v56`
+Counts stay **14 V4 contexts / 12 V4 flags / eight owned**. `runner-config-v56`
 stays accepted; there is no `runner-config-v57`.
 
 ## Activation
@@ -104,7 +104,7 @@ civilization-capacity claim.
 ## Pins
 
 Runner v4/v55/v56; result v2/v3; **43** commands; **73** observer semantic types;
-**204** metric families; 14 V4 contexts / 12 V4 flags / six owned; replay-v27 /
+**204** metric families; 14 V4 contexts / 12 V4 flags / eight owned; replay-v27 /
 codec `v25` when active; `/v1`; `observer-protocol-v1`; Alembic `0017`.
 
 ## Verification
@@ -113,3 +113,5 @@ Python unit/architecture, static, snapshot, movement, perception, cognition,
 checkpoint/replay, metric, and end-to-end lanes are exercised by the plan bundle.
 Env-gated Compose/browser, PostgreSQL integration, Godot, and benchmark lanes are
 recorded in the plan's verification receipt as pass or explicitly `unexecuted`.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

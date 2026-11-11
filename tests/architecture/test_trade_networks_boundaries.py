@@ -94,6 +94,7 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
             "organized_conflict",
             "infrastructure_networks",
         "supply_chains",
+        "markets_credit",
         }
     )
 
@@ -117,10 +118,10 @@ def test_no_v57_or_new_flag_reference() -> None:
 
 def test_metric_catalog_is_204() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 204
-    assert len(specs) == 204
+    assert METRIC_FAMILY_COUNT == 208
+    assert len(specs) == 208
     assert [spec.family_id.value for spec in specs[192:198]] == list(TRADE_FAMILIES)
-    assert [spec.family_id.value for spec in specs[-6:]] == [
+    assert [spec.family_id.value for spec in specs[198:204]] == [
         "supply_chain_structure",
         "supply_dependency_graph",
         "supply_bottleneck_pressure",

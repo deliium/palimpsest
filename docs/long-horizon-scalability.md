@@ -337,3 +337,5 @@ trait appearance produces earlier zero rows rather than a truncated history.
   replay.
 - [Research UI](research-ui.md) — paging controls, coverage and scope safety.
 - [Read-only observer](observer.md) — bounded playback and catch-up semantics.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

@@ -158,3 +158,5 @@ valid research outcome.
 - [Analysis metrics](analysis-metrics.md)
 - [Experiments](experiments.md)
 - [Architecture](architecture.md)
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

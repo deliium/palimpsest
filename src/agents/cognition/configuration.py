@@ -92,6 +92,11 @@ from agents.cognition.legal_disputes import (
     default_dispute_policy,
 )
 from agents.cognition.loop import CognitiveLoop
+from agents.cognition.market_institutions import (
+    MARKET_INSTITUTIONS_POLICY_VERSION,
+    MarketInstitutionPolicy,
+    default_market_institution_policy,
+)
 from agents.cognition.mediation import (
     MediationPolicy,
     default_mediation_policy,
@@ -462,6 +467,17 @@ class CognitionOrganizationMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionMarketMode(StrEnum):
+    """Owner-scoped market-like institution beliefs. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.markets_credit``. This is a
+    cognition mode, not a capability flag.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionFormalRuleMode(StrEnum):
     """Owner-scoped formal social rules. Disabled allocates nothing.
 
@@ -739,6 +755,8 @@ class CognitionLoopConfig:
     organization_concept_policy: OrganizationConceptPolicy | None = None
     organization_operation_policy: OrganizationOperationPolicy | None = None
     organization_agency_policy: OrganizationAgencyPolicy | None = None
+    market_institution_mode: CognitionMarketMode = CognitionMarketMode.DISABLED
+    market_institution_policy: MarketInstitutionPolicy | None = None
     formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
     formal_rule_policy: FormalRulePolicy | None = None
     dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
@@ -1328,6 +1346,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "organization_agency_policy must be OrganizationAgencyPolicy or None"
             )
+        if type(self.market_institution_mode) is not CognitionMarketMode:
+            _LOG.error(
+                "invalid_enum path=market_institution_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "market_institution_mode must be CognitionMarketMode"
+            )
+        if self.market_institution_mode is CognitionMarketMode.DISABLED:
+            object.__setattr__(self, "market_institution_policy", None)
+        elif self.market_institution_policy is None:
+            object.__setattr__(
+                self,
+                "market_institution_policy",
+                default_market_institution_policy(),
+            )
+        elif type(self.market_institution_policy) is not MarketInstitutionPolicy:
+            _LOG.error(
+                "invalid_enum path=market_institution_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "market_institution_policy must be MarketInstitutionPolicy or None"
+            )
         if type(self.formal_rule_mode) is not CognitionFormalRuleMode:
             _LOG.error("invalid_enum path=formal_rule_mode reason_code=invalid_mode")
             raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
@@ -1772,6 +1812,13 @@ class CognitionLoopConfig:
                 if self.organization_agency_policy is not None
                 else None
             )
+        if self.market_institution_mode is CognitionMarketMode.DETERMINISTIC:
+            material["market_institution_mode"] = self.market_institution_mode.value
+            material["market_institution_policy_version"] = (
+                MARKET_INSTITUTIONS_POLICY_VERSION
+                if self.market_institution_policy is not None
+                else None
+            )
         if self.formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC:
             material["formal_rule_mode"] = self.formal_rule_mode.value
             material["formal_rule_policy_version"] = (
@@ -2082,6 +2129,8 @@ def build_cognitive_loop(
         organization_concept_policy=resolved.organization_concept_policy,
         organization_operation_policy=resolved.organization_operation_policy,
         organization_agency_policy=resolved.organization_agency_policy,
+        market_institution_mode=resolved.market_institution_mode,
+        market_institution_policy=resolved.market_institution_policy,
         formal_rule_mode=resolved.formal_rule_mode,
         formal_rule_policy=resolved.formal_rule_policy,
         dispute_mode=resolved.dispute_mode,

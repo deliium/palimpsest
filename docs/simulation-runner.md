@@ -211,3 +211,5 @@ runtime state. Checkpoint round-trips are runtime-object equality and required
 for fork isolation; they do not claim durable process restart or subjective
 replay. Objective events and durable snapshots remain a separate contract. See `docs/configuration.md` for
 `runner-config-v50` and `species_default_offices_v1`.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 204
+METRIC_FAMILY_COUNT: Final[int] = 208
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -279,6 +279,10 @@ class MetricFamilyId(StrEnum):
     SUPPLY_RESOURCE_TOOL_DEPENDENCY = "supply_resource_tool_dependency"
     SUPPLY_LOCATION_INFRASTRUCTURE_RELIANCE = "supply_location_infrastructure_reliance"
     SUPPLY_ORGANIZATION_COORDINATION = "supply_organization_coordination"
+    MARKET_VENUE_RECURRENCE = "market_venue_recurrence"
+    MARKET_VENUE_PERSISTENCE = "market_venue_persistence"
+    MARKET_EXPECTATION_STRUCTURE = "market_expectation_structure"
+    MARKET_ROLE_STRUCTURE = "market_role_structure"
 
 
 class DenominatorKind(StrEnum):
@@ -8862,6 +8866,54 @@ SUPPLY_ORGANIZATION_COORDINATION_KEYS: Final[tuple[str, ...]] = (
     "window_tick",
     "coverage",
 )
+MARKET_VENUE_RECURRENCE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "venue_count",
+    "gathering_count",
+    "recurring_venue_count",
+    "persistent_venue_count",
+    "mean_recurrence_milli",
+    "max_recurrence_milli",
+    "multi_party_gathering_count",
+    "coverage",
+)
+MARKET_VENUE_PERSISTENCE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "venue_count",
+    "active_venue_count",
+    "emerged_count",
+    "continued_count",
+    "transformed_count",
+    "split_count",
+    "merge_count",
+    "dissolved_count",
+    "rerouted_count",
+    "sustained_market_count",
+    "coverage",
+)
+MARKET_EXPECTATION_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "expectation_row_count",
+    "expected_venue_count",
+    "scheduled_venue_count",
+    "record_anchor_count",
+    "consistent_count",
+    "unresolved_count",
+    "inconsistent_count",
+    "not_applicable_count",
+    "expectation_coverage",
+    "record_coverage",
+)
+MARKET_ROLE_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "role_row_count",
+    "broker_like_count",
+    "recognized_role_count",
+    "claimed_role_count",
+    "venue_with_role_count",
+    "mean_counterparty_count_milli",
+    "role_coverage",
+)
 
 
 def _trade_spec(
@@ -9055,6 +9107,81 @@ def _spec_supply_organization_coordination() -> MetricSpecification:
         denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
         keys=SUPPLY_ORGANIZATION_COORDINATION_KEYS,
         opportunity="owner-local claim attribution only; no organization actor",
+    )
+
+
+def _market_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="market_institutions_window_tick",
+        deceased_policy="retain_committed_exchange_evidence",
+        zero_holding_policy="no_exchange_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="venue ids never create participant self-edges",
+        censoring_policy="unresolved owner rows remain partial",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_exchange_evidence",
+    )
+
+
+def _spec_market_venue_recurrence() -> MetricSpecification:
+    return _market_spec(
+        family_id=MetricFamilyId.MARKET_VENUE_RECURRENCE,
+        population="analytical_market_venues",
+        denominator="observed_venue_windows",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=MARKET_VENUE_RECURRENCE_KEYS,
+        opportunity="bounded recurrence counts; never a market score",
+    )
+
+
+def _spec_market_venue_persistence() -> MetricSpecification:
+    return _market_spec(
+        family_id=MetricFamilyId.MARKET_VENUE_PERSISTENCE,
+        population="analytical_market_lineage",
+        denominator="observed_market_states",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=MARKET_VENUE_PERSISTENCE_KEYS,
+        opportunity="closed lineage status counts; no composite persistence",
+    )
+
+
+def _spec_market_expectation_structure() -> MetricSpecification:
+    return _market_spec(
+        family_id=MetricFamilyId.MARKET_EXPECTATION_STRUCTURE,
+        population="owner_scoped_market_expectations",
+        denominator="observed_expectation_rows",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=MARKET_EXPECTATION_STRUCTURE_KEYS,
+        opportunity="researcher-only alignment counts; never cognition input",
+    )
+
+
+def _spec_market_role_structure() -> MetricSpecification:
+    return _market_spec(
+        family_id=MetricFamilyId.MARKET_ROLE_STRUCTURE,
+        population="owner_scoped_market_roles",
+        denominator="observed_role_rows",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=MARKET_ROLE_STRUCTURE_KEYS,
+        opportunity="owner-local role attribution only; no broker actor",
     )
 
 
@@ -9555,6 +9682,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_supply_resource_tool_dependency,
     _spec_supply_location_infrastructure_reliance,
     _spec_supply_organization_coordination,
+    _spec_market_venue_recurrence,
+    _spec_market_venue_persistence,
+    _spec_market_expectation_structure,
+    _spec_market_role_structure,
 )
 
 

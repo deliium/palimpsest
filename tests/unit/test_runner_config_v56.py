@@ -250,7 +250,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "markets_credit",
         "science",
         "epidemics",
         "ecological_feedback",

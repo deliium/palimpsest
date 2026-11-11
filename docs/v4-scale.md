@@ -58,3 +58,5 @@ Multi-scale presentation is a client-side vocabulary only
 (`observer.scale`): `agent`, `cohort`, `settlement`, `region`, `civilization`,
 with population thresholds and per-level row caps. The server performs no
 aggregation and exposes no LOD contract; both clients choose a level locally.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

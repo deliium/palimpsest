@@ -613,6 +613,7 @@ class AgentRuntimeCheckpoint:
     office_concepts: object | None = None
     organization_concepts: object | None = None
     organization_operations: object | None = None
+    market_institutions: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     disputes: object | None = None
@@ -785,6 +786,15 @@ class AgentRuntimeCheckpoint:
             self.organization_operations,
             self.agent_id,
             field_name="organization_operations",
+        )
+        from agents.cognition.market_institutions import (
+            require_owner_market_institutions,
+        )
+
+        require_owner_market_institutions(
+            self.market_institutions,
+            self.agent_id,
+            field_name="market_institutions",
         )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,

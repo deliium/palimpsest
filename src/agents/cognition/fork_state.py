@@ -59,6 +59,7 @@ class CognitiveLoopForkState:
     experiment_ledger: object | None
     prepared_organization_concepts: object | None = None
     prepared_organization_operations: object | None = None
+    prepared_market_institutions: object | None = None
     prepared_organization_agency: object | None = None
     prepared_formal_rules: object | None = None
     prepared_disputes: object | None = None
@@ -129,6 +130,15 @@ class CognitiveLoopForkState:
         if prepared is not None and type(prepared) is not MigrationDisplacementLedger:
             raise CognitiveLoopForkStateError(
                 "fork_state_invalid", "invalid prepared migration displacement"
+            )
+        from agents.cognition.market_institutions import (
+            MarketInstitutionLedger,
+        )
+
+        market = self.prepared_market_institutions
+        if market is not None and type(market) is not MarketInstitutionLedger:
+            raise CognitiveLoopForkStateError(
+                "fork_state_invalid", "invalid prepared market institutions"
             )
         biases = _tuple(
             "prepared_migration_displacement_biases",

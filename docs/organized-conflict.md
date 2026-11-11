@@ -129,3 +129,5 @@ structure damage, route closure, group-move command, new event, new command,
 write pair, observer semantic type, `/v2` route, or SQL migration exists.
 Physical structure damage and physical route closure require a separate plan
 that extends world semantics.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

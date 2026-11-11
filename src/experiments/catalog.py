@@ -2829,6 +2829,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "infrastructure_networks@1",
         "travel_network@1",
         "trade_networks@1",
+        "market_institutions@1",
         "supply_chains@1",
     }
 )
@@ -5662,6 +5663,25 @@ def experiment_trade_networks(
     )
     _LOG.info(
         "experiment_registered experiment_id=trade_networks@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_market_institutions(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-20 experiment: owner market-like institution beliefs."""
+    from experiments.market_institution_scenario import market_institution_scenario
+
+    definition = market_institution_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=market_institutions@1 arms=%s",
         len(definition.conditions),
     )
     return definition

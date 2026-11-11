@@ -190,3 +190,5 @@ they are not advertised as common-random-number isolation.
 - [Generational runner](generational-runner.md) — `runner-config-v55`, cohorts, archives, historical inspection
 - [Cultural evolution metrics](cultural-evolution-metrics.md) — repeated-seed blocks and paired contrasts
 - [Experiments](experiments.md) — trusted catalog, Matrix runner, off-gate experiment policy
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

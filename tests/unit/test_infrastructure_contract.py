@@ -47,6 +47,7 @@ _EXPECTED_OWNED = frozenset(
         "organized_conflict",
         "infrastructure_networks",
         "supply_chains",
+        "markets_credit",
     }
 )
 

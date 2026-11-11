@@ -55,10 +55,10 @@ ALIGNMENT_KEYS = (
 
 def test_catalog_is_160_unique_and_validated() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 204
-    assert len(specs) == 204
-    assert len({spec.family_id for spec in specs}) == 204
-    assert len(validate_metric_catalog()) == 204
+    assert METRIC_FAMILY_COUNT == 208
+    assert len(specs) == 208
+    assert len({spec.family_id for spec in specs}) == 208
+    assert len(validate_metric_catalog()) == 208
 
 
 def test_evidence_families_are_retained_before_representation() -> None:

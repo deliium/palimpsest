@@ -104,7 +104,7 @@ def test_pins_appear_exactly() -> None:
         "0017",
         "14 contexts",
         "12 flags",
-        "seven owned",
+        "eight owned",
         "EVENT_SCHEMA_REPLAY_V27",
         "v25",
         "/v1",
@@ -112,13 +112,13 @@ def test_pins_appear_exactly() -> None:
     ):
         assert token in page
     assert SUPPLY_CHAIN_ROUTE_COUNT == 7
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 7
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
 
 
 def test_architecture_and_configuration_surfaces() -> None:
     architecture = _read(".ai-factory/ARCHITECTURE.md")
     assert "### V4-19 supply-chain seam" in architecture
-    assert "204" in architecture
+    assert "208" in architecture
     project = _read("docs/architecture.md")
     assert "## V4-19 supply chains" in project
     configuration = _read("docs/configuration.md")

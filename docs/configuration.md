@@ -307,7 +307,7 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. The accepted set has five owned V4 flags that may construct
+closed `v4_capability_flags` sibling. The accepted set has eight owned V4 flags that may construct
 on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
 (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and
 `organized_conflict` (V4-12, requiring `diplomacy`). The other seven V4 flags
@@ -556,3 +556,12 @@ routes are read-only and bind the optional `window_index` filter into each
 cursor fingerprint. `supply_chains` itself activates no write pair:
 infrastructure-channel runs keep 23/`v21` and travel-channel runs keep
 27/`v25`. See [supply chains](supply-chains.md).
+
+### Market-like institutions (V4-20)
+
+`PALIMPSEST_MARKET_INSTITUTIONS_ROOT` and
+`PALIMPSEST_MARKET_INSTITUTIONS_CURSOR_KEY` (at least 32 UTF-8 bytes) are both
+required for the seven GET-only market-institution routes. Either setting missing
+yields `market_institutions_disabled`. No default deployment file sets them.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

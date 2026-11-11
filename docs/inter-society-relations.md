@@ -120,3 +120,5 @@ explicit unavailable state.
 - [Macro-societies](macro-societies.md): `msoc-` endpoints reused by ISR pairs
 - [Diplomacy](diplomacy.md): owner-scoped relations and lane metrics (distinct from ISR panels)
 - [Analysis metrics](analysis-metrics.md): catalog families including the four ISR appendages
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

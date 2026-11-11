@@ -223,7 +223,6 @@ def test_existing_unowned_v4_flag_still_fails_closed() -> None:
     flags = V4CapabilityFlags(organizations=True)
     assert flags.unimplemented_enabled_names() == ()
     for name in (
-        "markets_credit",
         "science",
         "epidemics",
         "ecological_feedback",

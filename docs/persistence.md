@@ -246,3 +246,5 @@ cumulative over v21: it carries infrastructure rows, optional regions/journeys,
 and bounded `travel_network` route rows. Route rows are required under v25 (an
 empty tuple is valid for an edgeless world) and rejected under v21. Old v21 and
 v19 checkpoints remain decodable. Alembic head stays **0017**.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

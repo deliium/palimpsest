@@ -231,3 +231,5 @@ fields are rejected as a whole rather than partially rendered. Enabling the
 corridor layer also fetches the read-only summary, and every trade fetch forwards
 the overlay's currently selected `window_index` when one is set. The overlay never
 advances the simulation.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

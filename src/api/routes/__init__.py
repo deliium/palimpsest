@@ -22,6 +22,9 @@ from api.routes.inter_society_relations import (
 )
 from api.routes.lineage import router as lineage_router
 from api.routes.macro_society import router as macro_society_router
+from api.routes.market_institutions import (
+    router as market_institutions_router,
+)
 from api.routes.migration_displacement import (
     router as migration_displacement_router,
 )
@@ -55,6 +58,7 @@ __all__ = [
     "inter_society_relations_router",
     "lineage_router",
     "macro_society_router",
+    "market_institutions_router",
     "migration_displacement_router",
     "observer_router",
     "observer_stream_router",

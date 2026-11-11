@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 204 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, and six V4-19 supply-chain families) |
+| Metric families | 208 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, and six V4-19 supply-chain families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -1059,7 +1059,7 @@ stores `trade-networks-store-v1` atomically; seven GET-only
 `/v1/simulations/{run_id}/trade-networks` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `trade_networks_disabled`; the Research UI and Godot observer
 render read-only analytical rows. Six trade-network metric families append the
-catalog to **204 metric families**; observer semantics stay **73**, commands
+catalog to **208 metric families**; observer semantics stay **73**, commands
 **43**, replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate
 experiment is `trade_networks@1`. See `docs/trade-networks.md`.
 
@@ -1068,7 +1068,7 @@ experiment is `trade_networks@1`. See `docs/trade-networks.md`.
 
 V4-19 owns the declared `supply_chains` V4 context on the accepted
 `runner-config-v56` seam; it adds no V4 context, flag slot, `runner-config-v57`,
-root field, or per-agent key. Counts are 14 contexts / 12 flags / seven owned /
+root field, or per-agent key. Counts are 14 contexts / 12 flags / eight owned /
 five unowned. `world.supply_chain` owns the locked `supply-chains.v1` stage
 contract, `SUPPLY_CHAIN_RECIPES`, catalog validation, and the `STRIKE` harvest
 probability helper. The legacy six-recipe `example_production_catalog()` and its
@@ -1091,6 +1091,27 @@ stores `supply-chains-store-v1` atomically; seven GET-only
 `/v1/simulations/{run_id}/supply-chains` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `supply_chains_disabled`; the Research UI adds a read-only
 panel and no Godot overlay. Six supply-chain metric families append the catalog
-to **204 metric families**; observer semantics stay **73**, commands **43**,
+to **208 metric families**; observer semantics stay **73**, commands **43**,
 replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate experiment is
 `supply_chains@1`. See `docs/supply-chains.md`.
+
+### V4-20 market-like institution seam
+
+`markets_credit` is the eighth owned V4 capability flag on the accepted
+`runner-config-v56` seam; no `runner-config-v57`, root field, per-agent key,
+command, event, observer semantic type, write pair, `/v2` route, or migration is
+added. One owner keeps a bounded `market-institutions.v1` ledger of own-observed
+exchange venues, meeting expectations, schedules, emergent broker-like role
+claims, and opaque record anchors. Exchange primitives are unchanged. Bounded
+`mkt_v1` frames travel inside existing speech; the only command-producing path
+replaces `Wait` with one observed adjacent `Move`. Detached
+`analysis.market_institutions_*` reconstructs gatherings, venues, market
+candidates, participation, owner joins, researcher-only alignment, and
+forward-only lineage from committed events only. Four families append the catalog
+to 208. `market-institutions-snapshot-v1` and `market-institutions-store-v1`
+publish opt-in and atomically; seven GET-only routes require `SUBJECTIVE_DEBUG`.
+No global Market object, authoritative price, money, credit, debt, planner,
+quota, or allocation exists. See `docs/market-like-institutions.md`.
+
+four remain unowned (`science`, `epidemics`, `ecological_feedback`,
+`disasters`); `markets_credit` is owned by V4-20.

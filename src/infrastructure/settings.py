@@ -249,6 +249,10 @@ class Settings(BaseSettings):
     trade_networks_cursor_key: SecretStr | None = Field(default=None, repr=False)
     supply_chains_root: Path | None = None
     supply_chains_cursor_key: SecretStr | None = Field(default=None, repr=False)
+    market_institutions_root: Path | None = None
+    market_institutions_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -438,6 +442,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "supply_chains cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("market_institutions_cursor_key")
+    @classmethod
+    def validate_market_institutions_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "market_institutions cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -812,6 +827,19 @@ class Settings(BaseSettings):
             ),
             "supply_chains_cursor_enabled": (
                 self.supply_chains_cursor_key is not None
+            ),
+            "has_market_institutions_root": (
+                self.market_institutions_root is not None
+            ),
+            "has_market_institutions_cursor_key": (
+                self.market_institutions_cursor_key is not None
+            ),
+            "market_institutions_enabled": (
+                self.market_institutions_root is not None
+                and self.market_institutions_cursor_key is not None
+            ),
+            "market_institutions_cursor_enabled": (
+                self.market_institutions_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

@@ -58,10 +58,10 @@ def _digest(specs: Sequence[MetricSpecification]) -> str:
 
 def test_catalog_count_is_184() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 204
-    assert len(specs) == 204
-    assert len(validate_metric_catalog()) == 204
-    assert len({spec.family_id for spec in specs}) == 204
+    assert METRIC_FAMILY_COUNT == 208
+    assert len(specs) == 208
+    assert len(validate_metric_catalog()) == 208
+    assert len({spec.family_id for spec in specs}) == 208
 
 
 def test_four_isr_families_are_last_and_distinct_from_lanes() -> None:

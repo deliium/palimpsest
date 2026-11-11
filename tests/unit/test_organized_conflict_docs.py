@@ -33,15 +33,15 @@ def test_canonical_contract_names_all_operations_and_bounds() -> None:
 
 
 def test_current_pins_are_176_and_five_owned() -> None:
-    assert "Closed catalog cardinality: **204**" in _read("docs/analysis-metrics.md")
-    assert "204" in _read("docs/analysis-metrics.md")
-    assert "204 metric families" in _read("docs/architecture.md")
-    assert "204" in _read("docs/architecture.md")
-    assert "204 metric families" in _read(".ai-factory/ARCHITECTURE.md")
-    assert "204" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "Closed catalog cardinality: **208**" in _read("docs/analysis-metrics.md")
+    assert "208" in _read("docs/analysis-metrics.md")
+    assert "208 metric families" in _read("docs/architecture.md")
+    assert "208" in _read("docs/architecture.md")
+    assert "208 metric families" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "208" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/DESCRIPTION.md")
-    assert "five owned V4 flags" in _read("docs/configuration.md")
+    assert "eight owned V4 flags" in _read("docs/configuration.md")
 
 
 def test_routes_settings_and_links_are_documented() -> None:
@@ -62,4 +62,4 @@ def test_no_stale_four_owned_statement_remains() -> None:
         "docs/configuration.md",
         "docs/v4-architecture.md",
     ):
-        assert "Four V4 flags are owned" not in _read(path)
+        assert "Eight V4 flags are owned" not in _read(path)

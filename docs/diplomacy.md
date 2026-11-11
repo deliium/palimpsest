@@ -13,7 +13,7 @@ score.
 V4-10 owns the declared `diplomacy` V4 context on the accepted
 `runner-config-v56` seam. It is the fourth owned V4 flag alongside
 `organizations`, `formal_rules`, and `legal_disputes`; V4-12 adds
-`organized_conflict` as the fifth, leaving seven V4 flags unowned and fail
+`organized_conflict` as the fifth, leaving four V4 flags unowned and fail
 closed. Activation is exactly
 `v4_capability_flags.diplomacy = true` on `runner-config-v56`; there is no
 `runner-config-v57`, runner root field, or per-agent runner key.
@@ -289,3 +289,5 @@ Border agreements may reference a treaty anchor read-only from the owner's own
 diplomacy ledger. The treaty contract is never rewritten, and an absent
 diplomacy ledger leaves anchors unresolved. See
 [borders and claims](borders-and-claims.md).
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

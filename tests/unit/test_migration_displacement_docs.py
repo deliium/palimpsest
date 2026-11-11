@@ -36,7 +36,7 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_180_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **204**" in metrics
+    assert "Closed catalog cardinality: **208**" in metrics
     for family in (
         "migration_wave_structure@1",
         "migration_cause_evidence@1",
@@ -44,8 +44,8 @@ def test_metric_doc_pins_180_and_four_families() -> None:
         "migration_integration_outcome@1",
     ):
         assert family in metrics
-    assert "204" in metrics
-    assert "from 176 to\n**180**" in metrics or "204" in metrics
+    assert "208" in metrics
+    assert "from 176 to\n**180**" in metrics or "208" in metrics
     assert "first\n176 families" in metrics or "first 204 families" in metrics
 
 
@@ -97,10 +97,10 @@ def test_ui_and_overlay_docs_cover_four_layers() -> None:
 
 def test_v4_architecture_baseline_uses_current_pins() -> None:
     v4 = _read("docs/v4-architecture.md")
-    assert "| Metric catalog | 204 families" in v4
+    assert "| Metric catalog | 208 families" in v4
     assert "six GET routes under `/v1/simulations/{run_id}/migration`" in v4
-    assert "204" in v4
-    assert "204" in v4
+    assert "208" in v4
+    assert "208" in v4
 
 
 def test_configuration_and_contract_docs() -> None:
@@ -119,13 +119,13 @@ def test_configuration_and_contract_docs() -> None:
     factory = _read(".ai-factory/ARCHITECTURE.md")
     assert "through V4-18" in factory
     assert "migration-displacement.md" in factory
-    assert "204" in factory
+    assert "208" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Migration and displacement (V4-14)" in description
-    assert "204 metric families" in description  # V4-14 landing pin
-    assert "204 metric families" in description
-    assert "catalog 204" in description
-    assert "catalog 204" in description
+    assert "208 metric families" in description  # V4-14 landing pin
+    assert "208 metric families" in description
+    assert "catalog 208" in description
+    assert "catalog 208" in description
 
 
 def test_no_forbidden_authority_wording_in_canonical_doc() -> None:
@@ -142,13 +142,13 @@ def test_no_forbidden_authority_wording_in_canonical_doc() -> None:
 
 def test_current_pin_guard_preserves_historical_176() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **204**" in metrics
-    assert "204" in metrics
-    assert "from 176 to\n**180**" in metrics or "204" in metrics
+    assert "Closed catalog cardinality: **208**" in metrics
+    assert "208" in metrics
+    assert "from 176 to\n**180**" in metrics or "208" in metrics
     assert "Closed catalog cardinality: **176**" not in metrics
     factory = _read(".ai-factory/ARCHITECTURE.md")
     assert "through V4-18" in factory
     assert "through V4-13" not in factory
-    assert "204" in factory
-    assert "204" in factory
-    assert "| Metric families | 204" in factory
+    assert "208" in factory
+    assert "208" in factory
+    assert "| Metric families | 208" in factory

@@ -463,6 +463,7 @@ class AgentRuntime:
         "_invocation_ids",
         "_last_observation_key",
         "_loop",
+        "_market_institutions",
         "_mediation",
         "_memory_reader",
         "_memory_service",
@@ -627,6 +628,7 @@ class AgentRuntime:
         self._office_concepts: object | None = None
         self._organization_concepts: object | None = None
         self._organization_operations: object | None = None
+        self._market_institutions: object | None = None
         self._organization_agency: object | None = None
         self._formal_rules: object | None = None
         self._disputes: object | None = None
@@ -1347,6 +1349,41 @@ class AgentRuntime:
             "organization_operations_carried owner_id=%s concepts=%s tick=%s",
             owner.value,
             len(ledger.concepts),
+            tick,
+        )
+
+    def _commit_market_institutions(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionMarketMode
+        from agents.cognition.market_institutions import MarketInstitutionLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_market_institution_mode",
+            CognitionMarketMode.DISABLED,
+        )
+        if mode is not CognitionMarketMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionMarketMode.DETERMINISTIC:
+                if self._market_institutions is not None:
+                    _LOG.warning(
+                        "market_institution_checkpoint_cleared "
+                        "reason_code=channel_disabled"
+                    )
+                self._market_institutions = None
+            return
+        if type(ledger) is not MarketInstitutionLedger:
+            raise TypeError(
+                "market_institutions must be MarketInstitutionLedger"
+            )
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._market_institutions = ledger
+        _LOG.debug(
+            "market_institutions_carried venues=%s tick=%s",
+            len(ledger.venues),
             tick,
         )
 
@@ -2538,6 +2575,7 @@ class AgentRuntime:
                 office_concepts=self._office_concepts,
                 organization_concepts=self._organization_concepts,
                 organization_operations=self._organization_operations,
+                market_institutions=self._market_institutions,
                 organization_agency=self._organization_agency,
                 formal_rules=self._formal_rules,
                 disputes=self._disputes,
@@ -3033,6 +3071,10 @@ class AgentRuntime:
         )
         self._commit_organization_operations(
             getattr(pending.loop_result, "organization_operations", None),
+            pending.tick,
+        )
+        self._commit_market_institutions(
+            getattr(pending.loop_result, "market_institutions", None),
             pending.tick,
         )
         self._commit_organization_agency(
@@ -3624,6 +3666,18 @@ class AgentRuntime:
         self._organization_operations = getattr(
             checkpoint, "organization_operations", None
         )
+        self._market_institutions = getattr(
+            checkpoint, "market_institutions", None
+        )
+        if (
+            self._market_institutions is not None
+            and getattr(self._market_institutions, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._organization_operations is not None
             and getattr(self._organization_operations, "owner_id", None)
@@ -3803,6 +3857,7 @@ class AgentRuntime:
             office_concepts=self._office_concepts,
             organization_concepts=self._organization_concepts,
             organization_operations=self._organization_operations,
+            market_institutions=self._market_institutions,
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
             disputes=self._disputes,

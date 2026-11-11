@@ -356,3 +356,5 @@ cross-society flows, and analytical network lineage. It provides a
 `window_index` selector and shows an explicit disabled message on
 `trade_networks_disabled` plus an empty state without inventing a network. It
 never displays price, money, a composite trade score, or a planned route.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

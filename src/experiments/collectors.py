@@ -349,6 +349,32 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("supply_chain_collector_missing_events")
+    if events is not None:
+        try:
+            from experiments.market_institutions_completed_run import (
+                build_completed_run_market_institutions_analysis,
+            )
+
+            market_analysis = build_completed_run_market_institutions_analysis(
+                arm.runner_result,
+                committed_events=events,
+                run_id=arm.assignment.run_id.value,
+                input_revision=arm.config_fingerprint[:32] or "rev-run",
+            )
+            inputs = replace(
+                inputs, market_institutions_analysis=market_analysis
+            )
+            _LOG.debug(
+                "market_institutions_collector_injected coverage=%s",
+                market_analysis.coverage.value,
+            )
+        except Exception as exc:
+            _LOG.error(
+                "market_institutions_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("market_institutions_collector_missing_events")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

@@ -385,7 +385,7 @@ def test_exactly_six_get_routes_require_subjective_debug() -> None:
 def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 7
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -395,6 +395,7 @@ def test_no_new_flag_context_or_v57() -> None:
             "organized_conflict",
             "infrastructure_networks",
         "supply_chains",
+        "markets_credit",
         }
     )
     offenders = [
@@ -409,9 +410,9 @@ def test_no_new_flag_context_or_v57() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert METRIC_FAMILY_COUNT == 204
+    assert METRIC_FAMILY_COUNT == 208
     specs = all_metric_specifications()
-    assert len(specs) == 204
+    assert len(specs) == 208
     assert tuple(spec.family_id.value for spec in specs[176:180]) == MIGRATION_FAMILIES
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

@@ -58,6 +58,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Travel network | `docs/travel-network.md` | V4-17 route conditions, write pair 27/`v25`, movement enforcement, fallible route beliefs, snapshot v2 |
 | Trade networks | `docs/trade-networks.md` | V4-18 event-sourced flows, directed corridors, dependence, major exchange locations, network lineage, snapshot and seven GET routes |
 | Supply chains | `docs/supply-chains.md` | V4-19 multi-stage production chains, dependency graph, bottlenecks, lineage, snapshot and seven GET routes |
+| Market-like institutions | `docs/market-like-institutions.md` | V4-20 owner-scoped meetings, schedules, emergent roles and records, venue persistence, market lineage, snapshot and seven GET routes |
 | Regions and migration | `docs/regions-migration.md` | V3 regional travel substrate and V4-14 belief deepening |
 
 
@@ -104,6 +105,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Inter-society relations](docs/inter-society-relations.md) | Researcher-only `isr-` society-pair panels over `msoc-` endpoints, eight evidence domains, window time series, vectorial comparison, dual-gate publication, six GET-only routes and Research UI panel |
 | [Trade networks](docs/trade-networks.md) | Event-sourced food/material/tool/record/media flows, directed corridors, observed dependence, major exchange locations, cross-society flows, forward-only network lineage, `trade-networks-snapshot-v1`, seven GET-only routes and Research UI panel |
 | [Supply chains](docs/supply-chains.md) | Multi-stage production chain catalog, tool-assisted harvest, local stage readiness, ten dependency edge kinds, bounded chains and lineage, seven bottleneck kinds, `supply-chains-snapshot-v1`, seven GET-only routes and Research UI panel |
+| [Market-like institutions](docs/market-like-institutions.md) | Owner-observed exchange venues, meeting expectations, social schedules, emergent broker-like roles, record anchors, venue persistence, forward-only market lineage, `market-institutions-snapshot-v1`, seven GET-only routes and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 

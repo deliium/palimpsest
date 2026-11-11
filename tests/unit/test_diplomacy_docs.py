@@ -48,19 +48,19 @@ def test_canonical_contract_states_authority_and_non_goals() -> None:
 def test_docs_state_four_owned_and_eight_unowned() -> None:
     text = _doc()
     assert "fourth owned V4 flag" in text
-    assert "seven V4 flags unowned" in text
+    assert "four V4 flags unowned" in text
     architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "Four V4 flags are owned" in architecture
-    assert "eight remain" in architecture
+    assert "Eight V4 flags are owned" in architecture
+    assert "four remain" in architecture
     configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
-    assert "five owned V4 flags" in configuration
+    assert "eight owned V4 flags" in configuration
     assert "other seven V4 flags" in configuration
 
 
 def test_catalog_and_families_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 204
+    assert METRIC_FAMILY_COUNT == 208
     metrics = (ROOT / "docs" / "analysis-metrics.md").read_text(encoding="utf-8")
-    assert "Closed catalog cardinality: **204**" in metrics
+    assert "Closed catalog cardinality: **208**" in metrics
     for family in (
         "diplomatic_contact_structure@1",
         "diplomatic_instrument_outcomes@1",
@@ -96,7 +96,7 @@ def test_agent_context_artifacts_state_v4_10() -> None:
     assert "V4-10" in description
     assert "V4-10 diplomacy seam" in architecture
     assert "`diplomacy`" in description
-    assert "eight remain" in architecture
+    assert "four remain" in architecture
 
 
 def test_no_current_document_claims_diplomacy_is_unowned() -> None:

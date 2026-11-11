@@ -120,3 +120,5 @@ Godot presentation labels (Observed…Acted, expanded chain names, artifact-kind
 
 
 For paginated historical graph navigation, see [Historical lineage explorer](lineage-explorer.md).
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

@@ -102,3 +102,5 @@ strengths before ordinary office/memory preparation. Accepted v54 memory
 profiles remain decay-disabled. Missing or damaged records do not delete
 already acquired entries, and occupant succession never copies them. See
 [Institutional decay](institutional-decay.md).
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

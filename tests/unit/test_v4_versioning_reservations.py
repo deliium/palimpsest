@@ -110,7 +110,7 @@ def test_deepening_pair_mutations_are_rejected() -> None:
         )
     with pytest.raises(ValueError, match="v4_deepening_pair_unowned_context"):
         validate_deepening_write_pairs(
-            (replace(pair, context_id=V4ContextId.MARKETS_CREDIT),)
+            (replace(pair, context_id=V4ContextId.SCIENCE),)
         )
 
 

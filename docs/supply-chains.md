@@ -8,7 +8,7 @@ V4-19 owns the declared `supply_chains` V4 context and extends V3 crafting into
 bounded multi-stage production chains. Dependencies cover resources, skills,
 tools, locations, infrastructure, and organizations. Agents and organizations
 plan locally; there is no central planner, optimizer, quota, price, money, or
-automatic allocation. Counts are 14 contexts / 12 flags / seven owned / five
+automatic allocation. Counts are 14 contexts / 12 flags / eight owned / five
 unowned. `runner-config-v56` is the only V4 runner schema and supply_chains
 adds no write pair.
 
@@ -119,7 +119,7 @@ exists.
 
 ## Verification
 
-Pins: 43 commands, 73 observer semantic types, 204 metric families,
+Pins: 43 commands, 73 observer semantic types, 208 metric families,
 `EVENT_SCHEMA_REPLAY_V27`, codec `v25`, Alembic `0017`, `/v1`, and
 `observer-protocol-v1`. The off-gate experiment `supply_chains@1` compares a
 legacy-catalog control with an extended-catalog treatment.
@@ -130,3 +130,5 @@ legacy-catalog control with an extended-catalog treatment.
 - [Infrastructure networks](infrastructure-networks.md) — venue and capacity evidence
 - [Analysis metrics](analysis-metrics.md)
 - [Configuration](configuration.md)
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

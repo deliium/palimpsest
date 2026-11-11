@@ -255,3 +255,5 @@ keeps a private migration-displacement ledger. Organization and related anchors
 resolve read-only from the owner's own ledgers and are never rewritten. Physical
 movement stays ordinary world admission. See
 [migration and displacement](migration-displacement.md).
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

@@ -159,9 +159,9 @@ def _beliefs(*recipe_ids: str) -> RecipeBeliefSet:
     )
 
 
-def test_flag_is_owned_counts_are_seven() -> None:
+def test_flag_is_owned_counts_are_eight() -> None:
     assert "supply_chains" in compatibility.V4_OWNED_CAPABILITY_FLAGS
-    assert len(compatibility.V4_OWNED_CAPABILITY_FLAGS) == 7
+    assert len(compatibility.V4_OWNED_CAPABILITY_FLAGS) == 8
     flags = V4CapabilityFlags(supply_chains=True)
     assert flags.owned_enabled_names() == ("supply_chains",)
     assert flags.unimplemented_enabled_names() == ()

@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **204** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **208** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -735,3 +735,16 @@ order, versions, and value keys. They read only the optional detached
 `supply_chain_analysis` input and emit counts, integer milli ratios,
 availability, and per-family coverage. No composite supply score, optimizer, or
 planner exists. See [supply chains](supply-chains.md).
+
+### Market-like institutions (V4-20)
+
+Four families append the catalog from 204 to **208**:
+`market_venue_recurrence@1`, `market_venue_persistence@1`,
+`market_expectation_structure@1`, and `market_role_structure@1`. They report
+counts, availability, closed status/alignment tokens, and integer milli ratios
+only. `market_venue_persistence` is the only family that reports
+emerged/continued/transformed/split/merge/dissolved counts. No composite
+persistence score, price, money, ranking, severity, recommendation, allocation,
+or quota exists.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

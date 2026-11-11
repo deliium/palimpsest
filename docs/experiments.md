@@ -592,3 +592,5 @@ artifacts yield `failed`. Receipts never contain claim text, party sets,
 evidence ids, rule ids, mediation ids, resolution terms, prompts, or
 credentials. See [Disputes](disputes.md) and
 [Persistence](persistence.md).
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

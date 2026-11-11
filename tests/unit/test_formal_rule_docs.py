@@ -55,12 +55,12 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "docs/formal-rules.md" in (ROOT / "README.md").read_text()
     description = (ROOT / ".ai-factory" / "DESCRIPTION.md").read_text()
     assert "V4-06" in description
-    assert "metric families 204" in description
+    assert "metric families 208" in description
 
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     assert "V4-06 formal rules seam" in architecture
     assert "V4-07 dispute resolution seam" in architecture
-    assert "204 metric families" in architecture
+    assert "208 metric families" in architecture
     assert "Owned V4 flags" in architecture
     assert "`formal_rules`" in architecture
 
@@ -72,7 +72,7 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
 
 def test_configuration_documents_four_owned_and_eight_unowned_flags() -> None:
     text = (ROOT / "docs" / "configuration.md").read_text()
-    assert "five owned V4 flags" in text
+    assert "eight owned V4 flags" in text
     assert "`organizations`" in text
     assert "`formal_rules`" in text
     assert "other seven V4 flags" in text

@@ -223,3 +223,5 @@ a successful cross-region `Fled`, it follows the committed relocation. Same-regi
 relocations, empty destinations, failed/waiting/timed-out journeys, failed flee,
 and contact-disabled runs emit nothing. The present set contains living
 non-participants only and is disjoint from the sorted participant set.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

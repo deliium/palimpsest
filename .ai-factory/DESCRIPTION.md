@@ -575,7 +575,7 @@ seven GET-only dual-gated infrastructure routes include `/routes`. Four metric
 families append 188 -> 192 metric families; V4-18 later appends six families to 204; observer semantics stay 73, commands 43,
 runner v4/v55/v56, result v2/v3, replay-v27/codec v25 when active, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Off-gate experiment
-`travel_network@1` is registered; 14 V4 contexts / 12 flags / six owned remain.
+`travel_network@1` is registered; 14 V4 contexts / 12 flags / eight owned remain.
 
 Trade networks (V4-18) deepen the owned `infrastructure_networks` context, the V3
 `multi_polity_migration` / `regions_migration` seam, and the V3 exchange/valuation
@@ -592,8 +592,8 @@ Research UI adds a read-only panel and the Godot observer adds four analytical
 overlays. Off-gate experiment `trade_networks@1` is registered. No centralized
 routing, planner, quota, allocation, price, money, currency, or registry exists.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-204 metric families, 14 V4 contexts, 12 V4 flags, seven owned, replay-v27/codec
-`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 204; the current catalog is 204 families (catalog 204).
+208 metric families, 14 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
+`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 208; the current catalog is 208 families (catalog 208).
 
 Supply chains (V4-19) own the declared `supply_chains` V4 context on the
 accepted `runner-config-v56` seam and add no context, flag slot,
@@ -614,5 +614,27 @@ Research UI adds a read-only panel and no Godot overlay. Off-gate experiment
 `supply_chains@1` is registered. No central planner, optimizer, quota,
 automatic allocation, price, money, currency, score, ranking, severity, or
 recommendation exists. Pins: 43 commands, 73 observer semantic types, 204
-metric families, 14 V4 contexts, 12 V4 flags, seven owned, replay-v27/codec
+metric families, 14 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
 `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+Market-like institutions (V4-20) own the declared `markets_credit` V4 context on
+the accepted `runner-config-v56` seam and add no context, flag slot,
+`runner-config-v57`, root field, per-agent key, command, event, observer semantic
+type, write pair, `/v2` route, or migration. One owner keeps a bounded
+`market-institutions.v1` ledger of own-observed exchange venues, meeting
+expectations, social schedules, emergent broker-like role claims, and opaque
+record anchors. Exchange remains `NegotiateExchange`/`ExchangeCompleted`; no
+price, money, credit, debt, allocation, quota, or planner exists. Bounded
+`mkt_v1` relations travel inside existing speech; the only command-producing path
+replaces `Wait` with one observed adjacent `Move`. Detached
+`analysis.market_institutions_*` reconstructs gatherings, venues, market
+candidates, participation, owner joins, researcher-only alignment, and
+forward-only lineage from committed events only. Four families append the catalog
+204 -> **208**. `market-institutions-snapshot-v1` and
+`market-institutions-store-v1` publish opt-in and atomically; seven GET-only
+`/v1/simulations/{run_id}/market-institutions` routes require `SUBJECTIVE_DEBUG`
+and fail closed with `market_institutions_disabled`; the Research UI adds a
+read-only panel and Godot adds no overlay. Off-gate experiment
+`market_institutions@1` is registered. Pins: 43 commands, 73 observer semantic
+types, 208 metric families, 14 V4 contexts, 12 V4 flags, eight owned / four
+unowned, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

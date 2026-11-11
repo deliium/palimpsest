@@ -1215,7 +1215,24 @@ class CommandPlanner:
                 ledger=prepared_conflict,
                 policy=organized_conflict_policy,
             )
+        from agents.cognition.market_institutions_actions import (
+            market_attendance_command,
+        )
         from agents.cognition.social_norms import norm_communicate_utterance
+
+        prepared_market_institutions = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "market_institutions", None)
+        )
+        command = market_attendance_command(
+            command,
+            owner_id=owner,
+            tick=tick,
+            observation=loop_input.observation,
+            ledger=prepared_market_institutions,
+            policy=None,
+        )
 
         prepared_norms = social_norms
         if prepared_norms is None and snapshot is not None:
@@ -1372,6 +1389,18 @@ class CommandPlanner:
         )
         command = organization_operation_communicate_utterance(
             command, prepared_operations
+        )
+        from agents.cognition.market_institutions_communication import (
+            market_communicate_utterance,
+        )
+
+        prepared_market_utterance = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "market_institutions", None)
+        )
+        command = market_communicate_utterance(
+            command, prepared_market_utterance
         )
         from agents.cognition.organization_agency_communication import (
             organization_agency_communicate_utterance,

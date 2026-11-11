@@ -80,3 +80,5 @@ uv run --frozen --python 3.12.14 pytest \
   tests/architecture/test_benchmark_suite_isolation.py \
   -q
 ```
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

@@ -103,6 +103,13 @@ from analysis.macro_society_metrics import (
     compute_macro_society_membership_dispute_metric,
     compute_macro_society_structure_metric,
 )
+from analysis.market_institutions_analysis import MarketInstitutionsAnalysis
+from analysis.market_institutions_metrics import (
+    compute_market_expectation_structure,
+    compute_market_role_structure,
+    compute_market_venue_persistence,
+    compute_market_venue_recurrence,
+)
 from analysis.memory_drift import compute_memory_drift
 from analysis.memory_dynamics_metrics import compute_memory_dynamics
 from analysis.mentorship_metrics import (
@@ -379,6 +386,7 @@ class MetricComputationInputs:
     travel_network_analysis: InfrastructureNetworksAnalysis | None = None
     trade_networks_analysis: TradeNetworksAnalysis | None = None
     supply_chain_analysis: SupplyChainAnalysis | None = None
+    market_institutions_analysis: MarketInstitutionsAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2538,6 +2546,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("metric_families_assembled source=supply_chain families=6")
     else:
         _LOG.debug("supply_chain_metrics_disabled")
+    if inputs.market_institutions_analysis is not None:
+        market = inputs.market_institutions_analysis
+        _safe(
+            "market_venue_recurrence",
+            lambda: compute_market_venue_recurrence(
+                market, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "market_venue_persistence",
+            lambda: compute_market_venue_persistence(
+                market, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "market_expectation_structure",
+            lambda: compute_market_expectation_structure(
+                market, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "market_role_structure",
+            lambda: compute_market_role_structure(
+                market, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("market_institutions_metrics_emitted families=4 catalog=208")
+    else:
+        _LOG.debug("market_institutions_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

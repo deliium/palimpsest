@@ -100,3 +100,5 @@ be served only after a plan lands its frames, mirror pins, and client support.
   passing legacy decode test for the retired version.
 - Removing an accepted version is a compatibility break and needs an explicit,
   scoped architectural decision.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

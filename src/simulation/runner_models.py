@@ -321,9 +321,10 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 
 # V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
 # V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, V4-12 owns
-# ``organized_conflict``, V4-16 owns ``infrastructure_networks``, and V4-19 owns
-# ``supply_chains``; the remaining five V4 flags stay unowned and fail closed at
-# runtime construction until their behavior plans land and claim ownership.
+# ``organized_conflict``, V4-16 owns ``infrastructure_networks``, V4-19 owns
+# ``supply_chains``, and V4-20 owns ``markets_credit``; the remaining four V4
+# flags stay unowned and fail closed at runtime construction until their
+# behavior plans land and claim ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
         "organizations",
@@ -333,6 +334,7 @@ _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "organized_conflict",
         "infrastructure_networks",
         "supply_chains",
+        "markets_credit",
     }
 )
 
@@ -6394,6 +6396,7 @@ class SimulationRunnerResult:
     organization_concept_ledgers: tuple[object, ...] = ()
     organization_operation_ledgers: tuple[object, ...] = ()
     organization_agency_ledgers: tuple[object, ...] = ()
+    market_institution_ledgers: tuple[object, ...] = ()
     formal_rule_ledgers: tuple[object, ...] = ()
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
@@ -6864,6 +6867,36 @@ class SimulationRunnerResult:
             raise ValueError("migration_displacement_ledgers: invalid_order")
         object.__setattr__(
             self, "migration_displacement_ledgers", migration_ledgers
+        )
+        if isinstance(self.market_institution_ledgers, (set, frozenset)):
+            raise TypeError("market_institution_ledgers must be ordered")
+        if type(self.market_institution_ledgers) is not tuple:
+            raise TypeError("market_institution_ledgers must be ordered")
+        from agents.cognition.market_institutions import (
+            MarketInstitutionLedger,
+            require_owner_market_institutions,
+            validate_market_institution_caps,
+        )
+
+        typed_market: list[MarketInstitutionLedger] = []
+        for market_ledger in self.market_institution_ledgers:
+            if type(market_ledger) is not MarketInstitutionLedger:
+                raise TypeError("market_institution_ledgers: invalid_item")
+            require_owner_market_institutions(
+                market_ledger,
+                market_ledger.owner_id,
+                field_name="market_institution_ledgers",
+            )
+            validate_market_institution_caps(market_ledger)
+            typed_market.append(market_ledger)
+        market_ledgers = tuple(typed_market)
+        market_owners = [ledger.owner_id.value for ledger in market_ledgers]
+        if len(set(market_owners)) != len(market_owners) or (
+            market_owners != sorted(market_owners)
+        ):
+            raise ValueError("market_institution_ledgers: invalid_order")
+        object.__setattr__(
+            self, "market_institution_ledgers", market_ledgers
         )
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")

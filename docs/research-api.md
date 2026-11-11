@@ -404,3 +404,24 @@ bound into the 900-second purpose-bound cursor fingerprint. Unconfigured
 storage returns `503 trade_networks_disabled`; a corrupt payload returns
 `500 trade_networks_store_corrupt`; an absent run returns
 `404 trade_networks_run_not_found`. No trade route mutates state.
+
+### Market-like institutions (V4-20)
+
+Seven GET-only routes under `/v1/simulations/{run_id}/market-institutions` serve
+the published `market-institutions-snapshot-v1` artifact:
+
+- `/v1/simulations/{run_id}/market-institutions`
+- `/v1/simulations/{run_id}/market-institutions/venues`
+- `/v1/simulations/{run_id}/market-institutions/gatherings`
+- `/v1/simulations/{run_id}/market-institutions/expectations`
+- `/v1/simulations/{run_id}/market-institutions/roles`
+- `/v1/simulations/{run_id}/market-institutions/records`
+- `/v1/simulations/{run_id}/market-institutions/markets`
+
+All require `SUBJECTIVE_DEBUG` and the dual market-institution settings;
+`window_index` is bounded to `0..511`, default page size is 100, and maximum is
+500. Failure codes are `market_institutions_disabled`,
+`market_institutions_store_corrupt`, `market_institutions_cursor_invalid`, and
+`market_institutions_cursor_expired`.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

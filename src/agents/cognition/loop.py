@@ -352,6 +352,8 @@ class CognitiveLoop:
         "_last_developmental_audits",
         "_last_mentorship_audits",
         "_last_practical_knowledge_audits",
+        "_market_institution_mode",
+        "_market_institution_policy",
         "_max_open_interpretations",
         "_mediation_mode",
         "_mediation_policy",
@@ -378,6 +380,7 @@ class CognitiveLoop:
         "_prepared_evidence",
         "_prepared_formal_rules",
         "_prepared_institutional_decay",
+        "_prepared_market_institutions",
         "_prepared_migration_displacement",
         "_prepared_migration_displacement_biases",
         "_prepared_organization_agency",
@@ -518,6 +521,8 @@ class CognitiveLoop:
         organization_concept_policy: object | None = None,
         organization_operation_policy: object | None = None,
         organization_agency_policy: object | None = None,
+        market_institution_mode: object | None = None,
+        market_institution_policy: object | None = None,
         formal_rule_mode: object | None = None,
         formal_rule_policy: object | None = None,
         dispute_mode: object | None = None,
@@ -1035,6 +1040,35 @@ class CognitiveLoop:
         self._prepared_organization_concepts: object | None = None
         self._prepared_organization_agency: object | None = None
         self._prepared_organization_operations: object | None = None
+        from agents.cognition.configuration import CognitionMarketMode
+        from agents.cognition.market_institutions import (
+            MarketInstitutionPolicy,
+            default_market_institution_policy,
+        )
+
+        market_mode = (
+            CognitionMarketMode.DISABLED
+            if market_institution_mode is None
+            else market_institution_mode
+        )
+        if type(market_mode) is not CognitionMarketMode:
+            raise TypeError(
+                "market_institution_mode must be CognitionMarketMode"
+            )
+        if market_mode is CognitionMarketMode.DISABLED:
+            market_policy = None
+        else:
+            if market_institution_policy is None:
+                market_policy = default_market_institution_policy()
+            elif type(market_institution_policy) is not MarketInstitutionPolicy:
+                raise TypeError(
+                    "market_institution_policy must be MarketInstitutionPolicy"
+                )
+            else:
+                market_policy = market_institution_policy
+        self._market_institution_mode = market_mode
+        self._market_institution_policy = market_policy
+        self._prepared_market_institutions: object | None = None
         from agents.cognition.configuration import CognitionFormalRuleMode
         from agents.cognition.formal_rules import (
             FormalRulePolicy,
@@ -1651,6 +1685,7 @@ class CognitiveLoop:
             prepared_institutional_decay=self._prepared_institutional_decay,
             prepared_organization_concepts=self._prepared_organization_concepts,
             prepared_organization_operations=self._prepared_organization_operations,
+            prepared_market_institutions=self._prepared_market_institutions,
             prepared_organization_agency=self._prepared_organization_agency,
             prepared_formal_rules=self._prepared_formal_rules,
             prepared_disputes=self._prepared_disputes,
@@ -1708,6 +1743,7 @@ class CognitiveLoop:
         self._prepared_institutional_decay = state.prepared_institutional_decay
         self._prepared_organization_concepts = state.prepared_organization_concepts
         self._prepared_organization_operations = state.prepared_organization_operations
+        self._prepared_market_institutions = state.prepared_market_institutions
         self._prepared_organization_agency = state.prepared_organization_agency
         self._prepared_formal_rules = state.prepared_formal_rules
         self._prepared_disputes = state.prepared_disputes
@@ -2677,6 +2713,56 @@ class CognitiveLoop:
             len(updated.concepts),
             sum(len(item.decisions) for item in updated.concepts),
             sum(len(item.actions) for item in updated.concepts),
+        )
+        return updated
+
+    def _prepare_market_institutions(
+        self,
+        loop_input: CognitiveLoopInput,
+        organization_concepts: object | None,
+        offices: object | None,
+    ) -> object | None:
+        """Refresh one owner's market institution ledger from own evidence."""
+        from agents.cognition.configuration import CognitionMarketMode
+        from agents.cognition.market_institutions import (
+            MarketInstitutionLedger,
+            MarketInstitutionPolicy,
+            apply_market_institution_update,
+        )
+
+        if (
+            self._market_institution_mode
+            is not CognitionMarketMode.DETERMINISTIC
+        ):
+            self._prepared_market_institutions = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "market_institutions", None)
+        )
+        ledger = carried if type(carried) is MarketInstitutionLedger else None
+        policy = self._market_institution_policy
+        if type(policy) is not MarketInstitutionPolicy:
+            raise TypeError(
+                "market_institution_policy must be MarketInstitutionPolicy"
+            )
+        updated = apply_market_institution_update(
+            owner_id=loop_input.agent_id,
+            tick=loop_input.observation.tick,
+            observation=loop_input.observation,
+            prior=ledger,
+            offices=offices,
+            organization_concepts=organization_concepts,
+            policy=policy,
+        )
+        self._prepared_market_institutions = updated
+        _LOG.debug(
+            "market_institutions_carried venues=%s observations=%s notices=%s",
+            len(updated.venues),
+            sum(len(venue.observations) for venue in updated.venues),
+            len(updated.notices),
         )
         return updated
 
@@ -5410,6 +5496,11 @@ class CognitiveLoop:
             structured_commitments,
             possession_legitimacy,
         )
+        market_institutions = self._prepare_market_institutions(
+            loop_input,
+            organization_concepts,
+            office_concepts,
+        )
         organization_agency = self._prepare_organization_agency(
             loop_input,
             organization_concepts,
@@ -5832,6 +5923,7 @@ class CognitiveLoop:
             office_concepts=office_concepts,
             organization_concepts=organization_concepts,
             organization_operations=organization_operations,
+            market_institutions=market_institutions,
             organization_agency=organization_agency,
             formal_rules=formal_rules,
             disputes=disputes,
@@ -6287,6 +6379,7 @@ class CognitiveLoop:
             office_concepts=proposal.office_concepts,
             organization_concepts=proposal.organization_concepts,
             organization_operations=proposal.organization_operations,
+            market_institutions=proposal.market_institutions,
             organization_agency=proposal.organization_agency,
             formal_rules=proposal.formal_rules,
             disputes=disputes,

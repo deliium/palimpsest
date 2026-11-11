@@ -315,3 +315,5 @@ than duplicating derived final rows, which resume recomputes and verifies; legac
 ## Path-dependence outcomes
 
 Historical-contingency experiments reuse the repeated-seed numerical policy and several existing analysis calculators; see [Historical contingency](historical-contingency.md). They add comparison projections, not new metric families.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

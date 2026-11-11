@@ -144,3 +144,5 @@ capacity, throughput, or composite civilization score.
 - [Configuration](configuration.md)
 - [Research API](research-api.md)
 - [Research UI](research-ui.md)
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

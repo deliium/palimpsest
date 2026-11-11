@@ -209,3 +209,5 @@ account is true, who is guilty or liable, or which party should win.
 
 Current catalog note: the evidence families remain in place, and the current
 closed catalog is **204** families after the V4-09 through V4-17 appends.
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

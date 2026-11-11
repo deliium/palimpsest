@@ -168,3 +168,5 @@ wellbeing, or composite score.
 - [Borders and claims](borders-and-claims.md)
 - [Organizations](organizations.md)
 - [Analysis metrics](analysis-metrics.md)
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

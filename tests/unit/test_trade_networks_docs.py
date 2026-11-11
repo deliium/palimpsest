@@ -59,7 +59,7 @@ def test_required_sections_and_exact_tokens() -> None:
 
 def test_metric_catalog_is_204_and_six_trade_families_are_documented() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert METRIC_FAMILY_COUNT == 204
+    assert METRIC_FAMILY_COUNT == 208
     assert "**204**" in metrics
     for family in (
         "trade_corridor_structure@1",
@@ -99,7 +99,7 @@ def test_snapshot_store_and_experiment_versions_are_documented() -> None:
 
 def test_no_new_v4_flag_or_runner_v57_claim() -> None:
     page = _read("docs/trade-networks.md")
-    assert "14 contexts / 12 flags / six owned" in page
+    assert "14 contexts / 12 flags / eight owned" in page
     assert "runner-config-v57" not in page
 
 

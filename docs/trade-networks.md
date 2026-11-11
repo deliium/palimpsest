@@ -30,7 +30,7 @@ or central route planner exists.
 - No centralized trade routing, route planner, quota, or automatic allocation.
 - No price, money, currency, numeraire, store of value, or unit of account.
 - No global trade registry and no authoritative trade-network entity.
-- No new V4 context or flag: 14 contexts / 12 flags / six owned stay unchanged.
+- No new V4 context or flag: 14 contexts / 12 flags / eight owned stay unchanged.
 - No new command, event, observer semantic type, write pair, replay marker, or
   SQL migration. `NegotiateExchange`, `Give`, artifact custody, storage, and
   inventory-carrying journeys remain the only mechanics.
@@ -187,3 +187,5 @@ plan bundle do not edit `.ai-factory/ROADMAP.md`.
 - [Travel network](travel-network.md) — route conditions and movement enforcement
 - [Infrastructure networks](infrastructure-networks.md) — objective `infra-` assets and trade posts
 - [Analysis metrics](analysis-metrics.md) — catalog, documents, and availability
+
+Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

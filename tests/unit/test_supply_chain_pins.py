@@ -24,11 +24,11 @@ def _test_files() -> list[Path]:
     ]
 
 
-def test_catalog_pins_are_204() -> None:
+def test_catalog_pins_are_208() -> None:
     stale: list[str] = []
     for path in _test_files():
         text = path.read_text(encoding="utf-8")
-        if re.search(r"==\s*198\b", text):
+        if re.search(r"==\s*204\b", text):
             stale.append(str(path.relative_to(ROOT)))
     assert stale == []
 
@@ -47,7 +47,22 @@ def test_no_test_expects_supply_chains_unimplemented() -> None:
     assert offenders == []
 
 
-def test_owned_flag_count_is_seven() -> None:
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 7
+def test_no_test_expects_markets_credit_unimplemented() -> None:
+    offenders: list[str] = []
+    pattern = re.compile(r"V4CapabilityFlags\([^)]*markets_credit\s*=\s*True[^)]*\)")
+    for path in _test_files():
+        if path.name.startswith("test_market_institutions"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in pattern.finditer(text):
+            window = text[max(0, match.start() - 400) : match.end() + 400]
+            if "unimplemented" in window or "CAPABILITY_UNIMPLEMENTED" in window:
+                offenders.append(f"{path.relative_to(ROOT)}:{match.start()}")
+    assert offenders == []
+
+
+def test_owned_flag_count_is_eight() -> None:
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert "supply_chains" in V4_OWNED_CAPABILITY_FLAGS
-    assert METRIC_FAMILY_COUNT == 204
+    assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
+    assert METRIC_FAMILY_COUNT == 208
