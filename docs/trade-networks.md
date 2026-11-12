@@ -188,4 +188,4 @@ plan bundle do not edit `.ai-factory/ROADMAP.md`.
 - [Infrastructure networks](infrastructure-networks.md) — objective `infra-` assets and trade posts
 - [Analysis metrics](analysis-metrics.md) — catalog, documents, and availability
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

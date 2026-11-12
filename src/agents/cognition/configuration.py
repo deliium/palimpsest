@@ -45,6 +45,11 @@ from agents.cognition.counterfactual import (
     CounterfactualPolicy,
     default_counterfactual_policy,
 )
+from agents.cognition.credit_relationships import (
+    CREDIT_RELATIONSHIPS_POLICY_VERSION,
+    CreditRelationshipPolicy,
+    default_credit_relationship_policy,
+)
 from agents.cognition.cultural_narratives import (
     CulturalNarrativePolicy,
     default_cultural_narrative_policy,
@@ -495,6 +500,18 @@ class CognitionPriceMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionCreditMode(StrEnum):
+    """Owner-scoped credit relationships. Disabled allocates nothing.
+
+    Active only when ``simulation.V4CapabilityFlags.markets_credit`` and the
+    V3-17 ``structured_commitments`` spec are both present. This is a cognition
+    mode, not a capability flag and not a runner schema.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionFormalRuleMode(StrEnum):
     """Owner-scoped formal social rules. Disabled allocates nothing.
 
@@ -776,6 +793,8 @@ class CognitionLoopConfig:
     market_institution_policy: MarketInstitutionPolicy | None = None
     price_expectation_mode: CognitionPriceMode = CognitionPriceMode.DISABLED
     price_expectation_policy: EmergentPricePolicy | None = None
+    credit_relationship_mode: CognitionCreditMode = CognitionCreditMode.DISABLED
+    credit_relationship_policy: CreditRelationshipPolicy | None = None
     formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
     formal_rule_policy: FormalRulePolicy | None = None
     dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
@@ -1409,6 +1428,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "price_expectation_policy must be EmergentPricePolicy or None"
             )
+        if type(self.credit_relationship_mode) is not CognitionCreditMode:
+            _LOG.error(
+                "invalid_enum path=credit_relationship_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "credit_relationship_mode must be CognitionCreditMode"
+            )
+        if self.credit_relationship_mode is CognitionCreditMode.DISABLED:
+            object.__setattr__(self, "credit_relationship_policy", None)
+        elif self.credit_relationship_policy is None:
+            object.__setattr__(
+                self,
+                "credit_relationship_policy",
+                default_credit_relationship_policy(),
+            )
+        elif type(self.credit_relationship_policy) is not CreditRelationshipPolicy:
+            _LOG.error(
+                "invalid_enum path=credit_relationship_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "credit_relationship_policy must be CreditRelationshipPolicy or None"
+            )
         if type(self.formal_rule_mode) is not CognitionFormalRuleMode:
             _LOG.error("invalid_enum path=formal_rule_mode reason_code=invalid_mode")
             raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
@@ -1867,6 +1908,13 @@ class CognitionLoopConfig:
                 if self.price_expectation_policy is not None
                 else None
             )
+        if self.credit_relationship_mode is CognitionCreditMode.DETERMINISTIC:
+            material["credit_relationship_mode"] = self.credit_relationship_mode.value
+            material["credit_relationship_policy_version"] = (
+                CREDIT_RELATIONSHIPS_POLICY_VERSION
+                if self.credit_relationship_policy is not None
+                else None
+            )
         if self.formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC:
             material["formal_rule_mode"] = self.formal_rule_mode.value
             material["formal_rule_policy_version"] = (
@@ -2181,6 +2229,8 @@ def build_cognitive_loop(
         market_institution_policy=resolved.market_institution_policy,
         price_expectation_mode=resolved.price_expectation_mode,
         price_expectation_policy=resolved.price_expectation_policy,
+        credit_relationship_mode=resolved.credit_relationship_mode,
+        credit_relationship_policy=resolved.credit_relationship_policy,
         formal_rule_mode=resolved.formal_rule_mode,
         formal_rule_policy=resolved.formal_rule_policy,
         dispute_mode=resolved.dispute_mode,

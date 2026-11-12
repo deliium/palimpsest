@@ -237,7 +237,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
     assert ALEMBIC_HEAD_REVISION == "0017"

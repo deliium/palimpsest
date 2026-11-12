@@ -61,6 +61,7 @@ class CognitiveLoopForkState:
     prepared_organization_operations: object | None = None
     prepared_market_institutions: object | None = None
     prepared_emergent_prices: object | None = None
+    prepared_credit_relationships: object | None = None
     prepared_organization_agency: object | None = None
     prepared_formal_rules: object | None = None
     prepared_disputes: object | None = None
@@ -147,6 +148,15 @@ class CognitiveLoopForkState:
         if prices is not None and type(prices) is not EmergentPriceLedger:
             raise CognitiveLoopForkStateError(
                 "fork_state_invalid", "invalid prepared emergent prices"
+            )
+        from agents.cognition.credit_relationships import (
+            CreditRelationshipLedger,
+        )
+
+        credit = self.prepared_credit_relationships
+        if credit is not None and type(credit) is not CreditRelationshipLedger:
+            raise CognitiveLoopForkStateError(
+                "fork_state_invalid", "invalid prepared credit relationships"
             )
         biases = _tuple(
             "prepared_migration_displacement_biases",

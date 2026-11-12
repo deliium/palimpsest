@@ -175,6 +175,7 @@ class Perspective:
     organization_operations: object | None = None
     market_institutions: object | None = None
     emergent_prices: object | None = None
+    credit_relationships: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -446,6 +447,15 @@ class Perspective:
             self.agent_id,
             field_name="Perspective.emergent_prices",
         )
+        from agents.cognition.credit_relationships import (
+            require_owner_credit_relationships,
+        )
+
+        require_owner_credit_relationships(
+            self.credit_relationships,
+            self.agent_id,
+            field_name="Perspective.credit_relationships",
+        )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,
         )
@@ -654,6 +664,7 @@ class Perspective:
             organization_operations=self.organization_operations,
             market_institutions=self.market_institutions,
             emergent_prices=self.emergent_prices,
+            credit_relationships=self.credit_relationships,
             organization_agency=self.organization_agency,
             formal_rules=self.formal_rules,
             collective_decisions=self.collective_decisions,

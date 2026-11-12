@@ -75,8 +75,8 @@ LANE_KEYS = (
 
 def test_catalog_is_176_with_four_diplomacy_families_before_treaties() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 212
-    assert len(specs) == 212
+    assert METRIC_FAMILY_COUNT == 216
+    assert len(specs) == 216
     assert [spec.family_id for spec in specs[160:164]] == [
         MetricFamilyId.DIPLOMATIC_CONTACT_STRUCTURE,
         MetricFamilyId.DIPLOMATIC_INSTRUMENT_OUTCOMES,
@@ -89,7 +89,7 @@ def test_catalog_is_176_with_four_diplomacy_families_before_treaties() -> None:
         MetricFamilyId.TREATY_RECOLLECTION,
         MetricFamilyId.TREATY_ANCHOR_COVERAGE,
     ]
-    assert len({spec.family_id for spec in specs}) == 212
+    assert len({spec.family_id for spec in specs}) == 216
 
 
 def test_diplomacy_value_keys_are_exact() -> None:

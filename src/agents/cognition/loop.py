@@ -310,6 +310,8 @@ class CognitiveLoop:
         "_counterfactual_policy",
         "_counterfactual_skipped",
         "_counterfactual_state",
+        "_credit_relationship_mode",
+        "_credit_relationship_policy",
         "_cultural_features_spec",
         "_cultural_narrative_mode",
         "_cultural_narrative_policy",
@@ -375,6 +377,7 @@ class CognitiveLoop:
         "_planner",
         "_possession_succession_active",
         "_prepared_borders",
+        "_prepared_credit_relationships",
         "_prepared_diplomacy",
         "_prepared_disputes",
         "_prepared_emergent_prices",
@@ -528,6 +531,8 @@ class CognitiveLoop:
         market_institution_policy: object | None = None,
         price_expectation_mode: object | None = None,
         price_expectation_policy: object | None = None,
+        credit_relationship_mode: object | None = None,
+        credit_relationship_policy: object | None = None,
         formal_rule_mode: object | None = None,
         formal_rule_policy: object | None = None,
         dispute_mode: object | None = None,
@@ -1100,6 +1105,34 @@ class CognitiveLoop:
         self._price_expectation_mode = price_mode
         self._price_expectation_policy = price_policy
         self._prepared_emergent_prices: object | None = None
+        from agents.cognition.configuration import CognitionCreditMode
+        from agents.cognition.credit_relationships import (
+            CreditRelationshipPolicy,
+            default_credit_relationship_policy,
+        )
+
+        credit_mode = (
+            CognitionCreditMode.DISABLED
+            if credit_relationship_mode is None
+            else credit_relationship_mode
+        )
+        if type(credit_mode) is not CognitionCreditMode:
+            raise TypeError(
+                "credit_relationship_mode must be CognitionCreditMode"
+            )
+        if credit_mode is CognitionCreditMode.DISABLED:
+            credit_policy = None
+        elif credit_relationship_policy is None:
+            credit_policy = default_credit_relationship_policy()
+        elif type(credit_relationship_policy) is not CreditRelationshipPolicy:
+            raise TypeError(
+                "credit_relationship_policy must be CreditRelationshipPolicy or None"
+            )
+        else:
+            credit_policy = credit_relationship_policy
+        self._credit_relationship_mode = credit_mode
+        self._credit_relationship_policy = credit_policy
+        self._prepared_credit_relationships: object | None = None
         from agents.cognition.configuration import CognitionFormalRuleMode
         from agents.cognition.formal_rules import (
             FormalRulePolicy,
@@ -1718,6 +1751,7 @@ class CognitiveLoop:
             prepared_organization_operations=self._prepared_organization_operations,
             prepared_market_institutions=self._prepared_market_institutions,
             prepared_emergent_prices=self._prepared_emergent_prices,
+            prepared_credit_relationships=self._prepared_credit_relationships,
             prepared_organization_agency=self._prepared_organization_agency,
             prepared_formal_rules=self._prepared_formal_rules,
             prepared_disputes=self._prepared_disputes,
@@ -1777,6 +1811,7 @@ class CognitiveLoop:
         self._prepared_organization_operations = state.prepared_organization_operations
         self._prepared_market_institutions = state.prepared_market_institutions
         self._prepared_emergent_prices = state.prepared_emergent_prices
+        self._prepared_credit_relationships = state.prepared_credit_relationships
         self._prepared_organization_agency = state.prepared_organization_agency
         self._prepared_formal_rules = state.prepared_formal_rules
         self._prepared_disputes = state.prepared_disputes
@@ -2998,6 +3033,265 @@ class CognitiveLoop:
             len(updated.notices),
         )
         return updated
+
+    def _prepare_credit_relationships(
+        self,
+        loop_input: CognitiveLoopInput,
+        structured_commitments: object | None,
+        emergent_prices: object | None,
+    ) -> object | None:
+        """Refresh one owner's credit beliefs from owner-scoped evidence only."""
+        from agents.cognition.communication import project_trust_inputs
+        from agents.cognition.configuration import CognitionCreditMode
+        from agents.cognition.credit_relationships import (
+            CreditCounterpartySignal,
+            CreditRelationshipLedger,
+            CreditRelationshipPolicy,
+            apply_credit_relationship_update,
+        )
+        from agents.cognition.emergent_prices import EmergentPriceLedger
+        from agents.cognition.structured_commitments import (
+            StructuredCommitmentLedger,
+        )
+        from world.identifiers import EntityId
+
+        if self._credit_relationship_mode is not CognitionCreditMode.DETERMINISTIC:
+            self._prepared_credit_relationships = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "credit_relationships", None)
+        )
+        prior = carried if type(carried) is CreditRelationshipLedger else None
+        policy = self._credit_relationship_policy
+        if type(policy) is not CreditRelationshipPolicy:
+            raise TypeError(
+                "credit_relationship_policy must be CreditRelationshipPolicy"
+            )
+        observation = loop_input.observation
+        tick = observation.tick
+        observer = getattr(observation, "observer_id", None)
+        observer_value = getattr(observer, "value", None)
+        owner_value = (
+            observer_value
+            if type(observer_value) is str
+            else loop_input.agent_id.value
+        )
+        commitments = (
+            structured_commitments
+            if type(structured_commitments) is StructuredCommitmentLedger
+            else None
+        )
+        prices = (
+            emergent_prices
+            if type(emergent_prices) is EmergentPriceLedger
+            else None
+        )
+        signals: list[CreditCounterpartySignal] = []
+        relationships = () if snapshot is None else tuple(snapshot.relationships)
+        for profile in relationships:
+            source = getattr(profile, "source_id", None)
+            target = getattr(profile, "target_id", None)
+            source_value = getattr(source, "value", None)
+            target_value = getattr(target, "value", None)
+            if source_value == owner_value and type(target_value) is str:
+                other = target_value
+            elif target_value == owner_value and type(source_value) is str:
+                other = source_value
+            else:
+                continue
+            trust, confidence = project_trust_inputs(profile)
+            signals.append(
+                CreditCounterpartySignal(
+                    counterparty_id=EntityId(other),
+                    trust_milli=max(0, min(1_000, round(trust * 1_000))),
+                    confidence_milli=max(
+                        0, min(1_000, round(confidence * 1_000))
+                    ),
+                )
+            )
+        claims = self._received_credit_claims(observation, owner_value)
+        repayments = self._credit_repayment_observations(
+            observation, owner_value, prior
+        )
+        updated = apply_credit_relationship_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            claims=cast("Any", claims),
+            repayments=cast("Any", repayments),
+            prior=prior,
+            commitments=commitments,
+            prices=prices,
+            signals=tuple(signals),
+            policy=policy,
+        )
+        self._prepared_credit_relationships = updated
+        _LOG.debug(
+            "credit_relationships_carried rows=%s claims=%s notices=%s",
+            len(updated.rows),
+            sum(len(row.claims) for row in updated.rows),
+            len(updated.notices),
+        )
+        return updated
+
+    def _received_credit_claims(
+        self, observation: object, owner_value: str
+    ) -> tuple[object, ...]:
+        """Parse received ``crd_v1`` frames into owner-scoped claims."""
+        from agents.cognition.credit_relationships import (
+            CreditAct,
+            CreditClaim,
+            CreditClaimSource,
+            CreditCollateralKind,
+            CreditCondition,
+            CreditDirection,
+            CreditTerms,
+        )
+        from world.credit_relationships import parse_credit_claim_relation
+        from world.identifiers import EntityId
+        from world.values import ItemKind
+
+        claims: list[CreditClaim] = []
+        dropped = 0
+        tick_value = getattr(observation, "tick", None)
+        tick = tick_value if type(tick_value) is int else 0
+        for communication in getattr(observation, "communications", ()):
+            speaker = getattr(communication, "speaker_id", None)
+            listener = getattr(communication, "listener_id", None)
+            speaker_value = getattr(speaker, "value", None)
+            listener_value = getattr(listener, "value", None)
+            if speaker_value != owner_value and listener_value != owner_value:
+                continue
+            if speaker_value == owner_value and listener_value == owner_value:
+                continue
+            counterparty_value = (
+                speaker_value
+                if speaker_value != owner_value
+                else listener_value
+            )
+            if type(counterparty_value) is not str:
+                continue
+            utterance = getattr(communication, "utterance", None)
+            content = getattr(utterance, "content", None)
+            for relation in getattr(content, "relations", ()):
+                try:
+                    frame = parse_credit_claim_relation(relation)
+                except (TypeError, ValueError):
+                    dropped += 1
+                    continue
+                if frame is None:
+                    continue
+                try:
+                    principal_kind = ItemKind(frame.principal_kind_token)
+                    repayment_kind = ItemKind(frame.repayment_kind_token)
+                except ValueError:
+                    dropped += 1
+                    continue
+                collateral_item_kind = None
+                if frame.collateral_item_token is not None:
+                    try:
+                        collateral_item_kind = ItemKind(
+                            frame.collateral_item_token
+                        )
+                    except ValueError:
+                        dropped += 1
+                        continue
+                try:
+                    terms = CreditTerms(
+                        principal_kind=principal_kind,
+                        principal_quantity=frame.principal_quantity,
+                        repayment_kind=repayment_kind,
+                        repayment_quantity=frame.repayment_quantity,
+                        due_tick=frame.due_tick,
+                        condition=CreditCondition(frame.condition),
+                        collateral_kind=CreditCollateralKind(
+                            frame.collateral_kind
+                        ),
+                        collateral_item_kind=collateral_item_kind,
+                        collateral_quantity=frame.collateral_quantity,
+                    )
+                except ValueError:
+                    dropped += 1
+                    continue
+                source = (
+                    CreditClaimSource.SELF_AUTHORED
+                    if speaker_value == owner_value
+                    else CreditClaimSource.COMMUNICATED
+                )
+                claims.append(
+                    CreditClaim(
+                        act=CreditAct(frame.act.value),
+                        direction=CreditDirection(frame.direction.value),
+                        anchor=frame.anchor,
+                        terms=terms,
+                        paid_quantity=frame.paid_quantity,
+                        opened_tick=frame.opened_tick,
+                        confidence_milli=frame.confidence_milli,
+                        counterparty_id=EntityId(counterparty_value),
+                        source=source,
+                        source_tick=tick,
+                    )
+                )
+        if dropped:
+            _LOG.warning("credit_frame_dropped count=%s", dropped)
+        return tuple(claims)
+
+    def _credit_repayment_observations(
+        self,
+        observation: object,
+        owner_value: str,
+        prior: object | None,
+    ) -> tuple[object, ...]:
+        """Collect owner-observed physical gives to credit counterparties."""
+        from agents.cognition.credit_relationships import (
+            CreditRelationshipLedger,
+            CreditRepaymentObservation,
+        )
+        from world.identifiers import EntityId
+        from world.values import ItemKind
+
+        if type(prior) is not CreditRelationshipLedger:
+            return ()
+        counterparties = {
+            row.counterparty_id.value for row in prior.rows
+        }
+        if not counterparties:
+            return ()
+        repayments: list[CreditRepaymentObservation] = []
+        tick_value = getattr(observation, "tick", None)
+        tick = tick_value if type(tick_value) is int else 0
+        for occurrence in getattr(observation, "occurrences", ()):
+            facts = getattr(occurrence, "public_facts", None) or {}
+            if facts.get("kind") != "give":
+                continue
+            if facts.get("actor_id") != owner_value:
+                continue
+            target = facts.get("target_id")
+            if target not in counterparties:
+                continue
+            try:
+                item_kind = ItemKind(str(facts.get("item_kind")))
+            except ValueError:
+                continue
+            provenance = getattr(occurrence, "provenance", None)
+            source_tick = getattr(provenance, "source_tick", None)
+            if (
+                isinstance(source_tick, bool)
+                or type(source_tick) is not int
+                or source_tick < 0
+            ):
+                source_tick = tick
+            repayments.append(
+                CreditRepaymentObservation(
+                    counterparty_id=EntityId(target),
+                    item_kind=item_kind,
+                    quantity=1,
+                    tick=source_tick,
+                )
+            )
+        return tuple(repayments)
 
     def _received_price_quotes(
         self,
@@ -5959,6 +6253,11 @@ class CognitiveLoop:
             subjective_valuations,
             acceptance_memories,
         )
+        credit_relationships = self._prepare_credit_relationships(
+            loop_input,
+            structured_commitments,
+            emergent_prices,
+        )
         effective_prospective = self._effective_prospective_policy(budget_ledger)
         futures = await run_stage(
             kind=ComponentKind.FUTURES,
@@ -6232,6 +6531,7 @@ class CognitiveLoop:
             organization_operations=organization_operations,
             market_institutions=market_institutions,
             emergent_prices=emergent_prices,
+            credit_relationships=credit_relationships,
             organization_agency=organization_agency,
             formal_rules=formal_rules,
             disputes=disputes,
@@ -6689,6 +6989,7 @@ class CognitiveLoop:
             organization_operations=proposal.organization_operations,
             market_institutions=proposal.market_institutions,
             emergent_prices=proposal.emergent_prices,
+            credit_relationships=proposal.credit_relationships,
             organization_agency=proposal.organization_agency,
             formal_rules=proposal.formal_rules,
             disputes=disputes,

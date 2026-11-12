@@ -25,8 +25,8 @@ _LAST_SIX = (
 
 
 def test_catalog_count_is_204() -> None:
-    assert METRIC_FAMILY_COUNT == 212
-    assert len(all_metric_specifications()) == 212
+    assert METRIC_FAMILY_COUNT == 216
+    assert len(all_metric_specifications()) == 216
     assert validate_metric_catalog()
     assert METRIC_CATALOG_VERSION == "metric-catalog-v1"
 

@@ -287,4 +287,4 @@ not a passing durability check.
 
 Historical-contingency experiments fork a finalized generational prefix into replay children; see [Historical contingency](historical-contingency.md). This is different from historical objective inspection: it never implies durable subjective restart.
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

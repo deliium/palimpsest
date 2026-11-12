@@ -743,6 +743,7 @@ class SubjectiveSnapshot:
     organization_operations: object | None = None
     market_institutions: object | None = None
     emergent_prices: object | None = None
+    credit_relationships: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -1107,6 +1108,15 @@ class SubjectiveSnapshot:
             self.emergent_prices,
             self.owner_id,
             field_name="SubjectiveSnapshot.emergent_prices",
+        )
+        from agents.cognition.credit_relationships import (
+            require_owner_credit_relationships,
+        )
+
+        require_owner_credit_relationships(
+            self.credit_relationships,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.credit_relationships",
         )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,
@@ -4016,6 +4026,7 @@ class CognitiveLoopProposal:
     organization_operations: object | None = None
     market_institutions: object | None = None
     emergent_prices: object | None = None
+    credit_relationships: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -4136,6 +4147,15 @@ class CognitiveLoopProposal:
             self.structured_commitments,
             self.agent_id,
             field_name="CognitiveLoopProposal.structured_commitments",
+        )
+        from agents.cognition.credit_relationships import (
+            require_owner_credit_relationships,
+        )
+
+        require_owner_credit_relationships(
+            self.credit_relationships,
+            self.agent_id,
+            field_name="CognitiveLoopProposal.credit_relationships",
         )
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
         from agents.cognition.subjective_value import (
@@ -4380,6 +4400,7 @@ class CognitiveLoopResult:
     organization_operations: object | None = None
     market_institutions: object | None = None
     emergent_prices: object | None = None
+    credit_relationships: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -4477,6 +4498,15 @@ class CognitiveLoopResult:
             self.structured_commitments,
             self.agent_id,
             field_name="CognitiveLoopResult.structured_commitments",
+        )
+        from agents.cognition.credit_relationships import (
+            require_owner_credit_relationships,
+        )
+
+        require_owner_credit_relationships(
+            self.credit_relationships,
+            self.agent_id,
+            field_name="CognitiveLoopResult.credit_relationships",
         )
         from agents.cognition.scarcity_beliefs import require_owner_scarcity_beliefs
         from agents.cognition.subjective_value import (

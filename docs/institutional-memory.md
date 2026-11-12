@@ -103,4 +103,4 @@ profiles remain decay-disabled. Missing or damaged records do not delete
 already acquired entries, and occupant succession never copies them. See
 [Institutional decay](institutional-decay.md).
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

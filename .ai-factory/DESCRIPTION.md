@@ -651,12 +651,35 @@ expectations never alter exchange admission. Detached
 `analysis.emergent_prices_*` reconstructs paired ratios, completed and quoted
 distributions, owner joins, market distributions through detached V4-20
 memberships, and pairwise convergence from committed events and token-only
-exports. Four families append the catalog 208 -> **212**; current catalog: 212 metric families. The sibling
+exports. Four families append the catalog 208 -> **212**; current catalog: 216 metric families. The sibling
 `emergent-prices-snapshot-v1` / `emergent-prices-store-v1` artifact publishes
 programmatically and atomically; seven GET-only
 `/v1/simulations/{run_id}/emergent-prices` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `emergent_prices_disabled`; the Research UI adds a read-only
 panel and Godot adds no overlay. Off-gate experiment `emergent_prices@1` is
 registered. No money, currency, credit, debt, allocation, quota, planner, or
-canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 212, 14 V4 contexts, 12 V4 flags, eight owned / four unowned,
+canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 216, 14 V4 contexts, 12 V4 flags, eight owned / four unowned,
 replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+Credit relationships (V4-22) deepen the owned `markets_credit` context and add
+no context, flag slot, `runner-config-v57`, root field, per-agent key, command,
+event, observer semantic type, write pair, `/v2` route, or migration. Credit
+cognition activates only when `markets_credit` and the V3-17
+`structured_commitments` spec are both present. One owner keeps a bounded
+`credit-relationships.v1` ledger of direction, item-kind principal/repayment
+terms, conditions, deadlines, collateral-like claims, revisions, acts, status,
+trust, willingness, and confidence. Bounded `crd_v1` frames travel inside
+existing `Talk`/`Tell`; every act is a declaration and no command is created or
+replaced. Detached `analysis.credit_relationships_*` reconstructs committed
+claims and `Given` transfers, descriptive performances, separate
+`proposed`/`agreed` repayment distributions, counterparty aggregates, and
+researcher-only alignment. Four families append the catalog 212 -> **216**.
+`credit-relationships-snapshot-v1` / `credit-relationships-store-v1` publish
+programmatically and atomically; seven GET-only
+`/v1/simulations/{run_id}/credit-relationships` routes require
+`SUBJECTIVE_DEBUG`; the Research UI adds a read-only panel and Godot adds no
+overlay. Off-gate experiment `credit_relationships@1` is registered. No bank,
+money, interest, enforceable debt, credit score, or canonical credit exists.
+Pins: 43 commands, 73 observer semantic types, 216 metric families, 14 V4
+contexts, 12 V4 flags, eight owned / four unowned, replay-v27/codec `v25`,
+`/v1`, `observer-protocol-v1`, Alembic `0017`.

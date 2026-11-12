@@ -276,13 +276,13 @@ def test_pins_and_catalog_append() -> None:
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(V4_CONTEXTS) == 14
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not any(
         "0018" in path.name for path in (ROOT / "alembic" / "versions").glob("*.py")
     )
     specs = all_metric_specifications()
-    assert len(specs) == 212
+    assert len(specs) == 216
     assert tuple(spec.family_id.value for spec in specs[180:184]) == ISR_FAMILIES
     assert all(
         spec.family_id.value != "inter_society_relation_lanes"

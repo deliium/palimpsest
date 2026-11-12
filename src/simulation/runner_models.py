@@ -6398,6 +6398,7 @@ class SimulationRunnerResult:
     organization_agency_ledgers: tuple[object, ...] = ()
     market_institution_ledgers: tuple[object, ...] = ()
     emergent_price_ledgers: tuple[object, ...] = ()
+    credit_relationship_ledgers: tuple[object, ...] = ()
     formal_rule_ledgers: tuple[object, ...] = ()
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
@@ -6927,6 +6928,36 @@ class SimulationRunnerResult:
         ):
             raise ValueError("emergent_price_ledgers: invalid_order")
         object.__setattr__(self, "emergent_price_ledgers", price_ledgers)
+        if isinstance(self.credit_relationship_ledgers, (set, frozenset)):
+            raise TypeError("credit_relationship_ledgers must be ordered")
+        if type(self.credit_relationship_ledgers) is not tuple:
+            raise TypeError("credit_relationship_ledgers must be ordered")
+        from agents.cognition.credit_relationships import (
+            CreditRelationshipLedger,
+            require_owner_credit_relationships,
+            validate_credit_relationship_caps,
+        )
+
+        typed_credit: list[CreditRelationshipLedger] = []
+        for credit_ledger in self.credit_relationship_ledgers:
+            if type(credit_ledger) is not CreditRelationshipLedger:
+                raise TypeError("credit_relationship_ledgers: invalid_item")
+            require_owner_credit_relationships(
+                credit_ledger,
+                credit_ledger.owner_id,
+                field_name="credit_relationship_ledgers",
+            )
+            validate_credit_relationship_caps(credit_ledger)
+            typed_credit.append(credit_ledger)
+        credit_ledgers = tuple(typed_credit)
+        credit_owners = [ledger.owner_id.value for ledger in credit_ledgers]
+        if len(set(credit_owners)) != len(credit_owners) or (
+            credit_owners != sorted(credit_owners)
+        ):
+            raise ValueError("credit_relationship_ledgers: invalid_order")
+        object.__setattr__(
+            self, "credit_relationship_ledgers", credit_ledgers
+        )
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

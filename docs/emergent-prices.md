@@ -220,6 +220,7 @@ The experiment is never added to the V1 A–E gate.
 ## See also
 
 - [Market-like institutions](market-like-institutions.md)
+- [Credit relationships](credit-relationships.md)
 - [Trade networks](trade-networks.md)
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)

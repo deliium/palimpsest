@@ -3,6 +3,9 @@
 from api.routes.borders import router as borders_router
 from api.routes.branches import router as branches_router
 from api.routes.civilization import router as civilization_router
+from api.routes.credit_relationships import (
+    router as credit_relationships_router,
+)
 from api.routes.debugger import router as debugger_router
 from api.routes.delegation_representation import (
     router as delegation_representation_router,
@@ -47,6 +50,7 @@ __all__ = [
     "borders_router",
     "branches_router",
     "civilization_router",
+    "credit_relationships_router",
     "debugger_router",
     "delegation_representation_router",
     "diplomacy_router",

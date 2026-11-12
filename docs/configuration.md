@@ -580,4 +580,19 @@ added. Off-gate experiment `emergent_prices@1` composes `markets_credit`,
 `subjective_valuation`, and `resource_exchange_profile`; it is never on the V1
 A–E gate. See [emergent prices](emergent-prices.md).
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+### Credit relationships (V4-22)
+
+Credit cognition activates only when `v4_capability_flags.markets_credit` is
+enabled **and** the V3-17 `structured_commitments` spec is present. V4-21 price
+expectations are optional; when absent, credit still uses trust and history.
+
+`PALIMPSEST_CREDIT_RELATIONSHIPS_ROOT` and
+`PALIMPSEST_CREDIT_RELATIONSHIPS_CURSOR_KEY` (at least 32 UTF-8 bytes) are both
+required for the seven GET-only credit routes. Either setting missing yields
+`credit_relationships_disabled`. No runner root field, per-agent key,
+`runner-config-v57`, command, event, migration, or default deployment file is
+added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
+`structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
+gate. See [credit relationships](credit-relationships.md).
+
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

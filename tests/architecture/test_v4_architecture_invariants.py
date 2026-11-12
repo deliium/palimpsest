@@ -90,6 +90,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/catalog.py",
     "experiments/collectors.py",
     "experiments/emergent_prices_scenario.py",
+    "experiments/credit_relationship_scenario.py",
     "experiments/civilization_benchmark_forks.py",
     "experiments/infrastructure_networks_scenario.py",
     "experiments/market_institution_scenario.py",
@@ -140,7 +141,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 

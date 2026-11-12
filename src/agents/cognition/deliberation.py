@@ -1415,6 +1415,21 @@ class CommandPlanner:
             ledger=prepared_price_utterance,
             counterparty_id=getattr(command, "recipient_id", None),
         )
+        from agents.cognition.credit_relationships_communication import (
+            credit_communicate_utterance,
+        )
+
+        prepared_credit_utterance = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "credit_relationships", None)
+        )
+        command = credit_communicate_utterance(
+            command,
+            owner_id=owner,
+            ledger=prepared_credit_utterance,
+            tick=tick,
+        )
         from agents.cognition.organization_agency_communication import (
             organization_agency_communicate_utterance,
         )

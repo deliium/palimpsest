@@ -2832,6 +2832,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "market_institutions@1",
         "supply_chains@1",
         "emergent_prices@1",
+        "credit_relationships@1",
     }
 )
 
@@ -5707,9 +5708,29 @@ def experiment_emergent_prices(
     return definition
 
 
-def experiment_supply_chains(
+def experiment_credit_relationships(
     base: SimulationRunnerConfig,
     *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-22 experiment: promises, credit terms, and expectations."""
+    from experiments.credit_relationship_scenario import (
+        credit_relationship_scenario,
+    )
+
+    definition = credit_relationship_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=credit_relationships@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_supply_chains(
+    base: SimulationRunnerConfig,    *,
     seed_matrix: ExperimentSeedMatrix | None = None,
     max_ticks: int = 48,
 ) -> ExperimentDefinition:

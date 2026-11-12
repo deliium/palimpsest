@@ -181,14 +181,14 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 212 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, six V4-19 supply-chain families, four V4-20 market-like institution families, and four V4-21 emergent-price families) |
+| Metric families | 216 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, six V4-19 supply-chain families, four V4-20 market-like institution families, four V4-21 emergent-price families, and four V4-22 credit-relationship families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 216 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -1138,5 +1138,32 @@ both gated settings. No canonical price, global price table, money, currency,
 credit, debt, planner, quota, or allocation exists. See
 `docs/emergent-prices.md`.
 
+### V4-22 credit-relationship seam
+
+V4-22 deepens the same owned `markets_credit` context and adds no context, flag
+slot, `runner-config-v57`, root field, per-agent runner key, command, event,
+observer semantic type, write pair, `/v2` route, migration, or Godot overlay.
+Credit cognition activates only when `markets_credit` and the V3-17
+`structured_commitments` spec are both present; V4-21 price expectations are an
+optional input to willingness. One owner keeps a bounded
+`CreditRelationshipLedger` under `credit-relationships.v1` with direction,
+item-kind principal/repayment terms, conditions, deadlines, collateral-like
+claims, revisions, acts, status, trust, willingness, confidence, and notices.
+Bounded `crd_v1` frames (16 parts, 320 characters, one relation per
+`Talk`/`Tell`) carry `propose`, `accept`, `decline`, `repay`, `default`,
+`renegotiate`, `forgive`, `dispute`, and `withdraw`; every act is a declaration
+and no command is created or replaced. Physical principal and repayment remain
+ordinary `Give`/`ExchangeCompleted`. Detached `analysis.credit_relationships_*`
+reconstructs committed claims and `Given` transfers, descriptive performances,
+separate `proposed`/`agreed` repayment distributions, counterparty aggregates,
+and researcher-only alignment that never reaches cognition. Four families append
+the catalog to **216 metric families**; commands stay **43**, observer semantics
+**73**, replay-v27/codec **`v25`**, and Alembic **`0017`**.
+`credit-relationships-snapshot-v1` and `credit-relationships-store-v1` publish
+programmatically and atomically; seven GET-only
+`/v1/simulations/{run_id}/credit-relationships` routes require
+`SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score, or
+canonical credit exists. See `docs/credit-relationships.md`.
+
 four remain unowned (`science`, `epidemics`, `ecological_feedback`,
-`disasters`); `markets_credit` is owned by V4-20.
+`disasters`); `markets_credit` is owned by V4-20/V4-21/V4-22.

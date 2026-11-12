@@ -29,6 +29,7 @@ from api.routes import (
     borders_router,
     branches_router,
     civilization_router,
+    credit_relationships_router,
     debugger_router,
     delegation_representation_router,
     diplomacy_router,
@@ -595,6 +596,36 @@ def _attach_emergent_prices_reader(app: FastAPI) -> None:
     _LOGGER.info("emergent_prices_attach enabled=true")
 
 
+def _attach_credit_relationships_reader(app: FastAPI) -> None:
+    from api.credit_relationships_cursor import CreditRelationshipsCursorCodec
+    from persistence.credit_relationships_filesystem import (
+        create_credit_relationships_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.credit_relationships_cursor_codec = None
+        app.state.credit_relationships_reader = None
+        return
+    secret = (
+        settings.credit_relationships_cursor_key.get_secret_value().encode("utf-8")
+        if settings.credit_relationships_cursor_key is not None
+        else None
+    )
+    if settings.credit_relationships_root is None or secret is None:
+        app.state.credit_relationships_cursor_codec = None
+        app.state.credit_relationships_reader = None
+        _LOGGER.info("credit_relationships_attach enabled=false")
+        return
+    app.state.credit_relationships_cursor_codec = (
+        CreditRelationshipsCursorCodec.from_secret(secret)
+    )
+    app.state.credit_relationships_reader = create_credit_relationships_reader(
+        settings.credit_relationships_root
+    )
+    _LOGGER.info("credit_relationships_attach enabled=true")
+
+
 def _attach_infrastructure_networks_reader(app: FastAPI) -> None:
     from api.infrastructure_networks_cursor import InfrastructureNetworksCursorCodec
     from persistence.infrastructure_filesystem import (
@@ -763,6 +794,7 @@ def create_app(
     _attach_supply_chain_reader(app)
     _attach_market_institutions_reader(app)
     _attach_emergent_prices_reader(app)
+    _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
         app.state.research_cultural_cursor_codec = CulturalCursorCodec.from_secret(
@@ -803,6 +835,7 @@ def create_app(
     app.include_router(supply_chains_router)
     app.include_router(market_institutions_router)
     app.include_router(emergent_prices_router)
+    app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
     app.include_router(observer_router)

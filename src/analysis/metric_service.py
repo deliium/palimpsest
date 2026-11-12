@@ -31,6 +31,13 @@ from analysis.contact_lexical_borrowing import compute_contact_lexical_borrowing
 from analysis.contact_reputation_transfer import (
     compute_contact_reputation_transfer_metric,
 )
+from analysis.credit_relationships_analysis import CreditRelationshipsAnalysis
+from analysis.credit_relationships_metrics import (
+    compute_credit_distribution_structure,
+    compute_credit_relationship_formation,
+    compute_credit_repayment_performance,
+    compute_credit_term_alignment,
+)
 from analysis.cultural_feature_metrics import (
     compute_cultural_feature_mutation,
     compute_cultural_feature_provenance,
@@ -395,6 +402,7 @@ class MetricComputationInputs:
     supply_chain_analysis: SupplyChainAnalysis | None = None
     market_institutions_analysis: MarketInstitutionsAnalysis | None = None
     emergent_prices_analysis: EmergentPricesAnalysis | None = None
+    credit_relationships_analysis: CreditRelationshipsAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2612,6 +2620,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("emergent_prices_metrics_emitted families=4 catalog=212")
     else:
         _LOG.debug("emergent_prices_metrics_disabled")
+    if inputs.credit_relationships_analysis is not None:
+        credit = inputs.credit_relationships_analysis
+        _safe(
+            "credit_relationship_formation",
+            lambda: compute_credit_relationship_formation(
+                credit, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "credit_repayment_performance",
+            lambda: compute_credit_repayment_performance(
+                credit, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "credit_term_alignment",
+            lambda: compute_credit_term_alignment(
+                credit, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "credit_distribution_structure",
+            lambda: compute_credit_distribution_structure(
+                credit, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("credit_relationship_metrics_emitted families=4 catalog=216")
+    else:
+        _LOG.debug("credit_relationship_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

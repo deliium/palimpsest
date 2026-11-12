@@ -59,7 +59,7 @@ def test_required_sections_and_exact_tokens() -> None:
 
 def test_metric_catalog_is_204_and_six_trade_families_are_documented() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
     assert "**204**" in metrics
     for family in (
         "trade_corridor_structure@1",

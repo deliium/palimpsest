@@ -114,4 +114,4 @@ checkpoint/replay, metric, and end-to-end lanes are exercised by the plan bundle
 Env-gated Compose/browser, PostgreSQL integration, Godot, and benchmark lanes are
 recorded in the plan's verification receipt as pass or explicitly `unexecuted`.
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

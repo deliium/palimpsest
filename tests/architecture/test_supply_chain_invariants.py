@@ -101,7 +101,7 @@ def test_alembic_head_is_0017() -> None:
 
 
 def test_metric_catalog_is_204() -> None:
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
 
 
 def test_seven_routes() -> None:

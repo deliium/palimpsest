@@ -1034,6 +1034,7 @@ def _cognition_config_for(
     organized_conflict_enabled: bool = False,
     supply_chains_active: bool = False,
     markets_enabled: bool = False,
+    structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
     regional_migration_mode: str | None = None,
     multi_polity_migration_enabled: bool = False,
@@ -1488,6 +1489,29 @@ def _cognition_config_for(
         price_mode.value,
         EMERGENT_PRICES_POLICY_VERSION if price_policy is not None else None,
     )
+    from agents.cognition.configuration import CognitionCreditMode
+    from agents.cognition.credit_relationships import (
+        CREDIT_RELATIONSHIPS_POLICY_VERSION,
+        default_credit_relationship_policy,
+    )
+
+    credit_enabled = markets_enabled and structured_commitments_active
+    credit_mode = (
+        CognitionCreditMode.DETERMINISTIC
+        if credit_enabled
+        else CognitionCreditMode.DISABLED
+    )
+    credit_policy = (
+        default_credit_relationship_policy() if credit_enabled else None
+    )
+    if credit_mode is CognitionCreditMode.DETERMINISTIC:
+        _LOG.info(
+            "credit_relationship_mode mode=%s policy_version=%s",
+            credit_mode.value,
+            CREDIT_RELATIONSHIPS_POLICY_VERSION,
+        )
+    else:
+        _LOG.debug("credit_relationship_disabled")
     _LOG.debug(
         "cognition_config_organization_mode mode=%s",
         organization_mode.value,
@@ -1744,6 +1768,8 @@ def _cognition_config_for(
         market_institution_policy=market_policy,
         price_expectation_mode=price_mode,
         price_expectation_policy=price_policy,
+        credit_relationship_mode=credit_mode,
+        credit_relationship_policy=credit_policy,
         formal_rule_mode=formal_rule_mode,
         formal_rule_policy=formal_rule_policy,
         dispute_mode=dispute_mode,
@@ -2922,6 +2948,9 @@ class SimulationRunner:
                     ),
                     markets_enabled=(
                         config.v4_capability_flags.markets_credit
+                    ),
+                    structured_commitments_active=(
+                        config.structured_commitments is not None
                     ),
                     subjective_valuation_active=(
                         config.subjective_valuation is not None
@@ -5046,6 +5075,9 @@ class SimulationRunner:
                 if any(binding.group_key not in groups for binding in ledger.bindings):
                     raise ValueError("institutional decay binding group mismatch")
         from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.credit_relationships import (
+            CreditRelationshipLedger,
+        )
         from agents.cognition.emergent_prices import EmergentPriceLedger
         from agents.cognition.formal_rules import FormalRuleLedger
         from agents.cognition.market_institutions import MarketInstitutionLedger
@@ -5066,6 +5098,12 @@ class SimulationRunner:
                     raise TypeError("emergent price ledger invalid type")
                 if price_ledger.owner_id != state.agent_id:
                     raise ValueError("emergent price ledger owner_id mismatch")
+            credit_ledger = getattr(state, "credit_relationships", None)
+            if credit_ledger is not None:
+                if type(credit_ledger) is not CreditRelationshipLedger:
+                    raise TypeError("credit relationship ledger invalid type")
+                if credit_ledger.owner_id != state.agent_id:
+                    raise ValueError("credit relationship ledger owner_id mismatch")
             agency_ledger = getattr(state, "organization_agency", None)
             if agency_ledger is not None:
                 if type(agency_ledger) is not OrganizationAgencyLedger:
@@ -5354,6 +5392,9 @@ class SimulationRunner:
                 self.export_market_institution_ledgers()
             ),
             emergent_price_ledgers=(self.export_emergent_price_ledgers()),
+            credit_relationship_ledgers=(
+                self.export_credit_relationship_ledgers()
+            ),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
@@ -5892,6 +5933,18 @@ class SimulationRunner:
             "market_institution_ledger_exported owners=%s",
             len(ledgers),
         )
+        return tuple(ledgers)
+
+    def export_credit_relationship_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered credit relationship ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "credit_relationships", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("credit_relationship_ledger_exported owners=%s", len(ledgers))
         return tuple(ledgers)
 
     def export_emergent_price_ledgers(self) -> tuple[object, ...]:
@@ -6770,6 +6823,9 @@ class SimulationRunner:
                 markets_enabled=(
                     self._config.v4_capability_flags.markets_credit
                 ),
+                structured_commitments_active=(
+                    self._config.structured_commitments is not None
+                ),
                 subjective_valuation_active=(
                     self._config.subjective_valuation is not None
                 ),
@@ -7159,6 +7215,7 @@ def _construct_agent_bundle(
         organized_conflict_enabled=config.v4_capability_flags.organized_conflict,
         supply_chains_active=config.v4_capability_flags.supply_chains,
         markets_enabled=config.v4_capability_flags.markets_credit,
+        structured_commitments_active=config.structured_commitments is not None,
         subjective_valuation_active=config.subjective_valuation is not None,
         regional_migration_mode=(
             None

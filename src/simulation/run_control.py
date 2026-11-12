@@ -615,6 +615,7 @@ class AgentRuntimeCheckpoint:
     organization_operations: object | None = None
     market_institutions: object | None = None
     emergent_prices: object | None = None
+    credit_relationships: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     disputes: object | None = None
@@ -805,6 +806,15 @@ class AgentRuntimeCheckpoint:
             self.emergent_prices,
             self.agent_id,
             field_name="emergent_prices",
+        )
+        from agents.cognition.credit_relationships import (
+            require_owner_credit_relationships,
+        )
+
+        require_owner_credit_relationships(
+            self.credit_relationships,
+            self.agent_id,
+            field_name="credit_relationships",
         )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,

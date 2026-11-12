@@ -448,4 +448,27 @@ maximum is 500. Cursors bind the window filter. Failure codes are
 relation token. No route returns a canonical price, score, ranking, severity, or
 recommendation. See [emergent prices](emergent-prices.md).
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+### Credit relationships
+
+Seven GET-only routes under `/v1/simulations/{run_id}/credit-relationships`
+serve the published `credit-relationships-snapshot-v1` artifact:
+
+- `/v1/simulations/{run_id}/credit-relationships`
+- `/v1/simulations/{run_id}/credit-relationships/relationships`
+- `/v1/simulations/{run_id}/credit-relationships/claims`
+- `/v1/simulations/{run_id}/credit-relationships/performances`
+- `/v1/simulations/{run_id}/credit-relationships/distributions`
+- `/v1/simulations/{run_id}/credit-relationships/counterparties`
+- `/v1/simulations/{run_id}/credit-relationships/alignment`
+
+All require `SUBJECTIVE_DEBUG` and both
+`PALIMPSEST_CREDIT_RELATIONSHIPS_ROOT` /
+`PALIMPSEST_CREDIT_RELATIONSHIPS_CURSOR_KEY` settings. `window_index` is bounded
+to `0..511`, default page size is 100, and maximum is 500. Cursors bind the
+window filter. Failure codes are `credit_relationships_disabled`,
+`credit_relationships_run_not_found`, `credit_relationships_store_corrupt`,
+`credit_relationships_cursor_invalid`, and `credit_relationships_cursor_expired`.
+No route returns a bank, money, enforceable debt, credit score, ranking, or
+canonical credit. See [credit relationships](credit-relationships.md).
+
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

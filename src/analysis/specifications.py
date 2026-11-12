@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 212
+METRIC_FAMILY_COUNT: Final[int] = 216
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -287,6 +287,10 @@ class MetricFamilyId(StrEnum):
     PRICE_DISTRIBUTION_DISPERSION = "price_distribution_dispersion"
     PRICE_REFERENCE_UNIT_ALIGNMENT = "price_reference_unit_alignment"
     MARKET_PRICE_CONVERGENCE = "market_price_convergence"
+    CREDIT_RELATIONSHIP_FORMATION = "credit_relationship_formation"
+    CREDIT_REPAYMENT_PERFORMANCE = "credit_repayment_performance"
+    CREDIT_TERM_ALIGNMENT = "credit_term_alignment"
+    CREDIT_DISTRIBUTION_STRUCTURE = "credit_distribution_structure"
 
 
 class DenominatorKind(StrEnum):
@@ -8964,6 +8968,55 @@ MARKET_PRICE_CONVERGENCE_KEYS: Final[tuple[str, ...]] = (
     "market_pair_count",
     "relation_coverage",
 )
+CREDIT_RELATIONSHIP_FORMATION_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "relationship_count",
+    "proposed_count",
+    "accepted_count",
+    "declined_count",
+    "withdrawn_count",
+    "renegotiated_count",
+    "distinct_counterparty_pairs",
+    "collateral_claim_count",
+    "conditional_count",
+    "mean_confidence_milli",
+    "relationship_coverage",
+)
+CREDIT_REPAYMENT_PERFORMANCE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "performance_count",
+    "repaid_count",
+    "partially_repaid_count",
+    "defaulted_count",
+    "forgiven_count",
+    "disputed_count",
+    "expired_count",
+    "declared_repayment_count",
+    "observed_transfer_count",
+    "mean_repayment_ratio_milli",
+    "performance_coverage",
+)
+CREDIT_TERM_ALIGNMENT_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "alignment_row_count",
+    "consistent_count",
+    "unresolved_count",
+    "inconsistent_count",
+    "not_applicable_count",
+    "mean_gap_milli",
+    "alignment_coverage",
+)
+CREDIT_DISTRIBUTION_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "distribution_count",
+    "available_distribution_count",
+    "insufficient_sample_count",
+    "sample_count",
+    "median_repayment_ratio_milli",
+    "mean_iqr_milli",
+    "mean_dispersion_milli",
+    "distribution_coverage",
+)
 
 
 def _trade_spec(
@@ -9222,6 +9275,37 @@ def _price_spec(
     )
 
 
+def _credit_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="credit_relationships_window_tick",
+        deceased_policy="retain_committed_credit_evidence",
+        zero_holding_policy="no_credit_claims_or_owner_rows_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="owner tokens never create self-edges",
+        censoring_policy="insufficient samples remain explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_credit_evidence",
+    )
+
+
 def _spec_market_venue_recurrence() -> MetricSpecification:
     return _market_spec(
         family_id=MetricFamilyId.MARKET_VENUE_RECURRENCE,
@@ -9307,6 +9391,50 @@ def _spec_market_price_convergence() -> MetricSpecification:
         denominator_kind=DenominatorKind.ACTIVE_EDGES,
         keys=MARKET_PRICE_CONVERGENCE_KEYS,
         opportunity="pairwise overlap only; never a score or ranking",
+    )
+
+
+def _spec_credit_relationship_formation() -> MetricSpecification:
+    return _credit_spec(
+        family_id=MetricFamilyId.CREDIT_RELATIONSHIP_FORMATION,
+        population="owner_scoped_credit_relationships",
+        denominator="observed_credit_relationships",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=CREDIT_RELATIONSHIP_FORMATION_KEYS,
+        opportunity="owner-local credit beliefs only; no bank or obligation",
+    )
+
+
+def _spec_credit_repayment_performance() -> MetricSpecification:
+    return _credit_spec(
+        family_id=MetricFamilyId.CREDIT_REPAYMENT_PERFORMANCE,
+        population="analytical_credit_performances",
+        denominator="observed_credit_performances",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CREDIT_REPAYMENT_PERFORMANCE_KEYS,
+        opportunity="descriptive outcomes; never a credit score",
+    )
+
+
+def _spec_credit_term_alignment() -> MetricSpecification:
+    return _credit_spec(
+        family_id=MetricFamilyId.CREDIT_TERM_ALIGNMENT,
+        population="owner_scoped_credit_alignment",
+        denominator="observed_alignment_rows",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=CREDIT_TERM_ALIGNMENT_KEYS,
+        opportunity="researcher-only alignment; never cognition input",
+    )
+
+
+def _spec_credit_distribution_structure() -> MetricSpecification:
+    return _credit_spec(
+        family_id=MetricFamilyId.CREDIT_DISTRIBUTION_STRUCTURE,
+        population="analytical_credit_distributions",
+        denominator="observed_distribution_samples",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=CREDIT_DISTRIBUTION_STRUCTURE_KEYS,
+        opportunity="distribution shape counts; never one canonical ratio",
     )
 
 
@@ -9815,6 +9943,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_price_distribution_dispersion,
     _spec_price_reference_unit_alignment,
     _spec_market_price_convergence,
+    _spec_credit_relationship_formation,
+    _spec_credit_repayment_performance,
+    _spec_credit_term_alignment,
+    _spec_credit_distribution_structure,
 )
 
 

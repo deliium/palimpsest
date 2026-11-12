@@ -837,6 +837,27 @@ currency, credit, debt, allocation, quota, planner, canonical price, V4 context,
 flag slot, runner schema bump, or migration is added. See
 `docs/emergent-prices.md`.
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+### V4-22 credit relationships
+
+Credit relationships deepen the owned `markets_credit` context and extend the
+V3-17 promise/debt seam without adding a context, flag slot, `runner-config-v57`,
+root field, per-agent key, command, event, observer semantic type, write pair,
+`/v2` route, migration, or Godot overlay. Credit cognition requires
+`markets_credit` and `structured_commitments`; V4-21 price confidence is
+optional. One owner keeps a bounded `credit-relationships.v1` ledger of
+direction, item-kind terms, conditions, deadlines, collateral-like claims,
+revisions, acts, status, trust, willingness, and confidence. Bounded `crd_v1`
+frames travel inside existing `Talk`/`Tell`; every act is a declaration and
+physical principal/repayment remains `Give`/`ExchangeCompleted`. Detached
+`analysis.credit_relationships_*` reconstructs committed claims and `Given`
+transfers, descriptive performances, separate `proposed`/`agreed`
+distributions, counterparties, and researcher-only alignment. Four families
+append the catalog to 216. `credit-relationships-snapshot-v1` and
+`credit-relationships-store-v1` publish programmatically and atomically; seven
+GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
+`SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
+or canonical credit is added. See `docs/credit-relationships.md`.
+
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Eight V4 flags are owned; four remain unowned.

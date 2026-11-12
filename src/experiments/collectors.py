@@ -406,6 +406,37 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("emergent_prices_collector_missing_events_or_seams")
+    credit_enabled = (
+        events is not None
+        and getattr(flags, "markets_credit", False)
+        and getattr(runner_config, "structured_commitments", None) is not None
+    )
+    if credit_enabled:
+        try:
+            from experiments.credit_relationships_completed_run import (
+                build_completed_run_credit_relationships_analysis,
+            )
+
+            credit_analysis = build_completed_run_credit_relationships_analysis(
+                arm.runner_result,
+                committed_events=events,
+                run_id=arm.assignment.run_id.value,
+                input_revision=arm.config_fingerprint[:32] or "rev-run",
+            )
+            inputs = replace(
+                inputs, credit_relationships_analysis=credit_analysis
+            )
+            _LOG.debug(
+                "credit_relationships_collector_injected coverage=%s",
+                credit_analysis.coverage.value,
+            )
+        except Exception as exc:
+            _LOG.error(
+                "credit_relationships_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("credit_relationships_collector_missing_events_or_seams")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

@@ -34,7 +34,7 @@ pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 TESTS = ROOT / "tests"
-BASELINE_208 = "addd1dc350b8c0f7588132845138951f48f5595891e2bd136094a381cf734fed"
+BASELINE_212 = "87fd875c1b53e588e19af116ca6c974515a5e8fa4b878901def526c096eb496e"
 
 
 def test_markets_credit_seam_is_unchanged() -> None:
@@ -90,15 +90,15 @@ def test_version_pins_are_unchanged() -> None:
 
 
 def test_catalog_and_prefix_digest() -> None:
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
     specs = all_metric_specifications()
     material = "\x1e".join(
         "\x1f".join(
             (spec.family_id.value, spec.algorithm_version, ",".join(spec.value_keys))
         )
-        for spec in specs[:208]
+        for spec in specs[:212]
     )
-    assert hashlib.sha256(material.encode()).hexdigest() == BASELINE_208
+    assert hashlib.sha256(material.encode()).hexdigest() == BASELINE_212
 
 
 def test_no_global_price_field_in_price_modules() -> None:

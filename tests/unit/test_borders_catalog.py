@@ -20,8 +20,8 @@ BORDER_FAMILIES = (
 
 def test_catalog_count_is_176_and_validates() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 212
-    assert len(specs) == 212
+    assert METRIC_FAMILY_COUNT == 216
+    assert len(specs) == 216
     validate_metric_catalog()
 
 

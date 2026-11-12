@@ -438,6 +438,7 @@ class AgentRuntime:
         "_counterfactual_audits",
         "_counterfactual_capture",
         "_counterfactual_state",
+        "_credit_relationships",
         "_cultural_feature_audits",
         "_cultural_features",
         "_cultural_fresh_channels",
@@ -631,6 +632,7 @@ class AgentRuntime:
         self._organization_operations: object | None = None
         self._market_institutions: object | None = None
         self._emergent_prices: object | None = None
+        self._credit_relationships: object | None = None
         self._organization_agency: object | None = None
         self._formal_rules: object | None = None
         self._disputes: object | None = None
@@ -1417,6 +1419,45 @@ class AgentRuntime:
         self._emergent_prices = ledger
         _LOG.debug(
             "emergent_prices_carried rows=%s tick=%s",
+            len(ledger.rows),
+            tick,
+        )
+
+    def _commit_credit_relationships(
+        self, ledger: object | None, tick: int
+    ) -> None:
+        from agents.cognition.configuration import CognitionCreditMode
+        from agents.cognition.credit_relationships import (
+            CreditRelationshipLedger,
+        )
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_credit_relationship_mode",
+            CognitionCreditMode.DISABLED,
+        )
+        if mode is not CognitionCreditMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionCreditMode.DETERMINISTIC:
+                if self._credit_relationships is not None:
+                    _LOG.warning(
+                        "credit_relationship_checkpoint_cleared "
+                        "reason_code=mode_disabled"
+                    )
+                self._credit_relationships = None
+            return
+        if type(ledger) is not CreditRelationshipLedger:
+            raise TypeError(
+                "credit_relationships must be CreditRelationshipLedger"
+            )
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._credit_relationships = ledger
+        _LOG.debug(
+            "credit_relationships_carried rows=%s tick=%s",
             len(ledger.rows),
             tick,
         )
@@ -2611,6 +2652,7 @@ class AgentRuntime:
                 organization_operations=self._organization_operations,
                 market_institutions=self._market_institutions,
                 emergent_prices=self._emergent_prices,
+                credit_relationships=self._credit_relationships,
                 organization_agency=self._organization_agency,
                 formal_rules=self._formal_rules,
                 disputes=self._disputes,
@@ -3114,6 +3156,10 @@ class AgentRuntime:
         )
         self._commit_emergent_prices(
             getattr(pending.loop_result, "emergent_prices", None),
+            pending.tick,
+        )
+        self._commit_credit_relationships(
+            getattr(pending.loop_result, "credit_relationships", None),
             pending.tick,
         )
         self._commit_organization_agency(
@@ -3709,6 +3755,18 @@ class AgentRuntime:
             checkpoint, "market_institutions", None
         )
         self._emergent_prices = getattr(checkpoint, "emergent_prices", None)
+        self._credit_relationships = getattr(
+            checkpoint, "credit_relationships", None
+        )
+        if (
+            self._credit_relationships is not None
+            and getattr(self._credit_relationships, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._emergent_prices is not None
             and getattr(self._emergent_prices, "owner_id", None)
@@ -3908,6 +3966,7 @@ class AgentRuntime:
             organization_operations=self._organization_operations,
             market_institutions=self._market_institutions,
             emergent_prices=self._emergent_prices,
+            credit_relationships=self._credit_relationships,
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
             disputes=self._disputes,

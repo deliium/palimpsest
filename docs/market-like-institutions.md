@@ -202,6 +202,7 @@ selected; Alembic `0017`; `/v1`; `observer-protocol-v1`; off-gate
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)
 - [Trade networks](trade-networks.md)
+- [Credit relationships](credit-relationships.md)
 
 ## Emergent prices (V4-21)
 

@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **212** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **216** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -747,6 +747,19 @@ descriptive; `insufficient_samples` remains explicit and no family is a
 canonical price, score, ranking, or recommendation. See
 [emergent prices](emergent-prices.md).
 
+### Credit-relationship families (V4-22)
+
+Four families append the catalog (212 -> **216**):
+`credit_relationship_formation`, `credit_repayment_performance`,
+`credit_term_alignment`, and `credit_distribution_structure`. They report owner
+relationship counts and status counts, descriptive performance outcomes,
+researcher-only alignment counts and gaps, and repayment-ratio distribution
+availability, median, IQR, dispersion, and sample counts in integer milli.
+`proposed` and `agreed` samples are never pooled; fewer than four samples is
+`insufficient_samples`. No family is a credit score, probability, ranking, or
+canonical credit. The first 212 family ids, order, algorithm versions, and value
+keys are unchanged. See [credit relationships](credit-relationships.md).
+
 ### Market-like institutions (V4-20)
 
 Four families append the catalog from 204 to **208**:
@@ -758,4 +771,4 @@ emerged/continued/transformed/split/merge/dissolved counts. No composite
 persistence score, price, money, ranking, severity, recommendation, allocation,
 or quota exists.
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

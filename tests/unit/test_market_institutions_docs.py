@@ -111,11 +111,11 @@ def test_readme_and_context_docs_link_the_page() -> None:
         assert "208" in text, path
         assert "markets_credit" in text, path
         assert "eight owned" in text, path
-    assert "212 metric families" in _read("docs/architecture.md")
+    assert "216 metric families" in _read("docs/architecture.md")
     assert "MARKET_INSTITUTIONS_ROOT" in _read("docs/configuration.md")
     assert "market_role_structure@1" in _read("docs/analysis-metrics.md")
     assert "**208**" in _read("docs/analysis-metrics.md")
-    assert METRIC_FAMILY_COUNT == 212
+    assert METRIC_FAMILY_COUNT == 216
 
 
 def test_roadmap_remains_present_and_registration_is_deferred() -> None:

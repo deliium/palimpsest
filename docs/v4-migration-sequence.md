@@ -44,4 +44,4 @@ stage 6 is gated by a proven read-model need rather than a flag.
 
 See [Persistence](persistence.md) for the event store, codecs, and checkpoints.
 
-Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

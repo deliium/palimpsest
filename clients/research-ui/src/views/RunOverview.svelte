@@ -49,6 +49,7 @@
   import InfrastructureNetworksPanel from './InfrastructureNetworksPanel.svelte'
   import TradeNetworksPanel from './TradeNetworksPanel.svelte'
   import EmergentPricesPanel from './EmergentPricesPanel.svelte'
+  import CreditRelationshipsPanel from './CreditRelationshipsPanel.svelte'
   import MarketInstitutionsPanel from './MarketInstitutionsPanel.svelte'
   import SupplyChainsPanel from './SupplyChainsPanel.svelte'
   import OrganizationsPanel from './OrganizationsPanel.svelte'
@@ -364,6 +365,7 @@
     <MarketInstitutionsPanel {runId} {selection} />
   {:else if view === 'emergent-prices'}
     <EmergentPricesPanel {runId} {selection} />
+    <CreditRelationshipsPanel {runId} {selection} />
   {:else if view === 'supply-chains'}
     <SupplyChainsPanel {runId} />
   {:else if view === 'institutions'}
