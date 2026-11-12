@@ -742,6 +742,7 @@ class SubjectiveSnapshot:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     market_institutions: object | None = None
+    emergent_prices: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -1097,6 +1098,15 @@ class SubjectiveSnapshot:
             self.market_institutions,
             self.owner_id,
             field_name="SubjectiveSnapshot.market_institutions",
+        )
+        from agents.cognition.emergent_prices import (
+            require_owner_emergent_prices,
+        )
+
+        require_owner_emergent_prices(
+            self.emergent_prices,
+            self.owner_id,
+            field_name="SubjectiveSnapshot.emergent_prices",
         )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,
@@ -4005,6 +4015,7 @@ class CognitiveLoopProposal:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     market_institutions: object | None = None
+    emergent_prices: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -4368,6 +4379,7 @@ class CognitiveLoopResult:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     market_institutions: object | None = None
+    emergent_prices: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None

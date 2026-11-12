@@ -225,4 +225,4 @@ Cause and wave stay visually distinct. Integration is analytical, not a fourth
 evidence class. The observer protocol, capabilities, `/version`, and three-class
 evidence model are unchanged.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

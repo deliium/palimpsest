@@ -166,4 +166,4 @@ and performs no client-side clustering or identity derivation.
 
 - [Organizations](organizations.md): a macro-society candidate is a large society-like cluster; an organization concept is a narrower recurring collective structure held as an owner-scoped belief.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

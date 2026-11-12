@@ -9,6 +9,7 @@ from api.routes.delegation_representation import (
 )
 from api.routes.diplomacy import router as diplomacy_router
 from api.routes.dispute import router as dispute_router
+from api.routes.emergent_prices import router as emergent_prices_router
 from api.routes.evidence_testimony import router as evidence_testimony_router
 from api.routes.formal_rule import router as formal_rule_router
 from api.routes.health import router as health_router
@@ -50,6 +51,7 @@ __all__ = [
     "delegation_representation_router",
     "diplomacy_router",
     "dispute_router",
+    "emergent_prices_router",
     "evidence_testimony_router",
     "formal_rule_router",
     "health_router",

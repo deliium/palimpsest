@@ -424,4 +424,28 @@ All require `SUBJECTIVE_DEBUG` and the dual market-institution settings;
 `market_institutions_store_corrupt`, `market_institutions_cursor_invalid`, and
 `market_institutions_cursor_expired`.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+### Emergent prices (V4-21)
+
+Seven GET-only routes under `/v1/simulations/{run_id}/emergent-prices` serve the
+published `emergent-prices-snapshot-v1` artifact:
+
+- `/v1/simulations/{run_id}/emergent-prices`
+- `/v1/simulations/{run_id}/emergent-prices/units`
+- `/v1/simulations/{run_id}/emergent-prices/expectations`
+- `/v1/simulations/{run_id}/emergent-prices/quotes`
+- `/v1/simulations/{run_id}/emergent-prices/distributions`
+- `/v1/simulations/{run_id}/emergent-prices/markets`
+- `/v1/simulations/{run_id}/emergent-prices/relations`
+
+All require `SUBJECTIVE_DEBUG` and both
+`PALIMPSEST_EMERGENT_PRICES_ROOT` / `PALIMPSEST_EMERGENT_PRICES_CURSOR_KEY`
+settings. `window_index` is bounded to `0..511`, default page size is 100, and
+maximum is 500. Cursors bind the window filter. Failure codes are
+`emergent_prices_disabled`, `emergent_prices_run_not_found`,
+`emergent_prices_store_corrupt`, `emergent_prices_cursor_invalid`, and
+`emergent_prices_cursor_expired`. Distributions expose `sample_source`, five
+`bin_shares_milli`, and quantiles; relations expose `overlap_milli` and a closed
+relation token. No route returns a canonical price, score, ranking, severity, or
+recommendation. See [emergent prices](emergent-prices.md).
+
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

@@ -564,4 +564,20 @@ infrastructure-channel runs keep 23/`v21` and travel-channel runs keep
 required for the seven GET-only market-institution routes. Either setting missing
 yields `market_institutions_disabled`. No default deployment file sets them.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+### Emergent prices (V4-21)
+
+Price cognition activates only when `v4_capability_flags.markets_credit` is
+enabled **and** the V3-18 `subjective_valuation` spec is present. The V3-19
+`resource_exchange_profile` spec supplies observed-medium evidence but is not a
+standalone activation gate.
+
+`PALIMPSEST_EMERGENT_PRICES_ROOT` and
+`PALIMPSEST_EMERGENT_PRICES_CURSOR_KEY` (at least 32 UTF-8 bytes) are both
+required for the seven GET-only price routes. Either setting missing yields
+`emergent_prices_disabled`. No runner root field, per-agent key,
+`runner-config-v57`, command, event, migration, or default deployment file is
+added. Off-gate experiment `emergent_prices@1` composes `markets_credit`,
+`subjective_valuation`, and `resource_exchange_profile`; it is never on the V1
+A–E gate. See [emergent prices](emergent-prices.md).
+
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

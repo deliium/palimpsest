@@ -265,7 +265,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 208 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 204) | `analysis.specifications` |
+| Metric catalog | 212 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 198; V4-19 198 → 204; V4-20 204 → 208; V4-21 208 → 212) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -452,7 +452,7 @@ require `SUBJECTIVE_DEBUG` and fail closed with `supply_chains_disabled`; the
 Research UI adds a read-only panel and no Godot overlay. Supply chains activate
 no write pair; infrastructure-channel runs keep 23/`v21` and travel-channel runs
 keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
-commands, 73 observer semantic types, 208 metric families, Alembic `0017`,
+commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

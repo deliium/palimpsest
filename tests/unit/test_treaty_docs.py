@@ -72,12 +72,12 @@ def test_docs_state_non_enforcement_and_forbidden_objects() -> None:
 
 
 def test_current_counts_and_routes_match_code() -> None:
-    assert METRIC_FAMILY_COUNT == 208
-    assert "Closed catalog cardinality: **208**" in _read("docs/analysis-metrics.md")
+    assert METRIC_FAMILY_COUNT == 212
+    assert "Closed catalog cardinality: **212**" in _read("docs/analysis-metrics.md")
     assert "204" in _read("docs/analysis-metrics.md")
-    assert "208 metric families" in _read("docs/architecture.md")
+    assert "212 metric families" in _read("docs/architecture.md")
     assert "208" in _read("docs/architecture.md")
-    assert "208 metric families" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "212 metric families" in _read(".ai-factory/ARCHITECTURE.md")
     assert "208" in _read(".ai-factory/ARCHITECTURE.md")
     api = _read("docs/research-api.md")
     for route in (

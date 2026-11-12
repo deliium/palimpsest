@@ -53,6 +53,13 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
+from analysis.emergent_prices_analysis import EmergentPricesAnalysis
+from analysis.emergent_prices_metrics import (
+    compute_market_price_convergence,
+    compute_price_distribution_dispersion,
+    compute_price_expectation_structure,
+    compute_price_reference_unit_alignment,
+)
 from analysis.generational_cohort import (
     compute_generational_cohort_comparison,
 )
@@ -387,6 +394,7 @@ class MetricComputationInputs:
     trade_networks_analysis: TradeNetworksAnalysis | None = None
     supply_chain_analysis: SupplyChainAnalysis | None = None
     market_institutions_analysis: MarketInstitutionsAnalysis | None = None
+    emergent_prices_analysis: EmergentPricesAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2575,6 +2583,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("market_institutions_metrics_emitted families=4 catalog=208")
     else:
         _LOG.debug("market_institutions_metrics_disabled")
+    if inputs.emergent_prices_analysis is not None:
+        prices = inputs.emergent_prices_analysis
+        _safe(
+            "price_expectation_structure",
+            lambda: compute_price_expectation_structure(
+                prices, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "price_distribution_dispersion",
+            lambda: compute_price_distribution_dispersion(
+                prices, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "price_reference_unit_alignment",
+            lambda: compute_price_reference_unit_alignment(
+                prices, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "market_price_convergence",
+            lambda: compute_market_price_convergence(
+                prices, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("emergent_prices_metrics_emitted families=4 catalog=212")
+    else:
+        _LOG.debug("emergent_prices_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

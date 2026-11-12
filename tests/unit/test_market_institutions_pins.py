@@ -23,8 +23,8 @@ def _test_files() -> list[Path]:
     ]
 
 
-def test_catalog_is_208() -> None:
-    assert METRIC_FAMILY_COUNT == 208
+def test_catalog_is_212() -> None:
+    assert METRIC_FAMILY_COUNT == 212
 
 
 def test_owned_flags_are_eight() -> None:
@@ -42,11 +42,11 @@ def test_owned_flags_are_eight() -> None:
     )
 
 
-def test_no_stale_204_catalog_pin_remains() -> None:
+def test_no_stale_208_catalog_pin_remains() -> None:
     stale = [
         str(path.relative_to(ROOT))
         for path in _test_files()
-        if re.search(r"==\s*204\b", path.read_text(encoding="utf-8"))
+        if re.search(r"==\s*208\b", path.read_text(encoding="utf-8"))
     ]
     assert stale == []
 

@@ -565,7 +565,7 @@ catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
 Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 208 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 212 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
 formal-rule context adds six GET-only `/v1` routes alongside the six organization
@@ -659,7 +659,7 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
 panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
-semantic types, 208 metric families, replay-v22/codec v20, `/v1`,
+semantic types, 212 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
 V4-10/V4-11.
 
@@ -711,7 +711,7 @@ GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 208 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 212 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
 
@@ -730,7 +730,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 208 metric families, 14 V4 contexts, 12 V4 flags, eight owned flags,
+types, 212 metric families, 14 V4 contexts, 12 V4 flags, eight owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
 
@@ -818,6 +818,25 @@ catalog to 208. `market-institutions-snapshot-v1` and `market-institutions-store
 publish programmatically and atomically; seven GET-only routes require
 `SUBJECTIVE_DEBUG` and both gated settings. See `docs/market-like-institutions.md`.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+### V4-21 emergent price seam
+
+`agents.cognition.emergent_prices*` deepens the same owned `markets_credit`
+context. Activation requires both the flag and the V3-18
+`subjective_valuation` spec; otherwise no price ledger is allocated. One owner
+keeps a bounded `emergent-prices.v1` ledger of item-kind expectations, unit
+candidates, observed exchange ratios, quotes, confidence, and notices. Bounded
+`prc_v1` relations travel only inside existing `Talk`/`Tell`; no command is
+created or replaced, and expectations never alter exchange admission. Detached
+`analysis.emergent_prices_*` reconstructs paired ratios, completed and quoted
+distributions, owner joins, market distributions through detached V4-20
+memberships, and pairwise convergence from committed events and token-only
+exports. Four families append the catalog to 212. The snapshot and store are
+siblings (`emergent-prices-snapshot-v1`, `emergent-prices-store-v1`); seven
+GET-only routes require `SUBJECTIVE_DEBUG` and both gated settings. No money,
+currency, credit, debt, allocation, quota, planner, canonical price, V4 context,
+flag slot, runner schema bump, or migration is added. See
+`docs/emergent-prices.md`.
+
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Eight V4 flags are owned; four remain unowned.

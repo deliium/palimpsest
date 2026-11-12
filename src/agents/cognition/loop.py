@@ -377,6 +377,7 @@ class CognitiveLoop:
         "_prepared_borders",
         "_prepared_diplomacy",
         "_prepared_disputes",
+        "_prepared_emergent_prices",
         "_prepared_evidence",
         "_prepared_formal_rules",
         "_prepared_institutional_decay",
@@ -388,6 +389,8 @@ class CognitiveLoop:
         "_prepared_organization_operations",
         "_prepared_organized_conflict",
         "_prepared_representation",
+        "_price_expectation_mode",
+        "_price_expectation_policy",
         "_production_allow_provider",
         "_production_knowledge_mode",
         "_prospective_policy",
@@ -523,6 +526,8 @@ class CognitiveLoop:
         organization_agency_policy: object | None = None,
         market_institution_mode: object | None = None,
         market_institution_policy: object | None = None,
+        price_expectation_mode: object | None = None,
+        price_expectation_policy: object | None = None,
         formal_rule_mode: object | None = None,
         formal_rule_policy: object | None = None,
         dispute_mode: object | None = None,
@@ -1069,6 +1074,32 @@ class CognitiveLoop:
         self._market_institution_mode = market_mode
         self._market_institution_policy = market_policy
         self._prepared_market_institutions: object | None = None
+        from agents.cognition.configuration import CognitionPriceMode
+        from agents.cognition.emergent_prices import (
+            EmergentPricePolicy,
+            default_emergent_price_policy,
+        )
+
+        price_mode = (
+            CognitionPriceMode.DISABLED
+            if price_expectation_mode is None
+            else price_expectation_mode
+        )
+        if type(price_mode) is not CognitionPriceMode:
+            raise TypeError("price_expectation_mode must be CognitionPriceMode")
+        if price_mode is CognitionPriceMode.DISABLED:
+            price_policy = None
+        elif price_expectation_policy is None:
+            price_policy = default_emergent_price_policy()
+        elif type(price_expectation_policy) is not EmergentPricePolicy:
+            raise TypeError(
+                "price_expectation_policy must be EmergentPricePolicy or None"
+            )
+        else:
+            price_policy = price_expectation_policy
+        self._price_expectation_mode = price_mode
+        self._price_expectation_policy = price_policy
+        self._prepared_emergent_prices: object | None = None
         from agents.cognition.configuration import CognitionFormalRuleMode
         from agents.cognition.formal_rules import (
             FormalRulePolicy,
@@ -1686,6 +1717,7 @@ class CognitiveLoop:
             prepared_organization_concepts=self._prepared_organization_concepts,
             prepared_organization_operations=self._prepared_organization_operations,
             prepared_market_institutions=self._prepared_market_institutions,
+            prepared_emergent_prices=self._prepared_emergent_prices,
             prepared_organization_agency=self._prepared_organization_agency,
             prepared_formal_rules=self._prepared_formal_rules,
             prepared_disputes=self._prepared_disputes,
@@ -1744,6 +1776,7 @@ class CognitiveLoop:
         self._prepared_organization_concepts = state.prepared_organization_concepts
         self._prepared_organization_operations = state.prepared_organization_operations
         self._prepared_market_institutions = state.prepared_market_institutions
+        self._prepared_emergent_prices = state.prepared_emergent_prices
         self._prepared_organization_agency = state.prepared_organization_agency
         self._prepared_formal_rules = state.prepared_formal_rules
         self._prepared_disputes = state.prepared_disputes
@@ -2765,6 +2798,275 @@ class CognitiveLoop:
             len(updated.notices),
         )
         return updated
+
+    def _prepare_emergent_prices(
+        self,
+        loop_input: CognitiveLoopInput,
+        subjective_valuations: object | None,
+        acceptance_memories: object | None,
+    ) -> object | None:
+        """Refresh one owner's price expectations from own evidence only."""
+        from dataclasses import dataclass, field
+
+        from agents.cognition.acceptance_memory import AcceptanceMemoryLedger
+        from agents.cognition.configuration import CognitionPriceMode
+        from agents.cognition.emergent_prices import (
+            EmergentPriceLedger,
+            EmergentPricePolicy,
+            PriceQuote,
+            PriceQuoteSource,
+            apply_emergent_price_update,
+            canonical_exchange_pair,
+            make_price_observation,
+            price_venue_token,
+            quote_direction_for,
+        )
+        from agents.cognition.subjective_value import SubjectiveValuationLedger
+        from world.identifiers import EntityId
+        from world.values import ItemKind
+
+        @dataclass
+        class _PriceAggregate:
+            exchange: int = 0
+            proposed: int = 0
+            withdrawn: int = 0
+            item: int = 0
+            unit: int = 0
+            parties: set[str] = field(default_factory=set)
+
+        if self._price_expectation_mode is not CognitionPriceMode.DETERMINISTIC:
+            self._prepared_emergent_prices = None
+            return None
+        snapshot = loop_input.snapshot
+        carried = (
+            None if snapshot is None else getattr(snapshot, "emergent_prices", None)
+        )
+        ledger = carried if type(carried) is EmergentPriceLedger else None
+        policy = self._price_expectation_policy
+        if type(policy) is not EmergentPricePolicy:
+            raise TypeError("price_expectation_policy must be EmergentPricePolicy")
+        observation = loop_input.observation
+        tick = observation.tick
+        observer = getattr(observation, "observer_id", None)
+        observer_value = getattr(observer, "value", None)
+        owner_value = (
+            observer_value
+            if type(observer_value) is str
+            else loop_input.agent_id.value
+        )
+        body = getattr(observation, "self_body", None)
+        location = getattr(body, "location_id", None)
+        venue = (
+            price_venue_token(location.value)
+            if isinstance(location, EntityId)
+            else "none"
+        )
+        kinds = {kind.value: kind for kind in ItemKind}
+        aggregates: dict[tuple[int, ItemKind, ItemKind], _PriceAggregate] = {}
+        quotes: list[object] = []
+        for occurrence in getattr(observation, "occurrences", ()):
+            facts = getattr(occurrence, "public_facts", None) or {}
+            kind = facts.get("kind")
+            if kind not in {
+                "exchange_completed",
+                "exchange_proposed",
+                "exchange_withdrawn",
+            }:
+                continue
+            provenance = getattr(occurrence, "provenance", None)
+            source_tick = getattr(provenance, "source_tick", None)
+            if (
+                isinstance(source_tick, bool)
+                or type(source_tick) is not int
+                or source_tick < 0
+                or source_tick > tick
+            ):
+                continue
+            give_kinds = tuple(
+                kinds[value]
+                for value in facts.get("give_item_kinds", ())
+                if value in kinds
+            )
+            take_kinds = tuple(
+                kinds[value]
+                for value in facts.get("take_item_kinds", ())
+                if value in kinds
+            )
+            pair = canonical_exchange_pair(give_kinds, take_kinds)
+            if pair is None:
+                continue
+            item_kind, unit_kind = pair
+            item_count = give_kinds.count(item_kind) + take_kinds.count(item_kind)
+            unit_count = give_kinds.count(unit_kind) + take_kinds.count(unit_kind)
+            if item_count <= 0 or unit_count <= 0:
+                continue
+            ratio = unit_count * 1_000 // item_count
+            if ratio > policy.ratio_max_milli:
+                continue
+            other = getattr(occurrence, "other_entity_id", None)
+            counterparty = other if type(other) is EntityId else None
+            if kind == "exchange_completed":
+                key = (source_tick, item_kind, unit_kind)
+                aggregate = aggregates.setdefault(key, _PriceAggregate())
+                aggregate.exchange += 1
+                aggregate.item += item_count
+                aggregate.unit += unit_count
+                if counterparty is not None:
+                    aggregate.parties.add(counterparty.value)
+            elif counterparty is not None:
+                quotes.append(
+                    PriceQuote(
+                        item_kind=item_kind,
+                        unit_kind=unit_kind,
+                        venue_id=venue,
+                        direction=quote_direction_for(
+                            item_kind=item_kind,
+                            unit_kind=unit_kind,
+                            give_kinds=give_kinds,
+                        ),
+                        counterparty_id=counterparty,
+                        ratio_milli=ratio,
+                        confidence_milli=500,
+                        source=PriceQuoteSource.OBSERVED_OFFER,
+                        source_tick=source_tick,
+                        first_tick=tick,
+                        last_tick=tick,
+                    )
+                )
+        observations = tuple(
+            make_price_observation(
+                source_tick=source_tick,
+                item_kind=item_kind,
+                unit_kind=unit_kind,
+                counterparty_ids=tuple(
+                    EntityId(value) for value in sorted(aggregate.parties)
+                ),
+                exchange_count=aggregate.exchange,
+                proposed_count=aggregate.proposed,
+                withdrawn_count=aggregate.withdrawn,
+                observed_ratio_milli=(
+                    aggregate.unit * 1_000 // aggregate.item
+                    if aggregate.item > 0
+                    else None
+                ),
+            )
+            for (source_tick, item_kind, unit_kind), aggregate in sorted(
+                aggregates.items(),
+                key=lambda item: (
+                    item[0][0],
+                    item[0][1].value,
+                    item[0][2].value,
+                ),
+            )
+        )
+        valuation_ledger = (
+            subjective_valuations
+            if type(subjective_valuations) is SubjectiveValuationLedger
+            else None
+        )
+        acceptance_ledger = (
+            acceptance_memories
+            if type(acceptance_memories) is AcceptanceMemoryLedger
+            else None
+        )
+        quotes.extend(
+            cast(
+                "list[PriceQuote]",
+                self._received_price_quotes(
+                    observation,
+                    owner_value=owner_value,
+                    venue=venue,
+                    tick=tick,
+                ),
+            )
+        )
+        updated = apply_emergent_price_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            observations=observations,
+            observed_quotes=tuple(cast("list[PriceQuote]", quotes)),
+            prior=ledger,
+            valuations=valuation_ledger,
+            acceptance=acceptance_ledger,
+            policy=policy,
+        )
+        self._prepared_emergent_prices = updated
+        _LOG.debug(
+            "emergent_prices_carried rows=%s observations=%s notices=%s",
+            len(updated.rows),
+            len(observations),
+            len(updated.notices),
+        )
+        return updated
+
+    def _received_price_quotes(
+        self,
+        observation: object,
+        *,
+        owner_value: str,
+        venue: str,
+        tick: int,
+    ) -> list[object]:
+        """Fold received ``prc_v1`` frames into bounded communicated quotes."""
+        from agents.cognition.emergent_prices import (
+            PriceQuote,
+            PriceQuoteSource,
+        )
+        from agents.cognition.emergent_prices_communication import (
+            parse_price_claim_relation,
+        )
+        from world.identifiers import EntityId
+        from world.values import ItemKind
+
+        kinds = {kind.value: kind for kind in ItemKind}
+        quotes: list[object] = []
+        for communication in getattr(observation, "communications", ()):
+            listener = getattr(communication, "listener_id", None)
+            speaker = getattr(communication, "speaker_id", None)
+            speaker_value = getattr(speaker, "value", None)
+            listener_value = getattr(listener, "value", None)
+            if listener_value != owner_value and speaker_value != owner_value:
+                continue
+            utterance = getattr(communication, "utterance", None)
+            content = getattr(utterance, "content", None)
+            for relation in getattr(content, "relations", ()):
+                try:
+                    claim = parse_price_claim_relation(relation)
+                except (TypeError, ValueError):
+                    _LOG.warning("price_frame_dropped reason_code=malformed")
+                    continue
+                if claim is None:
+                    continue
+                item_kind = kinds.get(claim.item_kind_token)
+                unit_kind = kinds.get(claim.unit_token)
+                if item_kind is None or unit_kind is None or item_kind is unit_kind:
+                    _LOG.warning("price_frame_dropped reason_code=unresolved_unit")
+                    continue
+                if speaker_value == owner_value:
+                    source = PriceQuoteSource.SELF_AUTHORED
+                else:
+                    source = PriceQuoteSource.COMMUNICATED
+                quotes.append(
+                    PriceQuote(
+                        item_kind=item_kind,
+                        unit_kind=unit_kind,
+                        venue_id=venue,
+                        direction=claim.direction,
+                        counterparty_id=(
+                            EntityId(speaker_value)
+                            if type(speaker_value) is str
+                            and speaker_value != owner_value
+                            else None
+                        ),
+                        ratio_milli=claim.ratio_milli,
+                        confidence_milli=claim.confidence_milli,
+                        source=source,
+                        source_tick=tick,
+                        first_tick=tick,
+                        last_tick=tick,
+                    )
+                )
+        return quotes
 
     def _prepare_formal_rules(self, loop_input: CognitiveLoopInput) -> object | None:
         """Refresh one owner's formal-rule ledger from owner-visible evidence."""
@@ -5652,6 +5954,11 @@ class CognitiveLoop:
                 emotional_evaluation=emotional_evaluation,
             )
         )
+        emergent_prices = self._prepare_emergent_prices(
+            loop_input,
+            subjective_valuations,
+            acceptance_memories,
+        )
         effective_prospective = self._effective_prospective_policy(budget_ledger)
         futures = await run_stage(
             kind=ComponentKind.FUTURES,
@@ -5924,6 +6231,7 @@ class CognitiveLoop:
             organization_concepts=organization_concepts,
             organization_operations=organization_operations,
             market_institutions=market_institutions,
+            emergent_prices=emergent_prices,
             organization_agency=organization_agency,
             formal_rules=formal_rules,
             disputes=disputes,
@@ -6380,6 +6688,7 @@ class CognitiveLoop:
             organization_concepts=proposal.organization_concepts,
             organization_operations=proposal.organization_operations,
             market_institutions=proposal.market_institutions,
+            emergent_prices=proposal.emergent_prices,
             organization_agency=proposal.organization_agency,
             formal_rules=proposal.formal_rules,
             disputes=disputes,

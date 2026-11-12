@@ -584,7 +584,7 @@ semantic type, write pair, or migration. Locked `trade-networks.v1` reconstructs
 transfer and local-supply evidence from committed events only; derives directed
 corridors, observed exchange dependence, major exchange locations and venues,
 cross-society flows over contemporaneous `msoc-` candidates, and forward-only
-`trd-net-` network lineage. Six metric families append 192 -> **204**;
+`trd-net-` network lineage. Six metric families append 192 -> **198**;
 `trade-networks-snapshot-v1` and `trade-networks-store-v1` publish opt-in and
 atomically; seven GET-only `/v1/simulations/{run_id}/trade-networks` routes
 require `SUBJECTIVE_DEBUG` and fail closed with `trade_networks_disabled`; the
@@ -592,8 +592,8 @@ Research UI adds a read-only panel and the Godot observer adds four analytical
 overlays. Off-gate experiment `trade_networks@1` is registered. No centralized
 routing, planner, quota, allocation, price, money, currency, or registry exists.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-208 metric families, 14 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
-`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 208; the current catalog is 208 families (catalog 208).
+198 metric families, 14 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
+`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 212; the current catalog is 212 families (catalog 212).
 
 Supply chains (V4-19) own the declared `supply_chains` V4 context on the
 accepted `runner-config-v56` seam and add no context, flag slot,
@@ -638,3 +638,25 @@ read-only panel and Godot adds no overlay. Off-gate experiment
 `market_institutions@1` is registered. Pins: 43 commands, 73 observer semantic
 types, 208 metric families, 14 V4 contexts, 12 V4 flags, eight owned / four
 unowned, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+Emergent prices (V4-21) deepen the owned `markets_credit` context and add no
+context, flag slot, `runner-config-v57`, root field, per-agent key, command,
+event, observer semantic type, write pair, `/v2` route, or migration. Price
+cognition activates only when `markets_credit` and the V3-18
+`subjective_valuation` spec are both present. One owner keeps a bounded
+`emergent-prices.v1` ledger of item-kind expectations, unit sources, observed
+exchange ratios, quotes, confidence, and notices. Bounded `prc_v1` relations
+travel only inside existing `Talk`/`Tell`; no command is created or replaced, and
+expectations never alter exchange admission. Detached
+`analysis.emergent_prices_*` reconstructs paired ratios, completed and quoted
+distributions, owner joins, market distributions through detached V4-20
+memberships, and pairwise convergence from committed events and token-only
+exports. Four families append the catalog 208 -> **212**; current catalog: 212 metric families. The sibling
+`emergent-prices-snapshot-v1` / `emergent-prices-store-v1` artifact publishes
+programmatically and atomically; seven GET-only
+`/v1/simulations/{run_id}/emergent-prices` routes require `SUBJECTIVE_DEBUG` and
+fail closed with `emergent_prices_disabled`; the Research UI adds a read-only
+panel and Godot adds no overlay. Off-gate experiment `emergent_prices@1` is
+registered. No money, currency, credit, debt, allocation, quota, planner, or
+canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 212, 14 V4 contexts, 12 V4 flags, eight owned / four unowned,
+replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

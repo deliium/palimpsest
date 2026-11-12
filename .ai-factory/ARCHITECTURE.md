@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 208 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, and six V4-19 supply-chain families) |
+| Metric families | 212 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, six V4-19 supply-chain families, four V4-20 market-like institution families, and four V4-21 emergent-price families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -203,9 +203,11 @@ those as current pins or silently drop their legacy accepted versions.
   `institutional_economy` remains unowned and fails closed.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
   (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
-  `organized_conflict` (V4-12), `infrastructure_networks` (V4-16), and
-  `supply_chains` (V4-19). The other five V4 flags remain unowned and fail
-  closed.
+  `organized_conflict` (V4-12), `infrastructure_networks` (V4-16),
+  `supply_chains` (V4-19), and `markets_credit` (V4-20/V4-21).
+  There are eight owned V4 flags and four unowned flags.
+  `science`, `epidemics`, `ecological_feedback`, and `disasters` remain unowned
+  and fail closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -1059,7 +1061,7 @@ stores `trade-networks-store-v1` atomically; seven GET-only
 `/v1/simulations/{run_id}/trade-networks` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `trade_networks_disabled`; the Research UI and Godot observer
 render read-only analytical rows. Six trade-network metric families append the
-catalog to **208 metric families**; observer semantics stay **73**, commands
+catalog to **198 metric families**; observer semantics stay **73**, commands
 **43**, replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate
 experiment is `trade_networks@1`. See `docs/trade-networks.md`.
 
@@ -1068,7 +1070,7 @@ experiment is `trade_networks@1`. See `docs/trade-networks.md`.
 
 V4-19 owns the declared `supply_chains` V4 context on the accepted
 `runner-config-v56` seam; it adds no V4 context, flag slot, `runner-config-v57`,
-root field, or per-agent key. Counts are 14 contexts / 12 flags / eight owned /
+root field, or per-agent key. Counts are 14 contexts / 12 flags / seven owned /
 five unowned. `world.supply_chain` owns the locked `supply-chains.v1` stage
 contract, `SUPPLY_CHAIN_RECIPES`, catalog validation, and the `STRIKE` harvest
 probability helper. The legacy six-recipe `example_production_catalog()` and its
@@ -1091,7 +1093,7 @@ stores `supply-chains-store-v1` atomically; seven GET-only
 `/v1/simulations/{run_id}/supply-chains` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `supply_chains_disabled`; the Research UI adds a read-only
 panel and no Godot overlay. Six supply-chain metric families append the catalog
-to **208 metric families**; observer semantics stay **73**, commands **43**,
+to **204 metric families**; observer semantics stay **73**, commands **43**,
 replay-v27/codec **`v25`**, and Alembic **`0017`**. The off-gate experiment is
 `supply_chains@1`. See `docs/supply-chains.md`.
 
@@ -1112,6 +1114,29 @@ to 208. `market-institutions-snapshot-v1` and `market-institutions-store-v1`
 publish opt-in and atomically; seven GET-only routes require `SUBJECTIVE_DEBUG`.
 No global Market object, authoritative price, money, credit, debt, planner,
 quota, or allocation exists. See `docs/market-like-institutions.md`.
+
+### V4-21 emergent price seam
+
+V4-21 deepens the same owned `markets_credit` context and adds no context, flag
+slot, `runner-config-v57`, root field, per-agent runner key, command, event,
+observer semantic type, write pair, `/v2` route, or migration. Price cognition
+activates only when `markets_credit` and the V3-18 `subjective_valuation` spec
+are both present; otherwise no price ledger is allocated. One owner keeps a
+bounded `emergent-prices.v1` ledger of item-kind expectations, unit sources,
+observed exchange ratios, quotes, confidence, and notices. Bounded `prc_v1`
+relations travel only inside existing `Talk`/`Tell`; no command is created or
+replaced, and expectations never alter exchange admission. Detached
+`analysis.emergent_prices_*` reconstructs paired ratios, completed and quoted
+distributions, owner joins, market distributions through detached V4-20
+membership rows, and pairwise convergence from committed events and token-only
+exports. Four families append the catalog to **212 metric families**; observer
+semantics stay **73**, commands **43**, replay-v27/codec **`v25`**, and Alembic
+**`0017`**. `emergent-prices-snapshot-v1` and `emergent-prices-store-v1` publish
+programmatically and atomically; seven GET-only
+`/v1/simulations/{run_id}/emergent-prices` routes require `SUBJECTIVE_DEBUG` and
+both gated settings. No canonical price, global price table, money, currency,
+credit, debt, planner, quota, or allocation exists. See
+`docs/emergent-prices.md`.
 
 four remain unowned (`science`, `epidemics`, `ecological_feedback`,
 `disasters`); `markets_credit` is owned by V4-20.

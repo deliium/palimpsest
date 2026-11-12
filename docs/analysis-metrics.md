@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **208** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **212** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -736,6 +736,17 @@ order, versions, and value keys. They read only the optional detached
 availability, and per-family coverage. No composite supply score, optimizer, or
 planner exists. See [supply chains](supply-chains.md).
 
+### Emergent-price families (V4-21)
+
+Four families append the catalog (208 -> 212): `price_expectation_structure`,
+`price_distribution_dispersion`, `price_reference_unit_alignment`, and
+`market_price_convergence`. They report owner expectation counts, completed and
+quoted distribution counts with integer IQR/dispersion, unit-source alignment
+counts, and pairwise relation counts with mean overlap. Distributions are
+descriptive; `insufficient_samples` remains explicit and no family is a
+canonical price, score, ranking, or recommendation. See
+[emergent prices](emergent-prices.md).
+
 ### Market-like institutions (V4-20)
 
 Four families append the catalog from 204 to **208**:
@@ -747,4 +758,4 @@ emerged/continued/transformed/split/merge/dissolved counts. No composite
 persistence score, price, money, ranking, severity, recommendation, allocation,
 or quota exists.
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

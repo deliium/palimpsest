@@ -375,6 +375,37 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("market_institutions_collector_missing_events")
+    runner_config = getattr(arm.assignment, "runner_config", None)
+    flags = getattr(runner_config, "v4_capability_flags", None)
+    prices_enabled = (
+        events is not None
+        and getattr(flags, "markets_credit", False)
+        and getattr(runner_config, "subjective_valuation", None) is not None
+    )
+    if prices_enabled:
+        try:
+            from experiments.emergent_prices_completed_run import (
+                build_completed_run_emergent_prices_analysis,
+            )
+
+            price_analysis = build_completed_run_emergent_prices_analysis(
+                arm.runner_result,
+                committed_events=events,
+                run_id=arm.assignment.run_id.value,
+                input_revision=arm.config_fingerprint[:32] or "rev-run",
+            )
+            inputs = replace(inputs, emergent_prices_analysis=price_analysis)
+            _LOG.debug(
+                "emergent_prices_collector_injected coverage=%s",
+                price_analysis.coverage.value,
+            )
+        except Exception as exc:
+            _LOG.error(
+                "emergent_prices_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("emergent_prices_collector_missing_events_or_seams")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

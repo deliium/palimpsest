@@ -24,11 +24,11 @@ def _test_files() -> list[Path]:
     ]
 
 
-def test_catalog_pins_are_208() -> None:
+def test_no_stale_current_catalog_pin_remains() -> None:
     stale: list[str] = []
     for path in _test_files():
         text = path.read_text(encoding="utf-8")
-        if re.search(r"==\s*204\b", text):
+        if re.search(r"==\s*208\b", text):
             stale.append(str(path.relative_to(ROOT)))
     assert stale == []
 
@@ -65,4 +65,4 @@ def test_owned_flag_count_is_eight() -> None:
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert "supply_chains" in V4_OWNED_CAPABILITY_FLAGS
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
-    assert METRIC_FAMILY_COUNT == 208
+    assert METRIC_FAMILY_COUNT == 212

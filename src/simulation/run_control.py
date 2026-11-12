@@ -614,6 +614,7 @@ class AgentRuntimeCheckpoint:
     organization_concepts: object | None = None
     organization_operations: object | None = None
     market_institutions: object | None = None
+    emergent_prices: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     disputes: object | None = None
@@ -795,6 +796,15 @@ class AgentRuntimeCheckpoint:
             self.market_institutions,
             self.agent_id,
             field_name="market_institutions",
+        )
+        from agents.cognition.emergent_prices import (
+            require_owner_emergent_prices,
+        )
+
+        require_owner_emergent_prices(
+            self.emergent_prices,
+            self.agent_id,
+            field_name="emergent_prices",
         )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,

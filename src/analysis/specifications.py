@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 208
+METRIC_FAMILY_COUNT: Final[int] = 212
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -283,6 +283,10 @@ class MetricFamilyId(StrEnum):
     MARKET_VENUE_PERSISTENCE = "market_venue_persistence"
     MARKET_EXPECTATION_STRUCTURE = "market_expectation_structure"
     MARKET_ROLE_STRUCTURE = "market_role_structure"
+    PRICE_EXPECTATION_STRUCTURE = "price_expectation_structure"
+    PRICE_DISTRIBUTION_DISPERSION = "price_distribution_dispersion"
+    PRICE_REFERENCE_UNIT_ALIGNMENT = "price_reference_unit_alignment"
+    MARKET_PRICE_CONVERGENCE = "market_price_convergence"
 
 
 class DenominatorKind(StrEnum):
@@ -8914,6 +8918,52 @@ MARKET_ROLE_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
     "mean_counterparty_count_milli",
     "role_coverage",
 )
+PRICE_EXPECTATION_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "expectation_row_count",
+    "strong_count",
+    "expected_count",
+    "weak_count",
+    "valuation_row_count",
+    "mean_confidence_milli",
+    "expectation_coverage",
+)
+PRICE_DISTRIBUTION_DISPERSION_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "distribution_count",
+    "completed_distribution_count",
+    "quoted_distribution_count",
+    "available_count",
+    "insufficient_count",
+    "mean_iqr_milli",
+    "mean_dispersion_milli",
+    "item_kind_count",
+    "unit_count",
+    "distribution_coverage",
+)
+PRICE_REFERENCE_UNIT_ALIGNMENT_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "unit_row_count",
+    "owner_reference_count",
+    "observed_medium_count",
+    "exchange_counterpart_count",
+    "quoted_count",
+    "consistent_count",
+    "unresolved_count",
+    "inconsistent_count",
+    "unit_coverage",
+)
+MARKET_PRICE_CONVERGENCE_KEYS: Final[tuple[str, ...]] = (
+    "window_tick",
+    "relation_count",
+    "converged_count",
+    "partially_converged_count",
+    "divergent_count",
+    "insufficient_count",
+    "mean_overlap_milli",
+    "market_pair_count",
+    "relation_coverage",
+)
 
 
 def _trade_spec(
@@ -9141,6 +9191,37 @@ def _market_spec(
     )
 
 
+def _price_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="emergent_prices_window_tick",
+        deceased_policy="retain_committed_exchange_evidence",
+        zero_holding_policy="no_exchange_or_owner_rows_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="owner tokens never create self-edges",
+        censoring_policy="insufficient samples remain explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_exchange_evidence",
+    )
+
+
 def _spec_market_venue_recurrence() -> MetricSpecification:
     return _market_spec(
         family_id=MetricFamilyId.MARKET_VENUE_RECURRENCE,
@@ -9182,6 +9263,50 @@ def _spec_market_role_structure() -> MetricSpecification:
         denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
         keys=MARKET_ROLE_STRUCTURE_KEYS,
         opportunity="owner-local role attribution only; no broker actor",
+    )
+
+
+def _spec_price_expectation_structure() -> MetricSpecification:
+    return _price_spec(
+        family_id=MetricFamilyId.PRICE_EXPECTATION_STRUCTURE,
+        population="owner_scoped_price_expectations",
+        denominator="observed_expectation_rows",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=PRICE_EXPECTATION_STRUCTURE_KEYS,
+        opportunity="owner-local expectation rows only; no global price",
+    )
+
+
+def _spec_price_distribution_dispersion() -> MetricSpecification:
+    return _price_spec(
+        family_id=MetricFamilyId.PRICE_DISTRIBUTION_DISPERSION,
+        population="analytical_price_distributions",
+        denominator="observed_distribution_samples",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=PRICE_DISTRIBUTION_DISPERSION_KEYS,
+        opportunity="distribution shape counts; never a composite price",
+    )
+
+
+def _spec_price_reference_unit_alignment() -> MetricSpecification:
+    return _price_spec(
+        family_id=MetricFamilyId.PRICE_REFERENCE_UNIT_ALIGNMENT,
+        population="owner_scoped_price_units",
+        denominator="observed_unit_rows",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=PRICE_REFERENCE_UNIT_ALIGNMENT_KEYS,
+        opportunity="researcher-only unit alignment; never cognition input",
+    )
+
+
+def _spec_market_price_convergence() -> MetricSpecification:
+    return _price_spec(
+        family_id=MetricFamilyId.MARKET_PRICE_CONVERGENCE,
+        population="analytical_price_relations",
+        denominator="observed_relation_pairs",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=MARKET_PRICE_CONVERGENCE_KEYS,
+        opportunity="pairwise overlap only; never a score or ranking",
     )
 
 
@@ -9686,6 +9811,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_market_venue_persistence,
     _spec_market_expectation_structure,
     _spec_market_role_structure,
+    _spec_price_expectation_structure,
+    _spec_price_distribution_dispersion,
+    _spec_price_reference_unit_alignment,
+    _spec_market_price_convergence,
 )
 
 

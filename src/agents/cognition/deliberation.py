@@ -1402,6 +1402,19 @@ class CommandPlanner:
         command = market_communicate_utterance(
             command, prepared_market_utterance
         )
+        from agents.cognition.emergent_prices_communication import (
+            price_communicate_utterance,
+        )
+
+        prepared_price_utterance = (
+            None if snapshot is None else getattr(snapshot, "emergent_prices", None)
+        )
+        command = price_communicate_utterance(
+            command,
+            owner_id=owner,
+            ledger=prepared_price_utterance,
+            counterparty_id=getattr(command, "recipient_id", None),
+        )
         from agents.cognition.organization_agency_communication import (
             organization_agency_communicate_utterance,
         )

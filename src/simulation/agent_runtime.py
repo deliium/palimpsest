@@ -448,6 +448,7 @@ class AgentRuntime:
         "_developmental_knowledge",
         "_diplomacy",
         "_disputes",
+        "_emergent_prices",
         "_emotional_state",
         "_evidence",
         "_finalized_hashes",
@@ -629,6 +630,7 @@ class AgentRuntime:
         self._organization_concepts: object | None = None
         self._organization_operations: object | None = None
         self._market_institutions: object | None = None
+        self._emergent_prices: object | None = None
         self._organization_agency: object | None = None
         self._formal_rules: object | None = None
         self._disputes: object | None = None
@@ -1384,6 +1386,38 @@ class AgentRuntime:
         _LOG.debug(
             "market_institutions_carried venues=%s tick=%s",
             len(ledger.venues),
+            tick,
+        )
+
+    def _commit_emergent_prices(self, ledger: object | None, tick: int) -> None:
+        from agents.cognition.configuration import CognitionPriceMode
+        from agents.cognition.emergent_prices import EmergentPriceLedger
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_price_expectation_mode",
+            CognitionPriceMode.DISABLED,
+        )
+        if mode is not CognitionPriceMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionPriceMode.DETERMINISTIC:
+                if self._emergent_prices is not None:
+                    _LOG.warning(
+                        "emergent_price_checkpoint_cleared reason_code=mode_disabled"
+                    )
+                self._emergent_prices = None
+            return
+        if type(ledger) is not EmergentPriceLedger:
+            raise TypeError("emergent_prices must be EmergentPriceLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._emergent_prices = ledger
+        _LOG.debug(
+            "emergent_prices_carried rows=%s tick=%s",
+            len(ledger.rows),
             tick,
         )
 
@@ -2576,6 +2610,7 @@ class AgentRuntime:
                 organization_concepts=self._organization_concepts,
                 organization_operations=self._organization_operations,
                 market_institutions=self._market_institutions,
+                emergent_prices=self._emergent_prices,
                 organization_agency=self._organization_agency,
                 formal_rules=self._formal_rules,
                 disputes=self._disputes,
@@ -3075,6 +3110,10 @@ class AgentRuntime:
         )
         self._commit_market_institutions(
             getattr(pending.loop_result, "market_institutions", None),
+            pending.tick,
+        )
+        self._commit_emergent_prices(
+            getattr(pending.loop_result, "emergent_prices", None),
             pending.tick,
         )
         self._commit_organization_agency(
@@ -3669,6 +3708,16 @@ class AgentRuntime:
         self._market_institutions = getattr(
             checkpoint, "market_institutions", None
         )
+        self._emergent_prices = getattr(checkpoint, "emergent_prices", None)
+        if (
+            self._emergent_prices is not None
+            and getattr(self._emergent_prices, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._market_institutions is not None
             and getattr(self._market_institutions, "owner_id", None)
@@ -3858,6 +3907,7 @@ class AgentRuntime:
             organization_concepts=self._organization_concepts,
             organization_operations=self._organization_operations,
             market_institutions=self._market_institutions,
+            emergent_prices=self._emergent_prices,
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
             disputes=self._disputes,

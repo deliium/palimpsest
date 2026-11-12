@@ -65,7 +65,7 @@ def test_evidence_cap_retains_prefix_and_notice() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert METRIC_FAMILY_COUNT == 208
+    assert METRIC_FAMILY_COUNT == 212
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert SUPPLY_CHAIN_ROUTE_COUNT == 7
     assert ALEMBIC_HEAD_REVISION == "0017"

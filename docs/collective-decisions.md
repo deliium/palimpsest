@@ -94,4 +94,4 @@ definition = collective_decisions_scenario(seed=23, max_ticks=16)
 results = await ExperimentCoordinator(definition).run_all()
 ```
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

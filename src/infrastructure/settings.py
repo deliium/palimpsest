@@ -253,6 +253,10 @@ class Settings(BaseSettings):
     market_institutions_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    emergent_prices_root: Path | None = None
+    emergent_prices_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -453,6 +457,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "market_institutions cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("emergent_prices_cursor_key")
+    @classmethod
+    def validate_emergent_prices_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "emergent_prices cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -840,6 +855,17 @@ class Settings(BaseSettings):
             ),
             "market_institutions_cursor_enabled": (
                 self.market_institutions_cursor_key is not None
+            ),
+            "has_emergent_prices_root": self.emergent_prices_root is not None,
+            "has_emergent_prices_cursor_key": (
+                self.emergent_prices_cursor_key is not None
+            ),
+            "emergent_prices_enabled": (
+                self.emergent_prices_root is not None
+                and self.emergent_prices_cursor_key is not None
+            ),
+            "emergent_prices_cursor_enabled": (
+                self.emergent_prices_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

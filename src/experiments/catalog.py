@@ -2831,6 +2831,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "trade_networks@1",
         "market_institutions@1",
         "supply_chains@1",
+        "emergent_prices@1",
     }
 )
 
@@ -5682,6 +5683,25 @@ def experiment_market_institutions(
     )
     _LOG.info(
         "experiment_registered experiment_id=market_institutions@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_emergent_prices(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-21 experiment: owner price expectations and distributions."""
+    from experiments.emergent_prices_scenario import emergent_prices_scenario
+
+    definition = emergent_prices_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=emergent_prices@1 arms=%s",
         len(definition.conditions),
     )
     return definition

@@ -632,4 +632,4 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 208 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 212 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

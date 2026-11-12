@@ -6397,6 +6397,7 @@ class SimulationRunnerResult:
     organization_operation_ledgers: tuple[object, ...] = ()
     organization_agency_ledgers: tuple[object, ...] = ()
     market_institution_ledgers: tuple[object, ...] = ()
+    emergent_price_ledgers: tuple[object, ...] = ()
     formal_rule_ledgers: tuple[object, ...] = ()
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
@@ -6898,6 +6899,34 @@ class SimulationRunnerResult:
         object.__setattr__(
             self, "market_institution_ledgers", market_ledgers
         )
+        if isinstance(self.emergent_price_ledgers, (set, frozenset)):
+            raise TypeError("emergent_price_ledgers must be ordered")
+        if type(self.emergent_price_ledgers) is not tuple:
+            raise TypeError("emergent_price_ledgers must be ordered")
+        from agents.cognition.emergent_prices import (
+            EmergentPriceLedger,
+            require_owner_emergent_prices,
+            validate_emergent_price_caps,
+        )
+
+        typed_prices: list[EmergentPriceLedger] = []
+        for price_ledger in self.emergent_price_ledgers:
+            if type(price_ledger) is not EmergentPriceLedger:
+                raise TypeError("emergent_price_ledgers: invalid_item")
+            require_owner_emergent_prices(
+                price_ledger,
+                price_ledger.owner_id,
+                field_name="emergent_price_ledgers",
+            )
+            validate_emergent_price_caps(price_ledger)
+            typed_prices.append(price_ledger)
+        price_ledgers = tuple(typed_prices)
+        price_owners = [ledger.owner_id.value for ledger in price_ledgers]
+        if len(set(price_owners)) != len(price_owners) or (
+            price_owners != sorted(price_owners)
+        ):
+            raise ValueError("emergent_price_ledgers: invalid_order")
+        object.__setattr__(self, "emergent_price_ledgers", price_ledgers)
         if isinstance(self.institutional_decay_ledgers, (set, frozenset)):
             raise TypeError("institutional_decay_ledgers must be ordered")
         if isinstance(self.institutional_decay_ledgers, (str, bytes)) or not isinstance(

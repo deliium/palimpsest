@@ -60,6 +60,7 @@ class CognitiveLoopForkState:
     prepared_organization_concepts: object | None = None
     prepared_organization_operations: object | None = None
     prepared_market_institutions: object | None = None
+    prepared_emergent_prices: object | None = None
     prepared_organization_agency: object | None = None
     prepared_formal_rules: object | None = None
     prepared_disputes: object | None = None
@@ -139,6 +140,13 @@ class CognitiveLoopForkState:
         if market is not None and type(market) is not MarketInstitutionLedger:
             raise CognitiveLoopForkStateError(
                 "fork_state_invalid", "invalid prepared market institutions"
+            )
+        from agents.cognition.emergent_prices import EmergentPriceLedger
+
+        prices = self.prepared_emergent_prices
+        if prices is not None and type(prices) is not EmergentPriceLedger:
+            raise CognitiveLoopForkStateError(
+                "fork_state_invalid", "invalid prepared emergent prices"
             )
         biases = _tuple(
             "prepared_migration_displacement_biases",

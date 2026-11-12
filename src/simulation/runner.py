@@ -1034,6 +1034,7 @@ def _cognition_config_for(
     organized_conflict_enabled: bool = False,
     supply_chains_active: bool = False,
     markets_enabled: bool = False,
+    subjective_valuation_active: bool = False,
     regional_migration_mode: str | None = None,
     multi_polity_migration_enabled: bool = False,
 ) -> CognitionLoopConfig:
@@ -1469,6 +1470,24 @@ def _cognition_config_for(
         market_mode.value,
         MARKET_INSTITUTIONS_POLICY_VERSION if market_policy is not None else None,
     )
+    from agents.cognition.configuration import CognitionPriceMode
+    from agents.cognition.emergent_prices import (
+        EMERGENT_PRICES_POLICY_VERSION,
+        default_emergent_price_policy,
+    )
+
+    price_enabled = markets_enabled and subjective_valuation_active
+    price_mode = (
+        CognitionPriceMode.DETERMINISTIC
+        if price_enabled
+        else CognitionPriceMode.DISABLED
+    )
+    price_policy = default_emergent_price_policy() if price_enabled else None
+    _LOG.debug(
+        "cognition_config_price_expectation mode=%s policy_version=%s",
+        price_mode.value,
+        EMERGENT_PRICES_POLICY_VERSION if price_policy is not None else None,
+    )
     _LOG.debug(
         "cognition_config_organization_mode mode=%s",
         organization_mode.value,
@@ -1723,6 +1742,8 @@ def _cognition_config_for(
         organization_agency_policy=organization_agency_policy,
         market_institution_mode=market_mode,
         market_institution_policy=market_policy,
+        price_expectation_mode=price_mode,
+        price_expectation_policy=price_policy,
         formal_rule_mode=formal_rule_mode,
         formal_rule_policy=formal_rule_policy,
         dispute_mode=dispute_mode,
@@ -2901,6 +2922,9 @@ class SimulationRunner:
                     ),
                     markets_enabled=(
                         config.v4_capability_flags.markets_credit
+                    ),
+                    subjective_valuation_active=(
+                        config.subjective_valuation is not None
                     ),
                     regional_migration_mode=(
                         None
@@ -5022,6 +5046,7 @@ class SimulationRunner:
                 if any(binding.group_key not in groups for binding in ledger.bindings):
                     raise ValueError("institutional decay binding group mismatch")
         from agents.cognition.configuration import CognitionOrganizationMode
+        from agents.cognition.emergent_prices import EmergentPriceLedger
         from agents.cognition.formal_rules import FormalRuleLedger
         from agents.cognition.market_institutions import MarketInstitutionLedger
         from agents.cognition.organization_agency import OrganizationAgencyLedger
@@ -5035,6 +5060,12 @@ class SimulationRunner:
                     raise TypeError("market institution ledger invalid type")
                 if market_ledger.owner_id != state.agent_id:
                     raise ValueError("market institution ledger owner_id mismatch")
+            price_ledger = getattr(state, "emergent_prices", None)
+            if price_ledger is not None:
+                if type(price_ledger) is not EmergentPriceLedger:
+                    raise TypeError("emergent price ledger invalid type")
+                if price_ledger.owner_id != state.agent_id:
+                    raise ValueError("emergent price ledger owner_id mismatch")
             agency_ledger = getattr(state, "organization_agency", None)
             if agency_ledger is not None:
                 if type(agency_ledger) is not OrganizationAgencyLedger:
@@ -5322,6 +5353,7 @@ class SimulationRunner:
             market_institution_ledgers=(
                 self.export_market_institution_ledgers()
             ),
+            emergent_price_ledgers=(self.export_emergent_price_ledgers()),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
@@ -5858,6 +5890,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "market_institution_ledger_exported owners=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_emergent_price_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered emergent price ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "emergent_prices", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "emergent_price_ledger_exported owners=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6723,6 +6770,9 @@ class SimulationRunner:
                 markets_enabled=(
                     self._config.v4_capability_flags.markets_credit
                 ),
+                subjective_valuation_active=(
+                    self._config.subjective_valuation is not None
+                ),
                 regional_migration_mode=(
                     None
                     if self._config.regions_migration is None
@@ -7109,6 +7159,7 @@ def _construct_agent_bundle(
         organized_conflict_enabled=config.v4_capability_flags.organized_conflict,
         supply_chains_active=config.v4_capability_flags.supply_chains,
         markets_enabled=config.v4_capability_flags.markets_credit,
+        subjective_valuation_active=config.subjective_valuation is not None,
         regional_migration_mode=(
             None
             if config.regions_migration is None

@@ -59,6 +59,11 @@ from agents.cognition.diplomacy import (
     DiplomacyPolicy,
     default_diplomacy_policy,
 )
+from agents.cognition.emergent_prices import (
+    EMERGENT_PRICES_POLICY_VERSION,
+    EmergentPricePolicy,
+    default_emergent_price_policy,
+)
 from agents.cognition.epistemic import EpistemicPolicy, default_epistemic_policy
 from agents.cognition.evidence_testimony import (
     EVIDENCE_TESTIMONY_POLICY_VERSION,
@@ -478,6 +483,18 @@ class CognitionMarketMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionPriceMode(StrEnum):
+    """Owner-scoped price expectations. Disabled allocates nothing.
+
+    Active only when ``simulation.V4CapabilityFlags.markets_credit`` and the
+    V3-18 ``subjective_valuation`` spec are both present. This is a cognition
+    mode, not a capability flag and not a runner schema.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionFormalRuleMode(StrEnum):
     """Owner-scoped formal social rules. Disabled allocates nothing.
 
@@ -757,6 +774,8 @@ class CognitionLoopConfig:
     organization_agency_policy: OrganizationAgencyPolicy | None = None
     market_institution_mode: CognitionMarketMode = CognitionMarketMode.DISABLED
     market_institution_policy: MarketInstitutionPolicy | None = None
+    price_expectation_mode: CognitionPriceMode = CognitionPriceMode.DISABLED
+    price_expectation_policy: EmergentPricePolicy | None = None
     formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
     formal_rule_policy: FormalRulePolicy | None = None
     dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
@@ -1368,6 +1387,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "market_institution_policy must be MarketInstitutionPolicy or None"
             )
+        if type(self.price_expectation_mode) is not CognitionPriceMode:
+            _LOG.error(
+                "invalid_enum path=price_expectation_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "price_expectation_mode must be CognitionPriceMode"
+            )
+        if self.price_expectation_mode is CognitionPriceMode.DISABLED:
+            object.__setattr__(self, "price_expectation_policy", None)
+        elif self.price_expectation_policy is None:
+            object.__setattr__(
+                self,
+                "price_expectation_policy",
+                default_emergent_price_policy(),
+            )
+        elif type(self.price_expectation_policy) is not EmergentPricePolicy:
+            _LOG.error(
+                "invalid_enum path=price_expectation_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "price_expectation_policy must be EmergentPricePolicy or None"
+            )
         if type(self.formal_rule_mode) is not CognitionFormalRuleMode:
             _LOG.error("invalid_enum path=formal_rule_mode reason_code=invalid_mode")
             raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
@@ -1819,6 +1860,13 @@ class CognitionLoopConfig:
                 if self.market_institution_policy is not None
                 else None
             )
+        if self.price_expectation_mode is CognitionPriceMode.DETERMINISTIC:
+            material["price_expectation_mode"] = self.price_expectation_mode.value
+            material["price_expectation_policy_version"] = (
+                EMERGENT_PRICES_POLICY_VERSION
+                if self.price_expectation_policy is not None
+                else None
+            )
         if self.formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC:
             material["formal_rule_mode"] = self.formal_rule_mode.value
             material["formal_rule_policy_version"] = (
@@ -2131,6 +2179,8 @@ def build_cognitive_loop(
         organization_agency_policy=resolved.organization_agency_policy,
         market_institution_mode=resolved.market_institution_mode,
         market_institution_policy=resolved.market_institution_policy,
+        price_expectation_mode=resolved.price_expectation_mode,
+        price_expectation_policy=resolved.price_expectation_policy,
         formal_rule_mode=resolved.formal_rule_mode,
         formal_rule_policy=resolved.formal_rule_policy,
         dispute_mode=resolved.dispute_mode,
