@@ -26,6 +26,7 @@ from api.presentation_static import mount_presentation
 from api.research_cultural_cursor import CulturalCursorCodec
 from api.research_static import mount_research_ui
 from api.routes import (
+    accounting_ledgers_router,
     borders_router,
     branches_router,
     civilization_router,
@@ -596,6 +597,36 @@ def _attach_emergent_prices_reader(app: FastAPI) -> None:
     _LOGGER.info("emergent_prices_attach enabled=true")
 
 
+def _attach_accounting_ledgers_reader(app: FastAPI) -> None:
+    from api.accounting_ledgers_cursor import AccountingLedgersCursorCodec
+    from persistence.accounting_ledgers_filesystem import (
+        create_accounting_ledgers_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.accounting_ledgers_cursor_codec = None
+        app.state.accounting_ledgers_reader = None
+        return
+    secret = (
+        settings.accounting_ledgers_cursor_key.get_secret_value().encode("utf-8")
+        if settings.accounting_ledgers_cursor_key is not None
+        else None
+    )
+    if settings.accounting_ledgers_root is None or secret is None:
+        app.state.accounting_ledgers_cursor_codec = None
+        app.state.accounting_ledgers_reader = None
+        _LOGGER.info("accounting_ledgers_attach enabled=false")
+        return
+    app.state.accounting_ledgers_cursor_codec = (
+        AccountingLedgersCursorCodec.from_secret(secret)
+    )
+    app.state.accounting_ledgers_reader = create_accounting_ledgers_reader(
+        settings.accounting_ledgers_root
+    )
+    _LOGGER.info("accounting_ledgers_router_ready")
+
+
 def _attach_credit_relationships_reader(app: FastAPI) -> None:
     from api.credit_relationships_cursor import CreditRelationshipsCursorCodec
     from persistence.credit_relationships_filesystem import (
@@ -794,6 +825,7 @@ def create_app(
     _attach_supply_chain_reader(app)
     _attach_market_institutions_reader(app)
     _attach_emergent_prices_reader(app)
+    _attach_accounting_ledgers_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -835,6 +867,7 @@ def create_app(
     app.include_router(supply_chains_router)
     app.include_router(market_institutions_router)
     app.include_router(emergent_prices_router)
+    app.include_router(accounting_ledgers_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

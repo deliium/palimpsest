@@ -4,6 +4,24 @@ Public facade. Private authority modules (``world._*``) and legacy gateway
 helpers are not re-exported. Objective mutation goes through ``simulation.WorldEngine``.
 """
 
+from world.accounting_ledgers import (
+    ACCOUNTING_FRAME_FIELD_COUNT,
+    ACCOUNTING_FRAME_MAX_CHARS,
+    ACCOUNTING_FRAME_MAX_RELATIONS,
+    ACCOUNTING_FRAME_SUBJECT,
+    AccountingEntryFrame,
+    AccountingFrameAct,
+    AccountingFrameAssessment,
+    AccountingFrameDirection,
+    AccountingFrameEntryKind,
+    AccountingFrameIntegrity,
+    accounting_entry_relation,
+    accounting_record_content,
+    accounting_record_genre,
+    encode_accounting_entry_frame,
+    parse_accounting_entry_frame,
+    parse_accounting_entry_relation,
+)
 from world.actions import (
     ActionProposal,
     ActionRequest,
@@ -376,6 +394,10 @@ from world.values import (
 )
 
 __all__ = [
+    "ACCOUNTING_FRAME_FIELD_COUNT",
+    "ACCOUNTING_FRAME_MAX_CHARS",
+    "ACCOUNTING_FRAME_MAX_RELATIONS",
+    "ACCOUNTING_FRAME_SUBJECT",
     "COMMUNICATION_ELIGIBILITY_POLICY_VERSION",
     "COMMUNICATION_SCHEMA_VERSION",
     "CONTENT_VISIBILITY_THRESHOLD",
@@ -431,6 +453,12 @@ __all__ = [
     "SUPPLY_CHAIN_MAX_STAGE_DEPTH",
     "SUPPLY_CHAIN_POLICY_VERSION",
     "SUPPLY_CHAIN_RECIPES",
+    "AccountingEntryFrame",
+    "AccountingFrameAct",
+    "AccountingFrameAssessment",
+    "AccountingFrameDirection",
+    "AccountingFrameEntryKind",
+    "AccountingFrameIntegrity",
     "ActionCause",
     "ActionProposal",
     "ActionRequest",
@@ -645,6 +673,9 @@ __all__ = [
     "WorldEvent",
     "WorldId",
     "WorldRevision",
+    "accounting_entry_relation",
+    "accounting_record_content",
+    "accounting_record_genre",
     "agent_command_tag",
     "artifact_kind_is_durable_capable",
     "artifact_kind_is_portable",
@@ -661,6 +692,7 @@ __all__ = [
     "default_entrant_body",
     "default_physical_rules",
     "detached_mapping",
+    "encode_accounting_entry_frame",
     "encode_credit_claim_frame",
     "event_is_replayable",
     "example_environmental_dynamics",
@@ -678,6 +710,8 @@ __all__ = [
     "observation_allows_communication_target",
     "observed_self_from_body",
     "origin_utterance",
+    "parse_accounting_entry_frame",
+    "parse_accounting_entry_relation",
     "parse_credit_claim_frame",
     "parse_credit_claim_relation",
     "physical_rules_fingerprint",

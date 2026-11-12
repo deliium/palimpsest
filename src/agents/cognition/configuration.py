@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from agents.cognition.accounting_ledgers import (
+    ACCOUNTING_LEDGERS_POLICY_VERSION,
+    AccountingLedgerPolicy,
+    default_accounting_ledger_policy,
+)
 from agents.cognition.artifacts import ArtifactInterpretationMode
 from agents.cognition.borders import (
     BordersPolicy,
@@ -512,6 +517,18 @@ class CognitionCreditMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionAccountingLedgerMode(StrEnum):
+    """Owner-scoped accounting interpretations. Disabled allocates nothing.
+
+    Active only when ``simulation.V4CapabilityFlags.organizations`` and the
+    V3-11 ``durable_records`` spec are both present. This is a cognition mode,
+    not a capability flag and not a runner schema.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionFormalRuleMode(StrEnum):
     """Owner-scoped formal social rules. Disabled allocates nothing.
 
@@ -795,6 +812,10 @@ class CognitionLoopConfig:
     price_expectation_policy: EmergentPricePolicy | None = None
     credit_relationship_mode: CognitionCreditMode = CognitionCreditMode.DISABLED
     credit_relationship_policy: CreditRelationshipPolicy | None = None
+    accounting_ledger_mode: CognitionAccountingLedgerMode = (
+        CognitionAccountingLedgerMode.DISABLED
+    )
+    accounting_ledger_policy: AccountingLedgerPolicy | None = None
     formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
     formal_rule_policy: FormalRulePolicy | None = None
     dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
@@ -1450,6 +1471,28 @@ class CognitionLoopConfig:
             raise TypeError(
                 "credit_relationship_policy must be CreditRelationshipPolicy or None"
             )
+        if type(self.accounting_ledger_mode) is not CognitionAccountingLedgerMode:
+            _LOG.error(
+                "invalid_enum path=accounting_ledger_mode reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "accounting_ledger_mode must be CognitionAccountingLedgerMode"
+            )
+        if self.accounting_ledger_mode is CognitionAccountingLedgerMode.DISABLED:
+            object.__setattr__(self, "accounting_ledger_policy", None)
+        elif self.accounting_ledger_policy is None:
+            object.__setattr__(
+                self,
+                "accounting_ledger_policy",
+                default_accounting_ledger_policy(),
+            )
+        elif type(self.accounting_ledger_policy) is not AccountingLedgerPolicy:
+            _LOG.error(
+                "invalid_enum path=accounting_ledger_policy reason_code=invalid_type"
+            )
+            raise TypeError(
+                "accounting_ledger_policy must be AccountingLedgerPolicy or None"
+            )
         if type(self.formal_rule_mode) is not CognitionFormalRuleMode:
             _LOG.error("invalid_enum path=formal_rule_mode reason_code=invalid_mode")
             raise TypeError("formal_rule_mode must be CognitionFormalRuleMode")
@@ -1915,6 +1958,13 @@ class CognitionLoopConfig:
                 if self.credit_relationship_policy is not None
                 else None
             )
+        if self.accounting_ledger_mode is CognitionAccountingLedgerMode.DETERMINISTIC:
+            material["accounting_ledger_mode"] = self.accounting_ledger_mode.value
+            material["accounting_ledger_policy_version"] = (
+                ACCOUNTING_LEDGERS_POLICY_VERSION
+                if self.accounting_ledger_policy is not None
+                else None
+            )
         if self.formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC:
             material["formal_rule_mode"] = self.formal_rule_mode.value
             material["formal_rule_policy_version"] = (
@@ -2231,6 +2281,8 @@ def build_cognitive_loop(
         price_expectation_policy=resolved.price_expectation_policy,
         credit_relationship_mode=resolved.credit_relationship_mode,
         credit_relationship_policy=resolved.credit_relationship_policy,
+        accounting_ledger_mode=resolved.accounting_ledger_mode,
+        accounting_ledger_policy=resolved.accounting_ledger_policy,
         formal_rule_mode=resolved.formal_rule_mode,
         formal_rule_policy=resolved.formal_rule_policy,
         dispute_mode=resolved.dispute_mode,

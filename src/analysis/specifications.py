@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 216
+METRIC_FAMILY_COUNT: Final[int] = 220
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -291,6 +291,10 @@ class MetricFamilyId(StrEnum):
     CREDIT_REPAYMENT_PERFORMANCE = "credit_repayment_performance"
     CREDIT_TERM_ALIGNMENT = "credit_term_alignment"
     CREDIT_DISTRIBUTION_STRUCTURE = "credit_distribution_structure"
+    ACCOUNTING_RECORD_COVERAGE = "accounting_record_coverage"
+    ACCOUNTING_ENTRY_ALIGNMENT = "accounting_entry_alignment"
+    ACCOUNTING_RECORD_CONDITION = "accounting_record_condition"
+    ACCOUNTING_FLOW_STRUCTURE = "accounting_flow_structure"
 
 
 class DenominatorKind(StrEnum):
@@ -9018,6 +9022,59 @@ CREDIT_DISTRIBUTION_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
     "distribution_coverage",
 )
 
+ACCOUNTING_RECORD_COVERAGE_KEYS: Final[tuple[str, ...]] = (
+    "accounting_ledgers_window_tick",
+    "record_row_count",
+    "entry_row_count",
+    "record_backed_entry_count",
+    "unbacked_entry_count",
+    "intact_row_count",
+    "damaged_row_count",
+    "tombstoned_row_count",
+    "coverage",
+    "availability",
+)
+ACCOUNTING_ENTRY_ALIGNMENT_KEYS: Final[tuple[str, ...]] = (
+    "accounting_ledgers_window_tick",
+    "consistent_count",
+    "unresolved_count",
+    "inconsistent_count",
+    "not_applicable_count",
+    "owner_row_count",
+    "evidence_row_count",
+    "alignment_share_milli",
+    "coverage",
+    "availability",
+)
+ACCOUNTING_RECORD_CONDITION_KEYS: Final[tuple[str, ...]] = (
+    "accounting_ledgers_window_tick",
+    "unassessed_count",
+    "consistent_count",
+    "contradicted_count",
+    "outdated_count",
+    "suspected_fraudulent_count",
+    "damaged_count",
+    "total_row_count",
+    "assessed_share_milli",
+    "damaged_share_milli",
+    "coverage",
+    "availability",
+)
+ACCOUNTING_FLOW_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "accounting_ledgers_window_tick",
+    "exchange_count",
+    "debt_count",
+    "inventory_count",
+    "organizational_resource_count",
+    "contribution_count",
+    "inflow_count",
+    "outflow_count",
+    "holding_count",
+    "counterparty_count",
+    "coverage",
+    "availability",
+)
+
 
 def _trade_spec(
     *,
@@ -9305,6 +9362,36 @@ def _credit_spec(
         availability_behavior="explicit_unknown_without_credit_evidence",
     )
 
+def _accounting_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset({EvidenceStage.OBJECTIVE_EVENT_STATE}),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="accounting_ledgers_window_tick",
+        deceased_policy="retain_committed_accounting_evidence",
+        zero_holding_policy="no_accounting_rows_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="owner tokens never create self-edges",
+        censoring_policy="partial coverage remains explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="emit_value",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_accounting_evidence",
+    )
+
 
 def _spec_market_venue_recurrence() -> MetricSpecification:
     return _market_spec(
@@ -9436,6 +9523,50 @@ def _spec_credit_distribution_structure() -> MetricSpecification:
         keys=CREDIT_DISTRIBUTION_STRUCTURE_KEYS,
         opportunity="distribution shape counts; never one canonical ratio",
     )
+
+def _spec_accounting_record_coverage() -> MetricSpecification:
+    return _accounting_spec(
+        family_id=MetricFamilyId.ACCOUNTING_RECORD_COVERAGE,
+        population="detached_accounting_records",
+        denominator="observed_record_and_entry_rows",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=ACCOUNTING_RECORD_COVERAGE_KEYS,
+        opportunity="record coverage counts only; never an objective ledger",
+    )
+
+
+def _spec_accounting_entry_alignment() -> MetricSpecification:
+    return _accounting_spec(
+        family_id=MetricFamilyId.ACCOUNTING_ENTRY_ALIGNMENT,
+        population="detached_accounting_owner_alignment",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=ACCOUNTING_ENTRY_ALIGNMENT_KEYS,
+        opportunity="researcher-only alignment; never cognition input",
+    )
+
+
+def _spec_accounting_record_condition() -> MetricSpecification:
+    return _accounting_spec(
+        family_id=MetricFamilyId.ACCOUNTING_RECORD_CONDITION,
+        population="detached_accounting_entries",
+        denominator="observed_entry_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=ACCOUNTING_RECORD_CONDITION_KEYS,
+        opportunity="owner appraisals only; never truth or fraud findings",
+    )
+
+
+def _spec_accounting_flow_structure() -> MetricSpecification:
+    return _accounting_spec(
+        family_id=MetricFamilyId.ACCOUNTING_FLOW_STRUCTURE,
+        population="detached_accounting_flow_rows",
+        denominator="observed_flow_rows",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=ACCOUNTING_FLOW_STRUCTURE_KEYS,
+        opportunity="claim sums and counts only; never a wealth total",
+    )
+
 
 
 def _spec_infrastructure_network_structure() -> MetricSpecification:
@@ -9947,6 +10078,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_credit_repayment_performance,
     _spec_credit_term_alignment,
     _spec_credit_distribution_structure,
+    _spec_accounting_record_coverage,
+    _spec_accounting_entry_alignment,
+    _spec_accounting_record_condition,
+    _spec_accounting_flow_structure,
 )
 
 

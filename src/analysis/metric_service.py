@@ -12,6 +12,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, cast
 
+from analysis.accounting_ledgers_analysis import AccountingLedgersAnalysis
+from analysis.accounting_ledgers_metrics import (
+    compute_accounting_entry_alignment,
+    compute_accounting_flow_structure,
+    compute_accounting_record_condition,
+    compute_accounting_record_coverage,
+)
 from analysis.behavior_metrics import (
     compute_behavioral_specialization,
     compute_repeated_conventions,
@@ -403,6 +410,7 @@ class MetricComputationInputs:
     market_institutions_analysis: MarketInstitutionsAnalysis | None = None
     emergent_prices_analysis: EmergentPricesAnalysis | None = None
     credit_relationships_analysis: CreditRelationshipsAnalysis | None = None
+    accounting_ledgers_analysis: AccountingLedgersAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2649,6 +2657,35 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("credit_relationship_metrics_emitted families=4 catalog=216")
     else:
         _LOG.debug("credit_relationship_metrics_disabled")
+    if inputs.accounting_ledgers_analysis is not None:
+        accounting = inputs.accounting_ledgers_analysis
+        _safe(
+            "accounting_record_coverage",
+            lambda: compute_accounting_record_coverage(
+                accounting, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "accounting_entry_alignment",
+            lambda: compute_accounting_entry_alignment(
+                accounting, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "accounting_record_condition",
+            lambda: compute_accounting_record_condition(
+                accounting, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "accounting_flow_structure",
+            lambda: compute_accounting_flow_structure(
+                accounting, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("accounting_ledger_metrics_emitted families=4 catalog=220")
+    else:
+        _LOG.debug("accounting_ledger_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

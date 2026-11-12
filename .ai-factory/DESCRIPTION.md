@@ -651,14 +651,14 @@ expectations never alter exchange admission. Detached
 `analysis.emergent_prices_*` reconstructs paired ratios, completed and quoted
 distributions, owner joins, market distributions through detached V4-20
 memberships, and pairwise convergence from committed events and token-only
-exports. Four families append the catalog 208 -> **212**; current catalog: 216 metric families. The sibling
+exports. Four families append the catalog 208 -> **212**; current catalog: 220 metric families. The sibling
 `emergent-prices-snapshot-v1` / `emergent-prices-store-v1` artifact publishes
 programmatically and atomically; seven GET-only
 `/v1/simulations/{run_id}/emergent-prices` routes require `SUBJECTIVE_DEBUG` and
 fail closed with `emergent_prices_disabled`; the Research UI adds a read-only
 panel and Godot adds no overlay. Off-gate experiment `emergent_prices@1` is
 registered. No money, currency, credit, debt, allocation, quota, planner, or
-canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 216, 14 V4 contexts, 12 V4 flags, eight owned / four unowned,
+canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 220, 14 V4 contexts, 12 V4 flags, eight owned / four unowned,
 replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
 
 Credit relationships (V4-22) deepen the owned `markets_credit` context and add
@@ -680,6 +680,32 @@ programmatically and atomically; seven GET-only
 `SUBJECTIVE_DEBUG`; the Research UI adds a read-only panel and Godot adds no
 overlay. Off-gate experiment `credit_relationships@1` is registered. No bank,
 money, interest, enforceable debt, credit score, or canonical credit exists.
-Pins: 43 commands, 73 observer semantic types, 216 metric families, 14 V4
+Pins: 43 commands, 73 observer semantic types, 220 metric families, 14 V4
 contexts, 12 V4 flags, eight owned / four unowned, replay-v27/codec `v25`,
 `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+V4-23 (accounting ledgers, 2026-11-12) deepens the owned `organizations`
+context and the V3-11 durable-records seam without adding a V4 context, flag
+slot, `runner-config-v57`, root field, per-agent key, command, event, observer
+semantic type, write pair, `/v2` route, migration, or Godot overlay. Accounting
+cognition activates only when `organizations` and the `durable_records` spec are
+present; the durable channel keeps its cultural/provenance prerequisites. One
+owner keeps a bounded `accounting-ledgers.v1` ledger of five descriptive record
+kinds (`exchange`, `debt`, `inventory`, `organizational_resource`,
+`contribution`), six directions, six owner appraisals, revisions, evidence refs,
+confidence, counts, and notices. `consistent` is not truth and
+`suspected_fraudulent` is not proven fraud. Accounting-like artifacts are
+existing durable records carrying `acc_v1` relation triples; bounded `acc_v1`
+frames travel inside existing `Talk`/`Tell`, and accounting content may extend an
+already-selected `Inscribe` without changing its verb, kind, or recipient.
+Evidence use is a pure candidate bridge into the existing V4-08 ledger. Detached
+`analysis.accounting_ledgers_*` reconstructs committed records, transfers,
+contributions, and speech, keeps three separated layers, and appends four metric
+families (216 -> 220). `accounting-ledgers-snapshot-v1` and
+`accounting-ledgers-store-v1` publish programmatically and atomically; seven
+GET-only `/v1/simulations/{run_id}/accounting-ledgers` routes require
+`SUBJECTIVE_DEBUG` and fail closed with `accounting_ledgers_disabled`; the
+Research UI adds a read-only panel and Godot adds no overlay. Off-gate experiment
+`accounting_ledgers@1` is registered. Pins: 220 metric families, 43 commands, 73
+observer semantic types, 14 V4 contexts, 12 V4 flags, eight owned / four
+unowned, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

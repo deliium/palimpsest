@@ -131,4 +131,4 @@ legacy-catalog control with an extended-catalog treatment.
 - [Analysis metrics](analysis-metrics.md)
 - [Configuration](configuration.md)
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

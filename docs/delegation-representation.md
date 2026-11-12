@@ -210,4 +210,4 @@ V4-13 added four border families (catalog 172 -> 176). V4-14 raises the catalog
 to **180** families. See [borders and claims](borders-and-claims.md) and
 [migration and displacement](migration-displacement.md).
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

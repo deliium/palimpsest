@@ -181,14 +181,14 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 216 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, six V4-19 supply-chain families, four V4-20 market-like institution families, four V4-21 emergent-price families, and four V4-22 credit-relationship families) |
+| Metric families | 220 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, six V4-19 supply-chain families, four V4-20 market-like institution families, four V4-21 emergent-price families, four V4-22 credit-relationship families, and four V4-23 accounting-ledger families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 216 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 220 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -1167,3 +1167,32 @@ canonical credit exists. See `docs/credit-relationships.md`.
 
 four remain unowned (`science`, `epidemics`, `ecological_feedback`,
 `disasters`); `markets_credit` is owned by V4-20/V4-21/V4-22.
+
+
+### V4-23 accounting-ledger seam
+
+V4-23 deepens the owned `organizations` context and the V3-11 durable-records
+seam. Accounting cognition activates only when `organizations` and the
+`durable_records` spec are both present; the durable channel keeps its existing
+cultural/provenance prerequisites. `agents.cognition.accounting_ledgers` keeps
+one bounded owner ledger of entries, claims, revisions, evidence refs, counts,
+and notices under `accounting-ledgers.v1`. Five descriptive entry kinds
+(`exchange`, `debt`, `inventory`, `organizational_resource`, `contribution`),
+six directions, and six owner appraisals exist; `consistent` is not truth and
+`suspected_fraudulent` is not proven fraud. Accounting-like records are existing
+durable-capable artifacts carrying `acc_v1` relation triples; no new genre,
+kind, command, event, observer semantic type, write pair, `/v2` route, or
+migration is added. Bounded `acc_v1` frames travel inside existing `Talk`/
+`Tell`; accounting content may extend an already-selected `Inscribe` without
+changing its verb, kind, or recipient. The evidence bridge is a pure candidate
+projection into the existing V4-08 ledger. `analysis.accounting_ledgers_*`
+reconstructs committed record/transfer/contribution/speech evidence, keeps
+objective, owner, and analytical layers separate, and reports counts, claim
+sums, and milli shares only. Four families append the catalog 216 -> 220.
+`accounting-ledgers-snapshot-v1` and `accounting-ledgers-store-v1` publish
+programmatically after completion; seven GET-only dual-gated
+`/v1/simulations/{run_id}/accounting-ledgers` routes fail closed with
+`accounting_ledgers_disabled`; the Research UI adds a read-only panel and Godot
+adds no overlay. Off-gate `accounting_ledgers@1` is registered. Pins remain 14
+V4 contexts, 12 flags, eight owned, 43 commands, 73 observer semantic types,
+replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, and Alembic `0017`.

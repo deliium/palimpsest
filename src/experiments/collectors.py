@@ -437,6 +437,40 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("credit_relationships_collector_missing_events_or_seams")
+    accounting_enabled = (
+        events is not None
+        and getattr(flags, "organizations", False)
+        and getattr(runner_config, "durable_records", None) is not None
+    )
+    if accounting_enabled:
+        try:
+            from experiments.accounting_ledgers_completed_run import (
+                accounting_owner_rows_from_result,
+                build_completed_run_accounting_ledgers_analysis,
+            )
+
+            owner_rows = accounting_owner_rows_from_result(arm.runner_result)
+            accounting_analysis = (
+                build_completed_run_accounting_ledgers_analysis(
+                    run_id=arm.assignment.run_id.value,
+                    events=events if events is not None else (),
+                    owner_rows=owner_rows,
+                )
+            )
+            inputs = replace(
+                inputs, accounting_ledgers_analysis=accounting_analysis
+            )
+            _LOG.debug(
+                "[FIX] accounting_ledgers_collector_injected families=6 owner_rows=%s",
+                len(owner_rows),
+            )
+        except Exception as exc:
+            _LOG.error(
+                "accounting_ledgers_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("accounting_ledgers_collector_missing_events_or_seams")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

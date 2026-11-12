@@ -286,6 +286,8 @@ class CognitiveLoop:
 
     __slots__ = (
         "_acceptance_window_ticks",
+        "_accounting_ledger_mode",
+        "_accounting_ledger_policy",
         "_artifact_interpretation_mode",
         "_borders_mode",
         "_borders_policy",
@@ -376,6 +378,7 @@ class CognitiveLoop:
         "_perception",
         "_planner",
         "_possession_succession_active",
+        "_prepared_accounting_ledger",
         "_prepared_borders",
         "_prepared_credit_relationships",
         "_prepared_diplomacy",
@@ -533,6 +536,8 @@ class CognitiveLoop:
         price_expectation_policy: object | None = None,
         credit_relationship_mode: object | None = None,
         credit_relationship_policy: object | None = None,
+        accounting_ledger_mode: object | None = None,
+        accounting_ledger_policy: object | None = None,
         formal_rule_mode: object | None = None,
         formal_rule_policy: object | None = None,
         dispute_mode: object | None = None,
@@ -1133,6 +1138,34 @@ class CognitiveLoop:
         self._credit_relationship_mode = credit_mode
         self._credit_relationship_policy = credit_policy
         self._prepared_credit_relationships: object | None = None
+        from agents.cognition.accounting_ledgers import (
+            AccountingLedgerPolicy,
+            default_accounting_ledger_policy,
+        )
+        from agents.cognition.configuration import CognitionAccountingLedgerMode
+
+        accounting_mode = (
+            CognitionAccountingLedgerMode.DISABLED
+            if accounting_ledger_mode is None
+            else accounting_ledger_mode
+        )
+        if type(accounting_mode) is not CognitionAccountingLedgerMode:
+            raise TypeError(
+                "accounting_ledger_mode must be CognitionAccountingLedgerMode"
+            )
+        if accounting_mode is CognitionAccountingLedgerMode.DISABLED:
+            accounting_policy = None
+        elif accounting_ledger_policy is None:
+            accounting_policy = default_accounting_ledger_policy()
+        elif type(accounting_ledger_policy) is not AccountingLedgerPolicy:
+            raise TypeError(
+                "accounting_ledger_policy must be AccountingLedgerPolicy or None"
+            )
+        else:
+            accounting_policy = accounting_ledger_policy
+        self._accounting_ledger_mode = accounting_mode
+        self._accounting_ledger_policy = accounting_policy
+        self._prepared_accounting_ledger: object | None = None
         from agents.cognition.configuration import CognitionFormalRuleMode
         from agents.cognition.formal_rules import (
             FormalRulePolicy,
@@ -1752,6 +1785,7 @@ class CognitiveLoop:
             prepared_market_institutions=self._prepared_market_institutions,
             prepared_emergent_prices=self._prepared_emergent_prices,
             prepared_credit_relationships=self._prepared_credit_relationships,
+            prepared_accounting_ledger=self._prepared_accounting_ledger,
             prepared_organization_agency=self._prepared_organization_agency,
             prepared_formal_rules=self._prepared_formal_rules,
             prepared_disputes=self._prepared_disputes,
@@ -1812,6 +1846,7 @@ class CognitiveLoop:
         self._prepared_market_institutions = state.prepared_market_institutions
         self._prepared_emergent_prices = state.prepared_emergent_prices
         self._prepared_credit_relationships = state.prepared_credit_relationships
+        self._prepared_accounting_ledger = state.prepared_accounting_ledger
         self._prepared_organization_agency = state.prepared_organization_agency
         self._prepared_formal_rules = state.prepared_formal_rules
         self._prepared_disputes = state.prepared_disputes
@@ -3494,8 +3529,312 @@ class CognitiveLoop:
         )
         return updated
 
+    def _prepare_accounting_ledgers(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        structured_commitments: object | None,
+        subjective_valuations: object | None,
+        organizations: object | None,
+    ) -> object | None:
+        """Refresh one owner's accounting beliefs from owner-visible sources."""
+        from agents.cognition.accounting_ledgers import (
+            AccountingLedger,
+            AccountingLedgerPolicy,
+            AccountingRecordIntegrity,
+            AccountingRecordObservation,
+            accounting_record_token,
+            apply_accounting_ledger_update,
+        )
+        from agents.cognition.configuration import CognitionAccountingLedgerMode
+
+        if (
+            self._accounting_ledger_mode
+            is not CognitionAccountingLedgerMode.DETERMINISTIC
+        ):
+            self._prepared_accounting_ledger = None
+            return None
+        policy = self._accounting_ledger_policy
+        if type(policy) is not AccountingLedgerPolicy:
+            raise TypeError("accounting_ledger_policy must be AccountingLedgerPolicy")
+        snapshot = loop_input.snapshot
+        carried = (
+            None if snapshot is None else getattr(snapshot, "accounting_ledger", None)
+        )
+        prior = carried if type(carried) is AccountingLedger else None
+        observation = loop_input.observation
+        tick = observation.tick
+        integrity_by_value = {
+            "intact": AccountingRecordIntegrity.INTACT,
+            "damaged": AccountingRecordIntegrity.DAMAGED,
+            "partially_lost": AccountingRecordIntegrity.PARTIALLY_LOST,
+            "destroyed": AccountingRecordIntegrity.UNKNOWN,
+        }
+        records: list[AccountingRecordObservation] = []
+        for ordinal, artifact in enumerate(observation.artifacts):
+            genre = getattr(artifact, "record_genre", None)
+            genre_value = getattr(genre, "value", None)
+            integrity = getattr(artifact, "integrity", None)
+            relations = tuple(
+                (
+                    relation.subject,
+                    relation.predicate,
+                    relation.object,
+                )
+                for relation in getattr(artifact.content, "relations", ())
+            )
+            records.append(
+                AccountingRecordObservation(
+                    record_token=accounting_record_token(
+                        artifact.entity_id.value
+                    ),
+                    record_genre=genre_value,
+                    integrity=integrity_by_value.get(
+                        getattr(integrity, "value", ""),
+                        AccountingRecordIntegrity.UNKNOWN,
+                    ),
+                    content_revision=getattr(
+                        artifact, "content_revision", 0
+                    ),
+                    relations=relations,
+                    tick=tick,
+                    ordinal=ordinal,
+                )
+            )
+        contributions: list[object] = []
+        for project in getattr(observation, "collective_projects", ()):
+            contributions.extend(getattr(project, "contributions", ()))
+        commitments = (
+            getattr(structured_commitments, "interpretations", None)
+            if structured_commitments is not None
+            else None
+        )
+        valuation_rows: tuple[object, ...] | None = None
+        if subjective_valuations is not None:
+            valuation_rows = (
+                *getattr(subjective_valuations, "kind_rows", ()),
+                *getattr(subjective_valuations, "judgment_rows", ()),
+            )
+        organization_rows = (
+            getattr(organizations, "concepts", None)
+            if organizations is not None
+            else None
+        )
+        observer = getattr(observation, "observer_id", None)
+        observer_value = getattr(observer, "value", None)
+        owner_value = (
+            observer_value
+            if type(observer_value) is str
+            else loop_input.agent_id.value
+        )
+        claims = self._received_accounting_claims(observation, owner_value)
+        updated = apply_accounting_ledger_update(
+            owner_id=loop_input.agent_id,
+            tick=tick,
+            records=tuple(records),
+            claims=cast("Any", claims),
+            prior=prior,
+            commitments=(
+                tuple(cast("list[object]", commitments))
+                if commitments is not None
+                else None
+            ),
+            valuations=(
+                tuple(cast("list[object]", valuation_rows))
+                if valuation_rows is not None
+                else None
+            ),
+            contributions=tuple(contributions),
+            organizations=(
+                tuple(cast("list[object]", organization_rows))
+                if organization_rows is not None
+                else None
+            ),
+            policy=policy,
+        )
+        self._prepared_accounting_ledger = updated
+        _LOG.debug(
+            "accounting_ledger_carried entries=%s notices=%s",
+            len(updated.entries),
+            len(updated.notices),
+        )
+        return updated
+
+    def _received_accounting_claims(
+        self, observation: object, owner_value: str
+    ) -> tuple[object, ...]:
+        """Parse received ``acc_v1`` frames into owner-scoped claims."""
+        from agents.cognition.accounting_ledgers import (
+            AccountingAct,
+            AccountingClaim,
+            AccountingClaimSource,
+            AccountingDirection,
+            AccountingEntryKind,
+            AccountingRecordAssessment,
+            AccountingRecordIntegrity,
+            AccountingTerms,
+        )
+        from world.accounting_ledgers import (
+            AccountingFrameAct,
+            AccountingFrameAssessment,
+            AccountingFrameDirection,
+            AccountingFrameEntryKind,
+            AccountingFrameIntegrity,
+            parse_accounting_entry_relation,
+        )
+
+        acts = {
+            frame.value: member
+            for frame, member in (
+                (AccountingFrameAct.DECLARE_ENTRY, AccountingAct.DECLARE_ENTRY),
+                (AccountingFrameAct.CITE_RECORD, AccountingAct.CITE_RECORD),
+                (AccountingFrameAct.AFFIRM_ENTRY, AccountingAct.AFFIRM_ENTRY),
+                (AccountingFrameAct.DISPUTE_ENTRY, AccountingAct.DISPUTE_ENTRY),
+                (AccountingFrameAct.CORRECT_ENTRY, AccountingAct.CORRECT_ENTRY),
+                (AccountingFrameAct.RETRACT_ENTRY, AccountingAct.RETRACT_ENTRY),
+            )
+        }
+        kinds = {
+            frame.value: member
+            for frame, member in (
+                (AccountingFrameEntryKind.EXCHANGE, AccountingEntryKind.EXCHANGE),
+                (AccountingFrameEntryKind.DEBT, AccountingEntryKind.DEBT),
+                (AccountingFrameEntryKind.INVENTORY, AccountingEntryKind.INVENTORY),
+                (
+                    AccountingFrameEntryKind.ORGANIZATIONAL_RESOURCE,
+                    AccountingEntryKind.ORGANIZATIONAL_RESOURCE,
+                ),
+                (
+                    AccountingFrameEntryKind.CONTRIBUTION,
+                    AccountingEntryKind.CONTRIBUTION,
+                ),
+            )
+        }
+        directions = {
+            frame.value: member
+            for frame, member in (
+                (AccountingFrameDirection.INFLOW, AccountingDirection.INFLOW),
+                (AccountingFrameDirection.OUTFLOW, AccountingDirection.OUTFLOW),
+                (AccountingFrameDirection.HOLDING, AccountingDirection.HOLDING),
+                (
+                    AccountingFrameDirection.RECEIVABLE,
+                    AccountingDirection.RECEIVABLE,
+                ),
+                (AccountingFrameDirection.PAYABLE, AccountingDirection.PAYABLE),
+                (
+                    AccountingFrameDirection.CONTRIBUTION,
+                    AccountingDirection.CONTRIBUTION,
+                ),
+            )
+        }
+        assessments = {
+            frame.value: member
+            for frame, member in (
+                (
+                    AccountingFrameAssessment.UNASSESSED,
+                    AccountingRecordAssessment.UNASSESSED,
+                ),
+                (
+                    AccountingFrameAssessment.CONSISTENT,
+                    AccountingRecordAssessment.CONSISTENT,
+                ),
+                (
+                    AccountingFrameAssessment.CONTRADICTED,
+                    AccountingRecordAssessment.CONTRADICTED,
+                ),
+                (
+                    AccountingFrameAssessment.OUTDATED,
+                    AccountingRecordAssessment.OUTDATED,
+                ),
+                (
+                    AccountingFrameAssessment.SUSPECTED_FRAUDULENT,
+                    AccountingRecordAssessment.SUSPECTED_FRAUDULENT,
+                ),
+                (
+                    AccountingFrameAssessment.DAMAGED,
+                    AccountingRecordAssessment.DAMAGED,
+                ),
+            )
+        }
+        integrity_values = {
+            frame.value: member
+            for frame, member in (
+                (AccountingFrameIntegrity.INTACT, AccountingRecordIntegrity.INTACT),
+                (AccountingFrameIntegrity.DAMAGED, AccountingRecordIntegrity.DAMAGED),
+                (
+                    AccountingFrameIntegrity.PARTIALLY_LOST,
+                    AccountingRecordIntegrity.PARTIALLY_LOST,
+                ),
+                (AccountingFrameIntegrity.UNKNOWN, AccountingRecordIntegrity.UNKNOWN),
+            )
+        }
+        claims: list[AccountingClaim] = []
+        tick_value = getattr(observation, "tick", None)
+        tick = tick_value if type(tick_value) is int else 0
+        for communication in getattr(observation, "communications", ()):
+            speaker = getattr(communication, "speaker_id", None)
+            listener = getattr(communication, "listener_id", None)
+            speaker_value = getattr(speaker, "value", None)
+            listener_value = getattr(listener, "value", None)
+            if speaker_value != owner_value and listener_value != owner_value:
+                continue
+            if speaker_value == owner_value and listener_value == owner_value:
+                continue
+            counterparty_value = (
+                speaker_value if speaker_value != owner_value else listener_value
+            )
+            if type(counterparty_value) is not str:
+                continue
+            utterance = getattr(communication, "utterance", None)
+            content = getattr(utterance, "content", None)
+            for relation in getattr(content, "relations", ()):
+                frame = parse_accounting_entry_relation(relation)
+                if frame is None:
+                    continue
+                act = acts.get(frame.act.value)
+                kind = kinds.get(frame.entry_kind.value)
+                direction = directions.get(frame.direction.value)
+                assessment = assessments.get(frame.assessment.value)
+                integrity = integrity_values.get(frame.integrity.value)
+                if (
+                    act is None
+                    or kind is None
+                    or direction is None
+                    or assessment is None
+                    or integrity is None
+                ):
+                    continue
+                try:
+                    claims.append(
+                        AccountingClaim(
+                            anchor=frame.entry_anchor,
+                            terms=AccountingTerms(
+                                entry_kind=kind,
+                                direction=direction,
+                                item_kind=frame.item_kind,
+                                quantity=frame.quantity,
+                            ),
+                            act=act,
+                            source=AccountingClaimSource.COMMUNICATED,
+                            confidence_milli=frame.confidence_milli,
+                            tick=min(tick, frame.tick),
+                            ordinal=len(claims),
+                            record_token=frame.record_token,
+                            organization_token=frame.organization_token,
+                            counterparty_token=frame.counterparty_token,
+                            assessment=assessment,
+                            integrity=integrity,
+                        )
+                    )
+                except (ValueError, TypeError):
+                    continue
+        return tuple(claims)
+
     def _prepare_evidence(
-        self, loop_input: CognitiveLoopInput, memory: object | None
+        self,
+        loop_input: CognitiveLoopInput,
+        memory: object | None,
+        accounting_candidates: tuple[object, ...] = (),
     ) -> object | None:
         """Refresh one owner's evidence ledger from owner-visible inputs.
 
@@ -3509,6 +3848,7 @@ class CognitiveLoop:
             EvidenceLedger,
             EvidenceObservedReference,
             EvidenceOwnerContext,
+            EvidencePriorAgreement,
             EvidenceReferenceKind,
             EvidenceRememberedReference,
             apply_evidence_update,
@@ -3556,6 +3896,19 @@ class CognitiveLoop:
                     owner_id=loop_input.agent_id.value,
                 )
             )
+        accounting_observed: list[EvidenceObservedReference] = []
+        accounting_prior_agreements: list[EvidencePriorAgreement] = []
+        for candidate in accounting_candidates:
+            if type(candidate) is EvidenceObservedReference:
+                accounting_observed.append(candidate)
+            elif type(candidate) is EvidencePriorAgreement:
+                accounting_prior_agreements.append(candidate)
+        observed.extend(accounting_observed)
+        _LOG.debug(
+            "[FIX] accounting_evidence_candidates observed=%s prior=%s",
+            len(accounting_observed),
+            len(accounting_prior_agreements),
+        )
         for repository in observation.repositories:
             observed.append(
                 EvidenceObservedReference(
@@ -3687,6 +4040,7 @@ class CognitiveLoop:
             frames=tuple(frames),
             observed=tuple(observed),
             remembered=tuple(remembered),
+            prior_agreements=tuple(accounting_prior_agreements),
         )
         updated = detect_evidence_contradictions(
             updated, owner_id=loop_input.agent_id, tick=tick
@@ -6103,7 +6457,35 @@ class CognitiveLoop:
         )
         formal_rules = self._prepare_formal_rules(loop_input)
         disputes = self._prepare_disputes(loop_input, memory)
-        evidence = self._prepare_evidence(loop_input, memory)
+        subjective_valuations, scarcity_beliefs, acceptance_memories = (
+            self._prepare_subjective_valuations(
+                loop_input,
+                world_model=world_model,
+                emotional_evaluation=emotional_evaluation,
+            )
+        )
+        accounting_ledger = self._prepare_accounting_ledgers(
+            loop_input,
+            structured_commitments=structured_commitments,
+            subjective_valuations=subjective_valuations,
+            organizations=organization_concepts,
+        )
+        from agents.cognition.accounting_ledgers import (
+            accounting_evidence_candidates,
+        )
+
+        accounting_candidates = (
+            ()
+            if accounting_ledger is None
+            else accounting_evidence_candidates(
+                cast("Any", accounting_ledger),
+                owner_id=loop_input.agent_id,
+                tick=loop_input.observation.tick,
+            )
+        )
+        evidence = self._prepare_evidence(
+            loop_input, memory, accounting_candidates=accounting_candidates
+        )
         representation = self._prepare_representation(
             loop_input,
             organization_concepts=organization_concepts,
@@ -6241,13 +6623,6 @@ class CognitiveLoop:
                 provider=provider,
                 tick=loop_input.observation.tick,
             )
-        subjective_valuations, scarcity_beliefs, acceptance_memories = (
-            self._prepare_subjective_valuations(
-                loop_input,
-                world_model=world_model,
-                emotional_evaluation=emotional_evaluation,
-            )
-        )
         emergent_prices = self._prepare_emergent_prices(
             loop_input,
             subjective_valuations,
@@ -6532,6 +6907,7 @@ class CognitiveLoop:
             market_institutions=market_institutions,
             emergent_prices=emergent_prices,
             credit_relationships=credit_relationships,
+            accounting_ledger=accounting_ledger,
             organization_agency=organization_agency,
             formal_rules=formal_rules,
             disputes=disputes,
@@ -6990,6 +7366,7 @@ class CognitiveLoop:
             market_institutions=proposal.market_institutions,
             emergent_prices=proposal.emergent_prices,
             credit_relationships=proposal.credit_relationships,
+            accounting_ledger=proposal.accounting_ledger,
             organization_agency=proposal.organization_agency,
             formal_rules=proposal.formal_rules,
             disputes=disputes,

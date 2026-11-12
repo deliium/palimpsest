@@ -261,6 +261,10 @@ class Settings(BaseSettings):
     credit_relationships_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    accounting_ledgers_root: Path | None = None
+    accounting_ledgers_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -483,6 +487,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "credit_relationships cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("accounting_ledgers_cursor_key")
+    @classmethod
+    def validate_accounting_ledgers_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "accounting_ledgers cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -894,6 +909,19 @@ class Settings(BaseSettings):
             ),
             "credit_relationships_cursor_enabled": (
                 self.credit_relationships_cursor_key is not None
+            ),
+            "has_accounting_ledgers_root": (
+                self.accounting_ledgers_root is not None
+            ),
+            "has_accounting_ledgers_cursor_key": (
+                self.accounting_ledgers_cursor_key is not None
+            ),
+            "accounting_ledgers_enabled": (
+                self.accounting_ledgers_root is not None
+                and self.accounting_ledgers_cursor_key is not None
+            ),
+            "accounting_ledgers_cursor_enabled": (
+                self.accounting_ledgers_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

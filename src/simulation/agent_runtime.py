@@ -420,6 +420,7 @@ class AgentRuntime:
 
     __slots__ = (
         "_acceptance_memories",
+        "_accounting_ledger",
         "_advice",
         "_agent",
         "_applied_identity_operation_ids",
@@ -633,6 +634,7 @@ class AgentRuntime:
         self._market_institutions: object | None = None
         self._emergent_prices: object | None = None
         self._credit_relationships: object | None = None
+        self._accounting_ledger: object | None = None
         self._organization_agency: object | None = None
         self._formal_rules: object | None = None
         self._disputes: object | None = None
@@ -1459,6 +1461,41 @@ class AgentRuntime:
         _LOG.debug(
             "credit_relationships_carried rows=%s tick=%s",
             len(ledger.rows),
+            tick,
+        )
+
+    def _commit_accounting_ledger(
+        self, ledger: object | None, tick: int
+    ) -> None:
+        from agents.cognition.accounting_ledgers import AccountingLedger
+        from agents.cognition.configuration import CognitionAccountingLedgerMode
+
+        owner = self._agent.agent_id
+        mode = getattr(
+            self._loop,
+            "_accounting_ledger_mode",
+            CognitionAccountingLedgerMode.DISABLED,
+        )
+        if mode is not CognitionAccountingLedgerMode.DETERMINISTIC or ledger is None:
+            if mode is not CognitionAccountingLedgerMode.DETERMINISTIC:
+                if self._accounting_ledger is not None:
+                    _LOG.warning(
+                        "accounting_ledger_checkpoint_cleared "
+                        "reason_code=mode_disabled"
+                    )
+                self._accounting_ledger = None
+            return
+        if type(ledger) is not AccountingLedger:
+            raise TypeError("accounting_ledger must be AccountingLedger")
+        if ledger.owner_id != owner:
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=owner.value,
+            )
+        self._accounting_ledger = ledger
+        _LOG.debug(
+            "accounting_ledger_carried entries=%s tick=%s",
+            len(ledger.entries),
             tick,
         )
 
@@ -2653,6 +2690,7 @@ class AgentRuntime:
                 market_institutions=self._market_institutions,
                 emergent_prices=self._emergent_prices,
                 credit_relationships=self._credit_relationships,
+                accounting_ledger=self._accounting_ledger,
                 organization_agency=self._organization_agency,
                 formal_rules=self._formal_rules,
                 disputes=self._disputes,
@@ -3160,6 +3198,10 @@ class AgentRuntime:
         )
         self._commit_credit_relationships(
             getattr(pending.loop_result, "credit_relationships", None),
+            pending.tick,
+        )
+        self._commit_accounting_ledger(
+            getattr(pending.loop_result, "accounting_ledger", None),
             pending.tick,
         )
         self._commit_organization_agency(
@@ -3758,6 +3800,18 @@ class AgentRuntime:
         self._credit_relationships = getattr(
             checkpoint, "credit_relationships", None
         )
+        self._accounting_ledger = getattr(
+            checkpoint, "accounting_ledger", None
+        )
+        if (
+            self._accounting_ledger is not None
+            and getattr(self._accounting_ledger, "owner_id", None)
+            != self._agent.agent_id
+        ):
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
         if (
             self._credit_relationships is not None
             and getattr(self._credit_relationships, "owner_id", None)
@@ -3967,6 +4021,7 @@ class AgentRuntime:
             market_institutions=self._market_institutions,
             emergent_prices=self._emergent_prices,
             credit_relationships=self._credit_relationships,
+            accounting_ledger=self._accounting_ledger,
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
             disputes=self._disputes,

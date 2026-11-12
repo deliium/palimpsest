@@ -59,4 +59,4 @@ Multi-scale presentation is a client-side vocabulary only
 with population thresholds and per-level row caps. The server performs no
 aggregation and exposes no LOD contract; both clients choose a level locally.
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

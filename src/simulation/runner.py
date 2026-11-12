@@ -1036,6 +1036,7 @@ def _cognition_config_for(
     markets_enabled: bool = False,
     structured_commitments_active: bool = False,
     subjective_valuation_active: bool = False,
+    durable_records_active: bool = False,
     regional_migration_mode: str | None = None,
     multi_polity_migration_enabled: bool = False,
 ) -> CognitionLoopConfig:
@@ -1512,6 +1513,29 @@ def _cognition_config_for(
         )
     else:
         _LOG.debug("credit_relationship_disabled")
+    from agents.cognition.accounting_ledgers import (
+        ACCOUNTING_LEDGERS_POLICY_VERSION,
+        default_accounting_ledger_policy,
+    )
+    from agents.cognition.configuration import CognitionAccountingLedgerMode
+
+    accounting_enabled = organizations_enabled and durable_records_active
+    accounting_mode = (
+        CognitionAccountingLedgerMode.DETERMINISTIC
+        if accounting_enabled
+        else CognitionAccountingLedgerMode.DISABLED
+    )
+    accounting_policy = (
+        default_accounting_ledger_policy() if accounting_enabled else None
+    )
+    if accounting_mode is CognitionAccountingLedgerMode.DETERMINISTIC:
+        _LOG.info(
+            "accounting_ledger_mode mode=%s policy_version=%s",
+            accounting_mode.value,
+            ACCOUNTING_LEDGERS_POLICY_VERSION,
+        )
+    else:
+        _LOG.debug("accounting_ledger_disabled")
     _LOG.debug(
         "cognition_config_organization_mode mode=%s",
         organization_mode.value,
@@ -1770,6 +1794,8 @@ def _cognition_config_for(
         price_expectation_policy=price_policy,
         credit_relationship_mode=credit_mode,
         credit_relationship_policy=credit_policy,
+        accounting_ledger_mode=accounting_mode,
+        accounting_ledger_policy=accounting_policy,
         formal_rule_mode=formal_rule_mode,
         formal_rule_policy=formal_rule_policy,
         dispute_mode=dispute_mode,
@@ -2954,6 +2980,9 @@ class SimulationRunner:
                     ),
                     subjective_valuation_active=(
                         config.subjective_valuation is not None
+                    ),
+                    durable_records_active=(
+                        config.durable_records is not None
                     ),
                     regional_migration_mode=(
                         None
@@ -5074,6 +5103,7 @@ class SimulationRunner:
                 }
                 if any(binding.group_key not in groups for binding in ledger.bindings):
                     raise ValueError("institutional decay binding group mismatch")
+        from agents.cognition.accounting_ledgers import AccountingLedger
         from agents.cognition.configuration import CognitionOrganizationMode
         from agents.cognition.credit_relationships import (
             CreditRelationshipLedger,
@@ -5104,6 +5134,12 @@ class SimulationRunner:
                     raise TypeError("credit relationship ledger invalid type")
                 if credit_ledger.owner_id != state.agent_id:
                     raise ValueError("credit relationship ledger owner_id mismatch")
+            accounting_ledger = getattr(state, "accounting_ledger", None)
+            if accounting_ledger is not None:
+                if type(accounting_ledger) is not AccountingLedger:
+                    raise TypeError("accounting ledger invalid type")
+                if accounting_ledger.owner_id != state.agent_id:
+                    raise ValueError("accounting ledger owner_id mismatch")
             agency_ledger = getattr(state, "organization_agency", None)
             if agency_ledger is not None:
                 if type(agency_ledger) is not OrganizationAgencyLedger:
@@ -5395,6 +5431,7 @@ class SimulationRunner:
             credit_relationship_ledgers=(
                 self.export_credit_relationship_ledgers()
             ),
+            accounting_ledgers=self.export_accounting_ledgers(),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
@@ -5945,6 +5982,18 @@ class SimulationRunner:
                 continue
             ledgers.append(ledger)
         _LOG.info("credit_relationship_ledger_exported owners=%s", len(ledgers))
+        return tuple(ledgers)
+
+    def export_accounting_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered accounting ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "accounting_ledger", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info("accounting_ledger_exported owners=%s", len(ledgers))
         return tuple(ledgers)
 
     def export_emergent_price_ledgers(self) -> tuple[object, ...]:
@@ -6829,6 +6878,9 @@ class SimulationRunner:
                 subjective_valuation_active=(
                     self._config.subjective_valuation is not None
                 ),
+                durable_records_active=(
+                    self._config.durable_records is not None
+                ),
                 regional_migration_mode=(
                     None
                     if self._config.regions_migration is None
@@ -7217,6 +7269,7 @@ def _construct_agent_bundle(
         markets_enabled=config.v4_capability_flags.markets_credit,
         structured_commitments_active=config.structured_commitments is not None,
         subjective_valuation_active=config.subjective_valuation is not None,
+        durable_records_active=config.durable_records is not None,
         regional_migration_mode=(
             None
             if config.regions_migration is None

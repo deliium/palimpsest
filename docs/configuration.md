@@ -595,4 +595,14 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+
+## V4-23 accounting ledgers
+
+Accounting cognition requires the owned `organizations` flag plus the V3-11
+`durable_records` spec; the durable channel keeps its existing cultural and
+provenance prerequisites. No runner key or schema is added. Publication and
+reads are dual-gated by `PALIMPSEST_ACCOUNTING_LEDGERS_ROOT` and
+`PALIMPSEST_ACCOUNTING_LEDGERS_CURSOR_KEY` (at least 32 UTF-8 bytes); either
+missing means `accounting_ledgers_disabled`. See
+[Accounting ledgers](accounting-ledgers.md).

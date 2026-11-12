@@ -65,4 +65,4 @@ def test_owned_flag_count_is_eight() -> None:
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert "supply_chains" in V4_OWNED_CAPABILITY_FLAGS
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
-    assert METRIC_FAMILY_COUNT == 216
+    assert METRIC_FAMILY_COUNT == 220

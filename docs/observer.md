@@ -232,4 +232,4 @@ corridor layer also fetches the read-only summary, and every trade fetch forward
 the overlay's currently selected `window_index` when one is set. The overlay never
 advances the simulation.
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

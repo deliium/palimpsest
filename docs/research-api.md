@@ -471,4 +471,14 @@ window filter. Failure codes are `credit_relationships_disabled`,
 No route returns a bank, money, enforceable debt, credit score, ranking, or
 canonical credit. See [credit relationships](credit-relationships.md).
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+
+## V4-23 accounting ledger routes
+
+Seven GET-only routes under `/v1/simulations/{run_id}/accounting-ledgers`
+serve the published sibling snapshot: summary, entries, records, conditions,
+flows, counterparties, and alignment. All require `SUBJECTIVE_DEBUG` and both
+`PALIMPSEST_ACCOUNTING_LEDGERS_ROOT` and
+`PALIMPSEST_ACCOUNTING_LEDGERS_CURSOR_KEY`; otherwise they return
+`accounting_ledgers_disabled`. Default limit is 100 and maximum is 500. Cursors
+bind purpose and `window_index`. See [Accounting ledgers](accounting-ledgers.md).

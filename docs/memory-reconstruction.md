@@ -226,4 +226,4 @@ PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 pytest \
 - [LLM providers](llm-providers.md) — structured provider boundary used by LLM reconstruction
 - [Architecture](architecture.md) — package imports and objective/subjective boundary
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

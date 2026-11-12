@@ -2833,6 +2833,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "supply_chains@1",
         "emergent_prices@1",
         "credit_relationships@1",
+        "accounting_ledgers@1",
     }
 )
 
@@ -5703,6 +5704,27 @@ def experiment_emergent_prices(
     )
     _LOG.info(
         "experiment_registered experiment_id=emergent_prices@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_accounting_ledgers(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-23 experiment: records, organizations, and accounting beliefs."""
+    from experiments.accounting_ledger_scenario import (
+        accounting_ledger_scenario,
+    )
+
+    definition = accounting_ledger_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=accounting_ledgers@1 arms=%s",
         len(definition.conditions),
     )
     return definition

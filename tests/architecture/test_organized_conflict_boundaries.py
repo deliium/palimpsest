@@ -204,7 +204,7 @@ def test_conflict_metric_catalog_and_reserved_write_pairs() -> None:
     from analysis.specifications import METRIC_FAMILY_COUNT
     from simulation.versioning import V4_WRITE_PAIR_RESERVATIONS
 
-    assert METRIC_FAMILY_COUNT == 216
+    assert METRIC_FAMILY_COUNT == 220
     assert len(V4_WRITE_PAIR_RESERVATIONS) == 4
 
 

@@ -858,6 +858,23 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Eight V4 flags are owned; four remain unowned.
+
+## V4-23 accounting ledgers
+
+V4-23 deepens the owned `organizations` context and the V3-11 durable-records
+seam. Accounting cognition activates only when `organizations` and the
+`durable_records` spec are both present. Owners keep bounded accounting beliefs
+over existing artifacts carrying `acc_v1` relation triples; `acc_v1` frames
+travel inside existing `Talk`/`Tell`, and accounting content may extend an
+already-selected `Inscribe`. Detached analysis reconstructs committed evidence,
+keeps three layers separate, and appends four metric families (216 -> 220).
+`accounting-ledgers-snapshot-v1` and `accounting-ledgers-store-v1` publish
+programmatically; seven GET-only dual-gated `/v1/simulations/{run_id}/accounting-ledgers`
+routes fail closed with `accounting_ledgers_disabled`; the Research UI adds a
+read-only panel and Godot adds no overlay. Off-gate `accounting_ledgers@1` is
+registered. Pins: 220 metric families, 43 commands, 73 observer semantic types,
+replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`. See
+[Accounting ledgers](accounting-ledgers.md).

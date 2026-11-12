@@ -297,5 +297,5 @@ def test_current_catalog_and_default_versions_are_pinned() -> None:
     from simulation.compatibility import ALEMBIC_HEAD_REVISION
 
     validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 216
+    assert METRIC_FAMILY_COUNT == 220
     assert ALEMBIC_HEAD_REVISION == "0017"

@@ -57,7 +57,7 @@ def test_final_v4_22_pins() -> None:
 
     assert CREDIT_RELATIONSHIPS_POLICY_VERSION == "credit-relationships.v1"
     assert CREDIT_FRAME_SUBJECT == "crd_v1"
-    assert METRIC_FAMILY_COUNT == 216
+    assert METRIC_FAMILY_COUNT == 220
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(get_args(AgentCommand)) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

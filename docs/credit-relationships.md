@@ -79,7 +79,7 @@ Four families append the catalog (212 -> 216):
 - `credit_distribution_structure`
 
 The first 212 families keep their ids, order, algorithm versions, and value
-keys. Current catalog: 216 metric families.
+keys. Current catalog: 220 metric families.
 
 ## Snapshot, store, and routes
 
@@ -122,3 +122,9 @@ debt, credit score, or global credit registry.
 - [Configuration](configuration.md)
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)
+
+## Accounting ledgers
+
+Accounting interpretations of durable records are a separate owner-scoped seam;
+see [Accounting ledgers](accounting-ledgers.md). Neither ledger is an objective
+book of record.

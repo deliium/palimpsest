@@ -1,5 +1,6 @@
 """HTTP route modules."""
 
+from api.routes.accounting_ledgers import router as accounting_ledgers_router
 from api.routes.borders import router as borders_router
 from api.routes.branches import router as branches_router
 from api.routes.civilization import router as civilization_router
@@ -47,6 +48,7 @@ from api.routes.trade_networks import (
 from api.routes.version import router as version_router
 
 __all__ = [
+    "accounting_ledgers_router",
     "borders_router",
     "branches_router",
     "civilization_router",

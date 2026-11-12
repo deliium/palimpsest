@@ -1430,6 +1430,22 @@ class CommandPlanner:
             ledger=prepared_credit_utterance,
             tick=tick,
         )
+        from agents.cognition.accounting_ledgers import AccountingLedger
+        from agents.cognition.accounting_ledgers_communication import (
+            accounting_communicate_utterance,
+        )
+
+        prepared_accounting_utterance = (
+            None
+            if snapshot is None
+            else getattr(snapshot, "accounting_ledger", None)
+        )
+        command = accounting_communicate_utterance(
+            command,
+            owner_id=owner,
+            ledger=prepared_accounting_utterance,
+            tick=tick,
+        )
         from agents.cognition.organization_agency_communication import (
             organization_agency_communicate_utterance,
         )
@@ -1490,6 +1506,46 @@ class CommandPlanner:
             preferred=preferred_inscribe,
             inbox=inbox,
         )
+        from agents.cognition.accounting_ledgers_communication import (
+            accounting_inscribe_content,
+        )
+        from world.accounting_ledgers import (
+            AccountingFrameEntryKind,
+            accounting_record_genre,
+        )
+        from world.artifacts import DurableRecordGenre
+
+        if (
+            type(command) is Inscribe
+            and type(prepared_accounting_utterance) is AccountingLedger
+        ):
+            merged_content = accounting_inscribe_content(
+                prepared_accounting_utterance,
+                owner_id=owner,
+                tick=tick,
+                existing=command.content,
+            )
+            if merged_content is not None:
+                genre = command.record_genre
+                if genre is None and prepared_accounting_utterance.entries:
+                    first = sorted(
+                        prepared_accounting_utterance.entries,
+                        key=lambda entry: (entry.last_tick, entry.entry_id),
+                        reverse=True,
+                    )[0]
+                    genre = DurableRecordGenre(
+                        accounting_record_genre(
+                            AccountingFrameEntryKind(
+                                first.terms.entry_kind.value
+                            )
+                        )
+                    )
+                command = Inscribe(
+                    kind=command.kind,
+                    content=merged_content,
+                    hold=command.hold,
+                    record_genre=genre,
+                )
         from agents.cognition.institutional_memory import (
             InstitutionalMemoryLedger,
             InstitutionalMemorySelection,

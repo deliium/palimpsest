@@ -591,4 +591,11 @@ post-selection record stage captures the owner's own diplomacy utterance as a
 `SimulationRunnerResult.diplomacy_ledgers`; the result document schema is
 unchanged. Disabled mode allocates nothing.
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+
+## Accounting ledgers
+
+Durable records may be interpreted by an owner-scoped accounting ledger when
+`organizations` and `durable_records` are both active; see
+[Accounting ledgers](accounting-ledgers.md). The ledger never mutates world
+state or another owner's beliefs.

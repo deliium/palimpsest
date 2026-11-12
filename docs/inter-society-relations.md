@@ -121,4 +121,4 @@ explicit unavailable state.
 - [Diplomacy](diplomacy.md): owner-scoped relations and lane metrics (distinct from ISR panels)
 - [Analysis metrics](analysis-metrics.md): catalog families including the four ISR appendages
 
-Current catalog: 216 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

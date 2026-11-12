@@ -20,15 +20,15 @@ pytestmark = pytest.mark.unit
 
 def test_catalog_appends_exactly_four_families() -> None:
     specifications = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 216
-    assert len(specifications) == 216
-    assert [spec.family_id for spec in specifications[-4:]] == [
+    assert METRIC_FAMILY_COUNT == 220
+    assert len(specifications) == 220
+    assert [spec.family_id for spec in specifications[212:216]] == [
         MetricFamilyId.CREDIT_RELATIONSHIP_FORMATION,
         MetricFamilyId.CREDIT_REPAYMENT_PERFORMANCE,
         MetricFamilyId.CREDIT_TERM_ALIGNMENT,
         MetricFamilyId.CREDIT_DISTRIBUTION_STRUCTURE,
     ]
-    assert specifications[-5].family_id is MetricFamilyId.MARKET_PRICE_CONVERGENCE
+    assert specifications[211].family_id is MetricFamilyId.MARKET_PRICE_CONVERGENCE
 
 
 @pytest.mark.parametrize(

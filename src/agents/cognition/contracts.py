@@ -176,6 +176,7 @@ class Perspective:
     market_institutions: object | None = None
     emergent_prices: object | None = None
     credit_relationships: object | None = None
+    accounting_ledger: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
     collective_decisions: object | None = None
@@ -455,6 +456,15 @@ class Perspective:
             self.credit_relationships,
             self.agent_id,
             field_name="Perspective.credit_relationships",
+        )
+        from agents.cognition.accounting_ledgers import (
+            require_owner_accounting_ledger,
+        )
+
+        require_owner_accounting_ledger(
+            self.accounting_ledger,
+            self.agent_id,
+            field_name="Perspective.accounting_ledger",
         )
         from agents.cognition.organization_agency import (
             require_owner_organization_agency,
