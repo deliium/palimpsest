@@ -471,6 +471,70 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("accounting_ledgers_collector_missing_events_or_seams")
+    economic_enabled = events is not None and (
+        getattr(flags, "organizations", False)
+        or getattr(flags, "markets_credit", False)
+        or getattr(flags, "infrastructure_networks", False)
+        or getattr(flags, "supply_chains", False)
+        or getattr(runner_config, "durable_records", None) is not None
+        or getattr(runner_config, "structured_commitments", None) is not None
+        or getattr(runner_config, "subjective_valuation", None) is not None
+    )
+    if economic_enabled:
+        try:
+            from experiments.economic_inequality_completed_run import (
+                build_completed_run_economic_inequality_analysis,
+            )
+
+            organization_rows: tuple[object, ...] = ()
+            operation_ledgers = getattr(
+                arm.runner_result, "organization_operation_ledgers", None
+            )
+            if operation_ledgers:
+                from analysis.organization_operations import (
+                    harvest_organization_operation_rows,
+                )
+
+                organization_rows = harvest_organization_operation_rows(
+                    operation_ledgers
+                )
+            macro_analysis = getattr(arm, "macro_society_analysis", None)
+            if macro_analysis is None:
+                macro_analysis = getattr(
+                    arm.runner_result, "macro_society_analysis", None
+                )
+            economic_analysis = (
+                build_completed_run_economic_inequality_analysis(
+                    arm.runner_result,
+                    runner_config=runner_config,
+                    committed_events=events if events is not None else (),
+                    run_id=arm.assignment.run_id.value,
+                    macro_society_analysis=macro_analysis,
+                    organization_operation_rows=organization_rows,  # type: ignore[arg-type]
+                    window_end=max(ticks - 1, 0),
+                )
+            )
+            inputs = replace(
+                inputs, economic_inequality_analysis=economic_analysis
+            )
+            _LOG.info(
+                "economic_inequality_collector_injected families=8 rows=%d",
+                economic_analysis.row_count,
+            )
+            _LOG.debug(
+                "economic_inequality_collector_counts owners=%d credit=%d "
+                "control=%d",
+                economic_analysis.owner_count,
+                economic_analysis.credit_claim_count,
+                economic_analysis.control_claim_count,
+            )
+        except Exception as exc:
+            _LOG.error(
+                "economic_inequality_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("economic_inequality_collector_disabled")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

@@ -85,8 +85,8 @@ def test_no_forbidden_result_field_exists() -> None:
 
 
 def test_catalog_and_context_pins_are_unchanged() -> None:
-    assert METRIC_FAMILY_COUNT == 220
-    assert len(V4_CONTEXTS) == 14
+    assert METRIC_FAMILY_COUNT == 228
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
 
 

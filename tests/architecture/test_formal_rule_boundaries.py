@@ -201,7 +201,7 @@ def test_snapshot_schema_and_store_schema_are_v1() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     assert len(COMMAND_RULE_MATRIX) == 43
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -214,10 +214,14 @@ def test_compatibility_pins_are_exact() -> None:
 
 def test_v4_registry_has_fourteen_contexts_twelve_flags_two_owned() -> None:
     validate_v4_contexts()
-    assert len(V4_CONTEXT_BY_ID) == 14
+    assert len(V4_CONTEXT_BY_ID) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset(
-        {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
+        {
+            V4ContextId.SOCIETAL_RESILIENCE,
+            V4ContextId.MACRO_SOCIETY_IDENTITY,
+            V4ContextId.ECONOMIC_INEQUALITY,
+        }
     )
     assert V4CapabilityFlags(organizations=True).owned_enabled_names() == (
         "organizations",

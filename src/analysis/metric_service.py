@@ -67,6 +67,17 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
+from analysis.economic_inequality_analysis import EconomicInequalityAnalysis
+from analysis.economic_inequality_metrics import (
+    compute_credit_relationship_inequality,
+    compute_economic_inequality_cohorts,
+    compute_economic_inequality_society_comparison,
+    compute_infrastructure_access_inequality,
+    compute_organizational_resource_control_inequality,
+    compute_productive_tool_access_inequality,
+    compute_resource_possession_inequality,
+    compute_storage_access_inequality,
+)
 from analysis.emergent_prices_analysis import EmergentPricesAnalysis
 from analysis.emergent_prices_metrics import (
     compute_market_price_convergence,
@@ -411,6 +422,7 @@ class MetricComputationInputs:
     emergent_prices_analysis: EmergentPricesAnalysis | None = None
     credit_relationships_analysis: CreditRelationshipsAnalysis | None = None
     accounting_ledgers_analysis: AccountingLedgersAnalysis | None = None
+    economic_inequality_analysis: EconomicInequalityAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2686,6 +2698,59 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("accounting_ledger_metrics_emitted families=4 catalog=220")
     else:
         _LOG.debug("accounting_ledger_metrics_disabled")
+    if inputs.economic_inequality_analysis is not None:
+        inequality = inputs.economic_inequality_analysis
+        _safe(
+            "resource_possession_inequality",
+            lambda: compute_resource_possession_inequality(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "productive_tool_access_inequality",
+            lambda: compute_productive_tool_access_inequality(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "infrastructure_access_inequality",
+            lambda: compute_infrastructure_access_inequality(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "storage_access_inequality",
+            lambda: compute_storage_access_inequality(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "credit_relationship_inequality",
+            lambda: compute_credit_relationship_inequality(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "organizational_resource_control_inequality",
+            lambda: compute_organizational_resource_control_inequality(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "economic_inequality_cohorts",
+            lambda: compute_economic_inequality_cohorts(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "economic_inequality_society_comparison",
+            lambda: compute_economic_inequality_society_comparison(
+                inequality, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("economic_inequality_metrics_emitted families=8 catalog=228")
+    else:
+        _LOG.debug("economic_inequality_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

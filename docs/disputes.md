@@ -221,7 +221,7 @@ zero or false.
 `runner-config-v56` keyset. There is no `runner-config-v57`, no new runner root
 field, and no per-agent runner mode.
 
-**Landing pins:** 14 V4 contexts, 12 capability flags, and **4 owned** flags
+**Landing pins:** 15 V4 contexts, 12 capability flags, and **4 owned** flags
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`); 188 metric families;
 43 commands; 73 observer semantic types; replay `EVENT_SCHEMA_REPLAY_V22`
 (22) / codec `v20`; Alembic head `0017` with **no `0018`**; `/v1`; and
@@ -270,4 +270,4 @@ trade-network append.
 - [Research API](research-api.md)
 - [Analysis metrics](analysis-metrics.md)
 
-Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

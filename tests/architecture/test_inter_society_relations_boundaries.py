@@ -140,8 +140,8 @@ def test_isr_paths_exist() -> None:
 
 
 def test_no_new_flag_context_or_v57() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
-    assert len(V4_CONTEXTS) == 14
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4ContextId.MACRO_SOCIETY_IDENTITY in V4_ANALYSIS_ONLY_CONTEXTS
     spec = V4_CONTEXT_BY_ID[V4ContextId.MACRO_SOCIETY_IDENTITY]
@@ -274,15 +274,15 @@ def test_pins_and_catalog_append() -> None:
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert len(V4_CONTEXTS) == 14
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not any(
         "0018" in path.name for path in (ROOT / "alembic" / "versions").glob("*.py")
     )
     specs = all_metric_specifications()
-    assert len(specs) == 220
+    assert len(specs) == 228
     assert tuple(spec.family_id.value for spec in specs[180:184]) == ISR_FAMILIES
     assert all(
         spec.family_id.value != "inter_society_relation_lanes"

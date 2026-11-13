@@ -102,7 +102,7 @@ def test_pins_appear_exactly() -> None:
         "73",
         str(METRIC_FAMILY_COUNT),
         "0017",
-        "14 contexts",
+        "15 contexts",
         "12 flags",
         "eight owned",
         "EVENT_SCHEMA_REPLAY_V27",

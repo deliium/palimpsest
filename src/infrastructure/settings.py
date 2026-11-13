@@ -265,6 +265,10 @@ class Settings(BaseSettings):
     accounting_ledgers_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    economic_inequality_root: Path | None = None
+    economic_inequality_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -318,6 +322,7 @@ class Settings(BaseSettings):
         "dispute_root",
         "evidence_root",
         "representation_root",
+        "economic_inequality_root",
         mode="before",
     )
     @classmethod
@@ -498,6 +503,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "accounting_ledgers cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("economic_inequality_cursor_key")
+    @classmethod
+    def validate_economic_inequality_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "economic_inequality cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -922,6 +938,19 @@ class Settings(BaseSettings):
             ),
             "accounting_ledgers_cursor_enabled": (
                 self.accounting_ledgers_cursor_key is not None
+            ),
+            "has_economic_inequality_root": (
+                self.economic_inequality_root is not None
+            ),
+            "has_economic_inequality_cursor_key": (
+                self.economic_inequality_cursor_key is not None
+            ),
+            "economic_inequality_enabled": (
+                self.economic_inequality_root is not None
+                and self.economic_inequality_cursor_key is not None
+            ),
+            "economic_inequality_cursor_enabled": (
+                self.economic_inequality_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

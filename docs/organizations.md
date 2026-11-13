@@ -256,10 +256,13 @@ resolve read-only from the owner's own ledgers and are never rewritten. Physical
 movement stays ordinary world admission. See
 [migration and displacement](migration-displacement.md).
 
-Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## Accounting ledgers
 
 Owner-scoped accounting interpretations extend the durable-record seam; see
 [Accounting ledgers](accounting-ledgers.md). Organizations remain beliefs and
 never become ledger actors or objective treasuries.
+
+
+See also [Economic inequality](economic-inequality.md) for the detached six-dimensional inequality surface over possession, access, credit, and organizational-control evidence.

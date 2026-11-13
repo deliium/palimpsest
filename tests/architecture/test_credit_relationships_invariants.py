@@ -46,9 +46,9 @@ CREDIT_FAMILIES = (
 
 
 def test_catalog_appends_four_credit_families_after_212() -> None:
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     specs = all_metric_specifications()
-    assert len(specs) == 220
+    assert len(specs) == 228
     assert tuple(spec.family_id.value for spec in specs[212:216]) == CREDIT_FAMILIES
     assert all(spec.algorithm_version == "1" for spec in specs[212:216])
 
@@ -69,7 +69,7 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
         context.context_id.value for context in V4_CONTEXTS
     }
     assert "credit_relationships" not in V4_CAPABILITY_FLAGS
-    assert len(V4_CONTEXTS) == 14
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(

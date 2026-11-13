@@ -84,7 +84,7 @@ def test_page_names_pins_and_closed_tokens() -> None:
         "208",
         "43 commands",
         "73 observer semantic types",
-        "14 contexts / 12 flags / eight owned",
+        "15 contexts / 12 flags / eight owned",
         "Alembic `0017`",
         "/v1",
         "observer-protocol-v1",
@@ -111,11 +111,11 @@ def test_readme_and_context_docs_link_the_page() -> None:
         assert "208" in text, path
         assert "markets_credit" in text, path
         assert "eight owned" in text, path
-    assert "220 metric families" in _read("docs/architecture.md")
+    assert "228 metric families" in _read("docs/architecture.md")
     assert "MARKET_INSTITUTIONS_ROOT" in _read("docs/configuration.md")
     assert "market_role_structure@1" in _read("docs/analysis-metrics.md")
     assert "**208**" in _read("docs/analysis-metrics.md")
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
 
 
 def test_roadmap_remains_present_and_registration_is_deferred() -> None:

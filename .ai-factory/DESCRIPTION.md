@@ -340,7 +340,7 @@ read-only Research UI disputes view. Researcher-only objective alignment
 (`supported`, `unresolved`, `inconsistent`, `not_applicable`) never reaches
 cognition, prompts, memory, world state, observer semantics, or stop selectors.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 157, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 157, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017` with no `0018`; four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain
 unowned.
@@ -367,7 +367,7 @@ reaches cognition. Canonical `evidence-testimony-snapshot-v1`,
 routes under `SUBJECTIVE_DEBUG`, and a read-only Research UI Evidence panel are
 added. Three metric families (154 → 157) are appended. Pins: runner v4/v55/v56,
 result v2/v3, commands 43, observer semantic types 73, metric families 157,
-14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+15 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017` with no `0018`; four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain
 unowned.
@@ -389,7 +389,7 @@ raising the metric catalog from 157 to **160** (V4-10 raises it to **164**), plu
 filesystem store, six GET-only `/v1` representation routes under
 `SUBJECTIVE_DEBUG`, and a read-only Research UI Representation panel.
 Pins: runner v4/v55/v56, result v2/v3, commands 43, observer semantic types 73,
-metric families 184, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+metric families 184, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -418,7 +418,7 @@ catalog from 160 to **164**. `diplomacy-snapshot-v1` and
 `/v1/simulations/{run_id}/diplomacy` routes require `SUBJECTIVE_DEBUG` and fail
 closed with `diplomacy_disabled`; the Research UI adds a read-only panel.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+184 metric families, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017` with no `0018`; four V4 flags are
 owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight
 remain unowned.
@@ -443,7 +443,7 @@ canonical, v1 remains decodable, `diplomacy-store-v1` is unchanged, and eight
 GET-only diplomacy routes require `SUBJECTIVE_DEBUG`. `WorldEngine`, perception,
 admission, stop selectors, memory, prompts, observer semantics, and Godot never
 read a treaty ledger. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 184 metric families, 14 V4 contexts, 12 V4 flags,
+observer semantic types, 184 metric families, 15 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
 
@@ -467,7 +467,7 @@ and `organized-conflict-store-v1` publish opt-in and atomically; six GET-only
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`
 and fail closed with `organized_conflict_disabled`; the Research UI adds a
 read-only conflict view. Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 184 metric families, 14 V4 contexts, 12 V4 flags,
+observer semantic types, 184 metric families, 15 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
 
@@ -490,7 +490,7 @@ GET-only `/v1/simulations/{run_id}/borders` routes require `SUBJECTIVE_DEBUG` an
 fail closed with `borders_disabled`; the Research UI adds four read-only
 sections; the presentation client adds four border overlays. Pins: runner
 v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 180 metric
-families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+families, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; five V4 flags are owned and seven remain
 unowned.
 
@@ -516,7 +516,7 @@ routes require `SUBJECTIVE_DEBUG` and fail closed with
 `migration_displacement_disabled`; the Research UI adds four read-only sections;
 the presentation client adds four migration overlays on the existing three
 evidence classes. Pins at landing: runner v4/v55/v56, result v2/v3, 43 commands,
-73 observer semantic types, 180 metric families, 14 V4 contexts, 12 V4 flags,
+73 observer semantic types, 180 metric families, 15 V4 contexts, 12 V4 flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, Alembic `0017`; five V4
 flags are owned and seven remain unowned.
 
@@ -534,7 +534,7 @@ publish opt-in and atomically; six GET-only
 unless both root and cursor-key settings are present; the Research UI adds a
 read-only panel. No authoritative civilization relationship score exists.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-184 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
+184 metric families, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; five V4 flags are owned and seven remain
 unowned.
 
@@ -553,7 +553,7 @@ and Godot objective overlays. Off-gate experiment `infrastructure_networks@1`
 is registered. Non-goals: automatic maintenance, grid planner, infrastructure
 actor, civilization score, and `supply_chains` ownership. Landing pins: runner
 v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 188 metric
-families, 14 V4 contexts, 12 V4 flags,
+families, 15 V4 contexts, 12 V4 flags,
 replay-v23/codec v21 when the channel is active, `/v1`, `observer-protocol-v1`,
 Alembic `0017`; six V4 flags are owned and six remain unowned.
 
@@ -575,7 +575,7 @@ seven GET-only dual-gated infrastructure routes include `/routes`. Four metric
 families append 188 -> 192 metric families; V4-18 later appends six families to 204; observer semantics stay 73, commands 43,
 runner v4/v55/v56, result v2/v3, replay-v27/codec v25 when active, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Off-gate experiment
-`travel_network@1` is registered; 14 V4 contexts / 12 flags / eight owned remain.
+`travel_network@1` is registered; 15 V4 contexts / 12 flags / eight owned remain.
 
 Trade networks (V4-18) deepen the owned `infrastructure_networks` context, the V3
 `multi_polity_migration` / `regions_migration` seam, and the V3 exchange/valuation
@@ -592,7 +592,7 @@ Research UI adds a read-only panel and the Godot observer adds four analytical
 overlays. Off-gate experiment `trade_networks@1` is registered. No centralized
 routing, planner, quota, allocation, price, money, currency, or registry exists.
 Pins: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
-198 metric families, 14 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
+198 metric families, 15 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
 `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`. Current pins: metric families 212; the current catalog is 212 families (catalog 212).
 
 Supply chains (V4-19) own the declared `supply_chains` V4 context on the
@@ -614,7 +614,7 @@ Research UI adds a read-only panel and no Godot overlay. Off-gate experiment
 `supply_chains@1` is registered. No central planner, optimizer, quota,
 automatic allocation, price, money, currency, score, ranking, severity, or
 recommendation exists. Pins: 43 commands, 73 observer semantic types, 204
-metric families, 14 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
+metric families, 15 V4 contexts, 12 V4 flags, eight owned, replay-v27/codec
 `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
 
 Market-like institutions (V4-20) own the declared `markets_credit` V4 context on
@@ -636,7 +636,7 @@ forward-only lineage from committed events only. Four families append the catalo
 and fail closed with `market_institutions_disabled`; the Research UI adds a
 read-only panel and Godot adds no overlay. Off-gate experiment
 `market_institutions@1` is registered. Pins: 43 commands, 73 observer semantic
-types, 208 metric families, 14 V4 contexts, 12 V4 flags, eight owned / four
+types, 208 metric families, 15 V4 contexts, 12 V4 flags, eight owned / four
 unowned, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
 
 Emergent prices (V4-21) deepen the owned `markets_credit` context and add no
@@ -658,7 +658,7 @@ programmatically and atomically; seven GET-only
 fail closed with `emergent_prices_disabled`; the Research UI adds a read-only
 panel and Godot adds no overlay. Off-gate experiment `emergent_prices@1` is
 registered. No money, currency, credit, debt, allocation, quota, planner, or
-canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 220, 14 V4 contexts, 12 V4 flags, eight owned / four unowned,
+canonical price exists. Pins: 43 commands, 73 observer semantic types, metric families 228, 15 V4 contexts, 12 V4 flags, eight owned / four unowned,
 replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
 
 Credit relationships (V4-22) deepen the owned `markets_credit` context and add
@@ -706,6 +706,28 @@ families (216 -> 220). `accounting-ledgers-snapshot-v1` and
 GET-only `/v1/simulations/{run_id}/accounting-ledgers` routes require
 `SUBJECTIVE_DEBUG` and fail closed with `accounting_ledgers_disabled`; the
 Research UI adds a read-only panel and Godot adds no overlay. Off-gate experiment
-`accounting_ledgers@1` is registered. Pins: 220 metric families, 43 commands, 73
-observer semantic types, 14 V4 contexts, 12 V4 flags, eight owned / four
+`accounting_ledgers@1` is registered. Pins: 228 metric families, 43 commands, 73
+observer semantic types, 15 V4 contexts, 12 V4 flags, eight owned / four
 unowned, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+V4-24 (economic inequality, 2026-11-13) adds the fifteenth V4 context,
+`economic_inequality`, as analysis-only on the accepted `runner-config-v56`
+seam; it adds no capability flag, runner schema, root field, per-agent key,
+command, event, observer semantic type, write pair, `/v2` route, migration, or
+Godot overlay. Detached analysis measures six independent dimensions (resource
+possession, productive-tool access, infrastructure access, storage access,
+credit relationships, and organizational resource control) over committed
+events, operational assets, store structures, repositories, `crd_v1` claims,
+and detached organization-operation rows. Objective possession/access, owner
+claims, and analytical comparisons remain hard-separated; no composite wealth,
+ownership, merit, poverty, or legitimacy score exists. Per-window distributions
+and quantized Gini/Theil/Atkinson/top-share, generation cohorts, and detached
+`msoc-` society comparisons are descriptive only. Eight families append the
+catalog 220 -> 228. `economic-inequality-snapshot-v1` and
+`economic-inequality-store-v1` publish programmatically and atomically; seven
+GET-only `/v1/simulations/{run_id}/economic-inequality` routes require
+`SUBJECTIVE_DEBUG` and fail closed with `economic_inequality_disabled`; the
+Research UI adds a read-only panel. Off-gate experiment `economic_inequality@1`
+is registered. Pins: 228 metric families, 43 commands, 73 observer semantic
+types, 15 V4 contexts, 12 V4 flags, eight owned / four unowned, replay-v27/codec
+`v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

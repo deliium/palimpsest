@@ -283,6 +283,16 @@ from experiments.dispute_publication import (
     dispute_publication_document,
     publish_dispute_snapshot,
 )
+from experiments.economic_inequality_completed_run import (
+    build_completed_run_economic_inequality_analysis,
+)
+from experiments.economic_inequality_publication import (
+    EconomicInequalityHarvest,
+    EconomicInequalityReceipt,
+    build_economic_inequality_harvest_result,
+    compose_economic_inequality_snapshot,
+    publish_economic_inequality_snapshot,
+)
 from experiments.emergent_naming_scenario import emergent_naming_scenario
 from experiments.emergent_prices_completed_run import (
     build_completed_run_emergent_prices_analysis,
@@ -569,6 +579,8 @@ __all__ = [
     "CulturalChannelRow",
     "DisputeHarvest",
     "DisputeHarvestResult",
+    "EconomicInequalityHarvest",
+    "EconomicInequalityReceipt",
     "EmergentPricesHarvest",
     "EmergentPricesReceipt",
     "EvidenceAvailability",
@@ -696,6 +708,7 @@ __all__ = [
     "build_completed_run_accounting_ledgers_analysis",
     "build_completed_run_credit_relationships_analysis",
     "build_completed_run_dispute_harvest",
+    "build_completed_run_economic_inequality_analysis",
     "build_completed_run_emergent_prices_analysis",
     "build_completed_run_evidence_harvest",
     "build_completed_run_harvest",
@@ -705,6 +718,7 @@ __all__ = [
     "build_completed_run_trade_networks_analysis",
     "build_credit_relationships_harvest_result",
     "build_dispute_harvest_result",
+    "build_economic_inequality_harvest_result",
     "build_emergent_prices_harvest_result",
     "build_evidence_testimony_harvest_result",
     "build_generational_comparison",
@@ -737,6 +751,7 @@ __all__ = [
     "compare_grouped_benchmark_outcomes",
     "compose_accounting_ledgers_snapshot",
     "compose_credit_relationships_snapshot",
+    "compose_economic_inequality_snapshot",
     "compose_emergent_prices_snapshot",
     "compose_inter_society_relations_snapshot",
     "compose_trade_networks_snapshot",
@@ -873,6 +888,7 @@ __all__ = [
     "publish_accounting_ledgers_snapshot",
     "publish_credit_relationships_snapshot",
     "publish_dispute_snapshot",
+    "publish_economic_inequality_snapshot",
     "publish_emergent_prices_snapshot",
     "publish_evidence_testimony_snapshot",
     "publish_inter_society_relations_snapshot",

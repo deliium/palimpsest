@@ -24,7 +24,7 @@ def _test_files() -> list[Path]:
 
 
 def test_catalog_is_212() -> None:
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
 
 
 def test_owned_flags_are_eight() -> None:

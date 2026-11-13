@@ -24,6 +24,7 @@ without parsing messages:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -35,7 +36,9 @@ from simulation.compatibility import (
     V4_CAPABILITY_FLAGS_WIRE_KEY,
 )
 
-V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v2"
+_LOG: Final[logging.Logger] = logging.getLogger("simulation.v4_architecture")
+
+V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v3"
 V4_ANALYSIS_CAPTURE_SEAM: Final[str] = "analysis_capture"
 
 _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
@@ -53,7 +56,7 @@ _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
         "research_runner",
     }
 )
-_REQUIRED_CONTEXT_COUNT: Final[int] = 14
+_REQUIRED_CONTEXT_COUNT: Final[int] = 15
 _RESERVED_V3_FLAGS: Final[frozenset[str]] = frozenset(V3_CAPABILITY_FLAG_NAMES)
 
 
@@ -74,6 +77,7 @@ class V4ContextId(StrEnum):
     DISASTERS = "disasters"
     SOCIETAL_RESILIENCE = "societal_resilience"
     MACRO_SOCIETY_IDENTITY = "macro_society_identity"
+    ECONOMIC_INEQUALITY = "economic_inequality"
 
 
 class V4Authority(StrEnum):
@@ -317,6 +321,24 @@ V4_CONTEXTS: Final[tuple[V4ContextSpec, ...]] = (
             "no feedback into cognition, memory, prompts, admission, or stop selectors",
         ),
     ),
+    V4ContextSpec(
+        context_id=V4ContextId.ECONOMIC_INEQUALITY,
+        capability_flag=None,
+        authority=V4Authority.DETACHED_ANALYSIS,
+        owner_packages=("analysis",),
+        existing_mechanism=(
+            "resource possession, access, credit claims, and organization operations"
+        ),
+        required_config_seam=V4_ANALYSIS_CAPTURE_SEAM,
+        uses_existing_events=True,
+        prerequisite_contexts=(),
+        non_goals=(
+            "no objective wealth or ownership metric",
+            "no composite inequality score",
+            "no feedback into cognition, prompts, memory, admission, or stop selectors",
+            "no legitimate-ownership, merit, poverty, or welfare adjudication",
+        ),
+    ),
 )
 
 V4_CONTEXT_BY_ID: Final[Mapping[V4ContextId, V4ContextSpec]] = MappingProxyType(
@@ -324,7 +346,11 @@ V4_CONTEXT_BY_ID: Final[Mapping[V4ContextId, V4ContextSpec]] = MappingProxyType(
 )
 
 V4_ANALYSIS_ONLY_CONTEXTS: Final[frozenset[V4ContextId]] = frozenset(
-    {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
+    {
+        V4ContextId.SOCIETAL_RESILIENCE,
+        V4ContextId.MACRO_SOCIETY_IDENTITY,
+        V4ContextId.ECONOMIC_INEQUALITY,
+    }
 )
 
 V4_CAPABILITY_FLAGS: Final[tuple[str, ...]] = tuple(
@@ -333,6 +359,7 @@ V4_CAPABILITY_FLAGS: Final[tuple[str, ...]] = tuple(
 
 
 def _fail(code: str) -> NoReturn:
+    _LOG.error("v4_context_validation_failed code=%s", code)
     raise ValueError(code)
 
 
@@ -415,6 +442,14 @@ def validate_v4_contexts(
             _fail("v4_context_missing_non_goals")
 
     _require_acyclic(contexts)
+
+    _LOG.debug("v4_context_registry_validated count=%d", len(contexts))
+    if any(
+        spec.context_id is V4ContextId.ECONOMIC_INEQUALITY for spec in contexts
+    ):
+        _LOG.info(
+            "economic_inequality_context_registered contexts=%d", len(contexts)
+        )
 
 
 def v4_context_for_flag(flag: str) -> V4ContextSpec:

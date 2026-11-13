@@ -2834,6 +2834,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "emergent_prices@1",
         "credit_relationships@1",
         "accounting_ledgers@1",
+        "economic_inequality@1",
     }
 )
 
@@ -5725,6 +5726,27 @@ def experiment_accounting_ledgers(
     )
     _LOG.info(
         "experiment_registered experiment_id=accounting_ledgers@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_economic_inequality(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-24 experiment: independent economic inequality dimensions."""
+    from experiments.economic_inequality_scenario import (
+        economic_inequality_scenario,
+    )
+
+    definition = economic_inequality_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=economic_inequality@1 arms=%s",
         len(definition.conditions),
     )
     return definition

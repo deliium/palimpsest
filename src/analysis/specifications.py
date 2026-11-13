@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 220
+METRIC_FAMILY_COUNT: Final[int] = 228
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -295,6 +295,18 @@ class MetricFamilyId(StrEnum):
     ACCOUNTING_ENTRY_ALIGNMENT = "accounting_entry_alignment"
     ACCOUNTING_RECORD_CONDITION = "accounting_record_condition"
     ACCOUNTING_FLOW_STRUCTURE = "accounting_flow_structure"
+    RESOURCE_POSSESSION_INEQUALITY = "resource_possession_inequality"
+    PRODUCTIVE_TOOL_ACCESS_INEQUALITY = "productive_tool_access_inequality"
+    INFRASTRUCTURE_ACCESS_INEQUALITY = "infrastructure_access_inequality"
+    STORAGE_ACCESS_INEQUALITY = "storage_access_inequality"
+    CREDIT_RELATIONSHIP_INEQUALITY = "credit_relationship_inequality"
+    ORGANIZATIONAL_RESOURCE_CONTROL_INEQUALITY = (
+        "organizational_resource_control_inequality"
+    )
+    ECONOMIC_INEQUALITY_COHORTS = "economic_inequality_cohorts"
+    ECONOMIC_INEQUALITY_SOCIETY_COMPARISON = (
+        "economic_inequality_society_comparison"
+    )
 
 
 class DenominatorKind(StrEnum):
@@ -9075,6 +9087,50 @@ ACCOUNTING_FLOW_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
     "availability",
 )
 
+ECONOMIC_INEQUALITY_DIMENSION_KEYS: Final[tuple[str, ...]] = (
+    "economic_inequality_window_tick",
+    "window_count",
+    "owner_count",
+    "observed_owner_count",
+    "gini_latest",
+    "theil_t_latest",
+    "atkinson_eps_1_latest",
+    "top_share_milli_latest",
+    "median_latest",
+    "iqr_latest",
+    "trend_direction",
+    "coverage",
+    "availability",
+)
+ECONOMIC_INEQUALITY_COHORT_KEYS: Final[tuple[str, ...]] = (
+    "economic_inequality_window_tick",
+    "cohort_count",
+    "comparable_cohort_count",
+    "gini_median_milli",
+    "gini_iqr_milli",
+    "gini_range_milli",
+    "widening_count",
+    "narrowing_count",
+    "stable_count",
+    "insufficient_count",
+    "coverage",
+    "availability",
+)
+ECONOMIC_INEQUALITY_SOCIETY_KEYS: Final[tuple[str, ...]] = (
+    "economic_inequality_window_tick",
+    "society_count",
+    "comparable_society_count",
+    "gini_median_milli",
+    "gini_iqr_milli",
+    "gini_range_milli",
+    "above_pooled_median_count",
+    "below_pooled_median_count",
+    "equal_pooled_median_count",
+    "overlap_member_count",
+    "coverage",
+    "availability",
+)
+
 
 def _trade_spec(
     *,
@@ -9567,6 +9623,137 @@ def _spec_accounting_flow_structure() -> MetricSpecification:
         opportunity="claim sums and counts only; never a wealth total",
     )
 
+
+
+def _economic_inequality_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+    organization_claims: bool = False,
+) -> MetricSpecification:
+    evidence = {EvidenceStage.OBJECTIVE_EVENT_STATE}
+    if organization_claims:
+        evidence.update(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        )
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset(evidence),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="economic_inequality_window_tick",
+        deceased_policy="exclude_owners_strictly_after_death",
+        zero_holding_policy="observed_zero_included_unobserved_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="not_applicable",
+        censoring_policy="insufficient_samples_remain_explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="insufficient_samples",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_economic_evidence",
+    )
+
+
+def _spec_resource_possession_inequality() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.RESOURCE_POSSESSION_INEQUALITY,
+        population="observed_committed_item_holders",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_DIMENSION_KEYS,
+        opportunity="physical custody counts only; never legitimate ownership",
+    )
+
+
+def _spec_productive_tool_access_inequality() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.PRODUCTIVE_TOOL_ACCESS_INEQUALITY,
+        population="observed_committed_tool_holders",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_DIMENSION_KEYS,
+        opportunity="held items with a known tool kind only; unknown excluded",
+    )
+
+
+def _spec_infrastructure_access_inequality() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.INFRASTRUCTURE_ACCESS_INEQUALITY,
+        population="owners_with_observed_location",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_DIMENSION_KEYS,
+        opportunity="operational assets at the observed location; not permission",
+    )
+
+
+def _spec_storage_access_inequality() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.STORAGE_ACCESS_INEQUALITY,
+        population="owners_with_observed_location",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_DIMENSION_KEYS,
+        opportunity="physical store structures and repositories; not access grants",
+    )
+
+
+def _spec_credit_relationship_inequality() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.CREDIT_RELATIONSHIP_INEQUALITY,
+        population="observed_credit_claim_owners",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_DIMENSION_KEYS,
+        opportunity="declared credit claims and observed repayment; no debt truth",
+    )
+
+
+def _spec_organizational_resource_control_inequality() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=(
+            MetricFamilyId.ORGANIZATIONAL_RESOURCE_CONTROL_INEQUALITY
+        ),
+        population="detached_organization_control_claim_owners",
+        denominator="observed_owner_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_DIMENSION_KEYS,
+        opportunity="believed control relations only; never objective custody",
+        organization_claims=True,
+    )
+
+
+def _spec_economic_inequality_cohorts() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.ECONOMIC_INEQUALITY_COHORTS,
+        population="generation_cohorts_with_observed_owners",
+        denominator="comparable_cohort_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_COHORT_KEYS,
+        opportunity="cohort comparison distributions only; never a ranking",
+    )
+
+
+def _spec_economic_inequality_society_comparison() -> MetricSpecification:
+    return _economic_inequality_spec(
+        family_id=MetricFamilyId.ECONOMIC_INEQUALITY_SOCIETY_COMPARISON,
+        population="detached_society_candidates_with_observed_owners",
+        denominator="comparable_society_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=ECONOMIC_INEQUALITY_SOCIETY_KEYS,
+        opportunity="society comparison distributions only; never a ranking",
+    )
 
 
 def _spec_infrastructure_network_structure() -> MetricSpecification:
@@ -10082,6 +10269,14 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_accounting_entry_alignment,
     _spec_accounting_record_condition,
     _spec_accounting_flow_structure,
+    _spec_resource_possession_inequality,
+    _spec_productive_tool_access_inequality,
+    _spec_infrastructure_access_inequality,
+    _spec_storage_access_inequality,
+    _spec_credit_relationship_inequality,
+    _spec_organizational_resource_control_inequality,
+    _spec_economic_inequality_cohorts,
+    _spec_economic_inequality_society_comparison,
 )
 
 

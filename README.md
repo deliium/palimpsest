@@ -111,6 +111,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Emergent prices](docs/emergent-prices.md) | Owner-scoped price expectations, `prc_v1` quoted offers, paired exchange ratios, analytical distributions with five bin shares, market convergence/divergence, `emergent-prices-snapshot-v1`, seven GET-only routes and Research UI panel |
 | [Credit relationships](docs/credit-relationships.md) | Owner-scoped credit beliefs, `crd_v1` acts, repayment performances and distributions, researcher-only alignment, `credit-relationships-snapshot-v1`, seven GET-only routes and Research UI panel |
 | [Accounting ledgers](docs/accounting-ledgers.md) | Owner-scoped accounting interpretations, evidence, analysis, snapshot, and read surface |
+| [Economic inequality](docs/economic-inequality.md) | Six-dimensional detached inequality distributions, indices, cohorts, societies, snapshot, and read surface |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 

@@ -219,6 +219,25 @@ and four GET-only `/v1` routes. It adds no capability flag, command, event,
 observer semantic type, write pair, or migration. See
 [Macro-societies](macro-societies.md).
 
+### economic_inequality
+
+Economic inequality is a detached longitudinal measurement over already-owned
+objective and owner-scoped economic seams. This context owns only `analysis`,
+has no capability flag, and has no mutable world seam. Six independent dimensions
+(resource possession, productive-tool access, infrastructure access, storage
+access, credit relationships, and organizational resource control) report
+per-window distributions and quantized indices; no composite score, ranking, or
+legitimate-ownership truth exists. Physical possession/access, owner claims, and
+analytical comparison stay in separated layers. Findings never feed cognition,
+prompts, memory, admission, observations, or stop criteria.
+
+V4-24 implements the context in `analysis.economic_inequality_*`, canonical
+`economic-inequality-snapshot-v1`/`economic-inequality-store-v1`, seven GET-only
+dual-gated routes, a read-only Research UI panel, eight appended metric families,
+and the off-gate `economic_inequality@1` experiment. It adds no capability flag,
+runner schema, command, event, observer semantic type, write pair, `/v2` route,
+or migration. See [Economic inequality](economic-inequality.md).
+
 ## Cross-context contracts
 
 - Owner-scoped constructs travel only through ordinary commands, perception,
@@ -265,7 +284,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 220 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 198; V4-19 198 → 204; V4-20 204 → 208; V4-21 208 → 212; V4-22 212 → 216; V4-23 216 → 220) | `analysis.specifications` |
+| Metric catalog | 228 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 198; V4-19 198 → 204; V4-20 204 → 208; V4-21 208 → 212; V4-22 212 → 216; V4-23 216 → 220; V4-24 220 → 228) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -409,7 +428,7 @@ presentation overlays. See
 
 V4-17 deepens the owned `infrastructure_networks` context and the V3
 `multi_polity_migration` / `regions_migration` seam. It adds no V4 context or
-flag; the registry stays 14 contexts / 12 flags / eight owned. The travel-network
+flag; the registry stays 15 contexts / 12 flags / eight owned. The travel-network
 channel is active only when `infrastructure_networks` and `regions_migration`
 are both present; it writes replay-v27 / codec `v25`. Reserved pairs 23–26 /
 `v21`–`v24` are unchanged. Infrastructure-only runs keep `(23, "v21")` and
@@ -436,7 +455,7 @@ require `SUBJECTIVE_DEBUG`; the Research UI and Godot observer stay read-only.
 ## V4-19 supply chains
 
 V4-19 owns the declared `supply_chains` context on `runner-config-v56`; the
-registry stays 14 contexts / 12 flags / eight owned. `world.supply_chain` locks
+registry stays 15 contexts / 12 flags / eight owned. `world.supply_chain` locks
 `supply-chains.v1`, six chain recipes, catalog validation, and a held-`STRIKE`
 harvest probability bonus; the legacy catalog and digest are unchanged.
 Detached analysis reconstructs stages from committed events, derives ten
@@ -455,7 +474,7 @@ keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
 commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 

@@ -237,7 +237,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -251,10 +251,14 @@ def test_compatibility_pins_are_unchanged() -> None:
 
 def test_v4_registry_keeps_fourteen_contexts_and_ownership_split() -> None:
     validate_v4_contexts()
-    assert len(V4_CONTEXTS) == 14
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset(
-        {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
+        {
+            V4ContextId.SOCIETAL_RESILIENCE,
+            V4ContextId.MACRO_SOCIETY_IDENTITY,
+            V4ContextId.ECONOMIC_INEQUALITY,
+        }
     )
     assert V4ContextId.ORGANIZATIONS in V4_EVENT_REUSING_CONTEXTS
     assert len(V4_WRITE_PAIR_RESERVATIONS) == 4

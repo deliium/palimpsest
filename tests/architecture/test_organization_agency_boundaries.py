@@ -98,9 +98,9 @@ def test_analysis_agency_module_imports_no_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     families = all_metric_specifications()
-    assert len(families) == 220
+    assert len(families) == 228
     assert families[146].family_id.value == "organization_collective_agency"
     assert families[147].family_id.value == "organization_collective_implementation"
     assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
@@ -117,8 +117,8 @@ def test_compatibility_pins_are_exact() -> None:
 
 
 def test_registry_and_organizations_context_are_unchanged() -> None:
-    assert len(V4ContextId) == 14
-    assert len(V4_CONTEXT_BY_ID) == 14
+    assert len(V4ContextId) == 15
+    assert len(V4_CONTEXT_BY_ID) == 15
     assert V4ContextId.ORGANIZATIONS in V4_CONTEXT_BY_ID
     spec = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS]
     assert spec.authority.value == "owner_scoped"

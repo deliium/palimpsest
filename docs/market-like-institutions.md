@@ -190,7 +190,7 @@ Local lanes:
 - `uv run mypy src tests`
 - `uv run lint-imports`
 
-Pins: 14 contexts / 12 flags / eight owned / four unowned; 212 metric families;
+Pins: 15 contexts / 12 flags / eight owned / four unowned; 212 metric families;
 43 commands; 73 observer semantic types; replay-v27 / codec `v25` maximum when
 selected; Alembic `0017`; `/v1`; `observer-protocol-v1`; off-gate
 `market_institutions@1`. Roadmap registration remains with `$aif-roadmap`.

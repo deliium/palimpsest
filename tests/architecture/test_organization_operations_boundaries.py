@@ -267,7 +267,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert next_revision() == "0018"
@@ -277,7 +277,7 @@ def test_compatibility_pins_are_unchanged() -> None:
 
 def test_v4_registry_and_reservations_are_unchanged() -> None:
     validate_v4_contexts()
-    assert len(V4_CONTEXTS) == 14
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_WRITE_PAIR_RESERVATIONS) == 4
     assert V4ContextId.ORGANIZATIONS in {context.context_id for context in V4_CONTEXTS}

@@ -82,8 +82,8 @@ def _base() -> SimulationRunnerConfig:
 def test_v4_10_owns_diplomacy_without_new_schema() -> None:
     from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
-    assert len(V4_CONTEXTS) == 14
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == _OWNED_FLAGS
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
@@ -283,7 +283,7 @@ def test_no_new_wire_surfaces() -> None:
     from world._rules import COMMAND_RULE_MATRIX
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

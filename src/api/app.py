@@ -35,6 +35,7 @@ from api.routes import (
     delegation_representation_router,
     diplomacy_router,
     dispute_router,
+    economic_inequality_router,
     emergent_prices_router,
     evidence_testimony_router,
     formal_rule_router,
@@ -627,6 +628,36 @@ def _attach_accounting_ledgers_reader(app: FastAPI) -> None:
     _LOGGER.info("accounting_ledgers_router_ready")
 
 
+def _attach_economic_inequality_reader(app: FastAPI) -> None:
+    from api.economic_inequality_cursor import EconomicInequalityCursorCodec
+    from persistence.economic_inequality_filesystem import (
+        create_economic_inequality_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.economic_inequality_cursor_codec = None
+        app.state.economic_inequality_reader = None
+        return
+    secret = (
+        settings.economic_inequality_cursor_key.get_secret_value().encode("utf-8")
+        if settings.economic_inequality_cursor_key is not None
+        else None
+    )
+    if settings.economic_inequality_root is None or secret is None:
+        app.state.economic_inequality_cursor_codec = None
+        app.state.economic_inequality_reader = None
+        _LOGGER.info("economic_inequality_attach enabled=false")
+        return
+    app.state.economic_inequality_cursor_codec = (
+        EconomicInequalityCursorCodec.from_secret(secret)
+    )
+    app.state.economic_inequality_reader = create_economic_inequality_reader(
+        settings.economic_inequality_root
+    )
+    _LOGGER.info("economic_inequality_router_ready")
+
+
 def _attach_credit_relationships_reader(app: FastAPI) -> None:
     from api.credit_relationships_cursor import CreditRelationshipsCursorCodec
     from persistence.credit_relationships_filesystem import (
@@ -826,6 +857,7 @@ def create_app(
     _attach_market_institutions_reader(app)
     _attach_emergent_prices_reader(app)
     _attach_accounting_ledgers_reader(app)
+    _attach_economic_inequality_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -868,6 +900,7 @@ def create_app(
     app.include_router(market_institutions_router)
     app.include_router(emergent_prices_router)
     app.include_router(accounting_ledgers_router)
+    app.include_router(economic_inequality_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

@@ -43,6 +43,7 @@ DECLARED_ORDER = (
     V4ContextId.DISASTERS,
     V4ContextId.SOCIETAL_RESILIENCE,
     V4ContextId.MACRO_SOCIETY_IDENTITY,
+    V4ContextId.ECONOMIC_INEQUALITY,
 )
 
 DECLARED_PREREQUISITES = {
@@ -62,6 +63,7 @@ DECLARED_PREREQUISITES = {
     V4ContextId.DISASTERS: frozenset({V4ContextId.ECOLOGICAL_FEEDBACK}),
     V4ContextId.SOCIETAL_RESILIENCE: frozenset(),
     V4ContextId.MACRO_SOCIETY_IDENTITY: frozenset(),
+    V4ContextId.ECONOMIC_INEQUALITY: frozenset(),
 }
 
 REQUIRED_SECTIONS = (
@@ -96,10 +98,10 @@ def _candidate(target: V4ContextId, **changes: Any) -> tuple[V4ContextSpec, ...]
     )
 
 
-def test_registry_validates_and_declares_fourteen_contexts() -> None:
+def test_registry_validates_and_declares_fifteen_contexts() -> None:
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
-    assert len(V4_CONTEXTS) == 14
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(set(V4_CAPABILITY_FLAGS)) == 12
     assert tuple(spec.context_id for spec in V4_CONTEXTS) == DECLARED_ORDER
@@ -108,7 +110,11 @@ def test_registry_validates_and_declares_fourteen_contexts() -> None:
 
 def test_analysis_only_contexts_carry_no_flag() -> None:
     assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset(
-        {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
+        {
+            V4ContextId.SOCIETAL_RESILIENCE,
+            V4ContextId.MACRO_SOCIETY_IDENTITY,
+            V4ContextId.ECONOMIC_INEQUALITY,
+        }
     )
     for context_id in V4_ANALYSIS_ONLY_CONTEXTS:
         spec = V4_CONTEXT_BY_ID[context_id]
@@ -122,10 +128,17 @@ def test_analysis_only_contexts_carry_no_flag() -> None:
     assert macro.prerequisite_contexts == ()
     assert "no global society registry or WorldEngine identity" in macro.non_goals
 
+    economic = V4_CONTEXT_BY_ID[V4ContextId.ECONOMIC_INEQUALITY]
+    assert economic.prerequisite_contexts == ()
+    assert "no composite inequality score" in economic.non_goals
+    assert "no objective wealth or ownership metric" in economic.non_goals
+
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("societal_resilience")
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("macro_society_identity")
+    with pytest.raises(ValueError, match="v4_context_unknown_flag"):
+        v4_context_for_flag("economic_inequality")
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("not_a_v4_context")
 
@@ -174,7 +187,7 @@ def test_document_declares_every_context_and_required_section() -> None:
         assert f"### {context_id.value}" in text, context_id
     for section in REQUIRED_SECTIONS:
         assert section in text, section
-    assert text.count("\n### ") == 14
+    assert text.count("\n### ") == 15
 
 
 def test_registry_module_imports_only_the_core_packages() -> None:

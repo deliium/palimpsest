@@ -92,6 +92,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/emergent_prices_scenario.py",
     "experiments/credit_relationship_scenario.py",
     "experiments/accounting_ledger_scenario.py",
+    "experiments/economic_inequality_scenario.py",
     "experiments/civilization_benchmark_forks.py",
     "experiments/infrastructure_networks_scenario.py",
     "experiments/market_institution_scenario.py",
@@ -142,7 +143,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 220
+    assert METRIC_FAMILY_COUNT == 228
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -174,7 +175,11 @@ def test_context_registry_and_capability_ownership() -> None:
     assert set(V4_CONTEXT_BY_ID) == set(V4ContextId)
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset(
-        {V4ContextId.SOCIETAL_RESILIENCE, V4ContextId.MACRO_SOCIETY_IDENTITY}
+        {
+            V4ContextId.SOCIETAL_RESILIENCE,
+            V4ContextId.MACRO_SOCIETY_IDENTITY,
+            V4ContextId.ECONOMIC_INEQUALITY,
+        }
     )
     for spec in V4_CONTEXTS:
         if spec.context_id in V4_ANALYSIS_ONLY_CONTEXTS:
@@ -206,8 +211,8 @@ def test_context_registry_and_capability_ownership() -> None:
 def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
     """V4-08 adds no context, flag, runner schema, or reserved surface."""
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
-    assert len(V4_CONTEXTS) == 14
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
@@ -383,8 +388,8 @@ def test_validators_reject_mutated_copies() -> None:
 def test_v4_09_deepens_organizations_without_new_schema() -> None:
     """V4-09 deepens organizations; it adds no context, flag, or schema."""
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v2"
-    assert len(V4_CONTEXTS) == 14
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
+    assert len(V4_CONTEXTS) == 15
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {

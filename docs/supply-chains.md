@@ -8,7 +8,7 @@ V4-19 owns the declared `supply_chains` V4 context and extends V3 crafting into
 bounded multi-stage production chains. Dependencies cover resources, skills,
 tools, locations, infrastructure, and organizations. Agents and organizations
 plan locally; there is no central planner, optimizer, quota, price, money, or
-automatic allocation. Counts are 14 contexts / 12 flags / eight owned / five
+automatic allocation. Counts are 15 contexts / 12 flags / eight owned / five
 unowned. `runner-config-v56` is the only V4 runner schema and supply_chains
 adds no write pair.
 
@@ -131,4 +131,7 @@ legacy-catalog control with an extended-catalog treatment.
 - [Analysis metrics](analysis-metrics.md)
 - [Configuration](configuration.md)
 
-Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+
+
+See also [Economic inequality](economic-inequality.md) for the detached six-dimensional inequality surface over possession, access, credit, and organizational-control evidence.

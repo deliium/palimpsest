@@ -597,7 +597,7 @@ cognition, prompts, memory, world state, observer semantics, or stop selectors.
 `dispute-resolution-snapshot-v1` and `dispute-resolution-store-v1` are
 independent; publication is opt-in and post-completion. Six GET-only `/v1`
 dispute routes require `SUBJECTIVE_DEBUG`. The catalog stays at **184** metric
-families, with 14 V4 contexts and 12 capability flags. No command, event,
+families, with 15 V4 contexts and 12 capability flags. No command, event,
 observer semantic type, write pair, `/v2` route, `observer-protocol-v2`, or SQL
 migration is added; replay stays v22, codec v20, and Alembic head `0017` with no
 `0018`.
@@ -711,7 +711,7 @@ GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 212 metric families, 14 V4 contexts, 12 V4 flags, replay-v22/codec v20,
+types, 212 metric families, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
 
@@ -730,7 +730,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
 Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
-types, 212 metric families, 14 V4 contexts, 12 V4 flags, eight owned flags,
+types, 212 metric families, 15 V4 contexts, 12 V4 flags, eight owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
 
@@ -774,7 +774,7 @@ destruction. Explicit public-good frozensets keep infra-only kinds out of the
 Use/Maintain/Oppose sets. Four metric families append (catalog 184 -> 188);
 observer semantic types stay 73 through aliases; commands stay 43; Alembic
 stays `0017`. Landing pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
-observer semantic types, 188 metric families, 14 V4 contexts, 12 V4 flags, eight owned
+observer semantic types, 188 metric families, 15 V4 contexts, 12 V4 flags, eight owned
 flags, replay-v23/codec `v21` when selected, `/v1`, `observer-protocol-v1`,
 and Alembic `0017`. See
 [infrastructure networks](infrastructure-networks.md).
@@ -800,7 +800,7 @@ score, ranking, severity, or recommendation exists.
 fail closed with `supply_chains_disabled`; the Research UI adds a read-only
 panel and no Godot overlay. Six metric families append 198 → **204**; observer
 semantic types stay 73; commands stay 43; replay-v27/codec `v25` and Alembic
-`0017` remain the pins. Counts are 14 V4 contexts / 12 flags / eight owned.
+`0017` remain the pins. Counts are 15 V4 contexts / 12 flags / eight owned.
 See [supply chains](supply-chains.md).
 
 ### V4-20 market-like institution seam
@@ -858,7 +858,7 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 220 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Eight V4 flags are owned; four remain unowned.
 
@@ -875,6 +875,8 @@ keeps three layers separate, and appends four metric families (216 -> 220).
 programmatically; seven GET-only dual-gated `/v1/simulations/{run_id}/accounting-ledgers`
 routes fail closed with `accounting_ledgers_disabled`; the Research UI adds a
 read-only panel and Godot adds no overlay. Off-gate `accounting_ledgers@1` is
-registered. Pins: 220 metric families, 43 commands, 73 observer semantic types,
+registered. Pins: 228 metric families, 43 commands, 73 observer semantic types,
 replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`. See
 [Accounting ledgers](accounting-ledgers.md).
+
+V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated `/v1/simulations/{run_id}/economic-inequality` routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
