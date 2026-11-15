@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **228** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **236** families (`METRIC_FAMILY_COUNT`). New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -771,7 +771,7 @@ emerged/continued/transformed/split/merge/dissolved counts. No composite
 persistence score, price, money, ranking, severity, recommendation, allocation,
 or quota exists.
 
-Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger families
 
@@ -779,7 +779,9 @@ Four appended families describe committed accounting evidence:
 `accounting_record_coverage@1`, `accounting_entry_alignment@1`,
 `accounting_record_condition@1`, and `accounting_flow_structure@1`. They report
 counts, integer claim sums, milli shares, and condition availability only; there is no
-balance, solvency, score, or audit authority. The catalog is 228 families. See
+balance, solvency, score, or audit authority. The catalog is 236 families. See
 [Accounting ledgers](accounting-ledgers.md).
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated `/v1/simulations/{run_id}/economic-inequality` routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
+
+V4-25 appends eight social-mobility families (228 -> 236): six domain families, `social_mobility_generation_lag@1`, and `social_mobility_coverage@1`. Each domain family reports one domain only; lag strata recompute their own statistics and no composite score exists. See [Social mobility](social-mobility.md).

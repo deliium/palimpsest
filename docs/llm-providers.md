@@ -196,4 +196,4 @@ Logger: `llm.openai_compatible` / `llm.recording` (stdlib). Prompt loader may em
 - [Configuration](configuration.md)
 - [Development](development.md)
 
-Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

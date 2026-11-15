@@ -181,14 +181,14 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 228 (V4-15's 184 plus four V4-16 infrastructure-network families, four V4-17 travel-network families, six V4-18 trade-network families, six V4-19 supply-chain families, four V4-20 market-like institution families, four V4-21 emergent-price families, four V4-22 credit-relationship families, four V4-23 accounting-ledger families, and eight V4-24 economic-inequality families) |
+| Metric families | 236 (V4-24's 228 plus eight V4-25 social-mobility families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 228 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 236 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -551,9 +551,9 @@ types, 136 metric families, replay-v22/codec v20 when selected, Alembic `0017`,
 `simulation.scale`, and `observer.capabilities` publish the V4 vocabulary without
 implementing behavior. V4-01 initially declared thirteen contexts: twelve closed
 capability flags plus analysis-only `societal_resilience`. Later analysis-only
-additions raised the registry to fifteen contexts (`societal_resilience`,
-`macro_society_identity`, `economic_inequality`); the current revision is
-`v4-context-map-v3`. Every context names one authority
+additions raised the registry to sixteen contexts (`societal_resilience`,
+`macro_society_identity`, `economic_inequality`, `social_mobility`); the current
+revision is `v4-context-map-v4`. Every context names one authority
 (`objective_world`, `owner_scoped`, `detached_analysis`, `presentation_only`),
 owning packages, prerequisites, and non-goals; no context declares an
 organization, market, polity, institution, or civilization actor, and no global
@@ -1221,3 +1221,27 @@ per-agent key is added. Pins remain runner v4/v55/v56, result v2/v3, 43 commands
 73 observer semantic types, 228 metric families, replay-v27/codec `v25`, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. See
 `docs/economic-inequality.md`.
+
+### V4-25 social-mobility seam
+
+V4-25 adds the sixteenth V4 context, `social_mobility`, as analysis-only on the
+accepted `runner-config-v56` seam. It owns no capability flag, world state, or
+owner state; the registry revision is `v4-context-map-v4` (16 contexts / 12
+flags / eight owned / four unowned). Detached `analysis.social_mobility_*`
+harvests committed `KinshipEdgeRecorded` and `AgentCreated.generation_index`
+evidence plus six observed outcome domains, translates agent-id-keyed audits
+through one identity map, pairs ancestors and descendants at the same window
+boundary, and reports 5-bin persistence, upward/downward shares, mean absolute
+rank change, and quantized Spearman milli. Each lag 1-4 recomputes its own
+statistics. It keeps objective outcomes, owner outcomes, and analytical rows in
+separated layers with a hard leakage guard and appends eight families (228 ->
+236). `social-mobility-snapshot-v1` and `social-mobility-store-v1` publish
+programmatically after completion; seven GET-only dual-gated routes fail closed
+with `social_mobility_disabled`; the Research UI adds a read-only panel and Godot
+adds no overlay. No command, event, observer semantic type, write pair, `/v2`
+route, migration, runner root field, or per-agent key is added. Pins remain
+runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 236
+metric families, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, and
+Alembic `0017`. No social class, caste, stratum, elite, underclass, merit,
+prestige, inheritance right, or composite mobility score exists. See
+`docs/social-mobility.md`.

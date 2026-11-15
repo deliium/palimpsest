@@ -44,6 +44,7 @@ DECLARED_ORDER = (
     V4ContextId.SOCIETAL_RESILIENCE,
     V4ContextId.MACRO_SOCIETY_IDENTITY,
     V4ContextId.ECONOMIC_INEQUALITY,
+    V4ContextId.SOCIAL_MOBILITY,
 )
 
 DECLARED_PREREQUISITES = {
@@ -64,6 +65,7 @@ DECLARED_PREREQUISITES = {
     V4ContextId.SOCIETAL_RESILIENCE: frozenset(),
     V4ContextId.MACRO_SOCIETY_IDENTITY: frozenset(),
     V4ContextId.ECONOMIC_INEQUALITY: frozenset(),
+    V4ContextId.SOCIAL_MOBILITY: frozenset(),
 }
 
 REQUIRED_SECTIONS = (
@@ -98,10 +100,10 @@ def _candidate(target: V4ContextId, **changes: Any) -> tuple[V4ContextSpec, ...]
     )
 
 
-def test_registry_validates_and_declares_fifteen_contexts() -> None:
+def test_registry_validates_and_declares_sixteen_contexts() -> None:
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
-    assert len(V4_CONTEXTS) == 15
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
+    assert len(V4_CONTEXTS) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(set(V4_CAPABILITY_FLAGS)) == 12
     assert tuple(spec.context_id for spec in V4_CONTEXTS) == DECLARED_ORDER
@@ -114,6 +116,7 @@ def test_analysis_only_contexts_carry_no_flag() -> None:
             V4ContextId.SOCIETAL_RESILIENCE,
             V4ContextId.MACRO_SOCIETY_IDENTITY,
             V4ContextId.ECONOMIC_INEQUALITY,
+            V4ContextId.SOCIAL_MOBILITY,
         }
     )
     for context_id in V4_ANALYSIS_ONLY_CONTEXTS:
@@ -133,12 +136,21 @@ def test_analysis_only_contexts_carry_no_flag() -> None:
     assert "no composite inequality score" in economic.non_goals
     assert "no objective wealth or ownership metric" in economic.non_goals
 
+    mobility = V4_CONTEXT_BY_ID[V4ContextId.SOCIAL_MOBILITY]
+    assert mobility.prerequisite_contexts == ()
+    assert "no social class, caste, stratum, elite, or underclass label" in (
+        mobility.non_goals
+    )
+    assert "no composite cross-domain mobility index" in mobility.non_goals
+
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("societal_resilience")
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("macro_society_identity")
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("economic_inequality")
+    with pytest.raises(ValueError, match="v4_context_unknown_flag"):
+        v4_context_for_flag("social_mobility")
     with pytest.raises(ValueError, match="v4_context_unknown_flag"):
         v4_context_for_flag("not_a_v4_context")
 
@@ -187,7 +199,7 @@ def test_document_declares_every_context_and_required_section() -> None:
         assert f"### {context_id.value}" in text, context_id
     for section in REQUIRED_SECTIONS:
         assert section in text, section
-    assert text.count("\n### ") == 15
+    assert text.count("\n### ") == 16
 
 
 def test_registry_module_imports_only_the_core_packages() -> None:

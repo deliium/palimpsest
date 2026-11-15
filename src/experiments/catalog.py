@@ -2835,6 +2835,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "credit_relationships@1",
         "accounting_ledgers@1",
         "economic_inequality@1",
+        "social_mobility@1",
     }
 )
 
@@ -5747,6 +5748,25 @@ def experiment_economic_inequality(
     )
     _LOG.info(
         "experiment_registered experiment_id=economic_inequality@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_social_mobility(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-25 experiment: intergenerational persistence."""
+    from experiments.social_mobility_scenario import social_mobility_scenario
+
+    definition = social_mobility_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=social_mobility@1 arms=%s",
         len(definition.conditions),
     )
     return definition

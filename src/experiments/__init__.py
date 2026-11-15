@@ -106,6 +106,7 @@ from experiments.catalog import (
     experiment_q_distributed_reputation,
     experiment_r_skill_learning,
     experiment_s_cultural_transmission,
+    experiment_social_mobility,
     experiment_t_skill_specialization,
     experiment_u_seasonal_scarcity,
     experiment_v_territorial_claims,
@@ -505,6 +506,18 @@ from experiments.reference_scenario import (
     build_reference_scenario,
 )
 from experiments.reputation_scenario import distributed_reputation_scenario
+from experiments.social_mobility_completed_run import (
+    build_completed_run_social_mobility_analysis,
+    social_mobility_recipe_mappings,
+)
+from experiments.social_mobility_publication import (
+    SocialMobilityHarvest,
+    SocialMobilityReceipt,
+    build_social_mobility_harvest_result,
+    compose_social_mobility_snapshot,
+    publish_social_mobility_snapshot,
+)
+from experiments.social_mobility_scenario import social_mobility_scenario
 from experiments.trade_networks_completed_run import (
     build_completed_run_trade_networks_analysis,
 )
@@ -661,6 +674,8 @@ __all__ = [
     "RetryPolicy",
     "RunVersionIdentity",
     "SmokeOutputAvailability",
+    "SocialMobilityHarvest",
+    "SocialMobilityReceipt",
     "StoryIntervention",
     "StoryInterventionArbiter",
     "StoryTruthSpec",
@@ -715,6 +730,7 @@ __all__ = [
     "build_completed_run_inter_society_relations_analysis",
     "build_completed_run_organization_harvest",
     "build_completed_run_representation_harvest",
+    "build_completed_run_social_mobility_analysis",
     "build_completed_run_trade_networks_analysis",
     "build_credit_relationships_harvest_result",
     "build_dispute_harvest_result",
@@ -729,6 +745,7 @@ __all__ = [
     "build_organization_harvest_result",
     "build_reference_scenario",
     "build_representation_harvest_result",
+    "build_social_mobility_harvest_result",
     "build_trade_networks_harvest_result",
     "build_v3_benchmark_base",
     "build_v3_benchmark_comparison",
@@ -754,6 +771,7 @@ __all__ = [
     "compose_economic_inequality_snapshot",
     "compose_emergent_prices_snapshot",
     "compose_inter_society_relations_snapshot",
+    "compose_social_mobility_snapshot",
     "compose_trade_networks_snapshot",
     "condition_fingerprint",
     "config_fingerprint_for_cell",
@@ -846,6 +864,7 @@ __all__ = [
     "experiment_q_distributed_reputation",
     "experiment_r_skill_learning",
     "experiment_s_cultural_transmission",
+    "experiment_social_mobility",
     "experiment_t_skill_specialization",
     "experiment_u_seasonal_scarcity",
     "experiment_v_territorial_claims",
@@ -895,6 +914,7 @@ __all__ = [
     "publish_macro_society_snapshot",
     "publish_organization_snapshot",
     "publish_representation_snapshot",
+    "publish_social_mobility_snapshot",
     "publish_trade_networks_snapshot",
     "regional_context_from_run",
     "regional_destination_evidence_rows_from_traces",
@@ -910,6 +930,8 @@ __all__ = [
     "run_one_assignment",
     "seasonal_scarcity_scenario",
     "smoke_tick_budget",
+    "social_mobility_recipe_mappings",
+    "social_mobility_scenario",
     "spatial_action_rows_from_events",
     "technique_lifecycle_profile",
     "territorial_control_rows_from_spatial_actions",

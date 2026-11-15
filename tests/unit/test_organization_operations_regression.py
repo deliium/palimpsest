@@ -50,8 +50,8 @@ AUTHORITY_KEYS = {
 
 
 def test_catalog_is_154_with_formal_rule_families_last() -> None:
-    assert METRIC_FAMILY_COUNT == 228
-    assert len(all_metric_specifications()) == 228
+    assert METRIC_FAMILY_COUNT == 236
+    assert len(all_metric_specifications()) == 236
     assert [spec.family_id for spec in all_metric_specifications()[144:146]] == [
         MetricFamilyId.ORGANIZATION_OPERATIONS,
         MetricFamilyId.ORGANIZATION_OPERATION_AUTHORITY,
@@ -103,8 +103,8 @@ def test_no_v57_runner_schema_exists() -> None:
 
 
 def test_v4_registry_is_unchanged() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
-    assert len(V4_CONTEXTS) == 15
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
+    assert len(V4_CONTEXTS) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4ContextId.ORGANIZATIONS in {context.context_id for context in V4_CONTEXTS}
 

@@ -112,6 +112,7 @@ V4_EVENT_REUSING_CONTEXTS: Final[frozenset[V4ContextId]] = frozenset(
         V4ContextId.SOCIETAL_RESILIENCE,
         V4ContextId.MACRO_SOCIETY_IDENTITY,
         V4ContextId.ECONOMIC_INEQUALITY,
+        V4ContextId.SOCIAL_MOBILITY,
     }
 )
 

@@ -402,13 +402,14 @@ def test_exactly_six_get_routes_and_six_cursor_purposes() -> None:
 
 def test_exact_context_flag_reservation_and_wire_pins() -> None:
     validate_v4_contexts()
-    assert len(V4_CONTEXT_BY_ID) == 15
+    assert len(V4_CONTEXT_BY_ID) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_ANALYSIS_ONLY_CONTEXTS == frozenset(
         {
             V4ContextId.SOCIETAL_RESILIENCE,
             V4ContextId.MACRO_SOCIETY_IDENTITY,
             V4ContextId.ECONOMIC_INEQUALITY,
+            V4ContextId.SOCIAL_MOBILITY,
         }
     )
     owned = V4CapabilityFlags(
@@ -458,7 +459,7 @@ def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(COMMAND_RULE_MATRIX) == 43
-    assert METRIC_FAMILY_COUNT == 228
+    assert METRIC_FAMILY_COUNT == 236
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"

@@ -7,7 +7,7 @@ event, no observer semantic type, no metric family, and no world seam.
 Validation codes are stable strings so later plans and tests can assert on them
 without parsing messages:
 
-- ``v4_context_count`` — not exactly thirteen contexts
+- ``v4_context_count`` — not exactly sixteen contexts
 - ``v4_context_duplicate`` — duplicate context id
 - ``v4_context_flag_duplicate`` — two contexts share one capability flag
 - ``v4_context_unknown_owner`` — empty or unknown owning package
@@ -38,7 +38,7 @@ from simulation.compatibility import (
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.v4_architecture")
 
-V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v3"
+V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v4"
 V4_ANALYSIS_CAPTURE_SEAM: Final[str] = "analysis_capture"
 
 _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
@@ -56,7 +56,7 @@ _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
         "research_runner",
     }
 )
-_REQUIRED_CONTEXT_COUNT: Final[int] = 15
+_REQUIRED_CONTEXT_COUNT: Final[int] = 16
 _RESERVED_V3_FLAGS: Final[frozenset[str]] = frozenset(V3_CAPABILITY_FLAG_NAMES)
 
 
@@ -78,6 +78,7 @@ class V4ContextId(StrEnum):
     SOCIETAL_RESILIENCE = "societal_resilience"
     MACRO_SOCIETY_IDENTITY = "macro_society_identity"
     ECONOMIC_INEQUALITY = "economic_inequality"
+    SOCIAL_MOBILITY = "social_mobility"
 
 
 class V4Authority(StrEnum):
@@ -339,6 +340,25 @@ V4_CONTEXTS: Final[tuple[V4ContextSpec, ...]] = (
             "no legitimate-ownership, merit, poverty, or welfare adjudication",
         ),
     ),
+    V4ContextSpec(
+        context_id=V4ContextId.SOCIAL_MOBILITY,
+        capability_flag=None,
+        authority=V4Authority.DETACHED_ANALYSIS,
+        owner_packages=("analysis",),
+        existing_mechanism=(
+            "generational kinship, practical knowledge, teaching receipts, "
+            "organization operations, and committed communication"
+        ),
+        required_config_seam=V4_ANALYSIS_CAPTURE_SEAM,
+        uses_existing_events=True,
+        prerequisite_contexts=(),
+        non_goals=(
+            "no social class, caste, stratum, elite, or underclass label",
+            "no objective mobility verdict, merit, desert, or prestige score",
+            "no composite cross-domain mobility index",
+            "no feedback into cognition, prompts, memory, admission, or stop selectors",
+        ),
+    ),
 )
 
 V4_CONTEXT_BY_ID: Final[Mapping[V4ContextId, V4ContextSpec]] = MappingProxyType(
@@ -350,6 +370,7 @@ V4_ANALYSIS_ONLY_CONTEXTS: Final[frozenset[V4ContextId]] = frozenset(
         V4ContextId.SOCIETAL_RESILIENCE,
         V4ContextId.MACRO_SOCIETY_IDENTITY,
         V4ContextId.ECONOMIC_INEQUALITY,
+        V4ContextId.SOCIAL_MOBILITY,
     }
 )
 
@@ -450,6 +471,8 @@ def validate_v4_contexts(
         _LOG.info(
             "economic_inequality_context_registered contexts=%d", len(contexts)
         )
+    if any(spec.context_id is V4ContextId.SOCIAL_MOBILITY for spec in contexts):
+        _LOG.info("social_mobility_context_registered contexts=%d", len(contexts))
 
 
 def v4_context_for_flag(flag: str) -> V4ContextSpec:

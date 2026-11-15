@@ -619,8 +619,8 @@ def test_metric_service_registers_all_regional_families() -> None:
         "regional_migration",
         "regional_destination_beliefs",
     } <= {doc.metric_family for doc in docs}
-    assert METRIC_FAMILY_COUNT == 228
-    assert len(validate_metric_catalog()) == 228
+    assert METRIC_FAMILY_COUNT == 236
+    assert len(validate_metric_catalog()) == 236
 
 
 def test_destination_belief_coverage_distinguishes_unavailable_from_empty() -> None:

@@ -383,7 +383,7 @@ def test_exactly_six_get_routes_require_subjective_debug() -> None:
 
 
 def test_no_new_flag_context_or_v57() -> None:
-    assert len(V4_CONTEXTS) == 15
+    assert len(V4_CONTEXTS) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -410,9 +410,9 @@ def test_no_new_flag_context_or_v57() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert METRIC_FAMILY_COUNT == 228
+    assert METRIC_FAMILY_COUNT == 236
     specs = all_metric_specifications()
-    assert len(specs) == 228
+    assert len(specs) == 236
     assert tuple(spec.family_id.value for spec in specs[176:180]) == MIGRATION_FAMILIES
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

@@ -41,6 +41,7 @@ from api.routes.organized_conflict import router as organized_conflict_router
 from api.routes.replay import router as replay_router
 from api.routes.research_matrix import router as research_matrix_router
 from api.routes.simulations import router as simulations_router
+from api.routes.social_mobility import router as social_mobility_router
 from api.routes.streams import router as streams_router
 from api.routes.supply_chains import router as supply_chains_router
 from api.routes.trade_networks import (
@@ -78,6 +79,7 @@ __all__ = [
     "research_matrix_router",
     "research_router",
     "simulations_router",
+    "social_mobility_router",
     "streams_router",
     "supply_chains_router",
     "trade_networks_router",

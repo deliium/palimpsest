@@ -858,7 +858,7 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Eight V4 flags are owned; four remain unowned.
 
@@ -875,8 +875,10 @@ keeps three layers separate, and appends four metric families (216 -> 220).
 programmatically; seven GET-only dual-gated `/v1/simulations/{run_id}/accounting-ledgers`
 routes fail closed with `accounting_ledgers_disabled`; the Research UI adds a
 read-only panel and Godot adds no overlay. Off-gate `accounting_ledgers@1` is
-registered. Pins: 228 metric families, 43 commands, 73 observer semantic types,
+registered. Pins: 236 metric families, 43 commands, 73 observer semantic types,
 replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`. See
 [Accounting ledgers](accounting-ledgers.md).
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated `/v1/simulations/{run_id}/economic-inequality` routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
+
+V4-25 adds the analysis-only `social_mobility` context (16 contexts / `v4-context-map-v4`), six outcome domains over committed genealogy, eight appended families (228 -> 236), canonical `social-mobility-snapshot-v1`, an atomic store, seven GET-only dual-gated routes, a read-only Research UI panel, and off-gate `social_mobility@1`; see [Social mobility](social-mobility.md).

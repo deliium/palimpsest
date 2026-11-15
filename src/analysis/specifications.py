@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 228
+METRIC_FAMILY_COUNT: Final[int] = 236
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -307,6 +307,14 @@ class MetricFamilyId(StrEnum):
     ECONOMIC_INEQUALITY_SOCIETY_COMPARISON = (
         "economic_inequality_society_comparison"
     )
+    RESOURCE_MOBILITY = "resource_mobility"
+    SKILL_MOBILITY = "skill_mobility"
+    SOCIAL_INFLUENCE_MOBILITY = "social_influence_mobility"
+    ORGANIZATION_ROLE_MOBILITY = "organization_role_mobility"
+    EDUCATIONAL_ACCESS_MOBILITY = "educational_access_mobility"
+    PRODUCTIVE_ASSET_MOBILITY = "productive_asset_mobility"
+    SOCIAL_MOBILITY_GENERATION_LAG = "social_mobility_generation_lag"
+    SOCIAL_MOBILITY_COVERAGE = "social_mobility_coverage"
 
 
 class DenominatorKind(StrEnum):
@@ -9131,6 +9139,56 @@ ECONOMIC_INEQUALITY_SOCIETY_KEYS: Final[tuple[str, ...]] = (
     "availability",
 )
 
+SOCIAL_MOBILITY_DOMAIN_KEYS: Final[tuple[str, ...]] = (
+    "social_mobility_window_tick",
+    "window_count",
+    "pair_count",
+    "resolved_pair_count",
+    "rank_correlation_milli",
+    "same_bin_share_milli",
+    "upward_share_milli",
+    "downward_share_milli",
+    "mean_absolute_rank_change_milli",
+    "persistence_direction",
+    "coverage",
+    "availability",
+)
+SOCIAL_MOBILITY_GENERATION_KEYS: Final[tuple[str, ...]] = (
+    "social_mobility_window_tick",
+    "max_generation_lag",
+    "lag1_pair_count",
+    "lag1_same_bin_share_milli",
+    "lag1_upward_share_milli",
+    "lag1_downward_share_milli",
+    "lag2_pair_count",
+    "lag2_same_bin_share_milli",
+    "lag2_upward_share_milli",
+    "lag2_downward_share_milli",
+    "lag3_pair_count",
+    "lag3_same_bin_share_milli",
+    "lag3_upward_share_milli",
+    "lag3_downward_share_milli",
+    "lag4_pair_count",
+    "lag4_same_bin_share_milli",
+    "lag4_upward_share_milli",
+    "lag4_downward_share_milli",
+    "coverage",
+    "availability",
+)
+SOCIAL_MOBILITY_COVERAGE_KEYS: Final[tuple[str, ...]] = (
+    "social_mobility_window_tick",
+    "generation_count",
+    "owner_count",
+    "genealogy_edge_count",
+    "pair_count",
+    "resolved_pair_count",
+    "unresolved_pair_count",
+    "domain_available_count",
+    "truncated",
+    "coverage",
+    "availability",
+)
+
 
 def _trade_spec(
     *,
@@ -9665,6 +9723,46 @@ def _economic_inequality_spec(
     )
 
 
+def _social_mobility_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+    owner_claims: bool = False,
+) -> MetricSpecification:
+    evidence = {EvidenceStage.OBJECTIVE_EVENT_STATE}
+    if owner_claims:
+        evidence.update(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        )
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset(evidence),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="social_mobility_window_tick",
+        deceased_policy="exclude_owners_strictly_after_death",
+        zero_holding_policy="observed_zero_included_unobserved_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="not_applicable",
+        censoring_policy="insufficient_samples_remain_explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="insufficient_samples",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior="explicit_unknown_without_genealogy_or_outcome_evidence",
+    )
+
+
 def _spec_resource_possession_inequality() -> MetricSpecification:
     return _economic_inequality_spec(
         family_id=MetricFamilyId.RESOURCE_POSSESSION_INEQUALITY,
@@ -9753,6 +9851,99 @@ def _spec_economic_inequality_society_comparison() -> MetricSpecification:
         denominator_kind=DenominatorKind.POPULATION_SIZE,
         keys=ECONOMIC_INEQUALITY_SOCIETY_KEYS,
         opportunity="society comparison distributions only; never a ranking",
+    )
+
+
+def _spec_resource_mobility() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.RESOURCE_MOBILITY,
+        population="observed_owner_generations",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_DOMAIN_KEYS,
+        opportunity="observed resource items only; never legitimate inheritance",
+    )
+
+
+def _spec_skill_mobility() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.SKILL_MOBILITY,
+        population="owners_with_observed_practical_knowledge",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_DOMAIN_KEYS,
+        opportunity="active owner-scoped techniques only; no capability truth",
+    )
+
+
+def _spec_social_influence_mobility() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.SOCIAL_INFLUENCE_MOBILITY,
+        population="owners_with_observed_inbound_communication",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_DOMAIN_KEYS,
+        opportunity=(
+            "distinct observed communication partners; never authority or status"
+        ),
+        owner_claims=True,
+    )
+
+
+def _spec_organization_role_mobility() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.ORGANIZATION_ROLE_MOBILITY,
+        population="owners_with_observed_organization_role_claims",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_DOMAIN_KEYS,
+        opportunity="believed role assignments; never objective office truth",
+        owner_claims=True,
+    )
+
+
+def _spec_educational_access_mobility() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.EDUCATIONAL_ACCESS_MOBILITY,
+        population="owners_with_observed_educational_receipts",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_DOMAIN_KEYS,
+        opportunity="teaching and repository receipts; never guaranteed learning",
+        owner_claims=True,
+    )
+
+
+def _spec_productive_asset_mobility() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.PRODUCTIVE_ASSET_MOBILITY,
+        population="owners_with_observed_productive_assets",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_DOMAIN_KEYS,
+        opportunity="additive observed physical-asset count; not wealth",
+    )
+
+
+def _spec_social_mobility_generation_lag() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.SOCIAL_MOBILITY_GENERATION_LAG,
+        population="generation_lag_strata_with_resolved_pairs",
+        denominator="comparable_lag_rows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_GENERATION_KEYS,
+        opportunity="per-lag descriptive persistence; no ranking",
+    )
+
+
+def _spec_social_mobility_coverage() -> MetricSpecification:
+    return _social_mobility_spec(
+        family_id=MetricFamilyId.SOCIAL_MOBILITY_COVERAGE,
+        population="observed_owner_generations",
+        denominator="resolved_parent_child_pairs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SOCIAL_MOBILITY_COVERAGE_KEYS,
+        opportunity="genealogy and outcome coverage only",
     )
 
 
@@ -10277,6 +10468,14 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_organizational_resource_control_inequality,
     _spec_economic_inequality_cohorts,
     _spec_economic_inequality_society_comparison,
+    _spec_resource_mobility,
+    _spec_skill_mobility,
+    _spec_social_influence_mobility,
+    _spec_organization_role_mobility,
+    _spec_educational_access_mobility,
+    _spec_productive_asset_mobility,
+    _spec_social_mobility_generation_lag,
+    _spec_social_mobility_coverage,
 )
 
 

@@ -209,6 +209,17 @@ from analysis.serialization import (
     encode_metric_document,
     metric_document_fingerprint,
 )
+from analysis.social_mobility_analysis import SocialMobilityAnalysis
+from analysis.social_mobility_metrics import (
+    compute_educational_access_mobility,
+    compute_organization_role_mobility,
+    compute_productive_asset_mobility,
+    compute_resource_mobility,
+    compute_skill_mobility,
+    compute_social_influence_mobility,
+    compute_social_mobility_coverage,
+    compute_social_mobility_generation_lag,
+)
 from analysis.society_contact import compute_society_contact_metric
 from analysis.society_divergence import (
     SocietyDivergenceResult,
@@ -423,6 +434,7 @@ class MetricComputationInputs:
     credit_relationships_analysis: CreditRelationshipsAnalysis | None = None
     accounting_ledgers_analysis: AccountingLedgersAnalysis | None = None
     economic_inequality_analysis: EconomicInequalityAnalysis | None = None
+    social_mobility_analysis: SocialMobilityAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2748,9 +2760,62 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
                 inequality, run_id=run_id, input_revision=revision
             ),
         )
-        _LOG.info("economic_inequality_metrics_emitted families=8 catalog=228")
+        _LOG.info("economic_inequality_metrics_emitted families=8 catalog=236")
     else:
         _LOG.debug("economic_inequality_metrics_disabled")
+    if inputs.social_mobility_analysis is not None:
+        mobility = inputs.social_mobility_analysis
+        _safe(
+            "resource_mobility",
+            lambda: compute_resource_mobility(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "skill_mobility",
+            lambda: compute_skill_mobility(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "social_influence_mobility",
+            lambda: compute_social_influence_mobility(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "organization_role_mobility",
+            lambda: compute_organization_role_mobility(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "educational_access_mobility",
+            lambda: compute_educational_access_mobility(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "productive_asset_mobility",
+            lambda: compute_productive_asset_mobility(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "social_mobility_generation_lag",
+            lambda: compute_social_mobility_generation_lag(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "social_mobility_coverage",
+            lambda: compute_social_mobility_coverage(
+                mobility, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("social_mobility_metrics_emitted families=8 catalog=236")
+    else:
+        _LOG.debug("social_mobility_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

@@ -731,3 +731,26 @@ Research UI adds a read-only panel. Off-gate experiment `economic_inequality@1`
 is registered. Pins: 228 metric families, 43 commands, 73 observer semantic
 types, 15 V4 contexts, 12 V4 flags, eight owned / four unowned, replay-v27/codec
 `v25`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+V4-25 (social mobility, 2026-11-14) adds the sixteenth V4 context,
+`social_mobility`, as analysis-only on the accepted `runner-config-v56` seam; it
+adds no capability flag, runner schema, root field, per-agent key, command,
+event, observer semantic type, write pair, `/v2` route, migration, or Godot
+overlay. Detached analysis harvests committed `KinshipEdgeRecorded` edges and
+`AgentCreated.generation_index` labels, translates agent-id-keyed practical
+knowledge, teaching, and organization-assignment evidence through one identity
+map, and measures six independent outcome domains: resources, skills, social
+influence, organization roles, educational access, and productive assets.
+Ancestor and descendant quantities are compared at the same window boundary;
+5-bin persistence, upward/downward shares, mean absolute rank change, and
+quantized Spearman milli are reported, with generation lags 1-4 recomputed
+independently. No social class, caste, stratum, elite, underclass, merit,
+prestige, inheritance-right, or composite mobility score exists. Eight families
+append the catalog 228 -> 236, so the current catalog is 236 metric families. `social-mobility-snapshot-v1` and
+`social-mobility-store-v1` publish programmatically and atomically; seven
+GET-only dual-gated `/v1/simulations/{run_id}/social-mobility` routes require
+`SUBJECTIVE_DEBUG` and fail closed with `social_mobility_disabled`; the Research
+UI adds a read-only panel. Off-gate experiment `social_mobility@1` is
+registered. Pins: metric families 236, 16 V4 contexts, 12 V4 flags, eight owned
+/ four unowned, 43 commands, 73 observer semantic types, replay-v27/codec `v25`,
+`/v1`, `observer-protocol-v1`, Alembic `0017`.

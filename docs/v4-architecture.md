@@ -238,6 +238,27 @@ and the off-gate `economic_inequality@1` experiment. It adds no capability flag,
 runner schema, command, event, observer semantic type, write pair, `/v2` route,
 or migration. See [Economic inequality](economic-inequality.md).
 
+### social_mobility
+
+Social mobility is a detached analytical context over already-owned V3 genealogy
+and V4 economic/institutional data; the registry revision is
+`v4-context-map-v4` with 16 contexts. It owns only `analysis`, has no capability
+flag, and has no mutable world seam. Six independent domains (resources, skills,
+social influence, organization roles, educational access, and productive assets)
+are paired across committed parent→child edges; each domain reports quantile-bin
+persistence, upward/downward shares, mean absolute rank change, and quantized
+Spearman correlation. Generation lags 1–4 are computed independently. No social
+class, caste, stratum, elite, underclass, merit, prestige, inheritance-right, or
+composite mobility score exists, and findings never feed cognition, prompts,
+memory, admission, observations, or stop criteria.
+
+V4-25 implements the context in `analysis.social_mobility_*`, canonical
+`social-mobility-snapshot-v1`/`social-mobility-store-v1`, seven GET-only
+dual-gated routes, a read-only Research UI panel, eight appended metric families,
+and the off-gate `social_mobility@1` experiment. It adds no capability flag,
+runner schema, command, event, observer semantic type, write pair, `/v2` route,
+Godot overlay, or migration. See [Social mobility](social-mobility.md).
+
 ## Cross-context contracts
 
 - Owner-scoped constructs travel only through ordinary commands, perception,
@@ -284,7 +305,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 228 families (V4-16 184 → 188; V4-17 188 → 192; V4-18 192 → 198; V4-19 198 → 204; V4-20 204 → 208; V4-21 208 → 212; V4-22 212 → 216; V4-23 216 → 220; V4-24 220 → 228) | `analysis.specifications` |
+| Metric catalog | 236 families (V4-24 220 → 228; V4-25 228 → 236) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -474,7 +495,7 @@ keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
 commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 

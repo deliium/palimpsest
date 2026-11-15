@@ -74,8 +74,8 @@ def _owned_names() -> tuple[str, ...]:
 
 
 def test_v4_09_deepens_organizations_without_new_schema() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
-    assert len(V4_CONTEXTS) == 15
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
+    assert len(V4_CONTEXTS) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert set(_owned_names()) == {
         "organizations",
@@ -249,7 +249,7 @@ def test_snapshot_store_and_catalog_pins() -> None:
     )
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 228
+    assert METRIC_FAMILY_COUNT == 236
     assert DELEGATION_REPRESENTATION_SNAPSHOT_SCHEMA == (
         "delegation-representation-snapshot-v1"
     )

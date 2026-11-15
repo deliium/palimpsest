@@ -146,7 +146,7 @@ flag.
 
 ## Pins
 
-The catalog is 228 metric families: six dimension families plus cohort and
+The catalog is 236 metric families: six dimension families plus cohort and
 society comparison families append positions 220-227 and keep the first 220
 ids, order, versions, and value keys unchanged. Commands stay 43; observer
 semantic types stay 73; the maximum replay/write pair is replay-v27 with codec
@@ -163,3 +163,5 @@ in-process end-to-end path uses a real engine admission loop, real commands and
 events, the completed-run builder, a finalized snapshot, the filesystem store,
 and a read through the API. Env-gated Compose/browser acceptance and benchmark
 lanes are recorded as `unexecuted` when their prerequisites are missing.
+
+Intergenerational persistence over these economic outcomes is measured by [Social mobility](social-mobility.md); it adds no composite score.

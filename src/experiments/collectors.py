@@ -535,6 +535,55 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("economic_inequality_collector_disabled")
+    social_mobility_enabled = False
+    if events is not None:
+        from world.events import KinshipEdgeRecorded
+
+        has_kinship = any(
+            type(event.details) is KinshipEdgeRecorded for event in events
+        )
+        has_outcome_channel = (
+            getattr(flags, "organizations", False)
+            or getattr(flags, "markets_credit", False)
+            or getattr(flags, "infrastructure_networks", False)
+            or getattr(flags, "supply_chains", False)
+            or getattr(runner_config, "durable_records", None) is not None
+            or getattr(runner_config, "structured_commitments", None) is not None
+            or getattr(runner_config, "subjective_valuation", None) is not None
+            or bool(getattr(arm.runner_result, "practical_knowledge_audits", ()))
+            or bool(getattr(arm.runner_result, "teaching_audits", ()))
+            or bool(getattr(arm.runner_result, "organization_operation_ledgers", ()))
+        )
+        social_mobility_enabled = has_kinship and has_outcome_channel
+        if has_kinship and not has_outcome_channel:
+            _LOG.warning("social_mobility_missing_outcome_channel")
+    if social_mobility_enabled:
+        try:
+            from experiments.social_mobility_completed_run import (
+                build_completed_run_social_mobility_analysis,
+            )
+
+            mobility_analysis = build_completed_run_social_mobility_analysis(
+                arm.runner_result,
+                runner_config=runner_config,
+                committed_events=events if events is not None else (),
+                run_id=arm.assignment.run_id.value,
+                window_end=max(ticks - 1, 0),
+            )
+            inputs = replace(
+                inputs, social_mobility_analysis=mobility_analysis
+            )
+            _LOG.info(
+                "social_mobility_collector_injected rows=%d",
+                mobility_analysis.row_count,
+            )
+        except Exception as exc:
+            _LOG.error(
+                "social_mobility_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("social_mobility_collector_disabled")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

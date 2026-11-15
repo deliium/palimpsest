@@ -173,7 +173,7 @@ overlay exists. No money, currency, interest, bank, or credit score exists.
 
 ## Pins
 
-The catalog is 228 metric families. Commands stay 43; observer semantic types
+The catalog is 236 metric families. Commands stay 43; observer semantic types
 stay 73; the maximum replay/write pair is replay-v27 with codec `v25`; Alembic
 head stays `0017`; the stable API is `/v1`; the observer protocol stays
 `observer-protocol-v1`. V4 remains 15 contexts, 12 flags, eight owned, and four

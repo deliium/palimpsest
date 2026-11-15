@@ -175,6 +175,14 @@ describe('cohort selection', () => {
       expect(first.selection.cohort?.generationIndex).toBe(3)
     }
   })
+
+  it('accepts the social-mobility run-scoped view', () => {
+    const result = parseResearchSelection('?run_id=run-1&view=social-mobility')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.selection.view).toBe('social-mobility')
+    }
+  })
 })
 
 describe('godot focus options', () => {

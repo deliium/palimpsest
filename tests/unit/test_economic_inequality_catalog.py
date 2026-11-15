@@ -1,5 +1,5 @@
 # mypy: ignore-errors
-"""Economic-inequality metric catalog append discipline (220 -> 228)."""
+"""Economic-inequality metric catalog append discipline (historical 220 -> 228)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from analysis.specifications import (
     validate_metric_catalog,
 )
 
-_FIRST_220_DIGEST = "fe3ee3944b1bda9c5950235ee310260958b7dc8645203f6ac91ce0831c112515"
+_FIRST_228_DIGEST = "c8ac976ec9ae568d337835d4b0879850c4864040e4d338e663a3c13a83dc3dff"
 
 _APPENDED_IDS = (
     "resource_possession_inequality",
@@ -26,25 +26,25 @@ _APPENDED_IDS = (
 )
 
 
-def test_catalog_count_is_228() -> None:
-    assert METRIC_FAMILY_COUNT == 228
+def test_catalog_count_is_236() -> None:
+    assert METRIC_FAMILY_COUNT == 236
     specs = all_metric_specifications()
-    assert len(specs) == 228
+    assert len(specs) == 236
     validate_metric_catalog()
 
 
-def test_first_220_are_unchanged() -> None:
+def test_first_228_are_unchanged() -> None:
     specs = all_metric_specifications()
     material = "\n".join(
         f"{spec.family_id.value}@{spec.algorithm_version}|{','.join(spec.value_keys)}"
-        for spec in specs[:220]
+        for spec in specs[:228]
     )
-    assert hashlib.sha256(material.encode()).hexdigest() == _FIRST_220_DIGEST
+    assert hashlib.sha256(material.encode()).hexdigest() == _FIRST_228_DIGEST
 
 
-def test_eight_families_append_at_220_through_227() -> None:
+def test_eight_economic_families_append_at_220_through_227() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id.value for spec in specs[220:]) == _APPENDED_IDS
+    assert tuple(spec.family_id.value for spec in specs[220:228]) == _APPENDED_IDS
     assert {
         MetricFamilyId.RESOURCE_POSSESSION_INEQUALITY,
         MetricFamilyId.PRODUCTIVE_TOOL_ACCESS_INEQUALITY,
@@ -58,7 +58,7 @@ def test_eight_families_append_at_220_through_227() -> None:
 
 
 def test_appended_specs_use_the_locked_cases() -> None:
-    specs = all_metric_specifications()[220:]
+    specs = all_metric_specifications()[220:228]
     for spec in specs:
         assert spec.cohort_window == "economic_inequality_window_tick"
         assert spec.deceased_policy == "exclude_owners_strictly_after_death"

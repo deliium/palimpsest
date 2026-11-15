@@ -471,7 +471,7 @@ window filter. Failure codes are `credit_relationships_disabled`,
 No route returns a bank, money, enforceable debt, credit score, ranking, or
 canonical credit. See [credit relationships](credit-relationships.md).
 
-Current catalog: 228 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger routes
 
@@ -484,3 +484,5 @@ flows, counterparties, and alignment. All require `SUBJECTIVE_DEBUG` and both
 bind purpose and `window_index`. See [Accounting ledgers](accounting-ledgers.md).
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated `/v1/simulations/{run_id}/economic-inequality` routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
+
+V4-25 adds seven GET-only dual-gated `/v1/simulations/{run_id}/social-mobility` routes under `SUBJECTIVE_DEBUG`; when either social-mobility setting is unset every route returns `social_mobility_disabled`. See [Social mobility](social-mobility.md).

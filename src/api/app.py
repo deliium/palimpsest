@@ -55,6 +55,7 @@ from api.routes import (
     research_matrix_router,
     research_router,
     simulations_router,
+    social_mobility_router,
     streams_router,
     supply_chains_router,
     trade_networks_router,
@@ -658,6 +659,36 @@ def _attach_economic_inequality_reader(app: FastAPI) -> None:
     _LOGGER.info("economic_inequality_router_ready")
 
 
+def _attach_social_mobility_reader(app: FastAPI) -> None:
+    from api.social_mobility_cursor import SocialMobilityCursorCodec
+    from persistence.social_mobility_filesystem import (
+        create_social_mobility_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.social_mobility_cursor_codec = None
+        app.state.social_mobility_reader = None
+        return
+    secret = (
+        settings.social_mobility_cursor_key.get_secret_value().encode("utf-8")
+        if settings.social_mobility_cursor_key is not None
+        else None
+    )
+    if settings.social_mobility_root is None or secret is None:
+        app.state.social_mobility_cursor_codec = None
+        app.state.social_mobility_reader = None
+        _LOGGER.info("social_mobility_attach enabled=false")
+        return
+    app.state.social_mobility_cursor_codec = (
+        SocialMobilityCursorCodec.from_secret(secret)
+    )
+    app.state.social_mobility_reader = create_social_mobility_reader(
+        settings.social_mobility_root
+    )
+    _LOGGER.info("social_mobility_router_ready")
+
+
 def _attach_credit_relationships_reader(app: FastAPI) -> None:
     from api.credit_relationships_cursor import CreditRelationshipsCursorCodec
     from persistence.credit_relationships_filesystem import (
@@ -858,6 +889,7 @@ def create_app(
     _attach_emergent_prices_reader(app)
     _attach_accounting_ledgers_reader(app)
     _attach_economic_inequality_reader(app)
+    _attach_social_mobility_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -901,6 +933,7 @@ def create_app(
     app.include_router(emergent_prices_router)
     app.include_router(accounting_ledgers_router)
     app.include_router(economic_inequality_router)
+    app.include_router(social_mobility_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

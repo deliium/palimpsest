@@ -36,9 +36,9 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 
 def test_metric_doc_pins_184_and_four_families() -> None:
-    assert METRIC_FAMILY_COUNT == 228
+    assert METRIC_FAMILY_COUNT == 236
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **228**" in metrics
+    assert "Closed catalog cardinality: **236**" in metrics
     for family in (
         "inter_society_relation_structure@1",
         "inter_society_domain_evidence@1",
@@ -83,15 +83,15 @@ def test_api_configuration_and_ui_docs() -> None:
 def test_architecture_baseline_and_description() -> None:
     factory = _read(".ai-factory/ARCHITECTURE.md")
     assert "through V4-18" in factory
-    assert "| Metric families | 228" in factory
+    assert "| Metric families | 236" in factory
     assert "V4-15 inter-society relations seam" in factory
     assert "inter-society-relations.md" in factory
     architecture = _read("docs/architecture.md")
     assert "V4-15 inter-society relations" in architecture
-    assert "228 metric families" in architecture
+    assert "236 metric families" in architecture
     v4 = _read("docs/v4-architecture.md")
-    assert "| Metric catalog | 228 families" in v4
+    assert "| Metric catalog | 236 families" in v4
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Inter-society relations (V4-15)" in description
-    assert "228 metric families" in description
+    assert "236 metric families" in description
     assert "catalog 204" in description or "204" in description

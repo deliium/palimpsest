@@ -36,10 +36,10 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "docs/organizations.md" in (ROOT / "README.md").read_text()
     description = (ROOT / ".ai-factory" / "DESCRIPTION.md").read_text()
     assert "V4-03" in description
-    assert "metric families 228" in description
+    assert "metric families 236" in description
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     assert "V4-03 organizations seam" in architecture
-    assert "228 metric families" in architecture
+    assert "236 metric families" in architecture
 
     docs_architecture = (ROOT / "docs" / "architecture.md").read_text()
     assert "Downstream V4 organization contract" in docs_architecture
@@ -50,7 +50,7 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
 
 def test_v4_doc_keeps_fourteen_context_headings() -> None:
     text = (ROOT / "docs" / "v4-architecture.md").read_text()
-    assert text.count("\n### ") == len(V4_CONTEXTS) == 15
+    assert text.count("\n### ") == len(V4_CONTEXTS) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     for context in V4_CONTEXTS:
         assert f"### {context.context_id.value}" in text

@@ -269,6 +269,10 @@ class Settings(BaseSettings):
     economic_inequality_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    social_mobility_root: Path | None = None
+    social_mobility_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -323,6 +327,7 @@ class Settings(BaseSettings):
         "evidence_root",
         "representation_root",
         "economic_inequality_root",
+        "social_mobility_root",
         mode="before",
     )
     @classmethod
@@ -514,6 +519,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "economic_inequality cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("social_mobility_cursor_key")
+    @classmethod
+    def validate_social_mobility_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "social_mobility cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -951,6 +967,19 @@ class Settings(BaseSettings):
             ),
             "economic_inequality_cursor_enabled": (
                 self.economic_inequality_cursor_key is not None
+            ),
+            "has_social_mobility_root": (
+                self.social_mobility_root is not None
+            ),
+            "has_social_mobility_cursor_key": (
+                self.social_mobility_cursor_key is not None
+            ),
+            "social_mobility_enabled": (
+                self.social_mobility_root is not None
+                and self.social_mobility_cursor_key is not None
+            ),
+            "social_mobility_cursor_enabled": (
+                self.social_mobility_cursor_key is not None
             ),
             "has_revision": bool(self.revision),
         }

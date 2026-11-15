@@ -33,8 +33,8 @@ def next_revision() -> str:
 
 
 def test_v4_12_owns_organized_conflict_without_new_context() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v3"
-    assert len(V4_CONTEXTS) == 15
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
+    assert len(V4_CONTEXTS) == 16
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
@@ -204,7 +204,7 @@ def test_conflict_metric_catalog_and_reserved_write_pairs() -> None:
     from analysis.specifications import METRIC_FAMILY_COUNT
     from simulation.versioning import V4_WRITE_PAIR_RESERVATIONS
 
-    assert METRIC_FAMILY_COUNT == 228
+    assert METRIC_FAMILY_COUNT == 236
     assert len(V4_WRITE_PAIR_RESERVATIONS) == 4
 
 
