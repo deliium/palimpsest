@@ -35,6 +35,7 @@ from api.routes import (
     delegation_representation_router,
     diplomacy_router,
     dispute_router,
+    economic_cascades_router,
     economic_inequality_router,
     emergent_prices_router,
     evidence_testimony_router,
@@ -659,6 +660,36 @@ def _attach_economic_inequality_reader(app: FastAPI) -> None:
     _LOGGER.info("economic_inequality_router_ready")
 
 
+def _attach_economic_cascades_reader(app: FastAPI) -> None:
+    from api.economic_cascades_cursor import EconomicCascadesCursorCodec
+    from persistence.economic_cascades_filesystem import (
+        economic_cascades_store_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.economic_cascades_cursor_codec = None
+        app.state.economic_cascades_reader = None
+        return
+    secret = (
+        settings.economic_cascades_cursor_key.get_secret_value().encode("utf-8")
+        if settings.economic_cascades_cursor_key is not None
+        else None
+    )
+    if settings.economic_cascades_root is None or secret is None:
+        app.state.economic_cascades_cursor_codec = None
+        app.state.economic_cascades_reader = None
+        _LOGGER.info("economic_cascades_attach enabled=false")
+        return
+    app.state.economic_cascades_cursor_codec = (
+        EconomicCascadesCursorCodec.from_secret(secret)
+    )
+    app.state.economic_cascades_reader = economic_cascades_store_reader(
+        settings.economic_cascades_root
+    )
+    _LOGGER.info("economic_cascades_reader_attached enabled=true")
+
+
 def _attach_social_mobility_reader(app: FastAPI) -> None:
     from api.social_mobility_cursor import SocialMobilityCursorCodec
     from persistence.social_mobility_filesystem import (
@@ -890,6 +921,7 @@ def create_app(
     _attach_accounting_ledgers_reader(app)
     _attach_economic_inequality_reader(app)
     _attach_social_mobility_reader(app)
+    _attach_economic_cascades_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -934,6 +966,7 @@ def create_app(
     app.include_router(accounting_ledgers_router)
     app.include_router(economic_inequality_router)
     app.include_router(social_mobility_router)
+    app.include_router(economic_cascades_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

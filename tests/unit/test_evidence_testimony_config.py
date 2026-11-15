@@ -91,7 +91,7 @@ def test_evidence_context_pins_the_existing_flag() -> None:
 
 
 def test_v4_registry_keeps_fourteen_contexts_and_twelve_flags() -> None:
-    assert len(V4_CONTEXTS) == 16
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     owned = {
         name

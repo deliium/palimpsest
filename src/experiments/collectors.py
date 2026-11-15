@@ -584,6 +584,38 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("social_mobility_collector_disabled")
+    economic_cascades_enabled = (
+        events is not None and getattr(flags, "supply_chains", False)
+    )
+    if economic_cascades_enabled:
+        try:
+            from experiments.economic_cascades_completed_run import (
+                build_completed_run_economic_cascades_analysis,
+            )
+
+            cascades_analysis = (
+                build_completed_run_economic_cascades_analysis(
+                    arm.runner_result,
+                    committed_events=events if events is not None else (),
+                    run_id=arm.assignment.run_id.value,
+                    window_end=max(ticks - 1, 0),
+                )
+            )
+            inputs = replace(
+                inputs, economic_cascades_analysis=cascades_analysis
+            )
+            _LOG.info(
+                "economic_cascades_collector_injected windows=%d chains=%d",
+                cascades_analysis.window_count,
+                cascades_analysis.chain_count,
+            )
+        except Exception as exc:
+            _LOG.warning(
+                "economic_cascades_collection_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("economic_cascades_collector_disabled")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

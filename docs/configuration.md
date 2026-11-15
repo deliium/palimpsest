@@ -595,7 +595,7 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -619,3 +619,9 @@ either missing means `economic_inequality_disabled`. No runner key or schema is
 added. See [Economic inequality](economic-inequality.md).
 
 V4-25 adds no runner schema: `runner-config-v56` remains the accepted V4 seam. Two composition settings gate reads: `PALIMPSEST_SOCIAL_MOBILITY_ROOT` and `PALIMPSEST_SOCIAL_MOBILITY_CURSOR_KEY` (at least 32 UTF-8 bytes). See [Social mobility](social-mobility.md).
+
+V4-26 adds no runner schema either. Two composition settings gate economic-cascade
+reads: `PALIMPSEST_ECONOMIC_CASCADES_ROOT` and
+`PALIMPSEST_ECONOMIC_CASCADES_CURSOR_KEY` (at least 32 UTF-8 bytes). When either
+is unset every cascade route returns `economic_cascades_disabled`. See
+[Economic cascades](economic-cascades.md).

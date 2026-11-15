@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 236
+METRIC_FAMILY_COUNT: Final[int] = 244
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -315,6 +315,14 @@ class MetricFamilyId(StrEnum):
     PRODUCTIVE_ASSET_MOBILITY = "productive_asset_mobility"
     SOCIAL_MOBILITY_GENERATION_LAG = "social_mobility_generation_lag"
     SOCIAL_MOBILITY_COVERAGE = "social_mobility_coverage"
+    RESOURCE_LOSS_CASCADE = "resource_loss_cascade"
+    ROUTE_CLOSURE_CASCADE = "route_closure_cascade"
+    INFRASTRUCTURE_DESTRUCTION_CASCADE = "infrastructure_destruction_cascade"
+    POPULATION_LOSS_CASCADE = "population_loss_cascade"
+    TOOL_SHORTAGE_CASCADE = "tool_shortage_cascade"
+    CASCADE_DEPENDENCY_STRUCTURE = "cascade_dependency_structure"
+    CASCADE_PROPAGATION = "cascade_propagation"
+    CASCADE_COVERAGE = "cascade_coverage"
 
 
 class DenominatorKind(StrEnum):
@@ -9188,6 +9196,59 @@ SOCIAL_MOBILITY_COVERAGE_KEYS: Final[tuple[str, ...]] = (
     "coverage",
     "availability",
 )
+CASCADE_KIND_KEYS: Final[tuple[str, ...]] = (
+    "cascade_window_tick",
+    "disruption_count",
+    "stage_shortfall_count",
+    "linked_chain_count",
+    "unlinked_chain_count",
+    "unresolved_chain_count",
+    "mean_chain_depth_milli",
+    "mean_lag_milli",
+    "propagation_share_milli",
+    "coverage",
+    "availability",
+)
+CASCADE_DEPENDENCY_KEYS: Final[tuple[str, ...]] = (
+    "cascade_window_tick",
+    "stage_count",
+    "dependency_edge_count",
+    "resource_edge_count",
+    "item_edge_count",
+    "tool_edge_count",
+    "infrastructure_edge_count",
+    "transport_edge_count",
+    "labor_join_count",
+    "max_depth",
+    "coverage",
+    "availability",
+)
+CASCADE_PROPAGATION_KEYS: Final[tuple[str, ...]] = (
+    "cascade_window_tick",
+    "disruption_kind_count",
+    "chain_count",
+    "linked_chain_count",
+    "unlinked_chain_count",
+    "unresolved_chain_count",
+    "mean_depth_milli",
+    "mean_lag_milli",
+    "downstream_stage_count",
+    "coverage",
+    "availability",
+)
+CASCADE_COVERAGE_KEYS: Final[tuple[str, ...]] = (
+    "cascade_window_tick",
+    "window_count",
+    "event_count",
+    "disruption_count",
+    "stage_count",
+    "dependency_edge_count",
+    "chain_count",
+    "linked_chain_count",
+    "truncated",
+    "coverage",
+    "availability",
+)
 
 
 def _trade_spec(
@@ -9763,6 +9824,48 @@ def _social_mobility_spec(
     )
 
 
+def _economic_cascades_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+    owner_claims: bool = False,
+) -> MetricSpecification:
+    evidence = {EvidenceStage.OBJECTIVE_EVENT_STATE}
+    if owner_claims:
+        evidence.update(
+            {
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        )
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset(evidence),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="cascade_window_tick",
+        deceased_policy="exclude_owners_strictly_after_death",
+        zero_holding_policy="observed_zero_included_unobserved_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="not_applicable",
+        censoring_policy="insufficient_samples_remain_explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="insufficient_samples",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior=(
+            "explicit_unknown_without_supply_chain_or_disruption_evidence"
+        ),
+    )
+
+
 def _spec_resource_possession_inequality() -> MetricSpecification:
     return _economic_inequality_spec(
         family_id=MetricFamilyId.RESOURCE_POSSESSION_INEQUALITY,
@@ -9944,6 +10047,106 @@ def _spec_social_mobility_coverage() -> MetricSpecification:
         denominator_kind=DenominatorKind.POPULATION_SIZE,
         keys=SOCIAL_MOBILITY_COVERAGE_KEYS,
         opportunity="genealogy and outcome coverage only",
+    )
+
+
+def _spec_resource_loss_cascade() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.RESOURCE_LOSS_CASCADE,
+        population="disruption_episodes",
+        denominator="linked_or_unlinked_chains",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_KIND_KEYS,
+        opportunity=(
+            "resource-loss dependency-conditioned observation, not proof of cause"
+        ),
+    )
+
+
+def _spec_route_closure_cascade() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.ROUTE_CLOSURE_CASCADE,
+        population="disruption_episodes",
+        denominator="linked_or_unlinked_chains",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_KIND_KEYS,
+        opportunity=(
+            "route-closure dependency-conditioned observation, not proof of cause"
+        ),
+    )
+
+
+def _spec_infrastructure_destruction_cascade() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.INFRASTRUCTURE_DESTRUCTION_CASCADE,
+        population="disruption_episodes",
+        denominator="linked_or_unlinked_chains",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_KIND_KEYS,
+        opportunity=(
+            "infrastructure-destruction dependency-conditioned observation, "
+            "not proof of cause"
+        ),
+    )
+
+
+def _spec_population_loss_cascade() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.POPULATION_LOSS_CASCADE,
+        population="disruption_episodes",
+        denominator="linked_or_unlinked_chains",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_KIND_KEYS,
+        opportunity=(
+            "population-loss dependency-conditioned observation, not proof of cause"
+        ),
+    )
+
+
+def _spec_tool_shortage_cascade() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.TOOL_SHORTAGE_CASCADE,
+        population="disruption_episodes",
+        denominator="linked_or_unlinked_chains",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_KIND_KEYS,
+        opportunity=(
+            "tool-production-decline dependency-conditioned observation, "
+            "not proof of cause"
+        ),
+    )
+
+
+def _spec_cascade_dependency_structure() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.CASCADE_DEPENDENCY_STRUCTURE,
+        population="production_stages",
+        denominator="dependency_edges",
+        denominator_kind=DenominatorKind.ACTIVE_EDGES,
+        keys=CASCADE_DEPENDENCY_KEYS,
+        opportunity="observed recipe and topology edges only",
+    )
+
+
+def _spec_cascade_propagation() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.CASCADE_PROPAGATION,
+        population="disruption_kinds_with_chains",
+        denominator="propagation_rows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_PROPAGATION_KEYS,
+        opportunity="per-kind descriptive linkage; no severity or ranking",
+    )
+
+
+def _spec_cascade_coverage() -> MetricSpecification:
+    return _economic_cascades_spec(
+        family_id=MetricFamilyId.CASCADE_COVERAGE,
+        population="observed_windows",
+        denominator="disruption_episodes",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=CASCADE_COVERAGE_KEYS,
+        opportunity="evidence coverage only",
     )
 
 
@@ -10476,6 +10679,14 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_productive_asset_mobility,
     _spec_social_mobility_generation_lag,
     _spec_social_mobility_coverage,
+    _spec_resource_loss_cascade,
+    _spec_route_closure_cascade,
+    _spec_infrastructure_destruction_cascade,
+    _spec_population_loss_cascade,
+    _spec_tool_shortage_cascade,
+    _spec_cascade_dependency_structure,
+    _spec_cascade_propagation,
+    _spec_cascade_coverage,
 )
 
 

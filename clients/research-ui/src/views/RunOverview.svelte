@@ -51,6 +51,7 @@
   import EmergentPricesPanel from './EmergentPricesPanel.svelte'
   import AccountingLedgersPanel from './AccountingLedgersPanel.svelte'
   import SocialMobilityPanel from './SocialMobilityPanel.svelte'
+  import EconomicCascadesPanel from './EconomicCascadesPanel.svelte'
   import EconomicInequalityPanel from './EconomicInequalityPanel.svelte'
   import CreditRelationshipsPanel from './CreditRelationshipsPanel.svelte'
   import MarketInstitutionsPanel from './MarketInstitutionsPanel.svelte'
@@ -131,6 +132,7 @@
           { id: 'accounting-ledgers', label: 'Accounting ledgers' },
           { id: 'economic-inequality', label: 'Economic inequality' },
           { id: 'social-mobility', label: 'Social mobility' },
+          { id: 'economic-cascades', label: 'Economic cascades' },
           { id: 'supply-chains', label: 'Supply chains' },
           { id: 'contact', label: 'Contact' },
         ],
@@ -378,6 +380,8 @@
     <EconomicInequalityPanel {runId} {selection} />
   {:else if view === 'social-mobility'}
     <SocialMobilityPanel {runId} {selection} />
+  {:else if view === 'economic-cascades'}
+    <EconomicCascadesPanel {runId} {selection} />
   {:else if view === 'supply-chains'}
     <SupplyChainsPanel {runId} />
   {:else if view === 'institutions'}

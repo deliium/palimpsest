@@ -126,8 +126,8 @@ and no Godot overlay is added.
 
 ## Pins
 
-16 V4 contexts / 12 V4 flags / eight owned / four unowned; map
-`v4-context-map-v4`; 236 metric families; 43 commands; 73 observer semantic
+17 V4 contexts / 12 V4 flags / eight owned / four unowned; map
+`v4-context-map-v5`; 244 metric families; 43 commands; 73 observer semantic
 types; replay-v27 / codec `v25`; Alembic `0017`; `/v1`;
 `observer-protocol-v1`.
 
@@ -142,4 +142,6 @@ analysis bounds, eight metric families, snapshot/codec/paging/ports, the atomic
 store, publication receipts, seven routes, the Research UI panel, determinism,
 and leakage guards. See the V4-25 plan bundle for the verification receipt.
 
-Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+
+See also: [Economic cascades](economic-cascades.md) measures how objective disruptions propagate through these production and infrastructure dependencies.

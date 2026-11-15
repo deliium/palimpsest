@@ -1,5 +1,5 @@
 # mypy: ignore-errors
-"""Social-mobility metric catalog append discipline (228 -> 236)."""
+"""Social-mobility metric catalog append discipline (228 -> 244)."""
 
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ _APPENDED_IDS = (
 )
 
 
-def test_catalog_count_is_236() -> None:
-    assert METRIC_FAMILY_COUNT == 236
+def test_catalog_count_is_244() -> None:
+    assert METRIC_FAMILY_COUNT == 244
     specs = all_metric_specifications()
-    assert len(specs) == 236
+    assert len(specs) == 244
     validate_metric_catalog()
 
 
@@ -44,7 +44,7 @@ def test_first_228_are_unchanged() -> None:
 
 def test_eight_families_append_at_228_through_235() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id.value for spec in specs[228:]) == _APPENDED_IDS
+    assert tuple(spec.family_id.value for spec in specs[228:236]) == _APPENDED_IDS
     assert {
         MetricFamilyId.RESOURCE_MOBILITY,
         MetricFamilyId.SKILL_MOBILITY,
@@ -58,7 +58,7 @@ def test_eight_families_append_at_228_through_235() -> None:
 
 
 def test_appended_specs_use_the_locked_cases() -> None:
-    for spec in all_metric_specifications()[228:]:
+    for spec in all_metric_specifications()[228:236]:
         assert spec.cohort_window == "social_mobility_window_tick"
         assert spec.empty_case == "unavailable_unknown"
         assert spec.one_case == "insufficient_samples"
@@ -94,7 +94,7 @@ def test_no_family_pools_multiple_domains() -> None:
     )
 
     domain_families = set(_APPENDED_IDS[:6])
-    for spec in all_metric_specifications()[228:]:
+    for spec in all_metric_specifications()[228:236]:
         assert spec.value_keys[0] == "social_mobility_window_tick"
         if spec.family_id.value in domain_families:
             assert spec.value_keys == SOCIAL_MOBILITY_DOMAIN_KEYS

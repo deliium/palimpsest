@@ -38,7 +38,7 @@ from simulation.compatibility import (
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.v4_architecture")
 
-V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v4"
+V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v5"
 V4_ANALYSIS_CAPTURE_SEAM: Final[str] = "analysis_capture"
 
 _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
@@ -56,7 +56,7 @@ _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
         "research_runner",
     }
 )
-_REQUIRED_CONTEXT_COUNT: Final[int] = 16
+_REQUIRED_CONTEXT_COUNT: Final[int] = 17
 _RESERVED_V3_FLAGS: Final[frozenset[str]] = frozenset(V3_CAPABILITY_FLAG_NAMES)
 
 
@@ -79,6 +79,7 @@ class V4ContextId(StrEnum):
     MACRO_SOCIETY_IDENTITY = "macro_society_identity"
     ECONOMIC_INEQUALITY = "economic_inequality"
     SOCIAL_MOBILITY = "social_mobility"
+    ECONOMIC_CASCADES = "economic_cascades"
 
 
 class V4Authority(StrEnum):
@@ -359,6 +360,25 @@ V4_CONTEXTS: Final[tuple[V4ContextSpec, ...]] = (
             "no feedback into cognition, prompts, memory, admission, or stop selectors",
         ),
     ),
+    V4ContextSpec(
+        context_id=V4ContextId.ECONOMIC_CASCADES,
+        capability_flag=None,
+        authority=V4Authority.DETACHED_ANALYSIS,
+        owner_packages=("analysis",),
+        existing_mechanism=(
+            "detached cascade analysis over committed production, route, "
+            "infrastructure, lifecycle, and tool evidence"
+        ),
+        required_config_seam=V4_ANALYSIS_CAPTURE_SEAM,
+        uses_existing_events=True,
+        prerequisite_contexts=(V4ContextId.SUPPLY_CHAINS,),
+        non_goals=(
+            "no cascade engine in WorldEngine",
+            "no new command, event, or write pair",
+            "no severity, impact, or risk score",
+            "no scripted downstream outcome",
+        ),
+    ),
 )
 
 V4_CONTEXT_BY_ID: Final[Mapping[V4ContextId, V4ContextSpec]] = MappingProxyType(
@@ -371,6 +391,7 @@ V4_ANALYSIS_ONLY_CONTEXTS: Final[frozenset[V4ContextId]] = frozenset(
         V4ContextId.MACRO_SOCIETY_IDENTITY,
         V4ContextId.ECONOMIC_INEQUALITY,
         V4ContextId.SOCIAL_MOBILITY,
+        V4ContextId.ECONOMIC_CASCADES,
     }
 )
 
@@ -473,6 +494,10 @@ def validate_v4_contexts(
         )
     if any(spec.context_id is V4ContextId.SOCIAL_MOBILITY for spec in contexts):
         _LOG.info("social_mobility_context_registered contexts=%d", len(contexts))
+    if any(spec.context_id is V4ContextId.ECONOMIC_CASCADES for spec in contexts):
+        _LOG.info(
+            "economic_cascades_context_registered contexts=%d", len(contexts)
+        )
 
 
 def v4_context_for_flag(flag: str) -> V4ContextSpec:

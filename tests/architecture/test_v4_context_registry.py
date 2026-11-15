@@ -45,6 +45,7 @@ DECLARED_ORDER = (
     V4ContextId.MACRO_SOCIETY_IDENTITY,
     V4ContextId.ECONOMIC_INEQUALITY,
     V4ContextId.SOCIAL_MOBILITY,
+    V4ContextId.ECONOMIC_CASCADES,
 )
 
 DECLARED_PREREQUISITES = {
@@ -66,6 +67,7 @@ DECLARED_PREREQUISITES = {
     V4ContextId.MACRO_SOCIETY_IDENTITY: frozenset(),
     V4ContextId.ECONOMIC_INEQUALITY: frozenset(),
     V4ContextId.SOCIAL_MOBILITY: frozenset(),
+    V4ContextId.ECONOMIC_CASCADES: frozenset({V4ContextId.SUPPLY_CHAINS}),
 }
 
 REQUIRED_SECTIONS = (
@@ -102,8 +104,8 @@ def _candidate(target: V4ContextId, **changes: Any) -> tuple[V4ContextSpec, ...]
 
 def test_registry_validates_and_declares_sixteen_contexts() -> None:
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
-    assert len(V4_CONTEXTS) == 16
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(set(V4_CAPABILITY_FLAGS)) == 12
     assert tuple(spec.context_id for spec in V4_CONTEXTS) == DECLARED_ORDER
@@ -117,6 +119,7 @@ def test_analysis_only_contexts_carry_no_flag() -> None:
             V4ContextId.MACRO_SOCIETY_IDENTITY,
             V4ContextId.ECONOMIC_INEQUALITY,
             V4ContextId.SOCIAL_MOBILITY,
+            V4ContextId.ECONOMIC_CASCADES,
         }
     )
     for context_id in V4_ANALYSIS_ONLY_CONTEXTS:
@@ -199,7 +202,7 @@ def test_document_declares_every_context_and_required_section() -> None:
         assert f"### {context_id.value}" in text, context_id
     for section in REQUIRED_SECTIONS:
         assert section in text, section
-    assert text.count("\n### ") == 16
+    assert text.count("\n### ") == 17
 
 
 def test_registry_module_imports_only_the_core_packages() -> None:

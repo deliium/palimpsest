@@ -50,7 +50,7 @@ def test_markets_credit_seam_is_unchanged() -> None:
 
 
 def test_context_and_flag_counts_stay_owned() -> None:
-    assert len(V4_CONTEXTS) == 16
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -90,7 +90,7 @@ def test_version_pins_are_unchanged() -> None:
 
 
 def test_catalog_and_prefix_digest() -> None:
-    assert METRIC_FAMILY_COUNT == 236
+    assert METRIC_FAMILY_COUNT == 244
     specs = all_metric_specifications()
     material = "\x1e".join(
         "\x1f".join(

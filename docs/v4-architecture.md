@@ -51,11 +51,12 @@ agents.
 
 ## Context map
 
-Fourteen bounded contexts. Twelve carry a closed capability flag; two
-(`societal_resilience` and `macro_society_identity`) are analysis-only and have no
-flag. Context identifiers are stable ASCII lowercase snake_case and are the same
+Seventeen bounded contexts (17 V4 contexts). Twelve carry a closed capability
+flag; five (`societal_resilience`, `macro_society_identity`,
+`economic_inequality`, `social_mobility`, and `economic_cascades`) are
+analysis-only and have no flag. Context identifiers are stable ASCII lowercase snake_case and are the same
 identifiers used by the machine-readable registry in `simulation.v4_architecture`.
-The registry revision is `v4-context-map-v2`.
+The registry revision is `v4-context-map-v5`.
 
 | Context | Capability flag | Authority | Owning packages | Existing mechanism | Event strategy | Measurement |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -73,6 +74,9 @@ The registry revision is `v4-context-map-v2`.
 | `disasters` | `disasters` | objective-world | `world`, `simulation` | environmental hazards | reserve event 26 / codec `v24` | deferred to V4-02+ |
 | `societal_resilience` | — (analysis-only) | detached-analysis | `analysis` | new detached classification | reuse | deferred to V4-02+ |
 | `macro_society_identity` | — (analysis-only) | detached-analysis | `analysis` | candidate-community analysis, cultural/institutional evidence joins, group persistence | reuse | V4-02 implementation |
+| `economic_inequality` | — (analysis-only) | detached-analysis | `analysis` | committed possession, access, credit, and organization-operation evidence | reuse | V4-24 implementation |
+| `social_mobility` | — (analysis-only) | detached-analysis | `analysis` | committed genealogy and six outcome domains | reuse | V4-25 implementation |
+| `economic_cascades` | — (analysis-only) | detached-analysis | `analysis` | committed production, route, infrastructure, lifecycle, and tool evidence | reuse | V4-26 implementation |
 
 Reservations are not implementations. A reserved event number or codec version
 carries no semantics and no payload; a later plan must still prove
@@ -259,6 +263,27 @@ and the off-gate `social_mobility@1` experiment. It adds no capability flag,
 runner schema, command, event, observer semantic type, write pair, `/v2` route,
 Godot overlay, or migration. See [Social mobility](social-mobility.md).
 
+### economic_cascades
+
+Economic cascades is a detached analytical context over already-owned production,
+route, infrastructure, and population evidence. It owns only `analysis`, has no
+capability flag, and has no mutable world seam. Five disruption classes
+(`resource_loss`, `route_closure`, `infrastructure_destruction`,
+`population_loss`, `tool_shortage`) are harvested from committed events; the tool
+class is a documented production-decline proxy. Chains are
+dependency-conditioned links over real recipe, tool, infrastructure, and transport
+edges and remain `linked`, `unlinked`, `unresolved`, or `unavailable`; no row
+asserts an objective cause, severity, impact, or risk. Objective disruptions,
+dependency structure, and analytical chains stay in three separated layers.
+
+V4-26 implements the context in `analysis.economic_cascades_*`, canonical
+`economic-cascades-snapshot-v1`/`economic-cascades-store-v1`, seven GET-only
+dual-gated routes, a read-only Research UI panel, eight appended metric families
+(236 → 244), and the off-gate `economic_cascades@1` experiment. It adds no
+capability flag, runner schema, command, event, observer semantic type, write
+pair, `/v2` route, Godot overlay, or migration. See
+[Economic cascades](economic-cascades.md).
+
 ## Cross-context contracts
 
 - Owner-scoped constructs travel only through ordinary commands, perception,
@@ -305,7 +330,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 236 families (V4-24 220 → 228; V4-25 228 → 236) | `analysis.specifications` |
+| Metric catalog | 244 families (V4-24 220 → 228; V4-25 228 → 236; V4-26 236 → 244) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -495,7 +520,7 @@ keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
 commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 

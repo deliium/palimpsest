@@ -22,9 +22,9 @@ _BASELINE_208_DIGEST = (
 
 
 def test_catalog_has_212_families_and_validates() -> None:
-    assert METRIC_FAMILY_COUNT == 236
+    assert METRIC_FAMILY_COUNT == 244
     specs = validate_metric_catalog()
-    assert len(specs) == 236
+    assert len(specs) == 244
 
 
 def test_first_208_specifications_are_unchanged() -> None:

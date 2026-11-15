@@ -228,6 +228,6 @@ runner/result version, SQL migration or `/v2` route. Baseline stays SQL head
 73 observer semantics, 136 metric families, replay-v22/codec v20 when selected,
 `/v1` and `observer-protocol-v1`.
 
-Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Objective genealogy evidence also feeds [Social mobility](social-mobility.md), which pairs ancestor and descendant outcomes without adding lineage facts.

@@ -181,14 +181,14 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 236 (V4-24's 228 plus eight V4-25 social-mobility families) |
+| Metric families | 244 (V4-24's 228, V4-25's 236, plus eight V4-26 economic-cascade families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 236 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 244 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -1221,6 +1221,34 @@ per-agent key is added. Pins remain runner v4/v55/v56, result v2/v3, 43 commands
 73 observer semantic types, 228 metric families, replay-v27/codec `v25`, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. See
 `docs/economic-inequality.md`.
+
+### V4-26 economic-cascades seam
+
+V4-26 adds the seventeenth V4 context, `economic_cascades`, as analysis-only on
+the accepted `runner-config-v56` seam. It owns no capability flag, world state, or
+owner state; the registry revision is `v4-context-map-v5` (17 contexts / 12 flags
+/ eight owned / four unowned) and the context is reuse-only with prerequisite
+`supply_chains`. Detached `analysis.economic_cascades_*` harvests five committed
+disruption classes (`resource_loss`, `route_closure`,
+`infrastructure_destruction`, `population_loss`, and a documented
+tool-production-decline proxy), derives five observable dependency edge kinds
+from detached recipe facts plus infrastructure and route topology, and links
+bounded chains with `linked`, `unlinked`, `unresolved`, or `unavailable` states.
+Objective disruptions and stage facts, dependency structure, and analytical
+chains stay in three separated layers with a hard leakage guard. No chain row
+asserts an objective cause, severity, impact, priority, blame, or composite
+score; a dependency-conditioned observation is not proof of cause. Eight families
+append the catalog 236 -> **244** while the first 236 keep their ids, order,
+versions, and value keys. `economic-cascades-snapshot-v1` and
+`economic-cascades-store-v1` publish programmatically and atomically after
+completion; seven GET-only dual-gated
+`/v1/simulations/{run_id}/economic-cascades` routes fail closed with
+`economic_cascades_disabled`; the Research UI adds a read-only panel and Godot
+adds no overlay. No command, event, observer semantic type, write pair, `/v2`
+route, migration, runner root field, or per-agent key is added. Pins remain
+runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types, 244
+metric families, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, and
+Alembic `0017`. See `docs/economic-cascades.md`.
 
 ### V4-25 social-mobility seam
 

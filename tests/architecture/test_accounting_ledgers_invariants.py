@@ -44,9 +44,9 @@ ACCOUNTING_FAMILIES = (
 
 
 def test_catalog_appends_four_accounting_families_after_220() -> None:
-    assert METRIC_FAMILY_COUNT == 236
+    assert METRIC_FAMILY_COUNT == 244
     specs = all_metric_specifications()
-    assert len(specs) == 236
+    assert len(specs) == 244
     assert tuple(spec.family_id.value for spec in specs[216:220]) == ACCOUNTING_FAMILIES
     assert all(spec.algorithm_version == "1" for spec in specs[216:220])
 
@@ -67,7 +67,7 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
         context.context_id.value for context in V4_CONTEXTS
     }
     assert "accounting_ledgers" not in V4_CAPABILITY_FLAGS
-    assert len(V4_CONTEXTS) == 16
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     unowned = set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS)

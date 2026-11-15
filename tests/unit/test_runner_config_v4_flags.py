@@ -46,7 +46,7 @@ def test_flag_names_match_the_context_registry() -> None:
         == V4_CAPABILITY_FLAG_NAMES
     )
     assert len(V4_CAPABILITY_FLAG_NAMES) == 12
-    assert len(V4_CONTEXTS) == 16
+    assert len(V4_CONTEXTS) == 17
 
 
 def test_flag_vocabularies_do_not_overlap() -> None:

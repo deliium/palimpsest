@@ -146,13 +146,13 @@ flag.
 
 ## Pins
 
-The catalog is 236 metric families: six dimension families plus cohort and
+The catalog is 244 metric families: six dimension families plus cohort and
 society comparison families append positions 220-227 and keep the first 220
 ids, order, versions, and value keys unchanged. Commands stay 43; observer
 semantic types stay 73; the maximum replay/write pair is replay-v27 with codec
 `v25`; Alembic head stays `0017`; the stable API is `/v1`; the observer protocol
-stays `observer-protocol-v1`. V4 remains 15 contexts, 12 flags, eight owned, and
-four unowned. The off-gate experiment is `economic_inequality@1`.
+stays `observer-protocol-v1`. V4 is currently 17 contexts on
+`v4-context-map-v5`, 12 flags, eight owned, and four unowned. The off-gate experiment is `economic_inequality@1`.
 
 ## Verification
 
@@ -165,3 +165,5 @@ and a read through the API. Env-gated Compose/browser acceptance and benchmark
 lanes are recorded as `unexecuted` when their prerequisites are missing.
 
 Intergenerational persistence over these economic outcomes is measured by [Social mobility](social-mobility.md); it adds no composite score.
+
+See also: [Economic cascades](economic-cascades.md) measures how objective disruptions propagate through these production and infrastructure dependencies.

@@ -471,7 +471,7 @@ window filter. Failure codes are `credit_relationships_disabled`,
 No route returns a bank, money, enforceable debt, credit score, ranking, or
 canonical credit. See [credit relationships](credit-relationships.md).
 
-Current catalog: 236 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger routes
 
@@ -486,3 +486,11 @@ bind purpose and `window_index`. See [Accounting ledgers](accounting-ledgers.md)
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated `/v1/simulations/{run_id}/economic-inequality` routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
 
 V4-25 adds seven GET-only dual-gated `/v1/simulations/{run_id}/social-mobility` routes under `SUBJECTIVE_DEBUG`; when either social-mobility setting is unset every route returns `social_mobility_disabled`. See [Social mobility](social-mobility.md).
+
+V4-26 adds seven GET-only dual-gated `/v1/simulations/{run_id}/economic-cascades`
+routes under `SUBJECTIVE_DEBUG`: summary, `disruptions`, `dependencies`, `chains`,
+`propagation`, `windows`, and `coverage`. Paged routes default to 100 rows and
+accept at most 500; `window_index` is bounded to 511. Cursors are bound to the
+snapshot, purpose, window, and limit; unconfigured reads fail closed with
+`economic_cascades_disabled` and corrupt stores return
+`economic_cascades_store_corrupt`. See [Economic cascades](economic-cascades.md).

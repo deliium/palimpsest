@@ -2836,6 +2836,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "accounting_ledgers@1",
         "economic_inequality@1",
         "social_mobility@1",
+        "economic_cascades@1",
     }
 )
 
@@ -5767,6 +5768,25 @@ def experiment_social_mobility(
     )
     _LOG.info(
         "experiment_registered experiment_id=social_mobility@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_economic_cascades(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-26 experiment: objective disruption propagation."""
+    from experiments.economic_cascades_scenario import economic_cascades_scenario
+
+    definition = economic_cascades_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=economic_cascades@1 arms=%s",
         len(definition.conditions),
     )
     return definition

@@ -94,6 +94,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/accounting_ledger_scenario.py",
     "experiments/economic_inequality_scenario.py",
     "experiments/social_mobility_scenario.py",
+    "experiments/economic_cascades_scenario.py",
     "experiments/civilization_benchmark_forks.py",
     "experiments/infrastructure_networks_scenario.py",
     "experiments/market_institution_scenario.py",
@@ -144,7 +145,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 236
+    assert METRIC_FAMILY_COUNT == 244
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -181,6 +182,7 @@ def test_context_registry_and_capability_ownership() -> None:
             V4ContextId.MACRO_SOCIETY_IDENTITY,
             V4ContextId.ECONOMIC_INEQUALITY,
             V4ContextId.SOCIAL_MOBILITY,
+            V4ContextId.ECONOMIC_CASCADES,
         }
     )
     for spec in V4_CONTEXTS:
@@ -221,16 +223,19 @@ def test_v4_25_registers_analysis_only_social_mobility_context() -> None:
     assert spec.capability_flag is None
     assert spec.authority is V4Authority.DETACHED_ANALYSIS
     assert spec.owner_packages == ("analysis",)
-    assert tuple(item.context_id for item in V4_CONTEXTS)[-1] is (
+    assert tuple(item.context_id for item in V4_CONTEXTS)[-2] is (
         V4ContextId.SOCIAL_MOBILITY
+    )
+    assert tuple(item.context_id for item in V4_CONTEXTS)[-1] is (
+        V4ContextId.ECONOMIC_CASCADES
     )
 
 
 def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
     """V4-08 adds no context, flag, runner schema, or reserved surface."""
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
-    assert len(V4_CONTEXTS) == 16
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
@@ -406,8 +411,8 @@ def test_validators_reject_mutated_copies() -> None:
 def test_v4_09_deepens_organizations_without_new_schema() -> None:
     """V4-09 deepens organizations; it adds no context, flag, or schema."""
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
-    assert len(V4_CONTEXTS) == 16
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {

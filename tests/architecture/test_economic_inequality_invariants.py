@@ -27,8 +27,8 @@ from world.events import EVENT_SCHEMA_REPLAY_V27
 
 
 def test_context_counts_are_fifteen_twelve_eight_four() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
-    assert len(V4_CONTEXTS) == 16
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
     assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 4
@@ -54,7 +54,7 @@ def test_no_new_write_pair_is_claimed() -> None:
 
 
 def test_catalog_and_closed_surface_counts() -> None:
-    assert METRIC_FAMILY_COUNT == 236
+    assert METRIC_FAMILY_COUNT == 244
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V27 == 27

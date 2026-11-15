@@ -44,7 +44,7 @@ def test_pinned_pages_mention_travel_network() -> None:
 
 
 def test_code_and_docs_agree_on_catalog_and_routes() -> None:
-    assert METRIC_FAMILY_COUNT == 236
+    assert METRIC_FAMILY_COUNT == 244
     assert "204" in _read("docs/analysis-metrics.md")
     api = _read("docs/research-api.md")
     assert "infrastructure-networks/routes" in api

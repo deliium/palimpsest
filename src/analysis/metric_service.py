@@ -67,6 +67,17 @@ from analysis.durable_record_metrics import (
     compute_durable_record_lineage,
     compute_durable_record_survival,
 )
+from analysis.economic_cascades_analysis import EconomicCascadesAnalysis
+from analysis.economic_cascades_metrics import (
+    compute_cascade_coverage,
+    compute_cascade_dependency_structure,
+    compute_cascade_propagation,
+    compute_infrastructure_destruction_cascade,
+    compute_population_loss_cascade,
+    compute_resource_loss_cascade,
+    compute_route_closure_cascade,
+    compute_tool_shortage_cascade,
+)
 from analysis.economic_inequality_analysis import EconomicInequalityAnalysis
 from analysis.economic_inequality_metrics import (
     compute_credit_relationship_inequality,
@@ -435,6 +446,7 @@ class MetricComputationInputs:
     accounting_ledgers_analysis: AccountingLedgersAnalysis | None = None
     economic_inequality_analysis: EconomicInequalityAnalysis | None = None
     social_mobility_analysis: SocialMobilityAnalysis | None = None
+    economic_cascades_analysis: EconomicCascadesAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2816,6 +2828,59 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("social_mobility_metrics_emitted families=8 catalog=236")
     else:
         _LOG.debug("social_mobility_metrics_disabled")
+    if inputs.economic_cascades_analysis is not None:
+        cascades = inputs.economic_cascades_analysis
+        _safe(
+            "resource_loss_cascade",
+            lambda: compute_resource_loss_cascade(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "route_closure_cascade",
+            lambda: compute_route_closure_cascade(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "infrastructure_destruction_cascade",
+            lambda: compute_infrastructure_destruction_cascade(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "population_loss_cascade",
+            lambda: compute_population_loss_cascade(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "tool_shortage_cascade",
+            lambda: compute_tool_shortage_cascade(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "cascade_dependency_structure",
+            lambda: compute_cascade_dependency_structure(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "cascade_propagation",
+            lambda: compute_cascade_propagation(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "cascade_coverage",
+            lambda: compute_cascade_coverage(
+                cascades, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("economic_cascades_metrics_emitted families=8 catalog=244")
+    else:
+        _LOG.debug("economic_cascades_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

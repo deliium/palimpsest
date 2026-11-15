@@ -75,7 +75,7 @@ def test_routes_settings_and_pins() -> None:
     assert "PALIMPSEST_ACCOUNTING_LEDGERS_ROOT" in text
     assert "PALIMPSEST_ACCOUNTING_LEDGERS_CURSOR_KEY" in text
     for pin in (
-        "236 metric families",
+        "244 metric families",
         "43",
         "73",
         "replay-v27",
@@ -112,7 +112,7 @@ def test_positive_metric_parity() -> None:
     ):
         assert family in metrics
         assert hasattr(MetricFamilyId, family.upper())
-    assert "236" in metrics
+    assert "244" in metrics
 
 
 def test_cross_links_and_current_pins() -> None:
@@ -124,4 +124,4 @@ def test_cross_links_and_current_pins() -> None:
         assert "accounting-ledgers.md" in _read(ROOT / "docs" / page)
     assert "accounting-ledgers.md" in _read(ROOT / "README.md")
     for path in (ARCHITECTURE, CONFIGURATION, API, DESCRIPTION, PROJECT_ARCHITECTURE):
-        assert "236" in _read(path)
+        assert "244" in _read(path)

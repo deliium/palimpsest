@@ -50,10 +50,10 @@ def _digest(specs) -> str:
 
 def test_catalog_count_is_180() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 236
-    assert len(specs) == 236
-    assert len(validate_metric_catalog()) == 236
-    assert len({spec.family_id for spec in specs}) == 236
+    assert METRIC_FAMILY_COUNT == 244
+    assert len(specs) == 244
+    assert len(validate_metric_catalog()) == 244
+    assert len({spec.family_id for spec in specs}) == 244
 
 
 def test_four_migration_families_are_last() -> None:

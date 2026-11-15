@@ -746,11 +746,35 @@ Ancestor and descendant quantities are compared at the same window boundary;
 quantized Spearman milli are reported, with generation lags 1-4 recomputed
 independently. No social class, caste, stratum, elite, underclass, merit,
 prestige, inheritance-right, or composite mobility score exists. Eight families
-append the catalog 228 -> 236, so the current catalog is 236 metric families. `social-mobility-snapshot-v1` and
+append the catalog 228 -> 236, so the current catalog is 244 metric families. `social-mobility-snapshot-v1` and
 `social-mobility-store-v1` publish programmatically and atomically; seven
 GET-only dual-gated `/v1/simulations/{run_id}/social-mobility` routes require
 `SUBJECTIVE_DEBUG` and fail closed with `social_mobility_disabled`; the Research
 UI adds a read-only panel. Off-gate experiment `social_mobility@1` is
-registered. Pins: metric families 236, 16 V4 contexts, 12 V4 flags, eight owned
+registered. Pins: metric families 244, 16 V4 contexts, 12 V4 flags, eight owned
 / four unowned, 43 commands, 73 observer semantic types, replay-v27/codec `v25`,
 `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+V4-26 (economic cascades, 2026-11-15) adds the seventeenth V4 context,
+`economic_cascades`, as analysis-only on the accepted `runner-config-v56` seam; it
+adds no capability flag, runner schema, root field, per-agent key, command, event,
+observer semantic type, write pair, `/v2` route, migration, or Godot overlay. The
+registry becomes `v4-context-map-v5` with 17 contexts / 12 flags / eight owned /
+four unowned. Detached analysis harvests five committed disruption classes
+(`resource_loss`, `route_closure`, `infrastructure_destruction`,
+`population_loss`, and a documented tool-production-decline proxy), derives
+resource, item, tool, infrastructure, and transport dependency edges from
+detached recipe facts plus observable topology, and links depth- and lag-bounded
+chains with `linked`, `unlinked`, `unresolved`, or `unavailable` states. Objective
+disruptions and stage facts, dependency structure, and analytical chains stay in
+three separated layers; no row asserts an objective cause, severity, impact,
+priority, blame, class, merit, or composite score, and shortfall-before-disruption
+is never linked. Eight families append the catalog 236 -> **244**. Dry-run
+publication uses `economic-cascades-snapshot-v1` and `economic-cascades-store-v1`
+programmatically and atomically; seven GET-only dual-gated
+`/v1/simulations/{run_id}/economic-cascades` routes require `SUBJECTIVE_DEBUG` and
+fail closed with `economic_cascades_disabled`; the Research UI adds a read-only
+panel and Godot adds no overlay. Off-gate `economic_cascades@1` is registered with
+three arms. Pins: 244 metric families, 17 V4 contexts, 12 V4 flags, eight owned /
+four unowned, 43 commands, 73 observer semantic types, replay-v27/codec `v25`,
+`/v1`, `observer-protocol-v1`, and Alembic `0017`.

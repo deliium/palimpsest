@@ -58,6 +58,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | Travel network | `docs/travel-network.md` | V4-17 route conditions, write pair 27/`v25`, movement enforcement, fallible route beliefs, snapshot v2 |
 | Trade networks | `docs/trade-networks.md` | V4-18 event-sourced flows, directed corridors, dependence, major exchange locations, network lineage, snapshot and seven GET routes |
 | Supply chains | `docs/supply-chains.md` | V4-19 multi-stage production chains, dependency graph, bottlenecks, lineage, snapshot and seven GET routes |
+| Economic cascades | `docs/economic-cascades.md` | V4-26 objective disruption classes, real dependency edges, bounded chain states, snapshot/store and seven GET routes |
 | Market-like institutions | `docs/market-like-institutions.md` | V4-20 owner-scoped meetings, schedules, emergent roles and records, venue persistence, market lineage, snapshot and seven GET routes |
 | Emergent prices | `docs/emergent-prices.md` | V4-21 owner-scoped price expectations, `prc_v1` quotes, analytical distributions, market convergence, snapshot/store and seven GET routes |
 | Credit relationships | `docs/credit-relationships.md` | V4-22 owner-scoped credit terms, `crd_v1` claims, repayment performance, researcher-only alignment, snapshot/store and seven GET routes |
@@ -113,6 +114,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Accounting ledgers](docs/accounting-ledgers.md) | Owner-scoped accounting interpretations, evidence, analysis, snapshot, and read surface |
 | [Economic inequality](docs/economic-inequality.md) | Six-dimensional detached inequality distributions, indices, cohorts, societies, snapshot, and read surface |
 | [Social mobility](docs/social-mobility.md) | Six-domain intergenerational persistence over committed genealogy, generation lags, snapshot, and read surface |
+| [Economic cascades](docs/economic-cascades.md) | Five objective disruption classes, observable dependency edges, bounded `linked`/`unlinked`/`unresolved` chains, snapshot/store, seven GET routes, and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
 

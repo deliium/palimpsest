@@ -183,6 +183,14 @@ describe('cohort selection', () => {
       expect(result.selection.view).toBe('social-mobility')
     }
   })
+
+  it('accepts the economic-cascades run-scoped view', () => {
+    const result = parseResearchSelection('?run_id=run-1&view=economic-cascades')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.selection.view).toBe('economic-cascades')
+    }
+  })
 })
 
 describe('godot focus options', () => {

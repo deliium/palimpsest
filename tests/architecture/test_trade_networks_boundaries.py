@@ -82,8 +82,8 @@ def test_pins_are_unchanged() -> None:
 
 
 def test_v4_contexts_and_flags_are_unchanged() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v4"
-    assert len(V4_CONTEXTS) == 16
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
@@ -118,8 +118,8 @@ def test_no_v57_or_new_flag_reference() -> None:
 
 def test_metric_catalog_is_204() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 236
-    assert len(specs) == 236
+    assert METRIC_FAMILY_COUNT == 244
+    assert len(specs) == 244
     assert [spec.family_id.value for spec in specs[192:198]] == list(TRADE_FAMILIES)
     assert [spec.family_id.value for spec in specs[198:204]] == [
         "supply_chain_structure",
