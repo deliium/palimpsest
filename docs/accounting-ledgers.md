@@ -186,3 +186,5 @@ unowned. The off-gate experiment is `accounting_ledgers@1`.
 - [Credit relationships](credit-relationships.md)
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)
+
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.

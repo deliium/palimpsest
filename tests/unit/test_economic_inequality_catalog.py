@@ -27,9 +27,9 @@ _APPENDED_IDS = (
 
 
 def test_catalog_count_is_244() -> None:
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     specs = all_metric_specifications()
-    assert len(specs) == 244
+    assert len(specs) == 250
     validate_metric_catalog()
 
 

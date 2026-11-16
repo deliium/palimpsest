@@ -99,13 +99,13 @@ def test_final_v4_23_pins() -> None:
     from world._rules import COMMAND_RULE_MATRIX
     from world.actions import AgentCommand
 
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(get_args(AgentCommand)) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
     assert "organizations" in V4_OWNED_CAPABILITY_FLAGS
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert ALEMBIC_HEAD_REVISION == "0017"

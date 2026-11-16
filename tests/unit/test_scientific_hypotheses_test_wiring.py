@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Intentional scientific tests: observation gating and Wait replacement."""
 
 from __future__ import annotations

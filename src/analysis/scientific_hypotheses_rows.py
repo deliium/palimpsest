@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from analysis.scientific_hypotheses_contract import (
     NONE_TOKEN,
@@ -92,7 +92,7 @@ def _token(value: object) -> str:
     return value
 
 
-def _enum(value: object, enum_type: type) -> object:
+def _enum(value: object, enum_type: Any) -> Any:
     if type(value) is enum_type:
         return value
     if type(value) is str and value in {

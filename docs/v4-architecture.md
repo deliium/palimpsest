@@ -68,7 +68,7 @@ The registry revision is `v4-context-map-v5`.
 | `infrastructure_networks` | `infrastructure_networks` | objective-world | `world`, `simulation` | new physical network graph | event 23 / codec `v21` | owned by V4-16 |
 | `supply_chains` | `supply_chains` | objective-world | `world`, `simulation` | production, storage, transport | reuse | deferred to V4-02+ |
 | `markets_credit` | `markets_credit` | owner-scoped | `agents.cognition`, `simulation` | exchange profile, commitments | reuse | deferred to V4-02+ |
-| `science` | `science` | owner-scoped | `agents.cognition`, `simulation` | experimentation, practical knowledge, repositories | reuse | deferred to V4-02+ |
+| `science` | `science` | owner-scoped | `agents.cognition`, `simulation` | experimentation, practical knowledge, repositories | reuse | V4-27 owned (`formal_rules`) |
 | `epidemics` | `epidemics` | objective-world | `world`, `simulation`, `agents.cognition` | new host/transmission state | reserve event 24 / codec `v22` | deferred to V4-02+ |
 | `ecological_feedback` | `ecological_feedback` | objective-world | `world`, `simulation` | resource regeneration/depletion | reserve event 25 / codec `v23` | deferred to V4-02+ |
 | `disasters` | `disasters` | objective-world | `world`, `simulation` | environmental hazards | reserve event 26 / codec `v24` | deferred to V4-02+ |
@@ -330,7 +330,7 @@ the Godot client, not a server aggregation contract and not engine semantics.
 | Observer semantic types | 73 | `observer.version` |
 | Observer protocol | `observer-protocol-v1` | `observer.version` |
 | Observer layout schema | `observer-layout-v1` | `observer.version` |
-| Metric catalog | 244 families (V4-24 220 → 228; V4-25 228 → 236; V4-26 236 → 244) | `analysis.specifications` |
+| Metric catalog | 250 families (V4-24 220 → 228; V4-25 228 → 236; V4-26 236 → 244; V4-27 244 → 250) | `analysis.specifications` |
 | Border routes | six GET routes under `/v1/simulations/{run_id}/borders` | `api.routes.borders` |
 | Migration routes | six GET routes under `/v1/simulations/{run_id}/migration` | `api.routes.migration_displacement` |
 | Infrastructure routes | seven GET routes under `/v1/simulations/{run_id}/infrastructure-networks` | `api.routes.infrastructure_networks` |
@@ -520,7 +520,7 @@ keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
 commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -528,3 +528,6 @@ V4-23 deepens `organizations` without adding a context, flag, runner schema,
 command, event, observer semantic type, write pair, `/v2` route, or migration.
 Contexts remain 14, flags 12, owned 8, unowned 4. The catalog appends four
 accounting families (216 -> 220). See [Accounting ledgers](accounting-ledgers.md).
+
+
+V4-27 owns `science` on the accepted `runner-config-v56` seam and adds no context, flag slot, runner schema, command, event, observer semantic type, write pair, or migration. It deepens the owner experiment ledger into explicit testable hypotheses with claim, conditions, predicted result, confidence milli, support/contradiction evidence, source, and append-only revisions; `hyp_v1` claims travel in existing `Talk`/`Tell` as testimony only. Detached analysis appends six families (244 → 250). `scientific-hypotheses-snapshot-v1` and `scientific-hypotheses-store-v1` publish programmatically; seven GET-only dual-gated routes serve them; the Research UI adds a read-only panel and Godot adds no overlay. Pins: 17 contexts / 12 flags / 9 owned / 3 unowned, 250 families, 43 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.

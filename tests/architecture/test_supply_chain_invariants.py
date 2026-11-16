@@ -47,9 +47,8 @@ _FORBIDDEN_AUTHORITY = {
 def test_v4_19_owns_supply_chains() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
     assert set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS) == {
-        "science",
         "epidemics",
         "ecological_feedback",
         "disasters",
@@ -101,7 +100,7 @@ def test_alembic_head_is_0017() -> None:
 
 
 def test_metric_catalog_is_204() -> None:
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
 
 
 def test_seven_routes() -> None:

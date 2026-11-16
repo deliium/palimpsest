@@ -48,7 +48,7 @@ def _analysis(*rows: TravelRouteAnalysisRow) -> InfrastructureNetworksAnalysis:
 
 
 def test_catalog_is_198_and_prior_families_stay_before() -> None:
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     for family in (
         "travel_route_structure",
         "travel_route_condition",

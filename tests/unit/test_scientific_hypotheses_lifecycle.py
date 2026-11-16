@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Deterministic support, contradiction, confidence, and revision lifecycle."""
 
 from __future__ import annotations

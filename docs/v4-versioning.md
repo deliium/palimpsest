@@ -57,7 +57,7 @@ family. v56 never adds a generational run by itself.
   matrix finalization never emit it on their own.
 - Default writes stay `runner-config-v4`; the latest feature runner stays
   `runner-config-v55`.
-- Every V4 flag is unowned. Enabling any flag requires v56 and then fails closed
+- Nine V4 flags are owned (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`, `organized_conflict`, `infrastructure_networks`, `supply_chains`, `markets_credit`, `science`); `epidemics`, `ecological_feedback`, and `disasters` remain unowned. Enabling an unowned flag requires v56 and then fails closed
   at `SimulationRunner.from_config` with `capability_unimplemented` and
   `stage="v4_capability_flags"`.
 - Decoding a v1–v55 payload synthesizes `V4CapabilityFlags()` (all off).
@@ -101,4 +101,7 @@ be served only after a plan lands its frames, mirror pins, and client support.
 - Removing an accepted version is a compatibility break and needs an explicit,
   scoped architectural decision.
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+
+
+V4-27 owns `science` on `runner-config-v56` and adds no `runner-config-v57`. It appends six scientific-hypothesis families (244 -> 250) and uses existing events only.

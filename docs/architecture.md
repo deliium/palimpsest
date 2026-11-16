@@ -858,7 +858,7 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 Eight V4 flags are owned; four remain unowned.
 
@@ -884,3 +884,15 @@ V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET
 V4-25 adds the analysis-only `social_mobility` context (16 contexts / `v4-context-map-v4` at landing), six outcome domains over committed genealogy, eight appended families (228 -> 236), canonical `social-mobility-snapshot-v1`, an atomic store, seven GET-only dual-gated routes, a read-only Research UI panel, and off-gate `social_mobility@1`; see [Social mobility](social-mobility.md).
 
 V4-26 adds the analysis-only `economic_cascades` context (17 contexts / `v4-context-map-v5`), five committed disruption classes, five observable dependency edge kinds, bounded `linked`/`unlinked`/`unresolved` chains in three separated layers, eight appended families (236 -> 244), canonical `economic-cascades-snapshot-v1`, an atomic store, seven GET-only dual-gated routes, a read-only Research UI panel, and off-gate `economic_cascades@1`; no capability flag, command, event, write pair, migration, or Godot overlay is added. See [Economic cascades](economic-cascades.md).
+
+
+V4-27 owns `science` on `runner-config-v56` without adding a context, flag slot,
+runner schema, command, event, write pair, `/v2` route, or migration. The owner
+experiment ledger carries claim, conditions, predicted result, confidence milli,
+support/contradiction evidence, source, and append-only revisions; `hyp_v1`
+claims travel in existing speech as testimony only. Six detached families append
+236 -> 244? No: the catalog appends 244 -> 250. `scientific-hypotheses-snapshot-v1`
+and `scientific-hypotheses-store-v1` publish programmatically; seven GET-only
+dual-gated routes and a read-only Research UI panel serve them. Pins: 17 contexts
+/ 12 flags / 9 owned / 3 unowned, 250 families, 43 commands, 73 observer semantic
+types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.

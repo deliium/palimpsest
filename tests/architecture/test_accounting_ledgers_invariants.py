@@ -44,9 +44,9 @@ ACCOUNTING_FAMILIES = (
 
 
 def test_catalog_appends_four_accounting_families_after_220() -> None:
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     specs = all_metric_specifications()
-    assert len(specs) == 244
+    assert len(specs) == 250
     assert tuple(spec.family_id.value for spec in specs[216:220]) == ACCOUNTING_FAMILIES
     assert all(spec.algorithm_version == "1" for spec in specs[216:220])
 
@@ -69,10 +69,9 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
     assert "accounting_ledgers" not in V4_CAPABILITY_FLAGS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
     unowned = set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS)
     assert unowned == {
-        "science",
         "epidemics",
         "ecological_feedback",
         "disasters",
@@ -87,6 +86,7 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
             "infrastructure_networks",
             "supply_chains",
             "markets_credit",
+            "science",
         }
     )
     token = "runner-config-" + "v57"

@@ -778,3 +778,22 @@ panel and Godot adds no overlay. Off-gate `economic_cascades@1` is registered wi
 three arms. Pins: 244 metric families, 17 V4 contexts, 12 V4 flags, eight owned /
 four unowned, 43 commands, 73 observer semantic types, replay-v27/codec `v25`,
 `/v1`, `observer-protocol-v1`, and Alembic `0017`.
+
+
+V4-27 (scientific hypotheses, 2026-11-16) owns the declared `science` capability
+flag on the accepted `runner-config-v56` seam and adds no context, flag slot,
+runner schema, root field, per-agent key, command, event, observer semantic type,
+write pair, `/v2` route, migration, or Godot overlay. Activation requires
+`predictive_world_model` and `bounded_experimentation`; `science=False` is inert.
+One owner keeps `ExperimentHypothesis` rows with claim, conditions, predicted
+outcome, confidence milli, supporting and contradictory evidence, source, status,
+and append-only revisions. Intentional tests replace only a default `Wait` with
+one existing `Experiment` command, and `hyp_v1` claims travel in existing
+`Talk`/`Tell`; adoption is provisional, evidence-free testimony. Detached analysis
+appends six families (244 -> **250**) and the Research UI adds a read-only panel.
+`scientific-hypotheses-snapshot-v1` and `scientific-hypotheses-store-v1` publish
+programmatically; seven GET-only dual-gated routes serve them. Off-gate
+experiment `scientific_hypotheses@1` has three arms. Pins: 250 metric families,
+17 V4 contexts, 12 V4 flags, 9 owned / 3 unowned, 43 commands, 73 observer
+semantic types, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic
+`0017`.

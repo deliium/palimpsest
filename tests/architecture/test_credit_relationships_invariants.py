@@ -46,9 +46,9 @@ CREDIT_FAMILIES = (
 
 
 def test_catalog_appends_four_credit_families_after_212() -> None:
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     specs = all_metric_specifications()
-    assert len(specs) == 244
+    assert len(specs) == 250
     assert tuple(spec.family_id.value for spec in specs[212:216]) == CREDIT_FAMILIES
     assert all(spec.algorithm_version == "1" for spec in specs[212:216])
 
@@ -71,7 +71,7 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
     assert "credit_relationships" not in V4_CAPABILITY_FLAGS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -82,6 +82,7 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
             "infrastructure_networks",
             "supply_chains",
             "markets_credit",
+            "science",
         }
     )
     token = "runner-config-" + "v57"

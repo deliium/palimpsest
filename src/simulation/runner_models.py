@@ -6754,13 +6754,13 @@ class SimulationRunnerResult:
         from agents.cognition.experimentation import ExperimentLedger
 
         experiment_ledgers = tuple(self.experiment_ledgers)
-        owners: set[object] = set()
+        experiment_owners: set[object] = set()
         for ledger in experiment_ledgers:
             if type(ledger) is not ExperimentLedger:
                 raise TypeError("experiment_ledgers: invalid_item")
-            if ledger.owner_id in owners:
+            if ledger.owner_id in experiment_owners:
                 raise TypeError("experiment_ledgers: duplicate_owner")
-            owners.add(ledger.owner_id)
+            experiment_owners.add(ledger.owner_id)
         object.__setattr__(self, "experiment_ledgers", experiment_ledgers)
         if isinstance(self.dispute_ledgers, (set, frozenset)):
             raise TypeError("dispute_ledgers must be ordered")

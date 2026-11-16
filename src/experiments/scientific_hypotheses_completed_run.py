@@ -85,6 +85,7 @@ def _revision_fact(
     hypothesis: object, revision: object
 ) -> HypothesisRevisionFact:
     claim = getattr(revision, "claim", None)
+    claim_prediction = getattr(claim, "predicted_outcome", None)
     return HypothesisRevisionFact(
         revision_index=int(getattr(revision, "revision_index", 0)),
         tick=int(getattr(revision, "tick", 0)),
@@ -96,16 +97,10 @@ def _revision_fact(
             str(getattr(claim, "operand_a_id", "")),
             str(getattr(claim, "operand_b_id", None) or NONE_TOKEN),
             getattr(getattr(claim, "process_token", None), "value", ""),
-            (
-                NONE_TOKEN
-                if getattr(claim, "predicted_outcome", None) is None
-                else str(claim.predicted_outcome)
-            ),
+            NONE_TOKEN if claim_prediction is None else str(claim_prediction),
         ),
         predicted_outcome=(
-            NONE_TOKEN
-            if getattr(claim, "predicted_outcome", None) is None
-            else str(claim.predicted_outcome)
+            NONE_TOKEN if claim_prediction is None else str(claim_prediction)
         ),
         condition_pairs=tuple(
             (

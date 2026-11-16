@@ -95,6 +95,8 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/economic_inequality_scenario.py",
     "experiments/social_mobility_scenario.py",
     "experiments/economic_cascades_scenario.py",
+    "experiments/scientific_hypotheses_scenario.py",
+    "experiments/scientific_hypotheses_completed_run.py",
     "experiments/civilization_benchmark_forks.py",
     "experiments/infrastructure_networks_scenario.py",
     "experiments/market_institution_scenario.py",
@@ -145,7 +147,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
 
@@ -204,6 +206,7 @@ def test_context_registry_and_capability_ownership() -> None:
             "infrastructure_networks",
             "supply_chains",
             "markets_credit",
+            "science",
         }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
@@ -247,6 +250,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
             "infrastructure_networks",
             "supply_chains",
             "markets_credit",
+            "science",
         }
     )
     assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
@@ -424,6 +428,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
             "infrastructure_networks",
             "supply_chains",
             "markets_credit",
+            "science",
         }
     )
     assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (

@@ -49,10 +49,10 @@ def test_economic_inequality_page_has_required_sections() -> None:
     assert "economic_inequality_disabled" in page
     assert "PALIMPSEST_ECONOMIC_INEQUALITY_ROOT" in page
     assert "PALIMPSEST_ECONOMIC_INEQUALITY_CURSOR_KEY" in page
-    assert "244 metric families" in page
+    assert "250 metric families" in page
     assert "17 contexts" in page
     assert "12 flags" in page
-    assert "eight owned" in page
+    assert "nine owned" in page
 
 
 def test_readme_and_context_artifacts_link_the_page() -> None:
@@ -61,7 +61,7 @@ def test_readme_and_context_artifacts_link_the_page() -> None:
     assert "V4-24" in _read(".ai-factory/ARCHITECTURE.md")
     assert "economic-inequality" in _read(".ai-factory/ARCHITECTURE.md")
     assert "V4-24" in _read(".ai-factory/DESCRIPTION.md")
-    assert "244 metric families" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "250 metric families" in _read(".ai-factory/ARCHITECTURE.md")
     assert "17 V4 contexts" in _read(".ai-factory/DESCRIPTION.md")
     configuration = _read("docs/configuration.md")
     assert "PALIMPSEST_ECONOMIC_INEQUALITY_ROOT" in configuration

@@ -27,12 +27,12 @@ def test_context_pins() -> None:
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
-    assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 4
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 3
 
 
 def test_metric_catalog_pin() -> None:
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
 
 
 def test_closed_surface_pins() -> None:

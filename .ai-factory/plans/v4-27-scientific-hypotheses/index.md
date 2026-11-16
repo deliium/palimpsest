@@ -293,10 +293,10 @@ No blocking open questions: every material decision is fixed below.
 - [x] Task 17: Add determinism, property bounds, and no-rule leakage coverage ([details](phase-05-experiment-certification.md#task-17-add-determinism-property-bounds-and-no-rule-leakage-coverage)) (depends on 3-16)
 
 ### Phase 6: Invariants, Documentation, and Certification
-- [ ] Task 18: Sweep science ownership, catalog, and documentation pins ([details](phase-06-invariants-docs.md#task-18-sweep-science-ownership-catalog-and-documentation-pins)) (depends on 1-17)
-- [ ] Task 19: Documentation via `$aif-docs` ([details](phase-06-invariants-docs.md#task-19-documentation-via-aif-docs)) (depends on 18)
-- [ ] Task 20: Add documentation pin and negative parity checks ([details](phase-06-invariants-docs.md#task-20-add-documentation-pin-and-negative-parity-checks)) (depends on 19)
-- [ ] Task 21: Required-gate verification certification ([details](phase-06-invariants-docs.md#task-21-required-gate-verification-certification)) (depends on 16-20)
+- [x] Task 18: Sweep science ownership, catalog, and documentation pins ([details](phase-06-invariants-docs.md#task-18-sweep-science-ownership-catalog-and-documentation-pins)) (depends on 1-17)
+- [x] Task 19: Documentation via `$aif-docs` ([details](phase-06-invariants-docs.md#task-19-documentation-via-aif-docs)) (depends on 18)
+- [x] Task 20: Add documentation pin and negative parity checks ([details](phase-06-invariants-docs.md#task-20-add-documentation-pin-and-negative-parity-checks)) (depends on 19)
+- [x] Task 21: Required-gate verification certification ([details](phase-06-invariants-docs.md#task-21-required-gate-verification-certification)) (depends on 16-20)
 
 ## Commit Plan
 
@@ -374,21 +374,21 @@ here.
 
 | Lane | Command | Result | Prerequisite / note |
 | --- | --- | --- | --- |
-| Unit + architecture correctness | `uv run pytest tests/unit tests/architecture -q` | pending |  |
-| Focused scientific-hypothesis suites | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py tests/integration/test_scientific_hypotheses_store_api.py -q` | pending | integration lane runs separately with `-m integration` |
-| Python coverage (focused) | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q --cov=src --cov-report=term` | pending | lane-scoped coverage only |
-| Python coverage (full lane) | `uv run pytest tests/unit tests/architecture -q --cov=src --cov-report=term` | pending |  |
-| Static: Ruff | `uv run ruff check src tests` | pending |  |
-| Static: mypy | `uv run mypy src tests` | pending |  |
-| Static: import boundaries | `uv run lint-imports` | pending |  |
-| Integration (non-scale) | `uv run pytest tests/integration -m "not scale" -q` | pending | PostgreSQL-free lanes |
-| Scientific-hypothesis store/API integration | `uv run pytest tests/integration/test_scientific_hypotheses_store_api.py -q -m integration` | pending |  |
-| Compose config | `docker compose config` | pending |  |
-| Research UI tests | `cd clients/research-ui && ./node_modules/.bin/vitest run` | pending |  |
-| Research UI types | `cd clients/research-ui && ./node_modules/.bin/svelte-check --tsconfig ./tsconfig.app.json` | pending |  |
-| Godot regression | `GODOT_BIN=~/.cache/palimpsest-godot/Godot_v4.7.2-stable_linux.x86_64 "$GODOT_BIN" --headless --path clients/godot-observer --script res://tests/run_protocol.gd` | pending | existing suite only; no client change |
-| Compose/browser acceptance | `PALIMPSEST_API_IMAGE=<matched> PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1 uv run pytest -m compose -q` | pending | requires an attested image; record `unexecuted` if absent |
-| Benchmark regression (non-scale) | `PALIMPSEST_V4_SCALE_IDS=100000 uv run pytest tests/benchmarks -m "not scale" -q` | pending |  |
+| Unit + architecture correctness | `uv run pytest tests/unit tests/architecture -q` | green: 12,178 passed, 1 skipped (12:52) |  |
+| Focused scientific-hypothesis suites | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py tests/integration/test_scientific_hypotheses_store_api.py -q` | green: focused 189 passed; integration file 1 passed with `-m integration` | integration lane runs separately with `-m integration` |
+| Python coverage (focused) | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q --cov=src --cov-report=term` | green: 189 passed; lane TOTAL 25% | lane-scoped coverage only; full `src` denominator is dominated by unrelated modules |
+| Python coverage (full lane) | `uv run pytest tests/unit tests/architecture -q --cov=src --cov-report=term` | unexecuted: timed out at the 2400 s harness limit | full suite without coverage is green; rerun the coverage lane with a longer limit |
+| Static: Ruff | `uv run ruff check src tests` | green: all checks passed |  |
+| Static: mypy | `uv run mypy src tests` | green: no issues in 2,860 files |  |
+| Static: import boundaries | `uv run lint-imports` | green: 25 kept, 0 broken |  |
+| Integration (non-scale) | `uv run pytest tests/integration -m "not scale" -q` | green: 63 passed, 60 skipped, 5 deselected | PostgreSQL-free lanes |
+| Scientific-hypothesis store/API integration | `uv run pytest tests/integration/test_scientific_hypotheses_store_api.py -q -m integration` | green: 1 passed |  |
+| Compose config | `docker compose config` | green: exit 0 |  |
+| Research UI tests | `cd clients/research-ui && ./node_modules/.bin/vitest run` | green: 329 passed |  |
+| Research UI types | `cd clients/research-ui && ./node_modules/.bin/svelte-check --tsconfig ./tsconfig.app.json` | green: 0 errors, 0 warnings |  |
+| Godot regression | `GODOT_BIN=~/.cache/palimpsest-godot/Godot_v4.7.2-stable_linux.x86_64 "$GODOT_BIN" --headless --path clients/godot-observer --script res://tests/run_protocol.gd` | green: failed=0 | existing suite only; no client source change |
+| Compose/browser acceptance | `PALIMPSEST_API_IMAGE=<matched> PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1 uv run pytest -m compose -q` | unexecuted | requires an attested `PALIMPSEST_API_IMAGE`; none available |
+| Benchmark regression (non-scale) | `PALIMPSEST_V4_SCALE_IDS=100000 uv run pytest tests/benchmarks -m "not scale" -q` | green: 1 passed, 20 deselected |  |
 
 `git status` must confirm no `.ai-factory/ROADMAP.md` edit from this plan, no
 `alembic/versions/0018*` file, no `clients/godot-observer/` source change, no

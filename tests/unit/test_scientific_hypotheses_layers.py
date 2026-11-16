@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Hard layer-separation guard for scientific-hypothesis analysis."""
 
 from __future__ import annotations

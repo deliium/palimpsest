@@ -318,7 +318,7 @@ def attach_scientific_hypothesis_claim(
         return utterance
     updated_content = replace(content, relations=(*relations, relation))
     updated_utterance = replace(
-        utterance.utterance, content=updated_content
+        cast(Any, utterance).utterance, content=updated_content
     )
     _LOG.debug("scientific_hypothesis_frame_encoded source_kind=communicated")
     typed = cast(Any, utterance)

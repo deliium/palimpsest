@@ -471,7 +471,7 @@ window filter. Failure codes are `credit_relationships_disabled`,
 No route returns a bank, money, enforceable debt, credit score, ranking, or
 canonical credit. See [credit relationships](credit-relationships.md).
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger routes
 
@@ -494,3 +494,12 @@ accept at most 500; `window_index` is bounded to 511. Cursors are bound to the
 snapshot, purpose, window, and limit; unconfigured reads fail closed with
 `economic_cascades_disabled` and corrupt stores return
 `economic_cascades_store_corrupt`. See [Economic cascades](economic-cascades.md).
+
+
+V4-27 adds seven GET-only dual-gated routes under
+`/v1/simulations/{run_id}/scientific-hypotheses`: summary, `hypotheses`,
+`evidence`, `tests`, `revisions`, `sources`, and `coverage`. They require
+`SUBJECTIVE_DEBUG` and both `PALIMPSEST_SCIENTIFIC_HYPOTHESES_ROOT` and
+`PALIMPSEST_SCIENTIFIC_HYPOTHESES_CURSOR_KEY`; otherwise they fail closed with
+`scientific_hypotheses_disabled`. Default limit is 100, maximum 500, and
+`window_index` is bounded to 511.

@@ -161,7 +161,7 @@ def _beliefs(*recipe_ids: str) -> RecipeBeliefSet:
 
 def test_flag_is_owned_counts_are_eight() -> None:
     assert "supply_chains" in compatibility.V4_OWNED_CAPABILITY_FLAGS
-    assert len(compatibility.V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(compatibility.V4_OWNED_CAPABILITY_FLAGS) == 9
     flags = V4CapabilityFlags(supply_chains=True)
     assert flags.owned_enabled_names() == ("supply_chains",)
     assert flags.unimplemented_enabled_names() == ()
@@ -230,9 +230,11 @@ def test_other_v4_flag_still_fails_closed() -> None:
 
     from simulation.runner import RunnerConstructionError
 
-    config = replace(_v56_config(), v4_capability_flags=V4CapabilityFlags(science=True))
+    config = replace(
+        _v56_config(), v4_capability_flags=V4CapabilityFlags(epidemics=True)
+    )
     with pytest.raises(RunnerConstructionError):
-        asyncio.run(SimulationRunner.from_config(config, run_id=_run_id("science")))
+        asyncio.run(SimulationRunner.from_config(config, run_id=_run_id("epidemics")))
 
 
 def test_no_runner_config_v57_added() -> None:

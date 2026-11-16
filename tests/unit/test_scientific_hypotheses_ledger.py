@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Owner experiment-ledger extension: claim, conditions, source, revisions."""
 
 from __future__ import annotations

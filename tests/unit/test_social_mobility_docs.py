@@ -44,8 +44,8 @@ def test_required_sections_exist() -> None:
 
 def test_pins_match_the_code() -> None:
     text = _text()
-    assert METRIC_FAMILY_COUNT == 244
-    assert "244 metric families" in text
+    assert METRIC_FAMILY_COUNT == 250
+    assert "250 metric families" in text
     assert "17 V4 contexts" in text
     assert "v4-context-map-v5" in text
     for domain in (

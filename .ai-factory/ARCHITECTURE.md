@@ -181,14 +181,14 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v55` for generational runs |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 244 (V4-24's 228, V4-25's 236, plus eight V4-26 economic-cascade families) |
+| Metric families | 250 (V4-24's 228, V4-25's 236, V4-26's 244, plus six V4-27 scientific-hypothesis families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 244 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 250 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -205,9 +205,9 @@ those as current pins or silently drop their legacy accepted versions.
   (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
   `organized_conflict` (V4-12), `infrastructure_networks` (V4-16),
   `supply_chains` (V4-19), and `markets_credit` (V4-20/V4-21).
-  There are eight owned V4 flags and four unowned flags.
-  `science`, `epidemics`, `ecological_feedback`, and `disasters` remain unowned
-  and fail closed.
+  There are nine owned V4 flags and three unowned flags.
+  `epidemics`, `ecological_feedback`, and `disasters` remain unowned and fail
+  closed; `science` is owned by V4-27.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -1273,3 +1273,20 @@ metric families, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, and
 Alembic `0017`. No social class, caste, stratum, elite, underclass, merit,
 prestige, inheritance right, or composite mobility score exists. See
 `docs/social-mobility.md`.
+
+
+### V4-27 scientific-hypotheses seam
+
+`science` is owned on the accepted `runner-config-v56` seam and adds no context,
+flag slot, runner schema, command, event, observer semantic type, write pair,
+`/v2` route, or migration. Activation requires `predictive_world_model` and a
+`bounded_experimentation` spec. The owner `ExperimentLedger` records claim,
+conditions, predicted result, confidence milli, support/contradiction evidence,
+source, and append-only revisions; `hyp_v1` claims travel in existing
+`Talk`/`Tell` as testimony only. Detached analysis keeps objective evidence,
+owner rows, and analytical summaries separate and appends six families (244 ->
+250). `scientific-hypotheses-snapshot-v1` / `scientific-hypotheses-store-v1`
+publish programmatically; seven GET-only dual-gated routes serve them; the
+Research UI adds a read-only panel and Godot adds no overlay. Pins: 17 contexts /
+12 flags / 9 owned / 3 unowned, 250 families, 43 commands, 73 observer semantic
+types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.

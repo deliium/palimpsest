@@ -57,13 +57,13 @@ def test_final_v4_22_pins() -> None:
 
     assert CREDIT_RELATIONSHIPS_POLICY_VERSION == "credit-relationships.v1"
     assert CREDIT_FRAME_SUBJECT == "crd_v1"
-    assert METRIC_FAMILY_COUNT == 244
+    assert METRIC_FAMILY_COUNT == 250
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(get_args(AgentCommand)) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))

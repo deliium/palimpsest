@@ -78,15 +78,6 @@ from analysis.economic_cascades_metrics import (
     compute_route_closure_cascade,
     compute_tool_shortage_cascade,
 )
-from analysis.scientific_hypotheses_analysis import ScientificHypothesesAnalysis
-from analysis.scientific_hypotheses_metrics import (
-    compute_scientific_hypothesis_evidence,
-    compute_scientific_hypothesis_prediction_outcomes,
-    compute_scientific_hypothesis_provenance,
-    compute_scientific_hypothesis_revisions,
-    compute_scientific_hypothesis_structure,
-    compute_scientific_hypothesis_test_activity,
-)
 from analysis.economic_inequality_analysis import EconomicInequalityAnalysis
 from analysis.economic_inequality_metrics import (
     compute_credit_relationship_inequality,
@@ -216,6 +207,15 @@ from analysis.regional_population import (
 )
 from analysis.relationship_metrics import compute_relationship_stability
 from analysis.reputation_metrics import compute_distributed_reputation
+from analysis.scientific_hypotheses_analysis import ScientificHypothesesAnalysis
+from analysis.scientific_hypotheses_metrics import (
+    compute_scientific_hypothesis_evidence,
+    compute_scientific_hypothesis_prediction_outcomes,
+    compute_scientific_hypothesis_provenance,
+    compute_scientific_hypothesis_revisions,
+    compute_scientific_hypothesis_structure,
+    compute_scientific_hypothesis_test_activity,
+)
 from analysis.semantic_drift_metrics import (
     SemanticAnalysisInputs,
     compute_semantic_divergence,

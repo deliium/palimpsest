@@ -33,9 +33,9 @@ _APPENDED = (
 def test_catalog_count_is_244_and_validates() -> None:
     validate_metric_catalog()
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 244
-    assert len(specs) == 244
-    assert len({spec.family_id for spec in specs}) == 244
+    assert METRIC_FAMILY_COUNT == 250
+    assert len(specs) == 250
+    assert len({spec.family_id for spec in specs}) == 250
 
 
 def test_first_236_ids_are_byte_identical() -> None:
@@ -49,7 +49,7 @@ def test_first_236_ids_are_byte_identical() -> None:
 
 def test_appended_ids_are_exactly_the_eight_new_families() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-8:]) == _APPENDED
+    assert tuple(spec.family_id for spec in specs[236:244]) == _APPENDED
 
 
 def test_every_new_family_uses_the_cascade_window() -> None:

@@ -6,7 +6,7 @@ import hashlib
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from analysis.scientific_hypotheses_contract import (
     NONE_TOKEN,
@@ -174,7 +174,7 @@ def _assert_layers(analysis: ScientificHypothesesAnalysis) -> None:
     )
 
 
-def _cap(rows: list[object], limit: int) -> tuple[list[object], bool]:
+def _cap[T](rows: list[T], limit: int) -> tuple[list[T], bool]:
     if len(rows) <= limit:
         return rows, False
     return rows[:limit], True
@@ -514,7 +514,7 @@ def harvest_scientific_hypotheses_analysis(
     return analysis
 
 
-def _with_coverage(row: object, coverage: ScientificHypothesisCoverage) -> object:
+def _with_coverage(row: Any, coverage: ScientificHypothesisCoverage) -> Any:
     from dataclasses import replace
 
     return replace(row, coverage=coverage)
@@ -674,23 +674,23 @@ def _window_totals_from_rows(
     trial_rows: Sequence[ScientificTrialRow],
 ) -> dict[tuple[int, int], dict[str, int]]:
     totals: dict[tuple[int, int], dict[str, int]] = {}
-    for row in hypothesis_rows:
+    for hypothesis_row in hypothesis_rows:
         bucket = totals.setdefault(
-            (row.window_index, row.window_tick),
+            (hypothesis_row.window_index, hypothesis_row.window_tick),
             {"hypotheses": 0, "conditions": 0, "revisions": 0, "trials": 0},
         )
         bucket["hypotheses"] += 1
-        bucket["conditions"] += row.condition_count
-    for row in revision_rows:
+        bucket["conditions"] += hypothesis_row.condition_count
+    for revision_row in revision_rows:
         bucket = totals.setdefault(
-            (row.window_index, row.window_tick),
+            (revision_row.window_index, revision_row.window_tick),
             {"hypotheses": 0, "conditions": 0, "revisions": 0, "trials": 0},
         )
         bucket["revisions"] += 1
-    for row in trial_rows:
+    for trial_row in trial_rows:
         bucket = totals.setdefault(
-            (row.window_index, row.window_tick),
+            (trial_row.window_index, trial_row.window_tick),
             {"hypotheses": 0, "conditions": 0, "revisions": 0, "trials": 0},
         )
-        bucket["trials"] += row.trial_count
+        bucket["trials"] += trial_row.trial_count
     return totals

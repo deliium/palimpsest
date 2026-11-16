@@ -26,7 +26,10 @@ if TYPE_CHECKING:
     from agents.cognition.consolidation import OfflineConsolidationPlan
     from agents.cognition.counterfactual import CounterfactualScenario
     from agents.cognition.cultural_narratives import NarrativeCueSummary
-    from agents.cognition.experimentation import ExperimentLedger
+    from agents.cognition.experimentation import (
+        ExperimentHypothesis,
+        ExperimentLedger,
+    )
     from agents.cognition.identity import IdentityDissonanceNotice
     from agents.cognition.production import RecipeBeliefSet
     from agents.cognition.reflection import ReflectionPlan, ReflectionPolicy
@@ -7503,7 +7506,10 @@ class CognitiveLoop:
                     ledger, loop_input.observation.tick
                 )
                 if selected is not None:
-                    command = attach_scientific_hypothesis_claim(command, selected)
+                    command = cast(
+                        AgentCommand,
+                        attach_scientific_hypothesis_claim(command, selected),
+                    )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,

@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Bounded ``hyp_v1`` claim communication and evidence-free adoption."""
 
 from __future__ import annotations

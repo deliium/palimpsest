@@ -292,21 +292,6 @@ from experiments.economic_cascades_completed_run import (
     cascade_route_facts,
     cascade_supply_stages,
 )
-from experiments.scientific_hypotheses_scenario import (
-    SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID,
-    scientific_hypotheses_scenario,
-)
-from experiments.scientific_hypotheses_publication import (
-    ScientificHypothesesHarvest,
-    ScientificHypothesesPublicationReceipt,
-    build_scientific_hypotheses_harvest_result,
-    compose_scientific_hypotheses_snapshot,
-    publish_scientific_hypotheses_snapshot,
-)
-from experiments.scientific_hypotheses_completed_run import (
-    build_completed_run_scientific_hypotheses_analysis,
-    scientific_hypothesis_facts,
-)
 from experiments.economic_cascades_publication import (
     EconomicCascadesHarvest,
     EconomicCascadesReceipt,
@@ -540,6 +525,21 @@ from experiments.reference_scenario import (
     build_reference_scenario,
 )
 from experiments.reputation_scenario import distributed_reputation_scenario
+from experiments.scientific_hypotheses_completed_run import (
+    build_completed_run_scientific_hypotheses_analysis,
+    scientific_hypothesis_facts,
+)
+from experiments.scientific_hypotheses_publication import (
+    ScientificHypothesesHarvest,
+    ScientificHypothesesPublicationReceipt,
+    build_scientific_hypotheses_harvest_result,
+    compose_scientific_hypotheses_snapshot,
+    publish_scientific_hypotheses_snapshot,
+)
+from experiments.scientific_hypotheses_scenario import (
+    SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID,
+    scientific_hypotheses_scenario,
+)
 from experiments.social_mobility_completed_run import (
     build_completed_run_social_mobility_analysis,
     social_mobility_recipe_mappings,
@@ -596,6 +596,7 @@ __all__ = [
     "REFERENCE_MAX_TICKS",
     "REFERENCE_SCENARIO_ID",
     "REFERENCE_SCENARIO_VERSION",
+    "SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID",
     "V3_BENCHMARK_PROFILE_BUDGETS",
     "V3_BENCHMARK_SCENARIO_COUNT",
     "V3_BENCHMARK_SCENARIO_IDS",
@@ -710,6 +711,8 @@ __all__ = [
     "RepresentationHarvestResult",
     "RetryPolicy",
     "RunVersionIdentity",
+    "ScientificHypothesesHarvest",
+    "ScientificHypothesesPublicationReceipt",
     "SmokeOutputAvailability",
     "SocialMobilityHarvest",
     "SocialMobilityReceipt",
@@ -761,15 +764,6 @@ __all__ = [
     "build_completed_run_credit_relationships_analysis",
     "build_completed_run_dispute_harvest",
     "build_completed_run_economic_cascades_analysis",
-    "build_completed_run_scientific_hypotheses_analysis",
-    "scientific_hypothesis_facts",
-    "ScientificHypothesesHarvest",
-    "SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID",
-    "scientific_hypotheses_scenario",
-    "ScientificHypothesesPublicationReceipt",
-    "build_scientific_hypotheses_harvest_result",
-    "compose_scientific_hypotheses_snapshot",
-    "publish_scientific_hypotheses_snapshot",
     "build_completed_run_economic_inequality_analysis",
     "build_completed_run_emergent_prices_analysis",
     "build_completed_run_evidence_harvest",
@@ -777,6 +771,7 @@ __all__ = [
     "build_completed_run_inter_society_relations_analysis",
     "build_completed_run_organization_harvest",
     "build_completed_run_representation_harvest",
+    "build_completed_run_scientific_hypotheses_analysis",
     "build_completed_run_social_mobility_analysis",
     "build_completed_run_trade_networks_analysis",
     "build_credit_relationships_harvest_result",
@@ -793,6 +788,7 @@ __all__ = [
     "build_organization_harvest_result",
     "build_reference_scenario",
     "build_representation_harvest_result",
+    "build_scientific_hypotheses_harvest_result",
     "build_social_mobility_harvest_result",
     "build_trade_networks_harvest_result",
     "build_v3_benchmark_base",
@@ -825,6 +821,7 @@ __all__ = [
     "compose_economic_inequality_snapshot",
     "compose_emergent_prices_snapshot",
     "compose_inter_society_relations_snapshot",
+    "compose_scientific_hypotheses_snapshot",
     "compose_social_mobility_snapshot",
     "compose_trade_networks_snapshot",
     "condition_fingerprint",
@@ -970,6 +967,7 @@ __all__ = [
     "publish_macro_society_snapshot",
     "publish_organization_snapshot",
     "publish_representation_snapshot",
+    "publish_scientific_hypotheses_snapshot",
     "publish_social_mobility_snapshot",
     "publish_trade_networks_snapshot",
     "regional_context_from_run",
@@ -984,6 +982,8 @@ __all__ = [
     "representations_publication_document",
     "run_benchmark_smoke",
     "run_one_assignment",
+    "scientific_hypotheses_scenario",
+    "scientific_hypothesis_facts",
     "seasonal_scarcity_scenario",
     "smoke_tick_budget",
     "social_mobility_recipe_mappings",

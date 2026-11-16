@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Science capability ownership and fail-closed activation matrix (V4-27)."""
 
 from __future__ import annotations

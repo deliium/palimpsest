@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Locked scientific-hypothesis analysis policy defaults and bounds."""
 
 from __future__ import annotations

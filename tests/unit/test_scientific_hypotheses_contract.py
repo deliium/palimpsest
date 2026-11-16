@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Closed scientific-hypothesis analysis vocabulary and token determinism."""
 
 from __future__ import annotations

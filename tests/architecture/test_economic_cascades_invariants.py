@@ -31,8 +31,8 @@ def test_context_counts_are_seventeen_twelve_eight_four() -> None:
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
-    assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 4
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 3
 
 
 def test_economic_cascades_is_analysis_only_and_flagless() -> None:

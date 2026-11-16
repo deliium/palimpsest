@@ -14,9 +14,6 @@ from api.routes.delegation_representation import (
 from api.routes.diplomacy import router as diplomacy_router
 from api.routes.dispute import router as dispute_router
 from api.routes.economic_cascades import router as economic_cascades_router
-from api.routes.scientific_hypotheses import (
-    router as scientific_hypotheses_router,
-)
 from api.routes.economic_inequality import router as economic_inequality_router
 from api.routes.emergent_prices import router as emergent_prices_router
 from api.routes.evidence_testimony import router as evidence_testimony_router
@@ -44,6 +41,9 @@ from api.routes.organization import router as organization_router
 from api.routes.organized_conflict import router as organized_conflict_router
 from api.routes.replay import router as replay_router
 from api.routes.research_matrix import router as research_matrix_router
+from api.routes.scientific_hypotheses import (
+    router as scientific_hypotheses_router,
+)
 from api.routes.simulations import router as simulations_router
 from api.routes.social_mobility import router as social_mobility_router
 from api.routes.streams import router as streams_router
@@ -64,7 +64,6 @@ __all__ = [
     "diplomacy_router",
     "dispute_router",
     "economic_cascades_router",
-    "scientific_hypotheses_router",
     "economic_inequality_router",
     "emergent_prices_router",
     "evidence_testimony_router",
@@ -84,6 +83,7 @@ __all__ = [
     "replay_router",
     "research_matrix_router",
     "research_router",
+    "scientific_hypotheses_router",
     "simulations_router",
     "social_mobility_router",
     "streams_router",

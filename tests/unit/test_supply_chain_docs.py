@@ -102,9 +102,9 @@ def test_pins_appear_exactly() -> None:
         "73",
         str(METRIC_FAMILY_COUNT),
         "0017",
-        "15 contexts",
+        "17 contexts",
         "12 flags",
-        "eight owned",
+        "nine owned",
         "EVENT_SCHEMA_REPLAY_V27",
         "v25",
         "/v1",
@@ -112,7 +112,7 @@ def test_pins_appear_exactly() -> None:
     ):
         assert token in page
     assert SUPPLY_CHAIN_ROUTE_COUNT == 7
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
 
 
 def test_architecture_and_configuration_surfaces() -> None:

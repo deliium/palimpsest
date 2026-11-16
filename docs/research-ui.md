@@ -357,7 +357,7 @@ cross-society flows, and analytical network lineage. It provides a
 `trade_networks_disabled` plus an empty state without inventing a network. It
 never displays price, money, a composite trade score, or a planned route.
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated economic-inequality routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
@@ -369,3 +369,12 @@ dependencies, chains, propagation, and coverage sections. Chain state is rendere
 as the literal `linked`, `unlinked`, `unresolved`, or `unavailable` token; no
 severity, ranking, or causal badge is shown. See
 [Economic cascades](economic-cascades.md).
+
+
+V4-27 adds a read-only Scientific hypotheses panel: summary, hypotheses,
+evidence, tests, revisions, sources, and coverage. Status and source tokens are
+rendered literally and confidence is shown as `n/1000`; no truth, proof,
+accuracy, ranking, or score vocabulary is used.
+
+
+The Scientific hypotheses panel is read-only and shows status/source tokens literally with no truth or score vocabulary.

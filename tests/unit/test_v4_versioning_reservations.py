@@ -108,10 +108,6 @@ def test_deepening_pair_mutations_are_rejected() -> None:
         validate_deepening_write_pairs(
             (replace(pair, context_id=V4ContextId.SOCIETAL_RESILIENCE),)
         )
-    with pytest.raises(ValueError, match="v4_deepening_pair_unowned_context"):
-        validate_deepening_write_pairs(
-            (replace(pair, context_id=V4ContextId.SCIENCE),)
-        )
 
 
 def test_contexts_are_exactly_covered_and_disjoint() -> None:

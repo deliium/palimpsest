@@ -71,12 +71,12 @@ def test_page_exists_and_carries_the_contract_tokens() -> None:
 
 def test_pins_match_the_live_registry() -> None:
     text = PAGE.read_text(encoding="utf-8")
-    assert METRIC_FAMILY_COUNT == 244
-    assert "244" in text
+    assert METRIC_FAMILY_COUNT == 250
+    assert "250" in text
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 8
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V27 == 27
@@ -103,7 +103,7 @@ def test_v4_architecture_lists_the_context_and_all_headings() -> None:
     assert "### economic_cascades" in text
     assert text.count("\n### ") == len(V4_CONTEXTS)
     assert "v4-context-map-v5" in text
-    assert "244" in text
+    assert "250" in text
 
 
 def test_readme_and_cross_links_reference_the_page() -> None:

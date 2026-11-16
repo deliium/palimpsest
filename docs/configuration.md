@@ -307,8 +307,8 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. The accepted set has eight owned V4 flags that may construct
-on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
+closed `v4_capability_flags` sibling. The accepted set has nine owned V4 flags that may construct
+on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`, `science` (V4-27)
 (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and
 `organized_conflict` (V4-12, requiring `diplomacy`). The other seven V4 flags
 remain unowned and fail closed at `SimulationRunner.from_config`.
@@ -595,7 +595,7 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -625,3 +625,8 @@ reads: `PALIMPSEST_ECONOMIC_CASCADES_ROOT` and
 `PALIMPSEST_ECONOMIC_CASCADES_CURSOR_KEY` (at least 32 UTF-8 bytes). When either
 is unset every cascade route returns `economic_cascades_disabled`. See
 [Economic cascades](economic-cascades.md).
+
+
+## Scientific hypotheses (`runner-config-v56`)
+
+V4-27 owns `science`. Enabling it requires `predictive_world_model` and a `bounded_experimentation` spec (with that spec's cultural history and provenance prerequisites). `science=False` is inert. No new environment variable is required for science itself; the read artifact uses `PALIMPSEST_SCIENTIFIC_HYPOTHESES_ROOT` and `PALIMPSEST_SCIENTIFIC_HYPOTHESES_CURSOR_KEY`.

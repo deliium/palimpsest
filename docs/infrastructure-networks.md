@@ -159,6 +159,6 @@ civilization infrastructure score, `/v2` API, `runner-config-v57`, or Alembic
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)
 
-Current catalog: 244 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
 
 See also: [Economic cascades](economic-cascades.md) measures how objective disruptions propagate through these production and infrastructure dependencies.
