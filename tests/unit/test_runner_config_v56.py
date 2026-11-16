@@ -28,6 +28,7 @@ from simulation.runner_models import (
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    BoundedExperimentationSpec,
     CollectiveDecisionMode,
     InstitutionalDecayMode,
     InstitutionalMemoryMode,
@@ -36,8 +37,12 @@ from simulation.runner_models import (
     OfficeSuccessionMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
+    V2CapabilityFlags,
+    V3CapabilityFlags,
     V4CapabilityFlags,
     WorldScenarioSpec,
+    example_cultural_feature_provenance_spec,
+    example_experiment_law,
 )
 from simulation.runner_serialization import (
     RunnerSerializationError,
@@ -47,6 +52,7 @@ from simulation.runner_serialization import (
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
+from world.production import example_production_catalog
 
 pytestmark = pytest.mark.unit
 
@@ -239,7 +245,7 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
     config = replace(
         _base(),
         schema_version=RUNNER_SCHEMA_VERSION_V56,
-        v4_capability_flags=V4CapabilityFlags(science=True),
+        v4_capability_flags=V4CapabilityFlags(organizations=True),
     )
     with pytest.raises(MatrixValidationError) as excinfo:
         finalize_matrix_cell_config(config)
@@ -250,7 +256,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "science",
         "epidemics",
         "ecological_feedback",
         "disasters",
@@ -273,6 +278,40 @@ async def test_unowned_v4_flag_fails_closed_after_encode_decode(
         )
     assert excinfo.value.code is RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED
     assert excinfo.value.stage == "v4_capability_flags"
+
+
+@pytest.mark.asyncio
+async def test_science_flag_constructs_with_prerequisites() -> None:
+    catalog = example_production_catalog()
+    config = replace(
+        _base(),
+        schema_version=RUNNER_SCHEMA_VERSION_V56,
+        capability_flags=V2CapabilityFlags(predictive_world_model=True),
+        v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+        cultural_feature_provenance=example_cultural_feature_provenance_spec(),
+        bounded_experimentation=BoundedExperimentationSpec(
+            laws=(example_experiment_law(),)
+        ),
+        v4_capability_flags=V4CapabilityFlags(science=True),
+    )
+    config = replace(
+        config,
+        agents=tuple(
+            replace(
+                agent,
+                cognition=replace(agent.cognition, production_catalog=catalog),
+            )
+            for agent in config.agents
+        ),
+    )
+    decoded = decode_runner_config(encode_runner_config(config))
+    assert decoded.v4_capability_flags.science is True
+
+    runner = await SimulationRunner.from_config(
+        config, run_id=RunId("run-v4-gate-science")
+    )
+    assert runner.config.v4_capability_flags.owned_enabled_names() == ("science",)
+    assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()
 
 
 @pytest.mark.asyncio

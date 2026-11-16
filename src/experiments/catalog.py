@@ -2837,6 +2837,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "economic_inequality@1",
         "social_mobility@1",
         "economic_cascades@1",
+        "scientific_hypotheses@1",
     }
 )
 
@@ -5787,6 +5788,27 @@ def experiment_economic_cascades(
     )
     _LOG.info(
         "experiment_registered experiment_id=economic_cascades@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_scientific_hypotheses(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 64,
+) -> ExperimentDefinition:
+    """Off-gate V4-27 experiment: testable scientific hypotheses."""
+    from experiments.scientific_hypotheses_scenario import (
+        scientific_hypotheses_scenario,
+    )
+
+    definition = scientific_hypotheses_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=scientific_hypotheses@1 arms=%s",
         len(definition.conditions),
     )
     return definition

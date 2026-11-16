@@ -6,6 +6,7 @@ import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import Any, Final, cast
 
 from agents.cognition.production import observed_experiment_operand_ids
@@ -24,6 +25,212 @@ _LOG: Final[logging.Logger] = logging.getLogger("agents.cognition.experimentatio
 _OUTCOMES: Final[frozenset[str]] = frozenset(
     item.value for item in ExperimentOutcomeClass
 )
+
+MAX_HYPOTHESIS_CONDITIONS: Final[int] = 8
+MAX_HYPOTHESIS_REVISIONS: Final[int] = 32
+MAX_HYPOTHESIS_EVIDENCE: Final[int] = 64
+HYPOTHESIS_CONFIDENCE_PRIOR: Final[int] = 1
+
+
+class HypothesisConditionSlot(StrEnum):
+    """Ten closed observation slots a hypothesis may condition on."""
+
+    LOCATION = "location"
+    DAY_PHASE = "day_phase"
+    WEATHER = "weather"
+    HELD_ITEM_KIND = "held_item_kind"
+    COUNTERPART = "counterpart"
+    SEASON = "season"
+    TEMPERATURE_BAND = "temperature_band"
+    HAZARD = "hazard"
+    ACTION = "action"
+    CONCEPT = "concept"
+
+
+class HypothesisSourceKind(StrEnum):
+    """Descriptive provenance; a communicated claim is not evidence."""
+
+    SELF_FORMULATED = "self_formulated"
+    OBSERVED = "observed"
+    REMEMBERED = "remembered"
+    COMMUNICATED = "communicated"
+    RECORDED = "recorded"
+    UNKNOWN = "unknown"
+
+
+class HypothesisStatus(StrEnum):
+    """Owner-relative status; never an objective truth value."""
+
+    PROVISIONAL = "provisional"
+    SUPPORTED = "supported"
+    CONTRADICTED = "contradicted"
+    INCONCLUSIVE = "inconclusive"
+    SUPERSEDED = "superseded"
+    RETIRED = "retired"
+
+
+class HypothesisRevisionReason(StrEnum):
+    """Closed reasons for one append-only hypothesis revision."""
+
+    FORMULATED = "formulated"
+    PREDICTION_REVISED = "prediction_revised"
+    CONDITION_REVISED = "condition_revised"
+    SUPPORT_ADDED = "support_added"
+    CONTRADICTION_ADDED = "contradiction_added"
+    CONFIDENCE_REVISED = "confidence_revised"
+    SOURCE_ADOPTED = "source_adopted"
+    TEST_FORMULATED = "test_formulated"
+    SUPERSEDED = "superseded"
+    RETIRED = "retired"
+
+
+def _require_condition_token(value: object) -> str:
+    if type(value) is not str or not value:
+        raise _fail("condition", "invalid_value")
+    if len(value) > 128 or value != value.strip():
+        raise _fail("condition", "invalid_value")
+    if any(ord(char) < 32 for char in value):
+        raise _fail("condition", "invalid_value")
+    if "|" in value or "=" in value:
+        raise _fail("condition", "invalid_separator")
+    return value
+
+
+def _require_evidence(field_name: str, values: object) -> tuple[str, ...]:
+    if not isinstance(values, tuple):
+        raise _fail(field_name, "invalid_type")
+    if len(values) > MAX_HYPOTHESIS_EVIDENCE:
+        raise _fail(field_name, "invalid_cap")
+    for value in values:
+        if type(value) is not str or not value:
+            raise _fail(field_name, "invalid_type")
+    return values
+
+
+def confidence_milli_from_masses(
+    support: int,
+    counter: int,
+    *,
+    prior: int = HYPOTHESIS_CONFIDENCE_PRIOR,
+) -> int:
+    """Integer support ratio in milli; not a probability or calibration."""
+
+    for name, value in (("support", support), ("counter", counter), ("prior", prior)):
+        if isinstance(value, bool) or type(value) is not int or value < 0:
+            raise _fail(name, "invalid_count")
+    if prior < 1:
+        raise _fail("prior", "invalid_count")
+    value = ((support + prior) * 1000) // (support + counter + 2 * prior)
+    return max(0, min(1000, value))
+
+
+def derive_hypothesis_status(
+    support: int,
+    counter: int,
+    *,
+    min_evidence: int = 2,
+) -> HypothesisStatus:
+    """Derive the owner-relative status from retained evidence mass."""
+
+    for name, value in (
+        ("support", support),
+        ("counter", counter),
+        ("min_evidence", min_evidence),
+    ):
+        if isinstance(value, bool) or type(value) is not int or value < 0:
+            raise _fail(name, "invalid_count")
+    if min_evidence < 1:
+        raise _fail("min_evidence", "invalid_count")
+    if support + counter < min_evidence:
+        return HypothesisStatus.PROVISIONAL
+    if counter >= min_evidence and counter > support:
+        return HypothesisStatus.CONTRADICTED
+    if support >= min_evidence and support > counter:
+        return HypothesisStatus.SUPPORTED
+    return HypothesisStatus.INCONCLUSIVE
+
+
+@dataclass(frozen=True, slots=True)
+class HypothesisCondition:
+    """One closed observation slot and its stable value token."""
+
+    slot: HypothesisConditionSlot
+    value_token: str
+
+    def __post_init__(self) -> None:
+        if type(self.slot) is not HypothesisConditionSlot:
+            raise _fail("slot", "invalid_type")
+        object.__setattr__(
+            self, "value_token", _require_condition_token(self.value_token)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class HypothesisClaim:
+    """Claim components plus an optional predicted outcome class."""
+
+    operator: ExperimentOperator
+    operand_a_id: str
+    operand_b_id: str | None
+    process_token: ExperimentProcessToken
+    predicted_outcome: ExperimentOutcomeClass | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.operator) is not ExperimentOperator:
+            raise _fail("operator", "invalid_type")
+        if type(self.process_token) is not ExperimentProcessToken:
+            raise _fail("process_token", "invalid_type")
+        if type(self.operand_a_id) is not str or not self.operand_a_id:
+            raise _fail("operand_a_id", "invalid_type")
+        if self.operand_b_id is not None and type(self.operand_b_id) is not str:
+            raise _fail("operand_b_id", "invalid_type")
+        if self.predicted_outcome is not None and (
+            type(self.predicted_outcome) is not ExperimentOutcomeClass
+        ):
+            raise _fail("predicted_outcome", "invalid_outcome")
+
+
+@dataclass(frozen=True, slots=True)
+class HypothesisRevision:
+    """One append-only revision of an owner hypothesis."""
+
+    revision_index: int
+    tick: int
+    reason: HypothesisRevisionReason
+    claim: HypothesisClaim
+    conditions: tuple[HypothesisCondition, ...] = ()
+    confidence_milli: int = 0
+    evidence_ref: str = ""
+
+    def __post_init__(self) -> None:
+        if type(self.revision_index) is not int or self.revision_index < 0:
+            raise _fail("revision_index", "invalid_index")
+        if type(self.tick) is not int or self.tick < 0:
+            raise _fail("tick", "invalid_tick")
+        if type(self.reason) is not HypothesisRevisionReason:
+            raise _fail("reason", "invalid_type")
+        if type(self.claim) is not HypothesisClaim:
+            raise _fail("claim", "invalid_type")
+        if not isinstance(self.conditions, tuple):
+            raise _fail("conditions", "invalid_type")
+        if len(self.conditions) > MAX_HYPOTHESIS_CONDITIONS:
+            raise _fail("conditions", "invalid_cap")
+        seen: set[HypothesisConditionSlot] = set()
+        for condition in self.conditions:
+            if type(condition) is not HypothesisCondition:
+                raise _fail("conditions", "invalid_type")
+            if condition.slot in seen:
+                raise _fail("conditions", "duplicate")
+            seen.add(condition.slot)
+        if (
+            isinstance(self.confidence_milli, bool)
+            or type(self.confidence_milli) is not int
+            or not 0 <= self.confidence_milli <= 1000
+        ):
+            raise _fail("confidence_milli", "invalid_range")
+        if self.evidence_ref:
+            if type(self.evidence_ref) is not str or not self.evidence_ref:
+                raise _fail("evidence_ref", "invalid_type")
 
 
 def _fail(field_name: str, reason: str) -> ValueError:
@@ -111,6 +318,14 @@ class ExperimentHypothesis:
     evidence_event_ids: tuple[str, ...] = ()
     active: bool = True
     created_tick: int = 0
+    causal_hypothesis_id: str = ""
+    conditions: tuple[HypothesisCondition, ...] = ()
+    confidence_milli: int | None = None
+    counter_evidence_event_ids: tuple[str, ...] = ()
+    source_kind: HypothesisSourceKind = HypothesisSourceKind.SELF_FORMULATED
+    source_token: str = "self"
+    status: HypothesisStatus | None = None
+    revisions: tuple[HypothesisRevision, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -137,8 +352,103 @@ class ExperimentHypothesis:
             raise _fail("active", "invalid_type")
         if type(self.created_tick) is not int or self.created_tick < 0:
             raise _fail("created_tick", "invalid_tick")
-        if not isinstance(self.evidence_event_ids, tuple):
-            raise _fail("evidence_event_ids", "invalid_type")
+        object.__setattr__(
+            self,
+            "evidence_event_ids",
+            _require_evidence("evidence_event_ids", self.evidence_event_ids),
+        )
+        object.__setattr__(
+            self,
+            "counter_evidence_event_ids",
+            _require_evidence(
+                "counter_evidence_event_ids", self.counter_evidence_event_ids
+            ),
+        )
+        if type(self.causal_hypothesis_id) is not str:
+            raise _fail("causal_hypothesis_id", "invalid_type")
+        object.__setattr__(
+            self, "conditions", _validated_conditions(self.conditions)
+        )
+        if type(self.source_kind) is not HypothesisSourceKind:
+            raise _fail("source_kind", "invalid_type")
+        if type(self.source_token) is not str or not self.source_token:
+            raise _fail("source_token", "invalid_type")
+        if self.source_token != self.source_token.strip() or any(
+            ord(char) < 32 for char in self.source_token
+        ):
+            raise _fail("source_token", "invalid_type")
+        if (
+            self.source_kind is not HypothesisSourceKind.SELF_FORMULATED
+            and self.source_token == "self"
+        ):
+            raise _fail("source_token", "invalid_source_token")
+        object.__setattr__(self, "revisions", _validated_revisions(self.revisions))
+        expected_confidence = confidence_milli_from_masses(
+            self.support, self.counter
+        )
+        if self.confidence_milli is None:
+            object.__setattr__(self, "confidence_milli", expected_confidence)
+        elif (
+            isinstance(self.confidence_milli, bool)
+            or type(self.confidence_milli) is not int
+            or not 0 <= self.confidence_milli <= 1000
+        ):
+            raise _fail("confidence_milli", "invalid_range")
+        expected_status = derive_hypothesis_status(self.support, self.counter)
+        if self.status is None:
+            object.__setattr__(self, "status", expected_status)
+        elif type(self.status) is not HypothesisStatus:
+            raise _fail("status", "invalid_type")
+
+    @property
+    def claim(self) -> HypothesisClaim:
+        """Project the legacy claim fields into a closed claim value."""
+
+        return HypothesisClaim(
+            operator=self.operator,
+            operand_a_id=self.operand_a_id,
+            operand_b_id=self.operand_b_id,
+            process_token=self.process_token,
+            predicted_outcome=(
+                None
+                if self.predicted_outcome is None
+                else ExperimentOutcomeClass(self.predicted_outcome)
+            ),
+        )
+
+
+def _validated_conditions(
+    conditions: object,
+) -> tuple[HypothesisCondition, ...]:
+    if not isinstance(conditions, tuple):
+        raise _fail("conditions", "invalid_type")
+    if len(conditions) > MAX_HYPOTHESIS_CONDITIONS:
+        raise _fail("conditions", "invalid_cap")
+    seen: set[HypothesisConditionSlot] = set()
+    for condition in conditions:
+        if type(condition) is not HypothesisCondition:
+            raise _fail("conditions", "invalid_type")
+        if condition.slot in seen:
+            raise _fail("conditions", "duplicate")
+        seen.add(condition.slot)
+    return conditions
+
+
+def _validated_revisions(
+    revisions: object,
+) -> tuple[HypothesisRevision, ...]:
+    if not isinstance(revisions, tuple):
+        raise _fail("revisions", "invalid_type")
+    if len(revisions) > MAX_HYPOTHESIS_REVISIONS:
+        raise _fail("revisions", "invalid_cap")
+    previous = -1
+    for revision in revisions:
+        if type(revision) is not HypothesisRevision:
+            raise _fail("revisions", "invalid_type")
+        if revision.revision_index <= previous:
+            raise _fail("revisions", "out_of_order")
+        previous = revision.revision_index
+    return revisions
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,10 +535,25 @@ def empty_experiment_ledger(
     return ledger
 
 
+def require_owner_experiment_ledger(
+    ledger: object,
+    owner_id: object,
+    *,
+    field_name: str,
+) -> ExperimentLedger:
+    """Return the ledger only when it belongs to the exact owner."""
+
+    if type(ledger) is not ExperimentLedger:
+        raise ValueError(f"{field_name}: invalid_type")
+    if type(owner_id) is not AgentId or ledger.owner_id != owner_id:
+        raise ValueError(f"{field_name}: owner_mismatch")
+    return ledger
+
+
 def admit_hypothesis(
     ledger: ExperimentLedger, hypothesis: ExperimentHypothesis
 ) -> ExperimentLedger:
-    """Insert a hypothesis, evicting lowest support then oldest past the cap."""
+    """Insert a hypothesis, evicting lowest confidence then oldest past the cap."""
     if type(hypothesis) is not ExperimentHypothesis:
         raise _fail("hypothesis", "invalid_type")
     if hypothesis.owner_id != ledger.owner_id:
@@ -236,9 +561,25 @@ def admit_hypothesis(
     if any(row.hypothesis_id == hypothesis.hypothesis_id for row in ledger.hypotheses):
         return ledger
     rows = [*ledger.hypotheses, hypothesis]
+    evicted: ExperimentHypothesis | None = None
     while len(rows) > ledger.max_hypotheses:
-        rows.sort(key=lambda row: (row.support, row.created_tick, row.hypothesis_id))
-        rows.pop(0)
+        rows.sort(
+            key=lambda row: (
+                row.confidence_milli if row.confidence_milli is not None else 0,
+                row.created_tick,
+                row.hypothesis_id,
+            )
+        )
+        evicted = rows.pop(0)
+    _LOG.debug(
+        "scientific_hypothesis_admitted hypothesis_prefix=%s",
+        hypothesis.hypothesis_id[:12],
+    )
+    if evicted is not None:
+        _LOG.debug(
+            "scientific_hypothesis_evicted hypothesis_prefix=%s",
+            evicted.hypothesis_id[:12],
+        )
     return replace(ledger, hypotheses=tuple(rows))
 
 
@@ -250,6 +591,374 @@ def record_trial(ledger: ExperimentLedger, trial: ExperimentTrial) -> Experiment
     if used >= ledger.max_trials_per_tick:
         raise ValueError("experiment_trial_cap")
     return replace(ledger, trials=(*ledger.trials, trial))
+
+
+def _outcome_value(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, ExperimentOutcomeClass):
+        return value.value
+    if type(value) is str and value in _OUTCOMES:
+        return value
+    raise _fail("predicted_outcome", "invalid_outcome")
+
+
+def _require_reason(value: object) -> HypothesisRevisionReason:
+    if type(value) is not HypothesisRevisionReason:
+        raise _fail("reason", "invalid_type")
+    return value
+
+
+def _trim_evidence(
+    values: tuple[str, ...], event_id: str
+) -> tuple[tuple[str, ...], bool]:
+    appended = (*values, event_id)
+    if len(appended) > MAX_HYPOTHESIS_EVIDENCE:
+        return appended[-MAX_HYPOTHESIS_EVIDENCE:], True
+    return appended, False
+
+
+def append_revision(
+    hypothesis: ExperimentHypothesis,
+    *,
+    reason: HypothesisRevisionReason,
+    tick: int,
+    claim: HypothesisClaim | None = None,
+    conditions: tuple[HypothesisCondition, ...] | None = None,
+    confidence_milli: int | None = None,
+    evidence_ref: str = "",
+) -> ExperimentHypothesis:
+    """Append one monotonic revision and trim only the oldest past the cap."""
+    if type(hypothesis) is not ExperimentHypothesis:
+        raise _fail("hypothesis", "invalid_type")
+    reason = _require_reason(reason)
+    if type(tick) is not int or tick < 0:
+        raise _fail("tick", "invalid_tick")
+    active_claim = hypothesis.claim if claim is None else claim
+    if type(active_claim) is not HypothesisClaim:
+        raise _fail("claim", "invalid_type")
+    active_conditions = (
+        hypothesis.conditions if conditions is None else tuple(conditions)
+    )
+    confidence = (
+        hypothesis.confidence_milli
+        if confidence_milli is None
+        else confidence_milli
+    )
+    previous = hypothesis.revisions[-1].revision_index if hypothesis.revisions else -1
+    revision = HypothesisRevision(
+        revision_index=previous + 1,
+        tick=tick,
+        reason=reason,
+        claim=active_claim,
+        conditions=active_conditions,
+        confidence_milli=confidence if confidence is not None else 0,
+        evidence_ref=evidence_ref,
+    )
+    revisions = (*hypothesis.revisions, revision)
+    if len(revisions) > MAX_HYPOTHESIS_REVISIONS:
+        _LOG.warning("scientific_hypothesis_evidence_capped")
+        revisions = revisions[-MAX_HYPOTHESIS_REVISIONS:]
+    _LOG.debug(
+        "scientific_hypothesis_revised reason=%s revisions=%s",
+        reason.value,
+        len(revisions),
+    )
+    return replace(
+        hypothesis,
+        predicted_outcome=(
+            None
+            if active_claim.predicted_outcome is None
+            else active_claim.predicted_outcome.value
+        ),
+        conditions=active_conditions,
+        confidence_milli=revision.confidence_milli,
+        revisions=revisions,
+    )
+
+
+def formulate_hypothesis(
+    *,
+    owner_id: AgentId,
+    hypothesis_id: str,
+    operator: ExperimentOperator,
+    operand_a_id: str,
+    process_token: ExperimentProcessToken,
+    predicted_outcome: ExperimentOutcomeClass | str | None,
+    operand_b_id: str | None = None,
+    conditions: Sequence[HypothesisCondition] = (),
+    source_kind: HypothesisSourceKind = HypothesisSourceKind.SELF_FORMULATED,
+    source_token: str = "self",
+    causal_hypothesis_id: str = "",
+    created_tick: int = 0,
+) -> ExperimentHypothesis:
+    """Build a provisional hypothesis with one ``formulated`` revision."""
+
+    predicted = _outcome_value(predicted_outcome)
+    claim = HypothesisClaim(
+        operator=operator,
+        operand_a_id=operand_a_id,
+        operand_b_id=operand_b_id,
+        process_token=process_token,
+        predicted_outcome=(
+            None if predicted is None else ExperimentOutcomeClass(predicted)
+        ),
+    )
+    condition_tuple = tuple(conditions)
+    confidence = confidence_milli_from_masses(0, 0)
+    revision = HypothesisRevision(
+        revision_index=0,
+        tick=created_tick,
+        reason=HypothesisRevisionReason.FORMULATED,
+        claim=claim,
+        conditions=condition_tuple,
+        confidence_milli=confidence,
+    )
+    return ExperimentHypothesis(
+        owner_id=owner_id,
+        hypothesis_id=hypothesis_id,
+        operator=operator,
+        operand_a_id=operand_a_id,
+        operand_b_id=operand_b_id,
+        process_token=process_token,
+        predicted_outcome=_outcome_value(claim.predicted_outcome),
+        conditions=condition_tuple,
+        source_kind=source_kind,
+        source_token=source_token,
+        causal_hypothesis_id=causal_hypothesis_id,
+        confidence_milli=confidence,
+        status=HypothesisStatus.PROVISIONAL,
+        created_tick=created_tick,
+        revisions=(revision,),
+    )
+
+
+def _find_hypothesis(
+    ledger: ExperimentLedger, hypothesis_id: str
+) -> ExperimentHypothesis:
+    for row in ledger.hypotheses:
+        if row.hypothesis_id == hypothesis_id:
+            return row
+    raise ValueError("hypothesis_not_found")
+
+
+def _replace_hypothesis(
+    ledger: ExperimentLedger, updated: ExperimentHypothesis
+) -> ExperimentLedger:
+    return replace(
+        ledger,
+        hypotheses=tuple(
+            updated if row.hypothesis_id == updated.hypothesis_id else row
+            for row in ledger.hypotheses
+        ),
+    )
+
+
+def revise_hypothesis(
+    ledger: ExperimentLedger,
+    hypothesis_id: str,
+    *,
+    reason: HypothesisRevisionReason,
+    tick: int,
+    predicted_outcome: ExperimentOutcomeClass | str | None = None,
+    conditions: Sequence[HypothesisCondition] | None = None,
+) -> ExperimentLedger:
+    """Revise prediction or conditions without rewriting old revisions."""
+
+    if type(ledger) is not ExperimentLedger:
+        raise _fail("ledger", "invalid_type")
+    row = _find_hypothesis(ledger, hypothesis_id)
+    reason = _require_reason(reason)
+    if row.status is HypothesisStatus.SUPERSEDED:
+        raise ValueError("hypothesis_superseded")
+    prediction = (
+        row.predicted_outcome
+        if predicted_outcome is None
+        else _outcome_value(predicted_outcome)
+    )
+    claim = HypothesisClaim(
+        operator=row.operator,
+        operand_a_id=row.operand_a_id,
+        operand_b_id=row.operand_b_id,
+        process_token=row.process_token,
+        predicted_outcome=(
+            None if prediction is None else ExperimentOutcomeClass(prediction)
+        ),
+    )
+    condition_tuple = row.conditions if conditions is None else tuple(conditions)
+    updated = append_revision(
+        row,
+        reason=reason,
+        tick=tick,
+        claim=claim,
+        conditions=condition_tuple,
+        confidence_milli=row.confidence_milli,
+    )
+    updated = replace(
+        updated,
+        status=HypothesisStatus.PROVISIONAL,
+        active=True,
+    )
+    return _replace_hypothesis(ledger, updated)
+
+
+def _prediction_for_tick(
+    hypothesis: ExperimentHypothesis, tick: int
+) -> ExperimentOutcomeClass | None:
+    for revision in reversed(hypothesis.revisions):
+        if (
+            revision.reason is HypothesisRevisionReason.TEST_FORMULATED
+            and revision.tick <= tick
+        ):
+            return revision.claim.predicted_outcome
+    if hypothesis.predicted_outcome is None:
+        return None
+    return ExperimentOutcomeClass(hypothesis.predicted_outcome)
+
+
+def apply_test_outcome(
+    ledger: ExperimentLedger,
+    hypothesis_id: str,
+    *,
+    outcome_class: ExperimentOutcomeClass | str,
+    event_id: str,
+    tick: int,
+    discovery_mode: DiscoveryMode | str,
+) -> ExperimentLedger:
+    """Append one trial result's evidence, confidence, status, and revision."""
+
+    if type(ledger) is not ExperimentLedger:
+        raise _fail("ledger", "invalid_type")
+    if type(event_id) is not str or not event_id:
+        raise _fail("event_id", "invalid_type")
+    if type(tick) is not int or tick < 0:
+        raise _fail("tick", "invalid_tick")
+    try:
+        observed = ExperimentOutcomeClass(outcome_class)
+    except ValueError as error:
+        raise _fail("outcome_class", "invalid_outcome") from error
+    if isinstance(discovery_mode, DiscoveryMode):
+        mode = discovery_mode
+    elif type(discovery_mode) is str:
+        try:
+            mode = DiscoveryMode(discovery_mode)
+        except ValueError as error:
+            raise _fail("discovery_mode", "invalid_mode") from error
+    else:
+        raise _fail("discovery_mode", "invalid_mode")
+    if any(trial.event_id == event_id for trial in ledger.trials):
+        return ledger
+    row = _find_hypothesis(ledger, hypothesis_id)
+    if (
+        event_id in row.evidence_event_ids
+        or event_id in row.counter_evidence_event_ids
+    ):
+        return ledger
+    prediction = _prediction_for_tick(row, tick)
+    evidence = row.evidence_event_ids
+    counter_evidence = row.counter_evidence_event_ids
+    if prediction is None:
+        support = row.support
+        counter = row.counter
+        reason = HypothesisRevisionReason.CONFIDENCE_REVISED
+    elif observed is ExperimentOutcomeClass.UNEXPECTED:
+        support = row.support
+        counter = row.counter + 1
+        counter_evidence, trimmed = _trim_evidence(counter_evidence, event_id)
+        if trimmed:
+            _LOG.warning("scientific_hypothesis_evidence_capped")
+        reason = HypothesisRevisionReason.CONTRADICTION_ADDED
+    elif observed is prediction:
+        support = row.support + 1
+        counter = row.counter
+        evidence, trimmed = _trim_evidence(evidence, event_id)
+        if trimmed:
+            _LOG.warning("scientific_hypothesis_evidence_capped")
+        reason = HypothesisRevisionReason.SUPPORT_ADDED
+    else:
+        support = row.support
+        counter = row.counter + 1
+        counter_evidence, trimmed = _trim_evidence(counter_evidence, event_id)
+        if trimmed:
+            _LOG.warning("scientific_hypothesis_evidence_capped")
+        reason = HypothesisRevisionReason.CONTRADICTION_ADDED
+    confidence = confidence_milli_from_masses(support, counter)
+    status = derive_hypothesis_status(support, counter)
+    updated = replace(
+        row,
+        support=support,
+        counter=counter,
+        evidence_event_ids=evidence,
+        counter_evidence_event_ids=counter_evidence,
+        confidence_milli=confidence,
+        status=status,
+    )
+    updated = append_revision(
+        updated,
+        reason=reason,
+        tick=tick,
+        confidence_milli=confidence,
+        evidence_ref=event_id,
+    )
+    _LOG.debug(
+        "scientific_hypothesis_scored support=%s counter=%s status=%s",
+        support,
+        counter,
+        status.value,
+    )
+    _LOG.debug(
+        "scientific_hypothesis_trial_outcome discovery_mode=%s",
+        mode.value,
+    )
+    return _replace_hypothesis(ledger, updated)
+
+
+def supersede_hypothesis(
+    ledger: ExperimentLedger,
+    hypothesis_id: str,
+    *,
+    tick: int,
+    evidence_ref: str = "",
+) -> ExperimentLedger:
+    """Terminally supersede a hypothesis while retaining its evidence."""
+
+    row = _find_hypothesis(ledger, hypothesis_id)
+    if row.status is HypothesisStatus.SUPERSEDED:
+        return ledger
+    updated = append_revision(
+        row,
+        reason=HypothesisRevisionReason.SUPERSEDED,
+        tick=tick,
+        evidence_ref=evidence_ref,
+    )
+    return _replace_hypothesis(
+        ledger,
+        replace(updated, status=HypothesisStatus.SUPERSEDED, active=False),
+    )
+
+
+def retire_hypothesis(
+    ledger: ExperimentLedger,
+    hypothesis_id: str,
+    *,
+    tick: int,
+    evidence_ref: str = "",
+) -> ExperimentLedger:
+    """Retire a hypothesis; a later revision may reopen it."""
+
+    row = _find_hypothesis(ledger, hypothesis_id)
+    if row.status is HypothesisStatus.RETIRED:
+        return ledger
+    updated = append_revision(
+        row,
+        reason=HypothesisRevisionReason.RETIRED,
+        tick=tick,
+        evidence_ref=evidence_ref,
+    )
+    return _replace_hypothesis(
+        ledger,
+        replace(updated, status=HypothesisStatus.RETIRED, active=False),
+    )
 
 
 def _match_hypothesis(
@@ -314,19 +1023,18 @@ def score_remembered_experiment(
     )
     hypothesis_id = ""
     if match is not None:
-        matched = outcome == match.predicted_outcome
-        updated_row = replace(
-            match,
-            support=match.support + (1 if matched else 0),
-            counter=match.counter + (0 if matched else 1),
-            evidence_event_ids=(*match.evidence_event_ids, event_id),
-        )
-        ledger = replace(
+        ledger = apply_test_outcome(
             ledger,
-            hypotheses=tuple(
-                updated_row if row.hypothesis_id == match.hypothesis_id else row
-                for row in ledger.hypotheses
-            ),
+            match.hypothesis_id,
+            outcome_class=outcome,
+            event_id=event_id,
+            tick=tick,
+            discovery_mode=str(mode),
+        )
+        updated_row = next(
+            row
+            for row in ledger.hypotheses
+            if row.hypothesis_id == match.hypothesis_id
         )
         hypothesis_id = match.hypothesis_id
         _LOG.debug(
@@ -504,6 +1212,7 @@ def compile_experiment_command(
     draft: object | None = None,
     allow_provider: bool = False,
     proposals_this_tick: int = 0,
+    conditions: tuple[HypothesisCondition, ...] = (),
 ) -> ExperimentCompile:
     """Emit one Experiment command, or a stable reject. No physics fields."""
     if type(owner_id) is not AgentId:
@@ -590,6 +1299,7 @@ def compile_experiment_command(
         process_token=action.process_token,
         predicted_outcome=action.predicted_outcome,
         created_tick=created_tick,
+        conditions=conditions,
     )
     updated = admit_hypothesis(ledger, hypothesis)
     matches = [row for row in updated.hypotheses if row.hypothesis_id == hypothesis_id]
@@ -611,6 +1321,286 @@ def compile_experiment_command(
         stored.hypothesis_id[:12],
     )
     return ExperimentCompile(updated, command=command, hypothesis=stored)
+
+
+_CONDITION_ATOM_ATTRS: Final[Mapping[HypothesisConditionSlot, tuple[str, ...]]] = {
+    HypothesisConditionSlot.LOCATION: ("location_id",),
+    HypothesisConditionSlot.DAY_PHASE: ("day_phase",),
+    HypothesisConditionSlot.WEATHER: ("weather_condition", "weather"),
+    HypothesisConditionSlot.HELD_ITEM_KIND: ("held_item_kind",),
+    HypothesisConditionSlot.COUNTERPART: ("counterpart",),
+    HypothesisConditionSlot.SEASON: ("season",),
+    HypothesisConditionSlot.TEMPERATURE_BAND: ("temperature_band",),
+    HypothesisConditionSlot.HAZARD: ("hazard_kinds", "hazard"),
+    HypothesisConditionSlot.ACTION: ("action",),
+    HypothesisConditionSlot.CONCEPT: ("concept", "concepts"),
+}
+
+
+def _token_values(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, StrEnum):
+        return (value.value,)
+    if type(value) is str:
+        return (value,) if value else ()
+    raw = getattr(value, "value", None)
+    if type(raw) is str and raw:
+        return (raw,)
+    if isinstance(value, (str, bytes)):
+        return ()
+    if isinstance(value, Sequence):
+        tokens: list[str] = []
+        for item in value:
+            tokens.extend(_token_values(item))
+        return tuple(tokens)
+    return ()
+
+
+def _first_attr(observation: object, names: Sequence[str]) -> object:
+    for name in names:
+        value = getattr(observation, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def observed_condition_tokens(
+    observation: object,
+) -> Mapping[HypothesisConditionSlot, tuple[str, ...]]:
+    """Read only public observation attributes into closed condition tokens."""
+
+    observed: dict[HypothesisConditionSlot, tuple[str, ...]] = {}
+    self_body = getattr(observation, "self_body", None)
+    for slot, names in _CONDITION_ATOM_ATTRS.items():
+        value = _first_attr(observation, names)
+        if value is None and self_body is not None:
+            value = _first_attr(self_body, names)
+        tokens = _token_values(value)
+        if tokens:
+            observed[slot] = tokens
+    location = getattr(observation, "location_id", None)
+    if location is None and self_body is not None:
+        location = getattr(self_body, "location_id", None)
+    if location is not None:
+        observed[HypothesisConditionSlot.LOCATION] = _token_values(location)
+    return observed
+
+
+def conditions_hold(
+    conditions: Sequence[HypothesisCondition], observation: object
+) -> bool:
+    """Every condition must appear in the owner's current observation."""
+
+    observed = observed_condition_tokens(observation)
+    for condition in conditions:
+        if condition.value_token not in observed.get(condition.slot, ()):
+            return False
+    return True
+
+
+def _conditions_from_observation(
+    observation: object,
+) -> tuple[HypothesisCondition, ...]:
+    rows: list[HypothesisCondition] = []
+    for slot, tokens in observed_condition_tokens(observation).items():
+        if len(rows) >= MAX_HYPOTHESIS_CONDITIONS:
+            break
+        if not tokens:
+            continue
+        try:
+            rows.append(HypothesisCondition(slot, tokens[0]))
+        except ValueError:
+            continue
+    return tuple(rows)
+
+
+def _causal_link(
+    causal_model: object, owner_id: AgentId, observation: object
+) -> tuple[str, HypothesisSourceKind, str] | None:
+    if causal_model is None:
+        return None
+    if getattr(causal_model, "owner_id", None) != owner_id:
+        raise _fail("causal_model", "owner_mismatch")
+    observed = observed_condition_tokens(observation)
+    candidates: list[object] = []
+    for hypothesis in getattr(causal_model, "hypotheses", ()):
+        atoms = getattr(hypothesis, "atoms", ())
+        if not atoms:
+            continue
+        matched = True
+        for atom in atoms:
+            slot = getattr(getattr(atom, "slot", None), "value", None)
+            value = getattr(atom, "value", None)
+            if type(slot) is not str or value not in observed.get(
+                HypothesisConditionSlot(slot), ()
+            ):
+                matched = False
+                break
+        if matched:
+            candidates.append(hypothesis)
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda row: (-float(getattr(row, "confidence", 0.0)), getattr(row, "hypothesis_id", ""))  # noqa: E501
+    )
+    chosen = candidates[0]
+    provenance = getattr(getattr(chosen, "provenance_kind", None), "value", "")
+    if provenance == "memory":
+        source_kind = HypothesisSourceKind.REMEMBERED
+        source_token = "memory"
+    else:
+        source_kind = HypothesisSourceKind.OBSERVED
+        source_token = "observation"
+    return str(getattr(chosen, "hypothesis_id", "")), source_kind, source_token
+
+
+def _command_for(hypothesis: ExperimentHypothesis) -> Experiment:
+    return Experiment(
+        operator=hypothesis.operator,
+        operand_a_id=EntityId(hypothesis.operand_a_id),
+        operand_b_id=(
+            None
+            if hypothesis.operand_b_id is None
+            else EntityId(hypothesis.operand_b_id)
+        ),
+        process_token=hypothesis.process_token,
+        hypothesis_id=hypothesis.hypothesis_id,
+    )
+
+
+def _testable(
+    ledger: ExperimentLedger, tick: int, observation: object
+) -> list[ExperimentHypothesis]:
+    tested = {
+        trial.hypothesis_id
+        for trial in ledger.trials
+        if trial.tick == tick and trial.hypothesis_id
+    }
+    return [
+        row
+        for row in ledger.hypotheses
+        if row.active
+        and row.status
+        not in {HypothesisStatus.SUPERSEDED, HypothesisStatus.RETIRED}
+        and row.predicted_outcome is not None
+        and row.hypothesis_id not in tested
+        and conditions_hold(row.conditions, observation)
+    ]
+
+
+def compile_scientific_test(
+    owner_id: AgentId,
+    ledger: ExperimentLedger,
+    observation: object,
+    *,
+    hypothesis_id: str | None = None,
+    formulate_if_missing: bool = False,
+    causal_model: object | None = None,
+) -> ExperimentCompile:
+    """Replace a default Wait with one existing ``Experiment`` command."""
+
+    if type(owner_id) is not AgentId:
+        raise _fail("owner_id", "invalid_type")
+    if type(ledger) is not ExperimentLedger or ledger.owner_id != owner_id:
+        raise _fail("ledger", "owner_mismatch")
+    if type(formulate_if_missing) is not bool:
+        raise TypeError("formulate_if_missing must be bool")
+    tick_raw = getattr(observation, "tick", 0)
+    tick = tick_raw if type(tick_raw) is int and tick_raw >= 0 else 0
+    used = sum(1 for row in ledger.trials if row.tick == tick)
+    if used >= ledger.max_trials_per_tick:
+        _LOG.warning("scientific_test_skipped reason_code=experiment_trial_cap")
+        return ExperimentCompile(ledger, reason="experiment_trial_cap")
+
+    selected: ExperimentHypothesis | None = None
+    if hypothesis_id is not None:
+        rows = [row for row in ledger.hypotheses if row.hypothesis_id == hypothesis_id]
+        if rows and rows[0] in _testable(ledger, tick, observation):
+            selected = rows[0]
+    else:
+        candidates = _testable(ledger, tick, observation)
+        if candidates:
+            candidates.sort(
+                key=lambda row: (
+                    0 if row.counter > row.support else 1,
+                    row.created_tick,
+                    row.hypothesis_id,
+                )
+            )
+            selected = candidates[0]
+
+    if selected is None and formulate_if_missing:
+        active_with_prediction = [
+            row
+            for row in ledger.hypotheses
+            if row.active and row.predicted_outcome is not None
+        ]
+        if not active_with_prediction:
+            action = _deterministic_action(observation)
+            if action is not None:
+                new_id = experiment_hypothesis_id(
+                    owner_id,
+                    action.operator,
+                    action.operand_a_id,
+                    action.operand_b_id,
+                    action.process_token,
+                )
+                created = formulate_hypothesis(
+                    owner_id=owner_id,
+                    hypothesis_id=new_id,
+                    operator=action.operator,
+                    operand_a_id=action.operand_a_id,
+                    operand_b_id=action.operand_b_id,
+                    process_token=action.process_token,
+                    predicted_outcome=action.predicted_outcome,
+                    conditions=_conditions_from_observation(observation),
+                    source_kind=HypothesisSourceKind.OBSERVED,
+                    source_token="observation",
+                    created_tick=tick,
+                )
+                ledger = admit_hypothesis(ledger, created)
+                rows = [
+                    row
+                    for row in ledger.hypotheses
+                    if row.hypothesis_id == new_id
+                ]
+                if rows:
+                    selected = rows[0]
+
+    if selected is None:
+        _LOG.warning(
+            "scientific_test_skipped reason_code=scientific_hypothesis_untestable"
+        )
+        return ExperimentCompile(ledger, reason="scientific_hypothesis_untestable")
+
+    if causal_model is not None:
+        link = _causal_link(causal_model, owner_id, observation)
+        if link is not None:
+            causal_id, source_kind, source_token = link
+            selected = replace(
+                selected,
+                causal_hypothesis_id=causal_id,
+                source_kind=source_kind,
+                source_token=source_token,
+            )
+
+    tested = append_revision(
+        selected,
+        reason=HypothesisRevisionReason.TEST_FORMULATED,
+        tick=tick,
+        claim=selected.claim,
+        conditions=selected.conditions,
+        confidence_milli=selected.confidence_milli,
+    )
+    ledger = _replace_hypothesis(ledger, tested)
+    _LOG.info(
+        "scientific_test_proposed hypothesis_prefix=%s",
+        tested.hypothesis_id[:12],
+    )
+    return ExperimentCompile(
+        ledger, command=_command_for(tested), hypothesis=tested
+    )
 
 
 @dataclass(frozen=True, slots=True)

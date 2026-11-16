@@ -81,7 +81,7 @@ from agents.cognition.models import (
     SelfModel,
     SituationModel,
 )
-from world.actions import AgentCommand, Give, require_agent_command
+from world.actions import AgentCommand, Give, Talk, Tell, Wait, require_agent_command
 
 __all__ = [
     "COMPONENT_VERSION",
@@ -411,6 +411,7 @@ class CognitiveLoop:
         "_reputation_mode",
         "_reputation_policy",
         "_resource_exchange_profile_active",
+        "_scientific_hypotheses_mode",
         "_self_state",
         "_semantic_naming_mode",
         "_semantic_naming_policy",
@@ -540,6 +541,7 @@ class CognitiveLoop:
         accounting_ledger_policy: object | None = None,
         formal_rule_mode: object | None = None,
         formal_rule_policy: object | None = None,
+        scientific_hypotheses_mode: object | None = None,
         dispute_mode: object | None = None,
         dispute_policy: object | None = None,
         evidence_mode: object | None = None,
@@ -1188,6 +1190,24 @@ class CognitiveLoop:
         self._formal_rule_mode = formal_mode
         self._formal_rule_policy = formal_rule_policy
         self._prepared_formal_rules: object | None = None
+        from agents.cognition.configuration import (
+            CognitionScientificHypothesesMode,
+        )
+
+        scientific_mode = (
+            CognitionScientificHypothesesMode.DISABLED
+            if scientific_hypotheses_mode is None
+            else scientific_hypotheses_mode
+        )
+        if (
+            type(scientific_mode)
+            is not CognitionScientificHypothesesMode
+        ):
+            raise TypeError(
+                "scientific_hypotheses_mode must be "
+                "CognitionScientificHypothesesMode"
+            )
+        self._scientific_hypotheses_mode = scientific_mode
         from agents.cognition.configuration import CognitionDisputeMode
         from agents.cognition.legal_disputes import (
             DisputePolicy,
@@ -4740,6 +4760,34 @@ class CognitiveLoop:
         self._experiment_ledger = ledger
         return ledger
 
+    def experiment_ledger_if_present(self) -> ExperimentLedger | None:
+        """Return the current owner ledger without constructing an empty one."""
+
+        return self._experiment_ledger
+
+    def restore_experiment_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install a checkpoint ledger after validating the owner when known."""
+
+        if ledger is None:
+            self._experiment_ledger = None
+            return
+        from agents.cognition.experimentation import (
+            ExperimentLedger,
+            require_owner_experiment_ledger,
+        )
+
+        if owner_id is not None:
+            validated = require_owner_experiment_ledger(
+                ledger, owner_id, field_name="experiment_ledger"
+            )
+        elif type(ledger) is ExperimentLedger:
+            validated = ledger
+        else:
+            raise ValueError("experiment_ledger: invalid_type")
+        self._experiment_ledger = validated
+
     def _remember_experiments(self, loop_input: object) -> None:
         """Score the owner's hypotheses from actor occurrences. No second writer."""
         if self._bounded_experimentation_caps is None:
@@ -4760,6 +4808,95 @@ class CognitiveLoop:
         for occurrence in getattr(observation, "occurrences", ()):
             updated = score_remembered_experiment(updated, occurrence, tick=tick_value)
         self._experiment_ledger = updated
+
+    def _ingest_scientific_hypotheses(self, loop_input: object) -> None:
+        """Adopt received ``hyp_v1`` claims as testimony, never as evidence."""
+
+        from agents.cognition.configuration import (
+            CognitionScientificHypothesesMode,
+        )
+
+        if (
+            self._scientific_hypotheses_mode
+            is not CognitionScientificHypothesesMode.DETERMINISTIC
+        ):
+            return
+        if self._bounded_experimentation_caps is None:
+            return
+        from agents.cognition.scientific_hypothesis_communication import (
+            adopt_communicated_hypothesis,
+            parse_scientific_hypothesis_claim_relation,
+        )
+        from agents.models import AgentId
+
+        owner_id = getattr(loop_input, "agent_id", None)
+        observation = getattr(loop_input, "observation", None)
+        if type(owner_id) is not AgentId or observation is None:
+            return
+        ledger = self.experiment_ledger_for(owner_id)
+        if ledger is None:
+            return
+        tick_raw = getattr(observation, "tick", 0)
+        tick = tick_raw if type(tick_raw) is int and tick_raw >= 0 else 0
+        updated = ledger
+        for communication in getattr(observation, "communications", ()):
+            source = getattr(
+                getattr(communication, "provenance", None),
+                "source_event_id",
+                None,
+            )
+            delivery = getattr(source, "value", None)
+            if type(delivery) is not str or not delivery:
+                continue
+            content = getattr(
+                getattr(communication, "utterance", None), "content", None
+            )
+            for relation in getattr(content, "relations", ()):
+                claim = parse_scientific_hypothesis_claim_relation(relation)
+                if claim is None:
+                    continue
+                updated = adopt_communicated_hypothesis(
+                    updated,
+                    claim,
+                    source_token=f"evt:{delivery}",
+                    tick=tick,
+                )
+        self._experiment_ledger = updated
+
+    def _select_scientific_hypothesis(
+        self, ledger: ExperimentLedger, tick: int
+    ) -> ExperimentHypothesis | None:
+        """Most recent actively tested claim that was not communicated."""
+
+        from agents.cognition.experimentation import (
+            HypothesisRevisionReason,
+            HypothesisSourceKind,
+        )
+
+        candidates: list[tuple[int, str, ExperimentHypothesis]] = []
+        for row in ledger.hypotheses:
+            if not row.active or row.source_kind is HypothesisSourceKind.COMMUNICATED:
+                continue
+            if any(
+                revision.reason is HypothesisRevisionReason.SOURCE_ADOPTED
+                for revision in row.revisions
+            ):
+                continue
+            tested_tick: int | None = None
+            for revision in reversed(row.revisions):
+                if (
+                    revision.reason is HypothesisRevisionReason.TEST_FORMULATED
+                    and revision.tick <= tick
+                ):
+                    tested_tick = revision.tick
+                    break
+            if tested_tick is None:
+                continue
+            candidates.append((tested_tick, row.hypothesis_id, row))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (item[0], item[1]))
+        return candidates[-1][2]
 
     def mark_developmental_mid_run_admit(self) -> None:
         """Mark this loop as belonging to a mid-run admitted owner."""
@@ -7072,6 +7209,7 @@ class CognitiveLoop:
         )
         assert type(updates) is tuple
         self._remember_experiments(loop_input)
+        self._ingest_scientific_hypotheses(loop_input)
         updates = self._annotate_claim_violations(proposal, updates)
         updates = self._append_norm_trust(proposal, updates)
         updates = self._append_commitment_memory(proposal, updates)
@@ -7324,6 +7462,48 @@ class CognitiveLoop:
                     policy=self._organized_conflict_policy,
                 ),
             )
+        from agents.cognition.configuration import (
+            CognitionScientificHypothesesMode,
+        )
+
+        if (
+            self._scientific_hypotheses_mode
+            is CognitionScientificHypothesesMode.DETERMINISTIC
+            and type(command) is Wait
+        ):
+            ledger = self.experiment_ledger_for(loop_input.agent_id)
+            if ledger is not None:
+                from agents.cognition.experimentation import (
+                    compile_scientific_test,
+                )
+
+                compiled = compile_scientific_test(
+                    loop_input.agent_id,
+                    ledger,
+                    loop_input.observation,
+                    formulate_if_missing=True,
+                    causal_model=proposal.causal_world_model,
+                )
+                self._experiment_ledger = compiled.ledger
+                if compiled.command is not None:
+                    command = compiled.command
+        if (
+            self._scientific_hypotheses_mode
+            is CognitionScientificHypothesesMode.DETERMINISTIC
+            and type(command) in (Talk, Tell)
+            and self._bounded_experimentation_caps is not None
+        ):
+            ledger = self.experiment_ledger_for(loop_input.agent_id)
+            if ledger is not None:
+                from agents.cognition.scientific_hypothesis_communication import (
+                    attach_scientific_hypothesis_claim,
+                )
+
+                selected = self._select_scientific_hypothesis(
+                    ledger, loop_input.observation.tick
+                )
+                if selected is not None:
+                    command = attach_scientific_hypothesis_claim(command, selected)
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,

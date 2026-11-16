@@ -616,6 +616,40 @@ def assemble_arm_metric_bundle(
             )
     else:
         _LOG.debug("economic_cascades_collector_disabled")
+    scientific_hypotheses_enabled = (
+        events is not None
+        and getattr(flags, "science", False)
+        and getattr(runner_config, "bounded_experimentation", None) is not None
+        and bool(getattr(arm.runner_result, "experiment_ledgers", ()))
+    )
+    if scientific_hypotheses_enabled:
+        try:
+            from experiments.scientific_hypotheses_completed_run import (
+                build_completed_run_scientific_hypotheses_analysis,
+            )
+
+            science_analysis = (
+                build_completed_run_scientific_hypotheses_analysis(
+                    arm.runner_result,
+                    committed_events=events if events is not None else (),
+                    run_id=arm.assignment.run_id.value,
+                    window_end=max(ticks - 1, 0),
+                )
+            )
+            inputs = replace(
+                inputs, scientific_hypotheses_analysis=science_analysis
+            )
+            _LOG.info(
+                "scientific_hypotheses_collector_injected rows=%d",
+                science_analysis.row_count,
+            )
+        except Exception as exc:
+            _LOG.warning(
+                "scientific_hypotheses_collection_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    else:
+        _LOG.debug("scientific_hypotheses_collector_disabled")
     regions_spec = getattr(arm.assignment.runner_config, "regions_migration", None)
     if regions_spec is not None and events is not None:
         from experiments.composition import (

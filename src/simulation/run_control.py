@@ -619,6 +619,7 @@ class AgentRuntimeCheckpoint:
     accounting_ledger: object | None = None
     organization_agency: object | None = None
     formal_rules: object | None = None
+    experiment_ledger: object | None = None
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
@@ -842,6 +843,16 @@ class AgentRuntimeCheckpoint:
             self.agent_id,
             field_name="formal_rules",
         )
+        if self.experiment_ledger is not None:
+            from agents.cognition.experimentation import (
+                require_owner_experiment_ledger,
+            )
+
+            require_owner_experiment_ledger(
+                self.experiment_ledger,
+                self.agent_id,
+                field_name="experiment_ledger",
+            )
         from agents.cognition.legal_disputes import require_owner_disputes
 
         require_owner_disputes(

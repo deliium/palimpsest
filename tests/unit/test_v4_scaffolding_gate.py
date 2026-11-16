@@ -21,16 +21,22 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V56,
     AgentCognitionSpec,
     AgentRunnerSpec,
+    BoundedExperimentationSpec,
     CognitionTraceSpec,
     CollectiveProjectsSpec,
     SimulationRunnerConfig,
+    V2CapabilityFlags,
+    V3CapabilityFlags,
     V4CapabilityFlags,
     WorldScenarioSpec,
+    example_cultural_feature_provenance_spec,
+    example_experiment_law,
 )
 from simulation.runner_serialization import decode_runner_config, encode_runner_config
 from tests.simulation_helpers import alive_body, make_location, make_weather
 from world.identifiers import WorldId, WorldRevision
 from world.models import default_physical_rules
+from world.production import example_production_catalog
 
 pytestmark = pytest.mark.unit
 
@@ -98,6 +104,17 @@ def test_each_enabled_flag_fails_the_profile(flag_name: str) -> None:
     }
     if flag_name == "infrastructure_networks":
         extras["collective_projects"] = CollectiveProjectsSpec()
+    if flag_name == "science":
+        extras["capability_flags"] = V2CapabilityFlags(predictive_world_model=True)
+        extras["v3_capability_flags"] = V3CapabilityFlags(
+            cultural_historical_memory=True
+        )
+        extras["cultural_feature_provenance"] = (
+            example_cultural_feature_provenance_spec()
+        )
+        extras["bounded_experimentation"] = BoundedExperimentationSpec(
+            laws=(example_experiment_law(),)
+        )
     config = replace(_v56_config(), **extras)
     decoded = decode_runner_config(encode_runner_config(config))
     assert getattr(decoded.v4_capability_flags, flag_name) is True
@@ -129,6 +146,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
             "infrastructure_networks",
             "supply_chains",
             "markets_credit",
+            "science",
         }
     ),
 )
@@ -180,6 +198,38 @@ def test_v3_regression_profile_keeps_v1_rules() -> None:
     assert invalid.schema_version == RUNNER_SCHEMA_VERSION_V4
     with pytest.raises(ValueError, match="code=v1_regression_trace_enabled"):
         v3_regression_profile(invalid)
+
+
+@pytest.mark.asyncio
+async def test_science_constructs_with_prerequisites() -> None:
+    catalog = example_production_catalog()
+    config = replace(
+        _v56_config(),
+        capability_flags=V2CapabilityFlags(predictive_world_model=True),
+        v3_capability_flags=V3CapabilityFlags(cultural_historical_memory=True),
+        cultural_feature_provenance=example_cultural_feature_provenance_spec(),
+        bounded_experimentation=BoundedExperimentationSpec(
+            laws=(example_experiment_law(),)
+        ),
+        v4_capability_flags=V4CapabilityFlags(science=True),
+    )
+    config = replace(
+        config,
+        agents=tuple(
+            replace(
+                agent,
+                cognition=replace(agent.cognition, production_catalog=catalog),
+            )
+            for agent in config.agents
+        ),
+    )
+    with pytest.raises(ValueError, match="code=v4_scaffolding_flags_enabled"):
+        v4_scaffolding_profile(config)
+    runner = await SimulationRunner.from_config(
+        config, run_id=RunId("run-v4-profile-science")
+    )
+    assert runner.config.v4_capability_flags.owned_enabled_names() == ("science",)
+    assert runner.config.v4_capability_flags.unimplemented_enabled_names() == ()
 
 
 @pytest.mark.asyncio

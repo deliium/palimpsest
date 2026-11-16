@@ -44,7 +44,6 @@ NOT_PERSISTED_STORES: Final[frozenset[str]] = frozenset(
         "cognition_trace",
         "skill_ledger",
         "taught_content_lineage",
-        "experiment_ledger",
     }
 )
 
@@ -74,6 +73,7 @@ STORE_PROBE_PATHS: Final[Mapping[str, tuple[str, str]]] = {
     "subjective_valuations": ("runtime", "subjective_valuations"),
     "scarcity_beliefs": ("runtime", "scarcity_beliefs"),
     "acceptance_memories": ("runtime", "acceptance_memories"),
+    "experiment_ledger": ("runtime", "experiment_ledger"),
 }
 
 _MEASURABLE_STORES: Final[tuple[str, ...]] = tuple(

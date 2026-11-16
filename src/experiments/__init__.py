@@ -292,6 +292,21 @@ from experiments.economic_cascades_completed_run import (
     cascade_route_facts,
     cascade_supply_stages,
 )
+from experiments.scientific_hypotheses_scenario import (
+    SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID,
+    scientific_hypotheses_scenario,
+)
+from experiments.scientific_hypotheses_publication import (
+    ScientificHypothesesHarvest,
+    ScientificHypothesesPublicationReceipt,
+    build_scientific_hypotheses_harvest_result,
+    compose_scientific_hypotheses_snapshot,
+    publish_scientific_hypotheses_snapshot,
+)
+from experiments.scientific_hypotheses_completed_run import (
+    build_completed_run_scientific_hypotheses_analysis,
+    scientific_hypothesis_facts,
+)
 from experiments.economic_cascades_publication import (
     EconomicCascadesHarvest,
     EconomicCascadesReceipt,
@@ -746,6 +761,15 @@ __all__ = [
     "build_completed_run_credit_relationships_analysis",
     "build_completed_run_dispute_harvest",
     "build_completed_run_economic_cascades_analysis",
+    "build_completed_run_scientific_hypotheses_analysis",
+    "scientific_hypothesis_facts",
+    "ScientificHypothesesHarvest",
+    "SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID",
+    "scientific_hypotheses_scenario",
+    "ScientificHypothesesPublicationReceipt",
+    "build_scientific_hypotheses_harvest_result",
+    "compose_scientific_hypotheses_snapshot",
+    "publish_scientific_hypotheses_snapshot",
     "build_completed_run_economic_inequality_analysis",
     "build_completed_run_emergent_prices_analysis",
     "build_completed_run_evidence_harvest",

@@ -162,6 +162,7 @@ V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "infrastructure_networks",
         "supply_chains",
         "markets_credit",
+        "science",
     }
 )
 
@@ -788,8 +789,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"organized_conflict is owned by V4-12, and infrastructure_networks "
             f"is owned by V4-16 on "
             f"{RUNNER_SCHEMA_VERSION_V56}; V4-17 deepens infrastructure_networks "
-            "without adding a V4 flag or v57; V4-20 owns markets_credit, so four "
-            "flags remain unowned and any enabled unowned flag fails closed at "
+            "without adding a V4 flag or v57; V4-20 owns markets_credit and V4-27 "
+            "owns science, so nine flags are owned and three remain unowned; any "
+            "enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"
         ),

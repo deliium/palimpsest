@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 244
+METRIC_FAMILY_COUNT: Final[int] = 250
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -323,6 +323,14 @@ class MetricFamilyId(StrEnum):
     CASCADE_DEPENDENCY_STRUCTURE = "cascade_dependency_structure"
     CASCADE_PROPAGATION = "cascade_propagation"
     CASCADE_COVERAGE = "cascade_coverage"
+    SCIENTIFIC_HYPOTHESIS_STRUCTURE = "scientific_hypothesis_structure"
+    SCIENTIFIC_HYPOTHESIS_EVIDENCE = "scientific_hypothesis_evidence"
+    SCIENTIFIC_HYPOTHESIS_TEST_ACTIVITY = "scientific_hypothesis_test_activity"
+    SCIENTIFIC_HYPOTHESIS_REVISIONS = "scientific_hypothesis_revisions"
+    SCIENTIFIC_HYPOTHESIS_PROVENANCE = "scientific_hypothesis_provenance"
+    SCIENTIFIC_HYPOTHESIS_PREDICTION_OUTCOMES = (
+        "scientific_hypothesis_prediction_outcomes"
+    )
 
 
 class DenominatorKind(StrEnum):
@@ -9249,6 +9257,77 @@ CASCADE_COVERAGE_KEYS: Final[tuple[str, ...]] = (
     "coverage",
     "availability",
 )
+SCIENTIFIC_HYPOTHESIS_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "hypothesis_count",
+    "active_count",
+    "provisional_count",
+    "supported_count",
+    "contradicted_count",
+    "inconclusive_count",
+    "superseded_count",
+    "retired_count",
+    "condition_count",
+    "claim_count",
+    "mean_conditions_milli",
+    "coverage_ratio_milli",
+)
+SCIENTIFIC_HYPOTHESIS_EVIDENCE_KEYS: Final[tuple[str, ...]] = (
+    "support_observation_count",
+    "contradiction_count",
+    "hypotheses_with_support",
+    "hypotheses_with_contradiction",
+    "evidence_event_count",
+    "unresolved_evidence_count",
+    "support_share_milli",
+    "contradiction_share_milli",
+    "confidence_mean_milli",
+    "confidence_min_milli",
+    "confidence_max_milli",
+)
+SCIENTIFIC_HYPOTHESIS_TEST_ACTIVITY_KEYS: Final[tuple[str, ...]] = (
+    "test_formulated_count",
+    "trial_count",
+    "deliberate_trial_count",
+    "accidental_trial_count",
+    "tested_hypothesis_count",
+    "untested_hypothesis_count",
+    "mean_trials_milli",
+)
+SCIENTIFIC_HYPOTHESIS_REVISIONS_KEYS: Final[tuple[str, ...]] = (
+    "revision_count",
+    "revised_hypothesis_count",
+    "formulated_revision_count",
+    "prediction_revision_count",
+    "condition_revision_count",
+    "evidence_revision_count",
+    "source_revision_count",
+    "superseded_revision_count",
+    "mean_revision_depth_milli",
+    "max_revision_depth",
+)
+SCIENTIFIC_HYPOTHESIS_PROVENANCE_KEYS: Final[tuple[str, ...]] = (
+    "self_formulated_count",
+    "observed_count",
+    "remembered_count",
+    "communicated_count",
+    "recorded_count",
+    "unknown_count",
+    "adopted_count",
+    "communicated_share_milli",
+    "independent_evidence_count",
+)
+SCIENTIFIC_HYPOTHESIS_PREDICTION_OUTCOMES_KEYS: Final[tuple[str, ...]] = (
+    "matched_count",
+    "mismatched_count",
+    "inconclusive_count",
+    "unexpected_count",
+    "success_count",
+    "partial_success_count",
+    "failure_count",
+    "harm_count",
+    "matched_share_milli",
+    "mismatched_share_milli",
+)
 
 
 def _trade_spec(
@@ -10150,6 +10229,111 @@ def _spec_cascade_coverage() -> MetricSpecification:
     )
 
 
+def _scientific_hypotheses_spec(
+    *,
+    family_id: MetricFamilyId,
+    population: str,
+    denominator: str,
+    denominator_kind: DenominatorKind,
+    keys: tuple[str, ...],
+    opportunity: str,
+) -> MetricSpecification:
+    return _base(
+        family_id=family_id,
+        evidence_inputs=frozenset(
+            {
+                EvidenceStage.OBJECTIVE_EVENT_STATE,
+                EvidenceStage.AGENT_VISIBLE_PROJECTION,
+                EvidenceStage.BELIEF_REVISION_TESTIMONY,
+            }
+        ),
+        population=population,
+        denominator=denominator,
+        denominator_kind=denominator_kind,
+        cohort_window="scientific_hypotheses_window_tick",
+        deceased_policy="retain_owner_beliefs_after_death",
+        zero_holding_policy="observed_zero_included_unobserved_unknown",
+        opportunity_vs_occurrence=opportunity,
+        self_edge_policy="not_applicable",
+        censoring_policy="insufficient_samples_remain_explicit",
+        formulas={key: key.replace("_", " ") for key in keys},
+        value_keys=keys,
+        empty_case="unavailable_unknown",
+        one_case="insufficient_samples",
+        all_zero_case="emit_zero",
+        unknown_case="unavailable_unknown",
+        availability_behavior=(
+            "explicit_unknown_without_science_exported_ledgers_or_trials"
+        ),
+    )
+
+
+def _spec_scientific_hypothesis_structure() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_HYPOTHESIS_STRUCTURE,
+        population="hypotheses",
+        denominator="active_hypotheses",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SCIENTIFIC_HYPOTHESIS_STRUCTURE_KEYS,
+        opportunity="owner-relative status counts only; never truth",
+    )
+
+
+def _spec_scientific_hypothesis_evidence() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_HYPOTHESIS_EVIDENCE,
+        population="hypothesis_evidence",
+        denominator="observed_evidence",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_HYPOTHESIS_EVIDENCE_KEYS,
+        opportunity="owner-retained evidence counts; confidence is a support ratio",
+    )
+
+
+def _spec_scientific_hypothesis_test_activity() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_HYPOTHESIS_TEST_ACTIVITY,
+        population="hypothesis_trials",
+        denominator="tested_hypotheses",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_HYPOTHESIS_TEST_ACTIVITY_KEYS,
+        opportunity="intentional and remembered trials only; no discovery claim",
+    )
+
+
+def _spec_scientific_hypothesis_revisions() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_HYPOTHESIS_REVISIONS,
+        population="hypothesis_revisions",
+        denominator="revised_hypotheses",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_HYPOTHESIS_REVISIONS_KEYS,
+        opportunity="append-only revision history counts only",
+    )
+
+
+def _spec_scientific_hypothesis_provenance() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_HYPOTHESIS_PROVENANCE,
+        population="hypothesis_sources",
+        denominator="hypotheses",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SCIENTIFIC_HYPOTHESIS_PROVENANCE_KEYS,
+        opportunity="descriptive source mix; communication is not evidence",
+    )
+
+
+def _spec_scientific_hypothesis_prediction_outcomes() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_HYPOTHESIS_PREDICTION_OUTCOMES,
+        population="hypothesis_trials",
+        denominator="classified_trials",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_HYPOTHESIS_PREDICTION_OUTCOMES_KEYS,
+        opportunity="matched and mismatched counts; never accuracy or calibration",
+    )
+
+
 def _spec_infrastructure_network_structure() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
@@ -10687,6 +10871,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_cascade_dependency_structure,
     _spec_cascade_propagation,
     _spec_cascade_coverage,
+    _spec_scientific_hypothesis_structure,
+    _spec_scientific_hypothesis_evidence,
+    _spec_scientific_hypothesis_test_activity,
+    _spec_scientific_hypothesis_revisions,
+    _spec_scientific_hypothesis_provenance,
+    _spec_scientific_hypothesis_prediction_outcomes,
 )
 
 

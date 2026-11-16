@@ -540,6 +540,17 @@ class CognitionFormalRuleMode(StrEnum):
     DETERMINISTIC = "deterministic"
 
 
+class CognitionScientificHypothesesMode(StrEnum):
+    """Owner-scoped testable hypotheses. Disabled allocates nothing.
+
+    Lockstep with ``simulation.V4CapabilityFlags.science``. This is a cognition
+    mode, not a capability flag or per-agent runner key.
+    """
+
+    DISABLED = "disabled"
+    DETERMINISTIC = "deterministic"
+
+
 class CognitionDisputeMode(StrEnum):
     """Owner-scoped structured disputes. Disabled allocates nothing.
 
@@ -818,6 +829,10 @@ class CognitionLoopConfig:
     accounting_ledger_policy: AccountingLedgerPolicy | None = None
     formal_rule_mode: CognitionFormalRuleMode = CognitionFormalRuleMode.DISABLED
     formal_rule_policy: FormalRulePolicy | None = None
+    scientific_hypotheses_mode: CognitionScientificHypothesesMode = (
+        CognitionScientificHypothesesMode.DISABLED
+    )
+    scientific_hypotheses_policy: str = "scientific-hypotheses.v1"
     dispute_mode: CognitionDisputeMode = CognitionDisputeMode.DISABLED
     dispute_policy: DisputePolicy | None = None
     evidence_mode: CognitionEvidenceMode = CognitionEvidenceMode.DISABLED
@@ -1505,6 +1520,26 @@ class CognitionLoopConfig:
         elif type(self.formal_rule_policy) is not FormalRulePolicy:
             _LOG.error("invalid_enum path=formal_rule_policy reason_code=invalid_type")
             raise TypeError("formal_rule_policy must be FormalRulePolicy or None")
+        if (
+            type(self.scientific_hypotheses_mode)
+            is not CognitionScientificHypothesesMode
+        ):
+            _LOG.error(
+                "invalid_enum path=scientific_hypotheses_mode "
+                "reason_code=invalid_mode"
+            )
+            raise TypeError(
+                "scientific_hypotheses_mode must be "
+                "CognitionScientificHypothesesMode"
+            )
+        if self.scientific_hypotheses_policy != "scientific-hypotheses.v1":
+            _LOG.error(
+                "invalid_policy path=scientific_hypotheses_policy "
+                "reason_code=unsupported_version"
+            )
+            raise ValueError(
+                "scientific_hypotheses_policy must be scientific-hypotheses.v1"
+            )
         if type(self.dispute_mode) is not CognitionDisputeMode:
             _LOG.error("invalid_enum path=dispute_mode reason_code=invalid_mode")
             raise TypeError("dispute_mode must be CognitionDisputeMode")
@@ -1972,6 +2007,16 @@ class CognitionLoopConfig:
                 if self.formal_rule_policy is not None
                 else None
             )
+        if (
+            self.scientific_hypotheses_mode
+            is CognitionScientificHypothesesMode.DETERMINISTIC
+        ):
+            material["scientific_hypotheses_mode"] = (
+                self.scientific_hypotheses_mode.value
+            )
+            material["scientific_hypotheses_policy"] = (
+                self.scientific_hypotheses_policy
+            )
         if self.dispute_mode is CognitionDisputeMode.DETERMINISTIC:
             material["dispute_mode"] = self.dispute_mode.value
             material["dispute_policy_version"] = (
@@ -2285,6 +2330,7 @@ def build_cognitive_loop(
         accounting_ledger_policy=resolved.accounting_ledger_policy,
         formal_rule_mode=resolved.formal_rule_mode,
         formal_rule_policy=resolved.formal_rule_policy,
+        scientific_hypotheses_mode=resolved.scientific_hypotheses_mode,
         dispute_mode=resolved.dispute_mode,
         dispute_policy=resolved.dispute_policy,
         evidence_mode=resolved.evidence_mode,

@@ -3867,6 +3867,11 @@ class AgentRuntime:
                 AgentRuntimeErrorCode.OWNERSHIP,
                 agent_id=self._agent.agent_id.value,
             )
+        experiment_ledger = getattr(checkpoint, "experiment_ledger", None)
+        if experiment_ledger is not None:
+            self._loop.restore_experiment_ledger(
+                experiment_ledger, self._agent.agent_id
+            )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
             self._disputes is not None
@@ -4024,6 +4029,7 @@ class AgentRuntime:
             accounting_ledger=self._accounting_ledger,
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
+            experiment_ledger=self._loop.experiment_ledger_if_present(),
             disputes=self._disputes,
             evidence=self._evidence,
             representation=self._representation,

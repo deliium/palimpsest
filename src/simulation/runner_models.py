@@ -322,9 +322,10 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 # V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
 # V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, V4-12 owns
 # ``organized_conflict``, V4-16 owns ``infrastructure_networks``, V4-19 owns
-# ``supply_chains``, and V4-20 owns ``markets_credit``; the remaining four V4
-# flags stay unowned and fail closed at runtime construction until their
-# behavior plans land and claim ownership.
+# ``supply_chains``, V4-20 owns ``markets_credit``, and V4-27 owns ``science``;
+# the remaining three V4 flags (``epidemics``, ``ecological_feedback``,
+# ``disasters``) stay unowned and fail closed at runtime construction until
+# their behavior plans land and claim ownership.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
         "organizations",
@@ -335,6 +336,7 @@ _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "infrastructure_networks",
         "supply_chains",
         "markets_credit",
+        "science",
     }
 )
 
@@ -1132,7 +1134,8 @@ class V4CapabilityFlags:
     Defaults are all off. V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns
     ``formal_rules``, V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``,
     V4-12 owns ``organized_conflict``, V4-16 owns ``infrastructure_networks``,
-    and V4-19 owns ``supply_chains``. Enabling an unowned flag fails closed at
+    V4-19 owns ``supply_chains``, V4-20 owns ``markets_credit``, and V4-27 owns
+    ``science``. Enabling an unowned flag fails closed at
     ``SimulationRunner.from_config`` with ``capability_unimplemented`` and
     ``stage="v4_capability_flags"`` until an owning plan lands. Wire key
     ``v4_capability_flags`` is a sibling of ``capability_flags`` and
@@ -6401,6 +6404,7 @@ class SimulationRunnerResult:
     credit_relationship_ledgers: tuple[object, ...] = ()
     accounting_ledgers: tuple[object, ...] = ()
     formal_rule_ledgers: tuple[object, ...] = ()
+    experiment_ledgers: tuple[object, ...] = ()
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
     representation_ledgers: tuple[object, ...] = ()
@@ -6741,6 +6745,23 @@ class SimulationRunnerResult:
             if type(ledger) is not FormalRuleLedger:
                 raise TypeError("formal_rule_ledgers: invalid_item")
         object.__setattr__(self, "formal_rule_ledgers", formal_rule_ledgers)
+        if isinstance(self.experiment_ledgers, (set, frozenset)):
+            raise TypeError("experiment_ledgers must be ordered")
+        if isinstance(self.experiment_ledgers, (str, bytes)) or not isinstance(
+            self.experiment_ledgers, Sequence
+        ):
+            raise TypeError("experiment_ledgers must be ordered")
+        from agents.cognition.experimentation import ExperimentLedger
+
+        experiment_ledgers = tuple(self.experiment_ledgers)
+        owners: set[object] = set()
+        for ledger in experiment_ledgers:
+            if type(ledger) is not ExperimentLedger:
+                raise TypeError("experiment_ledgers: invalid_item")
+            if ledger.owner_id in owners:
+                raise TypeError("experiment_ledgers: duplicate_owner")
+            owners.add(ledger.owner_id)
+        object.__setattr__(self, "experiment_ledgers", experiment_ledgers)
         if isinstance(self.dispute_ledgers, (set, frozenset)):
             raise TypeError("dispute_ledgers must be ordered")
         if isinstance(self.dispute_ledgers, (str, bytes)) or not isinstance(
@@ -8241,6 +8262,50 @@ class SimulationRunnerConfig:
             raise ValueError(
                 "V4 capability flags require runner-config-v56 "
                 "(code=v4_capability_requires_v56)"
+            )
+        if self.v4_capability_flags.science:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V56:
+                _LOGGER.error(
+                    "science_requires_v56 schema_version=%s "
+                    "reason_code=science_requires_v56",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "science requires runner-config-v56 "
+                    "(code=science_requires_v56)"
+                )
+            if self.bounded_experimentation is None:
+                _LOGGER.error(
+                    "science_requires_bounded_experimentation "
+                    "schema_version=%s reason_code=%s",
+                    self.schema_version,
+                    "science_requires_bounded_experimentation",
+                )
+                raise ValueError(
+                    "science requires bounded_experimentation "
+                    "(code=science_requires_bounded_experimentation)"
+                )
+            if not self.capability_flags.predictive_world_model:
+                _LOGGER.error(
+                    "science_requires_predictive_world_model "
+                    "schema_version=%s reason_code=%s",
+                    self.schema_version,
+                    "science_requires_predictive_world_model",
+                )
+                raise ValueError(
+                    "science requires predictive_world_model "
+                    "(code=science_requires_predictive_world_model)"
+                )
+            _LOGGER.info(
+                "science_capability_owned policy_id=%s",
+                "scientific-hypotheses.v1",
+            )
+            _LOGGER.debug(
+                "science_activation schema_v56=%s bounded_experimentation=%s "
+                "predictive_world_model=%s",
+                self.schema_version == RUNNER_SCHEMA_VERSION_V56,
+                self.bounded_experimentation is not None,
+                self.capability_flags.predictive_world_model,
             )
         if self.v4_capability_flags.infrastructure_networks:
             if self.schema_version != RUNNER_SCHEMA_VERSION_V56:

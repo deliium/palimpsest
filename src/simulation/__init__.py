@@ -504,6 +504,43 @@ from simulation.dispute_ports import (
     dispute_query_fingerprint,
     require_known_dispute_candidate,
 )
+from simulation.scientific_hypotheses_codec import (
+    canonical_scientific_hypotheses_json,
+    decode_scientific_hypotheses_snapshot,
+    encode_scientific_hypotheses_snapshot,
+    finalize_scientific_hypotheses_snapshot,
+    scientific_hypotheses_digest,
+)
+from simulation.scientific_hypotheses_models import (
+    MAX_SCIENTIFIC_HYPOTHESES_SNAPSHOT_BYTES,
+    MAX_SCIENTIFIC_HYPOTHESES_WINDOW_INDEX,
+    SCIENTIFIC_HYPOTHESES_POLICY_VERSION,
+    SCIENTIFIC_HYPOTHESES_PUBLICATION_PREFIX,
+    SCIENTIFIC_HYPOTHESES_SNAPSHOT_VERSION,
+    ScientificHypothesesSnapshot,
+    ScientificHypothesisCoverageRecord,
+    ScientificHypothesisEvidenceRecord,
+    ScientificHypothesisRecord,
+    ScientificHypothesisRevisionRecord,
+    ScientificHypothesisSourceRecord,
+    ScientificHypothesisSummaryRecord,
+    ScientificHypothesisTestRecord,
+    empty_scientific_hypotheses_snapshot,
+)
+from simulation.scientific_hypotheses_paging import (
+    DEFAULT_SCIENTIFIC_HYPOTHESES_LIMIT,
+    MAX_SCIENTIFIC_HYPOTHESES_LIMIT,
+    SCIENTIFIC_HYPOTHESES_PURPOSES,
+    page_scientific_hypothesis_rows,
+)
+from simulation.scientific_hypotheses_ports import (
+    SCIENTIFIC_HYPOTHESES_CURSOR_PURPOSES,
+    SCIENTIFIC_HYPOTHESES_CURSOR_TOKEN,
+    ScientificHypothesesCursor,
+    ScientificHypothesesPublisher,
+    ScientificHypothesesReader,
+    scientific_hypotheses_query_fingerprint,
+)
 from simulation.economic_cascades_codec import (
     canonical_economic_cascades_json,
     decode_economic_cascades_snapshot,

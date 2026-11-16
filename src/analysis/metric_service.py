@@ -78,6 +78,15 @@ from analysis.economic_cascades_metrics import (
     compute_route_closure_cascade,
     compute_tool_shortage_cascade,
 )
+from analysis.scientific_hypotheses_analysis import ScientificHypothesesAnalysis
+from analysis.scientific_hypotheses_metrics import (
+    compute_scientific_hypothesis_evidence,
+    compute_scientific_hypothesis_prediction_outcomes,
+    compute_scientific_hypothesis_provenance,
+    compute_scientific_hypothesis_revisions,
+    compute_scientific_hypothesis_structure,
+    compute_scientific_hypothesis_test_activity,
+)
 from analysis.economic_inequality_analysis import EconomicInequalityAnalysis
 from analysis.economic_inequality_metrics import (
     compute_credit_relationship_inequality,
@@ -447,6 +456,7 @@ class MetricComputationInputs:
     economic_inequality_analysis: EconomicInequalityAnalysis | None = None
     social_mobility_analysis: SocialMobilityAnalysis | None = None
     economic_cascades_analysis: EconomicCascadesAnalysis | None = None
+    scientific_hypotheses_analysis: ScientificHypothesesAnalysis | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2881,6 +2891,47 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("economic_cascades_metrics_emitted families=8 catalog=244")
     else:
         _LOG.debug("economic_cascades_metrics_disabled")
+    if inputs.scientific_hypotheses_analysis is not None:
+        science = inputs.scientific_hypotheses_analysis
+        _safe(
+            "scientific_hypothesis_structure",
+            lambda: compute_scientific_hypothesis_structure(
+                science, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_hypothesis_evidence",
+            lambda: compute_scientific_hypothesis_evidence(
+                science, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_hypothesis_test_activity",
+            lambda: compute_scientific_hypothesis_test_activity(
+                science, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_hypothesis_revisions",
+            lambda: compute_scientific_hypothesis_revisions(
+                science, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_hypothesis_provenance",
+            lambda: compute_scientific_hypothesis_provenance(
+                science, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_hypothesis_prediction_outcomes",
+            lambda: compute_scientific_hypothesis_prediction_outcomes(
+                science, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("scientific_hypotheses_metrics_emitted families=6 catalog=250")
+    else:
+        _LOG.debug("scientific_hypotheses_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

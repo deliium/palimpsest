@@ -1029,6 +1029,7 @@ def _cognition_config_for(
     generational_narratives: object | None = None,
     organizations_enabled: bool = False,
     formal_rules_enabled: bool = False,
+    science_enabled: bool = False,
     legal_disputes_enabled: bool = False,
     diplomacy_enabled: bool = False,
     organized_conflict_enabled: bool = False,
@@ -1403,6 +1404,7 @@ def _cognition_config_for(
         CognitionOrganizationMode,
         CognitionOrganizedConflictMode,
         CognitionRepresentationMode,
+        CognitionScientificHypothesesMode,
     )
     from agents.cognition.delegation_representation import (
         REPRESENTATION_POLICY_VERSION,
@@ -1630,6 +1632,23 @@ def _cognition_config_for(
             formal_rule_mode.value,
             None,
         )
+    scientific_hypotheses_mode = (
+        CognitionScientificHypothesesMode.DETERMINISTIC
+        if science_enabled
+        else CognitionScientificHypothesesMode.DISABLED
+    )
+    if scientific_hypotheses_mode is CognitionScientificHypothesesMode.DETERMINISTIC:
+        _LOG.info(
+            "cognition_scientific_hypotheses_mode mode=%s policy_version=%s",
+            scientific_hypotheses_mode.value,
+            "scientific-hypotheses.v1",
+        )
+    else:
+        _LOG.debug(
+            "cognition_scientific_hypotheses_mode mode=%s policy_version=%s",
+            scientific_hypotheses_mode.value,
+            None,
+        )
     dispute_mode = (
         CognitionDisputeMode.DETERMINISTIC
         if legal_disputes_enabled
@@ -1798,6 +1817,7 @@ def _cognition_config_for(
         accounting_ledger_policy=accounting_policy,
         formal_rule_mode=formal_rule_mode,
         formal_rule_policy=formal_rule_policy,
+        scientific_hypotheses_mode=scientific_hypotheses_mode,
         dispute_mode=dispute_mode,
         dispute_policy=dispute_policy,
         evidence_mode=evidence_mode,
@@ -2964,6 +2984,7 @@ class SimulationRunner:
                     generational_narratives=config.generational_narratives,
                     organizations_enabled=(config.v4_capability_flags.organizations),
                     formal_rules_enabled=(config.v4_capability_flags.formal_rules),
+                    science_enabled=(config.v4_capability_flags.science),
                     legal_disputes_enabled=(config.v4_capability_flags.legal_disputes),
                     diplomacy_enabled=(config.v4_capability_flags.diplomacy),
                     organized_conflict_enabled=(
@@ -5433,6 +5454,7 @@ class SimulationRunner:
             ),
             accounting_ledgers=self.export_accounting_ledgers(),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
+            experiment_ledgers=(self.export_experiment_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
             representation_ledgers=(self.export_representation_ledgers()),
@@ -5863,6 +5885,21 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_formal_rule_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_experiment_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered experiment-hypothesis ledgers."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "experiment_ledger", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_experiment_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6859,6 +6896,7 @@ class SimulationRunner:
                 generational_narratives=self._config.generational_narratives,
                 organizations_enabled=(self._config.v4_capability_flags.organizations),
                 formal_rules_enabled=(self._config.v4_capability_flags.formal_rules),
+                science_enabled=(self._config.v4_capability_flags.science),
                 legal_disputes_enabled=(
                     self._config.v4_capability_flags.legal_disputes
                 ),
