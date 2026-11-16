@@ -36,6 +36,7 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     BoundedExperimentationSpec,
+    ImaginationMode,
     MortalityMode,
     RunnerStopPolicy,
     SimulationRunnerConfig,
@@ -75,7 +76,7 @@ FORBIDDEN = (
 )
 
 
-def _config(*, science: bool = True, ticks: int = 4) -> SimulationRunnerConfig:
+def _config(*, science: bool = True, ticks: int = 6) -> SimulationRunnerConfig:
     body = alive_body("body-1", inventory=(EntityId("item-tool"),))
     owner = AgentId("agent-1")
     catalog = example_production_catalog()
@@ -123,7 +124,9 @@ def _config(*, science: bool = True, ticks: int = 4) -> SimulationRunnerConfig:
             replace(
                 agent,
                 cognition=replace(
-                    agent.cognition, production_catalog=catalog
+                    agent.cognition,
+                    production_catalog=catalog,
+                    imagination_mode=ImaginationMode.DISABLED,
                 ),
             )
             for agent in base.agents
@@ -168,75 +171,27 @@ async def test_real_events_ledger_snapshot_store_and_routes(
 ) -> None:
     config = _config()
     runner = await SimulationRunner.from_config(config, run_id=RunId(RUN))
-    engine = runner.engine
-    loop = runner.runtimes[0]._loop
-    owner = AgentId("agent-1")
-    ledger = loop.experiment_ledger_for(owner)
-    assert ledger is not None
-    from agents.cognition.experimentation import (
-        admit_hypothesis,
-        formulate_hypothesis,
-        score_remembered_experiment,
-    )
-    from simulation.lifecycle import ActionSubmission
-    from world.actions import Experiment
-    from world.experimentation import (
-        ExperimentOperator,
-        ExperimentOutcomeClass,
-        ExperimentProcessToken,
-    )
-
-    hypothesis = formulate_hypothesis(
-        owner_id=owner,
-        hypothesis_id="hyp:e2e",
-        operator=ExperimentOperator.VARY_PROCESS,
-        operand_a_id="item-tool",
-        process_token=ExperimentProcessToken.HARVEST,
-        predicted_outcome=ExperimentOutcomeClass.SUCCESS,
-    )
-    ledger = admit_hypothesis(ledger, hypothesis)
-    for _ in range(2):
-        batch = engine.observe()
-        result = engine.resolve_tick(
-            (
-                ActionSubmission(
-                    batch.token,
-                    owner,
-                    Experiment(
-                        operator=ExperimentOperator.VARY_PROCESS,
-                        operand_a_id=EntityId("item-tool"),
-                        process_token=ExperimentProcessToken.HARVEST,
-                    ),
-                ),
-            )
-        )
-        assert result.resolutions
-        observation = next(
-            item
-            for item in engine.observe().observations
-            if item.observer_id.value == "body-1"
-        )
-        for occurrence in observation.occurrences:
-            ledger = score_remembered_experiment(
-                ledger, occurrence, tick=observation.tick
-            )
-    loop._experiment_ledger = ledger
-    events = tuple(engine.export_events().events)
+    result = await runner.run()
+    events = tuple(runner.engine.export_events().events)
     assert any(
         type(event.details).__name__ == "ExperimentResolved" for event in events
-    )
+    ), "real agent ticks must admit intentional Experiment commands"
+
+    assert result.experiment_ledgers, "runner must export the science ledger"
+    ledger = result.experiment_ledgers[0]
     hypothesis = ledger.hypotheses[0]
+    assert hypothesis.claim.operator.value == "vary_process"
+    assert hypothesis.conditions
+    assert hypothesis.predicted_outcome == "success"
+    assert 0 <= hypothesis.confidence_milli <= 1000
     assert hypothesis.counter >= 2
+    assert hypothesis.counter_evidence_event_ids
+    assert hypothesis.source_token
     assert len(hypothesis.revisions) >= 2
     assert hypothesis.status.value == "contradicted"
 
-    from types import SimpleNamespace
-
-    runner_result = SimpleNamespace(
-        runner_config=config, experiment_ledgers=(ledger,)
-    )
     analysis = build_completed_run_scientific_hypotheses_analysis(
-        runner_result, committed_events=events, run_id=RUN
+        result, committed_events=events, run_id=RUN
     )
     assert analysis.hypothesis_rows
     assert any(row.contradiction_count >= 1 for row in analysis.hypothesis_rows)

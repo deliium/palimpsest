@@ -191,6 +191,16 @@ describe('cohort selection', () => {
       expect(result.selection.view).toBe('economic-cascades')
     }
   })
+
+  it('accepts the scientific-hypotheses run-scoped view', () => {
+    const result = parseResearchSelection(
+      '?run_id=run-1&view=scientific-hypotheses',
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.selection.view).toBe('scientific-hypotheses')
+    }
+  })
 })
 
 describe('godot focus options', () => {

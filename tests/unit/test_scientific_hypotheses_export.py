@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+from agents.cognition.configuration import CognitionScientificHypothesesMode
+from agents.cognition.emotion import PassthroughEmotionalStateAppraiser
 from agents.cognition.experimentation import (
     ExperimentCognitionBinding,
     admit_hypothesis,
@@ -12,6 +14,8 @@ from agents.cognition.experimentation import (
     formulate_hypothesis,
     require_owner_experiment_ledger,
 )
+from agents.cognition.goal_manager import PassthroughGoalManager
+from agents.cognition.loop import CognitiveLoop
 from agents.cognition.models import InternalAgentState
 from agents.models import AgentId
 from experiments.civilization_benchmark_evidence import (
@@ -26,6 +30,17 @@ from simulation.new_agent_initialization import (
 )
 from simulation.run_control import AgentRuntimeCheckpoint
 from simulation.runner_models import SimulationRunnerResult
+from tests.typecheck.cognitive_loop import (
+    ScriptedFutureImagination,
+    ScriptedIntentionSelector,
+    ScriptedMemoryRetriever,
+    ScriptedMemoryUpdateHook,
+    ScriptedMotivationEvaluator,
+    ScriptedPerceptionInterpreter,
+    ScriptedPlanner,
+    ScriptedSelfStateProjector,
+    ScriptedSituationModeler,
+)
 from world.experimentation import (
     ExperimentOperator,
     ExperimentOutcomeClass,
@@ -89,6 +104,44 @@ def test_checkpoint_round_trips_the_ledger() -> None:
     assert checkpoint.experiment_ledger == ledger
     with pytest.raises(ValueError, match="experiment_ledger: owner_mismatch"):
         _checkpoint(experiment_ledger=_ledger(AgentId("agent-2")))
+
+
+def _loop() -> CognitiveLoop:
+    return CognitiveLoop(
+        perception=ScriptedPerceptionInterpreter(),
+        memory=ScriptedMemoryRetriever(),
+        situation=ScriptedSituationModeler(),
+        self_state=ScriptedSelfStateProjector(),
+        goal_manager=PassthroughGoalManager(),
+        emotional_state=PassthroughEmotionalStateAppraiser(),
+        futures=ScriptedFutureImagination(),
+        motivation=ScriptedMotivationEvaluator(),
+        intention=ScriptedIntentionSelector(),
+        planner=ScriptedPlanner(),
+        memory_updates=ScriptedMemoryUpdateHook(),
+        scientific_hypotheses_mode=CognitionScientificHypothesesMode.DETERMINISTIC,
+    )
+
+
+def test_ledger_if_present_is_none_until_the_channel_runs() -> None:
+    loop = _loop()
+    loop._bounded_experimentation_caps = _binding()
+    assert loop.experiment_ledger_if_present() is None
+    ledger = loop.experiment_ledger_for(OWNER)
+    assert ledger is not None
+    assert loop.experiment_ledger_if_present() is ledger
+
+
+def test_restore_ledger_validates_owner_and_installs() -> None:
+    loop = _loop()
+    loop._bounded_experimentation_caps = _binding()
+    ledger = _ledger(with_row=True)
+    loop.restore_experiment_ledger(ledger, OWNER)
+    assert loop.experiment_ledger_if_present() is ledger
+    with pytest.raises(ValueError, match="owner_mismatch"):
+        loop.restore_experiment_ledger(_ledger(AgentId("agent-2")), OWNER)
+    loop.restore_experiment_ledger(None)
+    assert loop.experiment_ledger_if_present() is None
 
 
 def test_result_accepts_ordered_owner_ledgers() -> None:

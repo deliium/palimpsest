@@ -51,7 +51,7 @@ _LOG: Final[logging.Logger] = logging.getLogger(
 )
 
 SCIENTIFIC_HYPOTHESIS_FRAME: Final[str] = "hyp_v1"
-SCIENTIFIC_HYPOTHESIS_FRAME_MAX_CHARS: Final[int] = 256
+SCIENTIFIC_HYPOTHESIS_FRAME_MAX_CHARS: Final[int] = 384
 SCIENTIFIC_HYPOTHESIS_RELATION_MAX: Final[int] = 32
 _PREDICATE: Final[str] = "claim"
 _NONE: Final[str] = "none"

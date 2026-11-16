@@ -50,11 +50,11 @@ def test_docs_state_four_owned_and_eight_unowned() -> None:
     assert "fourth owned V4 flag" in text
     assert "four V4 flags unowned" in text
     architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "Eight V4 flags are owned" in architecture
-    assert "four remain" in architecture
+    assert "Nine V4 flags are owned" in architecture
+    assert "three remain" in architecture
     configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
     assert "nine owned V4 flags" in configuration
-    assert "other seven V4 flags" in configuration
+    assert "other three V4" in configuration
 
 
 def test_catalog_and_families_match_code() -> None:

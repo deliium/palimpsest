@@ -307,11 +307,15 @@ replay/codec write pairs remain channel-selected. See
 Experiment BM comparisons reuse `runner-config-v55` and `runner-result-v3`; they
 do not add a runner schema. V4-01 separately accepts `runner-config-v56` for
 explicit scaffolding identity only: it is the active v55 family keyset plus one
-closed `v4_capability_flags` sibling. The accepted set has nine owned V4 flags that may construct
-on the accepted v56 seam: `organizations` (V4-03/V4-04/V4-05), `formal_rules`, `science` (V4-27)
-(V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11), and
-`organized_conflict` (V4-12, requiring `diplomacy`). The other seven V4 flags
-remain unowned and fail closed at `SimulationRunner.from_config`.
+closed `v4_capability_flags` sibling. The accepted set has nine owned V4 flags
+that may construct on the accepted v56 seam: `organizations`
+(V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07),
+`diplomacy` (V4-10/V4-11), `organized_conflict` (V4-12, requiring
+`diplomacy`), `infrastructure_networks` (V4-16), `supply_chains` (V4-19),
+`markets_credit` (V4-20/V4-21), and `science` (V4-27, requiring
+`predictive_world_model` and `bounded_experimentation`). The other three V4
+flags — `epidemics`, `ecological_feedback`, and `disasters` — remain unowned
+and fail closed at `SimulationRunner.from_config`.
 
 ## Organized conflict (`runner-config-v56`)
 

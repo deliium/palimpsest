@@ -2966,6 +2966,10 @@ class AgentRuntime:
             reflection=loop_result.reflection,
             identity_revisions=loop_result.identity_revisions,
         )
+        # Loop-boundary modifiers (speech frames, intentional experiments) adjust
+        # the command inside ``complete``; the bound submission must carry that
+        # final command rather than the pre-loop effective command.
+        command = require_agent_command(loop_result.command)
         submission = ActionSubmission(
             token=prepared.token,
             agent_id=self._agent.agent_id,

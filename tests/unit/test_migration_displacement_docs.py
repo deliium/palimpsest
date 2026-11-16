@@ -117,7 +117,7 @@ def test_configuration_and_contract_docs() -> None:
     social = _read("docs/social-communication.md")
     assert "mdp_v1" in social
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-18" in factory
+    assert "through V4-27" in factory
     assert "migration-displacement.md" in factory
     assert "212" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
@@ -147,7 +147,7 @@ def test_current_pin_guard_preserves_historical_176() -> None:
     assert "from 176 to\n**180**" in metrics or "208" in metrics
     assert "Closed catalog cardinality: **176**" not in metrics
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-18" in factory
+    assert "through V4-27" in factory
     assert "through V4-13" not in factory
     assert "212" in factory
     assert "212" in factory

@@ -374,25 +374,27 @@ here.
 
 | Lane | Command | Result | Prerequisite / note |
 | --- | --- | --- | --- |
-| Unit + architecture correctness | `uv run pytest tests/unit tests/architecture -q` | green: 12,178 passed, 1 skipped (12:52) |  |
-| Focused scientific-hypothesis suites | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py tests/integration/test_scientific_hypotheses_store_api.py -q` | green: focused 189 passed; integration file 1 passed with `-m integration` | integration lane runs separately with `-m integration` |
-| Python coverage (focused) | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q --cov=src --cov-report=term` | green: 189 passed; lane TOTAL 25% | lane-scoped coverage only; full `src` denominator is dominated by unrelated modules |
-| Python coverage (full lane) | `uv run pytest tests/unit tests/architecture -q --cov=src --cov-report=term` | unexecuted: timed out at the 2400 s harness limit | full suite without coverage is green; rerun the coverage lane with a longer limit |
+| Unit + architecture correctness | `uv run pytest tests/unit tests/architecture -q` | green: 12,180 passed, 1 skipped (12:20) |  |
+| Focused scientific-hypothesis suites | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py tests/integration/test_scientific_hypotheses_store_api.py -q` | green: focused 191 passed; integration file 1 passed with `-m integration` | integration lane runs separately with `-m integration` |
+| Python coverage (focused) | `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q --cov=src --cov-report=term` | green: 191 passed; lane TOTAL 25% | lane-scoped coverage only; full `src` denominator is dominated by unrelated modules |
+| Python coverage (full lane) | `uv run pytest tests/unit tests/architecture -q --cov=src --cov-report=term` | green: 12,180 passed, 1 skipped; TOTAL 79% (42:59) | full `src` denominator |
 | Static: Ruff | `uv run ruff check src tests` | green: all checks passed |  |
 | Static: mypy | `uv run mypy src tests` | green: no issues in 2,860 files |  |
 | Static: import boundaries | `uv run lint-imports` | green: 25 kept, 0 broken |  |
 | Integration (non-scale) | `uv run pytest tests/integration -m "not scale" -q` | green: 63 passed, 60 skipped, 5 deselected | PostgreSQL-free lanes |
 | Scientific-hypothesis store/API integration | `uv run pytest tests/integration/test_scientific_hypotheses_store_api.py -q -m integration` | green: 1 passed |  |
 | Compose config | `docker compose config` | green: exit 0 |  |
-| Research UI tests | `cd clients/research-ui && ./node_modules/.bin/vitest run` | green: 329 passed |  |
+| Research UI tests | `cd clients/research-ui && ./node_modules/.bin/vitest run` | green: 334 passed |  |
 | Research UI types | `cd clients/research-ui && ./node_modules/.bin/svelte-check --tsconfig ./tsconfig.app.json` | green: 0 errors, 0 warnings |  |
 | Godot regression | `GODOT_BIN=~/.cache/palimpsest-godot/Godot_v4.7.2-stable_linux.x86_64 "$GODOT_BIN" --headless --path clients/godot-observer --script res://tests/run_protocol.gd` | green: failed=0 | existing suite only; no client source change |
-| Compose/browser acceptance | `PALIMPSEST_API_IMAGE=<matched> PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1 uv run pytest -m compose -q` | unexecuted | requires an attested `PALIMPSEST_API_IMAGE`; none available |
+| Compose/browser acceptance | `PALIMPSEST_API_IMAGE=palimpsest-api:acceptance-v427 PALIMPSEST_V3_ACCEPTANCE_REQUIRED=1 uv run pytest -m compose -q` | executed: 18 passed, 1 failed — `test_observer_generational_browser.py::test_generational_browser_population_and_credentials` (`panel_apply_demographics null=true availability=missing`), reproduced on the prior image `palimpsest-api:compose-c1a90b40` | attested local image (revision `c3acfcb3+v4-27-fixes`, source-artifact digest); pre-existing generational browser failure, not caused by V4-27 (no Godot source change) |
 | Benchmark regression (non-scale) | `PALIMPSEST_V4_SCALE_IDS=100000 uv run pytest tests/benchmarks -m "not scale" -q` | green: 1 passed, 20 deselected |  |
 
-`git status` must confirm no `.ai-factory/ROADMAP.md` edit from this plan, no
-`alembic/versions/0018*` file, no `clients/godot-observer/` source change, no
-`/v2` route, no new V4 capability slot, and no `runner-config-v57`. The science
-ownership, cognition ledger, analysis modules, snapshot/store, seven routes,
-Research UI panel, six metric families, docs, and off-gate experiment are the
-only V4-27 surfaces changed.
+`git status` must confirm no `alembic/versions/0018*` file, no
+`clients/godot-observer/` source change, no `/v2` route, no new V4 capability
+slot, and no `runner-config-v57`. The science ownership, cognition ledger,
+analysis modules, snapshot/store, seven routes, Research UI panel, six metric
+families, docs, and off-gate experiment are the only V4-27 implementation
+surfaces changed. `.ai-factory/ROADMAP.md` is updated separately by the
+`$aif-roadmap` owner command to register V4-23 through V4-27 and current counts;
+that registration is not part of the plan's implementation diff.
