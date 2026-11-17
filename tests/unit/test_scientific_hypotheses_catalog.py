@@ -31,9 +31,9 @@ _APPENDED = (
 def test_catalog_count_is_250_and_validates() -> None:
     validate_metric_catalog()
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 250
-    assert len(specs) == 250
-    assert len({spec.family_id for spec in specs}) == 250
+    assert METRIC_FAMILY_COUNT == 256
+    assert len(specs) == 256
+    assert len({spec.family_id for spec in specs}) == 256
 
 
 def test_first_244_ids_are_byte_identical() -> None:
@@ -47,7 +47,15 @@ def test_first_244_ids_are_byte_identical() -> None:
 
 def test_appended_ids_are_exactly_the_six_new_families() -> None:
     specs = all_metric_specifications()
-    assert tuple(spec.family_id for spec in specs[-6:]) == _APPENDED
+    assert tuple(spec.family_id for spec in specs[244:250]) == _APPENDED
+    assert tuple(spec.family_id.value for spec in specs[250:256]) == (
+        "scientific_replication_design_lineage",
+        "scientific_replication_conditions",
+        "scientific_replication_results",
+        "scientific_replication_uncertainty",
+        "scientific_replication_relationships",
+        "scientific_replication_social_interpretation",
+    )
 
 
 def test_every_new_family_uses_the_science_window() -> None:

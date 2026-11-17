@@ -457,6 +457,7 @@ class MetricComputationInputs:
     social_mobility_analysis: SocialMobilityAnalysis | None = None
     economic_cascades_analysis: EconomicCascadesAnalysis | None = None
     scientific_hypotheses_analysis: ScientificHypothesesAnalysis | None = None
+    replication_analysis: object | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
     semantic_drift_analysis: SemanticAnalysisInputs | None = None
@@ -2932,6 +2933,56 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("scientific_hypotheses_metrics_emitted families=6 catalog=250")
     else:
         _LOG.debug("scientific_hypotheses_metrics_disabled")
+    if inputs.replication_analysis is not None:
+        replication = inputs.replication_analysis
+        from analysis.replication_metrics import (
+            compute_replication_conditions,
+            compute_replication_design_lineage,
+            compute_replication_relationships,
+            compute_replication_results,
+            compute_replication_social_interpretation,
+            compute_replication_uncertainty,
+        )
+
+        _safe(
+            "scientific_replication_design_lineage",
+            lambda: compute_replication_design_lineage(
+                replication, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_replication_conditions",
+            lambda: compute_replication_conditions(
+                replication, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_replication_results",
+            lambda: compute_replication_results(
+                replication, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_replication_uncertainty",
+            lambda: compute_replication_uncertainty(
+                replication, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_replication_relationships",
+            lambda: compute_replication_relationships(
+                replication, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_replication_social_interpretation",
+            lambda: compute_replication_social_interpretation(
+                replication, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("scientific_replication_metrics_emitted families=6 catalog=256")
+    else:
+        _LOG.debug("scientific_replication_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

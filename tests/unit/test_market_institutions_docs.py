@@ -115,7 +115,7 @@ def test_readme_and_context_docs_link_the_page() -> None:
     assert "MARKET_INSTITUTIONS_ROOT" in _read("docs/configuration.md")
     assert "market_role_structure@1" in _read("docs/analysis-metrics.md")
     assert "**208**" in _read("docs/analysis-metrics.md")
-    assert METRIC_FAMILY_COUNT == 250
+    assert METRIC_FAMILY_COUNT == 256
 
 
 def test_roadmap_remains_present_and_registration_is_deferred() -> None:

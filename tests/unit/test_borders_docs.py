@@ -31,7 +31,7 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_176_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **250**" in metrics
+    assert "Closed catalog cardinality: **256**" in metrics
     assert "204" in metrics
     for family in (
         "border_claim_structure@1",
@@ -97,7 +97,7 @@ def test_configuration_and_contract_docs() -> None:
     architecture = _read("docs/architecture.md")
     assert "borders-and-claims.md" in architecture
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-27" in factory
+    assert "through V4-28" in factory
     assert "borders-and-claims.md" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Borders and claims (V4-13)" in description

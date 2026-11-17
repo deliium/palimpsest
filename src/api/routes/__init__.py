@@ -40,6 +40,7 @@ from api.routes.observer_stream import router as observer_stream_router
 from api.routes.organization import router as organization_router
 from api.routes.organized_conflict import router as organized_conflict_router
 from api.routes.replay import router as replay_router
+from api.routes.replication import router as replication_router
 from api.routes.research_matrix import router as research_matrix_router
 from api.routes.scientific_hypotheses import (
     router as scientific_hypotheses_router,
@@ -81,6 +82,7 @@ __all__ = [
     "organization_router",
     "organized_conflict_router",
     "replay_router",
+    "replication_router",
     "research_matrix_router",
     "research_router",
     "scientific_hypotheses_router",

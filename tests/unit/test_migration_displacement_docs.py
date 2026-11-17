@@ -36,7 +36,7 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_180_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **250**" in metrics
+    assert "Closed catalog cardinality: **256**" in metrics
     for family in (
         "migration_wave_structure@1",
         "migration_cause_evidence@1",
@@ -117,7 +117,7 @@ def test_configuration_and_contract_docs() -> None:
     social = _read("docs/social-communication.md")
     assert "mdp_v1" in social
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-27" in factory
+    assert "through V4-28" in factory
     assert "migration-displacement.md" in factory
     assert "212" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
@@ -142,13 +142,13 @@ def test_no_forbidden_authority_wording_in_canonical_doc() -> None:
 
 def test_current_pin_guard_preserves_historical_176() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **250**" in metrics
+    assert "Closed catalog cardinality: **256**" in metrics
     assert "208" in metrics
     assert "from 176 to\n**180**" in metrics or "208" in metrics
     assert "Closed catalog cardinality: **176**" not in metrics
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-27" in factory
+    assert "through V4-28" in factory
     assert "through V4-13" not in factory
     assert "212" in factory
     assert "212" in factory
-    assert "| Metric families | 250" in factory
+    assert "| Metric families | 256" in factory

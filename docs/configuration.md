@@ -634,3 +634,7 @@ is unset every cascade route returns `economic_cascades_disabled`. See
 ## Scientific hypotheses (`runner-config-v56`)
 
 V4-27 owns `science`. Enabling it requires `predictive_world_model` and a `bounded_experimentation` spec (with that spec's cultural history and provenance prerequisites). `science=False` is inert. No new environment variable is required for science itself; the read artifact uses `PALIMPSEST_SCIENTIFIC_HYPOTHESES_ROOT` and `PALIMPSEST_SCIENTIFIC_HYPOTHESES_CURSOR_KEY`.
+
+## Scientific replication settings
+
+`PALIMPSEST_SCIENTIFIC_REPLICATION_ROOT` and `PALIMPSEST_SCIENTIFIC_REPLICATION_CURSOR_KEY` (>=32 UTF-8 bytes) attach the eight read-only replication routes. Both are optional; absent settings keep the routes disabled. Publication remains programmatic and is not enabled by API settings.

@@ -2116,6 +2116,10 @@ class PendingFinalizationStatus(StrEnum):
 
 
 PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "finalization-command-v1"
+PENDING_FINALIZATION_CODEC_VERSION_V2: Final[str] = "finalization-command-v2"
+PENDING_FINALIZATION_ACCEPTED_VERSIONS: Final[frozenset[str]] = frozenset(
+    {PENDING_FINALIZATION_CODEC_VERSION, PENDING_FINALIZATION_CODEC_VERSION_V2}
+)
 LEGACY_PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "pending-finalization-v1"
 
 

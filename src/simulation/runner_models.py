@@ -6405,6 +6405,7 @@ class SimulationRunnerResult:
     accounting_ledgers: tuple[object, ...] = ()
     formal_rule_ledgers: tuple[object, ...] = ()
     experiment_ledgers: tuple[object, ...] = ()
+    replication_ledgers: tuple[object, ...] = ()
     dispute_ledgers: tuple[object, ...] = ()
     evidence_ledgers: tuple[object, ...] = ()
     representation_ledgers: tuple[object, ...] = ()
@@ -6762,6 +6763,23 @@ class SimulationRunnerResult:
                 raise TypeError("experiment_ledgers: duplicate_owner")
             experiment_owners.add(ledger.owner_id)
         object.__setattr__(self, "experiment_ledgers", experiment_ledgers)
+        if isinstance(self.replication_ledgers, (set, frozenset)):
+            raise TypeError("replication_ledgers must be ordered")
+        if isinstance(self.replication_ledgers, (str, bytes)) or not isinstance(
+            self.replication_ledgers, Sequence
+        ):
+            raise TypeError("replication_ledgers must be ordered")
+        from agents.cognition.replication import ReplicationLedger
+
+        replication_ledgers = tuple(self.replication_ledgers)
+        replication_owners: set[object] = set()
+        for ledger in replication_ledgers:
+            if type(ledger) is not ReplicationLedger:
+                raise TypeError("replication_ledgers: invalid_item")
+            if ledger.owner_id in replication_owners:
+                raise TypeError("replication_ledgers: duplicate_owner")
+            replication_owners.add(ledger.owner_id)
+        object.__setattr__(self, "replication_ledgers", replication_ledgers)
         if isinstance(self.dispute_ledgers, (set, frozenset)):
             raise TypeError("dispute_ledgers must be ordered")
         if isinstance(self.dispute_ledgers, (str, bytes)) or not isinstance(

@@ -84,7 +84,15 @@ from agents.cognition.models import (
     SelfModel,
     SituationModel,
 )
-from world.actions import AgentCommand, Give, Talk, Tell, Wait, require_agent_command
+from world.actions import (
+    AgentCommand,
+    Experiment,
+    Give,
+    Talk,
+    Tell,
+    Wait,
+    require_agent_command,
+)
 
 __all__ = [
     "COMPONENT_VERSION",
@@ -286,6 +294,7 @@ class CognitiveLoop:
     """Sequential cognitive pipeline returning one closed ``AgentCommand``."""
 
     _experiment_ledger: ExperimentLedger | None
+    _replication_ledger: object | None
 
     __slots__ = (
         "_acceptance_window_ticks",
@@ -409,6 +418,7 @@ class CognitiveLoop:
         "_reflection_selector",
         "_regional_migration_cognition_mode",
         "_regional_migration_hop_limit",
+        "_replication_ledger",
         "_representation_mode",
         "_representation_policy",
         "_reputation_mode",
@@ -4724,6 +4734,7 @@ class CognitiveLoop:
         if spec is None:
             self._bounded_experimentation_caps = None
             self._experiment_ledger = None
+            self._replication_ledger = None
             _LOG.debug("bounded_experimentation_skipped present=False")
             return
         from agents.cognition.experimentation import cognition_binding_from_spec
@@ -4731,6 +4742,7 @@ class CognitiveLoop:
         binding = cognition_binding_from_spec(spec)
         self._bounded_experimentation_caps = binding
         self._experiment_ledger = None
+        self._replication_ledger = None
         _LOG.info(
             "bounded_experimentation_enabled max_hypotheses=%s "
             "max_trials_per_tick=%s repeat_threshold=%s "
@@ -4791,28 +4803,62 @@ class CognitiveLoop:
             raise ValueError("experiment_ledger: invalid_type")
         self._experiment_ledger = validated
 
-    def _remember_experiments(self, loop_input: object) -> None:
-        """Score the owner's hypotheses from actor occurrences. No second writer."""
-        if self._bounded_experimentation_caps is None:
+    def replication_ledger_if_present(self) -> object | None:
+        """Return the committed replication sidecar without constructing one."""
+
+        return self._replication_ledger
+
+    def restore_replication_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install a validated committed replication sidecar."""
+
+        if ledger is None:
+            self._replication_ledger = None
             return
+        from agents.cognition.replication import (
+            ReplicationLedger,
+            require_owner_replication_ledger,
+        )
+
+        if owner_id is not None:
+            validated = require_owner_replication_ledger(ledger, owner_id)
+        elif type(ledger) is ReplicationLedger:
+            validated = ledger
+        else:
+            raise ValueError("replication_ledger: invalid_type")
+        self._replication_ledger = validated
+
+    def _remember_experiments(
+        self, loop_input: object, ledger: ExperimentLedger | None = None
+    ) -> ExperimentLedger | None:
+        """Score the owner's hypotheses from actor occurrences. No install."""
+        if self._bounded_experimentation_caps is None:
+            return ledger
         from agents.cognition.experimentation import score_remembered_experiment
         from agents.models import AgentId
 
         owner_id = getattr(loop_input, "agent_id", None)
         if type(owner_id) is not AgentId:
-            return
+            return ledger
         observation = getattr(loop_input, "observation", None)
-        ledger = self.experiment_ledger_for(owner_id)
-        if ledger is None or observation is None:
-            return
+        current = ledger if ledger is not None else self._experiment_ledger
+        if current is None or observation is None:
+            return current
         tick = getattr(observation, "tick", 0)
         tick_value = tick if type(tick) is int and tick >= 0 else 0
-        updated = ledger
+        updated = current
         for occurrence in getattr(observation, "occurrences", ()):
             updated = score_remembered_experiment(updated, occurrence, tick=tick_value)
-        self._experiment_ledger = updated
+        return updated
 
-    def _ingest_scientific_hypotheses(self, loop_input: object) -> None:
+    def _ingest_scientific_hypotheses(
+        self,
+        loop_input: object,
+        ledger: ExperimentLedger | None = None,
+        *,
+        protected_hypothesis_ids: frozenset[str] = frozenset(),
+    ) -> ExperimentLedger | None:
         """Adopt received ``hyp_v1`` claims as testimony, never as evidence."""
 
         from agents.cognition.configuration import (
@@ -4823,9 +4869,9 @@ class CognitiveLoop:
             self._scientific_hypotheses_mode
             is not CognitionScientificHypothesesMode.DETERMINISTIC
         ):
-            return
+            return ledger
         if self._bounded_experimentation_caps is None:
-            return
+            return ledger
         from agents.cognition.scientific_hypothesis_communication import (
             adopt_communicated_hypothesis,
             parse_scientific_hypothesis_claim_relation,
@@ -4835,13 +4881,19 @@ class CognitiveLoop:
         owner_id = getattr(loop_input, "agent_id", None)
         observation = getattr(loop_input, "observation", None)
         if type(owner_id) is not AgentId or observation is None:
-            return
-        ledger = self.experiment_ledger_for(owner_id)
-        if ledger is None:
-            return
+            return ledger
+        current = ledger if ledger is not None else self._experiment_ledger
+        if current is None:
+            from agents.cognition.experimentation import empty_experiment_ledger
+
+            if self._bounded_experimentation_caps is None:
+                return None
+            current = empty_experiment_ledger(
+                owner_id, self._bounded_experimentation_caps
+            )
         tick_raw = getattr(observation, "tick", 0)
         tick = tick_raw if type(tick_raw) is int and tick_raw >= 0 else 0
-        updated = ledger
+        updated = current
         for communication in getattr(observation, "communications", ()):
             source = getattr(
                 getattr(communication, "provenance", None),
@@ -4863,8 +4915,9 @@ class CognitiveLoop:
                     claim,
                     source_token=f"evt:{delivery}",
                     tick=tick,
+                    protected_hypothesis_ids=protected_hypothesis_ids,
                 )
-        self._experiment_ledger = updated
+        return updated
 
     def _select_scientific_hypothesis(
         self, ledger: ExperimentLedger, tick: int
@@ -7175,6 +7228,93 @@ class CognitiveLoop:
         command = require_agent_command(effective_command)
         records = list(proposal.boundary_records)
         loop_input = proposal.loop_input
+        experiment_candidate = None
+        replication_candidate = None
+        snapshot = getattr(loop_input, "snapshot", None)
+        if self._bounded_experimentation_caps is not None:
+            from agents.cognition.experimentation import (
+                ExperimentLedger,
+                empty_experiment_ledger,
+            )
+            from agents.cognition.replication import (
+                ReplicationLedger,
+                empty_replication_ledger,
+            )
+
+            experiment_candidate = (
+                getattr(snapshot, "experiment_ledger", None)
+                if snapshot is not None
+                else None
+            )
+            if type(experiment_candidate) is not ExperimentLedger:
+                experiment_candidate = self._experiment_ledger
+            if experiment_candidate is None:
+                experiment_candidate = empty_experiment_ledger(
+                    proposal.agent_id, self._bounded_experimentation_caps
+                )
+            replication_candidate = (
+                getattr(snapshot, "replication_ledger", None)
+                if snapshot is not None
+                else None
+            )
+            if type(replication_candidate) is not ReplicationLedger:
+                replication_candidate = self._replication_ledger
+            if replication_candidate is None:
+                replication_candidate = empty_replication_ledger(
+                    proposal.agent_id
+                )
+        protected_replication_ids: frozenset[str] = frozenset()
+        if replication_candidate is not None:
+            from agents.cognition.replication_actions import (
+                protected_replication_hypothesis_ids,
+            )
+            from agents.cognition.replication_communication import (
+                ingest_replication_communication,
+            )
+            from agents.cognition.replication_interpretation import (
+                ReplicationOwnerContext,
+            )
+            from social.relationships import RelationshipDimension
+
+            protected_replication_ids = protected_replication_hypothesis_ids(
+                replication_candidate
+            )
+            trust_entries: list[tuple[str, float | None]] = []
+            for profile in (
+                getattr(snapshot, "relationships", ()) if snapshot is not None else ()
+            ):
+                for dimension in getattr(profile, "dimensions", ()):
+                    if dimension.dimension is RelationshipDimension.TRUST:
+                        trust_entries.append(
+                            (
+                                profile.target_id.value,
+                                max(
+                                    0.0,
+                                    min(
+                                        1.0,
+                                        (float(dimension.value) + 1.0) / 2.0,
+                                    ),
+                                ),
+                            )
+                        )
+            replication_candidate, _ = ingest_replication_communication(
+                proposal.agent_id,
+                replication_candidate,
+                loop_input.observation,
+                ReplicationOwnerContext(trust_by_entity=tuple(trust_entries)),
+            )
+            from agents.cognition.replication_communication import (
+                observe_replication_delivery,
+            )
+
+            replication_candidate, _observed_sends = observe_replication_delivery(
+                replication_candidate, loop_input.observation
+            )
+            replication_context = ReplicationOwnerContext(
+                trust_by_entity=tuple(trust_entries)
+            )
+        else:
+            replication_context = None
         agent_id = loop_input.agent_id.value
         invocation_id = proposal.invocation_id
         fail = self._make_fail(
@@ -7211,8 +7351,27 @@ class CognitiveLoop:
             expected_type=tuple,
         )
         assert type(updates) is tuple
-        self._remember_experiments(loop_input)
-        self._ingest_scientific_hypotheses(loop_input)
+        experiment_candidate = self._remember_experiments(
+            loop_input, experiment_candidate
+        )
+        experiment_candidate = self._ingest_scientific_hypotheses(
+            loop_input,
+            experiment_candidate,
+            protected_hypothesis_ids=protected_replication_ids,
+        )
+        if replication_candidate is not None and experiment_candidate is not None:
+            from agents.cognition.replication_actions import (
+                correlate_replication_occurrences,
+            )
+
+            replication_candidate, experiment_candidate = (
+                correlate_replication_occurrences(
+                    proposal.agent_id,
+                    replication_candidate,
+                    experiment_candidate,
+                    loop_input.observation,
+                )
+            )
         updates = self._annotate_claim_violations(proposal, updates)
         updates = self._append_norm_trust(proposal, updates)
         updates = self._append_commitment_memory(proposal, updates)
@@ -7474,29 +7633,123 @@ class CognitiveLoop:
             is CognitionScientificHypothesesMode.DETERMINISTIC
             and type(command) is Wait
         ):
-            ledger = self.experiment_ledger_for(loop_input.agent_id)
-            if ledger is not None:
+            if (
+                replication_candidate is not None
+                and experiment_candidate is not None
+            ):
+                from agents.cognition.replication_actions import (
+                    compile_replication_test,
+                )
+
+                compiled_replication = compile_replication_test(
+                    loop_input.agent_id,
+                    replication_candidate,
+                    experiment_candidate,
+                    loop_input.observation,
+                    source_context=replication_context,
+                )
+                replication_candidate = compiled_replication.replication_ledger
+                experiment_candidate = compiled_replication.experiment_ledger
+                if compiled_replication.attempt_token is not None:
+                    protected_replication_ids = frozenset(
+                        {
+                            *protected_replication_ids,
+                            *(
+                                row.hypothesis_id
+                                for row in replication_candidate.attempts
+                                if row.attempt_token
+                                == compiled_replication.attempt_token
+                            ),
+                        }
+                    )
+                if compiled_replication.command is not None:
+                    command = cast(
+                        AgentCommand, compiled_replication.command
+                    )
+            if type(command) is Wait and experiment_candidate is not None:
                 from agents.cognition.experimentation import (
                     compile_scientific_test,
                 )
 
                 compiled = compile_scientific_test(
                     loop_input.agent_id,
-                    ledger,
+                    experiment_candidate,
                     loop_input.observation,
                     formulate_if_missing=True,
                     causal_model=proposal.causal_world_model,
+                    excluded_hypothesis_ids=protected_replication_ids,
+                    protected_hypothesis_ids=protected_replication_ids,
                 )
-                self._experiment_ledger = compiled.ledger
+                experiment_candidate = compiled.ledger
                 if compiled.command is not None:
                     command = compiled.command
+        if (
+            type(command) is Experiment
+            and replication_candidate is not None
+            and experiment_candidate is not None
+        ):
+            from agents.cognition.experimentation import HypothesisSourceKind
+            from agents.cognition.replication_designs import (
+                source_draft_for_hypothesis,
+            )
+
+            hypothesis_id = getattr(command, "hypothesis_id", "")
+            hypothesis = next(
+                (
+                    row
+                    for row in experiment_candidate.hypotheses
+                    if row.hypothesis_id == hypothesis_id
+                ),
+                None,
+            )
+            if hypothesis is None:
+                hypothesis = next(
+                    (
+                        row
+                        for row in experiment_candidate.hypotheses
+                        if row.active
+                        and row.operator is getattr(command, "operator", None)
+                        and row.operand_a_id
+                        == getattr(
+                            getattr(command, "operand_a_id", None),
+                            "value",
+                            "",
+                        )
+                    ),
+                    None,
+                )
+            if (
+                hypothesis is not None
+                and hypothesis.source_kind is not HypothesisSourceKind.COMMUNICATED
+                and not any(
+                    row.hypothesis_id == hypothesis_id
+                    for row in replication_candidate.attempts
+                )
+                and not any(
+                    row.hypothesis_id == hypothesis_id
+                    for row in replication_candidate.source_drafts
+                )
+            ):
+                draft = source_draft_for_hypothesis(
+                    proposal.agent_id,
+                    hypothesis,
+                    loop_input.observation,
+                )
+                if draft is not None:
+                    replication_candidate = replace(
+                        replication_candidate,
+                        source_drafts=(
+                            *replication_candidate.source_drafts,
+                            draft,
+                        ),
+                    )
         if (
             self._scientific_hypotheses_mode
             is CognitionScientificHypothesesMode.DETERMINISTIC
             and type(command) in (Talk, Tell)
             and self._bounded_experimentation_caps is not None
         ):
-            ledger = self.experiment_ledger_for(loop_input.agent_id)
+            ledger = experiment_candidate
             if ledger is not None:
                 from agents.cognition.scientific_hypothesis_communication import (
                     attach_scientific_hypothesis_claim,
@@ -7510,6 +7763,25 @@ class CognitiveLoop:
                         AgentCommand,
                         attach_scientific_hypothesis_claim(command, selected),
                     )
+        if (
+            replication_candidate is not None
+            and type(command) in (Talk, Tell)
+        ):
+            from agents.cognition.replication_communication import (
+                attach_replication_message,
+                select_replication_speech,
+            )
+
+            replication_candidate, replication_document = (
+                select_replication_speech(
+                    replication_candidate, loop_input.observation, command
+                )
+            )
+            if replication_document is not None:
+                command = cast(
+                    AgentCommand,
+                    attach_replication_message(command, replication_document),
+                )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -7581,6 +7853,8 @@ class CognitiveLoop:
             ),
             communication_intent=proposal.communication_intent,
             communication_intent_audit=proposal.communication_intent_audit,
+            experiment_ledger=experiment_candidate,
+            replication_ledger=replication_candidate,
         )
         _LOG.debug(
             "cognitive_loop_complete",

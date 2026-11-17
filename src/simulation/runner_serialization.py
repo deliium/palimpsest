@@ -12129,8 +12129,13 @@ def finalization_command_to_mapping(command: object) -> dict[str, Any]:
     from simulation.clock import Tick
     from simulation.lifecycle import ActionSubmission, TickToken
     from simulation.models import RunId
+    from simulation.replication_checkpoint import (
+        encode_replication_state,
+        encode_scientific_experiment_state,
+    )
     from simulation.run_control import (
-        FINALIZATION_COMMAND_CODEC_VERSION,
+        FINALIZATION_COMMAND_ACCEPTED_VERSIONS,
+        FINALIZATION_COMMAND_CODEC_VERSION_V2,
         FinalizationCommand,
     )
     from simulation.serialization import encode_domain
@@ -12138,7 +12143,7 @@ def finalization_command_to_mapping(command: object) -> dict[str, Any]:
 
     if type(command) is not FinalizationCommand:
         raise TypeError("finalization_command_to_mapping requires FinalizationCommand")
-    if command.codec_version != FINALIZATION_COMMAND_CODEC_VERSION:
+    if command.codec_version not in FINALIZATION_COMMAND_ACCEPTED_VERSIONS:
         raise RunnerSerializationError("unsupported_codec_version", "$.codec_version")
     state = command.next_internal_state
     if type(state) is not InternalAgentState:
@@ -12193,6 +12198,20 @@ def finalization_command_to_mapping(command: object) -> dict[str, Any]:
         },
         "tick": command.tick,
     }
+    if command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V2:
+        from typing import cast as _cast
+
+        from agents.cognition.experimentation import ExperimentLedger as _EL
+        from agents.cognition.replication import ReplicationLedger as _RL
+
+        payload["replication_state"] = encode_replication_state(
+            _cast(_RL, command.replication_ledger)
+        )
+        payload["scientific_experiment_state"] = (
+            encode_scientific_experiment_state(
+                _cast(_EL, command.experiment_ledger)
+            )
+        )
     _ = (AgentRuntimeStatus, IntentionCode, RunId, Tick, TickToken)
     return payload
 
@@ -12211,8 +12230,13 @@ def decode_finalization_command(payload: object) -> object:
     from simulation.clock import Tick
     from simulation.lifecycle import ActionSubmission, TickToken
     from simulation.models import RunId
+    from simulation.replication_checkpoint import (
+        decode_replication_state,
+        decode_scientific_experiment_state,
+    )
     from simulation.run_control import (
-        FINALIZATION_COMMAND_CODEC_VERSION,
+        FINALIZATION_COMMAND_ACCEPTED_VERSIONS,
+        FINALIZATION_COMMAND_CODEC_VERSION_V2,
         FinalizationCommand,
     )
     from simulation.serialization import decode_domain
@@ -12255,10 +12279,16 @@ def decode_finalization_command(payload: object) -> object:
         "delivery_content_hash",
         "delivery_acknowledged",
     }
+    version = data.get("codec_version")
+    if version not in FINALIZATION_COMMAND_ACCEPTED_VERSIONS:
+        raise RunnerSerializationError("unsupported_codec_version", "$.codec_version")
+    if version == FINALIZATION_COMMAND_CODEC_VERSION_V2:
+        required = required | {
+            "replication_state",
+            "scientific_experiment_state",
+        }
     if set(data) != required:
         raise RunnerSerializationError("invalid_fields", "$")
-    if data["codec_version"] != FINALIZATION_COMMAND_CODEC_VERSION:
-        raise RunnerSerializationError("unsupported_codec_version", "$.codec_version")
     state_raw = data["next_internal_state"]
     if not isinstance(state_raw, dict):
         raise RunnerSerializationError("invalid_object", "$.next_internal_state")
@@ -12312,6 +12342,16 @@ def decode_finalization_command(payload: object) -> object:
             if batch_raw is None
             else decode_subjective_mutation_batch(batch_raw, path="$.subjective_batch")
         )
+        replication_ledger = None
+        experiment_ledger = None
+        if version == FINALIZATION_COMMAND_CODEC_VERSION_V2:
+            owner = AgentId(str(data["agent_id"]))
+            replication_ledger = decode_replication_state(
+                data["replication_state"], owner
+            )
+            experiment_ledger = decode_scientific_experiment_state(
+                data["scientific_experiment_state"], owner
+            )
         return FinalizationCommand(
             codec_version=str(data["codec_version"]),
             run_id=RunId(str(data["run_id"])),
@@ -12344,6 +12384,8 @@ def decode_finalization_command(payload: object) -> object:
             delivery_id=data["delivery_id"],
             delivery_content_hash=data["delivery_content_hash"],
             delivery_acknowledged=bool(data["delivery_acknowledged"]),
+            replication_ledger=replication_ledger,
+            experiment_ledger=experiment_ledger,
         )
     except RunnerSerializationError:
         raise

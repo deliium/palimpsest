@@ -411,9 +411,9 @@ def test_no_new_flag_context_or_v57() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert METRIC_FAMILY_COUNT == 250
+    assert METRIC_FAMILY_COUNT == 256
     specs = all_metric_specifications()
-    assert len(specs) == 250
+    assert len(specs) == 256
     assert tuple(spec.family_id.value for spec in specs[176:180]) == MIGRATION_FAMILIES
     assert len(COMMAND_RULE_MATRIX) == 43
     assert len(SEMANTIC_EVENT_TYPES) == 73

@@ -597,3 +597,7 @@ Current catalog: 250 metric families; 43 commands; 73 observer semantic types; A
 
 
 V4-27 registers off-gate `scientific_hypotheses@1` with baseline, enabled, and communicated arms over the owned `science` flag.
+
+## Scientific replication experiment
+
+`scientific_replication@1` registers four declared arms (baseline, individual, community, conflicting conditions). It stays off the V1 A–E gate and makes no emergence, consensus, or truth claim.

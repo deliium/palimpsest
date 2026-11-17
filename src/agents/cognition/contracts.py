@@ -203,6 +203,8 @@ class Perspective:
     organized_conflict: object | None = None
     borders: object | None = None
     migration_displacement: object | None = None
+    experiment_ledger: object | None = None
+    replication_ledger: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.agent_id) is not AgentId:
@@ -705,6 +707,8 @@ class Perspective:
             organized_conflict=self.organized_conflict,
             borders=self.borders,
             migration_displacement=self.migration_displacement,
+            experiment_ledger=self.experiment_ledger,
+            replication_ledger=self.replication_ledger,
         )
 
     def __repr__(self) -> str:

@@ -169,6 +169,8 @@ def build_perspective(
     organized_conflict: object | None = None,
     borders: object | None = None,
     migration_displacement: object | None = None,
+    experiment_ledger: object | None = None,
+    replication_ledger: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -391,6 +393,8 @@ def build_perspective(
         organized_conflict=organized_conflict,
         borders=borders,
         migration_displacement=migration_displacement,
+        experiment_ledger=experiment_ledger,
+        replication_ledger=replication_ledger,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

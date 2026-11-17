@@ -33,7 +33,7 @@ def test_canonical_contract_names_all_operations_and_bounds() -> None:
 
 
 def test_current_pins_are_176_and_five_owned() -> None:
-    assert "Closed catalog cardinality: **250**" in _read("docs/analysis-metrics.md")
+    assert "Closed catalog cardinality: **256**" in _read("docs/analysis-metrics.md")
     assert "208" in _read("docs/analysis-metrics.md")
     assert "250 metric families" in _read("docs/architecture.md")
     assert "208" in _read("docs/architecture.md")

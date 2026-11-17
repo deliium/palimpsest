@@ -333,6 +333,7 @@ def adopt_communicated_hypothesis(
     *,
     source_token: str,
     tick: int,
+    protected_hypothesis_ids: frozenset[str] = frozenset(),
 ) -> ExperimentLedger:
     """Adopt a received claim as provisional, evidence-free belief."""
 
@@ -391,7 +392,11 @@ def adopt_communicated_hypothesis(
         created_tick=tick,
         revisions=(revision,),
     )
-    updated = admit_hypothesis(ledger, row)
+    updated = admit_hypothesis(
+        ledger,
+        row,
+        protected_hypothesis_ids=protected_hypothesis_ids,
+    )
     if any(item.hypothesis_id == local_id for item in updated.hypotheses):
         _LOG.debug("scientific_hypothesis_adopted source_kind=communicated")
     return updated

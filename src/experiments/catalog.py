@@ -2838,6 +2838,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "social_mobility@1",
         "economic_cascades@1",
         "scientific_hypotheses@1",
+        "scientific_replication@1",
     }
 )
 
@@ -5809,6 +5810,25 @@ def experiment_scientific_hypotheses(
     )
     _LOG.info(
         "experiment_registered experiment_id=scientific_hypotheses@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_scientific_replication(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 64,
+) -> ExperimentDefinition:
+    """Off-gate V4-28 experiment: independent scientific replication."""
+    from experiments.replication_scenario import scientific_replication_scenario
+
+    definition = scientific_replication_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=scientific_replication@1 arms=%s",
         len(definition.conditions),
     )
     return definition

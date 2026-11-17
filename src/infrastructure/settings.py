@@ -281,6 +281,10 @@ class Settings(BaseSettings):
     scientific_hypotheses_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    scientific_replication_root: Path | None = None
+    scientific_replication_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -338,6 +342,7 @@ class Settings(BaseSettings):
         "social_mobility_root",
         "economic_cascades_root",
         "scientific_hypotheses_root",
+        "scientific_replication_root",
         mode="before",
     )
     @classmethod
@@ -540,6 +545,17 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "scientific_hypotheses cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
+    @field_validator("scientific_replication_cursor_key")
+    @classmethod
+    def validate_scientific_replication_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "scientific_replication cursor key must be at least 32 UTF-8 bytes"
             )
         return value
 
@@ -1016,6 +1032,12 @@ class Settings(BaseSettings):
             "has_scientific_hypotheses_root": (
                 self.scientific_hypotheses_root is not None
             ),
+            "has_scientific_replication_root": (
+                self.scientific_replication_root is not None
+            ),
+            "has_scientific_replication_cursor_key": (
+                self.scientific_replication_cursor_key is not None
+            ),
             "has_scientific_hypotheses_cursor_key": (
                 self.scientific_hypotheses_cursor_key is not None
             ),
@@ -1025,6 +1047,13 @@ class Settings(BaseSettings):
             ),
             "scientific_hypotheses_cursor_enabled": (
                 self.scientific_hypotheses_cursor_key is not None
+            ),
+            "scientific_replication_enabled": (
+                self.scientific_replication_root is not None
+                and self.scientific_replication_cursor_key is not None
+            ),
+            "scientific_replication_cursor_enabled": (
+                self.scientific_replication_cursor_key is not None
             ),
             "has_social_mobility_root": (
                 self.social_mobility_root is not None

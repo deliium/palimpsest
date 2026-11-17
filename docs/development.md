@@ -635,3 +635,7 @@ See [Disputes](disputes.md) and
 Current catalog: 250 metric families; 17 V4 contexts / `v4-context-map-v5`; 43 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
 
 V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v5`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
+
+## Scientific replication verification
+
+Run `tests/unit/test_replication_*.py`, `tests/architecture/test_replication_*.py`, and the Research UI replication tests. Filesystem store/API integration remains opt-in; missing prerequisites are unexecuted, not passed.

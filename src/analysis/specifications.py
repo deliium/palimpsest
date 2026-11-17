@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 250
+METRIC_FAMILY_COUNT: Final[int] = 256
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -330,6 +330,16 @@ class MetricFamilyId(StrEnum):
     SCIENTIFIC_HYPOTHESIS_PROVENANCE = "scientific_hypothesis_provenance"
     SCIENTIFIC_HYPOTHESIS_PREDICTION_OUTCOMES = (
         "scientific_hypothesis_prediction_outcomes"
+    )
+    SCIENTIFIC_REPLICATION_DESIGN_LINEAGE = (
+        "scientific_replication_design_lineage"
+    )
+    SCIENTIFIC_REPLICATION_CONDITIONS = "scientific_replication_conditions"
+    SCIENTIFIC_REPLICATION_RESULTS = "scientific_replication_results"
+    SCIENTIFIC_REPLICATION_UNCERTAINTY = "scientific_replication_uncertainty"
+    SCIENTIFIC_REPLICATION_RELATIONSHIPS = "scientific_replication_relationships"
+    SCIENTIFIC_REPLICATION_SOCIAL_INTERPRETATION = (
+        "scientific_replication_social_interpretation"
     )
 
 
@@ -9328,6 +9338,52 @@ SCIENTIFIC_HYPOTHESIS_PREDICTION_OUTCOMES_KEYS: Final[tuple[str, ...]] = (
     "matched_share_milli",
     "mismatched_share_milli",
 )
+SCIENTIFIC_REPLICATION_DESIGN_LINEAGE_KEYS: Final[tuple[str, ...]] = (
+    "design_count",
+    "root_count",
+    "child_count",
+    "unresolved_parent_count",
+)
+SCIENTIFIC_REPLICATION_CONDITIONS_KEYS: Final[tuple[str, ...]] = (
+    "comparison_count",
+    "matched_count",
+    "different_count",
+    "unknown_count",
+    "matched_share_milli",
+)
+SCIENTIFIC_REPLICATION_RESULTS_KEYS: Final[tuple[str, ...]] = (
+    "paired_count",
+    "compatible_count",
+    "conflicting_count",
+    "inconclusive_count",
+    "not_comparable_count",
+    "category_difference_count",
+)
+SCIENTIFIC_REPLICATION_UNCERTAINTY_KEYS: Final[tuple[str, ...]] = (
+    "measurement_count",
+    "declared_set_count",
+    "unreported_count",
+    "ambiguous_set_count",
+    "unreported_share_milli",
+)
+SCIENTIFIC_REPLICATION_RELATIONSHIPS_KEYS: Final[tuple[str, ...]] = (
+    "attempt_count",
+    "repeat_count",
+    "adapted_count",
+    "execution_backed_count",
+    "declared_only_count",
+    "duplicate_source_count",
+    "unresolved_count",
+)
+SCIENTIFIC_REPLICATION_SOCIAL_INTERPRETATION_KEYS: Final[tuple[str, ...]] = (
+    "interpretation_count",
+    "trusted_count",
+    "contested_count",
+    "unknown_source_count",
+    "disagreement_count",
+    "collaboration_count",
+    "participant_declaration_count",
+)
 
 
 def _trade_spec(
@@ -10334,6 +10390,72 @@ def _spec_scientific_hypothesis_prediction_outcomes() -> MetricSpecification:
     )
 
 
+def _spec_scientific_replication_design_lineage() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_REPLICATION_DESIGN_LINEAGE,
+        population="replication_designs",
+        denominator="designs",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SCIENTIFIC_REPLICATION_DESIGN_LINEAGE_KEYS,
+        opportunity="declared design lineage counts; not objective truth",
+    )
+
+
+def _spec_scientific_replication_conditions() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_REPLICATION_CONDITIONS,
+        population="replication_comparisons",
+        denominator="comparisons",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_REPLICATION_CONDITIONS_KEYS,
+        opportunity="matched/different/unknown condition counts only",
+    )
+
+
+def _spec_scientific_replication_results() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_REPLICATION_RESULTS,
+        population="replication_comparisons",
+        denominator="paired_comparisons",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_REPLICATION_RESULTS_KEYS,
+        opportunity="qualified categorical pairs; never a truth verdict",
+    )
+
+
+def _spec_scientific_replication_uncertainty() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_REPLICATION_UNCERTAINTY,
+        population="replication_reports",
+        denominator="measurements",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_REPLICATION_UNCERTAINTY_KEYS,
+        opportunity="declared uncertainty kinds; unreported is not zero error",
+    )
+
+
+def _spec_scientific_replication_relationships() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_REPLICATION_RELATIONSHIPS,
+        population="replication_attempts",
+        denominator="attempts",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_REPLICATION_RELATIONSHIPS_KEYS,
+        opportunity="declared repeat/adapted relations and evidence qualification",
+    )
+
+
+def _spec_scientific_replication_social_interpretation() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_REPLICATION_SOCIAL_INTERPRETATION,
+        population="replication_interpretations",
+        denominator="interpretations",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_REPLICATION_SOCIAL_INTERPRETATION_KEYS,
+        opportunity="owner-relative appraisals; disagreement is not error",
+    )
+
+
 def _spec_infrastructure_network_structure() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
@@ -10877,6 +10999,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_scientific_hypothesis_revisions,
     _spec_scientific_hypothesis_provenance,
     _spec_scientific_hypothesis_prediction_outcomes,
+    _spec_scientific_replication_design_lineage,
+    _spec_scientific_replication_conditions,
+    _spec_scientific_replication_results,
+    _spec_scientific_replication_uncertainty,
+    _spec_scientific_replication_relationships,
+    _spec_scientific_replication_social_interpretation,
 )
 
 

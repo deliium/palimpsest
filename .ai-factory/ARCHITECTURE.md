@@ -174,21 +174,22 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-27
+### Current baseline through V4-28
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v55` for generational runs |
+| Latest feature runner | `runner-config-v55` for generational runs; accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 43 / 73 |
-| Metric families | 250 (V4-24's 228, V4-25's 236, V4-26's 244, plus six V4-27 scientific-hypothesis families) |
+| Metric families | 256 (V4-24's 228, V4-25's 236, V4-26's 244, six V4-27 scientific-hypothesis families, plus six V4-28 scientific-replication families; the V4-27 landing reported 250 metric families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
+| Subjective pending codec | `finalization-command-v2` for science/replication transitions with nested `replication-state-v1` / `scientific-experiment-state-v1`; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 250 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 256 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -204,10 +205,11 @@ those as current pins or silently drop their legacy accepted versions.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
   (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
   `organized_conflict` (V4-12), `infrastructure_networks` (V4-16),
-  `supply_chains` (V4-19), and `markets_credit` (V4-20/V4-21).
+  `supply_chains` (V4-19), `markets_credit` (V4-20/V4-21), and `science`
+  (V4-27/V4-28).
   There are nine owned V4 flags and three unowned flags.
   `epidemics`, `ecological_feedback`, and `disasters` remain unowned and fail
-  closed; `science` is owned by V4-27.
+  closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -1167,7 +1169,7 @@ programmatically and atomically; seven GET-only
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score, or
 canonical credit exists. See `docs/credit-relationships.md`.
 
-four remain unowned (`science`, `epidemics`, `ecological_feedback`,
+three remain unowned (`epidemics`, `ecological_feedback`,
 `disasters`); `markets_credit` is owned by V4-20/V4-21/V4-22.
 
 
@@ -1290,3 +1292,24 @@ publish programmatically; seven GET-only dual-gated routes serve them; the
 Research UI adds a read-only panel and Godot adds no overlay. Pins: 17 contexts /
 12 flags / 9 owned / 3 unowned, 250 families, 43 commands, 73 observer semantic
 types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.
+
+### V4-28 scientific-replication seam
+
+`science` is deepened on the accepted `runner-config-v56` seam. `replication.py`,
+`replication_designs.py`, `replication_codec.py`, `replication_communication.py`,
+`replication_interpretation.py`, and `replication_actions.py` own frozen designs,
+owner attempts/reports/interpretations, bounded `rep_v1` testimony, and one
+ordinary `Experiment` compiler. Design identity covers the full payload; exact
+and same-kind selectors bind only observed own materials. Automatic execution
+requires a delivered design, delivered invitation, and local acceptance.
+Detached `analysis.replication_*` preserves executions and owner reports as a
+tagged union and appends six families (250 -> 256);
+`experiments.replication_completed_run` is the trusted bridge;
+`scientific-replication-snapshot-v1` / `-store-v1` publish programmatically;
+eight GET-only dual-gated routes and a read-only Research UI panel serve them.
+Pending science transitions use `finalization-command-v2` with nested
+`replication-state-v1` / `scientific-experiment-state-v1`; v1 is unchanged.
+Pins: 256 families, 17 contexts, 12 flags, nine owned / three unowned, 43
+commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic `0017`,
+`/v1`, `observer-protocol-v1`. No truth, consensus, N-count promotion, group
+executor, or analytical feedback into cognition exists.

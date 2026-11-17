@@ -119,8 +119,8 @@ def test_no_v57_or_new_flag_reference() -> None:
 
 def test_metric_catalog_is_204() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 250
-    assert len(specs) == 250
+    assert METRIC_FAMILY_COUNT == 256
+    assert len(specs) == 256
     assert [spec.family_id.value for spec in specs[192:198]] == list(TRADE_FAMILIES)
     assert [spec.family_id.value for spec in specs[198:204]] == [
         "supply_chain_structure",

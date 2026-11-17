@@ -551,26 +551,43 @@ def require_owner_experiment_ledger(
 
 
 def admit_hypothesis(
-    ledger: ExperimentLedger, hypothesis: ExperimentHypothesis
+    ledger: ExperimentLedger,
+    hypothesis: ExperimentHypothesis,
+    *,
+    protected_hypothesis_ids: frozenset[str] = frozenset(),
 ) -> ExperimentLedger:
-    """Insert a hypothesis, evicting lowest confidence then oldest past the cap."""
+    """Insert a hypothesis, evicting only unprotected low-confidence rows."""
     if type(hypothesis) is not ExperimentHypothesis:
         raise _fail("hypothesis", "invalid_type")
     if hypothesis.owner_id != ledger.owner_id:
         raise _fail("hypothesis", "owner_mismatch")
     if any(row.hypothesis_id == hypothesis.hypothesis_id for row in ledger.hypotheses):
         return ledger
+    if not isinstance(protected_hypothesis_ids, frozenset):
+        raise _fail("protected_hypothesis_ids", "invalid_type")
     rows = [*ledger.hypotheses, hypothesis]
     evicted: ExperimentHypothesis | None = None
     while len(rows) > ledger.max_hypotheses:
-        rows.sort(
+        evictable = [
+            row
+            for row in rows
+            if row.hypothesis_id not in protected_hypothesis_ids
+        ]
+        if not evictable:
+            _LOG.debug(
+                "scientific_hypothesis_admission_rejected "
+                "reason_code=protected_capacity"
+            )
+            return ledger
+        evictable.sort(
             key=lambda row: (
                 row.confidence_milli if row.confidence_milli is not None else 0,
                 row.created_tick,
                 row.hypothesis_id,
             )
         )
-        evicted = rows.pop(0)
+        evicted = evictable[0]
+        rows.remove(evicted)
     _LOG.debug(
         "scientific_hypothesis_admitted hypothesis_prefix=%s",
         hypothesis.hypothesis_id[:12],
@@ -1470,7 +1487,10 @@ def _command_for(hypothesis: ExperimentHypothesis) -> Experiment:
 
 
 def _testable(
-    ledger: ExperimentLedger, tick: int, observation: object
+    ledger: ExperimentLedger,
+    tick: int,
+    observation: object,
+    excluded_hypothesis_ids: frozenset[str] = frozenset(),
 ) -> list[ExperimentHypothesis]:
     tested = {
         trial.hypothesis_id
@@ -1485,6 +1505,7 @@ def _testable(
         not in {HypothesisStatus.SUPERSEDED, HypothesisStatus.RETIRED}
         and row.predicted_outcome is not None
         and row.hypothesis_id not in tested
+        and row.hypothesis_id not in excluded_hypothesis_ids
         and conditions_hold(row.conditions, observation)
     ]
 
@@ -1497,6 +1518,8 @@ def compile_scientific_test(
     hypothesis_id: str | None = None,
     formulate_if_missing: bool = False,
     causal_model: object | None = None,
+    excluded_hypothesis_ids: frozenset[str] = frozenset(),
+    protected_hypothesis_ids: frozenset[str] = frozenset(),
 ) -> ExperimentCompile:
     """Replace a default Wait with one existing ``Experiment`` command."""
 
@@ -1506,6 +1529,10 @@ def compile_scientific_test(
         raise _fail("ledger", "owner_mismatch")
     if type(formulate_if_missing) is not bool:
         raise TypeError("formulate_if_missing must be bool")
+    if not isinstance(excluded_hypothesis_ids, frozenset):
+        raise _fail("excluded_hypothesis_ids", "invalid_type")
+    if not isinstance(protected_hypothesis_ids, frozenset):
+        raise _fail("protected_hypothesis_ids", "invalid_type")
     tick_raw = getattr(observation, "tick", 0)
     tick = tick_raw if type(tick_raw) is int and tick_raw >= 0 else 0
     used = sum(1 for row in ledger.trials if row.tick == tick)
@@ -1516,10 +1543,14 @@ def compile_scientific_test(
     selected: ExperimentHypothesis | None = None
     if hypothesis_id is not None:
         rows = [row for row in ledger.hypotheses if row.hypothesis_id == hypothesis_id]
-        if rows and rows[0] in _testable(ledger, tick, observation):
+        if rows and rows[0] in _testable(
+            ledger, tick, observation, excluded_hypothesis_ids
+        ):
             selected = rows[0]
     else:
-        candidates = _testable(ledger, tick, observation)
+        candidates = _testable(
+            ledger, tick, observation, excluded_hypothesis_ids
+        )
         if candidates:
             candidates.sort(
                 key=lambda row: (
@@ -1559,7 +1590,20 @@ def compile_scientific_test(
                     source_token="observation",
                     created_tick=tick,
                 )
-                ledger = admit_hypothesis(ledger, created)
+                admitted = admit_hypothesis(
+                    ledger,
+                    created,
+                    protected_hypothesis_ids=protected_hypothesis_ids,
+                )
+                if admitted is ledger:
+                    _LOG.warning(
+                        "scientific_test_skipped "
+                        "reason_code=scientific_hypothesis_capacity"
+                    )
+                    return ExperimentCompile(
+                        ledger, reason="scientific_hypothesis_capacity"
+                    )
+                ledger = admitted
                 rows = [
                     row
                     for row in ledger.hypotheses

@@ -137,3 +137,5 @@ Current catalog: 250 metric families; 43 commands; 73 observer semantic types; A
 See also [Economic inequality](economic-inequality.md) for the detached six-dimensional inequality surface over possession, access, credit, and organizational-control evidence.
 
 See also: [Economic cascades](economic-cascades.md) measures how objective disruptions propagate through these production and infrastructure dependencies.
+
+Current catalog pin after V4-28: **256** metric families (the historical landing counts above remain unchanged).

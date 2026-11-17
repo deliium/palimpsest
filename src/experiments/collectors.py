@@ -289,6 +289,31 @@ def assemble_arm_metric_bundle(
         events = getattr(arm.runner_result, "committed_events", None)
     if events is not None:
         try:
+            from experiments.replication_completed_run import (
+                build_completed_run_replication_analysis,
+            )
+
+            replication_ledgers = tuple(
+                getattr(arm.runner_result, "replication_ledgers", ()) or ()
+            )
+            if replication_ledgers:
+                inputs = replace(
+                    inputs,
+                    replication_analysis=build_completed_run_replication_analysis(
+                        run_id=arm.assignment.run_id.value,
+                        replication_ledgers=replication_ledgers,
+                        events=events,
+                        registered_agent_ids=agent_ids,
+                        expected_participants=len(agent_ids),
+                    ),
+                )
+        except Exception as exc:
+            _LOG.error(
+                "replication_collector_failed code=%s",
+                getattr(exc, "reason_code", type(exc).__name__),
+            )
+    if events is not None:
+        try:
             from types import SimpleNamespace
 
             from experiments.trade_networks_completed_run import (

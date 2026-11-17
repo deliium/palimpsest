@@ -300,9 +300,9 @@ def test_loop_ingest_adopts_exactly_one_claim() -> None:
         agent_id=OWNER,
         observation=SimpleNamespace(tick=3, communications=(communication,)),
     )
-    loop._ingest_scientific_hypotheses(loop_input)
-    ledger = loop._experiment_ledger
+    ledger = loop._ingest_scientific_hypotheses(loop_input)
     assert ledger is not None
+    loop._experiment_ledger = ledger
     assert len(ledger.hypotheses) == 1
     row = ledger.hypotheses[0]
     assert row.source_kind is HypothesisSourceKind.COMMUNICATED

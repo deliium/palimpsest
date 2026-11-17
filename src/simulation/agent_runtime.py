@@ -267,6 +267,7 @@ class PendingRuntimeFinalization:
         from simulation.models import RunId
         from simulation.run_control import (
             FINALIZATION_COMMAND_CODEC_VERSION,
+            FINALIZATION_COMMAND_CODEC_VERSION_V2,
             FinalizationCommand,
         )
 
@@ -287,8 +288,17 @@ class PendingRuntimeFinalization:
         if len(delivery_id) > 128:
             # Long matrix/cell run ids must not exceed the delivery contract.
             delivery_id = f"delivery:{delivery_hash[:96]}"
+        replication_candidate = getattr(
+            self.loop_result, "replication_ledger", None
+        )
+        experiment_candidate = getattr(self.loop_result, "experiment_ledger", None)
+        codec_version = (
+            FINALIZATION_COMMAND_CODEC_VERSION_V2
+            if replication_candidate is not None
+            else FINALIZATION_COMMAND_CODEC_VERSION
+        )
         return FinalizationCommand(
-            codec_version=FINALIZATION_COMMAND_CODEC_VERSION,
+            codec_version=codec_version,
             run_id=run_id,
             agent_id=self.submission.agent_id,
             tick=self.tick,
@@ -307,6 +317,8 @@ class PendingRuntimeFinalization:
             delivery_id=delivery_id,
             delivery_content_hash=delivery_hash,
             delivery_acknowledged=False,
+            replication_ledger=replication_candidate,
+            experiment_ledger=experiment_candidate,
         )
 
 
@@ -338,6 +350,8 @@ def pending_from_finalization_command(command: object) -> PendingRuntimeFinaliza
         internal_state=command.next_internal_state,
         pending_accesses=(),
         pending_reconsolidation=None,
+        experiment_ledger=command.experiment_ledger,
+        replication_ledger=command.replication_ledger,
     )
     return PendingRuntimeFinalization(
         observation_key=command.observation_key,
@@ -2984,6 +2998,26 @@ class AgentRuntime:
             command_kind=command_kind,
             final_confidence=loop_result.final_confidence,
         )
+        candidate_digest = ""
+        if loop_result.replication_ledger is not None:
+            from typing import cast as _cast
+
+            from agents.cognition.experimentation import ExperimentLedger as _EL
+            from agents.cognition.replication import ReplicationLedger as _RL
+            from simulation.replication_checkpoint import (
+                replication_state_digest,
+                scientific_experiment_state_digest,
+            )
+
+            candidate_digest = (
+                replication_state_digest(
+                    _cast(_RL, loop_result.replication_ledger)
+                )
+                + ":"
+                + scientific_experiment_state_digest(
+                    _cast(_EL, loop_result.experiment_ledger)
+                )
+            )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -2994,6 +3028,7 @@ class AgentRuntime:
                 if subjective_batch is None
                 else (subjective_batch.expected_revision or 0)
             ),
+            candidate_digest=candidate_digest,
         )
         has_futures = any(
             record.component_kind is ComponentKind.FUTURES
@@ -3283,6 +3318,87 @@ class AgentRuntime:
         self._commit_counterfactual_audit(pending.tick)
         self._apply_reflection_journal(pending.tick)
         self._record_reflection_application(pending)
+        experiment_candidate = getattr(
+            pending.loop_result, "experiment_ledger", None
+        )
+        replication_candidate = getattr(
+            pending.loop_result, "replication_ledger", None
+        )
+        if replication_candidate is not None:
+            from dataclasses import replace as _dc_replace
+
+            from agents.cognition.replication import (
+                ReplicationAttemptState,
+            )
+            from world.actions import Experiment, Talk, Tell
+
+            effective = pending.submission.command
+            original = pending.loop_result.command
+            if type(original) is Experiment and (
+                type(effective) is not Experiment
+                or getattr(effective, "hypothesis_id", "")
+                != getattr(original, "hypothesis_id", "")
+            ):
+                dropped = {
+                    row.hypothesis_id
+                    for row in replication_candidate.attempts
+                    if row.state is ReplicationAttemptState.PROPOSED
+                    and row.submission_tick == pending.tick
+                }
+                if dropped:
+                    replication_candidate = _dc_replace(
+                        replication_candidate,
+                        attempts=tuple(
+                            row
+                            for row in replication_candidate.attempts
+                            if not (
+                                row.state is ReplicationAttemptState.PROPOSED
+                                and row.submission_tick == pending.tick
+                            )
+                        ),
+                    )
+                    if experiment_candidate is not None:
+                        experiment_candidate = _dc_replace(
+                            experiment_candidate,
+                            hypotheses=tuple(
+                                row
+                                for row in experiment_candidate.hypotheses
+                                if row.hypothesis_id not in dropped
+                            ),
+                        )
+            if type(effective) in (Talk, Tell):
+                from typing import cast as _cast2
+
+                from agents.cognition.replication_codec import (
+                    decode_replication_message,
+                )
+                from agents.cognition.replication_communication import (
+                    mark_replication_attempt,
+                )
+
+                content = getattr(
+                    getattr(effective, "utterance", None), "content", None
+                )
+                document = decode_replication_message(
+                    getattr(content, "relations", ())
+                )
+                if document is not None:
+                    replication_candidate, _reason = mark_replication_attempt(
+                        replication_candidate,
+                        document,
+                        recipient_entity_id=_cast2(
+                            Talk, effective
+                        ).recipient_id.value,
+                        tick=pending.tick,
+                    )
+        if experiment_candidate is not None:
+            self._loop.restore_experiment_ledger(
+                experiment_candidate, self._agent.agent_id
+            )
+        if replication_candidate is not None:
+            self._loop.restore_replication_ledger(
+                replication_candidate, self._agent.agent_id
+            )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
         self._processed_invocations.add(pending.invocation_id)
@@ -3876,6 +3992,11 @@ class AgentRuntime:
             self._loop.restore_experiment_ledger(
                 experiment_ledger, self._agent.agent_id
             )
+        replication_ledger = getattr(checkpoint, "replication_ledger", None)
+        if replication_ledger is not None:
+            self._loop.restore_replication_ledger(
+                replication_ledger, self._agent.agent_id
+            )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
             self._disputes is not None
@@ -4034,6 +4155,7 @@ class AgentRuntime:
             organization_agency=self._organization_agency,
             formal_rules=self._formal_rules,
             experiment_ledger=self._loop.experiment_ledger_if_present(),
+            replication_ledger=self._loop.replication_ledger_if_present(),
             disputes=self._disputes,
             evidence=self._evidence,
             representation=self._representation,
@@ -5432,10 +5554,13 @@ def _pending_integrity_hash(
     command_kind: str,
     next_status: str,
     revision_hint: int,
+    candidate_digest: str = "",
 ) -> str:
     material = (
         f"{invocation_id}|{tick}|{command_kind}|{next_status}|{revision_hint}"
     ).encode()
+    if candidate_digest:
+        material += b"|" + candidate_digest.encode("ascii")
     return hashlib.sha256(material).hexdigest()
 
 

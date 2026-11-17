@@ -214,3 +214,5 @@ Current catalog: 250 metric families; 43 commands; 73 observer semantic types; A
 
 Accounting records can project opt-in evidence candidates; see
 [Accounting ledgers](accounting-ledgers.md). Evidence remains belief, never truth.
+
+Current catalog pin after V4-28: **256** metric families (the historical landing counts above remain unchanged).

@@ -90,6 +90,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "subjective_valuations",
         "scarcity_beliefs",
         "acceptance_memories",
+        "replication_ledger",
     )
 
 

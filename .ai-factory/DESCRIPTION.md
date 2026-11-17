@@ -797,3 +797,27 @@ experiment `scientific_hypotheses@1` has three arms. Pins: 250 metric families,
 17 V4 contexts, 12 V4 flags, 9 owned / 3 unowned, 43 commands, 73 observer
 semantic types, replay-v27/codec `v25`, `/v1`, `observer-protocol-v1`, Alembic
 `0017`.
+
+V4-28 (scientific replication, 2026-11-17) deepens the owned `science` context
+without a new flag, context, runner schema, command, event, observer semantic
+type, write pair, `/v2` route, or migration. Owner-scoped `ExperimentDesign`
+records freeze the complete procedure (operator/process/selectors/prediction/
+conditions/parent/source), and `rep_v1` documents travel inside existing
+`Talk`/`Tell` as at most eight 256-character relations. Attempts, categorical
+measurements, explicitly unreported or declared-set uncertainty, immutable
+origin reports, append-only owner interpretations, collaboration declarations,
+and source-trial → child-attempt relations remain separate. Conflicting
+categories and changed/unknown conditions survive without a truth verdict.
+Detached analysis preserves objective executions and owner reports as a tagged
+`results` union and appends six families (250 -> **256**):
+`scientific_replication_design_lineage@1`, `..._conditions@1`, `..._results@1`,
+`..._uncertainty@1`, `..._relationships@1`, and
+`..._social_interpretation@1`. `scientific-replication-snapshot-v1` /
+`scientific-replication-store-v1` publish programmatically and atomically;
+eight GET-only dual-gated `/v1/simulations/{run_id}/scientific-replication`
+routes serve summary and seven sections; the Research UI adds a read-only panel.
+Pending science transitions use `finalization-command-v2` with nested
+`replication-state-v1` / `scientific-experiment-state-v1`; default v1 bytes stay
+unchanged. Pins: 256 metric families, 17 V4 contexts, 12 V4 flags, nine owned /
+three unowned, 43 commands, 73 observer semantic types, replay-v27/codec `v25`,
+`/v1`, `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2.

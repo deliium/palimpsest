@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, TypedDict
 
 if TYPE_CHECKING:
+    from simulation.new_agent_initialization import BlankSlateStoreCounts
     from world.lifecycle import AgentLifecycleRecord
 
 from agents.cognition.communication_strategy import (
@@ -5455,6 +5456,7 @@ class SimulationRunner:
             accounting_ledgers=self.export_accounting_ledgers(),
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             experiment_ledgers=(self.export_experiment_ledgers()),
+            replication_ledgers=(self.export_replication_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
             representation_ledgers=(self.export_representation_ledgers()),
@@ -5900,6 +5902,25 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_experiment_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_replication_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered replication sidecars, including retired owners."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "replication_ledger", None)
+            if ledger is None:
+                record = getattr(runtime, "retired_record", None)
+                retired_checkpoint = getattr(record, "runtime_checkpoint", None)
+                ledger = getattr(retired_checkpoint, "replication_ledger", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_replication_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -6836,7 +6857,6 @@ class SimulationRunner:
         if not new_registrations:
             return
         from simulation.new_agent_initialization import (
-            BlankSlateStoreCounts,
             assert_blank_slate_subjective_state,
             default_new_agent_initialization_spec,
             species_defaults_for,
@@ -7008,7 +7028,9 @@ class SimulationRunner:
             )
             if callable(mark_admit):
                 mark_admit()
-            assert_blank_slate_subjective_state(owner, BlankSlateStoreCounts())
+            assert_blank_slate_subjective_state(
+                owner, _blank_slate_counts(cognitive_loop)
+            )
             bundle = _AgentBundle(
                 runtime=runtime,
                 bundle=owner_bundle,
@@ -7682,6 +7704,30 @@ def _engine_snapshot(
     )
 
 
+def _blank_slate_counts(cognitive_loop: object) -> BlankSlateStoreCounts:
+    """Probe actual replication content instead of trusting zero defaults."""
+    from simulation.new_agent_initialization import BlankSlateStoreCounts
+
+    probe = getattr(cognitive_loop, "replication_ledger_if_present", None)
+    ledger = probe() if callable(probe) else None
+    if ledger is None:
+        return BlankSlateStoreCounts()
+    total = 0
+    for name in (
+        "source_drafts",
+        "designs",
+        "attempts",
+        "reports",
+        "collaborations",
+        "interpretations",
+        "outbox",
+        "receipts",
+        "notices",
+    ):
+        total += len(getattr(ledger, name, ()))
+    return BlankSlateStoreCounts(replication_ledger=total)
+
+
 def _pending_record_from_command(
     command: FinalizationCommand,
 ) -> PendingFinalizationRecord:
@@ -7692,7 +7738,7 @@ def _pending_record_from_command(
         tick=command.tick,
         invocation_id=command.invocation_id,
         integrity_hash=command.integrity_hash,
-        codec_version=PENDING_FINALIZATION_CODEC_VERSION,
+        codec_version=command.codec_version,
         payload=finalization_command_to_mapping(command),
         status=PendingFinalizationStatus.PENDING,
     )
@@ -7713,7 +7759,10 @@ def _command_from_pending_record(
             RunnerConstructionErrorCode.INVALID_CONFIG,
             stage="legacy_pending_finalization",
         )
-    if record.codec_version != PENDING_FINALIZATION_CODEC_VERSION:
+    if record.codec_version not in {
+        PENDING_FINALIZATION_CODEC_VERSION,
+        "finalization-command-v2",
+    }:
         _LOG.error(
             "runner_recovery_corrupt run_id=%s code=unsupported_codec "
             "invocation_id=%s codec_version=%s",

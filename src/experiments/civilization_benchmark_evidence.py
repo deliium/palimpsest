@@ -74,6 +74,7 @@ STORE_PROBE_PATHS: Final[Mapping[str, tuple[str, str]]] = {
     "scarcity_beliefs": ("runtime", "scarcity_beliefs"),
     "acceptance_memories": ("runtime", "acceptance_memories"),
     "experiment_ledger": ("runtime", "experiment_ledger"),
+    "replication_ledger": ("runtime", "replication_ledger"),
 }
 
 _MEASURABLE_STORES: Final[tuple[str, ...]] = tuple(
@@ -170,6 +171,26 @@ class BoundaryObservation:
     given_transfers: tuple[tuple[int, str, str], ...] = ()
 
 
+def _replication_content_count(ledger: object | None) -> int:
+    """Count real sidecar rows; an empty frozen ledger is not content."""
+    if ledger is None:
+        return 0
+    return sum(
+        content_count(getattr(ledger, name, ()))
+        for name in (
+            "source_drafts",
+            "designs",
+            "attempts",
+            "reports",
+            "collaborations",
+            "interpretations",
+            "outbox",
+            "receipts",
+            "notices",
+        )
+    )
+
+
 def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapshot:
     runtime = getattr(snapshot, "runtime_checkpoint", None)
     if runtime is None:
@@ -186,7 +207,15 @@ def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapsh
             continue
         source, attribute = STORE_PROBE_PATHS[store]
         holder = snapshot if source == "snapshot" else runtime
-        counts.append((store, content_count(getattr(holder, attribute, None))))
+        value = getattr(holder, attribute, None)
+        counts.append(
+            (
+                store,
+                _replication_content_count(value)
+                if store == "replication_ledger"
+                else content_count(value),
+            )
+        )
         measured.append(store)
     return OwnerStoreSnapshot(
         owner_id=snapshot.owner_id.value,

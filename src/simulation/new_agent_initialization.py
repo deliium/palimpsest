@@ -185,6 +185,8 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "institutional_decay",
         "institutional_decay_ledger",
         "institutional_decay_ledgers",
+        "replication_ledger",
+        "replication_ledgers",
     }
 )
 
@@ -218,6 +220,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "subjective_valuations",
     "scarcity_beliefs",
     "acceptance_memories",
+    "replication_ledger",
 )
 
 CREATION_REASON_CODES: Final[frozenset[str]] = frozenset(
@@ -892,6 +895,7 @@ class BlankSlateStoreCounts:
     structured_commitments: int = 0
     subjective_valuations: int = 0
     scarcity_beliefs: int = 0
+    replication_ledger: int = 0
     acceptance_memories: int = 0
 
 

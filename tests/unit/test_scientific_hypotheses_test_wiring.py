@@ -324,9 +324,14 @@ def test_loop_replaces_wait_but_not_meaningful_commands() -> None:
     result = asyncio.run(loop.run(loop_input, invocation_id="inv-science"))
     assert type(result.command) is Experiment
     assert result.command.hypothesis_id == "hyp:science"
-    assert loop._experiment_ledger is not None
-    assert loop._experiment_ledger.hypotheses[0].revisions[-1].reason.value == (
+    assert result.experiment_ledger is not None
+    assert result.experiment_ledger.hypotheses[0].revisions[-1].reason.value == (
         "test_formulated"
+    )
+    assert loop._experiment_ledger is not None
+    assert (
+        loop._experiment_ledger.hypotheses[0].revisions[-1].reason.value
+        == "formulated"
     )
 
 

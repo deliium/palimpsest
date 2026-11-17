@@ -115,6 +115,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Economic inequality](docs/economic-inequality.md) | Six-dimensional detached inequality distributions, indices, cohorts, societies, snapshot, and read surface |
 | [Social mobility](docs/social-mobility.md) | Six-domain intergenerational persistence over committed genealogy, generation lags, snapshot, and read surface |
 | [Scientific hypotheses](docs/scientific-hypotheses.md) | Owner-scoped testable hypotheses, evidence-free testimony, six detached families, snapshot/store/routes, Research UI panel |
+| [Scientific replication](docs/scientific-replication.md) | Owner-scoped designs, repeat/adapted relations, conditions, categorical uncertainty, conflicting outcomes, snapshot/store/routes, Research UI panel |
 | [Economic cascades](docs/economic-cascades.md) | Five objective disruption classes, observable dependency edges, bounded `linked`/`unlinked`/`unresolved` chains, snapshot/store, seven GET routes, and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
@@ -146,5 +147,6 @@ See `docs/lineage-explorer.md` for the eight-family read-only graph API, capture
 Optional V3 civilization overlays (regions, settlements, migration, completed-exchange trade, projects, public goods, repositories, culture, technology, groups, and grounded institutions) are documented in `docs/godot-civilization-overlays.md`, including evidence classes, captured-history cursors, and the optional `compose.civilization.yaml` deployment.
 
 - [Scientific hypotheses](docs/scientific-hypotheses.md)
+- [Scientific replication](docs/scientific-replication.md)
 
-Current catalog: 250 metric families; 17 V4 contexts / `v4-context-map-v5`; 9 owned / 3 unowned; replay-v27/codec `v25`; Alembic `0017`.
+Current catalog: 256 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v5`; 9 owned / 3 unowned; replay-v27/codec `v25`; Alembic `0017`.
