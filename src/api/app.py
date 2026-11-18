@@ -57,6 +57,7 @@ from api.routes import (
     research_matrix_router,
     research_router,
     scientific_hypotheses_router,
+    scientific_models_router,
     simulations_router,
     social_mobility_router,
     streams_router,
@@ -722,6 +723,38 @@ def _attach_scientific_replication_reader(app: FastAPI) -> None:
     _LOGGER.info("scientific_replication_reader_attached enabled=true")
 
 
+def _attach_scientific_models_reader(app: FastAPI) -> None:
+    from api.scientific_models_cursor import ScientificModelsCursorCodec
+    from persistence.scientific_models_filesystem import (
+        ScientificModelsStoreOptions,
+        scientific_models_store_reader,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.scientific_models_cursor_codec = None
+        app.state.scientific_models_reader = None
+        return
+    secret = (
+        settings.scientific_models_cursor_key.get_secret_value().encode("utf-8")
+        if settings.scientific_models_cursor_key is not None
+        else None
+    )
+    if settings.scientific_models_root is None or secret is None:
+        app.state.scientific_models_cursor_codec = None
+        app.state.scientific_models_reader = None
+        _LOGGER.info("scientific_models_attach enabled=false")
+        return
+    app.state.scientific_models_cursor_codec = (
+        ScientificModelsCursorCodec.from_secret(secret)
+    )
+    app.state.scientific_models_reader = scientific_models_store_reader(
+        settings.scientific_models_root,
+        options=ScientificModelsStoreOptions(enabled=True),
+    )
+    _LOGGER.info("scientific_models_reader_attached enabled=true")
+
+
 def _attach_scientific_hypotheses_reader(app: FastAPI) -> None:
     from api.scientific_hypotheses_cursor import (
         ScientificHypothesesCursorCodec,
@@ -988,6 +1021,7 @@ def create_app(
     _attach_economic_cascades_reader(app)
     _attach_scientific_hypotheses_reader(app)
     _attach_scientific_replication_reader(app)
+    _attach_scientific_models_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -1035,6 +1069,7 @@ def create_app(
     app.include_router(economic_cascades_router)
     app.include_router(scientific_hypotheses_router)
     app.include_router(replication_router)
+    app.include_router(scientific_models_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
