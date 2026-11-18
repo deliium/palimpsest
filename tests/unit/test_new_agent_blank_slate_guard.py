@@ -92,6 +92,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "acceptance_memories",
         "replication_ledger",
         "measurement_ledger",
+        "scientific_model_ledger",
     )
 
 

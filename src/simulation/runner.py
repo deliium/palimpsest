@@ -5479,6 +5479,7 @@ class SimulationRunner:
             formal_rule_ledgers=(self.export_formal_rule_ledgers()),
             experiment_ledgers=(self.export_experiment_ledgers()),
             replication_ledgers=(self.export_replication_ledgers()),
+            scientific_model_ledgers=(self.export_scientific_model_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
             representation_ledgers=(self.export_representation_ledgers()),
@@ -5962,6 +5963,25 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_measurement_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_scientific_model_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered predictive sidecars, including retired owners."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "scientific_model_ledger", None)
+            if ledger is None:
+                record = getattr(runtime, "retired_record", None)
+                retired_checkpoint = getattr(record, "runtime_checkpoint", None)
+                ledger = getattr(retired_checkpoint, "scientific_model_ledger", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_scientific_model_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -7799,9 +7819,18 @@ def _blank_slate_counts(cognitive_loop: object) -> BlankSlateStoreCounts:
             "notices",
         ):
             measurement_total += len(getattr(measurement, name, ()))
+    model_probe = getattr(
+        cognitive_loop, "scientific_model_ledger_if_present", None
+    )
+    model_ledger = model_probe() if callable(model_probe) else None
+    from agents.cognition.scientific_models import (
+        scientific_model_content_count,
+    )
+
     return BlankSlateStoreCounts(
         replication_ledger=replication_total,
         measurement_ledger=measurement_total,
+        scientific_model_ledger=scientific_model_content_count(model_ledger),
     )
 
 

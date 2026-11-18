@@ -644,6 +644,16 @@ def fork_state_digest(checkpoint: RunnerForkCheckpoint) -> str:
     for runtime_state in sorted(
         checkpoint.runtime_states, key=lambda item: item.checkpoint.agent_id.value
     ):
+        scientific_digest = None
+        model_ledger = getattr(
+            runtime_state.checkpoint, "scientific_model_ledger", None
+        )
+        if model_ledger is not None:
+            from simulation.scientific_model_checkpoint import (
+                scientific_model_state_digest,
+            )
+
+            scientific_digest = scientific_model_state_digest(model_ledger)
         runtimes.append(
             {
                 "agent_id": runtime_state.checkpoint.agent_id.value,
@@ -713,6 +723,11 @@ def fork_state_digest(checkpoint: RunnerForkCheckpoint) -> str:
                     for belief in runtime_state.legacy_beliefs
                 ),
                 "audits": _audit_payload(runtime_state),
+                **(
+                    {"scientific_model_state_digest": scientific_digest}
+                    if scientific_digest is not None
+                    else {}
+                ),
             }
         )
     document = {

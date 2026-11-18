@@ -76,6 +76,7 @@ STORE_PROBE_PATHS: Final[Mapping[str, tuple[str, str]]] = {
     "experiment_ledger": ("runtime", "experiment_ledger"),
     "replication_ledger": ("runtime", "replication_ledger"),
     "measurement_ledger": ("runtime", "measurement_ledger"),
+    "scientific_model_ledger": ("runtime", "scientific_model_ledger"),
 }
 
 _MEASURABLE_STORES: Final[tuple[str, ...]] = tuple(

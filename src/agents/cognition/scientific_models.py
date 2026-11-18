@@ -74,6 +74,7 @@ __all__ = [
     "prune_terminal_cases",
     "scientific_case_id",
     "scientific_hypothesis_id",
+    "scientific_model_content_count",
     "scientific_model_id",
     "scientific_prediction_id",
     "target_alphabet",
@@ -1461,3 +1462,44 @@ def bump_notice(
             count=1,
         ),
     )
+
+
+def scientific_model_content_count(ledger: object) -> int:
+    """Count actual predictive content. ``None`` and pristine state count zero."""
+
+    if ledger is None:
+        return 0
+    if type(ledger) is not ScientificModelLedger:
+        raise _fail("ledger", "invalid_type")
+    total = 0
+    total += len(ledger.hypotheses)
+    total += sum(len(row.revisions) for row in ledger.hypotheses)
+    total += len(ledger.models)
+    total += sum(len(row.revisions) for row in ledger.models)
+    total += sum(len(row.empirical_bins) for row in ledger.models)
+    total += len(ledger.cases)
+    total += len(ledger.bindings)
+    total += len(ledger.samples)
+    total += len(ledger.summaries)
+    total += len(ledger.comparisons)
+    total += len(ledger.notices)
+    total += len(ledger.issued_observation_keys)
+    for name in (
+        "cursor",
+        "sequence",
+        "hypothesis_sequence",
+        "model_sequence",
+        "case_sequence",
+        "revision_sequence",
+        "evicted_cases",
+        "evicted_revisions",
+        "last_observation_tick",
+    ):
+        total += int(getattr(ledger, name))
+    if ledger.last_issued_tick >= 0:
+        total += 1
+    if ledger.last_observation_key:
+        total += 1
+    if ledger.first_retained_tick is not None:
+        total += 1
+    return total
