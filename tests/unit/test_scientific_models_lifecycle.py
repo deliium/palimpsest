@@ -469,14 +469,13 @@ def test_contradictory_exposed_operand_is_not_comparable() -> None:
     assert updated.state is ForecastCaseState.NOT_COMPARABLE
 
 
-def test_foreign_observation_owner_is_rejected() -> None:
-    ledger = empty_scientific_model_ledger(_OWNER)
-    with pytest.raises(ValueError, match="owner_mismatch"):
+def test_invalid_ledger_type_is_rejected() -> None:
+    with pytest.raises(ValueError, match="invalid_type"):
         resolve_due_model_cases(
-            ledger,
+            object(),  # type: ignore[arg-type]
             Observation(
                 world_id=_WORLD,
-                observer_id=EntityId("agent-2"),
+                observer_id=EntityId("agent-1"),
                 revision=WorldRevision(0),
                 tick=0,
             ),

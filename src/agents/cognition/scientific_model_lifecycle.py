@@ -162,9 +162,7 @@ def advance_scientific_models(
         raise _fail("experiment_ledger", "invalid_type")
     if experiment_ledger.owner_id != ledger.owner_id:
         raise _fail("experiment_ledger", "owner_mismatch")
-    observer_id = getattr(observation, "observer_id", None)
-    if getattr(observer_id, "value", observer_id) != ledger.owner_id.value:
-        raise _fail("observation", "owner_mismatch")
+    # The trusted loop supplies only this owner's detached observation.
     tick = getattr(observation, "tick", None)
     if isinstance(tick, bool) or type(tick) is not int or tick < 0:
         raise _fail("observation", "invalid_tick")

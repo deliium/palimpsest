@@ -3008,6 +3008,24 @@ class AgentRuntime:
             command_kind=command_kind,
             final_confidence=loop_result.final_confidence,
         )
+        scientific_candidate = getattr(
+            loop_result, "scientific_model_ledger", None
+        )
+        if scientific_candidate is not None:
+            from agents.cognition.scientific_model_binding import (
+                bind_scientific_model_execution,
+            )
+
+            adjusted = bind_scientific_model_execution(
+                scientific_candidate,
+                command,
+                tick=prepared.tick,
+                observation=prepared.proposal.loop_input.observation,
+            )
+            if adjusted is not scientific_candidate:
+                loop_result = replace(
+                    loop_result, scientific_model_ledger=adjusted
+                )
         candidate_digest = ""
         if loop_result.replication_ledger is not None:
             from typing import cast as _cast
@@ -3426,6 +3444,13 @@ class AgentRuntime:
         if measurement_candidate is not None:
             self._loop.restore_measurement_ledger(
                 measurement_candidate, self._agent.agent_id
+            )
+        scientific_model_candidate = getattr(
+            pending.loop_result, "scientific_model_ledger", None
+        )
+        if scientific_model_candidate is not None:
+            self._loop.restore_scientific_model_ledger(
+                scientific_model_candidate, self._agent.agent_id
             )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key

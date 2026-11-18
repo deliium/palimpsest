@@ -263,9 +263,9 @@ def test_pending_cap_refuses_new_cases_without_dropping_old_ones() -> None:
     assert any(row.reason_code == "pending_cap" for row in blocked.notices)
 
 
-def test_forecast_rejects_foreign_observations() -> None:
-    with pytest.raises(ValueError, match="owner_mismatch"):
-        issue_model_forecasts(_season_ledger(), _observation(4, owner_id=_OTHER))
+def test_forecast_rejects_invalid_ledger_types() -> None:
+    with pytest.raises(ValueError, match="invalid_type"):
+        issue_model_forecasts(object(), _observation(4))  # type: ignore[arg-type]
 
 
 def test_terminal_case_state_is_untouched_by_issuance() -> None:

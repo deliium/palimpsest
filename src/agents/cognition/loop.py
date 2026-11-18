@@ -429,6 +429,8 @@ class CognitiveLoop:
         "_reputation_policy",
         "_resource_exchange_profile_active",
         "_scientific_hypotheses_mode",
+        "_scientific_model_enabled",
+        "_scientific_model_ledger",
         "_self_state",
         "_semantic_naming_mode",
         "_semantic_naming_policy",
@@ -1226,6 +1228,10 @@ class CognitiveLoop:
                 "CognitionScientificHypothesesMode"
             )
         self._scientific_hypotheses_mode = scientific_mode
+        self._scientific_model_ledger: object | None = None
+        self._scientific_model_enabled = (
+            scientific_mode is not CognitionScientificHypothesesMode.DISABLED
+        )
         self._measurement_ledger = None
         self._measurement_enabled = False
         from agents.cognition.configuration import CognitionDisputeMode
@@ -4875,6 +4881,28 @@ class CognitiveLoop:
         self._measurement_ledger = ledger
         self._measurement_enabled = True
 
+    def scientific_model_ledger_if_present(self) -> object | None:
+        """Return the committed predictive sidecar without constructing one."""
+
+        return self._scientific_model_ledger
+
+    def restore_scientific_model_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install a validated committed predictive sidecar."""
+
+        if ledger is None:
+            self._scientific_model_ledger = None
+            return
+        from agents.cognition.scientific_models import ScientificModelLedger
+
+        if type(ledger) is not ScientificModelLedger:
+            raise ValueError("scientific_model_ledger: invalid_type")
+        if owner_id is not None and ledger.owner_id != owner_id:
+            raise ValueError("scientific_model_ledger: owner mismatch")
+        self._scientific_model_ledger = ledger
+        self._scientific_model_enabled = True
+
     def _remember_experiments(
         self, loop_input: object, ledger: ExperimentLedger | None = None
     ) -> ExperimentLedger | None:
@@ -7381,6 +7409,33 @@ class CognitiveLoop:
                 measurement_candidate = ingest_measurement_communication(
                     measurement_candidate, communication
                 )
+        scientific_model_candidate = None
+        if self._scientific_model_enabled and experiment_candidate is not None:
+            from agents.cognition.scientific_model_lifecycle import (
+                advance_scientific_models,
+            )
+            from agents.cognition.scientific_models import (
+                ScientificModelLedger,
+                empty_scientific_model_ledger,
+            )
+
+            scientific_model_candidate = (
+                getattr(snapshot, "scientific_model_ledger", None)
+                if snapshot is not None
+                else None
+            )
+            if type(scientific_model_candidate) is not ScientificModelLedger:
+                scientific_model_candidate = self._scientific_model_ledger
+            if scientific_model_candidate is None:
+                scientific_model_candidate = empty_scientific_model_ledger(
+                    proposal.agent_id
+                )
+            assert type(scientific_model_candidate) is ScientificModelLedger
+            scientific_model_candidate = advance_scientific_models(
+                scientific_model_candidate,
+                loop_input.observation,
+                experiment_ledger=experiment_candidate,
+            )
         protected_replication_ids: frozenset[str] = frozenset()
         if replication_candidate is not None:
             from agents.cognition.replication_actions import (
@@ -8005,6 +8060,7 @@ class CognitiveLoop:
             experiment_ledger=experiment_candidate,
             replication_ledger=replication_candidate,
             measurement_ledger=measurement_candidate,
+            scientific_model_ledger=scientific_model_candidate,
         )
         _LOG.debug(
             "cognitive_loop_complete",

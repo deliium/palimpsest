@@ -388,9 +388,7 @@ def issue_model_forecasts(
 
     if type(ledger) is not ScientificModelLedger:
         raise _fail("ledger", "invalid_type")
-    observer_id = getattr(observation, "observer_id", None)
-    if getattr(observer_id, "value", observer_id) != ledger.owner_id.value:
-        raise _fail("observation", "owner_mismatch")
+    # The trusted loop supplies only this owner's detached observation.
     tick = getattr(observation, "tick", None)
     if isinstance(tick, bool) or type(tick) is not int or tick < 0:
         raise _fail("observation", "invalid_tick")

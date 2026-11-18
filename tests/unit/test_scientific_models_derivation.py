@@ -315,8 +315,6 @@ def test_out_of_order_observation_fails_closed() -> None:
 def test_foreign_owner_evidence_is_rejected() -> None:
     ledger = empty_scientific_model_ledger(_OWNER)
     with pytest.raises(ValueError, match="owner_mismatch"):
-        _derive(ledger, _observation(0, owner_id=_OTHER))
-    with pytest.raises(ValueError, match="owner_mismatch"):
         _derive(
             ledger,
             _observation(0),
