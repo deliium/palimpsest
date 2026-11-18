@@ -168,17 +168,20 @@ def _page(
             offset = 0 if raw in {None, ""} else int(str(raw))
         except ValueError as exc:
             raise bad_request(code="scientific_models_cursor_invalid") from exc
-    page = page_scientific_models_rows(
-        snapshot,
-        section=section,
-        page_size=limit,
-        offset=offset,
-        model_token=model_token,
-        target_kind=target_kind,
-        status=status,
-        issued_from_tick=issued_from_tick,
-        issued_through_tick=issued_through_tick,
-    )
+    try:
+        page = page_scientific_models_rows(
+            snapshot,
+            section=section,
+            page_size=limit,
+            offset=offset,
+            model_token=model_token,
+            target_kind=target_kind,
+            status=status,
+            issued_from_tick=issued_from_tick,
+            issued_through_tick=issued_through_tick,
+        )
+    except ValueError as exc:
+        raise bad_request(code="scientific_models_filter_invalid") from exc
     next_cursor = None
     if page.next_offset is not None:
         next_cursor = codec.encode(
@@ -219,9 +222,7 @@ async def scientific_models_summary(
         "policy_version": snapshot.policy_version,
         "finalized_through_tick": snapshot.finalized_through_tick,
         "coverage_status": snapshot.coverage_status,
-        "counts": {
-            section: len(getattr(snapshot, section)) for section in _SECTIONS
-        },
+        "counts": {section: len(getattr(snapshot, section)) for section in _SECTIONS},
         "publications": list(reader.list_publications(run_id)),
     }
 

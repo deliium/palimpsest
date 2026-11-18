@@ -260,7 +260,7 @@ publication, Godot work, capacity claims and unrelated refactors.
 - [x] Task 13: Implement immutable quota-bounded filesystem storage ([details](phase-04-store-api-and-ui.md#task-13-implement-immutable-quota-bounded-filesystem-storage)); depends on 11, 12.
 - [x] Task 14: Add dual-gated GET-only scientific-model routes ([details](phase-04-store-api-and-ui.md#task-14-add-dual-gated-get-only-scientific-model-routes)); depends on 13.
 - [x] Task 15: Build the read-only Scientific Models panel ([details](phase-04-store-api-and-ui.md#task-15-build-the-read-only-scientific-models-panel)); depends on 14.
-- [ ] Task 16: Prove end-to-end read isolation and authorization ([details](phase-04-store-api-and-ui.md#task-16-prove-end-to-end-read-isolation-and-authorization)); depends on 12–15.
+- [x] Task 16: Prove end-to-end read isolation and authorization ([details](phase-04-store-api-and-ui.md#task-16-prove-end-to-end-read-isolation-and-authorization)); depends on 12–15.
 
 ### Phase 5: Experiments and regressions
 
