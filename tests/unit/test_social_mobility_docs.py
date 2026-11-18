@@ -45,9 +45,9 @@ def test_required_sections_exist() -> None:
 def test_pins_match_the_code() -> None:
     text = _text()
     assert METRIC_FAMILY_COUNT == 256
-    assert "250 metric families" in text
+    assert "256 metric families" in text
     assert "17 V4 contexts" in text
-    assert "v4-context-map-v5" in text
+    assert "v4-context-map-v6" in text
     for domain in (
         "resources",
         "skills",
@@ -76,7 +76,7 @@ def test_v4_architecture_declares_sixteen_contexts() -> None:
     text = V4.read_text(encoding="utf-8")
     assert "### social_mobility" in text
     assert text.count("\n### ") == 17
-    assert "v4-context-map-v5" in text
+    assert "v4-context-map-v6" in text
 
 
 def test_negative_affirmative_claims_are_rejected() -> None:

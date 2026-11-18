@@ -98,7 +98,7 @@ def test_cognition_factory_version_stays_v1_and_payload_includes_borders() -> No
 
 def test_no_runner_v57_or_new_flag_key_exists() -> None:
     source = inspect.getsource(runner_module)
-    assert "runner-config-v57" not in source
+    assert "runner-config-v58" not in source
     assert "borders" not in V4CapabilityFlags.__dataclass_fields__
     with pytest.raises(ValueError):
         v4_context_for_flag("borders")

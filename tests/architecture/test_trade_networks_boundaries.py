@@ -72,17 +72,17 @@ def test_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION == "runner-config-v4"
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert list((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
 
 
 def test_v4_contexts_and_flags_are_unchanged() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -101,17 +101,20 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
 
 
 def test_deepening_pairs_are_unchanged() -> None:
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27]
-    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == ["v25"]
-    assert 28 not in ACCEPTED_EVENT_SCHEMA_VERSIONS
-    assert "v26" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == [
+        "v25",
+        "v26",
+    ]
+    assert 29 not in ACCEPTED_EVENT_SCHEMA_VERSIONS
+    assert "v27" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_no_v57_or_new_flag_reference() -> None:
     offenders = [
         path
         for path in SRC.rglob("*.py")
-        if "runner-config-v57" in path.read_text(encoding="utf-8")
+        if "runner-config-v58" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     assert len(V4_CAPABILITY_FLAGS) == 12

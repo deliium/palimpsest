@@ -35,10 +35,10 @@ def test_exact_pins() -> None:
     )
     assert ORGANIZATION_CURSOR_PURPOSES[-1] == "organization_collective_agency"
     assert len(ORGANIZATION_CURSOR_PURPOSES) == 6
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_six_get_routes() -> None:

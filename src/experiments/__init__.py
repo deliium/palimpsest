@@ -460,6 +460,10 @@ from experiments.matrix_serialization import (
     encode_matrix_spec_document,
     encode_run_version_identity,
 )
+from experiments.measurement_scenario import (
+    MEASUREMENT_INSTRUMENTS_EXPERIMENT_ID,
+    measurement_instruments_scenario,
+)
 from experiments.memory_repository import InMemoryExperimentRecordRepository
 from experiments.metric_collection import (
     MetricCollectionResult,
@@ -585,6 +589,7 @@ __all__ = [
     "EXPERIMENT_RECORD_SCHEMA_VERSION",
     "MATRIX_AGGREGATE_SCHEMA_VERSION",
     "MATRIX_MANIFEST_SCHEMA_VERSION",
+    "MEASUREMENT_INSTRUMENTS_EXPERIMENT_ID",
     "MILESTONE_ARBITER_POLICY_VERSION",
     "MULTIPLICITY_POLICY",
     "OBSERVER_GRAPHICAL_SCENARIO_ID",
@@ -953,6 +958,7 @@ __all__ = [
     "matrix_identity_document",
     "matrix_reference_fixture_base",
     "matrix_spec_fingerprint",
+    "measurement_instruments_scenario",
     "new_agent_bootstrap_profile",
     "organization_publication_document",
     "persist_metric_bundle",

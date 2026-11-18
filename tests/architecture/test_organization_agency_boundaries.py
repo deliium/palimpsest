@@ -103,9 +103,9 @@ def test_compatibility_pins_are_exact() -> None:
     assert len(families) == 256
     assert families[146].family_id.value == "organization_collective_agency"
     assert families[147].family_id.value == "organization_collective_implementation"
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert SUPPORTED_ORGANIZATION_SNAPSHOT_SCHEMAS == (
         "organization-snapshot-v1",
@@ -214,7 +214,7 @@ def test_v4_reservations_observer_and_migration_are_unchanged() -> None:
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert next_revision() == "0018"
 

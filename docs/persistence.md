@@ -247,8 +247,18 @@ and bounded `travel_network` route rows. Route rows are required under v25 (an
 empty tuple is valid for an edgeless world) and rejected under v21. Old v21 and
 v19 checkpoints remain decodable. Alembic head stays **0017**.
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## Scientific replication siblings
 
 `replication-state-v1` and `scientific-experiment-state-v1` are private pending-finalization v2 records. Published research uses `scientific-replication-snapshot-v1` / `scientific-replication-store-v1`. Pending v2 is not a world replay codec; legacy v1 bytes remain unchanged.
+
+## Measurement state (V4-29)
+
+Active measurement runs use `EVENT_SCHEMA_REPLAY_V28` and persistence codec
+`v26`; the v26 snapshot is the v25 superset plus mandatory
+`instrument_states` and `measurement_references` arrays. Measurement-bearing
+domain values use envelope schema 2. Pending subjective recovery uses
+`finalization-command-v3` with `measurement-state-v1`; v1 and v2 remain
+decodable with their original bytes. See
+[Measurement instruments](measurement-instruments.md).

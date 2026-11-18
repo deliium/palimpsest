@@ -133,7 +133,7 @@ def _generational_v55() -> SimulationRunnerConfig:
 def test_v56_is_accepted_and_never_the_default() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 == "runner-config-v56"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V4 == "runner-config-v4"
 
 

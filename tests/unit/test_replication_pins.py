@@ -49,4 +49,4 @@ def test_no_new_schema_migration_flag_or_wire_version() -> None:
         for path in (root / "src").rglob("*.py")
         if "replication" in path.name
     )
-    assert "runner-config-v57" not in sources
+    assert "runner-config-v58" not in sources

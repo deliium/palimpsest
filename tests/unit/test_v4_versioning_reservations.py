@@ -27,7 +27,7 @@ from simulation.versioning import (
 )
 from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
-    EVENT_SCHEMA_REPLAY_V27,
+    EVENT_SCHEMA_REPLAY_V28,
 )
 
 pytestmark = pytest.mark.unit
@@ -50,10 +50,11 @@ def test_reservations_validate_and_span_23_to_26() -> None:
 
 
 def test_current_wire_maxima_are_unchanged() -> None:
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V27 == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == EVENT_SCHEMA_REPLAY_V28 == 28
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
 
@@ -72,8 +73,11 @@ def test_deepening_pair_is_separate_and_contiguous() -> None:
         "v23",
         "v24",
     ]
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27]
-    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == ["v25"]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == [
+        "v25",
+        "v26",
+    ]
     assert TRAVEL_NETWORK_WRITE_PAIR_EVENT == 27
     assert TRAVEL_NETWORK_WRITE_PAIR_CODEC == "v25"
     reserved_events = {item.event_schema for item in V4_WRITE_PAIR_RESERVATIONS}
@@ -112,8 +116,10 @@ def test_deepening_pair_mutations_are_rejected() -> None:
 
 def test_contexts_are_exactly_covered_and_disjoint() -> None:
     reserved = {item.context_id for item in V4_WRITE_PAIR_RESERVATIONS}
+    deepened = {pair.context_id for pair in V4_DEEPENING_WRITE_PAIRS}
     assert not reserved & V4_EVENT_REUSING_CONTEXTS
-    assert reserved | V4_EVENT_REUSING_CONTEXTS == {
+    assert not deepened & V4_EVENT_REUSING_CONTEXTS
+    assert reserved | V4_EVENT_REUSING_CONTEXTS | deepened == {
         spec.context_id for spec in V4_CONTEXTS
     }
     assert V4ContextId.SOCIETAL_RESILIENCE in V4_EVENT_REUSING_CONTEXTS
@@ -150,9 +156,7 @@ def test_context_and_flag_mutations_are_rejected() -> None:
 
 def test_coverage_and_overlap_mutations_are_rejected() -> None:
     with pytest.raises(ValueError, match="v4_pair_uncovered_context"):
-        validate_write_pair_reservations(
-            reusing_contexts=V4_EVENT_REUSING_CONTEXTS - {V4ContextId.SCIENCE}
-        )
+        validate_write_pair_reservations(deepening_pairs=())
     with pytest.raises(ValueError, match="v4_pair_overlap"):
         validate_write_pair_reservations(
             reusing_contexts=V4_EVENT_REUSING_CONTEXTS | {V4ContextId.DISASTERS}

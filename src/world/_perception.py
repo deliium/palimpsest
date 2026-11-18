@@ -20,6 +20,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Final, cast
 
+from world._ambient import ambient_temperature
 from world._state import WorldState
 from world.artifacts import InformationArtifact, RecordIntegrity
 from world.environment import (
@@ -48,11 +49,13 @@ from world.events import (
     ExchangeWithdrawn,
     ExperimentResolved,
     Given,
+    InstrumentCalibrated,
     ItemCrafted,
     ItemStored,
     JourneyArrived,
     JourneyEnded,
     JourneyStarted,
+    MeasurementTaken,
     PossessionClaimAsserted,
     ProjectAbandoned,
     ProjectCompleted,
@@ -72,6 +75,7 @@ from world.events import (
     require_replayable_event,
 )
 from world.identifiers import EntityId, WorldId
+from world.measurement import InstrumentAppearance, ReferenceAppearance
 from world.models import Item, LifeStatus, copy_body
 from world.observations import (
     CONTENT_VISIBILITY_THRESHOLD,
@@ -104,7 +108,7 @@ from world.observations import (
     coarse_health_for,
     observed_self_from_body,
 )
-from world.values import WeatherCondition, round_physical
+from world.values import WeatherCondition
 
 _LOG: Final[logging.Logger] = logging.getLogger("world._perception")
 _PRODUCTION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -476,13 +480,13 @@ def _present_environment(
     if location is not None:
         rules = context.physical_rules
         phase_offsets = rules.phase_temperature_offset
-        weather_offsets = rules.weather_temperature_offset
-        assert phase_offsets is not None and weather_offsets is not None
-        ambient = round_physical(
-            location.base_temperature.value
-            + weather_offsets[condition]
-            + phase_offsets[context.day_phase]
-            + spec.offset_for(season)
+        assert phase_offsets is not None
+        ambient = ambient_temperature(
+            location,
+            condition,
+            phase_offsets[context.day_phase],
+            spec.offset_for(season),
+            rules,
         )
         band = temperature_band(ambient)
     kinds = tuple(
@@ -745,6 +749,42 @@ def _project_item(
         kind=item.kind,
         load=item.load,
         placement=placement,
+        instrument=_instrument_appearance(state, item.entity_id),
+        reference=_reference_appearance(state, item.entity_id),
+    )
+
+
+def _instrument_appearance(
+    state: WorldState, item_id: EntityId
+) -> InstrumentAppearance | None:
+    from world.measurement import (
+        InstrumentAppearance,
+        instrument_wear_band,
+    )
+
+    instrument = state.instrument_states.get(item_id)
+    if instrument is None:
+        return None
+    return InstrumentAppearance(
+        quantity=instrument.quantity,
+        unit=instrument.unit,
+        nominal_step_milli=instrument.nominal_step_milli,
+        wear=instrument_wear_band(instrument.damage_milli),
+        adjustment_mark_present=instrument.last_adjustment_tick is not None,
+    )
+
+
+def _reference_appearance(
+    state: WorldState, item_id: EntityId
+) -> ReferenceAppearance | None:
+    from world.measurement import ReferenceAppearance
+
+    reference = state.measurement_references.get(item_id)
+    if reference is None:
+        return None
+    return ReferenceAppearance(
+        unit=reference.unit,
+        nominal_value_milli=reference.nominal_value_milli,
     )
 
 
@@ -1229,6 +1269,9 @@ def _public_facts_for_role(
             "journey_reason": event.details.reason,
             "journey_status": "ended",
         }
+    measurement_facts = _measurement_public_facts(event, role)
+    if measurement_facts is not None:
+        return measurement_facts
     experiment_facts = _experiment_public_facts(event, role)
     if experiment_facts is not None:
         return experiment_facts
@@ -1587,6 +1630,50 @@ def _possession_public_facts(event: WorldEvent) -> dict[str, object] | None:
             "doctrine": details.doctrine,
             "item_ids": item_ids,
         }
+    return None
+
+
+def _measurement_public_facts(
+    event: WorldEvent, role: ObservationAudienceRole
+) -> dict[str, object] | None:
+    details = event.details
+    if type(details) is MeasurementTaken:
+        facts: dict[str, object] = {"kind": event.event_type}
+        if role is ObservationAudienceRole.ACTOR:
+            reading = details.reading
+            facts.update(
+                {
+                    "instrument_id": reading.instrument_id.value,
+                    "nominal_division_milli": reading.nominal_division_milli,
+                    "quantity": reading.quantity.value,
+                    "sample_tick": reading.sample_tick,
+                    "target_id": reading.target_id.value,
+                    "unit_kind": reading.unit.kind.value,
+                    "unit_resource": reading.unit.resource_unit,
+                }
+            )
+            if reading.displayed_category is not None:
+                facts["value_kind"] = "category"
+                facts["display_category"] = reading.displayed_category
+            else:
+                facts["value_kind"] = "scalar"
+                facts["display_scalar_milli"] = reading.displayed_scalar_milli
+        return facts
+    if type(details) is InstrumentCalibrated:
+        facts = {"kind": event.event_type}
+        if role is ObservationAudienceRole.ACTOR:
+            facts.update(
+                {
+                    "instrument_id": details.instrument_before.item_id.value,
+                    "nominal_value_milli": details.nominal_value_milli,
+                    "reference_id": details.reference_id.value,
+                    "reference_unit_kind": details.reference_unit.kind.value,
+                    "reference_unit_resource": (
+                        details.reference_unit.resource_unit
+                    ),
+                }
+            )
+        return facts
     return None
 
 

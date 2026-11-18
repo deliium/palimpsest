@@ -144,7 +144,7 @@ def test_client_has_no_mutating_method() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert len(_COMMAND_TYPES) == 43
+    assert len(_COMMAND_TYPES) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert METRIC_FAMILY_COUNT == 256
     assert EVENT_SCHEMA_REPLAY_V27 == 27

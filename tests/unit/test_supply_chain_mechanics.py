@@ -170,7 +170,7 @@ def test_flag_is_owned_counts_are_eight() -> None:
 
 def test_flag_requires_v56() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     config = replace(
         _base_config(RUNNER_SCHEMA_VERSION_V4),
     )
@@ -238,7 +238,7 @@ def test_other_v4_flag_still_fails_closed() -> None:
 
 
 def test_no_runner_config_v57_added() -> None:
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_harvest_probability_gain_with_strike_tool() -> None:

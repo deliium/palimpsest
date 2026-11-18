@@ -292,11 +292,19 @@ class PendingRuntimeFinalization:
             self.loop_result, "replication_ledger", None
         )
         experiment_candidate = getattr(self.loop_result, "experiment_ledger", None)
-        codec_version = (
-            FINALIZATION_COMMAND_CODEC_VERSION_V2
-            if replication_candidate is not None
-            else FINALIZATION_COMMAND_CODEC_VERSION
+        measurement_candidate = getattr(
+            self.loop_result, "measurement_ledger", None
         )
+        if measurement_candidate is not None:
+            from simulation.run_control import (
+                FINALIZATION_COMMAND_CODEC_VERSION_V3,
+            )
+
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V3
+        elif replication_candidate is not None:
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V2
+        else:
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION
         return FinalizationCommand(
             codec_version=codec_version,
             run_id=run_id,
@@ -319,6 +327,7 @@ class PendingRuntimeFinalization:
             delivery_acknowledged=False,
             replication_ledger=replication_candidate,
             experiment_ledger=experiment_candidate,
+            measurement_ledger=measurement_candidate,
         )
 
 
@@ -352,6 +361,7 @@ def pending_from_finalization_command(command: object) -> PendingRuntimeFinaliza
         pending_reconsolidation=None,
         experiment_ledger=command.experiment_ledger,
         replication_ledger=command.replication_ledger,
+        measurement_ledger=command.measurement_ledger,
     )
     return PendingRuntimeFinalization(
         observation_key=command.observation_key,
@@ -3018,6 +3028,17 @@ class AgentRuntime:
                     _cast(_EL, loop_result.experiment_ledger)
                 )
             )
+            if getattr(loop_result, "measurement_ledger", None) is not None:
+                from agents.cognition.measurement import (
+                    MeasurementLedger as _ML,
+                )
+                from simulation.measurement_checkpoint import (
+                    measurement_state_digest,
+                )
+
+                candidate_digest += ":" + measurement_state_digest(
+                    _cast(_ML, loop_result.measurement_ledger)
+                )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -3398,6 +3419,13 @@ class AgentRuntime:
         if replication_candidate is not None:
             self._loop.restore_replication_ledger(
                 replication_candidate, self._agent.agent_id
+            )
+        measurement_candidate = getattr(
+            pending.loop_result, "measurement_ledger", None
+        )
+        if measurement_candidate is not None:
+            self._loop.restore_measurement_ledger(
+                measurement_candidate, self._agent.agent_id
             )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
@@ -3997,6 +4025,11 @@ class AgentRuntime:
             self._loop.restore_replication_ledger(
                 replication_ledger, self._agent.agent_id
             )
+        measurement_ledger = getattr(checkpoint, "measurement_ledger", None)
+        if measurement_ledger is not None:
+            self._loop.restore_measurement_ledger(
+                measurement_ledger, self._agent.agent_id
+            )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
             self._disputes is not None
@@ -4156,6 +4189,7 @@ class AgentRuntime:
             formal_rules=self._formal_rules,
             experiment_ledger=self._loop.experiment_ledger_if_present(),
             replication_ledger=self._loop.replication_ledger_if_present(),
+            measurement_ledger=self._loop.measurement_ledger_if_present(),
             disputes=self._disputes,
             evidence=self._evidence,
             representation=self._representation,

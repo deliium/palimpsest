@@ -38,7 +38,7 @@ from simulation.compatibility import (
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.v4_architecture")
 
-V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v5"
+V4_CONTEXT_MAP_VERSION: Final[str] = "v4-context-map-v6"
 V4_ANALYSIS_CAPTURE_SEAM: Final[str] = "analysis_capture"
 
 _ALLOWED_OWNER_PACKAGES: Final[frozenset[str]] = frozenset(
@@ -241,7 +241,7 @@ V4_CONTEXTS: Final[tuple[V4ContextSpec, ...]] = (
             "experimentation, practical knowledge, knowledge repositories"
         ),
         required_config_seam="v4_capability_flags.science",
-        uses_existing_events=True,
+        uses_existing_events=False,
         prerequisite_contexts=(V4ContextId.FORMAL_RULES,),
         non_goals=(
             "no objective truth registry or global encyclopedia",

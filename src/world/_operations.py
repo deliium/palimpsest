@@ -22,6 +22,7 @@ from world.actions import (
     AssertPossessionClaim,
     Attack,
     Build,
+    CalibrateInstrument,
     ContributeCollectiveProject,
     CopyRecord,
     Craft,
@@ -43,6 +44,7 @@ from world.actions import (
     Inscribe,
     MaintainPublicGood,
     MaintainRepository,
+    Measure,
     Move,
     NegotiateExchange,
     OpposePublicGood,
@@ -564,6 +566,27 @@ class _ExperimentOp:
     hypothesis_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class _MeasureOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    instrument_id: EntityId
+    target_id: EntityId
+    quantity: object
+
+
+@dataclass(frozen=True, slots=True)
+class _CalibrateInstrumentOp:
+    request_id: RequestId
+    actor_id: EntityId
+    world_id: WorldId
+    base_revision: WorldRevision
+    instrument_id: EntityId
+    reference_id: EntityId
+
+
 ValidatedWorldOperation = (
     _MoveOp
     | _SearchOp
@@ -600,6 +623,8 @@ ValidatedWorldOperation = (
     | _MaintainRepositoryOp
     | _IndexRepositoryOp
     | _ExperimentOp
+    | _MeasureOp
+    | _CalibrateInstrumentOp
     | _AssertPossessionClaimOp
     | _DeclareCommitmentOp
     | _NegotiateExchangeOp
@@ -647,6 +672,8 @@ _OPERATION_TYPES: Final[frozenset[type]] = frozenset(
         _MaintainRepositoryOp,
         _IndexRepositoryOp,
         _ExperimentOp,
+        _MeasureOp,
+        _CalibrateInstrumentOp,
         _AssertPossessionClaimOp,
         _DeclareCommitmentOp,
         _NegotiateExchangeOp,
@@ -1123,6 +1150,30 @@ def validate_action_request(
                     hypothesis_id=hypothesis_id,
                 )
             )
+        case Measure(
+            instrument_id=instrument_id,
+            target_id=target_id,
+            quantity=quantity,
+        ):
+            return OperationAccepted(
+                _MeasureOp(
+                    *base,
+                    instrument_id=instrument_id,
+                    target_id=target_id,
+                    quantity=quantity,
+                )
+            )
+        case CalibrateInstrument(
+            instrument_id=instrument_id,
+            reference_id=reference_id,
+        ):
+            return OperationAccepted(
+                _CalibrateInstrumentOp(
+                    *base,
+                    instrument_id=instrument_id,
+                    reference_id=reference_id,
+                )
+            )
         case _:
             return OperationRejected(
                 code=RejectionCode.MALFORMED_ENVELOPE, request_id=request_id
@@ -1348,6 +1399,7 @@ def prepare_action_batch(
     infrastructure_networks_active: bool = False,
     season: Season | None = None,
     travel_network_active: bool = False,
+    measurement_context: object | None = None,
 ) -> PendingBatch:
     """Resolve ordered requests into pending effects against one evolving state.
 
@@ -1547,6 +1599,7 @@ def prepare_action_batch(
             infrastructure_networks_active=infrastructure_networks_active,
             season=season,
             travel_network_active=travel_network_active,
+            measurement_context=measurement_context,
         )
         if start_rule.disposition is RuleDisposition.REJECT:
             if start_rule.action_kind in {"feed", "transport"}:
@@ -1646,6 +1699,7 @@ def prepare_action_batch(
                 infrastructure_networks_active=infrastructure_networks_active,
                 season=season,
                 travel_network_active=travel_network_active,
+                measurement_context=measurement_context,
             )
             if working_rule.disposition is not RuleDisposition.EVENT_ONLY:
                 outcomes.append(
@@ -1742,6 +1796,7 @@ def prepare_action_batch(
             infrastructure_networks_active=infrastructure_networks_active,
             season=season,
             travel_network_active=travel_network_active,
+            measurement_context=measurement_context,
         )
         if application.result.disposition is RuleDisposition.REJECT:
             status = BatchItemStatus.CONFLICTED

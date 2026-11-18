@@ -202,13 +202,13 @@ def test_snapshot_schema_and_store_schema_are_v1() -> None:
 
 def test_compatibility_pins_are_exact() -> None:
     assert METRIC_FAMILY_COUNT == 256
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
     assert SUPPORTED_OBSERVER_PROTOCOLS == ("observer-protocol-v1",)
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v56" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
@@ -349,9 +349,9 @@ def test_app_wiring_imports_only_api_and_persistence() -> None:
 
 def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not sorted((ROOT / "alembic" / "versions").glob("0018_*.py"))
     spec = V4_CONTEXT_BY_ID[V4ContextId.FORMAL_RULES]

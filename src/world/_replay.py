@@ -27,6 +27,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final, Never
 
+from world._ambient import ambient_temperature
 from world._state import WorldState, rebuild_world_state
 from world.artifacts import ArtifactContent, InformationArtifact
 from world.environment import (
@@ -58,6 +59,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V27,
+    EVENT_SCHEMA_REPLAY_V28,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -95,6 +97,7 @@ from world.events import (
     InfrastructureDecayed,
     InfrastructureDestroyed,
     InfrastructureRepaired,
+    InstrumentCalibrated,
     ItemCrafted,
     ItemStored,
     JourneyArrived,
@@ -102,6 +105,7 @@ from world.events import (
     JourneyStarted,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
+    MeasurementTaken,
     Moved,
     NeedsApplied,
     PossessionClaimAsserted,
@@ -181,7 +185,6 @@ from world.values import (
     ResourceKind,
     TemperatureCelsius,
     Thirst,
-    round_physical,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.replay")
@@ -423,6 +426,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V22,
             EVENT_SCHEMA_REPLAY_V23,
             EVENT_SCHEMA_REPLAY_V27,
+            EVENT_SCHEMA_REPLAY_V28,
         }:
             raise ProjectionError(ProjectionErrorCode.UNSUPPORTED_SCHEMA)
     return normalized, schema_version, run_id
@@ -706,6 +710,30 @@ def _apply_event_effect(
             return _project_repository_neglected(state, event, neglected), True
         case ExperimentResolved() as experiment:
             return _project_experiment(state, event, experiment, production_catalog)
+        case MeasurementTaken() as measurement:
+            from world._measurement import project_measurement_taken
+
+            try:
+                next_state = project_measurement_taken(
+                    state, request_id=event.request_id, details=measurement
+                )
+            except ValueError as exc:
+                raise ProjectionError(
+                    ProjectionErrorCode.INVARIANT_FAILED
+                ) from exc
+            return next_state, next_state is not state
+        case InstrumentCalibrated() as calibrated:
+            from world._measurement import project_instrument_calibrated
+
+            try:
+                next_state = project_instrument_calibrated(
+                    state, details=calibrated
+                )
+            except ValueError as exc:
+                raise ProjectionError(
+                    ProjectionErrorCode.INVARIANT_FAILED
+                ) from exc
+            return next_state, next_state is not state
         case CorpseCustodyOpened() as opened:
             return _project_corpse_custody_opened(state, opened), True
         case TakenFromCorpse() as taken:
@@ -991,14 +1019,14 @@ def _band_at(
         return None
     rules: PhysicalRules = default_physical_rules()
     phase_offsets = rules.phase_temperature_offset
-    weather_offsets = rules.weather_temperature_offset
-    assert phase_offsets is not None and weather_offsets is not None
+    assert phase_offsets is not None
     season = spec.season_at(tick)
-    ambient = round_physical(
-        location.base_temperature.value
-        + weather_offsets[weather.condition]
-        + phase_offsets[rules.day_phase_for_tick(tick)]
-        + spec.offset_for(season)
+    ambient = ambient_temperature(
+        location,
+        weather.condition,
+        phase_offsets[rules.day_phase_for_tick(tick)],
+        spec.offset_for(season),
+        rules,
     )
     return temperature_band(ambient)
 

@@ -93,7 +93,7 @@ def test_absent_from_v1_gate() -> None:
 
 def test_no_new_runner_schema() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_both_conditions_construct() -> None:

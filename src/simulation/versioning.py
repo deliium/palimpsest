@@ -89,6 +89,8 @@ class DeepeningWritePair:
 
 TRAVEL_NETWORK_WRITE_PAIR_EVENT: Final[int] = 27
 TRAVEL_NETWORK_WRITE_PAIR_CODEC: Final[str] = "v25"
+MEASUREMENT_WRITE_PAIR_EVENT: Final[int] = 28
+MEASUREMENT_WRITE_PAIR_CODEC: Final[str] = "v26"
 
 V4_DEEPENING_WRITE_PAIRS: Final[tuple[DeepeningWritePair, ...]] = (
     DeepeningWritePair(
@@ -96,6 +98,12 @@ V4_DEEPENING_WRITE_PAIRS: Final[tuple[DeepeningWritePair, ...]] = (
         event_schema=TRAVEL_NETWORK_WRITE_PAIR_EVENT,
         codec_version=TRAVEL_NETWORK_WRITE_PAIR_CODEC,
         reason="derived route conditions and their transitions must replay",
+    ),
+    DeepeningWritePair(
+        context_id=V4ContextId.SCIENCE,
+        event_schema=MEASUREMENT_WRITE_PAIR_EVENT,
+        codec_version=MEASUREMENT_WRITE_PAIR_CODEC,
+        reason="physical instrument condition and displayed readings must replay",
     ),
 )
 
@@ -108,7 +116,6 @@ V4_EVENT_REUSING_CONTEXTS: Final[frozenset[V4ContextId]] = frozenset(
         V4ContextId.ORGANIZED_CONFLICT,
         V4ContextId.SUPPLY_CHAINS,
         V4ContextId.MARKETS_CREDIT,
-        V4ContextId.SCIENCE,
         V4ContextId.SOCIETAL_RESILIENCE,
         V4ContextId.MACRO_SOCIETY_IDENTITY,
         V4ContextId.ECONOMIC_INEQUALITY,
@@ -133,6 +140,7 @@ def validate_write_pair_reservations(
     reservations: Sequence[WritePairReservation] = V4_WRITE_PAIR_RESERVATIONS,
     *,
     reusing_contexts: frozenset[V4ContextId] = V4_EVENT_REUSING_CONTEXTS,
+    deepening_pairs: Sequence[DeepeningWritePair] = V4_DEEPENING_WRITE_PAIRS,
 ) -> None:
     """Validate reservations and context coverage with stable error codes."""
     events = [reservation.event_schema for reservation in reservations]
@@ -172,10 +180,26 @@ def validate_write_pair_reservations(
         reservation_contexts.add(reservation.context_id)
 
     known_contexts = {spec.context_id for spec in V4_CONTEXTS}
-    if not (reservation_contexts | reusing_contexts) == known_contexts:
+    deepening_contexts = {pair.context_id for pair in deepening_pairs}
+    if not (
+        reservation_contexts | reusing_contexts | deepening_contexts
+    ) == known_contexts:
         _fail("v4_pair_uncovered_context")
     if reservation_contexts & reusing_contexts:
         _fail("v4_pair_overlap")
+    if reusing_contexts & deepening_contexts:
+        _fail("v4_pair_reuse_deepening_conflict")
+    for pair in deepening_pairs:
+        if pair.context_id not in V4_CONTEXT_BY_ID:
+            _fail("v4_deepening_pair_unknown_context")
+        spec = V4_CONTEXT_BY_ID[pair.context_id]
+        if (
+            pair.context_id in V4_ANALYSIS_ONLY_CONTEXTS
+            or spec.authority is V4Authority.DETACHED_ANALYSIS
+            or spec.capability_flag is None
+            or spec.capability_flag not in V4_OWNED_CAPABILITY_FLAGS
+        ):
+            _fail("v4_deepening_pair_unowned_context")
 
 
 def validate_deepening_write_pairs(
@@ -240,6 +264,8 @@ def reservation_for_context(context_id: V4ContextId) -> WritePairReservation:
 
 
 __all__ = [
+    "MEASUREMENT_WRITE_PAIR_CODEC",
+    "MEASUREMENT_WRITE_PAIR_EVENT",
     "TRAVEL_NETWORK_WRITE_PAIR_CODEC",
     "TRAVEL_NETWORK_WRITE_PAIR_EVENT",
     "V4_DEEPENING_WRITE_PAIRS",

@@ -260,7 +260,7 @@ def test_no_v2_route_or_protocol() -> None:
 
 
 def test_pins_are_unchanged() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

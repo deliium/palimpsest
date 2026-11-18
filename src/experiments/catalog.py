@@ -2839,6 +2839,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "economic_cascades@1",
         "scientific_hypotheses@1",
         "scientific_replication@1",
+        "measurement_instruments@1",
     }
 )
 
@@ -5829,6 +5830,25 @@ def experiment_scientific_replication(
     )
     _LOG.info(
         "experiment_registered experiment_id=scientific_replication@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_measurement_instruments(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 64,
+) -> ExperimentDefinition:
+    """Off-gate V4-29 experiment: fallible physical measurement tools."""
+    from experiments.measurement_scenario import measurement_instruments_scenario
+
+    definition = measurement_instruments_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=measurement_instruments@1 arms=%s",
         len(definition.conditions),
     )
     return definition

@@ -22,7 +22,7 @@ surface; default runner/result writes remain `runner-config-v4` /
 | Artifact root | `<root>/<ensemble-id>/...` |
 | Schemas | `path-dependence-{ensemble,prefix,branch,outcomes,comparison}-v1` |
 | Runner pins | Latest feature runner `runner-config-v55`; accepted scaffolding `runner-config-v56` |
-| Catalog pins | 43 commands, 73 observer semantic types, 136 metric families, Alembic `0017` |
+| Catalog pins | 45 commands, 73 observer semantic types, 136 metric families, Alembic `0017` |
 
 The path-dependence schemas are research siblings. They do not widen runner
 configuration, legacy generational manifests, SQL branch lineage, `/v1`, or the
@@ -191,4 +191,4 @@ they are not advertised as common-random-number isolation.
 - [Cultural evolution metrics](cultural-evolution-metrics.md) — repeated-seed blocks and paired contrasts
 - [Experiments](experiments.md) — trusted catalog, Matrix runner, off-gate experiment policy
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

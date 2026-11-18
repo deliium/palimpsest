@@ -117,7 +117,7 @@ def test_dispute_doc_metric_and_wire_counts_match_the_code() -> None:
     text = _doc_text()
     assert str(METRIC_FAMILY_COUNT) == "256"
     assert "204" in text
-    assert "43 commands" in text or str(len(COMMAND_RULE_MATRIX)) in text
+    assert "45 commands" in text or str(len(COMMAND_RULE_MATRIX)) in text
     assert "73" in text or str(len(SEMANTIC_EVENT_TYPES)) in text
     assert "0017" in text
     assert "no `0018`" in text or "no 0018" in text
@@ -125,7 +125,7 @@ def test_dispute_doc_metric_and_wire_counts_match_the_code() -> None:
     assert str(len(V4_CAPABILITY_FLAGS)) in text
     assert DISPUTE_SNAPSHOT_SCHEMA in text
     assert "dispute-resolution-store-v1" in text
-    assert "runner-config-v57" in text or "v57" in text
+    assert "runner-config-v58" in text or "v57" in text
     assert "observer-protocol-v1" in text
 
 

@@ -23,6 +23,7 @@ from world.identifiers import (
     WorldRevision,
 )
 from world.infrastructure import InfrastructureAsset
+from world.measurement import InstrumentState, MeasurementReference
 from world.models import AgentBody, Item, LifeStatus, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 from world.regions import Journey, RegionsMigrationSpec
@@ -33,6 +34,7 @@ from world.travel_network import (
     RouteCondition,
     require_route_conditions,
 )
+from world.values import ItemKind
 
 _LOG = logging.getLogger("world.state")
 
@@ -51,6 +53,8 @@ def rebuild_world_state(
     structures: Mapping[EntityId, Structure] | None = None,
     production_jobs: Mapping[EntityId, ProductionJob] | None = None,
     tool_marks: Mapping[EntityId, ToolMark] | None = None,
+    instrument_states: Mapping[EntityId, InstrumentState] | None = None,
+    measurement_references: Mapping[EntityId, MeasurementReference] | None = None,
     active_hazards: Sequence[ActiveHazard] | None = None,
     artifacts: Mapping[EntityId, InformationArtifact] | None = None,
     repositories: Mapping[EntityId, KnowledgeRepository] | None = None,
@@ -77,6 +81,27 @@ def rebuild_world_state(
     structure_src = state.structures if structures is None else structures
     job_src = state.production_jobs if production_jobs is None else production_jobs
     mark_src = state.tool_marks if tool_marks is None else tool_marks
+    instrument_src = (
+        state.instrument_states if instrument_states is None else instrument_states
+    )
+    reference_src = (
+        state.measurement_references
+        if measurement_references is None
+        else measurement_references
+    )
+    if items is not None:
+        # Consuming transitions remove the physical item; its condition sidecars
+        # leave the commit in the same rebuild rather than dangling.
+        instrument_src = {
+            item_id: value
+            for item_id, value in instrument_src.items()
+            if item_id in item_src
+        }
+        reference_src = {
+            item_id: value
+            for item_id, value in reference_src.items()
+            if item_id in item_src
+        }
     hazard_src = state.active_hazards if active_hazards is None else active_hazards
     artifact_src = state.artifacts if artifacts is None else artifacts
     repository_src = state.repositories if repositories is None else repositories
@@ -127,6 +152,12 @@ def rebuild_world_state(
         ),
         tool_marks=tuple(
             sorted(mark_src.values(), key=lambda value: value.item_id.value)
+        ),
+        instrument_states=tuple(
+            sorted(instrument_src.values(), key=lambda value: value.item_id.value)
+        ),
+        measurement_references=tuple(
+            sorted(reference_src.values(), key=lambda value: value.item_id.value)
         ),
         active_hazards=tuple(
             sorted(
@@ -390,9 +421,11 @@ class WorldState:
         "_corpse_custody_item_ids",
         "_exchange_offers",
         "_infrastructure",
+        "_instrument_states",
         "_items",
         "_journeys",
         "_locations",
+        "_measurement_references",
         "_production_jobs",
         "_regions_migration",
         "_repositories",
@@ -416,6 +449,8 @@ class WorldState:
         structures: Sequence[Structure] = (),
         production_jobs: Sequence[ProductionJob] = (),
         tool_marks: Sequence[ToolMark] = (),
+        instrument_states: Sequence[InstrumentState] = (),
+        measurement_references: Sequence[MeasurementReference] = (),
         active_hazards: Sequence[ActiveHazard] = (),
         artifacts: Sequence[InformationArtifact] = (),
         repositories: Sequence[KnowledgeRepository] = (),
@@ -472,6 +507,17 @@ class WorldState:
         )
         job_index = _index_jobs(production_jobs)
         mark_index = _index_tool_marks(tool_marks)
+        reference_index = _index_measurement_references(
+            measurement_references,
+            item_index=item_index,
+            mark_index=mark_index,
+        )
+        instrument_index = _index_instrument_states(
+            instrument_states,
+            item_index=item_index,
+            mark_index=mark_index,
+            reference_ids=frozenset(reference_index),
+        )
         hazard_index = _index_hazards(active_hazards, location_index)
         weather_index = _index_weather(weather, location_index)
         _validate_topology(location_index)
@@ -496,6 +542,8 @@ class WorldState:
         self._structures = MappingProxyType(structure_index)
         self._production_jobs = MappingProxyType(job_index)
         self._tool_marks = MappingProxyType(mark_index)
+        self._instrument_states = MappingProxyType(instrument_index)
+        self._measurement_references = MappingProxyType(reference_index)
         self._active_hazards = hazard_index
         self._artifacts = MappingProxyType(artifact_index)
         self._repositories = MappingProxyType(repository_index)
@@ -604,6 +652,16 @@ class WorldState:
     @property
     def tool_marks(self) -> Mapping[EntityId, ToolMark]:
         return self._tool_marks
+
+    @property
+    def instrument_states(self) -> Mapping[EntityId, InstrumentState]:
+        return self._instrument_states
+
+    @property
+    def measurement_references(
+        self,
+    ) -> Mapping[EntityId, MeasurementReference]:
+        return self._measurement_references
 
     @property
     def active_hazards(self) -> tuple[ActiveHazard, ...]:
@@ -785,6 +843,79 @@ def _index_tool_marks(marks: Sequence[ToolMark]) -> dict[EntityId, ToolMark]:
         if mark.item_id in indexed:
             raise ValueError(f"duplicate tool mark for {mark.item_id.value!r}")
         indexed[mark.item_id] = mark
+    return indexed
+
+
+def _measurement_anchor(
+    item_id: EntityId,
+    *,
+    item_index: Mapping[EntityId, Item],
+    role: str,
+) -> None:
+    item = item_index.get(item_id)
+    if item is None:
+        raise ValueError(f"{role} item anchor must reference a known item")
+    if item.kind is not ItemKind.TOOL:
+        raise ValueError(f"{role} item anchor must be a TOOL item")
+
+
+def _index_measurement_references(
+    references: Sequence[MeasurementReference],
+    *,
+    item_index: Mapping[EntityId, Item],
+    mark_index: Mapping[EntityId, ToolMark],
+) -> dict[EntityId, MeasurementReference]:
+    indexed: dict[EntityId, MeasurementReference] = {}
+    for reference in references:
+        if type(reference) is not MeasurementReference:
+            raise TypeError(
+                "measurement_references entries must be MeasurementReference"
+            )
+        if reference.item_id in indexed:
+            raise ValueError(
+                f"duplicate measurement reference for {reference.item_id.value!r}"
+            )
+        _measurement_anchor(
+            reference.item_id, item_index=item_index, role="measurement reference"
+        )
+        if reference.item_id in mark_index:
+            raise ValueError(
+                "measurement reference cannot also carry a tool mark "
+                "(code=measurement_role_conflict)"
+            )
+        indexed[reference.item_id] = reference
+    return indexed
+
+
+def _index_instrument_states(
+    states: Sequence[InstrumentState],
+    *,
+    item_index: Mapping[EntityId, Item],
+    mark_index: Mapping[EntityId, ToolMark],
+    reference_ids: frozenset[EntityId],
+) -> dict[EntityId, InstrumentState]:
+    indexed: dict[EntityId, InstrumentState] = {}
+    for state in states:
+        if type(state) is not InstrumentState:
+            raise TypeError("instrument_states entries must be InstrumentState")
+        if state.item_id in indexed:
+            raise ValueError(
+                f"duplicate instrument state for {state.item_id.value!r}"
+            )
+        _measurement_anchor(
+            state.item_id, item_index=item_index, role="measurement instrument"
+        )
+        if state.item_id in mark_index:
+            raise ValueError(
+                "measurement instrument cannot also carry a tool mark "
+                "(code=measurement_role_conflict)"
+            )
+        if state.item_id in reference_ids:
+            raise ValueError(
+                "measurement instrument cannot also be a reference "
+                "(code=measurement_role_conflict)"
+            )
+        indexed[state.item_id] = state
     return indexed
 
 

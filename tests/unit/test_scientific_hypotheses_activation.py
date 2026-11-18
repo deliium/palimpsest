@@ -178,4 +178,4 @@ def test_science_off_is_byte_identical() -> None:
 
 
 def test_runner_config_v57_is_absent() -> None:
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS

@@ -133,7 +133,7 @@ The catalog appends three families, raising the count from 157 to **160**:
 - `representation_scope_alignment@1`
 
 The first 157 families keep their ids, order, versions, and value keys. Landing
-pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic types,
+pins remain runner v4/v55/v56, result v2/v3, 45 commands, 73 observer semantic types,
 188 metric families, replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and
 Alembic `0017`.
 
@@ -210,4 +210,4 @@ V4-13 added four border families (catalog 172 -> 176). V4-14 raises the catalog
 to **180** families. See [borders and claims](borders-and-claims.md) and
 [migration and displacement](migration-displacement.md).
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

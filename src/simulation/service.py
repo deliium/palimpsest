@@ -156,6 +156,7 @@ class PersistentSimulationService:
                 self._engine.infrastructure_networks_active
             ),
             travel_network_active=self._engine.travel_network_active,
+            measurement_active=bool(state.instrument_states),
         )
         production_rows: SnapshotExtensions = {}
         if codec_version in {
@@ -336,8 +337,21 @@ class PersistentSimulationService:
                 if state.infrastructure is not None
                 else ()
             )
-        if codec_version == "v25":
+        if codec_version in {"v25", "v26"}:
             production_rows["travel_network"] = tuple(state.travel_network)
+        if codec_version == "v26":
+            production_rows["instrument_states"] = tuple(
+                sorted(
+                    state.instrument_states.values(),
+                    key=lambda row: row.item_id.value,
+                )
+            )
+            production_rows["measurement_references"] = tuple(
+                sorted(
+                    state.measurement_references.values(),
+                    key=lambda row: row.item_id.value,
+                )
+            )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -393,6 +407,8 @@ class PersistentSimulationService:
             journeys=draft.journeys,
             infrastructure=draft.infrastructure,
             travel_network=draft.travel_network,
+            instrument_states=draft.instrument_states,
+            measurement_references=draft.measurement_references,
         )
 
     async def resolve_tick(
@@ -506,6 +522,8 @@ class PersistentSimulationService:
                 predecessor_commit_hash=None,
                 regions_migration=snapshot.regions_migration,
                 journeys=snapshot.journeys,
+                instrument_states=snapshot.instrument_states,
+                measurement_references=snapshot.measurement_references,
             )
             if not _snapshot_content_equal(caller_normalized, candidate_owned):
                 _LOGGER.error(

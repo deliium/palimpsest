@@ -41,7 +41,7 @@ def test_semantic_event_count_is_54() -> None:
 
 def test_agent_command_count_is_35() -> None:
     commands = get_args(AgentCommand)
-    assert len(commands) == 43
+    assert len(commands) == 45
     assert Experiment in commands
     assert EstablishRepository in commands
     assert DepositRecord in commands

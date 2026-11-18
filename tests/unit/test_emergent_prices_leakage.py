@@ -148,7 +148,7 @@ def test_no_runner_schema_bump_or_canonical_price_field() -> None:
     root = Path(__file__).resolve().parents[2]
     for path in (root / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v57" not in text
+        assert "runner-config-v58" not in text
         if "emergent_prices" in path.name:
             assert "canonical_price:" not in text
 

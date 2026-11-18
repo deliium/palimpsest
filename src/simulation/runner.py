@@ -148,7 +148,6 @@ from simulation.lifecycle import (
 from simulation.models import DERIVATION_VERSION_V3, RunId, SimulationRunConfig
 from simulation.persistence import (
     LEGACY_PENDING_FINALIZATION_CODEC_VERSION,
-    PENDING_FINALIZATION_CODEC_VERSION,
     PROJECTOR_VERSION,
     CommitHash,
     PayloadHash,
@@ -766,6 +765,7 @@ class _ChannelLoopOptions(TypedDict, total=False):
     knowledge_genealogy_spec: object | None
     knowledge_genealogy_seed_material: object | None
     bounded_experimentation_spec: object | None
+    measurement_enabled: bool
 
 
 def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
@@ -786,6 +786,7 @@ def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
         _public_goods_loop_kwargs,
         _knowledge_genealogy_loop_kwargs,
         _bounded_experimentation_loop_kwargs,
+        _measurement_loop_kwargs,
     ):
         options.update(factory(config))
     return options
@@ -992,6 +993,17 @@ def _bounded_experimentation_loop_kwargs(config: object) -> _ChannelLoopOptions:
     if spec is None:
         return {}
     return {"bounded_experimentation_spec": spec}
+
+
+def _measurement_loop_kwargs(config: object) -> _ChannelLoopOptions:
+    """Enable the owner measurement channel only when a spec is present.
+
+    The physical spec itself never reaches cognition; only this trusted flag does.
+    """
+    return {
+        "measurement_enabled": getattr(config, "measurement_instruments", None)
+        is not None
+    }
 
 
 def _generational_narrative_spec_digest(spec: object | None) -> str | None:
@@ -2591,6 +2603,16 @@ class SimulationRunner:
                 weather=config.scenario.weather,
                 artifacts=config.scenario.artifacts,
                 registrations=registrations,
+                instrument_states=(
+                    ()
+                    if config.measurement_instruments is None
+                    else config.measurement_instruments.instruments
+                ),
+                measurement_references=(
+                    ()
+                    if config.measurement_instruments is None
+                    else config.measurement_instruments.references
+                ),
                 regions_migration=config.regions_migration,
             )
             translator = registration_translator(bootstrap)
@@ -5925,6 +5947,25 @@ class SimulationRunner:
         )
         return tuple(ledgers)
 
+    def export_measurement_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered measurement sidecars, including retired owners."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "measurement_ledger", None)
+            if ledger is None:
+                record = getattr(runtime, "retired_record", None)
+                retired_checkpoint = getattr(record, "runtime_checkpoint", None)
+                ledger = getattr(retired_checkpoint, "measurement_ledger", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_measurement_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
     def export_evidence_ledgers(self) -> tuple[object, ...]:
         """Export owner-ordered evidence ledgers."""
         ledgers: list[object] = []
@@ -7470,6 +7511,7 @@ def _engine_snapshot(
         cultural_contact_active=engine.cultural_contact_active,
         infrastructure_networks_active=engine.infrastructure_networks_active,
         travel_network_active=engine.travel_network_active,
+        measurement_active=bool(state.instrument_states),
     )
     production_rows: SnapshotExtensions = {}
     if codec_version in {
@@ -7490,7 +7532,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows = {
             "structures": tuple(state.structures.values()),
@@ -7514,7 +7556,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
     if codec_version in {
@@ -7533,7 +7575,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
     if codec_version in {
@@ -7551,7 +7593,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     if codec_version in {
@@ -7567,7 +7609,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
@@ -7586,7 +7628,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
@@ -7601,7 +7643,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows["repositories"] = tuple(state.repositories.values())
     if codec_version in {
@@ -7612,25 +7654,25 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25",
+        "v20", "v21", "v25", "v26",
     }:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25"}:
+    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25", "v26"}:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version in {"v17", "v18", "v19", "v20", "v21", "v25"}:
+    if codec_version in {"v17", "v18", "v19", "v20", "v21", "v25", "v26"}:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
         )
     if codec_version in {"v19", "v20"} or (
-        codec_version in {"v21", "v25"} and state.regions_migration is not None
+        codec_version in {"v21", "v25", "v26"} and state.regions_migration is not None
     ):
         production_rows["regions_migration"] = state.regions_migration
         production_rows["journeys"] = (
             None if state.journeys is None else tuple(state.journeys.values())
         )
-    if codec_version in {"v21", "v25"}:
+    if codec_version in {"v21", "v25", "v26"}:
         production_rows["infrastructure"] = (
             ()
             if state.infrastructure is None
@@ -7641,8 +7683,21 @@ def _engine_snapshot(
                 )
             )
         )
-    if codec_version == "v25":
+    if codec_version in {"v25", "v26"}:
         production_rows["travel_network"] = tuple(state.travel_network)
+    if codec_version == "v26":
+        production_rows["instrument_states"] = tuple(
+            sorted(
+                state.instrument_states.values(),
+                key=lambda row: row.item_id.value,
+            )
+        )
+        production_rows["measurement_references"] = tuple(
+            sorted(
+                state.measurement_references.values(),
+                key=lambda row: row.item_id.value,
+            )
+        )
     draft = WorldSnapshot(
         snapshot_id=snapshot_id,
         run_id=engine.run_id,
@@ -7701,31 +7756,53 @@ def _engine_snapshot(
         journeys=draft.journeys,
         infrastructure=getattr(draft, "infrastructure", None),
         travel_network=getattr(draft, "travel_network", None),
+        instrument_states=getattr(draft, "instrument_states", ()),
+        measurement_references=getattr(
+            draft, "measurement_references", ()
+        ),
     )
 
 
 def _blank_slate_counts(cognitive_loop: object) -> BlankSlateStoreCounts:
-    """Probe actual replication content instead of trusting zero defaults."""
+    """Probe actual replication and measurement content, not zero defaults."""
     from simulation.new_agent_initialization import BlankSlateStoreCounts
 
-    probe = getattr(cognitive_loop, "replication_ledger_if_present", None)
-    ledger = probe() if callable(probe) else None
-    if ledger is None:
-        return BlankSlateStoreCounts()
-    total = 0
-    for name in (
-        "source_drafts",
-        "designs",
-        "attempts",
-        "reports",
-        "collaborations",
-        "interpretations",
-        "outbox",
-        "receipts",
-        "notices",
-    ):
-        total += len(getattr(ledger, name, ()))
-    return BlankSlateStoreCounts(replication_ledger=total)
+    replication_probe = getattr(
+        cognitive_loop, "replication_ledger_if_present", None
+    )
+    replication = replication_probe() if callable(replication_probe) else None
+    replication_total = 0
+    if replication is not None:
+        for name in (
+            "source_drafts",
+            "designs",
+            "attempts",
+            "reports",
+            "collaborations",
+            "interpretations",
+            "outbox",
+            "receipts",
+            "notices",
+        ):
+            replication_total += len(getattr(replication, name, ()))
+    measurement_probe = getattr(
+        cognitive_loop, "measurement_ledger_if_present", None
+    )
+    measurement = measurement_probe() if callable(measurement_probe) else None
+    measurement_total = 0
+    if measurement is not None:
+        for name in (
+            "evidence",
+            "beliefs",
+            "revisions",
+            "receipts",
+            "notices",
+        ):
+            measurement_total += len(getattr(measurement, name, ()))
+    return BlankSlateStoreCounts(
+        replication_ledger=replication_total,
+        measurement_ledger=measurement_total,
+    )
 
 
 def _pending_record_from_command(
@@ -7748,6 +7825,8 @@ def _command_from_pending_record(
     record: PendingFinalizationRecord,
 ) -> FinalizationCommand:
     """Decode a durable pending row into a finalization command."""
+    from simulation.persistence import PENDING_FINALIZATION_ACCEPTED_VERSIONS
+
     if record.codec_version == LEGACY_PENDING_FINALIZATION_CODEC_VERSION:
         _LOG.error(
             "runner_recovery_legacy run_id=%s invocation_id=%s codec_version=%s",
@@ -7759,10 +7838,7 @@ def _command_from_pending_record(
             RunnerConstructionErrorCode.INVALID_CONFIG,
             stage="legacy_pending_finalization",
         )
-    if record.codec_version not in {
-        PENDING_FINALIZATION_CODEC_VERSION,
-        "finalization-command-v2",
-    }:
+    if record.codec_version not in PENDING_FINALIZATION_ACCEPTED_VERSIONS:
         _LOG.error(
             "runner_recovery_corrupt run_id=%s code=unsupported_codec "
             "invocation_id=%s codec_version=%s",

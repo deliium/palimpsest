@@ -210,9 +210,11 @@ account is true, who is guilty or liable, or which party should win.
 Current catalog note: the evidence families remain in place, and the current
 closed catalog is **204** families after the V4-09 through V4-17 appends.
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 Accounting records can project opt-in evidence candidates; see
 [Accounting ledgers](accounting-ledgers.md). Evidence remains belief, never truth.
 
 Current catalog pin after V4-28: **256** metric families (the historical landing counts above remain unchanged).
+
+There is no `runner-config-v58`; the latest V4 runner schema is `runner-config-v57`.

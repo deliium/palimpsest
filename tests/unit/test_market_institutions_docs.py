@@ -82,7 +82,7 @@ def test_page_names_pins_and_closed_tokens() -> None:
         "market_like_persistent",
         "window_index",
         "208",
-        "43 commands",
+        "45 commands",
         "73 observer semantic types",
         "15 contexts / 12 flags / eight owned",
         "Alembic `0017`",
@@ -91,7 +91,7 @@ def test_page_names_pins_and_closed_tokens() -> None:
         "$aif-roadmap",
     ):
         assert token in page, token
-    assert "runner-config-v57" not in page
+    assert "runner-config-v58" not in page
 
 
 def test_page_and_api_docs_name_all_seven_routes() -> None:

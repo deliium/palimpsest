@@ -149,4 +149,4 @@ def test_no_runner_config_v57() -> None:
         Path("src/analysis/trade_networks_analysis.py"),
         Path("src/simulation/trade_networks_models.py"),
     ):
-        assert "runner-config-v57" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v58" not in path.read_text(encoding="utf-8")

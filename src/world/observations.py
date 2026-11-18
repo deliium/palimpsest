@@ -63,6 +63,7 @@ from world.identifiers import (
     require_exact_nonneg_int,
     require_stable_id,
 )
+from world.measurement import InstrumentAppearance, ReferenceAppearance
 from world.models import (
     AgentBody,
     LifeStatus,
@@ -651,6 +652,8 @@ class ObservedItem:
     kind: ItemKind
     load: ItemLoad
     placement: ObservedItemPlacement
+    instrument: InstrumentAppearance | None = None
+    reference: ReferenceAppearance | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -660,6 +663,18 @@ class ObservedItem:
             raise TypeError("ObservedItem.kind must be ItemKind")
         if type(self.load) is not ItemLoad:
             raise TypeError("ObservedItem.load must be ItemLoad")
+        if (
+            self.instrument is not None
+            and type(self.instrument) is not InstrumentAppearance
+        ):
+            raise TypeError("ObservedItem.instrument must be InstrumentAppearance")
+        if (
+            self.reference is not None
+            and type(self.reference) is not ReferenceAppearance
+        ):
+            raise TypeError("ObservedItem.reference must be ReferenceAppearance")
+        if self.instrument is not None and self.reference is not None:
+            raise ValueError("ObservedItem cannot be both instrument and reference")
         if type(self.placement) is not ObservedItemPlacement:
             raise TypeError("ObservedItem.placement must be ObservedItemPlacement")
 

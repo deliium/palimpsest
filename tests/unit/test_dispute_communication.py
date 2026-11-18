@@ -262,6 +262,6 @@ def test_no_new_command_or_event_is_created() -> None:
     from observer import SEMANTIC_EVENT_TYPES
     from world._rules import COMMAND_RULE_MATRIX
 
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert not any("Dispute" in command.__name__ for command in COMMAND_RULE_MATRIX)

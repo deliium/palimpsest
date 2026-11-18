@@ -564,7 +564,7 @@ Detached analysis appends `formal_rule_development@1`,
 catalog from 148 to 151 while the first 148 families keep their ids, order,
 versions, and value keys.
 
-Pins after V4-07: runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
+Pins after V4-07: runner v4/v55/v56, result v2/v3, 45 commands, 73 observer
 semantic types, 212 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`. Four V4 flags are owned
 (`organizations`, `formal_rules`, `legal_disputes`, `diplomacy`) and eight remain unowned. The
@@ -634,7 +634,7 @@ atomically with quotas; six GET-only `/v1` evidence routes require
 the Research UI adds a read-only Evidence panel. The catalog grows from 154 to
 157 with `evidence_source_structure@1`, `evidence_provenance_continuity@1`, and
 `evidence_objective_alignment@1`. Pins remain runner v4/v55/v56, result v2/v3,
-43 commands, 73 observer semantic types, 157 metric families, replay-v22/codec
+45 commands, 73 observer semantic types, 157 metric families, replay-v22/codec
 v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. Three V4
 flags remain owned (`organizations`, `formal_rules`, `legal_disputes`).
 See [Evidence and testimony](evidence-testimony.md).
@@ -658,7 +658,7 @@ families (157 -> 160). `delegation-representation-snapshot-v1` and
 `delegation-representation-store-v1` are independent of the dispute, evidence,
 organization, and formal-rule siblings. Six GET-only `/v1` representation routes
 require `SUBJECTIVE_DEBUG`; the Svelte client adds a read-only Representation
-panel. Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer
+panel. Pins remain runner v4/v55/v56, result v2/v3, 45 commands, 73 observer
 semantic types, 212 metric families, replay-v22/codec v20, `/v1`,
 `observer-protocol-v1`, and Alembic `0017`; `diplomacy` is owned by
 V4-10/V4-11.
@@ -710,7 +710,7 @@ decodable; `experiments` and `persistence` keep `diplomacy-store-v1`; eight
 GET-only `/v1` routes require `SUBJECTIVE_DEBUG`; the Svelte client adds a
 read-only treaties view. `WorldEngine`, perception, admission, stop selectors,
 memory, prompts, observer semantics, and Godot never read a treaty ledger.
-Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
+Pins remain runner v4/v55/v56, result v2/v3, 45 commands, 73 observer semantic
 types, 212 metric families, 15 V4 contexts, 12 V4 flags, replay-v22/codec v20,
 `/v1`, `observer-protocol-v1`, and Alembic `0017` with no `0018`. See
 `docs/diplomacy.md`.
@@ -729,7 +729,7 @@ individual, coordinated, and persistent inter-group conflict with the locked
 `organized-conflict-store-v1` publish opt-in and atomically; six GET-only
 `/v1/simulations/{run_id}/organized-conflict` routes require `SUBJECTIVE_DEBUG`;
 the Research UI panel is read-only. Four families append (catalog 168 -> 172).
-Pins remain runner v4/v55/v56, result v2/v3, 43 commands, 73 observer semantic
+Pins remain runner v4/v55/v56, result v2/v3, 45 commands, 73 observer semantic
 types, 212 metric families, 15 V4 contexts, 12 V4 flags, eight owned flags,
 replay-v22/codec v20, `/v1`, `observer-protocol-v1`, and Alembic `0017` with no
 `0018`. See [organized conflict](organized-conflict.md).
@@ -773,7 +773,7 @@ capacity, production, storage, and exposure plus damage, repair, decay, and
 destruction. Explicit public-good frozensets keep infra-only kinds out of the
 Use/Maintain/Oppose sets. Four metric families append (catalog 184 -> 188);
 observer semantic types stay 73 through aliases; commands stay 43; Alembic
-stays `0017`. Landing pins: runner v4/v55/v56, result v2/v3, 43 commands, 73
+stays `0017`. Landing pins: runner v4/v55/v56, result v2/v3, 45 commands, 73
 observer semantic types, 188 metric families, 15 V4 contexts, 12 V4 flags, eight owned
 flags, replay-v23/codec `v21` when selected, `/v1`, `observer-protocol-v1`,
 and Alembic `0017`. See
@@ -858,7 +858,7 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 256 metric families (the V4-27 landing reported 250 metric families); 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
 Nine V4 flags are owned; three remain unowned.
 
@@ -875,7 +875,7 @@ keeps three layers separate, and appends four metric families (216 -> 220).
 programmatically; seven GET-only dual-gated `/v1/simulations/{run_id}/accounting-ledgers`
 routes fail closed with `accounting_ledgers_disabled`; the Research UI adds a
 read-only panel and Godot adds no overlay. Off-gate `accounting_ledgers@1` is
-registered. Pins: 244 metric families, 43 commands, 73 observer semantic types,
+registered. Pins: 244 metric families, 45 commands, 73 observer semantic types,
 replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`. See
 [Accounting ledgers](accounting-ledgers.md).
 
@@ -883,7 +883,7 @@ V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET
 
 V4-25 adds the analysis-only `social_mobility` context (16 contexts / `v4-context-map-v4` at landing), six outcome domains over committed genealogy, eight appended families (228 -> 236), canonical `social-mobility-snapshot-v1`, an atomic store, seven GET-only dual-gated routes, a read-only Research UI panel, and off-gate `social_mobility@1`; see [Social mobility](social-mobility.md).
 
-V4-26 adds the analysis-only `economic_cascades` context (17 contexts / `v4-context-map-v5`), five committed disruption classes, five observable dependency edge kinds, bounded `linked`/`unlinked`/`unresolved` chains in three separated layers, eight appended families (236 -> 244), canonical `economic-cascades-snapshot-v1`, an atomic store, seven GET-only dual-gated routes, a read-only Research UI panel, and off-gate `economic_cascades@1`; no capability flag, command, event, write pair, migration, or Godot overlay is added. See [Economic cascades](economic-cascades.md).
+V4-26 adds the analysis-only `economic_cascades` context (17 contexts / `v4-context-map-v6`), five committed disruption classes, five observable dependency edge kinds, bounded `linked`/`unlinked`/`unresolved` chains in three separated layers, eight appended families (236 -> 244), canonical `economic-cascades-snapshot-v1`, an atomic store, seven GET-only dual-gated routes, a read-only Research UI panel, and off-gate `economic_cascades@1`; no capability flag, command, event, write pair, migration, or Godot overlay is added. See [Economic cascades](economic-cascades.md).
 
 
 V4-27 owns `science` on `runner-config-v56` without adding a context, flag slot,
@@ -894,5 +894,5 @@ claims travel in existing speech as testimony only. Six detached families append
 236 -> 244? No: the catalog appends 244 -> 250. `scientific-hypotheses-snapshot-v1`
 and `scientific-hypotheses-store-v1` publish programmatically; seven GET-only
 dual-gated routes and a read-only Research UI panel serve them. Pins: 17 contexts
-/ 12 flags / 9 owned / 3 unowned, 250 families, 43 commands, 73 observer semantic
+/ 12 flags / 9 owned / 3 unowned, 250 families, 45 commands, 73 observer semantic
 types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.

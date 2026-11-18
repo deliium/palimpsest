@@ -179,11 +179,11 @@ are presentation only; neither client advances the simulation.
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v55` for generational runs; accepted `runner-config-v56` carries V4 capability flags |
-| Closed commands / observer semantic types | 43 / 73 |
+| Latest feature runner | `runner-config-v57` for measurement instruments (the v56 family root plus one mandatory sibling); accepted `runner-config-v56` carries V4 capability flags |
+| Closed commands / observer semantic types | 45 / 73 |
 | Metric families | 256 (V4-24's 228, V4-25's 236, V4-26's 244, six V4-27 scientific-hypothesis families, plus six V4-28 scientific-replication families; the V4-27 landing reported 250 metric families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
-| Subjective pending codec | `finalization-command-v2` for science/replication transitions with nested `replication-state-v1` / `scientific-experiment-state-v1`; default is `finalization-command-v1` and this is not a world replay codec |
+| Subjective pending codec | `finalization-command-v3` adds `measurement-state-v1` to the v2 science/replication state; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
@@ -1313,3 +1313,16 @@ Pins: 256 families, 17 contexts, 12 flags, nine owned / three unowned, 43
 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic `0017`,
 `/v1`, `observer-protocol-v1`. No truth, consensus, N-count promotion, group
 executor, or analytical feedback into cognition exists.
+
+### V4-29 measurement-instruments seam
+
+`world.measurement` owns frozen physical/read contracts;
+`world._measurement` owns engine-only sampling, deterministic bounded display
+error, wear and calibration; `simulation.measurement_config` owns the exact v57
+spec; `simulation.measurement_serialization` and
+`simulation.measurement_checkpoint` own strict leaf/state codecs.
+`agents.cognition.measurement*` owns evidence, testimony, appraisal and one
+conservative command compiler. `Measure`/`CalibrateInstrument` are ordinary
+commands; only `WorldEngine` changes instrument condition. Readings are actor
+displays, never target truth. Active runs use event 28 / codec `v26`, domain
+envelope 2 and pending v3; absent-spec runs retain every previous pair.

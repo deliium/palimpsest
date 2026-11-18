@@ -779,6 +779,7 @@ class WorldEngine:
         "_knowledge_repositories_spec",
         "_last_tick_result",
         "_lifecycle_records",
+        "_measurement_active",
         "_new_agent_initialization",
         "_perception",
         "_population_lifecycle",
@@ -853,6 +854,7 @@ class WorldEngine:
             raise TypeError("WorldEngine requires WorldBootstrap")
         self._config = config
         self._bootstrap = bootstrap
+        self._measurement_active = bool(bootstrap.instrument_states)
         self._run_id = run_id if run_id is not None else derive_run_id(config)
         if type(self._run_id) is not RunId:
             raise TypeError("run_id must be RunId")
@@ -1428,6 +1430,9 @@ class WorldEngine:
         engine = cls.__new__(cls)
         engine._config = snapshot.config
         engine._bootstrap = bootstrap
+        engine._measurement_active = bool(
+            getattr(projected, "instrument_states", {})
+        )
         engine._run_id = snapshot.run_id
         engine._translator = registration_translator(bootstrap)
         engine._registrations = bootstrap.registrations
@@ -2262,6 +2267,7 @@ class WorldEngine:
                 cultural_contact_active=self._cultural_contact_active,
                 infrastructure_networks_active=self._infrastructure_networks_active,
                 travel_network_active=self._travel_network_active,
+                measurement_active=self._measurement_active,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2508,6 +2514,7 @@ class WorldEngine:
             cultural_contact_active=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
             travel_network_active=self._travel_network_active,
+            measurement_active=self._measurement_active,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4286,6 +4293,7 @@ class WorldEngine:
             infrastructure_networks_active=self._infrastructure_networks_active,
             season=action_season,
             travel_network_active=self._travel_network_active,
+            measurement_context=self._measurement_rule_context(snap),
             public_good_maintain_draw=(
                 (
                     lambda request, working: self._public_good_maintain_success(
@@ -4818,6 +4826,7 @@ class WorldEngine:
             cultural_contact_active=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
             travel_network_active=self._travel_network_active,
+            measurement_active=self._measurement_active,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -6639,6 +6648,67 @@ class WorldEngine:
             decay_millis=self._public_goods_decay_millis,
         )
 
+    def _measurement_rule_context(
+        self, snap: _EngineSnapshot
+    ) -> object | None:
+        if not self._measurement_active:
+            return None
+        batch = snap.observation_batch
+        if batch is None:
+            return None
+        from world._measurement import (
+            MeasurementEligibility,
+            MeasurementRuleContext,
+            MeasurementSamplingIdentity,
+        )
+        from world.models import default_physical_rules, physical_rules_fingerprint
+
+        rules = (
+            default_physical_rules()
+            if self._config.physical_rules is None
+            else self._config.physical_rules
+        )
+        identity = MeasurementSamplingIdentity(
+            seed=self._config.seed,
+            derivation_version=self._config.derivation_version
+            or "derivation-v1",
+            physical_rules_fingerprint=physical_rules_fingerprint(rules),
+            stochastic_identity_value=(
+                None
+                if self._config.stochastic_identity is None
+                else self._config.stochastic_identity.value
+            ),
+        )
+        state = snap.world.state
+        reference_index = state.measurement_references
+        eligibility: dict[EntityId, MeasurementEligibility] = {}
+        for observation in batch.observations:
+            location_ids = {item.entity_id for item in observation.locations}
+            if observation.self_body is not None:
+                location_ids.add(observation.self_body.location_id)
+            eligibility[observation.observer_id] = MeasurementEligibility(
+                location_ids=frozenset(location_ids),
+                resource_ids=frozenset(
+                    item.entity_id for item in observation.resources
+                ),
+                item_ids=frozenset(item.entity_id for item in observation.items),
+                reference_ids=frozenset(
+                    item.entity_id
+                    for item in observation.items
+                    if item.entity_id in reference_index
+                ),
+                destination_ids=frozenset(
+                    exit_.destination_id for exit_ in observation.exits
+                ),
+            )
+        return MeasurementRuleContext(
+            sampling_identity=identity,
+            tick=batch.tick.value,
+            physical_rules=rules,
+            environmental_dynamics=self._environmental_dynamics,
+            eligibility_by_actor=eligibility,
+        )
+
     def _public_good_maintain_success(
         self,
         *,
@@ -6883,6 +6953,7 @@ def select_checkpoint_schema(
     cultural_contact_active: bool = False,
     infrastructure_networks_active: bool = False,
     travel_network_active: bool = False,
+    measurement_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -6932,7 +7003,28 @@ def select_checkpoint_schema(
         cultural_contact_active=cultural_contact_active,
         infrastructure_networks_active=infrastructure_networks_active,
         travel_network_active=travel_network_active,
+        measurement_active=measurement_active,
     )
+    if measurement_active:
+        from simulation.versioning import (
+            MEASUREMENT_WRITE_PAIR_CODEC,
+            MEASUREMENT_WRITE_PAIR_EVENT,
+        )
+
+        if (
+            schema_version != MEASUREMENT_WRITE_PAIR_EVENT
+            or codec != MEASUREMENT_WRITE_PAIR_CODEC
+        ):
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=%s "
+                "reason=measurement_active",
+                schema_version,
+                codec,
+                MEASUREMENT_WRITE_PAIR_EVENT,
+                MEASUREMENT_WRITE_PAIR_CODEC,
+            )
+        return schema_version, codec
     if travel_network_active:
         from simulation.versioning import (
             TRAVEL_NETWORK_WRITE_PAIR_CODEC,

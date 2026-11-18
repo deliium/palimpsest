@@ -75,7 +75,7 @@ def test_routes_settings_and_pins() -> None:
     assert "PALIMPSEST_ACCOUNTING_LEDGERS_ROOT" in text
     assert "PALIMPSEST_ACCOUNTING_LEDGERS_CURSOR_KEY" in text
     for pin in (
-        "250 metric families",
+        "256 metric families",
         "43",
         "73",
         "replay-v27",
@@ -94,7 +94,7 @@ def test_negative_truth_money_and_version_claims() -> None:
         "source of truth",
         "verified balance",
         "fraud detected",
-        "runner-config-v57",
+        "runner-config-v58",
         "0018",
         "/v2/",
     ):
@@ -124,4 +124,5 @@ def test_cross_links_and_current_pins() -> None:
         assert "accounting-ledgers.md" in _read(ROOT / "docs" / page)
     assert "accounting-ledgers.md" in _read(ROOT / "README.md")
     for path in (ARCHITECTURE, CONFIGURATION, API, DESCRIPTION, PROJECT_ARCHITECTURE):
-        assert "250" in _read(path)
+        expected = "256" if path == CONFIGURATION else "250"
+        assert expected in _read(path)

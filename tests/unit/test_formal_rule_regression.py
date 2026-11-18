@@ -35,7 +35,7 @@ def test_exact_pins() -> None:
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert METRIC_FAMILY_COUNT == 256
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
@@ -44,7 +44,7 @@ def test_exact_pins() -> None:
 
 
 def test_no_v57_runner_schema_exists() -> None:
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_no_new_write_pair_reservation() -> None:

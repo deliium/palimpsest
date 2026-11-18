@@ -821,3 +821,25 @@ Pending science transitions use `finalization-command-v2` with nested
 unchanged. Pins: 256 metric families, 17 V4 contexts, 12 V4 flags, nine owned /
 three unowned, 43 commands, 73 observer semantic types, replay-v27/codec `v25`,
 `/v1`, `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2.
+
+V4-29 (measurement instruments, 2026-11-18) deepens owned `science` with
+explicit physical tools on the accepted `runner-config-v57` seam: the exact v56
+family root plus one mandatory `measurement_instruments` sibling (v1–v56 reject
+it). Five dimensions are supported over existing physical facts
+(`ambient_temperature`, `resource_amount`, `elapsed_duration`,
+`travel_time_estimate`, `load_category`). Instruments carry precision,
+intrinsic bias, bounded deterministic display error, persistent damage and
+fallible calibration; references are physical items with a visible nominal mark
+and hidden physical value. `Measure` and `CalibrateInstrument` raise the closed
+command count 43 → 45. Active instrument runs write replay event 28 / codec
+`v26`; measurement-bearing domain values use envelope schema 2; pending
+subjective transitions use `finalization-command-v3` with
+`measurement-state-v1`. Actor readings and bounded `msr_v1` testimony become
+owner evidence, never target truth; reliability beliefs are revisable and may
+be wrong. Off-gate `measurement_instruments@1` has four arms. No new metric
+family, API route, SQL migration, observer semantic type, Godot overlay or
+capability flag is added. Pins: 256 metric families, 17 V4 contexts, 12 flags,
+nine owned / three unowned, 45 commands, 73 observer semantic types,
+replay-v27/codec `v25` unless measurement is active (then 28/`v26`), `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2, latest
+opt-in runner v57. See `docs/measurement-instruments.md`.

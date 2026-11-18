@@ -773,6 +773,7 @@ class SubjectiveSnapshot:
     migration_displacement: object | None = None
     experiment_ledger: object | None = None
     replication_ledger: object | None = None
+    measurement_ledger: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -4061,6 +4062,7 @@ class CognitiveLoopProposal:
     migration_displacement: object | None = None
     experiment_ledger: object | None = None
     replication_ledger: object | None = None
+    measurement_ledger: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4438,6 +4440,7 @@ class CognitiveLoopResult:
     migration_displacement: object | None = None
     experiment_ledger: object | None = None
     replication_ledger: object | None = None
+    measurement_ledger: object | None = None
     organized_conflict_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:

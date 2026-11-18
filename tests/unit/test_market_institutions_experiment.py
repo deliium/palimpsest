@@ -72,6 +72,6 @@ def test_less_than_three_windows_is_rejected() -> None:
 def test_no_runner_config_v57_is_emitted() -> None:
     definition = experiment_market_institutions(_base())
     assert all(
-        condition.runner_config.schema_version != "runner-config-v57"
+        condition.runner_config.schema_version != "runner-config-v58"
         for condition in definition.conditions
     )

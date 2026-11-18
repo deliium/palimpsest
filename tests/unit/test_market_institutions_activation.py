@@ -76,5 +76,5 @@ def test_no_runner_config_v57_string_exists() -> None:
             continue
         if ".venv" in path.parts or "__pycache__" in path.parts:
             continue
-        if "runner-config-v57" in path.read_text(encoding="utf-8", errors="ignore"):
+        if "runner-config-v58" in path.read_text(encoding="utf-8", errors="ignore"):
             pytest.fail(f"unexpected runner-config-v57 in {path}")

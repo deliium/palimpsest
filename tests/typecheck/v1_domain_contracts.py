@@ -14,6 +14,7 @@ from world.actions import (
     AssertPossessionClaim,
     Attack,
     Build,
+    CalibrateInstrument,
     ContributeCollectiveProject,
     CopyRecord,
     Craft,
@@ -35,6 +36,7 @@ from world.actions import (
     Inscribe,
     MaintainPublicGood,
     MaintainRepository,
+    Measure,
     Move,
     NegotiateExchange,
     OpposePublicGood,
@@ -193,6 +195,10 @@ def _exhaust_agent_command(command: AgentCommand) -> str:
             return "maintain_public_good"
         case OpposePublicGood():
             return "oppose_public_good"
+        case Measure():
+            return "measure"
+        case CalibrateInstrument():
+            return "calibrate_instrument"
         case _:
             assert_never(command)
 

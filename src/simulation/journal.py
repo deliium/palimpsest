@@ -533,6 +533,8 @@ def bind_snapshot_commit_hash(
         journeys=snapshot.journeys,
         infrastructure=snapshot.infrastructure,
         travel_network=snapshot.travel_network,
+        instrument_states=snapshot.instrument_states,
+        measurement_references=snapshot.measurement_references,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -570,6 +572,8 @@ def bind_snapshot_commit_hash(
         journeys=draft.journeys,
         infrastructure=draft.infrastructure,
         travel_network=draft.travel_network,
+        instrument_states=draft.instrument_states,
+        measurement_references=draft.measurement_references,
     )
 
 
@@ -875,6 +879,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["structures"] = [
                 _encode_structure(item) for item in value.structures
@@ -905,6 +910,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["active_hazards"] = [
                 _encode_active_hazard(item) for item in value.active_hazards
@@ -928,6 +934,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["artifacts"] = [
                 _encode_information_artifact(item) for item in value.artifacts
@@ -950,6 +957,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["lifecycle_records"] = [
                 _encode_lifecycle_record(item) for item in value.lifecycle_records
@@ -970,6 +978,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["kinship_edges"] = [
                 _encode_kinship_edge(item) for item in value.kinship_edges
@@ -989,6 +998,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["dependency_need_registers"] = [
                 _encode_dependency_need_register(item)
@@ -1007,6 +1017,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["repositories"] = [
                 _encode_knowledge_repository(item) for item in value.repositories
@@ -1032,6 +1043,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["corpse_custody_item_ids"] = sorted(
                 item.value for item in value.corpse_custody_item_ids
@@ -1049,6 +1061,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["exchange_offers"] = [
                 {
@@ -1071,6 +1084,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v25",
+            "v26",
         }:
             payload["collective_projects"] = [
                 _encode_collective_project(
@@ -1092,7 +1106,7 @@ def _encode_world_snapshot(
             assert value.journeys is not None
             payload["regions_migration"] = value.regions_migration.canonical()
             payload["journeys"] = [_encode_journey(item) for item in value.journeys]
-        elif value.persistence_codec_version in {"v21", "v25"}:
+        elif value.persistence_codec_version in {"v21", "v25", "v26"}:
             if value.regions_migration is not None:
                 assert value.journeys is not None
                 payload["regions_migration"] = value.regions_migration.canonical()
@@ -1105,7 +1119,7 @@ def _encode_world_snapshot(
                 "infrastructure_snapshot_encode asset_count=%s",
                 len(value.infrastructure),
             )
-            if value.persistence_codec_version == "v25":
+            if value.persistence_codec_version in {"v25", "v26"}:
                 assert value.travel_network is not None
                 payload["travel_network"] = [
                     _encode_route_condition(item) for item in value.travel_network
@@ -1113,6 +1127,25 @@ def _encode_world_snapshot(
                 _LOGGER.debug(
                     "travel_network_snapshot_encode route_count=%s",
                     len(value.travel_network),
+                )
+            if value.persistence_codec_version == "v26":
+                from simulation.measurement_serialization import (
+                    encode_instrument_state,
+                    encode_measurement_reference,
+                )
+
+                payload["instrument_states"] = [
+                    encode_instrument_state(item) for item in value.instrument_states
+                ]
+                payload["measurement_references"] = [
+                    encode_measurement_reference(item)
+                    for item in value.measurement_references
+                ]
+                _LOGGER.debug(
+                    "measurement_snapshot_encode instrument_count=%s "
+                    "reference_count=%s",
+                    len(value.instrument_states),
+                    len(value.measurement_references),
                 )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -1249,7 +1282,11 @@ def _decode_journey(data: dict[str, Any], *, path: str) -> Journey:
 
 def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     wire_codec = data.get("persistence_codec_version")
-    codec = "v18" if wire_codec in {"v19", "v20", "v21", "v25"} else wire_codec
+    codec = (
+        "v18"
+        if wire_codec in {"v19", "v20", "v21", "v25", "v26"}
+        else wire_codec
+    )
     keys = {
         "snapshot_id",
         "run_id",
@@ -1395,12 +1432,14 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         )
     if wire_codec in {"v19", "v20"}:
         keys |= {"regions_migration", "journeys"}
-    elif wire_codec in {"v21", "v25"}:
+    elif wire_codec in {"v21", "v25", "v26"}:
         keys.add("infrastructure")
-        if wire_codec == "v25":
+        if wire_codec in {"v25", "v26"}:
             keys.add("travel_network")
         if "regions_migration" in data or "journeys" in data:
             keys |= {"regions_migration", "journeys"}
+        if wire_codec == "v26":
+            keys |= {"instrument_states", "measurement_references"}
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -1410,7 +1449,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     infrastructure = None
     travel_network = None
     if wire_codec in {"v19", "v20"} or (
-        wire_codec in {"v21", "v25"} and "regions_migration" in data
+        wire_codec in {"v21", "v25", "v26"} and "regions_migration" in data
     ):
         from simulation.runner_serialization import (
             RunnerSerializationError,
@@ -1431,18 +1470,48 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         journeys = _decode_object_list(
             data["journeys"], _decode_journey, path=f"{path}.journeys"
         )
-    if wire_codec in {"v21", "v25"}:
+    if wire_codec in {"v21", "v25", "v26"}:
         infrastructure = _decode_object_list(
             data["infrastructure"],
             _decode_infrastructure_asset,
             path=f"{path}.infrastructure",
         )
-    if wire_codec == "v25":
+    if wire_codec in {"v25", "v26"}:
         travel_network = _decode_object_list(
             data["travel_network"],
             _decode_route_condition,
             path=f"{path}.travel_network",
         )
+    instrument_states: tuple[Any, ...] = ()
+    measurement_references: tuple[Any, ...] = ()
+    if wire_codec == "v26":
+        from simulation.measurement_serialization import (
+            MeasurementSerializationError,
+            decode_instrument_state,
+            decode_measurement_reference,
+        )
+
+        if not isinstance(data["instrument_states"], list) or not isinstance(
+            data["measurement_references"], list
+        ):
+            raise PersistenceSerializationError(
+                "invalid_array", f"{path}.instrument_states"
+            )
+        try:
+            instrument_states = tuple(
+                decode_instrument_state(
+                    row, path=f"{path}.instrument_states[{index}]"
+                )
+                for index, row in enumerate(data["instrument_states"])
+            )
+            measurement_references = tuple(
+                decode_measurement_reference(
+                    row, path=f"{path}.measurement_references[{index}]"
+                )
+                for index, row in enumerate(data["measurement_references"])
+            )
+        except MeasurementSerializationError as exc:
+            raise PersistenceSerializationError(exc.code, exc.path) from exc
     try:
         predecessor_raw = data["predecessor_commit_hash"]
         predecessor: CommitHash | None
@@ -1696,6 +1765,8 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             journeys=journeys,
             infrastructure=infrastructure,
             travel_network=travel_network,
+            instrument_states=instrument_states,
+            measurement_references=measurement_references,
         )
     except PersistenceSerializationError:
         raise

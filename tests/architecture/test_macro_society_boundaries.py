@@ -110,7 +110,7 @@ def test_no_capability_flag_or_runner_schema_is_referenced() -> None:
         source = path.read_text(encoding="utf-8")
         assert "v4_capability_flags" not in source, path
         assert "V4CapabilityFlags" not in source, path
-        assert "runner-config-v57" not in source, path
+        assert "runner-config-v58" not in source, path
     assert V4CapabilityFlags().any_enabled() is False
 
 

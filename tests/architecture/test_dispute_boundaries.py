@@ -454,12 +454,12 @@ def test_exact_context_flag_reservation_and_wire_pins() -> None:
 
 def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert METRIC_FAMILY_COUNT == 256
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
@@ -467,7 +467,7 @@ def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
     assert SUPPORTED_OBSERVER_PROTOCOLS == ("observer-protocol-v1",)
 
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v56" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     spec = V4_CONTEXT_BY_ID[V4ContextId.LEGAL_DISPUTES]
     assert spec.uses_existing_events is True

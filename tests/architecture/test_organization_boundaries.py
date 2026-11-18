@@ -231,11 +231,11 @@ def test_v4_flag_literal_stays_inside_the_allowlist() -> None:
 
 def test_compatibility_pins_are_unchanged() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert METRIC_FAMILY_COUNT == 256
     assert BENCHMARK_SCENARIO_COUNT == 16
@@ -246,7 +246,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION == "runner-config-v4"
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_v4_registry_keeps_fourteen_contexts_and_ownership_split() -> None:

@@ -98,12 +98,12 @@ def test_snapshot_accepts_v1_v2_v3() -> None:
 
 
 def test_no_v57_runner_schema_exists() -> None:
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v56" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_v4_registry_is_unchanged() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4ContextId.ORGANIZATIONS in {context.context_id for context in V4_CONTEXTS}

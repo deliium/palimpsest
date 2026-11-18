@@ -104,7 +104,7 @@ def _candidate(target: V4ContextId, **changes: Any) -> tuple[V4ContextSpec, ...]
 
 def test_registry_validates_and_declares_sixteen_contexts() -> None:
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(set(V4_CAPABILITY_FLAGS)) == 12

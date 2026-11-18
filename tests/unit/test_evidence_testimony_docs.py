@@ -72,7 +72,7 @@ def test_canonical_document_states_the_contract() -> None:
     ):
         assert token in text, token
     assert f"{METRIC_FAMILY_COUNT}" in text
-    assert "runner-config-v57" in text and "does not exist" in text
+    assert "runner-config-v58" in text and "does not exist" in text
     for kind in (
         "witness testimony",
         "written record",

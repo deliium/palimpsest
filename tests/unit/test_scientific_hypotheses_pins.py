@@ -30,7 +30,7 @@ def test_science_ownership_pins() -> None:
     from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -71,7 +71,7 @@ def test_catalog_and_wire_pins() -> None:
         "scientific_replication_relationships",
         "scientific_replication_social_interpretation",
     )
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V27 == 27
     assert TRAVEL_NETWORK_WRITE_PAIR_CODEC == "v25"
@@ -83,17 +83,17 @@ def test_science_adds_no_write_pair_or_migration() -> None:
     reserved = {item.context_id for item in V4_WRITE_PAIR_RESERVATIONS}
     deepening = {item.context_id for item in V4_DEEPENING_WRITE_PAIRS}
     assert V4ContextId.SCIENCE not in reserved
-    assert V4ContextId.SCIENCE not in deepening
+    assert V4ContextId.SCIENCE in deepening
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
 
 
 def test_no_v57_or_v2_route_exists() -> None:
     from simulation.runner_models import SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v57" not in text, path
+        assert "runner-config-v58" not in text, path
         assert '"/v2' not in text, path
 
 

@@ -100,7 +100,7 @@ def test_snapshot_store_and_experiment_versions_are_documented() -> None:
 def test_no_new_v4_flag_or_runner_v57_claim() -> None:
     page = _read("docs/trade-networks.md")
     assert "15 contexts / 12 flags / eight owned" in page
-    assert "runner-config-v57" not in page
+    assert "runner-config-v58" not in page
 
 
 def test_no_central_planner_money_price_or_score_claim() -> None:
@@ -145,7 +145,7 @@ def test_network_lineage_status_and_society_anchors_are_documented() -> None:
 
 def test_no_new_command_event_write_pair_or_migration_claim() -> None:
     page = _read("docs/trade-networks.md")
-    phrases = ("new command", "new event", "new write pair", "runner-config-v57")
+    phrases = ("new command", "new event", "new write pair", "runner-config-v58")
     for sentence in _sentences(page):
         lowered = sentence.lower()
         for phrase in phrases:

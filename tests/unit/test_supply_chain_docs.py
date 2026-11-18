@@ -98,15 +98,15 @@ def test_page_names_locked_contract_tokens() -> None:
 def test_pins_appear_exactly() -> None:
     page = _read("docs/supply-chains.md")
     for token in (
-        "43",
+        "45",
         "73",
         str(METRIC_FAMILY_COUNT),
         "0017",
         "17 contexts",
         "12 flags",
         "nine owned",
-        "EVENT_SCHEMA_REPLAY_V27",
-        "v25",
+        "EVENT_SCHEMA_REPLAY_V28",
+        "v26",
         "/v1",
         "observer-protocol-v1",
     ):
@@ -133,7 +133,7 @@ def test_architecture_and_configuration_surfaces() -> None:
 def test_negative_claims_are_absent() -> None:
     page = _read("docs/supply-chains.md")
     for token in (
-        "runner-config-v57",
+        "runner-config-v58",
         "0018",
         "/v2",
         "observer-protocol-v2",

@@ -59,6 +59,11 @@ from world.identifiers import (
     require_ordered_unique,
     require_stable_id,
 )
+from world.measurement import (
+    InstrumentState,
+    MeasurementReading,
+    MeasurementUnit,
+)
 from world.models import LifeStatus
 from world.possession_succession import POSSESSION_DOCTRINES as _POSSESSION_DOCTRINES
 from world.regions import Journey
@@ -89,6 +94,7 @@ EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
 EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
 EVENT_SCHEMA_REPLAY_V23: Final[int] = 23
 EVENT_SCHEMA_REPLAY_V27: Final[int] = 27
+EVENT_SCHEMA_REPLAY_V28: Final[int] = 28
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
     {
         EVENT_SCHEMA_AUDIT_V1,
@@ -115,6 +121,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -142,6 +149,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -168,6 +176,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -191,6 +200,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -213,6 +223,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -234,6 +245,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -254,6 +266,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -273,6 +286,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -291,6 +305,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -308,6 +323,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 CURRENT_PHYSICAL_EVENT_SCHEMA_VERSION: Final[int] = EVENT_SCHEMA_REPLAY_V5
@@ -2276,6 +2292,105 @@ class ExperimentResolved:
         _reject_presentation_fields(self.kind, self.__slots__)
 
 
+@dataclass(frozen=True, slots=True)
+class MeasurementTaken:
+    """Effect-complete display plus the exact instrument transition."""
+
+    reading: MeasurementReading
+    instrument_before: InstrumentState
+    instrument_after: InstrumentState
+    kind: Literal["measurement_taken"] = field(
+        default="measurement_taken", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.reading) is not MeasurementReading:
+            raise TypeError("MeasurementTaken.reading must be MeasurementReading")
+        if type(self.instrument_before) is not InstrumentState:
+            raise TypeError(
+                "MeasurementTaken.instrument_before must be InstrumentState"
+            )
+        if type(self.instrument_after) is not InstrumentState:
+            raise TypeError(
+                "MeasurementTaken.instrument_after must be InstrumentState"
+            )
+        if self.reading.instrument_id != self.instrument_before.item_id:
+            raise ValueError("measurement_taken_instrument_mismatch")
+        if (
+            self.reading.quantity is not self.instrument_before.quantity
+            or self.reading.unit != self.instrument_before.unit
+        ):
+            raise ValueError("measurement_taken_reading_mismatch")
+        if self.instrument_after.item_id != self.instrument_before.item_id:
+            raise ValueError("measurement_taken_instrument_mismatch")
+        if (
+            self.instrument_after.quantity is not self.instrument_before.quantity
+            or self.instrument_after.unit != self.instrument_before.unit
+        ):
+            raise ValueError("measurement_taken_instrument_mismatch")
+        if (
+            self.instrument_after.calibration_revision
+            != self.instrument_before.calibration_revision
+        ):
+            raise ValueError("measurement_taken_revision_mismatch")
+        expected_damage = min(
+            self.instrument_before.damage_milli + 10, 1000
+        )
+        if self.instrument_after.damage_milli != expected_damage:
+            raise ValueError("measurement_taken_wear_mismatch")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class InstrumentCalibrated:
+    """Effect-complete adjustment against a physical reference."""
+
+    reference_id: EntityId
+    reference_unit: MeasurementUnit
+    nominal_value_milli: int
+    reference_display_milli: int
+    instrument_before: InstrumentState
+    instrument_after: InstrumentState
+    kind: Literal["instrument_calibrated"] = field(
+        default="instrument_calibrated", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.reference_id) is not EntityId:
+            raise TypeError("InstrumentCalibrated.reference_id must be EntityId")
+        if type(self.reference_unit) is not MeasurementUnit:
+            raise TypeError(
+                "InstrumentCalibrated.reference_unit must be MeasurementUnit"
+            )
+        if type(self.instrument_before) is not InstrumentState:
+            raise TypeError(
+                "InstrumentCalibrated.instrument_before must be InstrumentState"
+            )
+        if type(self.instrument_after) is not InstrumentState:
+            raise TypeError(
+                "InstrumentCalibrated.instrument_after must be InstrumentState"
+            )
+        if self.reference_unit != self.instrument_after.unit:
+            raise ValueError("instrument_calibrated_unit_mismatch")
+        if (
+            self.instrument_after.item_id != self.instrument_before.item_id
+            or self.instrument_after.quantity is not self.instrument_before.quantity
+            or self.instrument_after.unit != self.instrument_before.unit
+        ):
+            raise ValueError("instrument_calibrated_instrument_mismatch")
+        if (
+            self.instrument_after.calibration_revision
+            != self.instrument_before.calibration_revision + 1
+        ):
+            raise ValueError("instrument_calibrated_revision_mismatch")
+        if (
+            self.instrument_after.correction_milli
+            != self.nominal_value_milli - self.reference_display_milli
+        ):
+            raise ValueError("instrument_calibrated_correction_mismatch")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
 def _entity_id_tuple(field_name: str, value: object) -> tuple[EntityId, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, tuple):
         raise TypeError(f"{field_name} must be a tuple of EntityId")
@@ -3158,6 +3273,8 @@ EventDetails = (
     | RepositoryIndexed
     | RepositoryNeglected
     | ExperimentResolved
+    | MeasurementTaken
+    | InstrumentCalibrated
     | CorpseCustodyOpened
     | TakenFromCorpse
     | PossessionClaimAsserted
@@ -3236,6 +3353,8 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         RepositoryIndexed,
         RepositoryNeglected,
         ExperimentResolved,
+        MeasurementTaken,
+        InstrumentCalibrated,
         CorpseCustodyOpened,
         TakenFromCorpse,
         PossessionClaimAsserted,
@@ -3269,14 +3388,21 @@ _INFRASTRUCTURE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27}
+    {EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V28}
 )
 
 _TRAVEL_NETWORK_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {RouteConditionChanged}
 )
 _TRAVEL_NETWORK_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V27}
+    {EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V28}
+)
+
+_MEASUREMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {MeasurementTaken, InstrumentCalibrated}
+)
+_MEASUREMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V28}
 )
 
 _KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
@@ -3304,6 +3430,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -3318,6 +3445,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
@@ -3331,6 +3459,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _POSSESSION_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3346,6 +3475,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _COMMITMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({CommitmentDeclared})
@@ -3358,6 +3488,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _PROJECT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3377,6 +3508,7 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _PUBLIC_GOOD_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3389,6 +3521,7 @@ _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _JOURNEY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3400,6 +3533,7 @@ _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 _CONTACT_DETAIL_TYPES: Final[frozenset[type]] = frozenset({ContactRecorded})
@@ -3468,6 +3602,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 
@@ -3591,6 +3726,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         return schema_version in _CONTACT_EVENT_SCHEMAS
     if type(details) in _TRAVEL_NETWORK_DETAIL_TYPES:
         return schema_version in _TRAVEL_NETWORK_EVENT_SCHEMAS
+    if type(details) in _MEASUREMENT_DETAIL_TYPES:
+        return schema_version in _MEASUREMENT_EVENT_SCHEMAS
     if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
         return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
@@ -3882,6 +4019,10 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return repository_id
         case ExperimentResolved(operand_a_id=operand_a_id):
             return operand_a_id
+        case MeasurementTaken(reading=reading):
+            return reading.target_id
+        case InstrumentCalibrated(reference_id=reference_id):
+            return reference_id
         case (
             CorpseCustodyOpened(body_id=body_id)
             | PossessionClaimAsserted(decedent_id=body_id)
@@ -4080,6 +4221,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=travel_network_requires_v27",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _MEASUREMENT_DETAIL_TYPES:
+            if self.schema_version not in _MEASUREMENT_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=measurement_instruments_requires_v28",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -4684,6 +4834,25 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=tuple(affected),
+                private_recipient_ids=(),
+            )
+        case MeasurementTaken(reading=reading):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(
+                    reading.instrument_id,
+                    reading.target_id,
+                ),
+                private_recipient_ids=(),
+            )
+        case InstrumentCalibrated(
+            reference_id=reference_id, instrument_before=instrument
+        ):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(instrument.item_id, reference_id),
                 private_recipient_ids=(),
             )
         case (

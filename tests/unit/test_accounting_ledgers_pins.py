@@ -32,7 +32,7 @@ def test_accounting_modules_do_not_encode_a_runner_schema_bump() -> None:
     offenders = [
         str(path.relative_to(ROOT))
         for path in SRC.rglob("*accounting_ledgers*.py")
-        if "runner-config-v57" in path.read_text(encoding="utf-8")
+        if "runner-config-v58" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 
@@ -100,8 +100,8 @@ def test_final_v4_23_pins() -> None:
     from world.actions import AgentCommand
 
     assert METRIC_FAMILY_COUNT == 256
-    assert len(COMMAND_RULE_MATRIX) == 43
-    assert len(get_args(AgentCommand)) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
+    assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
@@ -110,7 +110,7 @@ def test_final_v4_23_pins() -> None:
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"

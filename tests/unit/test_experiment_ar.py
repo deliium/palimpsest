@@ -210,7 +210,7 @@ def test_ar_flags_off_stays_v4() -> None:
     config = _arm("ar-flags-off")
     assert config.schema_version == RUNNER_SCHEMA_VERSION_V4
     assert config.technique_lifecycle is None
-    assert len(AgentCommand.__args__) == 43
+    assert len(AgentCommand.__args__) == 45
 
 
 def test_ar_not_a_tree_rejects_requires_technique() -> None:

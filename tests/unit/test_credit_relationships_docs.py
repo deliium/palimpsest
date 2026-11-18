@@ -157,7 +157,7 @@ def test_no_affirmative_forbidden_feature_claim() -> None:
 
 def test_no_schema_protocol_or_migration_bump() -> None:
     text = _read("docs/credit-relationships.md")
-    assert "runner-config-v57" not in text
+    assert "runner-config-v58" not in text
     assert "observer-protocol-v2" not in text
     assert "alembic/versions/0018" not in text
     assert "/v2/simulations" not in text

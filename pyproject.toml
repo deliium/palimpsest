@@ -352,6 +352,8 @@ id = "private_world_authority"
 name = "private world authority modules are simulation-only"
 type = "protected"
 protected_modules = [
+    "world._ambient",
+    "world._measurement",
     "world._collective_projects",
     "world._production",
     "world._travel",
@@ -370,6 +372,8 @@ protected_modules = [
     "world._travel_network",
 ]
 allowed_importers = [
+    "world._ambient",
+    "world._measurement",
     "world._collective_projects",
     "world._production",
     "world._travel",
@@ -389,6 +393,7 @@ allowed_importers = [
     "world._infrastructure",
     "world._travel_network",
     "world.travel_network",
+    "world._measurement",
 ]
 as_packages = true
 

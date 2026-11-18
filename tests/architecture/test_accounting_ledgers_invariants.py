@@ -89,7 +89,7 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
             "science",
         }
     )
-    token = "runner-config-" + "v57"
+    token = "runner-config-" + "v58"
     assert token not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*accounting_ledgers*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
@@ -108,10 +108,10 @@ def test_organizations_context_is_unchanged() -> None:
 def test_version_pins_are_unchanged() -> None:
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))
-    assert len(COMMAND_RULE_MATRIX) == 43
-    assert len(get_args(AgentCommand)) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
+    assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 

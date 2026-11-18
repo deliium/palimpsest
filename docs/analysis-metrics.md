@@ -771,7 +771,7 @@ emerged/continued/transformed/split/merge/dissolved counts. No composite
 persistence score, price, money, ranking, severity, recommendation, allocation,
 or quota exists.
 
-Current catalog: 256 metric families (the V4-27 landing reported 250 metric families); 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger families
 

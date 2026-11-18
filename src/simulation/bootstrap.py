@@ -16,6 +16,7 @@ from agents.models import AgentId
 from simulation.registrations import AgentRegistration as AgentRegistration
 from world.artifacts import InformationArtifact
 from world.identifiers import EntityId, WorldId, WorldRevision
+from world.measurement import InstrumentState, MeasurementReference
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.regions import Journey, RegionsMigrationSpec
 from world.repositories import KnowledgeRepository
@@ -82,6 +83,10 @@ class WorldBootstrap:
     registrations: Sequence[AgentRegistration] = field(default_factory=tuple)
     artifacts: Sequence[InformationArtifact] = field(default_factory=tuple)
     repositories: Sequence[KnowledgeRepository] = field(default_factory=tuple)
+    instrument_states: Sequence[InstrumentState] = field(default_factory=tuple)
+    measurement_references: Sequence[MeasurementReference] = field(
+        default_factory=tuple
+    )
     regions_migration: RegionsMigrationSpec | None = None
     journeys: Sequence[Journey] | None = None
 
@@ -116,6 +121,16 @@ class WorldBootstrap:
             self.repositories,
             model_type=KnowledgeRepository,
         )
+        instrument_states = _copy_models(
+            "WorldBootstrap.instrument_states",
+            self.instrument_states,
+            model_type=InstrumentState,
+        )
+        measurement_references = _copy_models(
+            "WorldBootstrap.measurement_references",
+            self.measurement_references,
+            model_type=MeasurementReference,
+        )
         if (
             self.regions_migration is not None
             and type(self.regions_migration) is not RegionsMigrationSpec
@@ -144,6 +159,10 @@ class WorldBootstrap:
         object.__setattr__(self, "registrations", registrations)
         object.__setattr__(self, "artifacts", artifacts)
         object.__setattr__(self, "repositories", repositories)
+        object.__setattr__(self, "instrument_states", instrument_states)
+        object.__setattr__(
+            self, "measurement_references", measurement_references
+        )
         object.__setattr__(self, "journeys", journeys)
         _validate_registrations_against_models(
             locations=locations,
@@ -166,6 +185,8 @@ class WorldBootstrap:
                 weather=weather,
                 artifacts=artifacts,
                 repositories=repositories,
+                instrument_states=instrument_states,
+                measurement_references=measurement_references,
                 regions_migration=self.regions_migration,
                 journeys=journeys,
             )
@@ -196,7 +217,8 @@ class WorldBootstrap:
             "world_bootstrap_validated world_id=%s revision=%s "
             "location_count=%s item_count=%s resource_count=%s body_count=%s "
             "weather_count=%s registration_count=%s artifact_count=%s "
-            "region_count=%s journey_count=%s",
+            "region_count=%s journey_count=%s instrument_count=%s "
+            "reference_count=%s",
             self.world_id.value,
             self.revision.value,
             len(locations),
@@ -212,6 +234,8 @@ class WorldBootstrap:
                 else len(self.regions_migration.regions)
             ),
             0 if journeys is None else len(journeys),
+            len(instrument_states),
+            len(measurement_references),
         )
 
     def validate_finalized_boundary(self, completed_tick: int) -> None:
@@ -249,6 +273,8 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             weather=bootstrap.weather,
             artifacts=bootstrap.artifacts,
             repositories=bootstrap.repositories,
+            instrument_states=bootstrap.instrument_states,
+            measurement_references=bootstrap.measurement_references,
             regions_migration=bootstrap.regions_migration,
             journeys=bootstrap.journeys,
         )
@@ -285,6 +311,10 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         registrations=snapshot.registrations,
         artifacts=snapshot.artifacts,
         repositories=snapshot.repositories,
+        instrument_states=getattr(snapshot, "instrument_states", ()),
+        measurement_references=getattr(
+            snapshot, "measurement_references", ()
+        ),
         regions_migration=getattr(snapshot, "regions_migration", None),
         journeys=getattr(snapshot, "journeys", None),
     )

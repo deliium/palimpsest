@@ -57,7 +57,7 @@ flag; five (`societal_resilience`, `macro_society_identity`,
 `economic_inequality`, `social_mobility`, and `economic_cascades`) are
 analysis-only and have no flag. Context identifiers are stable ASCII lowercase snake_case and are the same
 identifiers used by the machine-readable registry in `simulation.v4_architecture`.
-The registry revision is `v4-context-map-v5`.
+The registry revision is `v4-context-map-v6`.
 
 | Context | Capability flag | Authority | Owning packages | Existing mechanism | Event strategy | Measurement |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -521,7 +521,7 @@ keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
 commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -531,4 +531,4 @@ Contexts remain 14, flags 12, owned 8, unowned 4. The catalog appends four
 accounting families (216 -> 220). See [Accounting ledgers](accounting-ledgers.md).
 
 
-V4-27 owns `science` on the accepted `runner-config-v56` seam and adds no context, flag slot, runner schema, command, event, observer semantic type, write pair, or migration. It deepens the owner experiment ledger into explicit testable hypotheses with claim, conditions, predicted result, confidence milli, support/contradiction evidence, source, and append-only revisions; `hyp_v1` claims travel in existing `Talk`/`Tell` as testimony only. Detached analysis appends six families (244 → 250). `scientific-hypotheses-snapshot-v1` and `scientific-hypotheses-store-v1` publish programmatically; seven GET-only dual-gated routes serve them; the Research UI adds a read-only panel and Godot adds no overlay. Pins: 17 contexts / 12 flags / 9 owned / 3 unowned, 250 families, 43 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.
+V4-27 owns `science` on the accepted `runner-config-v56` seam and adds no context, flag slot, runner schema, command, event, observer semantic type, write pair, or migration. It deepens the owner experiment ledger into explicit testable hypotheses with claim, conditions, predicted result, confidence milli, support/contradiction evidence, source, and append-only revisions; `hyp_v1` claims travel in existing `Talk`/`Tell` as testimony only. Detached analysis appends six families (244 → 250). `scientific-hypotheses-snapshot-v1` and `scientific-hypotheses-store-v1` publish programmatically; seven GET-only dual-gated routes serve them; the Research UI adds a read-only panel and Godot adds no overlay. Pins: 17 contexts / 12 flags / 9 owned / 3 unowned, 250 families, 45 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.

@@ -23,6 +23,7 @@ from world._operations import (
     _AssertPossessionClaimOp,
     _AttackOp,
     _BuildOp,
+    _CalibrateInstrumentOp,
     _ContributeCollectiveProjectOp,
     _CopyRecordOp,
     _CraftOp,
@@ -44,6 +45,7 @@ from world._operations import (
     _InscribeOp,
     _MaintainPublicGoodOp,
     _MaintainRepositoryOp,
+    _MeasureOp,
     _MoveOp,
     _NegotiateExchangeOp,
     _OpposePublicGoodOp,
@@ -116,8 +118,10 @@ from world.events import (
     Fled,
     Given,
     Helped,
+    InstrumentCalibrated,
     JourneyArrived,
     JourneyStarted,
+    MeasurementTaken,
     Moved,
     PossessionClaimAsserted,
     RepositoryEstablished,
@@ -310,6 +314,12 @@ class RuleReason(StrEnum):
     ROUTE_CLOSED = "route_closed"
     ROUTE_BLOCKED = "route_blocked"
     ROUTE_CAPACITY_EXCEEDED = "route_capacity_exceeded"
+    MEASUREMENT_CHANNEL_OFF = "measurement_channel_off"
+    MEASUREMENT_INSTRUMENT_UNAVAILABLE = "measurement_instrument_unavailable"
+    MEASUREMENT_INSTRUMENT_BROKEN = "measurement_instrument_broken"
+    MEASUREMENT_QUANTITY_MISMATCH = "measurement_quantity_mismatch"
+    MEASUREMENT_TARGET_INACCESSIBLE = "measurement_target_inaccessible"
+    MEASUREMENT_REFERENCE_INACCESSIBLE = "measurement_reference_inaccessible"
 
 
 @dataclass(frozen=True, slots=True)
@@ -682,6 +692,20 @@ COMMAND_RULE_MATRIX: Final[dict[type, CommandRulePolicy]] = {
         requires_living_actor=True,
         notes="closed law outcome; failure still emits experiment_resolved",
     ),
+    _MeasureOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="held instrument, eligible visible local target, one wear",
+    ),
+    _CalibrateInstrumentOp: CommandRulePolicy(
+        disposition=RuleDisposition.MUTATE,
+        emits_event_when_applied=True,
+        mutates_state_when_applied=True,
+        requires_living_actor=True,
+        notes="held instrument and same-unit reference, adjustment not repair",
+    ),
 }
 
 _OPERATION_KIND: Final[dict[type, str]] = {
@@ -728,6 +752,8 @@ _OPERATION_KIND: Final[dict[type, str]] = {
     _MaintainPublicGoodOp: "maintain_public_good",
     _OpposePublicGoodOp: "oppose_public_good",
     _ExperimentOp: "experiment",
+    _MeasureOp: "measure",
+    _CalibrateInstrumentOp: "calibrate_instrument",
 }
 
 _SEARCH_RESOURCE_KINDS: Final[frozenset[ResourceKind]] = frozenset(
@@ -761,6 +787,7 @@ def evaluate_operation(
     infrastructure_networks_active: bool = False,
     season: Season | None = None,
     travel_network_active: bool = False,
+    measurement_context: object | None = None,
 ) -> RuleResult:
     """Evaluate a validated operation against an immutable snapshot.
 
@@ -800,6 +827,7 @@ def evaluate_operation(
         structured_commitments_context
     )
     _require_subjective_valuation_context(subjective_valuation_context)
+    measurement = _require_measurement_context(measurement_context)
     op_type = type(operation)
     policy = COMMAND_RULE_MATRIX.get(op_type)
     if policy is None:
@@ -1100,6 +1128,14 @@ def evaluate_operation(
                 kind,
                 catalog=experiment_catalog,
                 rules=physical_rules,
+                tick=tick,
+            )
+        case _MeasureOp() | _CalibrateInstrumentOp():
+            return _evaluate_measurement(
+                state,
+                operation,
+                kind,
+                context=measurement,
                 tick=tick,
             )
         case _WaitOp():
@@ -3183,6 +3219,7 @@ def apply_operation(
     infrastructure_networks_active: bool = False,
     season: Season | None = None,
     travel_network_active: bool = False,
+    measurement_context: object | None = None,
 ) -> RuleApplication:
     """Evaluate then apply immutable physical or event-only effects.
 
@@ -3201,6 +3238,7 @@ def apply_operation(
     repository_context = _require_knowledge_repositories_context(
         knowledge_repositories_context
     )
+    measurement = _require_measurement_context(measurement_context)
     result = evaluate_operation(
         state,
         operation,
@@ -3220,6 +3258,7 @@ def apply_operation(
         infrastructure_networks_active=infrastructure_networks_active,
         season=season,
         travel_network_active=travel_network_active,
+        measurement_context=measurement,
     )
     if result.disposition in {
         RuleDisposition.REJECT,
@@ -3367,6 +3406,15 @@ def apply_operation(
             rules=physical_rules,
             tick=0 if tick is None else tick,
             experiment_catalog=experiment_catalog,
+        )
+    if type(operation) in {_MeasureOp, _CalibrateInstrumentOp}:
+        assert isinstance(operation, (_MeasureOp, _CalibrateInstrumentOp))
+        return _apply_measurement_operation(
+            state,
+            operation,
+            result=result,
+            context=measurement,
+            tick=0 if tick is None else tick,
         )
     if type(operation) is _FleeOp:
         return _apply_flee(
@@ -4575,6 +4623,18 @@ def _require_subjective_valuation_context(value: object | None) -> object | None
     return value
 
 
+def _require_measurement_context(value: object | None) -> object | None:
+    if value is None:
+        return None
+    from world._measurement import MeasurementRuleContext
+
+    if type(value) is not MeasurementRuleContext:
+        raise TypeError(
+            "measurement_context must be MeasurementRuleContext or None"
+        )
+    return value
+
+
 def _require_structured_commitments_context(value: object | None) -> object | None:
     if value is None:
         return None
@@ -5534,6 +5594,167 @@ def _apply_index_repository(
             index_entry_count=len(entries),
             revision_bump=1,
         ),
+    )
+
+
+def _measurement_reason(code: str) -> RuleReason:
+    if code == "measurement_instrument_broken":
+        return RuleReason.MEASUREMENT_INSTRUMENT_BROKEN
+    if code in {
+        "measurement_instrument_missing",
+        "measurement_instrument_not_held",
+        "measurement_instrument_state_mismatch",
+        "measurement_actor_unavailable",
+    }:
+        return RuleReason.MEASUREMENT_INSTRUMENT_UNAVAILABLE
+    if code == "measurement_quantity_mismatch":
+        return RuleReason.MEASUREMENT_QUANTITY_MISMATCH
+    if code in {
+        "measurement_reference_inaccessible",
+        "measurement_reference_missing",
+        "measurement_reference_mismatch",
+        "measurement_reference_unit_mismatch",
+    }:
+        return RuleReason.MEASUREMENT_REFERENCE_INACCESSIBLE
+    return RuleReason.MEASUREMENT_TARGET_INACCESSIBLE
+
+
+def _evaluate_measurement(
+    state: WorldState,
+    operation: _MeasureOp | _CalibrateInstrumentOp,
+    kind: str,
+    *,
+    context: object | None,
+    tick: int | None,
+) -> RuleResult:
+    from world._measurement import (
+        MeasurementResolutionError,
+        resolve_instrument_calibration,
+        resolve_measurement,
+    )
+
+    if context is None:
+        _OPS_LOG.debug(
+            "measurement_admission_rejected actor_id=%s kind=%s reason_code=%s",
+            operation.actor_id.value,
+            kind,
+            RuleReason.MEASUREMENT_CHANNEL_OFF.value,
+        )
+        return _reject(kind, RuleReason.MEASUREMENT_CHANNEL_OFF)
+    instrument = state.instrument_states.get(operation.instrument_id)
+    if instrument is None:
+        return _reject(kind, RuleReason.MEASUREMENT_INSTRUMENT_UNAVAILABLE)
+    try:
+        if type(operation) is _MeasureOp:
+            resolve_measurement(
+                state,
+                operation.actor_id,
+                instrument,
+                operation.target_id,
+                operation.quantity,  # type: ignore[arg-type]
+                request_id=operation.request_id,
+                context=context,  # type: ignore[arg-type]
+            )
+        else:
+            assert isinstance(operation, _CalibrateInstrumentOp)
+            reference = state.measurement_references.get(operation.reference_id)
+            if reference is None:
+                return _reject(
+                    kind, RuleReason.MEASUREMENT_REFERENCE_INACCESSIBLE
+                )
+            resolve_instrument_calibration(
+                state,
+                operation.actor_id,
+                instrument,
+                reference,
+                request_id=operation.request_id,
+                context=context,  # type: ignore[arg-type]
+            )
+    except MeasurementResolutionError as exc:
+        return _reject(kind, _measurement_reason(exc.code))
+    return RuleResult(
+        disposition=RuleDisposition.MUTATE,
+        reason=RuleReason.OCCURRENCE,
+        emits_event=True,
+        mutates_state=True,
+        action_kind=kind,
+    )
+
+
+def _apply_measurement_operation(
+    state: WorldState,
+    operation: _MeasureOp | _CalibrateInstrumentOp,
+    *,
+    result: RuleResult,
+    context: object | None,
+    tick: int,
+) -> RuleApplication:
+    from world._measurement import (
+        MeasurementResolutionError,
+        resolve_instrument_calibration,
+        resolve_measurement,
+    )
+
+    if context is None:
+        raise TypeError("measurement context is required after admission")
+    instrument = state.instrument_states.get(operation.instrument_id)
+    if instrument is None:
+        raise MeasurementResolutionError("measurement_instrument_missing")
+    try:
+        if type(operation) is _MeasureOp:
+            reading, after = resolve_measurement(
+                state,
+                operation.actor_id,
+                instrument,
+                operation.target_id,
+                operation.quantity,  # type: ignore[arg-type]
+                request_id=operation.request_id,
+                context=context,  # type: ignore[arg-type]
+            )
+            instruments = dict(state.instrument_states)
+            instruments[instrument.item_id] = after
+            next_state = rebuild_world_state(
+                state, instrument_states=instruments
+            )
+            details: EventDetails = MeasurementTaken(
+                reading=reading,
+                instrument_before=instrument,
+                instrument_after=after,
+            )
+        else:
+            assert isinstance(operation, _CalibrateInstrumentOp)
+            reference = state.measurement_references.get(operation.reference_id)
+            if reference is None:
+                raise MeasurementResolutionError(
+                    "measurement_reference_missing"
+                )
+            outcome = resolve_instrument_calibration(
+                state,
+                operation.actor_id,
+                instrument,
+                reference,
+                request_id=operation.request_id,
+                context=context,  # type: ignore[arg-type]
+            )
+            instruments = dict(state.instrument_states)
+            instruments[instrument.item_id] = outcome.after_state
+            next_state = rebuild_world_state(
+                state, instrument_states=instruments
+            )
+            details = InstrumentCalibrated(
+                reference_id=reference.item_id,
+                reference_unit=reference.unit,
+                nominal_value_milli=reference.nominal_value_milli,
+                reference_display_milli=outcome.reference_display_milli,
+                instrument_before=instrument,
+                instrument_after=outcome.after_state,
+            )
+    except MeasurementResolutionError as exc:
+        raise ValueError(exc.code) from exc
+    return RuleApplication(
+        result=result,
+        next_state=next_state,
+        event_details=details,
     )
 
 

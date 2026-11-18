@@ -403,11 +403,11 @@ def test_no_new_flag_context_or_v57() -> None:
         str(path.relative_to(ROOT / "src"))
         for path in sorted((ROOT / "src").rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v57" in path.read_text(encoding="utf-8")
+        and "runner-config-v58" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     for path in MIGRATION_PATHS:
-        assert "runner-config-v57" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v58" not in path.read_text(encoding="utf-8")
 
 
 def test_pins_are_unchanged() -> None:
@@ -415,7 +415,7 @@ def test_pins_are_unchanged() -> None:
     specs = all_metric_specifications()
     assert len(specs) == 256
     assert tuple(spec.family_id.value for spec in specs[176:180]) == MIGRATION_FAMILIES
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

@@ -401,7 +401,7 @@ uv run --frozen --python 3.12.14 pytest \
   tests/unit/test_experiment_bc.py -q
 ```
 
-Expected selectors: 43 commands, 73 observer semantic types, 124 metric families,
+Expected selectors: 45 commands, 73 observer semantic types, 124 metric families,
 `runner-config-v47` as the latest accepted schema (v46 remains valid for
 symbolic-only runs), `replay-v22`/codec `v20`, and Alembic `0017`.
 
@@ -444,7 +444,7 @@ uv run --frozen --python 3.12.14 pytest \
 
 Also run the full pytest, Ruff, mypy, import-linter/architecture isolation, the
 compatibility matrix, V1 regression and V2 scientific invariant gates, and the
-BB/BC/BD experiment regressions. Confirm 43 commands, 73 observer semantic
+BB/BC/BD experiment regressions. Confirm 45 commands, 73 observer semantic
 types, 124 metric families, runner schema v49 only with the deterministic mode, replay v22 /
 codec v20, and Alembic `0017`.
 
@@ -459,7 +459,7 @@ uv run --frozen --python 3.12.14 pytest tests/unit/test_institution_concepts_con
   tests/architecture/test_v3_institution_emergence_analysis_only.py -q
 ```
 
-Expected: 43 commands, 73 observer semantic types, 124 metric families,
+Expected: 45 commands, 73 observer semantic types, 124 metric families,
 `runner-config-v49` only when a deterministic institution mode is present,
 replay `EVENT_SCHEMA_REPLAY_V22`, codec `v20`, Alembic `0017`.
 
@@ -632,10 +632,16 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 250 metric families; 17 V4 contexts / `v4-context-map-v5`; 43 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
+Current catalog: 256 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
 
-V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v5`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
+V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v6`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
 
 ## Scientific replication verification
 
 Run `tests/unit/test_replication_*.py`, `tests/architecture/test_replication_*.py`, and the Research UI replication tests. Filesystem store/API integration remains opt-in; missing prerequisites are unexecuted, not passed.
+
+Measurement instruments add focused suites:
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_measurement_*.py -q
+```

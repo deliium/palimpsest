@@ -70,6 +70,14 @@ from memory.models import (
     RelationEndpoint,
     RelationEndpointKind,
 )
+from simulation.measurement_serialization import (
+    MeasurementSerializationError,
+    decode_instrument_state,
+    decode_measurement_reading,
+    encode_instrument_state,
+    encode_measurement_reading,
+    encode_measurement_unit,
+)
 from simulation.models import (
     LLM_REPLAY_REQUIREMENT,
     ExportMetadata,
@@ -92,6 +100,7 @@ from world.actions import (
     AssertPossessionClaim,
     Attack,
     Build,
+    CalibrateInstrument,
     ContributeCollectiveProject,
     CopyRecord,
     Craft,
@@ -112,6 +121,7 @@ from world.actions import (
     IndexRepository,
     Inscribe,
     MaintainRepository,
+    Measure,
     Move,
     NegotiateExchange,
     Repair,
@@ -176,6 +186,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V27,
+    EVENT_SCHEMA_REPLAY_V28,
     AgentCreated,
     AgentEnteredWorld,
     AgentInitializationRecorded,
@@ -213,6 +224,7 @@ from world.events import (
     InfrastructureDecayed,
     InfrastructureDestroyed,
     InfrastructureRepaired,
+    InstrumentCalibrated,
     ItemCrafted,
     ItemStored,
     JourneyArrived,
@@ -220,6 +232,7 @@ from world.events import (
     JourneyStarted,
     KinshipEdgeRecorded,
     LifecycleStageChanged,
+    MeasurementTaken,
     Moved,
     NeedsApplied,
     OccurrenceContext,
@@ -324,6 +337,10 @@ from world.values import (
 )
 
 SCHEMA_VERSION: Final[int] = 1
+SCHEMA_VERSION_V2: Final[int] = 2
+ACCEPTED_DOMAIN_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
+    {SCHEMA_VERSION, SCHEMA_VERSION_V2}
+)
 _LOG = logging.getLogger(__name__)
 EPISODIC_MEMORY_TRACE_VERSION: Final[int] = 1
 EPISODIC_MEMORY_TRACE_TYPE: Final[str] = "episodic_memory_trace"
@@ -362,12 +379,51 @@ class DomainSerializationError(ValueError):
         super().__init__(f"{code} at {path}")
 
 
+def required_domain_schema(value: object) -> int:
+    """Return the minimum domain envelope version for nested measurement data."""
+    from world.events import InstrumentCalibrated, MeasurementTaken
+
+    if type(value) in {Measure, CalibrateInstrument}:
+        return SCHEMA_VERSION_V2
+    if type(value) is ActionProposal:
+        return required_domain_schema(value.command)
+    if type(value) is WorldEvent:
+        return (
+            SCHEMA_VERSION_V2
+            if type(value.details) in {MeasurementTaken, InstrumentCalibrated}
+            else SCHEMA_VERSION
+        )
+    if type(value) is SimulationExport:
+        return (
+            SCHEMA_VERSION_V2
+            if any(
+                required_domain_schema(event) == SCHEMA_VERSION_V2
+                for event in value.events
+            )
+            else SCHEMA_VERSION
+        )
+    if type(value) is Observation:
+        measurement_kinds = {"measurement_taken", "instrument_calibrated"}
+        if any(
+            occurrence.kind in measurement_kinds for occurrence in value.occurrences
+        ):
+            return SCHEMA_VERSION_V2
+        if any(
+            getattr(item, "instrument", None) is not None
+            or getattr(item, "reference", None) is not None
+            for item in value.items
+        ):
+            return SCHEMA_VERSION_V2
+    return SCHEMA_VERSION
+
+
 def encode_domain(value: object) -> bytes:
     """Encode a supported immutable domain value to canonical UTF-8 bytes."""
-    tag, data = _encode_top(value, path="$")
+    wire_schema = required_domain_schema(value)
+    tag, data = _encode_top(value, path="$", wire_schema=wire_schema)
     envelope = {
         "data": data,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": wire_schema,
         "type": tag,
     }
     text = json.dumps(
@@ -403,15 +459,16 @@ def decode_domain(data: bytes) -> SerializableDomainValue:
         raise DomainSerializationError("invalid_envelope", "$")
     if set(payload) != {"schema_version", "type", "data"}:
         raise DomainSerializationError("invalid_envelope", "$")
-    if payload["schema_version"] != SCHEMA_VERSION:
+    if payload["schema_version"] not in ACCEPTED_DOMAIN_SCHEMA_VERSIONS:
         raise DomainSerializationError("unsupported_schema_version", "$.schema_version")
+    wire_schema = payload["schema_version"]
     type_tag = payload["type"]
     if not isinstance(type_tag, str):
         raise DomainSerializationError("invalid_type", "$.type")
     data_obj = payload["data"]
     if not isinstance(data_obj, dict):
         raise DomainSerializationError("invalid_data", "$.data")
-    return _decode_top(type_tag, data_obj, path="$.data")
+    return _decode_top(type_tag, data_obj, path="$.data", wire_schema=wire_schema)
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -423,7 +480,9 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
+def _encode_top(
+    value: object, *, path: str, wire_schema: int = 1
+) -> tuple[str, dict[str, Any]]:
     if type(value) is ActionRequest:
         raise DomainSerializationError("unsupported_type", path)
     # Lifecycle/runtime authority values are intentionally wire-ineligible.
@@ -485,22 +544,27 @@ def _encode_top(value: object, *, path: str) -> tuple[str, dict[str, Any]]:
     if type(value) is CommunicationEnvelope:
         return "communication_envelope", _encode_envelope(value)
     if type(value) is ActionProposal:
-        return "action_proposal", _encode_proposal(value)
+        return "action_proposal", _encode_proposal(value, wire_schema=wire_schema)
     if type(value) is Observation:
-        return "observation", _encode_observation(value)
+        return "observation", _encode_observation(value, wire_schema=wire_schema)
     if type(value) is WorldEvent:
-        return "world_event", _encode_world_event(value)
+        return "world_event", _encode_world_event(value, wire_schema=wire_schema)
     if type(value) is SimulationExport:
-        return "simulation_export", _encode_export(value)
+        return "simulation_export", _encode_export(value, wire_schema=wire_schema)
     try:
         command = require_agent_command(value)
     except TypeError as exc:
         raise DomainSerializationError("unsupported_type", path) from exc
-    return agent_command_tag(command), _encode_command(command)
+    if (
+        type(command) in {Measure, CalibrateInstrument}
+        and wire_schema != SCHEMA_VERSION_V2
+    ):
+        raise DomainSerializationError("unsupported_schema_version", path)
+    return agent_command_tag(command), _encode_command(command, wire_schema=wire_schema)
 
 
 def _decode_top(
-    tag: str, data: dict[str, Any], *, path: str
+    tag: str, data: dict[str, Any], *, path: str, wire_schema: int = 1
 ) -> SerializableDomainValue:
     if tag == "location":
         return _decode_location(data, path=path)
@@ -533,15 +597,17 @@ def _decode_top(
     if tag == "communication_envelope":
         return _decode_envelope(data, path=path)
     if tag == "action_proposal":
-        return _decode_proposal(data, path=path)
+        return _decode_proposal(data, path=path, wire_schema=wire_schema)
     if tag == "observation":
-        return _decode_observation(data, path=path)
+        return _decode_observation(data, path=path, wire_schema=wire_schema)
     if tag == "world_event":
-        return _decode_world_event(data, path=path)
+        return _decode_world_event(data, path=path, wire_schema=wire_schema)
     if tag == "simulation_export":
-        return _decode_export(data, path=path)
+        return _decode_export(data, path=path, wire_schema=wire_schema)
     if tag in _COMMAND_TAGS:
-        return require_agent_command(_decode_command(tag, data, path=path))
+        return require_agent_command(
+            _decode_command(tag, data, path=path, wire_schema=wire_schema)
+        )
     raise DomainSerializationError("unknown_type", "$.type")
 
 
@@ -577,6 +643,8 @@ _COMMAND_TAGS: Final[frozenset[str]] = frozenset(
         "annotate_record",
         "damage_record",
         "experiment",
+        "measure",
+        "calibrate_instrument",
         "assert_possession_claim",
         "declare_commitment",
         "negotiate_exchange",
@@ -2428,7 +2496,7 @@ def _decode_envelope(data: dict[str, Any], *, path: str) -> CommunicationEnvelop
         raise DomainSerializationError("invalid_model", path) from exc
 
 
-def _encode_command(value: object) -> dict[str, Any]:
+def _encode_command(value: object, *, wire_schema: int = 1) -> dict[str, Any]:
     match value:
         case Move(destination_id=destination_id):
             return {"destination_id": destination_id.value}
@@ -2638,6 +2706,23 @@ def _encode_command(value: object) -> dict[str, Any]:
             if operand_b_id is not None:
                 payload["operand_b_id"] = operand_b_id.value
             return payload
+        case Measure(
+            instrument_id=instrument_id,
+            target_id=target_id,
+            quantity=quantity,
+        ):
+            return {
+                "instrument_id": instrument_id.value,
+                "quantity": quantity.value,
+                "target_id": target_id.value,
+            }
+        case CalibrateInstrument(
+            instrument_id=instrument_id, reference_id=reference_id
+        ):
+            return {
+                "instrument_id": instrument_id.value,
+                "reference_id": reference_id.value,
+            }
         case _:
             raise DomainSerializationError("unsupported_type", "$")
 
@@ -2687,7 +2772,9 @@ def _decode_artifact_content(data: object, *, path: str) -> ArtifactContent:
     return ArtifactContent(marks=tuple(marks), relations=tuple(relations))
 
 
-def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
+def _decode_command(
+    tag: str, data: dict[str, Any], *, path: str, wire_schema: int = 1
+) -> object:
     try:
         if tag == "move":
             _require_keys(data, {"destination_id"}, path=path)
@@ -3003,6 +3090,27 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
                 operand_b_id=None if operand_b is None else EntityId(operand_b),
                 hypothesis_id=_str_field(data, "hypothesis_id", path=path),
             )
+        if tag in {"measure", "calibrate_instrument"}:
+            if wire_schema != 2:
+                raise DomainSerializationError("unsupported_schema_version", path)
+            if tag == "measure":
+                _require_keys(
+                    data,
+                    {"instrument_id", "quantity", "target_id"},
+                    path=path,
+                )
+                from world.measurement import MeasurementQuantity
+
+                return Measure(
+                    EntityId(_str_field(data, "instrument_id", path=path)),
+                    EntityId(_str_field(data, "target_id", path=path)),
+                    MeasurementQuantity(_str_field(data, "quantity", path=path)),
+                )
+            _require_keys(data, {"instrument_id", "reference_id"}, path=path)
+            return CalibrateInstrument(
+                EntityId(_str_field(data, "instrument_id", path=path)),
+                EntityId(_str_field(data, "reference_id", path=path)),
+            )
     except DomainSerializationError:
         raise
     except (TypeError, ValueError) as exc:
@@ -3010,10 +3118,10 @@ def _decode_command(tag: str, data: dict[str, Any], *, path: str) -> object:
     raise DomainSerializationError("unknown_type", "$.type")
 
 
-def _encode_proposal(value: ActionProposal) -> dict[str, Any]:
+def _encode_proposal(value: ActionProposal, *, wire_schema: int = 1) -> dict[str, Any]:
     command_tag, command_data = (
         agent_command_tag(value.command),
-        _encode_command(value.command),
+        _encode_command(value.command, wire_schema=wire_schema),
     )
     return {
         "command": {"data": command_data, "type": command_tag},
@@ -3021,7 +3129,9 @@ def _encode_proposal(value: ActionProposal) -> dict[str, Any]:
     }
 
 
-def _decode_proposal(data: dict[str, Any], *, path: str) -> ActionProposal:
+def _decode_proposal(
+    data: dict[str, Any], *, path: str, wire_schema: int = 1
+) -> ActionProposal:
     _require_keys(data, {"proposal_id", "command"}, path=path)
     command_obj = data["command"]
     if not isinstance(command_obj, dict) or set(command_obj) != {"type", "data"}:
@@ -3031,7 +3141,9 @@ def _decode_proposal(data: dict[str, Any], *, path: str) -> ActionProposal:
     if not isinstance(tag, str) or not isinstance(command_data, dict):
         raise DomainSerializationError("invalid_object", f"{path}.command")
     try:
-        command = _decode_command(tag, command_data, path=f"{path}.command.data")
+        command = _decode_command(
+            tag, command_data, path=f"{path}.command.data", wire_schema=wire_schema
+        )
         return ActionProposal(
             proposal_id=ProposalId(_str_field(data, "proposal_id", path=path)),
             command=require_agent_command(command),
@@ -3073,7 +3185,7 @@ def _optional_hazard_kinds(
     return tuple(HazardKind(item) for item in raw)
 
 
-def _encode_observation(value: Observation) -> dict[str, Any]:
+def _encode_observation(value: Observation, *, wire_schema: int = 1) -> dict[str, Any]:
     encoded: dict[str, Any] = {
         "communications": [
             _encode_observed_communication(item) for item in value.communications
@@ -3081,7 +3193,9 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
         "day_phase": None if value.day_phase is None else value.day_phase.value,
         "exits": [_encode_visible_exit(item) for item in value.exits],
         "hour": value.hour,
-        "items": [_encode_observed_item(item) for item in value.items],
+        "items": [
+            _encode_observed_item(item, wire_schema=wire_schema) for item in value.items
+        ],
         "locations": [_encode_observed_location(item) for item in value.locations],
         "observer_id": value.observer_id.value,
         "occurrences": [
@@ -3136,7 +3250,9 @@ def _encode_observation(value: Observation) -> dict[str, Any]:
     return encoded
 
 
-def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
+def _decode_observation(
+    data: dict[str, Any], *, path: str, wire_schema: int = 1
+) -> Observation:
     _require_keys(
         data,
         {
@@ -3214,8 +3330,11 @@ def _decode_observation(data: dict[str, Any], *, path: str) -> Observation:
                 _decode_observed_location,
                 path=f"{path}.locations",
             ),
-            items=_decode_object_list(
-                data["items"], _decode_observed_item, path=f"{path}.items"
+            items=tuple(
+                _decode_observed_item(
+                    item, path=f"{path}.items[{index}]", wire_schema=wire_schema
+                )
+                for index, item in enumerate(data["items"])
             ),
             resources=_decode_object_list(
                 data["resources"],
@@ -3644,14 +3763,37 @@ def _decode_observed_location(data: dict[str, Any], *, path: str) -> ObservedLoc
         raise DomainSerializationError("invalid_model", path) from exc
 
 
-def _encode_observed_item(value: ObservedItem) -> dict[str, Any]:
-    return {
+def _encode_observed_item(
+    value: ObservedItem, *, wire_schema: int = 1
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "entity_id": value.entity_id.value,
         "kind": value.kind.value,
         "load": value.load.value,
         "name": value.name,
         "placement": value.placement.value,
     }
+    if value.instrument is not None or value.reference is not None:
+        if wire_schema != 2:
+            raise DomainSerializationError("unsupported_schema_version", "$.items")
+    if value.instrument is not None:
+        from simulation.measurement_serialization import encode_measurement_unit
+
+        payload["instrument"] = {
+            "adjustment_mark_present": value.instrument.adjustment_mark_present,
+            "nominal_step_milli": value.instrument.nominal_step_milli,
+            "quantity": value.instrument.quantity.value,
+            "unit": encode_measurement_unit(value.instrument.unit),
+            "wear": value.instrument.wear.value,
+        }
+    if value.reference is not None:
+        from simulation.measurement_serialization import encode_measurement_unit
+
+        payload["reference"] = {
+            "nominal_value_milli": value.reference.nominal_value_milli,
+            "unit": encode_measurement_unit(value.reference.unit),
+        }
+    return payload
 
 
 def _decode_exchange_holdings(
@@ -3682,15 +3824,81 @@ def _decode_exchange_holdings(
     return tuple(copied)
 
 
-def _decode_observed_item(data: dict[str, Any], *, path: str) -> ObservedItem:
-    _require_keys(data, {"entity_id", "name", "kind", "load", "placement"}, path=path)
+def _decode_observed_item(
+    data: dict[str, Any], *, path: str, wire_schema: int = 1
+) -> ObservedItem:
+    base_keys = {"entity_id", "name", "kind", "load", "placement"}
+    allowed = base_keys | ({"instrument", "reference"} if wire_schema == 2 else set())
+    _require_keys(data, base_keys, path=path, optional=allowed - base_keys)
+    from world.measurement import (
+        InstrumentAppearance,
+        InstrumentWearBand,
+        MeasurementQuantity,
+        ReferenceAppearance,
+    )
+
+    instrument = None
+    reference = None
     try:
+        if "instrument" in data:
+            raw = data["instrument"]
+            if not isinstance(raw, dict):
+                raise DomainSerializationError("invalid_object", f"{path}.instrument")
+            _require_keys(
+                raw,
+                {
+                    "adjustment_mark_present",
+                    "nominal_step_milli",
+                    "quantity",
+                    "unit",
+                    "wear",
+                },
+                path=f"{path}.instrument",
+            )
+            from simulation.measurement_serialization import decode_measurement_unit
+
+            instrument = InstrumentAppearance(
+                quantity=MeasurementQuantity(
+                    _str_field(raw, "quantity", path=f"{path}.instrument")
+                ),
+                unit=decode_measurement_unit(
+                    raw["unit"], path=f"{path}.instrument.unit"
+                ),
+                nominal_step_milli=_int_field(
+                    raw, "nominal_step_milli", path=f"{path}.instrument"
+                ),
+                wear=InstrumentWearBand(
+                    _str_field(raw, "wear", path=f"{path}.instrument")
+                ),
+                adjustment_mark_present=raw["adjustment_mark_present"],
+            )
+        if "reference" in data:
+            raw = data["reference"]
+            if not isinstance(raw, dict):
+                raise DomainSerializationError("invalid_object", f"{path}.reference")
+            _require_keys(
+                raw,
+                {"nominal_value_milli", "unit"},
+                path=f"{path}.reference",
+            )
+            from simulation.measurement_serialization import decode_measurement_unit
+
+            reference = ReferenceAppearance(
+                unit=decode_measurement_unit(
+                    raw["unit"], path=f"{path}.reference.unit"
+                ),
+                nominal_value_milli=_int_field(
+                    raw, "nominal_value_milli", path=f"{path}.reference"
+                ),
+            )
         return ObservedItem(
             entity_id=EntityId(_str_field(data, "entity_id", path=path)),
             name=_str_field(data, "name", path=path),
             kind=ItemKind(_str_field(data, "kind", path=path)),
             load=ItemLoad(_int_field(data, "load", path=path)),
             placement=ObservedItemPlacement(_str_field(data, "placement", path=path)),
+            instrument=instrument,
+            reference=reference,
         )
     except (TypeError, ValueError) as exc:
         raise DomainSerializationError("invalid_model", path) from exc
@@ -4054,9 +4262,7 @@ def _encode_visible_exit(value: VisibleExit) -> dict[str, Any]:
         payload["route_blockage_cause"] = value.route_blockage_cause
         payload["route_capacity"] = value.route_capacity
         payload["route_risk"] = value.route_risk
-        payload["route_infrastructure_quality"] = (
-            value.route_infrastructure_quality
-        )
+        payload["route_infrastructure_quality"] = value.route_infrastructure_quality
     return payload
 
 
@@ -4132,9 +4338,7 @@ def _decode_visible_exit(data: dict[str, Any], *, path: str) -> VisibleExit:
             route_infrastructure_quality=(
                 None
                 if "route_infrastructure_quality" not in data
-                else _float_field(
-                    data, "route_infrastructure_quality", path=path
-                )
+                else _float_field(data, "route_infrastructure_quality", path=path)
             ),
         )
     except (TypeError, ValueError) as exc:
@@ -4899,23 +5103,25 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "tick": tick,
                 "topology": topology,
             }
-        case RouteConditionChanged(
-            origin_location_id=origin,
-            destination_location_id=destination,
-            previous_status=previous_status,
-            current_status=current_status,
-            previous_seasonal_availability=previous_availability,
-            current_seasonal_availability=current_availability,
-            duration_ticks=duration_ticks,
-            fatigue_cost=fatigue_cost,
-            capacity=capacity,
-            risk=risk,
-            infrastructure_quality=quality,
-            blockage_cause=blockage_cause,
-            reason_codes=reason_codes,
-            season=season,
-            as_of_tick=as_of_tick,
-        ) as route_detail:
+        case (
+            RouteConditionChanged(
+                origin_location_id=origin,
+                destination_location_id=destination,
+                previous_status=previous_status,
+                current_status=current_status,
+                previous_seasonal_availability=previous_availability,
+                current_seasonal_availability=current_availability,
+                duration_ticks=duration_ticks,
+                fatigue_cost=fatigue_cost,
+                capacity=capacity,
+                risk=risk,
+                infrastructure_quality=quality,
+                blockage_cause=blockage_cause,
+                reason_codes=reason_codes,
+                season=season,
+                as_of_tick=as_of_tick,
+            ) as route_detail
+        ):
             payload = {
                 "as_of_tick": as_of_tick,
                 "blockage_cause": blockage_cause,
@@ -4951,6 +5157,34 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                         else value
                     )
             return payload
+        case MeasurementTaken(
+            reading=reading,
+            instrument_before=before,
+            instrument_after=after,
+        ):
+            return {
+                "kind": "measurement_taken",
+                "reading": encode_measurement_reading(reading),
+                "instrument_before": encode_instrument_state(before),
+                "instrument_after": encode_instrument_state(after),
+            }
+        case InstrumentCalibrated(
+            reference_id=reference_id,
+            reference_unit=reference_unit,
+            nominal_value_milli=nominal_value_milli,
+            reference_display_milli=reference_display_milli,
+            instrument_before=before,
+            instrument_after=after,
+        ):
+            return {
+                "kind": "instrument_calibrated",
+                "reference_id": reference_id.value,
+                "reference_unit": encode_measurement_unit(reference_unit),
+                "nominal_value_milli": nominal_value_milli,
+                "reference_display_milli": reference_display_milli,
+                "instrument_before": encode_instrument_state(before),
+                "instrument_after": encode_instrument_state(after),
+            }
         case Searched(
             target_id=target_id,
             success=success,
@@ -6340,8 +6574,78 @@ def _decode_event_details(
     kind = data["kind"]
     fields = {key: value for key, value in data.items() if key != "kind"}
     try:
+        if kind == "measurement_taken":
+            if schema_version != EVENT_SCHEMA_REPLAY_V28:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            if set(fields) != {
+                "reading",
+                "instrument_before",
+                "instrument_after",
+            }:
+                raise DomainSerializationError("invalid_fields", path)
+            try:
+                return MeasurementTaken(
+                    reading=decode_measurement_reading(
+                        fields["reading"], path=f"{path}.reading"
+                    ),
+                    instrument_before=decode_instrument_state(
+                        fields["instrument_before"],
+                        path=f"{path}.instrument_before",
+                    ),
+                    instrument_after=decode_instrument_state(
+                        fields["instrument_after"],
+                        path=f"{path}.instrument_after",
+                    ),
+                )
+            except MeasurementSerializationError as exc:
+                raise DomainSerializationError(exc.code, exc.path) from exc
+        if kind == "instrument_calibrated":
+            if schema_version != EVENT_SCHEMA_REPLAY_V28:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            allowed = {
+                "reference_id",
+                "reference_unit",
+                "nominal_value_milli",
+                "reference_display_milli",
+                "instrument_before",
+                "instrument_after",
+            }
+            if set(fields) != allowed:
+                raise DomainSerializationError("invalid_fields", path)
+            try:
+                from simulation.measurement_serialization import (
+                    decode_measurement_unit,
+                )
+
+                return InstrumentCalibrated(
+                    reference_id=EntityId(
+                        _str_field(fields, "reference_id", path=path)
+                    ),
+                    reference_unit=decode_measurement_unit(
+                        fields["reference_unit"], path=f"{path}.reference_unit"
+                    ),
+                    nominal_value_milli=_int_field(
+                        fields, "nominal_value_milli", path=path
+                    ),
+                    reference_display_milli=_int_field(
+                        fields, "reference_display_milli", path=path
+                    ),
+                    instrument_before=decode_instrument_state(
+                        fields["instrument_before"],
+                        path=f"{path}.instrument_before",
+                    ),
+                    instrument_after=decode_instrument_state(
+                        fields["instrument_after"],
+                        path=f"{path}.instrument_after",
+                    ),
+                )
+            except MeasurementSerializationError as exc:
+                raise DomainSerializationError(exc.code, exc.path) from exc
         if kind == "route_condition_changed":
-            if schema_version != EVENT_SCHEMA_REPLAY_V27:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
                 "as_of_tick",
@@ -6424,9 +6728,7 @@ def _decode_event_details(
                     else None
                 ),
                 previous_infrastructure_quality=(
-                    _float_field(
-                        fields, "previous_infrastructure_quality", path=path
-                    )
+                    _float_field(fields, "previous_infrastructure_quality", path=path)
                     if "previous_infrastructure_quality" in fields
                     else None
                 ),
@@ -6456,6 +6758,7 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -6505,6 +6808,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V22,
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -6587,6 +6891,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V22,
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             _require_keys(
@@ -6683,6 +6988,7 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V22,
                 EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
@@ -7172,8 +7478,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_production_details(kind, fields, path=path)
@@ -7201,8 +7509,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_environment_details(kind, fields, path=path)
@@ -7231,8 +7541,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if kind in {
@@ -7250,8 +7562,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_artifact_details(kind, fields, path=path)
@@ -7274,8 +7588,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -7293,8 +7609,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_lifecycle_details(kind, fields, path=path)
@@ -7311,8 +7629,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_possession_details(kind, fields, path=path)
@@ -7323,8 +7643,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 _LOG.error(
                     "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7343,8 +7665,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 _LOG.error(
                     "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -7362,8 +7686,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_experiment_resolved(fields, path=path)
@@ -7384,8 +7710,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_repository_details(kind, fields, path=path)
@@ -7404,8 +7732,10 @@ def _decode_event_details(
                 EVENT_SCHEMA_REPLAY_V19,
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             return _decode_project_or_public_details(
@@ -7419,8 +7749,10 @@ def _decode_event_details(
             if schema_version not in {
                 EVENT_SCHEMA_REPLAY_V20,
                 EVENT_SCHEMA_REPLAY_V21,
-                EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
+                EVENT_SCHEMA_REPLAY_V22,
+                EVENT_SCHEMA_REPLAY_V23,
                 EVENT_SCHEMA_REPLAY_V27,
+                EVENT_SCHEMA_REPLAY_V28,
             }:
                 _LOG.warning(
                     "public_good event rejected on pre-v20 payload kind=%s",
@@ -7784,8 +8116,13 @@ def _decode_experiment_resolved(
     )
 
 
-def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
+def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str, Any]:
     details_kind = value.details.kind
+    if details_kind in {"measurement_taken", "instrument_calibrated"}:
+        if value.schema_version != EVENT_SCHEMA_REPLAY_V28 or wire_schema != 2:
+            raise DomainSerializationError(
+                "invalid_event_schema_version", "$.schema_version"
+            )
     if details_kind in {
         "project_created",
         "project_contributed",
@@ -7796,8 +8133,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7810,8 +8149,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
     } and value.schema_version not in {
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7840,8 +8181,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7871,8 +8214,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7902,8 +8247,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7924,8 +8271,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7949,8 +8298,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7969,8 +8320,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -7993,8 +8346,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8011,8 +8366,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8024,8 +8381,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         _LOG.error(
             "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -8045,8 +8404,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         _LOG.error(
             "event_kind_schema_mismatch kind=%s reason_code=%s",
@@ -8065,8 +8426,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8076,6 +8439,7 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8093,8 +8457,10 @@ def _encode_world_event(value: WorldEvent) -> dict[str, Any]:
         EVENT_SCHEMA_REPLAY_V19,
         EVENT_SCHEMA_REPLAY_V20,
         EVENT_SCHEMA_REPLAY_V21,
-        EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V22,
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
             "invalid_event_schema_version",
@@ -8189,7 +8555,9 @@ def _decode_event_cause(data: dict[str, Any], *, path: str) -> object:
     raise DomainSerializationError("unknown_type", f"{path}.kind")
 
 
-def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
+def _decode_world_event(
+    data: dict[str, Any], *, path: str, wire_schema: int = 1
+) -> WorldEvent:
     # Legacy schema-v1 audit shape: identity + details only.
     legacy_keys = {"event_id", "request_id", "world_id", "revision", "details"}
     replay_keys = {
@@ -8273,8 +8641,11 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
             EVENT_SCHEMA_REPLAY_V19,
             EVENT_SCHEMA_REPLAY_V20,
             EVENT_SCHEMA_REPLAY_V21,
-            EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23,
-                EVENT_SCHEMA_REPLAY_V27,
+            EVENT_SCHEMA_REPLAY_V22,
+            EVENT_SCHEMA_REPLAY_V23,
+            EVENT_SCHEMA_REPLAY_V27,
+            EVENT_SCHEMA_REPLAY_V28,
+            EVENT_SCHEMA_REPLAY_V28,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)
         actor_raw = data["actor_id"]
@@ -8297,6 +8668,13 @@ def _decode_world_event(data: dict[str, Any], *, path: str) -> WorldEvent:
                 event_id=event_id_value,
             )
         )
+        if wire_schema == SCHEMA_VERSION and type(details) in {
+            MeasurementTaken,
+            InstrumentCalibrated,
+        }:
+            raise DomainSerializationError(
+                "unsupported_schema_version", f"{path}.details"
+            )
         cause = None
         if "cause" in data:
             cause_raw = data["cause"]
@@ -8343,7 +8721,7 @@ def _optional_actor(raw: object, path: str) -> str:
     return raw
 
 
-def _encode_export(value: SimulationExport) -> dict[str, Any]:
+def _encode_export(value: SimulationExport, *, wire_schema: int = 1) -> dict[str, Any]:
     metadata: dict[str, Any] = {
         "derivation_version": value.metadata.derivation_version,
         "llm_replay": value.metadata.llm_replay,
@@ -8353,12 +8731,17 @@ def _encode_export(value: SimulationExport) -> dict[str, Any]:
     if value.metadata.stochastic_identity is not None:
         metadata["stochastic_identity"] = value.metadata.stochastic_identity.value
     return {
-        "events": [_encode_world_event(event) for event in value.events],
+        "events": [
+            _encode_world_event(event, wire_schema=wire_schema)
+            for event in value.events
+        ],
         "metadata": metadata,
     }
 
 
-def _decode_export(data: dict[str, Any], *, path: str) -> SimulationExport:
+def _decode_export(
+    data: dict[str, Any], *, path: str, wire_schema: int = 1
+) -> SimulationExport:
     _require_keys(data, {"metadata", "events"}, path=path)
     metadata = data["metadata"]
     events_raw = data["events"]
@@ -8383,7 +8766,9 @@ def _decode_export(data: dict[str, Any], *, path: str) -> SimulationExport:
                 _str_field(metadata, "stochastic_identity", path=f"{path}.metadata")
             )
         events = tuple(
-            _decode_world_event(item, path=f"{path}.events[{index}]")
+            _decode_world_event(
+                item, path=f"{path}.events[{index}]", wire_schema=wire_schema
+            )
             for index, item in enumerate(events_raw)
             if _ensure_dict(item, path=f"{path}.events[{index}]") or True
         )

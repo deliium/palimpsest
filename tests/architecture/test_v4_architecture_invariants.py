@@ -98,6 +98,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/scientific_hypotheses_scenario.py",
     "experiments/scientific_hypotheses_completed_run.py",
     "experiments/replication_scenario.py",
+    "experiments/measurement_scenario.py",
     "experiments/civilization_benchmark_forks.py",
     "experiments/infrastructure_networks_scenario.py",
     "experiments/market_institution_scenario.py",
@@ -143,11 +144,12 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V23 == 23
-    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert METRIC_FAMILY_COUNT == 256
     assert BENCHMARK_SCENARIO_COUNT == 16
     assert V3_BENCHMARK_SCENARIO_COUNT == 30
@@ -168,7 +170,7 @@ def test_migration_head_stays_at_0017() -> None:
 
 
 def test_closed_command_count_is_unchanged() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     for module in V4_MODULES:
         source = module.read_text(encoding="utf-8")
         assert "AgentCommand" not in source, module
@@ -238,7 +240,7 @@ def test_v4_25_registers_analysis_only_social_mobility_context() -> None:
 def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
     """V4-08 adds no context, flag, runner schema, or reserved surface."""
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -262,7 +264,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
     offenders = [
         str(path.relative_to(SRC))
         for path in _first_party_python_files()
-        if "runner-config-v57" in path.read_text(encoding="utf-8")
+        if "runner-config-v58" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 
@@ -270,11 +272,16 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
 def test_reservations_and_prerequisite_graph() -> None:
     validate_write_pair_reservations()
     validate_deepening_write_pairs()
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27]
-    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == ["v25"]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
+    assert [item.codec_version for item in V4_DEEPENING_WRITE_PAIRS] == [
+        "v25",
+        "v26",
+    ]
     reserved = {item.context_id for item in V4_WRITE_PAIR_RESERVATIONS}
+    deepened = {pair.context_id for pair in V4_DEEPENING_WRITE_PAIRS}
     assert not reserved & V4_EVENT_REUSING_CONTEXTS
-    assert reserved | V4_EVENT_REUSING_CONTEXTS == set(V4ContextId)
+    assert not deepened & V4_EVENT_REUSING_CONTEXTS
+    assert reserved | V4_EVENT_REUSING_CONTEXTS | deepened == set(V4ContextId)
 
     known = {spec.context_id for spec in V4_CONTEXTS}
     edges = {spec.context_id: set(spec.prerequisite_contexts) for spec in V4_CONTEXTS}
@@ -416,7 +423,7 @@ def test_validators_reject_mutated_copies() -> None:
 def test_v4_09_deepens_organizations_without_new_schema() -> None:
     """V4-09 deepens organizations; it adds no context, flag, or schema."""
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -446,6 +453,6 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
     offenders = [
         str(path.relative_to(SRC))
         for path in _first_party_python_files()
-        if "runner-config-v57" in path.read_text(encoding="utf-8")
+        if "runner-config-v58" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []

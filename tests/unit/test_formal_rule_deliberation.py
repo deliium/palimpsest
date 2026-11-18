@@ -161,7 +161,7 @@ def test_rule_speech_stamps_existing_talk_and_preserves_other_relations() -> Non
 
 
 def test_no_formal_rule_command_kind_is_added() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert not any(
         "FormalRule" in command.__name__ for command in COMMAND_RULE_MATRIX
     )

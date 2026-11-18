@@ -45,7 +45,7 @@ def _state() -> WorldState:
 
 
 def test_command_count_stays_43() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
 
 
 def test_start_collective_project_target_matrix() -> None:

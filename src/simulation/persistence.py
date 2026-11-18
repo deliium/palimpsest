@@ -13,7 +13,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, Final, Protocol, TypedDict
 
 if TYPE_CHECKING:
     from simulation.branching import BranchLineage
@@ -66,6 +66,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V27,
+    EVENT_SCHEMA_REPLAY_V28,
     WorldEvent,
     normalize_events,
 )
@@ -77,6 +78,7 @@ from world.identifiers import (
     require_stable_id,
 )
 from world.infrastructure import InfrastructureAsset
+from world.measurement import InstrumentState, MeasurementReference
 from world.models import AgentBody, Item, Location, Resource, Weather
 from world.production import ProductionJob, Structure, ToolMark
 from world.regions import Journey, RegionsMigrationSpec
@@ -106,6 +108,8 @@ class SnapshotExtensions(TypedDict, total=False):
     journeys: Sequence[Journey] | None
     infrastructure: Sequence[InfrastructureAsset] | None
     travel_network: Sequence[RouteCondition] | None
+    instrument_states: Sequence[InstrumentState]
+    measurement_references: Sequence[MeasurementReference]
 
 
 # New-write versions for physical replay-v5 runs (structured communication).
@@ -140,6 +144,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }
 )
 ACCEPTED_PROJECTOR_VERSIONS: Final[frozenset[str]] = frozenset({"v1", "v2"})
@@ -167,6 +172,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v20",
         "v21",
         "v25",
+        "v26",
     }
 )
 
@@ -180,6 +186,7 @@ __all__ = [
     "EVENT_SCHEMA_VERSION",
     "LEGACY_PENDING_FINALIZATION_CODEC_VERSION",
     "PENDING_FINALIZATION_CODEC_VERSION",
+    "PENDING_FINALIZATION_CODEC_VERSION_V3",
     "PERSISTENCE_CODEC_VERSION",
     "PROJECTOR_VERSION",
     "BoundedTickJournalRepository",
@@ -282,6 +289,7 @@ def checkpoint_schema_for_production(
     cultural_contact_active: bool = False,
     infrastructure_networks_active: bool = False,
     travel_network_active: bool = False,
+    measurement_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
@@ -292,6 +300,20 @@ def checkpoint_schema_for_production(
     else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
     replay-v5 / codec ``v2``.
     """
+    if measurement_active:
+        from simulation.versioning import (
+            MEASUREMENT_WRITE_PAIR_CODEC,
+            MEASUREMENT_WRITE_PAIR_EVENT,
+        )
+
+        pair = MEASUREMENT_WRITE_PAIR_EVENT, MEASUREMENT_WRITE_PAIR_CODEC
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=measurement_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if travel_network_active:
         from simulation.versioning import (
             TRAVEL_NETWORK_WRITE_PAIR_CODEC,
@@ -498,6 +520,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
     }:
         return projector_version == "v2"
     return False
@@ -680,6 +703,24 @@ class WorldSnapshot:
     journeys: Sequence[Journey] | None = None
     infrastructure: Sequence[InfrastructureAsset] | None = None
     travel_network: Sequence[RouteCondition] | None = None
+    instrument_states: Sequence[InstrumentState] = ()
+    measurement_references: Sequence[MeasurementReference] = ()
+
+    @staticmethod
+    def _measurement_rows(
+        name: str, values: object, model_type: type
+    ) -> tuple[Any, ...]:
+        if isinstance(values, (str, bytes, Mapping)) or not isinstance(
+            values, Sequence
+        ):
+            raise TypeError(f"{name} must be an ordered sequence")
+        rows = tuple(values)
+        if any(type(item) is not model_type for item in rows):
+            raise TypeError(f"{name} entries must be {model_type.__name__}")
+        ids = [row.item_id.value for row in rows]
+        if ids != sorted(ids) or len(set(ids)) != len(ids):
+            raise ValueError(f"{name} must be uniquely ordered by item id")
+        return rows
 
     def __post_init__(self) -> None:
         if type(self.snapshot_id) is not SnapshotId:
@@ -790,6 +831,8 @@ class WorldSnapshot:
                 raise ValueError(
                     f"codec {self.persistence_codec_version} requires regions_migration"
                 )
+        elif self.persistence_codec_version == "v26":
+            pass
         elif self.regions_migration is not None or journey_rows is not None:
             raise ValueError("regional migration checkpoint fields require codec v19")
         object.__setattr__(self, "journeys", journey_rows)
@@ -804,7 +847,7 @@ class WorldSnapshot:
             infra_rows = tuple(self.infrastructure)
             if any(type(item) is not InfrastructureAsset for item in infra_rows):
                 raise TypeError("infrastructure entries must be InfrastructureAsset")
-        if self.persistence_codec_version in {"v21", "v25"}:
+        if self.persistence_codec_version in {"v21", "v25", "v26"}:
             if infra_rows is None:
                 raise ValueError(
                     f"codec {self.persistence_codec_version} requires "
@@ -831,10 +874,13 @@ class WorldSnapshot:
             )
             if any(type(item) is not RouteCondition for item in route_rows):
                 raise TypeError("travel_network entries must be RouteCondition")
-        if self.persistence_codec_version == "v25":
+        if self.persistence_codec_version in {"v25", "v26"}:
             if route_rows is None:
                 raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
-            if self.regions_migration is None:
+            if (
+                self.persistence_codec_version == "v25"
+                and self.regions_migration is None
+            ):
                 raise ValueError("travel_network_checkpoint_requires_regions")
         elif route_rows is not None:
             raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
@@ -855,6 +901,23 @@ class WorldSnapshot:
                 if row.destination_id not in adjacency.get(row.origin_id, set()):
                     raise ValueError("travel_network_checkpoint_invalid_rows")
         object.__setattr__(self, "travel_network", route_rows)
+        instrument_rows = self._measurement_rows(
+            "instrument_states", self.instrument_states, InstrumentState
+        )
+        reference_rows = self._measurement_rows(
+            "measurement_references",
+            self.measurement_references,
+            MeasurementReference,
+        )
+        if self.persistence_codec_version == "v26":
+            if self.event_schema_version != EVENT_SCHEMA_REPLAY_V28:
+                raise ValueError("codec v26 requires event schema 28")
+        elif instrument_rows or reference_rows:
+            raise ValueError(
+                "measurement checkpoint fields require codec v26"
+            )
+        object.__setattr__(self, "instrument_states", instrument_rows)
+        object.__setattr__(self, "measurement_references", reference_rows)
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
         bootstrap = WorldBootstrap(
@@ -868,6 +931,8 @@ class WorldSnapshot:
             registrations=self.registrations,
             artifacts=self.artifacts,
             repositories=self.repositories,
+            instrument_states=instrument_rows,
+            measurement_references=reference_rows,
             regions_migration=self.regions_migration,
             journeys=journey_rows,
         )
@@ -880,6 +945,12 @@ class WorldSnapshot:
         object.__setattr__(self, "registrations", bootstrap.registrations)
         object.__setattr__(self, "artifacts", bootstrap.artifacts)
         object.__setattr__(self, "repositories", bootstrap.repositories)
+        object.__setattr__(
+            self, "instrument_states", bootstrap.instrument_states
+        )
+        object.__setattr__(
+            self, "measurement_references", bootstrap.measurement_references
+        )
         object.__setattr__(
             self,
             "journeys",
@@ -2117,8 +2188,13 @@ class PendingFinalizationStatus(StrEnum):
 
 PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "finalization-command-v1"
 PENDING_FINALIZATION_CODEC_VERSION_V2: Final[str] = "finalization-command-v2"
+PENDING_FINALIZATION_CODEC_VERSION_V3: Final[str] = "finalization-command-v3"
 PENDING_FINALIZATION_ACCEPTED_VERSIONS: Final[frozenset[str]] = frozenset(
-    {PENDING_FINALIZATION_CODEC_VERSION, PENDING_FINALIZATION_CODEC_VERSION_V2}
+    {
+        PENDING_FINALIZATION_CODEC_VERSION,
+        PENDING_FINALIZATION_CODEC_VERSION_V2,
+        PENDING_FINALIZATION_CODEC_VERSION_V3,
+    }
 )
 LEGACY_PENDING_FINALIZATION_CODEC_VERSION: Final[str] = "pending-finalization-v1"
 

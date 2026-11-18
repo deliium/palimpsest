@@ -67,7 +67,7 @@ def test_code_and_docs_agree_on_catalog_and_routes() -> None:
 def test_no_forbidden_score_or_new_flag_claims() -> None:
     page = _read("docs/travel-network.md")
     assert "route score" in page  # explicitly disclaimed
-    assert "runner-config-v57" in page  # explicitly absent
+    assert "runner-config-v58" in page  # explicitly absent
     for text in (
         page,
         _read("docs/v4-architecture.md"),

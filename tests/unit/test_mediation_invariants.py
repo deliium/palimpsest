@@ -20,7 +20,7 @@ from world.events import EVENT_SCHEMA_REPLAY_V22
 
 
 def test_closed_wire_and_catalog_pins() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert METRIC_FAMILY_COUNT == 256
     assert EVENT_SCHEMA_REPLAY_V22 == 22

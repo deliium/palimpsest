@@ -91,7 +91,7 @@ def test_runner_seam_keeps_v56_and_allocates_the_operation_policy() -> None:
 
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V55 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert V4CapabilityFlags(organizations=True).owned_enabled_names() == (
         "organizations",
     )

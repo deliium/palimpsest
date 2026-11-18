@@ -11,6 +11,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from world._ambient import ambient_temperature
 from world._production import shelter_factor_for
 from world._state import ActiveHazard, WorldState, rebuild_world_state
 from world.effects import (
@@ -723,17 +724,8 @@ def _ambient(
     season_offset: float,
     rules: PhysicalRules,
 ) -> float:
-    if type(location) is not Location:
-        raise TypeError("location must be Location")
-    if type(condition) is not WeatherCondition:
-        raise TypeError("condition must be WeatherCondition")
-    weather_offsets = rules.weather_temperature_offset
-    assert weather_offsets is not None
-    return round_physical(
-        location.base_temperature.value
-        + weather_offsets[condition]
-        + phase_offset
-        + season_offset
+    return ambient_temperature(
+        location, condition, phase_offset, season_offset, rules
     )
 
 

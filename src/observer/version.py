@@ -139,6 +139,8 @@ SEMANTIC_TYPE_BY_KIND: Final[dict[str, str]] = {
     "repository_indexed": "REPOSITORY_INDEXED",
     "repository_neglected": "REPOSITORY_NEGLECTED",
     "experiment_resolved": "EXPERIMENT_RESOLVED",
+    "measurement_taken": "EXPERIMENT_RESOLVED",
+    "instrument_calibrated": "EXPERIMENT_RESOLVED",
     "corpse_custody_opened": "CORPSE_CUSTODY_OPENED",
     "taken_from_corpse": "AGENT_TOOK_FROM_CORPSE",
     "possession_claim_asserted": "POSSESSION_CLAIM_ASSERTED",

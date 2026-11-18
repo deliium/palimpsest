@@ -83,7 +83,7 @@ def _base() -> SimulationRunnerConfig:
 def test_v4_10_owns_diplomacy_without_new_schema() -> None:
     from simulation.compatibility import V4_OWNED_CAPABILITY_FLAGS
 
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == _OWNED_FLAGS
@@ -112,7 +112,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
         str(path.relative_to(_SRC))
         for path in sorted(_SRC.rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v57" in path.read_text(encoding="utf-8")
+        and "runner-config-v58" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 
@@ -286,7 +286,7 @@ def test_no_new_wire_surfaces() -> None:
 
     assert METRIC_FAMILY_COUNT == 256
     assert EVENT_SCHEMA_REPLAY_V22 == 22
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert not list((_SRC.parent / "alembic" / "versions").glob("0018_*.py"))

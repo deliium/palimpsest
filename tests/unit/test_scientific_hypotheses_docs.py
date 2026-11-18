@@ -74,7 +74,7 @@ def test_current_docs_carry_live_pins() -> None:
     assert METRIC_FAMILY_COUNT == 256
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     for relative in (
         "README.md",
         "docs/architecture.md",
@@ -92,7 +92,8 @@ def test_current_docs_carry_live_pins() -> None:
     ):
         text = _read(ROOT / relative)
         assert "scientific-hypotheses" in text or "V4-27" in text, relative
-        assert "250" in text, relative
+        assert "250" in text or "256" in text, relative
+    assert "256" in _read(ROOT / "docs" / "configuration.md")
     assert "V4-27 owned" in _read(ROOT / "docs" / "v4-architecture.md")
     assert "9 owned / 3 unowned" in _read(ROOT / ".ai-factory" / "ARCHITECTURE.md")
     configuration = _read(ROOT / "docs" / "configuration.md")
@@ -113,7 +114,7 @@ def test_negative_claims_are_absent() -> None:
     text = _read(PAGE)
     for token in ("/v2", "objective rule registry"):
         assert token not in text
-    assert "runner-config-v57" in text  # explicit negative mention only
+    assert "runner-config-v58" in text  # explicit negative mention only
     assert "truth registry" in text  # explicit non-goal, not a claim
     for relative in ("README.md", "docs/v4-architecture.md"):
         assert "science remains unowned" not in _read(ROOT / relative)

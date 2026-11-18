@@ -152,7 +152,7 @@ ids, order, versions, and value keys unchanged. Commands stay 43; observer
 semantic types stay 73; the maximum replay/write pair is replay-v27 with codec
 `v25`; Alembic head stays `0017`; the stable API is `/v1`; the observer protocol
 stays `observer-protocol-v1`. V4 is currently 17 contexts on
-`v4-context-map-v5`, 12 flags, nine owned, and three unowned. The off-gate experiment is `economic_inequality@1`.
+`v4-context-map-v6`, 12 flags, nine owned, and three unowned. The off-gate experiment is `economic_inequality@1`.
 
 ## Verification
 

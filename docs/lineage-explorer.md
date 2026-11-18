@@ -224,10 +224,10 @@ every edge and witness; v1 publications remain readable. See
 
 This feature adds no command, event, observer semantic type, metric family,
 runner/result version, SQL migration or `/v2` route. Baseline stays SQL head
-`0017`, default runner/result v4/v2, latest feature runner v55, 43 commands,
+`0017`, default runner/result v4/v2, latest feature runner v55, 45 commands,
 73 observer semantics, 136 metric families, replay-v22/codec v20 when selected,
 `/v1` and `observer-protocol-v1`.
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 Objective genealogy evidence also feeds [Social mobility](social-mobility.md), which pairs ancestor and descendant outcomes without adding lineage facts.

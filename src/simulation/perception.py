@@ -171,6 +171,7 @@ def build_perspective(
     migration_displacement: object | None = None,
     experiment_ledger: object | None = None,
     replication_ledger: object | None = None,
+    measurement_ledger: object | None = None,
 ) -> Perspective:
     """Pair one ``AgentId`` with exactly its registered entity observation.
 
@@ -395,6 +396,7 @@ def build_perspective(
         migration_displacement=migration_displacement,
         experiment_ledger=experiment_ledger,
         replication_ledger=replication_ledger,
+        measurement_ledger=measurement_ledger,
     )
     _ = SemanticBelief, DirectedRelationshipProfile
     emotion_kind_count = (

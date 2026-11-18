@@ -143,10 +143,12 @@ analytical rows, the snapshot, routes, or the Research UI.
 ## Pins
 
 17 V4 contexts, 12 flags, 9 owned / 3 unowned (`epidemics`,
-`ecological_feedback`, `disasters`), `v4-context-map-v5`, 250 metric families,
-43 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic
+`ecological_feedback`, `disasters`), `v4-context-map-v6`, 250 metric families,
+45 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic
 `0017`, `/v1`, and `observer-protocol-v1`.
 
 ## Scientific replication (V4-28)
 
 Replication deepens this science context: see [Scientific replication](scientific-replication.md) for frozen designs, `rep_v1`, categorical uncertainty, conflicting outcomes, and the six appended families (catalog 256).
+
+There is no `runner-config-v58`; the latest V4 runner schema is `runner-config-v57`.

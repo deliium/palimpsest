@@ -305,7 +305,7 @@ def test_compatibility_pins_are_exact() -> None:
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert ALEMBIC_HEAD_REVISION == "0017"
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
@@ -322,7 +322,7 @@ def test_compatibility_pins_are_exact() -> None:
             "science",
         }
     )
-    assert "runner-config-v57" not in (
+    assert "runner-config-v58" not in (
         ROOT / "src" / "simulation" / "runner_models.py"
     ).read_text(encoding="utf-8")
     assert not list((ROOT / "alembic" / "versions").glob("0018_*.py"))

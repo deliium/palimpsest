@@ -68,11 +68,11 @@ def test_supply_chains_refuses_new_write_pair() -> None:
         "no central planner or quota",
         "no automatic allocation of items",
     )
-    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27]
+    assert [item.event_schema for item in V4_DEEPENING_WRITE_PAIRS] == [27, 28]
 
 
 def test_no_new_command() -> None:
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
 
 
 def test_no_new_observer_semantic() -> None:
@@ -84,12 +84,12 @@ def test_replay_and_codec_maxima_unchanged() -> None:
     assert EVENT_SCHEMA_REPLAY_V27 == 27
     from world import events
 
-    assert not hasattr(events, "EVENT_SCHEMA_REPLAY_V28")
+    assert not hasattr(events, "EVENT_SCHEMA_REPLAY_V29")
     from simulation import persistence
 
-    assert max(persistence.ACCEPTED_EVENT_SCHEMA_VERSIONS) == 27
+    assert max(persistence.ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in persistence.ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v26" not in persistence.ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v26" in persistence.ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_alembic_head_is_0017() -> None:

@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_context_counts_are_seventeen_twelve_eight_four() -> None:
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
@@ -60,5 +60,5 @@ def test_no_new_write_pair_is_claimed() -> None:
 
 def test_no_runner_schema_or_migration_is_added() -> None:
     for path in (ROOT / "src").rglob("*.py"):
-        assert "runner-config-v57" not in path.read_text(encoding="utf-8"), path
+        assert "runner-config-v58" not in path.read_text(encoding="utf-8"), path
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []

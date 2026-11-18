@@ -174,7 +174,7 @@ def _ledger(
 def test_every_domain_maps_only_to_existing_world_actions() -> None:
     import world.actions as actions_module
 
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     referenced: set[type] = set()
     for domain, commands in ORGANIZATION_DOMAIN_COMMANDS.items():
         assert type(domain) is OrganizationOperationDomain

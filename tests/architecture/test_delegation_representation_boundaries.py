@@ -74,7 +74,7 @@ def _owned_names() -> tuple[str, ...]:
 
 
 def test_v4_09_deepens_organizations_without_new_schema() -> None:
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert set(_owned_names()) == {
@@ -110,7 +110,7 @@ def test_no_runner_config_v57_literal_in_source() -> None:
     for path in sorted(_SRC.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        if "runner-config-v57" in path.read_text(encoding="utf-8"):
+        if "runner-config-v58" in path.read_text(encoding="utf-8"):
             offenders.append(str(path.relative_to(_SRC)))
     assert offenders == []
 

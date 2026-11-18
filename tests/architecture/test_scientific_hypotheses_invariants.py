@@ -45,7 +45,7 @@ def _imported_modules(path: Path) -> set[str]:
 
 def test_science_is_owned_without_adding_a_context_or_flag() -> None:
     validate_v4_contexts()
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
@@ -59,9 +59,9 @@ def test_science_context_spec_is_unchanged() -> None:
     assert spec.authority is V4Authority.OWNER_SCOPED
     assert spec.owner_packages == ("agents.cognition", "simulation")
     assert spec.required_config_seam == "v4_capability_flags.science"
-    assert spec.uses_existing_events is True
+    assert spec.uses_existing_events is False
     assert spec.prerequisite_contexts == (V4ContextId.FORMAL_RULES,)
-    assert V4ContextId.SCIENCE in V4_EVENT_REUSING_CONTEXTS
+    assert V4ContextId.SCIENCE not in V4_EVENT_REUSING_CONTEXTS
 
 
 def test_no_new_write_pair_is_claimed() -> None:
@@ -72,9 +72,9 @@ def test_no_new_write_pair_is_claimed() -> None:
 
 
 def test_no_runner_schema_or_migration_is_added() -> None:
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
-        assert "runner-config-v57" not in path.read_text(encoding="utf-8"), path
+        assert "runner-config-v58" not in path.read_text(encoding="utf-8"), path
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
 
 

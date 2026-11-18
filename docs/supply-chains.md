@@ -119,7 +119,7 @@ exists.
 
 ## Verification
 
-Pins: 43 commands, 73 observer semantic types, 212 metric families,
+Pins: 45 commands, 73 observer semantic types, 212 metric families,
 `EVENT_SCHEMA_REPLAY_V27`, codec `v25`, Alembic `0017`, `/v1`, and
 `observer-protocol-v1`. The off-gate experiment `supply_chains@1` compares a
 legacy-catalog control with an extended-catalog treatment.
@@ -131,7 +131,7 @@ legacy-catalog control with an extended-catalog treatment.
 - [Analysis metrics](analysis-metrics.md)
 - [Configuration](configuration.md)
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 See also [Economic inequality](economic-inequality.md) for the detached six-dimensional inequality surface over possession, access, credit, and organizational-control evidence.
@@ -139,3 +139,8 @@ See also [Economic inequality](economic-inequality.md) for the detached six-dime
 See also: [Economic cascades](economic-cascades.md) measures how objective disruptions propagate through these production and infrastructure dependencies.
 
 Current catalog pin after V4-28: **256** metric families (the historical landing counts above remain unchanged).
+
+Current pins after V4-29: 45 commands, 73 observer semantic types, 256 metric
+families, 17 V4 contexts, 12 flags, nine owned, `EVENT_SCHEMA_REPLAY_V28` /
+codec `v26` when the measurement channel is active, Alembic `0017`, `/v1`, and
+`observer-protocol-v1`.

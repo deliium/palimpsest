@@ -48,6 +48,7 @@ from simulation.runner_models import (
 from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V27,
+    EVENT_SCHEMA_REPLAY_V28,
 )
 
 V3_BASELINE: Final[dict[str, object]] = {
@@ -56,10 +57,10 @@ V3_BASELINE: Final[dict[str, object]] = {
     "accepted_scaffolding_runner_schema": "runner-config-v56",
     "default_result_schema": RESULT_SCHEMA_VERSION,
     "generational_result_schema": "runner-result-v3",
-    "latest_event_schema": 27,
+    "latest_event_schema": 28,
     "previous_event_schema": 22,
-    "latest_codec": "v25",
-    "next_codec": "v26",
+    "latest_codec": "v26",
+    "next_codec": "v27",
     "metric_family_count": 256,
     "observer_semantic_type_count": 73,
     "observer_protocol": "observer-protocol-v1",
@@ -81,12 +82,12 @@ def test_v3_baseline_runner_and_result_pins() -> None:
     # V4-01 accepts runner-config-v56 for explicit scaffolding identity only:
     # it is never the default and no feature selects it automatically.
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v57" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RESULT_SCHEMA_VERSION_V3 == V3_BASELINE["generational_result_schema"]
 
 
 def test_v3_baseline_event_and_codec_pins() -> None:
-    assert EVENT_SCHEMA_REPLAY_V27 == V3_BASELINE["latest_event_schema"]
+    assert EVENT_SCHEMA_REPLAY_V28 == V3_BASELINE["latest_event_schema"]
     assert EVENT_SCHEMA_REPLAY_V22 == V3_BASELINE["previous_event_schema"]
     assert EVENT_SCHEMA_REPLAY_V27 in ACCEPTED_EVENT_SCHEMA_VERSIONS
     assert V3_BASELINE["latest_codec"] in ACCEPTED_PERSISTENCE_CODEC_VERSIONS

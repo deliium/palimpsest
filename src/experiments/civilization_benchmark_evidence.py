@@ -75,6 +75,7 @@ STORE_PROBE_PATHS: Final[Mapping[str, tuple[str, str]]] = {
     "acceptance_memories": ("runtime", "acceptance_memories"),
     "experiment_ledger": ("runtime", "experiment_ledger"),
     "replication_ledger": ("runtime", "replication_ledger"),
+    "measurement_ledger": ("runtime", "measurement_ledger"),
 }
 
 _MEASURABLE_STORES: Final[tuple[str, ...]] = tuple(
@@ -191,6 +192,16 @@ def _replication_content_count(ledger: object | None) -> int:
     )
 
 
+def _measurement_content_count(ledger: object | None) -> int:
+    """Count real measurement sidecar rows; an empty frozen ledger is not content."""
+    if ledger is None:
+        return 0
+    return sum(
+        content_count(getattr(ledger, name, ()))
+        for name in ("evidence", "beliefs", "revisions", "receipts", "notices")
+    )
+
+
 def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapshot:
     runtime = getattr(snapshot, "runtime_checkpoint", None)
     if runtime is None:
@@ -213,7 +224,11 @@ def _measure_owner(snapshot: FinalizedResearchOwnerSnapshot) -> OwnerStoreSnapsh
                 store,
                 _replication_content_count(value)
                 if store == "replication_ledger"
-                else content_count(value),
+                else (
+                    _measurement_content_count(value)
+                    if store == "measurement_ledger"
+                    else content_count(value)
+                ),
             )
         )
         measured.append(store)

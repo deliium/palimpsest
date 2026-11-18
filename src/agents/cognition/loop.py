@@ -295,6 +295,8 @@ class CognitiveLoop:
 
     _experiment_ledger: ExperimentLedger | None
     _replication_ledger: object | None
+    _measurement_ledger: object | None
+    _measurement_enabled: bool
 
     __slots__ = (
         "_acceptance_window_ticks",
@@ -371,6 +373,8 @@ class CognitiveLoop:
         "_market_institution_mode",
         "_market_institution_policy",
         "_max_open_interpretations",
+        "_measurement_enabled",
+        "_measurement_ledger",
         "_mediation_mode",
         "_mediation_policy",
         "_memory",
@@ -517,6 +521,7 @@ class CognitiveLoop:
         knowledge_genealogy_spec: object | None = None,
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
+        measurement_enabled: bool = False,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         borders_mode: object | None = None,
@@ -1221,6 +1226,8 @@ class CognitiveLoop:
                 "CognitionScientificHypothesesMode"
             )
         self._scientific_hypotheses_mode = scientific_mode
+        self._measurement_ledger = None
+        self._measurement_enabled = False
         from agents.cognition.configuration import CognitionDisputeMode
         from agents.cognition.legal_disputes import (
             DisputePolicy,
@@ -1754,6 +1761,7 @@ class CognitiveLoop:
                 getattr(lineage, "max_hop_depth", None),
             )
         self._bind_bounded_experimentation(bounded_experimentation_spec)
+        self.bind_measurement(measurement_enabled)
         from agents.cognition.production import ProductionKnowledgeMode
 
         production_mode = (
@@ -3868,6 +3876,7 @@ class CognitiveLoop:
         loop_input: CognitiveLoopInput,
         memory: object | None,
         accounting_candidates: tuple[object, ...] = (),
+        measurement_candidates: tuple[object, ...] = (),
     ) -> object | None:
         """Refresh one owner's evidence ledger from owner-visible inputs.
 
@@ -3937,6 +3946,15 @@ class CognitiveLoop:
             elif type(candidate) is EvidencePriorAgreement:
                 accounting_prior_agreements.append(candidate)
         observed.extend(accounting_observed)
+        measured_observed: list[EvidenceObservedReference] = []
+        for candidate in measurement_candidates:
+            if type(candidate) is EvidenceObservedReference:
+                measured_observed.append(candidate)
+        observed.extend(measured_observed)
+        _LOG.debug(
+            "measurement_evidence_candidates observed=%s",
+            len(measured_observed),
+        )
         _LOG.debug(
             "[FIX] accounting_evidence_candidates observed=%s prior=%s",
             len(accounting_observed),
@@ -4828,6 +4846,34 @@ class CognitiveLoop:
         else:
             raise ValueError("replication_ledger: invalid_type")
         self._replication_ledger = validated
+
+    def bind_measurement(self, enabled: bool) -> None:
+        """Enable or disable this owner's measurement evidence channel."""
+        if type(enabled) is not bool:
+            raise TypeError("enabled must be bool")
+        self._measurement_enabled = enabled
+        if not enabled:
+            self._measurement_ledger = None
+
+    def measurement_ledger_if_present(self) -> object | None:
+        """Return the committed measurement sidecar without constructing one."""
+        return self._measurement_ledger
+
+    def restore_measurement_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install a validated committed measurement sidecar."""
+        if ledger is None:
+            self._measurement_ledger = None
+            return
+        from agents.cognition.measurement import MeasurementLedger
+
+        if type(ledger) is not MeasurementLedger:
+            raise ValueError("measurement_ledger: invalid_type")
+        if owner_id is not None and ledger.owner_id != owner_id:
+            raise ValueError("measurement_ledger: owner mismatch")
+        self._measurement_ledger = ledger
+        self._measurement_enabled = True
 
     def _remember_experiments(
         self, loop_input: object, ledger: ExperimentLedger | None = None
@@ -6657,6 +6703,46 @@ class CognitiveLoop:
                 emotional_evaluation=emotional_evaluation,
             )
         )
+        measurement_candidate = None
+        if self._measurement_enabled:
+            from agents.cognition.measurement import (
+                MeasurementLedger,
+                empty_measurement_ledger,
+                ingest_measurement_observations,
+            )
+            from agents.cognition.measurement_communication import (
+                ingest_measurement_communication,
+            )
+
+            measurement_candidate = (
+                getattr(loop_input.snapshot, "measurement_ledger", None)
+                if loop_input.snapshot is not None
+                else None
+            )
+            if type(measurement_candidate) is not MeasurementLedger:
+                measurement_candidate = self._measurement_ledger
+            if measurement_candidate is None:
+                measurement_candidate = empty_measurement_ledger(
+                    loop_input.agent_id
+                )
+            measurement_candidate = ingest_measurement_observations(
+                measurement_candidate, loop_input.observation  # type: ignore[arg-type]
+            )
+            for communication in loop_input.observation.communications:
+                measurement_candidate = ingest_measurement_communication(
+                    measurement_candidate, communication
+                )
+        from agents.cognition.measurement_actions import (
+            measurement_evidence_candidates,
+        )
+
+        measurement_candidates = (
+            ()
+            if measurement_candidate is None
+            else measurement_evidence_candidates(
+                measurement_candidate, loop_input.observation
+            )
+        )
         accounting_ledger = self._prepare_accounting_ledgers(
             loop_input,
             structured_commitments=structured_commitments,
@@ -6677,7 +6763,10 @@ class CognitiveLoop:
             )
         )
         evidence = self._prepare_evidence(
-            loop_input, memory, accounting_candidates=accounting_candidates
+            loop_input,
+            memory,
+            accounting_candidates=accounting_candidates,
+            measurement_candidates=measurement_candidates,
         )
         representation = self._prepare_representation(
             loop_input,
@@ -7263,6 +7352,35 @@ class CognitiveLoop:
                 replication_candidate = empty_replication_ledger(
                     proposal.agent_id
                 )
+        measurement_candidate = None
+        if self._measurement_enabled:
+            from agents.cognition.measurement import (
+                MeasurementLedger,
+                empty_measurement_ledger,
+                ingest_measurement_observations,
+            )
+            from agents.cognition.measurement_communication import (
+                ingest_measurement_communication,
+            )
+
+            measurement_candidate = (
+                getattr(snapshot, "measurement_ledger", None)
+                if snapshot is not None
+                else None
+            )
+            if type(measurement_candidate) is not MeasurementLedger:
+                measurement_candidate = self._measurement_ledger
+            if measurement_candidate is None:
+                measurement_candidate = empty_measurement_ledger(
+                    proposal.agent_id
+                )
+            measurement_candidate = ingest_measurement_observations(
+                measurement_candidate, loop_input.observation  # type: ignore[arg-type]
+            )
+            for communication in loop_input.observation.communications:
+                measurement_candidate = ingest_measurement_communication(
+                    measurement_candidate, communication
+                )
         protected_replication_ids: frozenset[str] = frozenset()
         if replication_candidate is not None:
             from agents.cognition.replication_actions import (
@@ -7684,6 +7802,22 @@ class CognitiveLoop:
                 if compiled.command is not None:
                     command = compiled.command
         if (
+            type(command) is Wait
+            and self._measurement_enabled
+            and measurement_candidate is not None
+        ):
+            from agents.cognition.measurement_actions import (
+                compile_measurement_action,
+            )
+
+            compiled_measurement = compile_measurement_action(
+                loop_input.observation,
+                measurement_candidate,
+                tick=loop_input.observation.tick,
+            )
+            if compiled_measurement is not None:
+                command = cast(AgentCommand, compiled_measurement)
+        if (
             type(command) is Experiment
             and replication_candidate is not None
             and experiment_candidate is not None
@@ -7782,6 +7916,21 @@ class CognitiveLoop:
                     AgentCommand,
                     attach_replication_message(command, replication_document),
                 )
+        if (
+            measurement_candidate is not None
+            and type(command) in (Talk, Tell)
+        ):
+            from agents.cognition.measurement_communication import (
+                attach_measurement_report,
+                select_measurement_report,
+            )
+
+            measurement_report = select_measurement_report(measurement_candidate)
+            if measurement_report is not None:
+                command = cast(
+                    AgentCommand,
+                    attach_measurement_report(command, measurement_report),
+                )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -7855,6 +8004,7 @@ class CognitiveLoop:
             communication_intent_audit=proposal.communication_intent_audit,
             experiment_ledger=experiment_candidate,
             replication_ledger=replication_candidate,
+            measurement_ledger=measurement_candidate,
         )
         _LOG.debug(
             "cognitive_loop_complete",

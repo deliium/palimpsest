@@ -33,6 +33,7 @@ from world.identifiers import (
     WorldId,
     WorldRevision,
 )
+from world.measurement import MeasurementQuantity
 from world.possession_succession import POSSESSION_DOCTRINES
 from world.production import require_production_command_fields
 from world.structured_commitments import (
@@ -681,6 +682,50 @@ class Experiment:
 
 
 @dataclass(frozen=True, slots=True)
+class Measure:
+    """Ask an owned instrument for a display. No predicted value or authority."""
+
+    instrument_id: EntityId
+    target_id: EntityId
+    quantity: MeasurementQuantity
+    kind: Literal["measure"] = field(default="measure", init=False)
+
+    def __post_init__(self) -> None:
+        if type(self.instrument_id) is not EntityId:
+            raise TypeError("Measure.instrument_id must be EntityId")
+        if type(self.target_id) is not EntityId:
+            raise TypeError("Measure.target_id must be EntityId")
+        if type(self.quantity) is not MeasurementQuantity:
+            raise TypeError("Measure.quantity must be MeasurementQuantity")
+        _EXPERIMENT_LOG.debug(
+            "command_constructed tag=measure quantity=%s instrument_id=%s",
+            self.quantity.value,
+            self.instrument_id.value,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrateInstrument:
+    """Adjust an owned instrument against a physical reference. Not a repair."""
+
+    instrument_id: EntityId
+    reference_id: EntityId
+    kind: Literal["calibrate_instrument"] = field(
+        default="calibrate_instrument", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.instrument_id) is not EntityId:
+            raise TypeError("CalibrateInstrument.instrument_id must be EntityId")
+        if type(self.reference_id) is not EntityId:
+            raise TypeError("CalibrateInstrument.reference_id must be EntityId")
+        _EXPERIMENT_LOG.debug(
+            "command_constructed tag=calibrate_instrument instrument_id=%s",
+            self.instrument_id.value,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class AssertPossessionClaim:
     """Public doctrine assertion. Does not move items or name an heir."""
 
@@ -944,6 +989,8 @@ AgentCommand = (
     | MaintainRepository
     | IndexRepository
     | Experiment
+    | Measure
+    | CalibrateInstrument
     | AssertPossessionClaim
     | DeclareCommitment
     | NegotiateExchange
@@ -991,6 +1038,8 @@ _COMMAND_TYPES: Final[frozenset[type]] = frozenset(
         MaintainRepository,
         IndexRepository,
         Experiment,
+        Measure,
+        CalibrateInstrument,
         AssertPossessionClaim,
         DeclareCommitment,
         NegotiateExchange,

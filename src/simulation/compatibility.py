@@ -101,6 +101,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V54,
     RUNNER_SCHEMA_VERSION_V55,
     RUNNER_SCHEMA_VERSION_V56,
+    RUNNER_SCHEMA_VERSION_V57,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -548,8 +549,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "context, or v57, and activates the separate deepening pair "
             "event 27 / codec v25 only when the travel-network channel is "
             "active; "
+            f"{RUNNER_SCHEMA_VERSION_V57} is the accepted V4-29 measurement "
+            "instrument family: the exact v56 family root plus one mandatory "
+            "measurement_instruments sibling, selected only when the spec is "
+            "present; active instrument runs use event 28 / codec v26; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
-            f"feature runner remains {RUNNER_SCHEMA_VERSION_V55})."
+            f"feature runner remains {RUNNER_SCHEMA_VERSION_V57})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -861,6 +866,7 @@ _LOG.debug(
         "runner_v54": RUNNER_SCHEMA_VERSION_V54,
         "runner_v55": RUNNER_SCHEMA_VERSION_V55,
         "runner_v56": RUNNER_SCHEMA_VERSION_V56,
+        "runner_v57": RUNNER_SCHEMA_VERSION_V57,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

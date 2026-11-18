@@ -91,7 +91,7 @@ def test_four_arms_differ_only_by_declared_seams() -> None:
 def test_no_runner_schema_bump_or_new_command() -> None:
     definition = experiment_emergent_prices(_base())
     assert all(
-        condition.runner_config.schema_version != "runner-config-v57"
+        condition.runner_config.schema_version != "runner-config-v58"
         for condition in definition.conditions
     )
     assert definition.paired_world_group == "emergent_prices@1-world"

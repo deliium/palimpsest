@@ -599,7 +599,7 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 250 metric families; 43 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -638,3 +638,12 @@ V4-27 owns `science`. Enabling it requires `predictive_world_model` and a `bound
 ## Scientific replication settings
 
 `PALIMPSEST_SCIENTIFIC_REPLICATION_ROOT` and `PALIMPSEST_SCIENTIFIC_REPLICATION_CURSOR_KEY` (>=32 UTF-8 bytes) attach the eight read-only replication routes. Both are optional; absent settings keep the routes disabled. Publication remains programmatic and is not enabled by API settings.
+
+## Measurement instruments (V4-29)
+
+`runner-config-v57` is the accepted v56 family root plus one mandatory
+`measurement_instruments` sibling. It is selected only when the spec is present
+and requires `science`; v1–v56 reject the sibling. The spec is bounded to 64
+instruments and 64 references, anchored to scenario `TOOL` items, and uses
+`measurement-instruments.v1`. Active instrument runs write replay event 28 /
+codec `v26`. See [Measurement instruments](measurement-instruments.md).

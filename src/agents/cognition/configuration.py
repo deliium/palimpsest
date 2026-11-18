@@ -2093,6 +2093,7 @@ def build_cognitive_loop(
     knowledge_genealogy_spec: object | None = None,
     knowledge_genealogy_seed_material: object | None = None,
     bounded_experimentation_spec: object | None = None,
+    measurement_enabled: bool = False,
     regional_migration_cognition_mode: str | None = None,
     regional_migration_hop_limit: int = 1,
 ) -> CognitiveLoop:
@@ -2285,6 +2286,7 @@ def build_cognitive_loop(
         knowledge_genealogy_spec=knowledge_genealogy_spec,
         knowledge_genealogy_seed_material=knowledge_genealogy_seed_material,
         bounded_experimentation_spec=bounded_experimentation_spec,
+        measurement_enabled=measurement_enabled,
         territorial_claim_mode=resolved.territorial_claim_mode,
         territorial_claim_policy=resolved.territorial_claim_policy,
         borders_mode=resolved.borders_mode,

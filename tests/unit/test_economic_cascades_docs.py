@@ -73,11 +73,11 @@ def test_pins_match_the_live_registry() -> None:
     text = PAGE.read_text(encoding="utf-8")
     assert METRIC_FAMILY_COUNT == 256
     assert "250" in text
-    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v5"
+    assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
-    assert len(COMMAND_RULE_MATRIX) == 43
+    assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V27 == 27
     assert TRAVEL_NETWORK_WRITE_PAIR_CODEC == "v25"
@@ -85,7 +85,7 @@ def test_pins_match_the_live_registry() -> None:
 
 def test_negative_claims_are_absent() -> None:
     text = PAGE.read_text(encoding="utf-8")
-    assert "runner-config-v57" not in text
+    assert "runner-config-v58" not in text
     assert "/v2" not in text
     assert "cascade engine in `WorldEngine`" in text
     for claim in (
@@ -102,7 +102,7 @@ def test_v4_architecture_lists_the_context_and_all_headings() -> None:
     text = _read("docs/v4-architecture.md")
     assert "### economic_cascades" in text
     assert text.count("\n### ") == len(V4_CONTEXTS)
-    assert "v4-context-map-v5" in text
+    assert "v4-context-map-v6" in text
     assert "250" in text
 
 
