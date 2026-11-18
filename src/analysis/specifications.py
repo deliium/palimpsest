@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 256
+METRIC_FAMILY_COUNT: Final[int] = 262
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -341,6 +341,12 @@ class MetricFamilyId(StrEnum):
     SCIENTIFIC_REPLICATION_SOCIAL_INTERPRETATION = (
         "scientific_replication_social_interpretation"
     )
+    SCIENTIFIC_MODEL_STRUCTURE = "scientific_model_structure"
+    SCIENTIFIC_MODEL_PREDICTIONS = "scientific_model_predictions"
+    SCIENTIFIC_MODEL_OBSERVED_OUTCOMES = "scientific_model_observed_outcomes"
+    SCIENTIFIC_MODEL_CALIBRATION = "scientific_model_calibration"
+    SCIENTIFIC_MODEL_REVISIONS = "scientific_model_revisions"
+    SCIENTIFIC_MODEL_COMPARISON = "scientific_model_comparison"
 
 
 class DenominatorKind(StrEnum):
@@ -9384,6 +9390,41 @@ SCIENTIFIC_REPLICATION_SOCIAL_INTERPRETATION_KEYS: Final[tuple[str, ...]] = (
     "collaboration_count",
     "participant_declaration_count",
 )
+SCIENTIFIC_MODEL_STRUCTURE_KEYS: Final[tuple[str, ...]] = (
+    "model_count",
+    "hypothesis_count",
+    "target_kind_count",
+)
+SCIENTIFIC_MODEL_PREDICTIONS_KEYS: Final[tuple[str, ...]] = (
+    "prediction_count",
+    "case_count",
+    "pending_case_count",
+)
+SCIENTIFIC_MODEL_OBSERVED_OUTCOMES_KEYS: Final[tuple[str, ...]] = (
+    "observed_case_count",
+    "unavailable_case_count",
+    "not_attempted_case_count",
+    "not_comparable_case_count",
+    "evicted_case_count",
+)
+SCIENTIFIC_MODEL_CALIBRATION_KEYS: Final[tuple[str, ...]] = (
+    "scored_prediction_count",
+    "calibration_group_count",
+    "insufficient_group_count",
+)
+SCIENTIFIC_MODEL_REVISIONS_KEYS: Final[tuple[str, ...]] = (
+    "revision_count",
+    "source_revision_count",
+    "parameter_revision_count",
+)
+SCIENTIFIC_MODEL_COMPARISON_KEYS: Final[tuple[str, ...]] = (
+    "comparison_count",
+    "paired_case_count",
+    "lower_loss_a_count",
+    "lower_loss_b_count",
+    "tie_count",
+    "insufficient_comparison_count",
+)
 
 
 def _trade_spec(
@@ -10456,6 +10497,72 @@ def _spec_scientific_replication_social_interpretation() -> MetricSpecification:
     )
 
 
+def _spec_scientific_model_structure() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_MODEL_STRUCTURE,
+        population="predictive_models",
+        denominator="exported_owner_ledgers",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=SCIENTIFIC_MODEL_STRUCTURE_KEYS,
+        opportunity="owner-model counts; no ranking or truth",
+    )
+
+
+def _spec_scientific_model_predictions() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_MODEL_PREDICTIONS,
+        population="prior_predictions",
+        denominator="issued_cases",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_MODEL_PREDICTIONS_KEYS,
+        opportunity="frozen prior forecasts; pending remains right-censored",
+    )
+
+
+def _spec_scientific_model_observed_outcomes() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_MODEL_OBSERVED_OUTCOMES,
+        population="forecast_cases",
+        denominator="terminal_cases",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_MODEL_OBSERVED_OUTCOMES_KEYS,
+        opportunity="owner outcomes only; missing data is not failure",
+    )
+
+
+def _spec_scientific_model_calibration() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_MODEL_CALIBRATION,
+        population="calibration_groups",
+        denominator="scored_predictions",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_MODEL_CALIBRATION_KEYS,
+        opportunity="target- and cohort-qualified forecasts; never one score",
+    )
+
+
+def _spec_scientific_model_revisions() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_MODEL_REVISIONS,
+        population="model_revisions",
+        denominator="revisions",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_MODEL_REVISIONS_KEYS,
+        opportunity="append-only revision counts; prior cases stay pinned",
+    )
+
+
+def _spec_scientific_model_comparison() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_MODEL_COMPARISON,
+        population="model_comparisons",
+        denominator="paired_cases",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=SCIENTIFIC_MODEL_COMPARISON_KEYS,
+        opportunity="descriptive paired losses; no universal winner",
+    )
+
+
 def _spec_infrastructure_network_structure() -> MetricSpecification:
     return _base(
         family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
@@ -11005,6 +11112,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_scientific_replication_uncertainty,
     _spec_scientific_replication_relationships,
     _spec_scientific_replication_social_interpretation,
+    _spec_scientific_model_structure,
+    _spec_scientific_model_predictions,
+    _spec_scientific_model_observed_outcomes,
+    _spec_scientific_model_calibration,
+    _spec_scientific_model_revisions,
+    _spec_scientific_model_comparison,
 )
 
 

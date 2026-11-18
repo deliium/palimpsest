@@ -216,6 +216,7 @@ from analysis.scientific_hypotheses_metrics import (
     compute_scientific_hypothesis_structure,
     compute_scientific_hypothesis_test_activity,
 )
+from analysis.scientific_models_rows import ScientificModelsAnalysis
 from analysis.semantic_drift_metrics import (
     SemanticAnalysisInputs,
     compute_semantic_divergence,
@@ -457,6 +458,7 @@ class MetricComputationInputs:
     social_mobility_analysis: SocialMobilityAnalysis | None = None
     economic_cascades_analysis: EconomicCascadesAnalysis | None = None
     scientific_hypotheses_analysis: ScientificHypothesesAnalysis | None = None
+    scientific_models_analysis: ScientificModelsAnalysis | None = None
     replication_analysis: object | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
@@ -2983,6 +2985,56 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("scientific_replication_metrics_emitted families=6 catalog=256")
     else:
         _LOG.debug("scientific_replication_metrics_disabled")
+    if inputs.scientific_models_analysis is not None:
+        models_analysis = inputs.scientific_models_analysis
+        from analysis.scientific_models_metrics import (
+            compute_scientific_model_calibration,
+            compute_scientific_model_comparison,
+            compute_scientific_model_observed_outcomes,
+            compute_scientific_model_predictions,
+            compute_scientific_model_revisions,
+            compute_scientific_model_structure,
+        )
+
+        _safe(
+            "scientific_model_structure",
+            lambda: compute_scientific_model_structure(
+                models_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_model_predictions",
+            lambda: compute_scientific_model_predictions(
+                models_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_model_observed_outcomes",
+            lambda: compute_scientific_model_observed_outcomes(
+                models_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_model_calibration",
+            lambda: compute_scientific_model_calibration(
+                models_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_model_revisions",
+            lambda: compute_scientific_model_revisions(
+                models_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_model_comparison",
+            lambda: compute_scientific_model_comparison(
+                models_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("scientific_models_metrics_emitted families=6 catalog=262")
+    else:
+        _LOG.debug("scientific_models_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

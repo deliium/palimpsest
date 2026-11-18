@@ -6,21 +6,61 @@ from dataclasses import dataclass
 from typing import Final, Literal
 
 __all__ = [
+    "FORBIDDEN_PREDICTIVE_KEYS",
+    "MAX_CALIBRATION_ROWS",
+    "MAX_COMPARISON_ROWS",
     "MAX_PREDICTIVE_ROWS",
     "MAX_PREDICTIVE_WINDOWS",
+    "MINIMUM_PAIRED_SAMPLES",
+    "SCIENTIFIC_MODELS_ANALYSIS_POLICY",
     "SCIENTIFIC_MODELS_ANALYSIS_VERSION",
+    "SCIENTIFIC_MODELS_WINDOW_TICKS",
     "ModelHypothesisFact",
     "ObservedModelOutcomeFact",
     "PredictiveCoverageFact",
     "PredictiveModelFact",
     "PredictiveRevisionFact",
     "PriorPredictionFact",
+    "ScientificModelsAnalysisError",
     "require_predictive_token",
 ]
 
 SCIENTIFIC_MODELS_ANALYSIS_VERSION: Final[str] = "scientific-models-analysis-v1"
+SCIENTIFIC_MODELS_ANALYSIS_POLICY: Final[str] = "scientific-models-analysis.v1"
+SCIENTIFIC_MODELS_WINDOW_TICKS: Final[int] = 32
 MAX_PREDICTIVE_WINDOWS: Final[int] = 512
 MAX_PREDICTIVE_ROWS: Final[int] = 8192
+MAX_CALIBRATION_ROWS: Final[int] = 8192
+MAX_COMPARISON_ROWS: Final[int] = 8192
+MINIMUM_PAIRED_SAMPLES: Final[int] = 3
+
+FORBIDDEN_PREDICTIVE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "truth",
+        "proven",
+        "verified",
+        "consensus",
+        "majority",
+        "p_value",
+        "confidence_interval",
+        "scientific_score",
+        "reliability_score",
+        "accuracy",
+        "universal_winner",
+    }
+)
+
+
+class ScientificModelsAnalysisError(ValueError):
+    """Safe detached predictive-analysis failure."""
+
+    __slots__ = ("code",)
+
+    def __init__(self, code: str) -> None:
+        if not isinstance(code, str) or not code:
+            raise ValueError("scientific_models_analysis_invalid_code")
+        self.code = code
+        super().__init__(code)
 
 
 def _nonneg(name: str, value: object) -> int:

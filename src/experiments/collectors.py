@@ -312,6 +312,34 @@ def assemble_arm_metric_bundle(
                 "replication_collector_failed code=%s",
                 getattr(exc, "reason_code", type(exc).__name__),
             )
+    try:
+        from analysis.scientific_models_analysis import (
+            harvest_scientific_models_analysis,
+        )
+        from experiments.scientific_models_completed_run import (
+            build_completed_run_scientific_models_analysis,
+        )
+
+        scientific_model_ledgers = tuple(
+            getattr(arm.runner_result, "scientific_model_ledgers", ()) or ()
+        )
+        if scientific_model_ledgers:
+            facts = build_completed_run_scientific_models_analysis(
+                arm.runner_result,
+                run_token=arm.assignment.run_id.value,
+                expected_owner_count=len(agent_ids),
+            )
+            inputs = replace(
+                inputs,
+                scientific_models_analysis=harvest_scientific_models_analysis(
+                    facts
+                ),
+            )
+    except Exception as exc:
+        _LOG.error(
+            "scientific_models_collector_failed code=%s",
+            getattr(exc, "code", type(exc).__name__),
+        )
     if events is not None:
         try:
             from types import SimpleNamespace
