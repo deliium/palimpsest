@@ -268,6 +268,7 @@ class PendingRuntimeFinalization:
         from simulation.run_control import (
             FINALIZATION_COMMAND_CODEC_VERSION,
             FINALIZATION_COMMAND_CODEC_VERSION_V2,
+            FINALIZATION_COMMAND_CODEC_VERSION_V4,
             FinalizationCommand,
         )
 
@@ -295,7 +296,12 @@ class PendingRuntimeFinalization:
         measurement_candidate = getattr(
             self.loop_result, "measurement_ledger", None
         )
-        if measurement_candidate is not None:
+        scientific_model_candidate = getattr(
+            self.loop_result, "scientific_model_ledger", None
+        )
+        if scientific_model_candidate is not None:
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V4
+        elif measurement_candidate is not None:
             from simulation.run_control import (
                 FINALIZATION_COMMAND_CODEC_VERSION_V3,
             )
@@ -328,6 +334,7 @@ class PendingRuntimeFinalization:
             replication_ledger=replication_candidate,
             experiment_ledger=experiment_candidate,
             measurement_ledger=measurement_candidate,
+            scientific_model_ledger=scientific_model_candidate,
         )
 
 
@@ -362,6 +369,7 @@ def pending_from_finalization_command(command: object) -> PendingRuntimeFinaliza
         experiment_ledger=command.experiment_ledger,
         replication_ledger=command.replication_ledger,
         measurement_ledger=command.measurement_ledger,
+        scientific_model_ledger=command.scientific_model_ledger,
     )
     return PendingRuntimeFinalization(
         observation_key=command.observation_key,
@@ -3057,6 +3065,19 @@ class AgentRuntime:
                 candidate_digest += ":" + measurement_state_digest(
                     _cast(_ML, loop_result.measurement_ledger)
                 )
+        if getattr(loop_result, "scientific_model_ledger", None) is not None:
+            from typing import cast as _cast_sm
+
+            from agents.cognition.scientific_models import (
+                ScientificModelLedger as _SML,
+            )
+            from simulation.scientific_model_checkpoint import (
+                scientific_model_state_digest,
+            )
+
+            candidate_digest += ":" + scientific_model_state_digest(
+                _cast_sm(_SML, loop_result.scientific_model_ledger)
+            )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -4055,6 +4076,13 @@ class AgentRuntime:
             self._loop.restore_measurement_ledger(
                 measurement_ledger, self._agent.agent_id
             )
+        scientific_model_ledger = getattr(
+            checkpoint, "scientific_model_ledger", None
+        )
+        if scientific_model_ledger is not None:
+            self._loop.restore_scientific_model_ledger(
+                scientific_model_ledger, self._agent.agent_id
+            )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
             self._disputes is not None
@@ -4215,6 +4243,9 @@ class AgentRuntime:
             experiment_ledger=self._loop.experiment_ledger_if_present(),
             replication_ledger=self._loop.replication_ledger_if_present(),
             measurement_ledger=self._loop.measurement_ledger_if_present(),
+            scientific_model_ledger=(
+                self._loop.scientific_model_ledger_if_present()
+            ),
             disputes=self._disputes,
             evidence=self._evidence,
             representation=self._representation,

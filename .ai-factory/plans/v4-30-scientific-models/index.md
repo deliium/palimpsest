@@ -245,7 +245,7 @@ publication, Godot work, capacity claims and unrelated refactors.
 
 - [x] Task 5: Settle future outcomes from actual owner observations ([details](phase-02-runtime-and-recovery.md#task-5-settle-future-outcomes-from-actual-owner-observations)); depends on 1–4.
 - [x] Task 6: Integrate staged cognition without adding action authority ([details](phase-02-runtime-and-recovery.md#task-6-integrate-staged-cognition-without-adding-action-authority)); depends on 5.
-- [ ] Task 7: Add strict predictive state and pending-finalization codecs ([details](phase-02-runtime-and-recovery.md#task-7-add-strict-predictive-state-and-pending-finalization-codecs)); depends on 1, 6.
+- [x] Task 7: Add strict predictive state and pending-finalization codecs ([details](phase-02-runtime-and-recovery.md#task-7-add-strict-predictive-state-and-pending-finalization-codecs)); depends on 1, 6.
 - [ ] Task 8: Preserve fork, retry, retirement and completed-run exports ([details](phase-02-runtime-and-recovery.md#task-8-preserve-fork-retry-retirement-and-completed-run-exports)); depends on 6, 7.
 
 ### Phase 3: Analysis and publication

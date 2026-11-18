@@ -12283,6 +12283,7 @@ def finalization_command_to_mapping(command: object) -> dict[str, Any]:
         FINALIZATION_COMMAND_ACCEPTED_VERSIONS,
         FINALIZATION_COMMAND_CODEC_VERSION_V2,
         FINALIZATION_COMMAND_CODEC_VERSION_V3,
+        FINALIZATION_COMMAND_CODEC_VERSION_V4,
         FinalizationCommand,
     )
     from simulation.serialization import encode_domain
@@ -12378,6 +12379,40 @@ def finalization_command_to_mapping(command: object) -> dict[str, Any]:
         payload["measurement_state"] = encode_measurement_state(
             _cast(_ML, command.measurement_ledger)
         )
+    if command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V4:
+        from typing import cast as _cast
+
+        from agents.cognition.experimentation import ExperimentLedger as _EL
+        from agents.cognition.measurement import MeasurementLedger as _ML
+        from agents.cognition.replication import ReplicationLedger as _RL
+        from agents.cognition.scientific_models import (
+            ScientificModelLedger as _SML,
+        )
+        from simulation.measurement_checkpoint import encode_measurement_state
+        from simulation.scientific_model_checkpoint import (
+            encode_scientific_model_state,
+        )
+
+        payload["replication_state"] = (
+            None
+            if command.replication_ledger is None
+            else encode_replication_state(_cast(_RL, command.replication_ledger))
+        )
+        payload["scientific_experiment_state"] = (
+            None
+            if command.experiment_ledger is None
+            else encode_scientific_experiment_state(
+                _cast(_EL, command.experiment_ledger)
+            )
+        )
+        payload["measurement_state"] = (
+            None
+            if command.measurement_ledger is None
+            else encode_measurement_state(_cast(_ML, command.measurement_ledger))
+        )
+        payload["scientific_model_state"] = encode_scientific_model_state(
+            _cast(_SML, command.scientific_model_ledger)
+        )
     _ = (AgentRuntimeStatus, IntentionCode, RunId, Tick, TickToken)
     return payload
 
@@ -12404,6 +12439,7 @@ def decode_finalization_command(payload: object) -> object:
         FINALIZATION_COMMAND_ACCEPTED_VERSIONS,
         FINALIZATION_COMMAND_CODEC_VERSION_V2,
         FINALIZATION_COMMAND_CODEC_VERSION_V3,
+        FINALIZATION_COMMAND_CODEC_VERSION_V4,
         FinalizationCommand,
     )
     from simulation.serialization import decode_domain
@@ -12459,6 +12495,13 @@ def decode_finalization_command(payload: object) -> object:
             "replication_state",
             "scientific_experiment_state",
             "measurement_state",
+        }
+    if version == FINALIZATION_COMMAND_CODEC_VERSION_V4:
+        required = required | {
+            "replication_state",
+            "scientific_experiment_state",
+            "measurement_state",
+            "scientific_model_state",
         }
     if set(data) != required:
         raise RunnerSerializationError("invalid_fields", "$")
@@ -12537,6 +12580,31 @@ def decode_finalization_command(payload: object) -> object:
             measurement_ledger = decode_measurement_state(
                 data["measurement_state"], AgentId(str(data["agent_id"]))
             )
+        scientific_model_ledger = None
+        if version == FINALIZATION_COMMAND_CODEC_VERSION_V4:
+            from simulation.measurement_checkpoint import (
+                decode_measurement_state,
+            )
+            from simulation.scientific_model_checkpoint import (
+                decode_scientific_model_state,
+            )
+
+            owner = AgentId(str(data["agent_id"]))
+            if data["replication_state"] is not None:
+                replication_ledger = decode_replication_state(
+                    data["replication_state"], owner
+                )
+            if data["scientific_experiment_state"] is not None:
+                experiment_ledger = decode_scientific_experiment_state(
+                    data["scientific_experiment_state"], owner
+                )
+            if data["measurement_state"] is not None:
+                measurement_ledger = decode_measurement_state(
+                    data["measurement_state"], owner
+                )
+            scientific_model_ledger = decode_scientific_model_state(
+                data["scientific_model_state"], owner
+            )
         return FinalizationCommand(
             codec_version=str(data["codec_version"]),
             run_id=RunId(str(data["run_id"])),
@@ -12572,6 +12640,7 @@ def decode_finalization_command(payload: object) -> object:
             replication_ledger=replication_ledger,
             experiment_ledger=experiment_ledger,
             measurement_ledger=measurement_ledger,
+            scientific_model_ledger=scientific_model_ledger,
         )
     except RunnerSerializationError:
         raise

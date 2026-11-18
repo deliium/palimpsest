@@ -46,6 +46,7 @@ __all__ = [
     "FINALIZATION_COMMAND_CODEC_VERSION",
     "FINALIZATION_COMMAND_CODEC_VERSION_V2",
     "FINALIZATION_COMMAND_CODEC_VERSION_V3",
+    "FINALIZATION_COMMAND_CODEC_VERSION_V4",
     "STREAM_RECORD_SCHEMA_VERSION",
     "AgentRuntimeCheckpoint",
     "CachedCriterionDecision",
@@ -81,11 +82,13 @@ __all__ = [
 FINALIZATION_COMMAND_CODEC_VERSION: Final[str] = "finalization-command-v1"
 FINALIZATION_COMMAND_CODEC_VERSION_V2: Final[str] = "finalization-command-v2"
 FINALIZATION_COMMAND_CODEC_VERSION_V3: Final[str] = "finalization-command-v3"
+FINALIZATION_COMMAND_CODEC_VERSION_V4: Final[str] = "finalization-command-v4"
 FINALIZATION_COMMAND_ACCEPTED_VERSIONS: Final[frozenset[str]] = frozenset(
     {
         FINALIZATION_COMMAND_CODEC_VERSION,
         FINALIZATION_COMMAND_CODEC_VERSION_V2,
         FINALIZATION_COMMAND_CODEC_VERSION_V3,
+        FINALIZATION_COMMAND_CODEC_VERSION_V4,
     }
 )
 STREAM_RECORD_SCHEMA_VERSION: Final[str] = "stream-record-v1"
@@ -518,10 +521,17 @@ class FinalizationCommand:
     replication_ledger: object | None = None
     experiment_ledger: object | None = None
     measurement_ledger: object | None = None
+    scientific_model_ledger: object | None = None
 
     def __post_init__(self) -> None:
         if self.codec_version not in FINALIZATION_COMMAND_ACCEPTED_VERSIONS:
             raise ValueError("unsupported_finalization_codec_version")
+        if self.codec_version in {
+            FINALIZATION_COMMAND_CODEC_VERSION,
+            FINALIZATION_COMMAND_CODEC_VERSION_V2,
+            FINALIZATION_COMMAND_CODEC_VERSION_V3,
+        } and self.scientific_model_ledger is not None:
+            raise ValueError("legacy_forbids_scientific_model_payload")
         if self.codec_version == FINALIZATION_COMMAND_CODEC_VERSION and (
             self.replication_ledger is not None
             or self.experiment_ledger is not None
@@ -540,6 +550,13 @@ class FinalizationCommand:
             or self.measurement_ledger is None
         ):
             raise ValueError("v3_requires_all_candidate_payloads")
+        if self.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V4:
+            if self.scientific_model_ledger is None:
+                raise ValueError("v4_requires_scientific_model_payload")
+            if (self.replication_ledger is None) != (
+                self.experiment_ledger is None
+            ):
+                raise ValueError("v4_requires_correlated_science_payloads")
         if type(self.run_id) is not RunId:
             raise TypeError("run_id must be RunId")
         if type(self.agent_id) is not AgentId:
@@ -655,6 +672,7 @@ class AgentRuntimeCheckpoint:
     experiment_ledger: object | None = None
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
+    scientific_model_ledger: object | None = None
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None
