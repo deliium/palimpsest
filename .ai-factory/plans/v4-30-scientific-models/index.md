@@ -253,7 +253,7 @@ publication, Godot work, capacity claims and unrelated refactors.
 - [x] Task 9: Normalize frozen owner forecasts into detached source facts ([details](phase-03-analysis-and-publication.md#task-9-normalize-frozen-owner-forecasts-into-detached-source-facts)); depends on 8.
 - [x] Task 10: Add bounded analysis and six append-only metric families ([details](phase-03-analysis-and-publication.md#task-10-add-bounded-analysis-and-six-append-only-metric-families)); depends on 4, 9.
 - [x] Task 11: Define canonical predictive snapshots and read/publication ports ([details](phase-03-analysis-and-publication.md#task-11-define-canonical-predictive-snapshots-and-readpublication-ports)); depends on 9, 10.
-- [ ] Task 12: Compose and publish only after scientific completion ([details](phase-03-analysis-and-publication.md#task-12-compose-and-publish-only-after-scientific-completion)); depends on 11.
+- [x] Task 12: Compose and publish only after scientific completion ([details](phase-03-analysis-and-publication.md#task-12-compose-and-publish-only-after-scientific-completion)); depends on 11.
 
 ### Phase 4: Store, API and UI
 

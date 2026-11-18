@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Final
 
 from analysis.scientific_models_analysis import harvest_scientific_models_analysis
@@ -13,6 +13,7 @@ from analysis.scientific_models_contract import (
     PriorPredictionFact,
 )
 from analysis.scientific_models_rows import ScientificModelsAnalysis
+from simulation.scientific_models_codec import ScientificModelsError
 from simulation.scientific_models_models import (
     MAX_SCIENTIFIC_MODELS_SECTION_ROWS,
     ScientificCalibrationRow,
@@ -25,7 +26,17 @@ from simulation.scientific_models_models import (
     ScientificRevisionRow,
 )
 
-__all__ = ["build_scientific_models_snapshot"]
+__all__ = [
+    "ScientificModelsHarvestResult",
+    "build_scientific_models_harvest_result",
+    "build_scientific_models_snapshot",
+    "compose_scientific_models_snapshot",
+    "publish_scientific_models_snapshot",
+]
+
+_HARVEST_STATUSES: Final[frozenset[str]] = frozenset(
+    {"published", "disabled", "missing", "quota_exceeded", "corrupt"}
+)
 
 _LOG: Final[logging.Logger] = logging.getLogger(
     "experiments.scientific_models_publication"
@@ -302,4 +313,139 @@ def build_scientific_models_snapshot(
         comparisons=comparison_rows,
         coverage=coverage_rows,
         notices=("retention_cap",) if omitted else (),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ScientificModelsHarvestResult:
+    """Safe publication receipt; scientific completion stays independent."""
+
+    status: str
+    publication_id: str | None
+    stored: bool
+    byte_size: int
+    scientific_status: str
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if self.status not in _HARVEST_STATUSES:
+            raise ValueError("scientific_models_harvest_invalid_status")
+        if self.publication_id is not None and (
+            type(self.publication_id) is not str or not self.publication_id
+        ):
+            raise ValueError("scientific_models_harvest_invalid_publication")
+        if type(self.stored) is not bool:
+            raise TypeError("stored must be bool")
+        if isinstance(self.byte_size, bool) or type(self.byte_size) is not int:
+            raise TypeError("byte_size must be int")
+        if self.byte_size < 0:
+            raise ValueError("byte_size must be non-negative")
+        if type(self.scientific_status) is not str or not self.scientific_status:
+            raise ValueError("scientific_models_harvest_invalid_scientific_status")
+
+
+def compose_scientific_models_snapshot(
+    analysis: object,
+    *,
+    run_token: str,
+    publication_id: str,
+    finalized_through_tick: int,
+    max_rows: int = MAX_SCIENTIFIC_MODELS_SECTION_ROWS,
+) -> ScientificModelsSnapshot:
+    """Compose one validated snapshot; never reruns science."""
+
+    return build_scientific_models_snapshot(
+        analysis,
+        run_token=run_token,
+        publication_id=publication_id,
+        finalized_through_tick=finalized_through_tick,
+        max_rows=max_rows,
+    )
+
+
+def build_scientific_models_harvest_result(
+    *,
+    snapshot: object | None,
+    publisher: object | None,
+    scientific_status: str = "complete",
+) -> ScientificModelsHarvestResult:
+    """Map one programmatic publication attempt onto a closed status."""
+
+    if snapshot is None:
+        return ScientificModelsHarvestResult(
+            status="missing",
+            publication_id=None,
+            stored=False,
+            byte_size=0,
+            scientific_status=scientific_status,
+            reason="missing",
+        )
+    if publisher is None:
+        return ScientificModelsHarvestResult(
+            status="disabled",
+            publication_id=None,
+            stored=False,
+            byte_size=0,
+            scientific_status=scientific_status,
+            reason="disabled",
+        )
+    try:
+        receipt = publisher.publish(snapshot)  # type: ignore[attr-defined]
+    except ScientificModelsError as exc:
+        _LOG.warning(
+            "scientific_models_publication_failed status=corrupt reason=%s",
+            exc.code,
+        )
+        return ScientificModelsHarvestResult(
+            status="corrupt",
+            publication_id=None,
+            stored=False,
+            byte_size=0,
+            scientific_status=scientific_status,
+            reason=exc.code,
+        )
+    except Exception:
+        _LOG.warning(
+            "scientific_models_publication_failed status=corrupt reason=unknown"
+        )
+        return ScientificModelsHarvestResult(
+            status="corrupt",
+            publication_id=None,
+            stored=False,
+            byte_size=0,
+            scientific_status=scientific_status,
+            reason="unknown",
+        )
+    reason = str(getattr(receipt, "reason", "") or "")
+    stored = bool(getattr(receipt, "stored", False))
+    if stored or reason == "published":
+        status = "published"
+    elif reason in {"disabled", "quota_exceeded"}:
+        status = reason
+    else:
+        status = "corrupt"
+    return ScientificModelsHarvestResult(
+        status=status,
+        publication_id=getattr(receipt, "publication_id", None),
+        stored=stored,
+        byte_size=int(getattr(receipt, "byte_size", 0)),
+        scientific_status=scientific_status,
+        reason=reason,
+    )
+
+
+def publish_scientific_models_snapshot(
+    snapshot: object | None,
+    *,
+    publisher: object | None,
+    scientific_status: str = "complete",
+) -> ScientificModelsHarvestResult:
+    """Publish exactly one snapshot through an explicit opt-in port."""
+
+    if snapshot is not None and type(snapshot) is not ScientificModelsSnapshot:
+        raise TypeError("snapshot must be ScientificModelsSnapshot")
+    return build_scientific_models_harvest_result(
+        snapshot=snapshot,
+        publisher=publisher,
+        scientific_status=scientific_status,
     )
