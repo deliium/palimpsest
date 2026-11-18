@@ -240,6 +240,7 @@ class ObservedModelOutcomeFact:
 class PredictiveRevisionFact:
     owner_token: str
     model_token: str
+    revision_token: str
     revision_index: int
     tick: int
     kind: Literal["hypothesis", "model"]
@@ -248,6 +249,7 @@ class PredictiveRevisionFact:
     def __post_init__(self) -> None:
         require_predictive_token("owner_token", self.owner_token)
         require_predictive_token("model_token", self.model_token)
+        require_predictive_token("revision_token", self.revision_token)
         _nonneg("revision_index", self.revision_index)
         _nonneg("tick", self.tick)
         if self.kind not in {"hypothesis", "model"} or not self.reason:

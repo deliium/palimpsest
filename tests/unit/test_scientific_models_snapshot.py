@@ -233,3 +233,86 @@ def test_paging_is_stable_and_filters_by_tick_range() -> None:
         )
     with pytest.raises(ValueError, match="invalid_page_size"):
         page_scientific_models_rows(snapshot, section="predictions", page_size=0)
+
+
+def _real_facts():
+    from types import SimpleNamespace
+
+    from agents.cognition.scientific_model_lifecycle import (
+        advance_scientific_models,
+    )
+    from analysis.scientific_models_analysis import (
+        harvest_scientific_models_analysis,
+    )
+    from experiments.scientific_models_completed_run import scientific_model_facts
+    from tests.unit.test_scientific_models_lifecycle import (
+        _experiment_ledger,
+        _observation,
+        _season_ledger,
+    )
+    from world.environment import Season
+
+    ledger = advance_scientific_models(
+        _season_ledger(),
+        _observation(12, season=Season.SUMMER),
+        experiment_ledger=_experiment_ledger(),
+    )
+    facts = scientific_model_facts(
+        SimpleNamespace(scientific_model_ledgers=(ledger,)),
+        run_token="run-snapshot",
+        expected_owner_count=1,
+    )
+    return harvest_scientific_models_analysis(facts)
+
+
+def test_builder_selects_reference_closed_cases_and_recomputes_groups() -> None:
+    from experiments.scientific_models_publication import (
+        build_scientific_models_snapshot,
+    )
+
+    harvested = _real_facts()
+    snapshot = build_scientific_models_snapshot(
+        harvested,
+        run_token="run-snapshot",
+        publication_id="pub-snapshot",
+        finalized_through_tick=12,
+    )
+    assert snapshot.predictions
+    assert snapshot.outcomes
+    assert snapshot.calibration
+    assert snapshot.comparisons
+    assert snapshot.coverage_status == "complete"
+    decoded = decode_scientific_models_snapshot(
+        encode_scientific_models_snapshot(snapshot)
+    )
+    assert scientific_models_snapshot_digest(decoded) == (
+        scientific_models_snapshot_digest(snapshot)
+    )
+
+
+def test_cap_omits_whole_cases_and_keeps_denominators_honest() -> None:
+    from experiments.scientific_models_publication import (
+        build_scientific_models_snapshot,
+    )
+
+    snapshot = build_scientific_models_snapshot(
+        _real_facts(),
+        run_token="run-snapshot",
+        publication_id="pub-capped",
+        finalized_through_tick=12,
+        max_rows=1,
+    )
+    assert snapshot.predictions == ()
+    assert snapshot.outcomes == ()
+    assert snapshot.calibration == ()
+    assert snapshot.comparisons == ()
+    assert any(row.reason_code == "retention_cap" for row in snapshot.coverage)
+    assert "retention_cap" in snapshot.notices
+    with pytest.raises(ValueError, match="invalid_max_rows"):
+        build_scientific_models_snapshot(
+            _real_facts(),
+            run_token="run-snapshot",
+            publication_id="pub",
+            finalized_through_tick=12,
+            max_rows=9000,
+        )

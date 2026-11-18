@@ -125,6 +125,7 @@ def scientific_model_facts(
                     PredictiveRevisionFact(
                         owner_token=owner_token,
                         model_token=hypothesis_tokens[hypothesis.hypothesis_id],
+                        revision_token=revision_token,
                         revision_index=revision.revision_index,
                         tick=revision.tick,
                         kind="hypothesis",
@@ -177,6 +178,7 @@ def scientific_model_facts(
                     PredictiveRevisionFact(
                         owner_token=owner_token,
                         model_token=model_token,
+                        revision_token=revision_token,
                         revision_index=revision.revision_index,
                         tick=revision.tick,
                         kind="model",
