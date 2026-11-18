@@ -5835,6 +5835,25 @@ def experiment_scientific_replication(
     return definition
 
 
+def experiment_scientific_models(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-30 experiment: reproducible predictive-model demonstrations."""
+    from experiments.scientific_models_scenario import scientific_models_scenario
+
+    definition = scientific_models_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=scientific_models@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
 def experiment_measurement_instruments(
     base: SimulationRunnerConfig,
     *,

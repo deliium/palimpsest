@@ -544,6 +544,10 @@ from experiments.scientific_hypotheses_scenario import (
     SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID,
     scientific_hypotheses_scenario,
 )
+from experiments.scientific_models_scenario import (
+    SCIENTIFIC_MODELS_EXPERIMENT_ID,
+    scientific_models_scenario,
+)
 from experiments.social_mobility_completed_run import (
     build_completed_run_social_mobility_analysis,
     social_mobility_recipe_mappings,
@@ -602,6 +606,7 @@ __all__ = [
     "REFERENCE_SCENARIO_ID",
     "REFERENCE_SCENARIO_VERSION",
     "SCIENTIFIC_HYPOTHESES_EXPERIMENT_ID",
+    "SCIENTIFIC_MODELS_EXPERIMENT_ID",
     "V3_BENCHMARK_PROFILE_BUDGETS",
     "V3_BENCHMARK_SCENARIO_COUNT",
     "V3_BENCHMARK_SCENARIO_IDS",
@@ -990,6 +995,7 @@ __all__ = [
     "run_one_assignment",
     "scientific_hypotheses_scenario",
     "scientific_hypothesis_facts",
+    "scientific_models_scenario",
     "seasonal_scarcity_scenario",
     "smoke_tick_budget",
     "social_mobility_recipe_mappings",
