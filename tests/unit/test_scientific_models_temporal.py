@@ -8,6 +8,9 @@ import dataclasses
 
 import pytest
 
+from agents.cognition.scientific_model_derivation import (
+    derive_model_hypotheses,
+)
 from agents.cognition.scientific_model_lifecycle import (
     advance_scientific_models,
 )
@@ -251,3 +254,149 @@ def test_pending_recovery_before_acknowledgment_preserves_the_frozen_case() -> N
     updated = next(row for row in settled.cases if row.case_id == case.case_id)
     assert updated.state is ForecastCaseState.SCORED
     assert updated.predictions == case.predictions
+
+
+def test_retired_source_permanently_retires_and_successor_carries_lineage() -> None:
+    from agents.cognition.experimentation import (
+        ExperimentHypothesis,
+        HypothesisStatus,
+    )
+    from agents.cognition.scientific_model_derivation import (
+        derive_model_hypotheses,
+    )
+    from agents.cognition.scientific_models import (
+        ModelLifecycle,
+        ModelRevisionReason,
+        empty_scientific_model_ledger,
+    )
+    from world.experimentation import (
+        ExperimentOperator,
+        ExperimentProcessToken,
+    )
+
+    def source(source_id: str, retired: bool) -> ExperimentHypothesis:
+        return ExperimentHypothesis(
+            owner_id=_experiment_ledger().owner_id,
+            hypothesis_id=source_id,
+            operator=ExperimentOperator.COMBINE,
+            operand_a_id="wheat",
+            process_token=ExperimentProcessToken.HARVEST,
+            predicted_outcome="success",
+            active=not retired,
+            status=(
+                HypothesisStatus.RETIRED if retired else HypothesisStatus.PROVISIONAL
+            ),
+        )
+
+    owner = _experiment_ledger().owner_id
+    ledger = empty_scientific_model_ledger(owner)
+    first = derive_model_hypotheses(
+        ledger,
+        _observation(0, include_self=True),
+        experiment_ledger=_experiment_ledger((source("hyp:a", False),)),
+    )
+    retired = derive_model_hypotheses(
+        first,
+        _observation(1, include_self=True),
+        experiment_ledger=_experiment_ledger((source("hyp:a", True),)),
+    )
+    model = retired.hypotheses[0]
+    assert model.lifecycle is ModelLifecycle.RETIRED
+    assert model.current_revision.reason is ModelRevisionReason.RETIRED
+    legacy_id = model.hypothesis_id
+    successor = derive_model_hypotheses(
+        retired,
+        _observation(2, include_self=True),
+        experiment_ledger=_experiment_ledger((source("hyp:b", False),)),
+    )
+    fresh = [row for row in successor.hypotheses if row.hypothesis_id != legacy_id]
+    assert fresh
+    assert fresh[-1].causal_link_ref == legacy_id
+    revived = derive_model_hypotheses(
+        successor,
+        _observation(3, include_self=True),
+        experiment_ledger=_experiment_ledger((source("hyp:a", False),)),
+    )
+    assert (
+        next(
+            row for row in revived.hypotheses if row.hypothesis_id == legacy_id
+        ).lifecycle
+        is ModelLifecycle.RETIRED
+    )
+
+
+def test_debug_logs_never_contain_hostile_payload_sentinels(caplog) -> None:
+    import logging
+
+    from agents.cognition.scientific_models import (
+        empty_scientific_model_ledger,
+    )
+
+    sentinel = "HOSTILE-SENTINEL-RESOURCE-NAME"
+    ledger = empty_scientific_model_ledger(_season_ledger().owner_id)
+    with caplog.at_level(logging.DEBUG):
+        for tick, quantity in ((0, 10.0), (1, 10.0), (2, 20.0), (3, 20.0)):
+            observation = _observation(tick, quantity=quantity)
+            observation = dataclasses.replace(
+                observation,
+                resources=tuple(
+                    dataclasses.replace(resource, name=sentinel)
+                    for resource in observation.resources
+                ),
+            )
+            ledger = derive_model_hypotheses(
+                ledger,
+                observation,
+                experiment_ledger=_experiment_ledger(),
+            )
+    assert sentinel not in caplog.text
+
+
+def test_frozen_loss_is_unaffected_by_later_model_parameters() -> None:
+    from agents.cognition.scientific_model_scoring import (
+        score_model_prediction,
+    )
+
+    _, case = _season_case()
+    prediction = case.predictions[0]
+    before = score_model_prediction(prediction, "summer")
+    # A later model revision replaces parameters; the issued case is immutable.
+    changed = dataclasses.replace(case.predictions[0], parameter_digest="par:new")
+    assert score_model_prediction(changed, "summer") == before
+    assert score_model_prediction(case.predictions[0], "summer") == before
+
+
+def test_binding_consumes_only_the_final_effective_command() -> None:
+    from agents.cognition.scientific_model_binding import (
+        bind_scientific_model_execution,
+    )
+    from world.actions import Experiment, Wait
+    from world.experimentation import (
+        ExperimentOperator,
+        ExperimentProcessToken,
+    )
+
+    ledger, _ = _production_case()
+    case = next(
+        row
+        for row in ledger.pending_cases
+        if row.target_kind is ModelTargetKind.PRODUCTION_OUTCOME
+    )
+    tick = case.issued_observation_tick + 1
+    observation = _observation(tick, include_self=True)
+    unchanged = bind_scientific_model_execution(
+        ledger, Wait(), tick=tick, observation=observation
+    )
+    assert unchanged.bindings == ()
+    final = Experiment(
+        operator=ExperimentOperator.COMBINE,
+        operand_a_id=__import__("world.identifiers", fromlist=["EntityId"]).EntityId(
+            "wheat"
+        ),
+        process_token=ExperimentProcessToken.HARVEST,
+    )
+    bound = bind_scientific_model_execution(
+        ledger, final, tick=tick, observation=observation
+    )
+    assert len(bound.bindings) == 1
+    assert bound.cases == ledger.cases

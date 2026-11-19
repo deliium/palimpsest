@@ -156,6 +156,8 @@ def _upsert_hypothesis(
         (row for row in ledger.hypotheses if row.hypothesis_id == hypothesis_id),
         None,
     )
+    if existing is not None and existing.lifecycle is ModelLifecycle.RETIRED:
+        return ledger
     if existing is None:
         if len(ledger.hypotheses) >= 32:
             return replace(
@@ -482,6 +484,36 @@ def _eligible_production_sources(
     return sources
 
 
+def _retired_source_ids(
+    owner_id: AgentId, experiment_ledger: ExperimentLedger
+) -> frozenset[str]:
+    retired: set[str] = set()
+    for hypothesis in experiment_ledger.hypotheses:
+        if hypothesis.owner_id != owner_id:
+            continue
+        status = hypothesis.status or derive_hypothesis_status(
+            hypothesis.support, hypothesis.counter
+        )
+        if status in {HypothesisStatus.RETIRED, HypothesisStatus.SUPERSEDED}:
+            retired.add(hypothesis.hypothesis_id)
+    return frozenset(retired)
+
+
+def _successor_link(
+    ledger: ScientificModelLedger, predicted_class: str
+) -> str:
+    candidates = [
+        row
+        for row in ledger.hypotheses
+        if row.lifecycle is ModelLifecycle.RETIRED
+        and row.target_kind is ModelTargetKind.PRODUCTION_OUTCOME
+        and row.predicted_class == predicted_class
+    ]
+    if not candidates:
+        return ""
+    return max(candidates, key=lambda row: row.created_tick).hypothesis_id
+
+
 def _derive_production(
     ledger: ScientificModelLedger,
     *,
@@ -519,6 +551,7 @@ def _derive_production(
             source_revision_ref=_production_source_ref(source),
             support_refs=source.evidence_event_ids[:8],
             tick=tick,
+            causal_link_ref=_successor_link(ledger, source.predicted_outcome),
         )
     return ledger
 
@@ -537,14 +570,23 @@ def _reconcile(
         for resource in getattr(observation, "resources", ())
     }
     sources = _eligible_production_sources(ledger.owner_id, experiment_ledger)
+    retired_sources = _retired_source_ids(ledger.owner_id, experiment_ledger)
     rows: list[ModelHypothesis] = []
     notices = ledger.notices
     for hypothesis in ledger.hypotheses:
         lifecycle = hypothesis.lifecycle
         reason_code: str | None = None
         if hypothesis.target_kind is ModelTargetKind.PRODUCTION_OUTCOME:
-            if hypothesis.target_ref in sources:
-                if lifecycle is not ModelLifecycle.ACTIVE:
+            if hypothesis.target_ref in retired_sources:
+                if lifecycle is not ModelLifecycle.RETIRED:
+                    hypothesis = _set_lifecycle(
+                        hypothesis,
+                        tick=tick,
+                        lifecycle=ModelLifecycle.RETIRED,
+                        reason=ModelRevisionReason.RETIRED,
+                    )
+            elif hypothesis.target_ref in sources:
+                if lifecycle is ModelLifecycle.SUSPENDED:
                     hypothesis = _set_lifecycle(
                         hypothesis,
                         tick=tick,
