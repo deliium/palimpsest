@@ -5,7 +5,7 @@ Mode: ultra
 Plan identifier: `v4-30-scientific-models`
 Branch: `main` (existing; branch creation disabled)
 Created: 2026-11-18
-Status: planned; implementation not started
+Status: implemented; all 24 tasks complete (conditional lanes reported)
 
 ## Original Request
 
@@ -273,8 +273,8 @@ publication, Godot work, capacity claims and unrelated refactors.
 
 - [x] Task 21: Complete the mandatory documentation checkpoint ([details](phase-06-documentation-and-verification.md#task-21-complete-the-mandatory-documentation-checkpoint)); depends on 1–20.
 - [x] Task 22: Update current pins without rewriting historical contracts ([details](phase-06-documentation-and-verification.md#task-22-update-current-pins-without-rewriting-historical-contracts)); depends on 10, 19, 21.
-- [ ] Task 23: Execute the final regression and quality gates ([details](phase-06-documentation-and-verification.md#task-23-execute-the-final-regression-and-quality-gates)); depends on 20–22.
-- [ ] Task 24: Record implementation outcome and unresolved limitations ([details](phase-06-documentation-and-verification.md#task-24-record-implementation-outcome-and-unresolved-limitations)); depends on 23.
+- [x] Task 23: Execute the final regression and quality gates ([details](phase-06-documentation-and-verification.md#task-23-execute-the-final-regression-and-quality-gates)); depends on 20–22.
+- [x] Task 24: Record implementation outcome and unresolved limitations ([details](phase-06-documentation-and-verification.md#task-24-record-implementation-outcome-and-unresolved-limitations)); depends on 23.
 
 ## Commit Plan
 
@@ -361,3 +361,69 @@ unchanged. Implementation has not started.
 ## Next Command
 
 `$aif-implement .ai-factory/plans/v4-30-scientific-models/index.md`
+
+## Completion Notes (2026-11-19)
+
+Status: all 24 tasks complete. Implementation and documentation are committed on
+`main`; no push was performed.
+
+### Delivered
+
+- Owner-scoped `ScientificModelLedger` under `scientific-models.v1` with typed
+  hypotheses, two frozen predictors, deterministic 1000-milli distributions,
+  prior issuance at `t`, commitment after finalization, target `t+2`, and
+  exact production binding at `t+1`.
+- Observation-relative Brier/ten-bin calibration, append-only revisions, source
+  suspend/resume/retire/successor lifecycle, paired comparison with a
+  three-pair minimum, and explicit non-scoring outcome states.
+- `scientific-model-state-v1`, `finalization-command-v4`, runtime checkpoint and
+  fork digest coverage, retired-owner and completed-result exports, blank-slate
+  admission enforcement.
+- Detached tokenized facts, bounded 32-tick-window analysis, six append-only
+  metric families, canonical `scientific-models-snapshot-v1` with
+  reference-closed case bundles, programmatic publication receipts, an atomic
+  quota-bounded `scientific-models-store-v1`, eight GET-only
+  `SUBJECTIVE_DEBUG` routes, and a read-only Research UI panel.
+- Off-gate `scientific_models@1` with four declared arms; documentation in
+  `docs/scientific-models.md` and focused cross-links.
+
+### Current pins
+
+262 metric families; 45 commands; 73 observer semantic types; 17 V4 contexts;
+12 flags (nine owned / three unowned); `v4-context-map-v6`; default
+runner/result v4/v2; latest opt-in runner v57; pending default v1, predictive
+v4; measurement event 28/`v26`, travel event 27/`v25`; `/v1`;
+`observer-protocol-v1`; Alembic `0017`.
+
+### Verification
+
+- `pytest -q tests/unit tests/architecture` — **12,704 passed, 1 skipped**
+  (12:27), after reconciling current catalog/docs pins at 262.
+- Focused scientific-model, V1 regression, V2 invariants and catalog suites —
+  216 passed; catalog/pin suites — 21 passed.
+- Real-runner integration — 1 passed: 40-tick season/resource run, ≥3 scored
+  prior forecasts, paired comparison, two issuance windows, snapshot
+  publication/read, six metric documents.
+- `ruff check src tests` — pass; `mypy src tests` — 2,988 files clean;
+  `lint-imports` — 25 contracts kept.
+- Research UI client/panel vitest — 4 passed (existing replication panel 2
+  passed).
+- Full-suite coverage run was attempted twice; the coverage-enabled run exceeded
+  the 30-minute tool timeout and was terminated (exit 143) without a report.
+  Focused suites were executed with `--cov` during implementation. This lane is
+  recorded as timed out, not passed.
+
+### Unexecuted / limited lanes
+
+- PostgreSQL durable journal and other database integration lanes: prerequisites
+  absent.
+- Compose/browser acceptance, pinned Godot client run, benchmark/scale lanes:
+  unexecuted; no certification or capacity claim is made.
+- Research UI `pnpm test/check/build`: `pnpm`/`corepack` are not installed and
+  the local Node is v26 rather than the pinned v24; `svelte-check` also fails on
+  a missing `esrap` module in the installed dependency tree. Vitest ran directly.
+- The real artifact exercises season forecasts; no controlled
+  production-mechanism prefix or fork-divergence twin is included.
+- Completed-result metric documents were exercised directly rather than through
+  `assemble_arm_metric_bundle`; the collector injection exists but lacks a
+  dedicated end-to-end assertion.
