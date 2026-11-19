@@ -8842,7 +8842,11 @@ class CognitiveLoop:
                     status=ComponentStatus.CANCELLED,
                 )
                 raise  # pragma: no cover
-            except Exception:
+            except Exception as exc:
+                _LOG.error(
+                    "cognitive_stage_failed error_type=%s",
+                    type(exc).__name__,
+                )
                 fail(  # type: ignore[operator]
                     reason=CognitionFailureReason.COMPONENT_FAILED,
                     kind=kind,

@@ -89,14 +89,6 @@ def _conditions_from_observation(observation: object) -> tuple[ModelCondition, .
     season = getattr(observation, "season", None)
     if season is not None:
         rows.append(ModelCondition("season", str(getattr(season, "value", season))))
-    weather = getattr(observation, "weather_condition", None)
-    if weather is not None:
-        rows.append(ModelCondition("weather", str(getattr(weather, "value", weather))))
-    day_phase = getattr(observation, "day_phase", None)
-    if day_phase is not None:
-        rows.append(
-            ModelCondition("day_phase", str(getattr(day_phase, "value", day_phase)))
-        )
     self_body = getattr(observation, "self_body", None)
     location_id = getattr(self_body, "location_id", None)
     if location_id is not None:
@@ -104,6 +96,21 @@ def _conditions_from_observation(observation: object) -> tuple[ModelCondition, .
             ModelCondition(
                 "location", str(getattr(location_id, "value", location_id))
             )
+        )
+    return tuple(sorted(rows, key=lambda row: row.slot))
+
+
+def _production_conditions(
+    observation: object,
+) -> tuple[ModelCondition, ...]:
+    rows = list(_conditions_from_observation(observation))
+    weather = getattr(observation, "weather_condition", None)
+    if weather is not None:
+        rows.append(ModelCondition("weather", str(getattr(weather, "value", weather))))
+    day_phase = getattr(observation, "day_phase", None)
+    if day_phase is not None:
+        rows.append(
+            ModelCondition("day_phase", str(getattr(day_phase, "value", day_phase)))
         )
     return tuple(sorted(rows, key=lambda row: row.slot))
 
@@ -742,7 +749,7 @@ def derive_model_hypotheses(
     updated = _derive_production(
         updated,
         tick=tick,
-        conditions=conditions,
+        conditions=_production_conditions(observation),
         experiment_ledger=experiment_ledger,
     )
     updated = _reconcile(

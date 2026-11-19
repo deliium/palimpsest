@@ -59,13 +59,6 @@ def _config():
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "scenario planning fails at tick 2 before forecasts form; "
-        "controlled mechanism harness remains for Task 20"
-    ),
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_real_runner_produces_scored_prior_forecasts_and_comparison() -> None:
     runner = await SimulationRunner.from_config(

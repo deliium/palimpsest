@@ -1180,7 +1180,11 @@ class DeterministicSocialMessagePolicy:
                     decision = retell
                 elif reconstructions:
                     recon = reconstructions[0]
-                    concepts = tuple(item.concept for item in recon.concepts[:4])
+                    concepts = tuple(
+                        dict.fromkeys(
+                            item.concept for item in recon.concepts[:4]
+                        )
+                    )
                     utterance = origin_utterance(
                         text=_SAFE_TELL_TEXT if not concepts else concepts[0],
                         speaker_id=speaker_id,

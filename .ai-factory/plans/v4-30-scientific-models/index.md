@@ -267,7 +267,7 @@ publication, Godot work, capacity claims and unrelated refactors.
 - [x] Task 17: Add an off-gate reproducible scientific-model experiment ([details](phase-05-experiments-and-regressions.md#task-17-add-an-off-gate-reproducible-scientific-model-experiment)); depends on 8, 10.
 - [x] Task 18: Add adversarial temporal and provenance regressions ([details](phase-05-experiments-and-regressions.md#task-18-add-adversarial-temporal-and-provenance-regressions)); depends on 5–8, 17.
 - [x] Task 19: Lock the supported configuration and compatibility matrix ([details](phase-05-experiments-and-regressions.md#task-19-lock-the-supported-configuration-and-compatibility-matrix)); depends on 7, 10, 14.
-- [ ] Task 20: Verify scientific arithmetic, boundedness and a real runner artifact ([details](phase-05-experiments-and-regressions.md#task-20-verify-scientific-arithmetic-boundedness-and-a-real-runner-artifact)); depends on 16–19.
+- [x] Task 20: Verify scientific arithmetic, boundedness and a real runner artifact ([details](phase-05-experiments-and-regressions.md#task-20-verify-scientific-arithmetic-boundedness-and-a-real-runner-artifact)); depends on 16–19.
 
 ### Phase 6: Documentation and verification
 
