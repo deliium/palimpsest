@@ -601,3 +601,13 @@ V4-27 registers off-gate `scientific_hypotheses@1` with baseline, enabled, and c
 ## Scientific replication experiment
 
 `scientific_replication@1` registers four declared arms (baseline, individual, community, conflicting conditions). It stays off the V1 A–E gate and makes no emergence, consensus, or truth claim.
+
+## Scientific models (`scientific_models@1`)
+
+Off-gate experiment with four declared arms over the owned `science` flag:
+`models-science-off`, `models-season-resource`, `models-production` and
+`models-measurement-coexistence`. Arms share seed, stochastic identity, founder
+roster, layout and a horizon of at least 96 ticks. The off arm leaves science
+inert; the measurement arm reuses the existing v57 instrument spec. No correct
+model is preloaded and no discovery or improvement is guaranteed. Autonomous
+nulls are legal. See [Scientific models](scientific-models.md).

@@ -122,3 +122,9 @@ No objective hypothesis truth, N-replication promotion, majority consensus,
 scientific merit score, calibrated numeric intervals, general multi-hop
 testimony graph, cross-run live evidence import, Godot overlay, `/v2`, SQL
 migration, or civilization throughput claim.
+
+## Scientific models (V4-30)
+
+Owner-scoped predictive models deepen the same science context without changing
+replication semantics. See [Scientific models](scientific-models.md) for prior
+forecasts, calibration and paired comparison.

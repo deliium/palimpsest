@@ -378,3 +378,13 @@ accuracy, ranking, or score vocabulary is used.
 
 
 The Scientific hypotheses panel is read-only and shows status/source tokens literally with no truth or score vocabulary.
+
+## Scientific models panel
+
+A read-only **Scientific models** panel renders published owner-scoped
+predictive snapshots: summary counts, models, prior predictions, observed
+outcomes, calibration groups, revisions, paired comparisons and coverage. It
+labels predictive probability, owner-observed outcome, retained-cohort
+calibration, lower loss on paired observations and net resource change (not
+isolated regeneration). It never edits models, revises forecasts, triggers
+experiments or advances ticks. See [Scientific models](scientific-models.md).

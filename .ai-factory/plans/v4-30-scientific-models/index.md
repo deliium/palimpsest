@@ -271,7 +271,7 @@ publication, Godot work, capacity claims and unrelated refactors.
 
 ### Phase 6: Documentation and verification
 
-- [ ] Task 21: Complete the mandatory documentation checkpoint ([details](phase-06-documentation-and-verification.md#task-21-complete-the-mandatory-documentation-checkpoint)); depends on 1–20.
+- [x] Task 21: Complete the mandatory documentation checkpoint ([details](phase-06-documentation-and-verification.md#task-21-complete-the-mandatory-documentation-checkpoint)); depends on 1–20.
 - [ ] Task 22: Update current pins without rewriting historical contracts ([details](phase-06-documentation-and-verification.md#task-22-update-current-pins-without-rewriting-historical-contracts)); depends on 10, 19, 21.
 - [ ] Task 23: Execute the final regression and quality gates ([details](phase-06-documentation-and-verification.md#task-23-execute-the-final-regression-and-quality-gates)); depends on 20–22.
 - [ ] Task 24: Record implementation outcome and unresolved limitations ([details](phase-06-documentation-and-verification.md#task-24-record-implementation-outcome-and-unresolved-limitations)); depends on 23.

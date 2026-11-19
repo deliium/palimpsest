@@ -647,3 +647,18 @@ and requires `science`; v1–v56 reject the sibling. The spec is bounded to 64
 instruments and 64 references, anchored to scenario `TOOL` items, and uses
 `measurement-instruments.v1`. Active instrument runs write replay event 28 /
 codec `v26`. See [Measurement instruments](measurement-instruments.md).
+
+## Optional scientific models (V4-30)
+
+Scientific models deepen the owned `science` flag and require
+`predictive_world_model` plus a `bounded_experimentation` spec. There is no new
+runner schema or capability slot: the latest opt-in runner remains
+`runner-config-v57`, and `science=False` stays inert.
+
+Optional read-only inspection uses a paired configuration:
+
+- `PALIMPSEST_SCIENTIFIC_MODELS_ROOT` — immutable snapshot store root;
+- `PALIMPSEST_SCIENTIFIC_MODELS_CURSOR_KEY` — at least 32 UTF-8 bytes.
+
+Neither set means disabled; exactly one is invalid. See
+[Scientific models](scientific-models.md).

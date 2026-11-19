@@ -645,3 +645,18 @@ Measurement instruments add focused suites:
 ```bash
 uv run --frozen --python 3.12.14 pytest tests/unit/test_measurement_*.py -q
 ```
+
+## Scientific-model verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest -q tests/unit/test_scientific_models_*.py
+uv run --frozen --python 3.12.14 pytest -q -m integration tests/integration/test_scientific_models_runner.py
+```
+
+The focused suites cover contracts, derivation, forecasts, scoring, lifecycle,
+runtime, codecs, storage, routes, client composition, compatibility, properties
+and adversarial chronology. The integration lane runs a real 40-tick
+season/resource science arm and proves subsequent observed outcomes, paired
+comparison, two issuance windows, snapshot publication/read and six metric
+documents. See [Scientific models](scientific-models.md). PostgreSQL, Compose/browser, Godot and scale lanes remain conditional
+and must be reported as unexecuted when their prerequisites are absent.

@@ -262,3 +262,14 @@ domain values use envelope schema 2. Pending subjective recovery uses
 `finalization-command-v3` with `measurement-state-v1`; v1 and v2 remain
 decodable with their original bytes. See
 [Measurement instruments](measurement-instruments.md).
+
+## Scientific-model codecs (V4-30)
+
+`scientific-model-state-v1` is the strict owner-safe checkpoint codec for
+predictive state. Pending subjective transitions use `finalization-command-v4`,
+which requires non-null predictive state while keeping replication/experiment
+correlated and measurement optional. v1/v2/v3 payloads are unchanged and forbid
+predictive state. Runtime checkpoints and forks carry the committed ledger and
+its digest. `scientific-models-snapshot-v1` and `scientific-models-store-v1` are
+independent publication versions stored outside SQL. See
+[Scientific models](scientific-models.md).

@@ -152,3 +152,9 @@ analytical rows, the snapshot, routes, or the Research UI.
 Replication deepens this science context: see [Scientific replication](scientific-replication.md) for frozen designs, `rep_v1`, categorical uncertainty, conflicting outcomes, and the six appended families (catalog 256).
 
 There is no `runner-config-v58`; the latest V4 runner schema is `runner-config-v57`.
+
+## Scientific models (V4-30)
+
+Predictive models derived from observed regularities or existing experimental
+hypotheses are separate from support-ratio confidence. See
+[Scientific models](scientific-models.md).

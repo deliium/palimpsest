@@ -111,5 +111,6 @@ experiment does not script scientific success or consensus.
 - [Physical Simulation](physical-simulation.md)
 - [Scientific Hypotheses](scientific-hypotheses.md)
 - [Scientific Replication](scientific-replication.md)
+- [Scientific Models](scientific-models.md)
 - [Persistence](persistence.md)
 - [Configuration](configuration.md)

@@ -896,3 +896,18 @@ and `scientific-hypotheses-store-v1` publish programmatically; seven GET-only
 dual-gated routes and a read-only Research UI panel serve them. Pins: 17 contexts
 / 12 flags / 9 owned / 3 unowned, 250 families, 45 commands, 73 observer semantic
 types, replay-v27/codec `v25`, Alembic `0017`, `/v1`, `observer-protocol-v1`.
+
+## V4-30 scientific models
+
+`world` remains authoritative; predictive models are owner-scoped cognition.
+`agents.cognition.scientific_models` owns frozen contracts,
+`scientific_model_derivation/prediction/scoring/observation/lifecycle/binding`
+own the pure owner transitions, and `simulation.scientific_model_checkpoint`
+owns the strict codec. `analysis.scientific_models_*` is detached and recomputes
+scoring without importing cognition. `experiments.scientific_models_*` is the
+trusted completed-run/publication bridge. `persistence.scientific_models_filesystem`
+implements read/publication ports; `api.routes.scientific_models` serves eight
+GET-only routes under `SUBJECTIVE_DEBUG`. Default runner/result stay v4/v2,
+latest opt-in runner v57; event 28/`v26` remains measurement-selected, event
+27/`v25` travel-selected; Alembic stays `0017`, `/v1` and
+`observer-protocol-v1` unchanged. See [Scientific models](scientific-models.md).
