@@ -97,7 +97,7 @@ def test_configuration_and_contract_docs() -> None:
     architecture = _read("docs/architecture.md")
     assert "borders-and-claims.md" in architecture
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-28" in factory
+    assert "through V4-30" in factory
     assert "borders-and-claims.md" in factory
     description = _read(".ai-factory/DESCRIPTION.md")
     assert "Borders and claims (V4-13)" in description

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 
 import pytest
 
@@ -102,20 +103,52 @@ def test_state_round_trips_with_pinned_forecasts() -> None:
     assert encode_scientific_model_state(decoded) == payload
 
 
-def test_digest_tracks_content_not_count() -> None:
+def test_digest_tracks_same_count_content_changes() -> None:
     ledger = _ledger()
     digest = scientific_model_state_digest(ledger)
     case = ledger.cases[0]
     prediction = case.predictions[0]
-    tampered_ledger = copy.deepcopy(ledger)
-    tampered_case = tampered_ledger.cases[0]
-    assert tampered_case.predictions[0] != prediction or True
-    payload = encode_scientific_model_state(ledger)
-    changed = copy.deepcopy(payload)
-    changed["ledger"]["cases"][0]["predictions"][0]["probabilities_milli"][0] += 1
-    with pytest.raises(ScientificModelCheckpointError):
-        decode_scientific_model_state(changed, _OWNER)
-    assert scientific_model_state_digest(tampered_ledger) == digest
+    predicted_index = prediction.alphabet.index(prediction.predicted_class)
+    changed: tuple[int, ...] | None = None
+    for donor in range(len(prediction.probabilities_milli)):
+        for receiver in range(len(prediction.probabilities_milli)):
+            if donor == receiver or prediction.probabilities_milli[donor] <= 0:
+                continue
+            candidate = list(prediction.probabilities_milli)
+            candidate[donor] -= 1
+            candidate[receiver] += 1
+            winner = max(
+                range(len(candidate)),
+                key=lambda index: (candidate[index], -index),
+            )
+            if prediction.alphabet[winner] == prediction.predicted_class:
+                changed = tuple(candidate)
+                break
+        if changed is not None:
+            break
+    assert changed is not None
+    assert sum(changed) == 1000
+    mutated_prediction = dataclasses.replace(
+        prediction,
+        probabilities_milli=changed,
+        confidence_milli=changed[predicted_index],
+    )
+    mutated_case = dataclasses.replace(
+        case,
+        predictions=(mutated_prediction, *case.predictions[1:]),
+    )
+    mutated_ledger = dataclasses.replace(
+        ledger,
+        cases=(mutated_case, *ledger.cases[1:]),
+    )
+
+    assert len(mutated_ledger.cases) == len(ledger.cases)
+    assert scientific_model_state_digest(mutated_ledger) != digest
+    assert encode_scientific_model_state(
+        decode_scientific_model_state(
+            encode_scientific_model_state(mutated_ledger), _OWNER
+        )
+    ) == encode_scientific_model_state(mutated_ledger)
 
 
 def test_unknown_keys_versions_and_foreign_owners_fail_closed() -> None:

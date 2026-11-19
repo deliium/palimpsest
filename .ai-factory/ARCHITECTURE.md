@@ -174,22 +174,22 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-28
+### Current baseline through V4-30
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v57` for measurement instruments (the v56 family root plus one mandatory sibling); accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 256 (V4-24's 228, V4-25's 236, V4-26's 244, six V4-27 scientific-hypothesis families, plus six V4-28 scientific-replication families; the V4-27 landing reported 250 metric families) |
-| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V27` / `v25` when the travel-network channel is active; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
-| Subjective pending codec | `finalization-command-v3` adds `measurement-state-v1` to the v2 science/replication state; default is `finalization-command-v1` and this is not a world replay codec |
+| Metric families | 262 (V4-24's 228, V4-25's 236, V4-26's 244, 250 after V4-27, 256 after V4-28, plus six V4-30 predictive families) |
+| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V28` / `v26` when measurement instruments are active; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
+| Subjective pending codec | `finalization-command-v4` adds `scientific-model-state-v1` to the v3 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 256 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 262 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 

@@ -77,7 +77,7 @@ def test_current_counts_and_routes_match_code() -> None:
     assert "204" in _read("docs/analysis-metrics.md")
     assert "250 metric families" in _read("docs/architecture.md")
     assert "208" in _read("docs/architecture.md")
-    assert "250 metric families" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "262 metric families" in _read(".ai-factory/ARCHITECTURE.md")
     assert "208" in _read(".ai-factory/ARCHITECTURE.md")
     api = _read("docs/research-api.md")
     for route in (

@@ -427,3 +427,52 @@ v4; measurement event 28/`v26`, travel event 27/`v25`; `/v1`;
 - Completed-result metric documents were exercised directly rather than through
   `assemble_arm_metric_bundle`; the collector injection exists but lacks a
   dedicated end-to-end assertion.
+
+### Post-verification remediation (2026-11-19)
+
+`$aif-verify` found no blocking behavior defect but closed three verification
+gaps:
+
+- Added `tests/integration/test_scientific_models_store_api.py`: a real
+  40-tick runner artifact is published through the filesystem store and read
+  through the production `create_app` factory across all eight routes, two
+  issuance windows, one-row pagination, and a cursor that stays pinned to
+  publication A after B becomes latest; repeated reads leave store bytes
+  unchanged.
+- Strengthened `test_scientific_models_checkpoint.py` so a same-count,
+  valid probability-vector change provably alters the canonical state digest,
+  and added a fork-digest test in `test_scientific_models_recovery.py` that
+  proves predictive content participates in `fork_state_digest`.
+- Updated the `ARCHITECTURE.md` current baseline to V4-30 pins (262 families,
+  replay 28/`v26` when measurement is active, pending v4 with v1 default).
+
+Re-ran the focused scientific-model, pin, architecture and integration lanes:
+focused unit/architecture 208 passed plus the temporal log-capture suite
+14 passed; both real integration tests passed; `ruff check src tests` passed;
+`git diff --check` clean. Remaining warnings are unchanged: no production
+real-run prefix, no `assemble_arm_metric_bundle` end-to-end assertion, the
+coverage-enabled full run and pnpm `check`/`build` lanes were not executed, and
+the roadmap landing entries remain an owner handoff.
+
+### Additional remediation (2026-11-19)
+
+Closed the remaining verification warnings that were actionable locally:
+
+- `$aif-verify` follow-up added twin/divergent fork-ledger settlement coverage
+  and a retired-owner export test in `test_scientific_models_recovery.py`.
+- `tests/integration/test_scientific_models_runner.py` now drives the real
+  collector/builder path through `assemble_arm_metric_bundle` and asserts all six
+  scientific-model families and counts.
+- Fixed the Research UI view union so `scientific-models` is a first-class
+  selection; `pnpm test` (343 tests), `pnpm check` (0 errors/warnings) and
+  `pnpm build` now pass via `npx pnpm@10.34.9`.
+- Added V4-28, V4-29 and V4-30 landing entries to `.ai-factory/ROADMAP.md`.
+- Re-ran focused scientific-model, pin and both integration lanes successfully.
+
+Remaining limitation: no controlled production-mechanism real run. A probe of
+the autonomous `models-production` arm (96 ticks, with a visible tool item)
+formed no production hypotheses, confirming that this lane requires a separate
+controlled prefix rather than being claimed from autonomous behavior. The
+coverage-enabled full suite on the corrected revision completed with
+**12,707 passed, 1 skipped, 80% branch coverage** (46:25); Research UI
+`pnpm test` (343), `pnpm check` (0 errors/warnings) and `pnpm build` also pass.

@@ -58,8 +58,8 @@ def test_metric_and_surface_docs() -> None:
 
 def test_architecture_baseline_through_v4_17() -> None:
     factory = _read(".ai-factory/ARCHITECTURE.md")
-    assert "through V4-28" in factory
-    assert "| Metric families | 256" in factory
+    assert "through V4-30" in factory
+    assert "| Metric families | 262" in factory
     assert "infrastructure_networks" in factory
     v4 = _read("docs/v4-architecture.md")
     assert "208 families" in v4

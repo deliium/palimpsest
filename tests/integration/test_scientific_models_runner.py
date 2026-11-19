@@ -138,3 +138,34 @@ async def test_real_runner_produces_scored_prior_forecasts_and_comparison() -> N
     assert documents[0].values["model_count"] >= 2
     assert documents[1].values["prediction_count"] >= 3
     assert documents[2].values["observed_case_count"] >= 3
+
+    # The completed result reaches the real collector and builder path, not
+    # only direct metric calls.
+    from types import SimpleNamespace
+
+    from experiments.collectors import assemble_arm_metric_bundle
+
+    config = _config()
+    arm = SimpleNamespace(
+        assignment=SimpleNamespace(
+            run_id=RunId("run-scientific-models-integration"),
+            condition_id="models-season-resource",
+            runner_config=config,
+        ),
+        runner_result=result,
+        config_fingerprint="a" * 64,
+    )
+    bundle = assemble_arm_metric_bundle(arm)
+    families = {document.metric_family: document for document in bundle.documents}
+    assert {
+        "scientific_model_structure",
+        "scientific_model_predictions",
+        "scientific_model_observed_outcomes",
+        "scientific_model_calibration",
+        "scientific_model_revisions",
+        "scientific_model_comparison",
+    } <= set(families)
+    assert families["scientific_model_predictions"].values["prediction_count"] >= 3
+    assert families["scientific_model_observed_outcomes"].values[
+        "observed_case_count"
+    ] >= 3

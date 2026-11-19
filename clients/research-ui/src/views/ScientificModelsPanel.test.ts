@@ -60,7 +60,7 @@ describe('ScientificModelsPanel', () => {
         return Promise.resolve(json(summary))
       }),
     )
-    const mounted = render(ScientificModelsPanel, {
+    const mounted = render(ScientificModelsPanel as never, {
       runId: 'run-1',
       selection: selection(),
     })
@@ -83,7 +83,7 @@ describe('ScientificModelsPanel', () => {
         ),
       ),
     )
-    const mounted = render(ScientificModelsPanel, {
+    const mounted = render(ScientificModelsPanel as never, {
       runId: 'run-1',
       selection: selection(),
     })

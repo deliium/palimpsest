@@ -191,10 +191,13 @@ restart or capacity claim is made.
 
 ```bash
 uv run --frozen --python 3.12.14 pytest -q tests/unit/test_scientific_models_*.py
-uv run --frozen --python 3.12.14 pytest -q -m integration tests/integration/test_scientific_models_runner.py
+uv run --frozen --python 3.12.14 pytest -q -m integration tests/integration/test_scientific_models_runner.py tests/integration/test_scientific_models_store_api.py
 uv run --frozen --python 3.12.14 ruff check src tests
 uv run --frozen --python 3.12.14 mypy src tests
 uv run --frozen --python 3.12.14 lint-imports
+pnpm --dir clients/research-ui test
+pnpm --dir clients/research-ui check
+pnpm --dir clients/research-ui build
 ```
 
 ## See also
