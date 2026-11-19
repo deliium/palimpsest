@@ -230,4 +230,4 @@ and [Research UI](research-ui.md).
 - [Long-horizon scalability](long-horizon-scalability.md) — measured scale envelope
 - [Development](development.md) — exact verification commands
 
-Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

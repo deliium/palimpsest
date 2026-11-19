@@ -96,7 +96,7 @@ def test_tokens_match_code_and_docs() -> None:
 def test_active_catalog_is_228() -> None:
     from analysis.specifications import METRIC_FAMILY_COUNT
 
-    assert METRIC_FAMILY_COUNT == 256
+    assert METRIC_FAMILY_COUNT == 262
     for path in (
         "docs/credit-relationships.md",
         "docs/analysis-metrics.md",
@@ -179,4 +179,4 @@ def test_experiment_is_off_gate() -> None:
 def test_historical_counts_are_not_active_pins() -> None:
     metrics = _read("docs/analysis-metrics.md")
     assert "208 -> 212" in metrics or "208 -> **212**" in metrics
-    assert "Closed catalog cardinality: **256**" in metrics
+    assert "Closed catalog cardinality: **262**" in metrics

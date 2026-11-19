@@ -153,4 +153,4 @@ Optional V3 civilization overlays (regions, settlements, migration, completed-ex
 - [Scientific models](docs/scientific-models.md)
 - [Measurement instruments](docs/measurement-instruments.md)
 
-Current catalog: 256 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v5`; 9 owned / 3 unowned; replay-v27/codec `v25`; Alembic `0017`.
+Current catalog: 262 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 9 owned / 3 unowned; replay-v27/codec `v25`; Alembic `0017`.

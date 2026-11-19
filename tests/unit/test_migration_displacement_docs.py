@@ -36,7 +36,7 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_180_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **256**" in metrics
+    assert "Closed catalog cardinality: **262**" in metrics
     for family in (
         "migration_wave_structure@1",
         "migration_cause_evidence@1",
@@ -142,7 +142,7 @@ def test_no_forbidden_authority_wording_in_canonical_doc() -> None:
 
 def test_current_pin_guard_preserves_historical_176() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **256**" in metrics
+    assert "Closed catalog cardinality: **262**" in metrics
     assert "208" in metrics
     assert "from 176 to\n**180**" in metrics or "208" in metrics
     assert "Closed catalog cardinality: **176**" not in metrics

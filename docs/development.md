@@ -632,7 +632,7 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 256 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
+Current catalog: 262 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
 
 V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v6`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
 

@@ -44,9 +44,9 @@ ACCOUNTING_FAMILIES = (
 
 
 def test_catalog_appends_four_accounting_families_after_220() -> None:
-    assert METRIC_FAMILY_COUNT == 256
+    assert METRIC_FAMILY_COUNT == 262
     specs = all_metric_specifications()
-    assert len(specs) == 256
+    assert len(specs) == 262
     assert tuple(spec.family_id.value for spec in specs[216:220]) == ACCOUNTING_FAMILIES
     assert all(spec.algorithm_version == "1" for spec in specs[216:220])
 

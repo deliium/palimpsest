@@ -24,7 +24,9 @@ def _text(relative: str) -> str:
 
 def test_cognition_predictive_modules_import_no_authority() -> None:
     for module in (contracts, lifecycle, observation, prediction, scoring):
-        source = Path(module.__file__).read_text(encoding="utf-8")
+        filename = module.__file__
+        assert filename is not None
+        source = Path(filename).read_text(encoding="utf-8")
         for forbidden in (
             "world._",
             "simulation",

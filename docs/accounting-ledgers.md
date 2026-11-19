@@ -187,4 +187,4 @@ unowned. The off-gate experiment is `accounting_ledgers@1`.
 - [Analysis metrics](analysis-metrics.md)
 - [Research API](research-api.md)
 
-Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

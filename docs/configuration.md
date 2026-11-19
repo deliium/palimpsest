@@ -599,7 +599,7 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 256 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 

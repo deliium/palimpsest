@@ -44,12 +44,12 @@ def test_prediction_and_outcome_rows_are_distinct() -> None:
     )
     assert analysis.predictions
     assert analysis.outcomes
-    for row in analysis.predictions:
-        assert type(row) is PriorPredictionFact
-        assert not hasattr(row, "observed_class")
-    for row in analysis.outcomes:
-        assert type(row) is ObservedModelOutcomeFact
-        assert not hasattr(row, "probabilities_milli")
+    for prediction_row in analysis.predictions:
+        assert type(prediction_row) is PriorPredictionFact
+        assert not hasattr(prediction_row, "observed_class")
+    for outcome_row in analysis.outcomes:
+        assert type(outcome_row) is ObservedModelOutcomeFact
+        assert not hasattr(outcome_row, "probabilities_milli")
 
 
 def test_analysis_carries_no_truth_or_quality_score_fields() -> None:

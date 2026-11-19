@@ -35,9 +35,9 @@ def test_canonical_doc_exists_and_is_linked() -> None:
 
 
 def test_metric_and_surface_docs() -> None:
-    assert METRIC_FAMILY_COUNT == 256
+    assert METRIC_FAMILY_COUNT == 262
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **256**" in metrics
+    assert "Closed catalog cardinality: **262**" in metrics
     for family in (
         "infrastructure_network_structure@1",
         "infrastructure_condition_lifecycle@1",

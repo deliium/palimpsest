@@ -20,8 +20,8 @@ pytestmark = pytest.mark.unit
 
 def test_catalog_appends_exactly_four_families() -> None:
     specifications = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 256
-    assert len(specifications) == 256
+    assert METRIC_FAMILY_COUNT == 262
+    assert len(specifications) == 262
     assert [spec.family_id for spec in specifications[212:216]] == [
         MetricFamilyId.CREDIT_RELATIONSHIP_FORMATION,
         MetricFamilyId.CREDIT_REPAYMENT_PERFORMANCE,

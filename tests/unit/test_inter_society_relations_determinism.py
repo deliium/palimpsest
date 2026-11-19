@@ -170,7 +170,12 @@ def test_forbidden_field_names_fail_closed_on_rows_and_metrics() -> None:
             excinfo.value.reason_code
             == "inter_society_relations_forbidden_result_field"
         )
-    for family in all_metric_specifications()[-4:]:
+    for family in (
+        spec
+        for spec in all_metric_specifications()
+        if spec.family_id.value.startswith("inter_society_relations")
+        or spec.family_id.value == "inter_society_relation_lanes"
+    ):
         assert INTER_SOCIETY_RELATIONS_FORBIDDEN_RESULT_FIELDS.isdisjoint(
             family.value_keys
         )
