@@ -843,3 +843,28 @@ nine owned / three unowned, 45 commands, 73 observer semantic types,
 replay-v27/codec `v25` unless measurement is active (then 28/`v26`), `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2, latest
 opt-in runner v57. See `docs/measurement-instruments.md`.
+
+V4-30 (scientific models, 2026-11-19) deepens the owned `science` context with
+owner-scoped predictive models. Activation requires `predictive_world_model`
+and a `bounded_experimentation` spec; `science=False` is inert. A
+`ScientificModelLedger` under `scientific-models.v1` derives typed hypotheses
+from owner-observed season/resource regularities or existing experimental
+hypotheses and issues two frozen candidates per case (baseline 2/1 vs
+Laplace-smoothed exact-context counts), with probabilities summing to 1000
+milli. Forecasts are committed at tick `t`, target observation `t+2`, and
+production binds the final effective `Experiment` at `t+1`; observed outcomes,
+ten-bin calibration, revisions and three-pair descriptive comparisons remain
+owner-scoped. Disease remains unavailable. Pending transitions use
+`finalization-command-v4` with `scientific-model-state-v1`; default pending stays
+v1 and v1–v3 are unchanged. Detached analysis appends six families
+(`scientific_model_structure` through `scientific_model_comparison`) raising the
+catalog 256 -> **262**. `scientific-models-snapshot-v1` /
+`scientific-models-store-v1` publish programmatically and atomically; eight
+GET-only dual-gated routes and a read-only Research UI panel expose them. No new
+capability flag/context, command, event, replay pair, migration or Godot overlay
+is added. Off-gate experiment `scientific_models@1` has four arms. Pins: 262
+metric families, 17 V4 contexts, 12 flags (nine owned/three unowned),
+`v4-context-map-v6`, 45 commands, 73 observer semantic types, runner v4/v55/v56
+with latest opt-in v57, pending v1 default/v4 predictive, replay 27/`v25` travel
+and 28/`v26` measurement, `/v1`, `observer-protocol-v1`, Alembic `0017`; default
+runner/result v4/v2. See `docs/scientific-models.md`.

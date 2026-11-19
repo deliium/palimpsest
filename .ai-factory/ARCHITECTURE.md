@@ -1326,3 +1326,24 @@ conservative command compiler. `Measure`/`CalibrateInstrument` are ordinary
 commands; only `WorldEngine` changes instrument condition. Readings are actor
 displays, never target truth. Active runs use event 28 / codec `v26`, domain
 envelope 2 and pending v3; absent-spec runs retain every previous pair.
+
+### V4-30 scientific-models seam
+
+`world` retains authority; predictive models are owner-scoped cognition.
+`agents.cognition.scientific_models` owns frozen physical/forecast contracts;
+`scientific_model_derivation`, `_prediction`, `_scoring`, `_observation`,
+`_lifecycle` and `_binding` own pure owner transitions. `simulation
+.scientific_model_checkpoint` owns `scientific-model-state-v1`; pending
+transitions use `finalization-command-v4` with predictive state mandatory and
+replication/experiment correlated. `analysis.scientific_models_*` is detached
+and recomputes scoring without importing cognition; it appends exactly six
+families (catalog 262). `experiments.scientific_models_*` is the trusted
+completed-run and publication bridge. `persistence.scientific_models_filesystem`
+implements separate read/publication ports with atomic quota-bounded writes;
+`api.routes.scientific_models` serves eight GET-only `SUBJECTIVE_DEBUG` routes.
+Readings are owner observations, never target truth; disease is unavailable.
+No new flag/context, command, event, replay pair, migration or Godot overlay is
+added. Pins: 262 families, 17 contexts, 12 flags (nine owned), `v4-context-map-v6`,
+45 commands, 73 observer semantic types, runner v4/v55/v56 with latest opt-in
+v57, pending v1 default/v4 predictive, replay 27/`v25` and 28/`v26`,
+`/v1`, `observer-protocol-v1`, Alembic `0017`. See `docs/scientific-models.md`.
