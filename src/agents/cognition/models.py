@@ -775,6 +775,7 @@ class SubjectiveSnapshot:
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
     scientific_model_ledger: object | None = None
+    competing_theory_ledger: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.owner_id) is not AgentId:
@@ -4065,6 +4066,7 @@ class CognitiveLoopProposal:
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
     scientific_model_ledger: object | None = None
+    competing_theory_ledger: object | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -4444,6 +4446,7 @@ class CognitiveLoopResult:
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
     scientific_model_ledger: object | None = None
+    competing_theory_ledger: object | None = None
     organized_conflict_audits: tuple[object, ...] | None = None
 
     def __post_init__(self) -> None:

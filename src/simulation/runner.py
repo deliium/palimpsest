@@ -5480,6 +5480,7 @@ class SimulationRunner:
             experiment_ledgers=(self.export_experiment_ledgers()),
             replication_ledgers=(self.export_replication_ledgers()),
             scientific_model_ledgers=(self.export_scientific_model_ledgers()),
+            competing_theory_ledgers=(self.export_competing_theory_ledgers()),
             dispute_ledgers=(self.export_dispute_ledgers()),
             evidence_ledgers=(self.export_evidence_ledgers()),
             representation_ledgers=(self.export_representation_ledgers()),
@@ -5982,6 +5983,25 @@ class SimulationRunner:
             ledgers.append(ledger)
         _LOG.info(
             "runner_scientific_model_ledger_export ledger_count=%s",
+            len(ledgers),
+        )
+        return tuple(ledgers)
+
+    def export_competing_theory_ledgers(self) -> tuple[object, ...]:
+        """Export owner-ordered competing-theory sidecars, including retired owners."""
+        ledgers: list[object] = []
+        for runtime in self._runtimes:
+            checkpoint = runtime.export_runtime_checkpoint()
+            ledger = getattr(checkpoint, "competing_theory_ledger", None)
+            if ledger is None:
+                record = getattr(runtime, "retired_record", None)
+                retired_checkpoint = getattr(record, "runtime_checkpoint", None)
+                ledger = getattr(retired_checkpoint, "competing_theory_ledger", None)
+            if ledger is None:
+                continue
+            ledgers.append(ledger)
+        _LOG.info(
+            "runner_competing_theory_ledger_export ledger_count=%s",
             len(ledgers),
         )
         return tuple(ledgers)
@@ -7827,10 +7847,19 @@ def _blank_slate_counts(cognitive_loop: object) -> BlankSlateStoreCounts:
         scientific_model_content_count,
     )
 
+    theory_probe = getattr(
+        cognitive_loop, "competing_theory_ledger_if_present", None
+    )
+    theory_ledger = theory_probe() if callable(theory_probe) else None
+    from agents.cognition.competing_theories import (
+        competing_theory_content_count,
+    )
+
     return BlankSlateStoreCounts(
         replication_ledger=replication_total,
         measurement_ledger=measurement_total,
         scientific_model_ledger=scientific_model_content_count(model_ledger),
+        competing_theory_ledger=competing_theory_content_count(theory_ledger),
     )
 
 
@@ -7881,6 +7910,25 @@ def _command_from_pending_record(
         )
     command = decode_finalization_command(record.payload)
     assert type(command) is FinalizationCommand
+    if (
+        command.codec_version != record.codec_version
+        or command.run_id != record.run_id
+        or command.agent_id.value != record.agent_id
+        or command.tick != record.tick
+        or command.invocation_id != record.invocation_id
+        or command.integrity_hash != record.integrity_hash
+    ):
+        _LOG.error(
+            "runner_recovery_corrupt run_id=%s code=pending_identity "
+            "invocation_id=%s codec_version=%s",
+            record.run_id.value,
+            record.invocation_id,
+            record.codec_version,
+        )
+        raise RunnerConstructionError(
+            RunnerConstructionErrorCode.INVALID_CONFIG,
+            stage="pending_identity",
+        )
     return command
 
 

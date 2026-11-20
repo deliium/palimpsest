@@ -299,7 +299,16 @@ class PendingRuntimeFinalization:
         scientific_model_candidate = getattr(
             self.loop_result, "scientific_model_ledger", None
         )
-        if scientific_model_candidate is not None:
+        competing_theory_candidate = getattr(
+            self.loop_result, "competing_theory_ledger", None
+        )
+        if competing_theory_candidate is not None:
+            from simulation.run_control import (
+                FINALIZATION_COMMAND_CODEC_VERSION_V5,
+            )
+
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V5
+        elif scientific_model_candidate is not None:
             codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V4
         elif measurement_candidate is not None:
             from simulation.run_control import (
@@ -335,6 +344,7 @@ class PendingRuntimeFinalization:
             experiment_ledger=experiment_candidate,
             measurement_ledger=measurement_candidate,
             scientific_model_ledger=scientific_model_candidate,
+            competing_theory_ledger=competing_theory_candidate,
         )
 
 
@@ -370,6 +380,7 @@ def pending_from_finalization_command(command: object) -> PendingRuntimeFinaliza
         replication_ledger=command.replication_ledger,
         measurement_ledger=command.measurement_ledger,
         scientific_model_ledger=command.scientific_model_ledger,
+        competing_theory_ledger=command.competing_theory_ledger,
     )
     return PendingRuntimeFinalization(
         observation_key=command.observation_key,
@@ -3078,6 +3089,19 @@ class AgentRuntime:
             candidate_digest += ":" + scientific_model_state_digest(
                 _cast_sm(_SML, loop_result.scientific_model_ledger)
             )
+        if getattr(loop_result, "competing_theory_ledger", None) is not None:
+            from typing import cast as _cast_ct
+
+            from agents.cognition.competing_theories import (
+                CompetingTheoryLedger as _CTL,
+            )
+            from simulation.competing_theory_checkpoint import (
+                competing_theory_state_digest,
+            )
+
+            candidate_digest += ":" + competing_theory_state_digest(
+                _cast_ct(_CTL, loop_result.competing_theory_ledger)
+            )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -3472,6 +3496,13 @@ class AgentRuntime:
         if scientific_model_candidate is not None:
             self._loop.restore_scientific_model_ledger(
                 scientific_model_candidate, self._agent.agent_id
+            )
+        competing_theory_candidate = getattr(
+            pending.loop_result, "competing_theory_ledger", None
+        )
+        if competing_theory_candidate is not None:
+            self._loop.restore_competing_theory_ledger(
+                competing_theory_candidate, self._agent.agent_id
             )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
@@ -4083,6 +4114,13 @@ class AgentRuntime:
             self._loop.restore_scientific_model_ledger(
                 scientific_model_ledger, self._agent.agent_id
             )
+        competing_theory_ledger = getattr(
+            checkpoint, "competing_theory_ledger", None
+        )
+        if competing_theory_ledger is not None:
+            self._loop.restore_competing_theory_ledger(
+                competing_theory_ledger, self._agent.agent_id
+            )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
             self._disputes is not None
@@ -4245,6 +4283,9 @@ class AgentRuntime:
             measurement_ledger=self._loop.measurement_ledger_if_present(),
             scientific_model_ledger=(
                 self._loop.scientific_model_ledger_if_present()
+            ),
+            competing_theory_ledger=(
+                self._loop.competing_theory_ledger_if_present()
             ),
             disputes=self._disputes,
             evidence=self._evidence,

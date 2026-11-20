@@ -191,6 +191,8 @@ SUBJECTIVE_COPY_DENY_LIST: Final[frozenset[str]] = frozenset(
         "measurement_ledgers",
         "scientific_model_ledger",
         "scientific_model_ledgers",
+        "competing_theory_ledger",
+        "competing_theory_ledgers",
     }
 )
 
@@ -227,6 +229,7 @@ BLANK_SLATE_SUBJECTIVE_STORES: Final[tuple[str, ...]] = (
     "replication_ledger",
     "measurement_ledger",
     "scientific_model_ledger",
+    "competing_theory_ledger",
 )
 
 CREATION_REASON_CODES: Final[frozenset[str]] = frozenset(
@@ -899,6 +902,7 @@ class BlankSlateStoreCounts:
     experiment_ledger: int = 0
     measurement_ledger: int = 0
     scientific_model_ledger: int = 0
+    competing_theory_ledger: int = 0
     possession_legitimacy: int = 0
     structured_commitments: int = 0
     subjective_valuations: int = 0

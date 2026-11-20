@@ -317,6 +317,8 @@ class CognitiveLoop:
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
+        "_competing_theory_enabled",
+        "_competing_theory_ledger",
         "_consolidation_mode",
         "_consolidation_policy",
         "_consolidation_selector",
@@ -1232,6 +1234,8 @@ class CognitiveLoop:
         self._scientific_model_enabled = (
             scientific_mode is not CognitionScientificHypothesesMode.DISABLED
         )
+        self._competing_theory_ledger: object | None = None
+        self._competing_theory_enabled = self._scientific_model_enabled
         self._measurement_ledger = None
         self._measurement_enabled = False
         from agents.cognition.configuration import CognitionDisputeMode
@@ -4903,6 +4907,28 @@ class CognitiveLoop:
         self._scientific_model_ledger = ledger
         self._scientific_model_enabled = True
 
+    def competing_theory_ledger_if_present(self) -> object | None:
+        """Return the committed competing-theory sidecar without constructing one."""
+
+        return self._competing_theory_ledger
+
+    def restore_competing_theory_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install another already-staged committed theory sidecar once."""
+
+        if ledger is None:
+            self._competing_theory_ledger = None
+            return
+        from agents.cognition.competing_theories import CompetingTheoryLedger
+
+        if type(ledger) is not CompetingTheoryLedger:
+            raise ValueError("competing_theory_ledger: invalid_type")
+        if owner_id is not None and ledger.owner_id != owner_id:
+            raise ValueError("competing_theory_ledger: owner mismatch")
+        self._competing_theory_ledger = ledger
+        self._competing_theory_enabled = True
+
     def _remember_experiments(
         self, loop_input: object, ledger: ExperimentLedger | None = None
     ) -> ExperimentLedger | None:
@@ -7431,10 +7457,41 @@ class CognitiveLoop:
                     proposal.agent_id
                 )
             assert type(scientific_model_candidate) is ScientificModelLedger
+            previous_scientific_models = scientific_model_candidate
             scientific_model_candidate = advance_scientific_models(
                 scientific_model_candidate,
                 loop_input.observation,
                 experiment_ledger=experiment_candidate,
+            )
+        else:
+            previous_scientific_models = None
+        competing_theory_candidate = None
+        if self._competing_theory_enabled and scientific_model_candidate is not None:
+            from agents.cognition.competing_theories import (
+                CompetingTheoryLedger,
+                empty_competing_theory_ledger,
+            )
+            from agents.cognition.competing_theory_policy import (
+                advance_competing_theories,
+            )
+
+            competing_theory_candidate = (
+                getattr(snapshot, "competing_theory_ledger", None)
+                if snapshot is not None
+                else None
+            )
+            if type(competing_theory_candidate) is not CompetingTheoryLedger:
+                competing_theory_candidate = self._competing_theory_ledger
+            if competing_theory_candidate is None:
+                competing_theory_candidate = empty_competing_theory_ledger(
+                    proposal.agent_id
+                )
+            assert type(competing_theory_candidate) is CompetingTheoryLedger
+            competing_theory_candidate = advance_competing_theories(
+                competing_theory_candidate,
+                loop_input.observation,
+                previous_scientific_models=previous_scientific_models,
+                scientific_models=scientific_model_candidate,
             )
         protected_replication_ids: frozenset[str] = frozenset()
         if replication_candidate is not None:
@@ -7986,6 +8043,48 @@ class CognitiveLoop:
                     AgentCommand,
                     attach_measurement_report(command, measurement_report),
                 )
+        if competing_theory_candidate is not None and type(command) in (Talk, Tell):
+            from agents.cognition.competing_theory_communication import (
+                attach_theory_message,
+            )
+            from agents.cognition.competing_theory_policy import (
+                record_theory_outbound,
+                select_theory_speech,
+            )
+
+            announcement_ledger = self._competing_theory_ledger
+            if announcement_ledger is None and snapshot is not None:
+                announcement_ledger = getattr(
+                    snapshot, "competing_theory_ledger", None
+                )
+            if announcement_ledger is not None:
+                recipient_id = getattr(command, "recipient_id", None)
+                selected_theory = select_theory_speech(
+                    cast(Any, announcement_ledger),
+                    command,
+                    recipient_entity_id=(
+                        None
+                        if recipient_id is None
+                        else str(getattr(recipient_id, "value", recipient_id))
+                    ),
+                )
+                if selected_theory is not None:
+                    theory_message, theory_stance = selected_theory
+                    attached_command = attach_theory_message(
+                        command, theory_message
+                    )
+                    if attached_command is not command:
+                        command = cast(AgentCommand, attached_command)
+                        competing_theory_candidate = record_theory_outbound(
+                            competing_theory_candidate,
+                            recipient_entity_id=str(
+                                getattr(recipient_id, "value", recipient_id)
+                            ),
+                            stance=theory_stance,
+                            act=theory_message.act,
+                            frame_digest=theory_message.frame_digest,
+                            send_tick=loop_input.observation.tick,
+                        )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -8061,6 +8160,7 @@ class CognitiveLoop:
             replication_ledger=replication_candidate,
             measurement_ledger=measurement_candidate,
             scientific_model_ledger=scientific_model_candidate,
+            competing_theory_ledger=competing_theory_candidate,
         )
         _LOG.debug(
             "cognitive_loop_complete",

@@ -93,6 +93,7 @@ def test_deny_list_covers_locked_stores() -> None:
         "replication_ledger",
         "measurement_ledger",
         "scientific_model_ledger",
+        "competing_theory_ledger",
     )
 
 

@@ -654,6 +654,16 @@ def fork_state_digest(checkpoint: RunnerForkCheckpoint) -> str:
             )
 
             scientific_digest = scientific_model_state_digest(model_ledger)
+        theory_digest = None
+        theory_ledger = getattr(
+            runtime_state.checkpoint, "competing_theory_ledger", None
+        )
+        if theory_ledger is not None:
+            from simulation.competing_theory_checkpoint import (
+                competing_theory_state_digest,
+            )
+
+            theory_digest = competing_theory_state_digest(theory_ledger)
         runtimes.append(
             {
                 "agent_id": runtime_state.checkpoint.agent_id.value,
@@ -726,6 +736,11 @@ def fork_state_digest(checkpoint: RunnerForkCheckpoint) -> str:
                 **(
                     {"scientific_model_state_digest": scientific_digest}
                     if scientific_digest is not None
+                    else {}
+                ),
+                **(
+                    {"competing_theory_state_digest": theory_digest}
+                    if theory_digest is not None
                     else {}
                 ),
             }
