@@ -357,7 +357,7 @@ cross-society flows, and analytical network lineage. It provides a
 `trade_networks_disabled` plus an empty state without inventing a network. It
 never displays price, money, a composite trade score, or a planned route.
 
-Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated economic-inequality routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
@@ -388,3 +388,17 @@ labels predictive probability, owner-observed outcome, retained-cohort
 calibration, lower loss on paired observations and net resource change (not
 isolated regeneration). It never edits models, revises forecasts, triggers
 experiments or advances ticks. See [Scientific models](scientific-models.md).
+
+## Competing theories panel
+
+A read-only **Competing theories** panel renders published owner-scoped theory
+snapshots through the eight `competing-theories` routes (`subjective_debug`).
+Summary counts show claims and declared support edges; section tabs cover
+theories, declared support, citations, predictions, failures, transmission and
+coverage. Declared support and observed predictive performance are presented on
+separate axes with separate denominators, and citations/teaching are labelled as
+testimony rather than verified evidence. `competing_theories_disabled` renders as
+a disabled state and a missing run or publication renders separately. The panel
+pins the selected publication and cursor, ignores stale responses, exposes no
+champion/rank/score badge, performs no mutation and never advances ticks. See
+[Competing theories](competing-theories.md).

@@ -75,7 +75,7 @@ def test_routes_settings_and_pins() -> None:
     assert "PALIMPSEST_ACCOUNTING_LEDGERS_ROOT" in text
     assert "PALIMPSEST_ACCOUNTING_LEDGERS_CURSOR_KEY" in text
     for pin in (
-        "262 metric families",
+        "268 metric families",
         "43",
         "73",
         "replay-v27",

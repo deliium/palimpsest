@@ -191,4 +191,4 @@ they are not advertised as common-random-number isolation.
 - [Cultural evolution metrics](cultural-evolution-metrics.md) — repeated-seed blocks and paired contrasts
 - [Experiments](experiments.md) — trusted catalog, Matrix runner, off-gate experiment policy
 
-Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

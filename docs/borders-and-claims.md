@@ -113,4 +113,4 @@ grid, polygon, territory registry, `Border` class, new event/command/write
 pair/migration, `/v2` route, or `observer-protocol-v2` exists. Analysis never
 mints, renames, splits, merges, or dissolves `org-` or `msoc-` identities.
 
-Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

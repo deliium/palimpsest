@@ -632,7 +632,7 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 262 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
+Current catalog: 268 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25`; Alembic `0017`.
 
 V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v6`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
 
@@ -660,3 +660,18 @@ season/resource science arm and proves subsequent observed outcomes, paired
 comparison, two issuance windows, snapshot publication/read and six metric
 documents. See [Scientific models](scientific-models.md). PostgreSQL, Compose/browser, Godot and scale lanes remain conditional
 and must be reported as unexecuted when their prerequisites are absent.
+
+## Competing-theory verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest -q tests/unit/test_competing_theories_*.py
+uv run --frozen --python 3.12.14 pytest -q tests/architecture/test_competing_theories_boundaries.py
+uv run --frozen --python 3.12.14 pytest -q -m integration tests/integration/test_competing_theories_runner.py
+```
+
+The focused suites cover claim identity, citations, stances, bounded speech,
+addressed support/teaching, frozen same-case forecasts and failures, finalization
+recovery, detached analysis, six metric families, canonical snapshots, atomic
+storage, routes and the off-gate scenario. The controlled and autonomous
+outcomes remain empirical; null runs are legal. See
+[Competing theories](competing-theories.md).

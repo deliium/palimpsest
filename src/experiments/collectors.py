@@ -340,6 +340,33 @@ def assemble_arm_metric_bundle(
             "scientific_models_collector_failed code=%s",
             getattr(exc, "code", type(exc).__name__),
         )
+    try:
+        from analysis.competing_theories_analysis import (
+            harvest_competing_theories_analysis,
+        )
+        from experiments.competing_theories_completed_run import (
+            build_completed_run_competing_theories_facts,
+        )
+
+        theory_ledgers = tuple(
+            getattr(arm.runner_result, "competing_theory_ledgers", ()) or ()
+        )
+        if theory_ledgers:
+            theory_facts = build_completed_run_competing_theories_facts(
+                arm.assignment.run_id.value, theory_ledgers
+            )
+            if theory_facts is not None:
+                inputs = replace(
+                    inputs,
+                    competing_theories_analysis=harvest_competing_theories_analysis(
+                        theory_facts
+                    ),
+                )
+    except Exception as exc:
+        _LOG.error(
+            "competing_theories_collector_failed code=%s",
+            getattr(exc, "code", type(exc).__name__),
+        )
     if events is not None:
         try:
             from types import SimpleNamespace

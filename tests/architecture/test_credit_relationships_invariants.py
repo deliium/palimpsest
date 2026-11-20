@@ -46,9 +46,9 @@ CREDIT_FAMILIES = (
 
 
 def test_catalog_appends_four_credit_families_after_212() -> None:
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     specs = all_metric_specifications()
-    assert len(specs) == 262
+    assert len(specs) == 268
     assert tuple(spec.family_id.value for spec in specs[212:216]) == CREDIT_FAMILIES
     assert all(spec.algorithm_version == "1" for spec in specs[212:216])
 

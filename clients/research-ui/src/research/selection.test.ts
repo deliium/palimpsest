@@ -201,6 +201,19 @@ describe('cohort selection', () => {
       expect(result.selection.view).toBe('scientific-hypotheses')
     }
   })
+
+  it('accepts the competing-theories run-scoped view', () => {
+    const result = parseResearchSelection(
+      '?run_id=run-1&view=competing-theories',
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.selection.view).toBe('competing-theories')
+      expect(buildResearchSelectionQuery(result.selection)).toContain(
+        'view=competing-theories',
+      )
+    }
+  })
 })
 
 describe('godot focus options', () => {

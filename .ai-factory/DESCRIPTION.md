@@ -858,13 +858,32 @@ owner-scoped. Disease remains unavailable. Pending transitions use
 `finalization-command-v4` with `scientific-model-state-v1`; default pending stays
 v1 and v1–v3 are unchanged. Detached analysis appends six families
 (`scientific_model_structure` through `scientific_model_comparison`) raising the
-catalog 256 -> **262**. `scientific-models-snapshot-v1` /
+catalog 256 -> **262**; V4-31 later raises it to **268**. `scientific-models-snapshot-v1` /
 `scientific-models-store-v1` publish programmatically and atomically; eight
 GET-only dual-gated routes and a read-only Research UI panel expose them. No new
 capability flag/context, command, event, replay pair, migration or Godot overlay
-is added. Off-gate experiment `scientific_models@1` has four arms. Pins: 262
+is added. Off-gate experiment `scientific_models@1` has four arms. Pins: 268
 metric families, 17 V4 contexts, 12 flags (nine owned/three unowned),
 `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner v4/v55/v56
 with latest opt-in v57, pending v1 default/v4 predictive, replay 27/`v25` travel
 and 28/`v26` measurement, `/v1`, `observer-protocol-v1`, Alembic `0017`; default
 runner/result v4/v2. See `docs/scientific-models.md`.
+
+V4-31 (competing theories, 2026-11-20) deepens the owned `science` context with
+owner-scoped, incompatible explanations. A `CompetingTheoryLedger` under
+`competing-theories.v1` holds content-addressed `continuity` and `recurrence`
+accounts over season or net visible resource-change contexts, attributed
+citations, explicit support/withdraw stances, addressed `thy_v1` speech and
+teaching receipts, and frozen same-case forecasts with observed hits or
+failures. Support and predictive accuracy remain independent; no global
+registry, consensus, winner or truth inference exists. Pending transitions use
+`finalization-command-v5` with `competing-theory-state-v1`. Detached analysis
+appends six families (262 -> **268**); `competing-theories-snapshot-v1` /
+`-store-v1` publish programmatically and atomically; eight GET-only dual-gated
+routes and a read-only Research UI panel expose them. Off-gate
+`competing_theories@1` has four arms. Pins: 268 metric families, 17 V4 contexts,
+12 flags (nine owned / three unowned), `v4-context-map-v6`, 45 commands, 73
+observer semantic types, runner v4/v55/v56 with latest opt-in v57, pending v1
+default/v5 competing, replay 27/`v25` and 28/`v26`, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
+`docs/competing-theories.md`.

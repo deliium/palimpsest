@@ -61,7 +61,7 @@ def test_readme_and_context_artifacts_link_the_page() -> None:
     assert "V4-24" in _read(".ai-factory/ARCHITECTURE.md")
     assert "economic-inequality" in _read(".ai-factory/ARCHITECTURE.md")
     assert "V4-24" in _read(".ai-factory/DESCRIPTION.md")
-    assert "262 metric families" in _read(".ai-factory/ARCHITECTURE.md")
+    assert "268 metric families" in _read(".ai-factory/ARCHITECTURE.md")
     assert "17 V4 contexts" in _read(".ai-factory/DESCRIPTION.md")
     configuration = _read("docs/configuration.md")
     assert "PALIMPSEST_ECONOMIC_INEQUALITY_ROOT" in configuration

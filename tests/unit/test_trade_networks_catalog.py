@@ -35,10 +35,10 @@ TRADE_FAMILIES = (
 
 
 def test_catalog_count_is_204() -> None:
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     catalog = validate_metric_catalog()
-    assert len(catalog) == 262
-    assert len(all_metric_specifications()) == 262
+    assert len(catalog) == 268
+    assert len(all_metric_specifications()) == 268
 
 
 def test_first_198_ids_order_versions_and_keys_are_unchanged() -> None:
@@ -51,7 +51,7 @@ def test_first_198_ids_order_versions_and_keys_are_unchanged() -> None:
     assert [spec.family_id for spec in first[192:]] == list(TRADE_FAMILIES)
     assert len(supply) == 6
     assert len(market) == 4
-    assert len({spec.family_id for spec in specs}) == 262
+    assert len({spec.family_id for spec in specs}) == 268
     for spec in first:
         assert spec.algorithm_version == "1"
         assert spec.value_keys

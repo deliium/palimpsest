@@ -71,7 +71,7 @@ def test_page_exists_and_carries_the_contract_tokens() -> None:
 
 def test_pins_match_the_live_registry() -> None:
     text = PAGE.read_text(encoding="utf-8")
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     assert "250" in text
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17

@@ -289,6 +289,10 @@ class Settings(BaseSettings):
     scientific_models_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    competing_theories_root: Path | None = None
+    competing_theories_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -574,6 +578,17 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("competing_theories_cursor_key")
+    @classmethod
+    def validate_competing_theories_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "competing_theories cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
     @field_validator("economic_cascades_cursor_key")
     @classmethod
     def validate_economic_cascades_cursor_key(
@@ -729,6 +744,17 @@ class Settings(BaseSettings):
             raw = self.test_database_url.get_secret_value()
             _validate_asyncpg_url(raw)
             _validate_disposable_test_database(raw)
+        return self
+
+    @model_validator(mode="after")
+    def validate_competing_theories_pairing(self) -> Settings:
+        if (self.competing_theories_root is None) != (
+            self.competing_theories_cursor_key is None
+        ):
+            raise ValueError(
+                "PALIMPSEST_COMPETING_THEORIES_ROOT and "
+                "PALIMPSEST_COMPETING_THEORIES_CURSOR_KEY must be set together"
+            )
         return self
 
     @model_validator(mode="after")

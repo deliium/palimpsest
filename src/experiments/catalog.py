@@ -5835,6 +5835,27 @@ def experiment_scientific_replication(
     return definition
 
 
+def experiment_competing_theories(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-31 experiment: coexisting and falsifiable explanations."""
+    from experiments.competing_theories_scenario import (
+        competing_theories_scenario,
+    )
+
+    definition = competing_theories_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=competing_theories@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
 def experiment_scientific_models(
     base: SimulationRunnerConfig,
     *,

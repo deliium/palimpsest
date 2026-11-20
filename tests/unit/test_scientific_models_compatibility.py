@@ -18,6 +18,7 @@ from simulation.run_control import (
     FINALIZATION_COMMAND_CODEC_VERSION_V2,
     FINALIZATION_COMMAND_CODEC_VERSION_V3,
     FINALIZATION_COMMAND_CODEC_VERSION_V4,
+    FINALIZATION_COMMAND_CODEC_VERSION_V5,
 )
 from simulation.runner import (
     RunnerDependencyFactories,
@@ -157,6 +158,7 @@ def test_predictive_versions_are_independent_of_runner_and_replay() -> None:
             FINALIZATION_COMMAND_CODEC_VERSION_V2,
             FINALIZATION_COMMAND_CODEC_VERSION_V3,
             FINALIZATION_COMMAND_CODEC_VERSION_V4,
+            FINALIZATION_COMMAND_CODEC_VERSION_V5,
         }
     )
     from world.events import EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V28
@@ -165,7 +167,7 @@ def test_predictive_versions_are_independent_of_runner_and_replay() -> None:
 
 
 def test_catalog_context_api_and_route_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert SCIENTIFIC_MODELS_ROUTE_COUNT == 8
     from simulation.scientific_models_models import (

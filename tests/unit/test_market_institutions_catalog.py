@@ -20,9 +20,9 @@ _BASELINE_DIGEST = "7b830c00ace8a044c0d65a28dd81448642bbb13a328c837e08420886cd73
 
 
 def test_catalog_has_212_families_and_validates() -> None:
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     specs = validate_metric_catalog()
-    assert len(specs) == 262
+    assert len(specs) == 268
 
 
 def test_first_204_specifications_are_unchanged() -> None:

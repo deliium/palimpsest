@@ -99,7 +99,7 @@ def test_final_v4_23_pins() -> None:
     from world._rules import COMMAND_RULE_MATRIX
     from world.actions import AgentCommand
 
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73

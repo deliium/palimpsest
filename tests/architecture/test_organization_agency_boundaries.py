@@ -98,9 +98,9 @@ def test_analysis_agency_module_imports_no_cognition() -> None:
 
 
 def test_compatibility_pins_are_exact() -> None:
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     families = all_metric_specifications()
-    assert len(families) == 262
+    assert len(families) == 268
     assert families[146].family_id.value == "organization_collective_agency"
     assert families[147].family_id.value == "organization_collective_implementation"
     assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS

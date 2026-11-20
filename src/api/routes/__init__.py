@@ -4,6 +4,7 @@ from api.routes.accounting_ledgers import router as accounting_ledgers_router
 from api.routes.borders import router as borders_router
 from api.routes.branches import router as branches_router
 from api.routes.civilization import router as civilization_router
+from api.routes.competing_theories import router as competing_theories_router
 from api.routes.credit_relationships import (
     router as credit_relationships_router,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "borders_router",
     "branches_router",
     "civilization_router",
+    "competing_theories_router",
     "credit_relationships_router",
     "debugger_router",
     "delegation_representation_router",

@@ -181,15 +181,15 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v57` for measurement instruments (the v56 family root plus one mandatory sibling); accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 262 (V4-24's 228, V4-25's 236, V4-26's 244, 250 after V4-27, 256 after V4-28, plus six V4-30 predictive families) |
+| Metric families | 268 (V4-24's 228, V4-25's 236, V4-26's 244, 250 after V4-27, 256 after V4-28, 262 after V4-30's six predictive families, plus six V4-31 competing-theory families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V28` / `v26` when measurement instruments are active; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
-| Subjective pending codec | `finalization-command-v4` adds `scientific-model-state-v1` to the v3 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
+| Subjective pending codec | `finalization-command-v5` adds `competing-theory-state-v1` to the v4 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 262 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 268 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -1343,7 +1343,24 @@ implements separate read/publication ports with atomic quota-bounded writes;
 `api.routes.scientific_models` serves eight GET-only `SUBJECTIVE_DEBUG` routes.
 Readings are owner observations, never target truth; disease is unavailable.
 No new flag/context, command, event, replay pair, migration or Godot overlay is
-added. Pins: 262 families, 17 contexts, 12 flags (nine owned), `v4-context-map-v6`,
+added. Pins: 268 families, 17 contexts, 12 flags (nine owned), `v4-context-map-v6`,
 45 commands, 73 observer semantic types, runner v4/v55/v56 with latest opt-in
 v57, pending v1 default/v4 predictive, replay 27/`v25` and 28/`v26`,
 `/v1`, `observer-protocol-v1`, Alembic `0017`. See `docs/scientific-models.md`.
+
+
+### V4-31 competing-theories seam
+
+`competition` is not a new V4 context. V4-31 deepens owned `science` with
+owner-scoped `competing-theories.v1` ledgers: content-addressed season or net
+visible resource-change explanations (`continuity` / `recurrence`), attributed
+citations, explicit stances, addressed `thy_v1` speech and teaching receipts,
+and frozen same-case forecasts. Support and predictive accuracy remain
+independent; no global registry, winner, truth inference or command path is
+added. `competing-theory-state-v1` is an owner-only checkpoint leaf and
+`finalization-command-v5` is pending-only. Detached analysis appends six
+families (262 -> **268**) and publishes `competing-theories-snapshot-v1` /
+`-store-v1` with GET-only routes. Pins: 268 families, 17 contexts, 12 flags
+(nine owned), `v4-context-map-v6`, 45 commands, 73 observer semantic types,
+runner v4/v55/v56 with latest opt-in v57, pending v1 default/v5 competing,
+replay 27/`v25` and 28/`v26`, `/v1`, `observer-protocol-v1`, Alembic `0017`.

@@ -459,6 +459,7 @@ class MetricComputationInputs:
     economic_cascades_analysis: EconomicCascadesAnalysis | None = None
     scientific_hypotheses_analysis: ScientificHypothesesAnalysis | None = None
     scientific_models_analysis: ScientificModelsAnalysis | None = None
+    competing_theories_analysis: object | None = None
     replication_analysis: object | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
@@ -3035,6 +3036,56 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("scientific_models_metrics_emitted families=6 catalog=262")
     else:
         _LOG.debug("scientific_models_metrics_disabled")
+    if inputs.competing_theories_analysis is not None:
+        theory_analysis = inputs.competing_theories_analysis
+        from analysis.competing_theories_metrics import (
+            compute_competing_theory_citations,
+            compute_competing_theory_failures,
+            compute_competing_theory_predictions,
+            compute_competing_theory_structure,
+            compute_competing_theory_support_network,
+            compute_competing_theory_transmission,
+        )
+
+        _safe(
+            "competing_theory_structure",
+            lambda: compute_competing_theory_structure(
+                theory_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "competing_theory_support_network",
+            lambda: compute_competing_theory_support_network(
+                theory_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "competing_theory_citations",
+            lambda: compute_competing_theory_citations(
+                theory_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "competing_theory_predictions",
+            lambda: compute_competing_theory_predictions(
+                theory_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "competing_theory_failures",
+            lambda: compute_competing_theory_failures(
+                theory_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "competing_theory_transmission",
+            lambda: compute_competing_theory_transmission(
+                theory_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("competing_theories_metrics_emitted families=6 catalog=268")
+    else:
+        _LOG.debug("competing_theories_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

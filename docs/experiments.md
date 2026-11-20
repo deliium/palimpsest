@@ -593,7 +593,7 @@ evidence ids, rule ids, mediation ids, resolution terms, prompts, or
 credentials. See [Disputes](disputes.md) and
 [Persistence](persistence.md).
 
-Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-27 registers off-gate `scientific_hypotheses@1` with baseline, enabled, and communicated arms over the owned `science` flag.
@@ -611,3 +611,15 @@ roster, layout and a horizon of at least 96 ticks. The off arm leaves science
 inert; the measurement arm reuses the existing v57 instrument spec. No correct
 model is preloaded and no discovery or improvement is guaranteed. Autonomous
 nulls are legal. See [Scientific models](scientific-models.md).
+
+## Competing theories (`competing_theories@1`)
+
+Off-gate experiment with four declared arms over the owned `science` flag:
+`theories-observation`, `theories-science-off`, `theories-communication` and
+`theories-measurement-coexistence`. Arms reuse the `models-season-resource`
+config (seed, stochastic identity, roster, layout and at least 96 ticks), clear
+only `V4CapabilityFlags.science` in the off arm, and enable deterministic
+communication in the communication arm. No explanation, supporter or winner is
+preloaded. Autonomous nulls are legal; controlled coexistence is demonstrated in
+the verification suite, not required from autonomous runs. See
+[Competing theories](competing-theories.md).

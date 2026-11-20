@@ -131,7 +131,7 @@ legacy-catalog control with an extended-catalog treatment.
 - [Analysis metrics](analysis-metrics.md)
 - [Configuration](configuration.md)
 
-Current catalog: 262 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 See also [Economic inequality](economic-inequality.md) for the detached six-dimensional inequality surface over possession, access, credit, and organizational-control evidence.

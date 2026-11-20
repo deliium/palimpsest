@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 262
+METRIC_FAMILY_COUNT: Final[int] = 268
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -347,6 +347,12 @@ class MetricFamilyId(StrEnum):
     SCIENTIFIC_MODEL_CALIBRATION = "scientific_model_calibration"
     SCIENTIFIC_MODEL_REVISIONS = "scientific_model_revisions"
     SCIENTIFIC_MODEL_COMPARISON = "scientific_model_comparison"
+    COMPETING_THEORY_STRUCTURE = "competing_theory_structure"
+    COMPETING_THEORY_SUPPORT_NETWORK = "competing_theory_support_network"
+    COMPETING_THEORY_CITATIONS = "competing_theory_citations"
+    COMPETING_THEORY_PREDICTIONS = "competing_theory_predictions"
+    COMPETING_THEORY_FAILURES = "competing_theory_failures"
+    COMPETING_THEORY_TRANSMISSION = "competing_theory_transmission"
 
 
 class DenominatorKind(StrEnum):
@@ -10563,8 +10569,73 @@ def _spec_scientific_model_comparison() -> MetricSpecification:
     )
 
 
-def _spec_infrastructure_network_structure() -> MetricSpecification:
-    return _base(
+def _spec_competing_theory_structure() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.COMPETING_THEORY_STRUCTURE,
+        population="owner_theory_claims",
+        denominator="claims",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=("claim_count", "rival_pair_count"),
+        opportunity="owner explanations coexist; no global theory",
+    )
+
+
+def _spec_competing_theory_support_network() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.COMPETING_THEORY_SUPPORT_NETWORK,
+        population="support_edges",
+        denominator="owners_with_stance",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=("support_edge_count", "community_count"),
+        opportunity="declared support communities; never a school or ballot",
+    )
+
+
+def _spec_competing_theory_citations() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.COMPETING_THEORY_CITATIONS,
+        population="theory_citations",
+        denominator="citations",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=("citation_count", "verified_root_count"),
+        opportunity="attributed cited evidence; declared pointers stay unresolved",
+    )
+
+
+def _spec_competing_theory_predictions() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.COMPETING_THEORY_PREDICTIONS,
+        population="theory_forecasts",
+        denominator="issued_theory_cases",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=("prediction_count", "scored_count"),
+        opportunity="frozen same-case forecasts; pending remains right-censored",
+    )
+
+
+def _spec_competing_theory_failures() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.COMPETING_THEORY_FAILURES,
+        population="theory_failures",
+        denominator="scored_predictions",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=("failure_count", "unscored_count"),
+        opportunity="observed misses only; missing outcomes are not failures",
+    )
+
+
+def _spec_competing_theory_transmission() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.COMPETING_THEORY_TRANSMISSION,
+        population="theory_transmission_edges",
+        denominator="delivered_support",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=("delivered_count", "teaching_count"),
+        opportunity="directed speaker-to-learner delivery; teaching grants no skill",
+    )
+
+
+def _spec_infrastructure_network_structure() -> MetricSpecification:    return _base(
         family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
         evidence_inputs=frozenset(
             {
@@ -11118,6 +11189,12 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_scientific_model_calibration,
     _spec_scientific_model_revisions,
     _spec_scientific_model_comparison,
+    _spec_competing_theory_structure,
+    _spec_competing_theory_support_network,
+    _spec_competing_theory_citations,
+    _spec_competing_theory_predictions,
+    _spec_competing_theory_failures,
+    _spec_competing_theory_transmission,
 )
 
 

@@ -54,7 +54,7 @@ def test_no_new_write_pair_is_claimed() -> None:
 
 
 def test_catalog_and_closed_surface_counts() -> None:
-    assert METRIC_FAMILY_COUNT == 262
+    assert METRIC_FAMILY_COUNT == 268
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert EVENT_SCHEMA_REPLAY_V27 == 27

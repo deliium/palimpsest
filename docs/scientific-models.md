@@ -205,5 +205,6 @@ pnpm --dir clients/research-ui build
 - [Scientific hypotheses](scientific-hypotheses.md)
 - [Scientific replication](scientific-replication.md)
 - [Measurement instruments](measurement-instruments.md)
+- [Competing theories](competing-theories.md)
 - [Configuration](configuration.md)
 - [Persistence](persistence.md)

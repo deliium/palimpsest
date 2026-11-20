@@ -31,7 +31,7 @@ def test_canonical_doc_exists_and_is_linked_from_readme() -> None:
 
 def test_metric_doc_pins_176_and_four_families() -> None:
     metrics = _read("docs/analysis-metrics.md")
-    assert "Closed catalog cardinality: **262**" in metrics
+    assert "Closed catalog cardinality: **268**" in metrics
     assert "204" in metrics
     for family in (
         "border_claim_structure@1",

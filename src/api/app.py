@@ -30,6 +30,7 @@ from api.routes import (
     borders_router,
     branches_router,
     civilization_router,
+    competing_theories_router,
     credit_relationships_router,
     debugger_router,
     delegation_representation_router,
@@ -755,6 +756,36 @@ def _attach_scientific_models_reader(app: FastAPI) -> None:
     _LOGGER.info("scientific_models_reader_attached enabled=true")
 
 
+def _attach_competing_theories_reader(app: FastAPI) -> None:
+    from api.competing_theories_cursor import CompetingTheoriesCursorCodec
+    from persistence.competing_theories_filesystem import (
+        FilesystemCompetingTheoriesStore,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.competing_theories_cursor_codec = None
+        app.state.competing_theories_reader = None
+        return
+    secret = (
+        settings.competing_theories_cursor_key.get_secret_value().encode("utf-8")
+        if settings.competing_theories_cursor_key is not None
+        else None
+    )
+    if settings.competing_theories_root is None or secret is None:
+        app.state.competing_theories_cursor_codec = None
+        app.state.competing_theories_reader = None
+        _LOGGER.info("competing_theories_attach enabled=false")
+        return
+    app.state.competing_theories_cursor_codec = (
+        CompetingTheoriesCursorCodec.from_secret(secret)
+    )
+    app.state.competing_theories_reader = FilesystemCompetingTheoriesStore(
+        settings.competing_theories_root
+    )
+    _LOGGER.info("competing_theories_reader_attached enabled=true")
+
+
 def _attach_scientific_hypotheses_reader(app: FastAPI) -> None:
     from api.scientific_hypotheses_cursor import (
         ScientificHypothesesCursorCodec,
@@ -1022,6 +1053,7 @@ def create_app(
     _attach_scientific_hypotheses_reader(app)
     _attach_scientific_replication_reader(app)
     _attach_scientific_models_reader(app)
+    _attach_competing_theories_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -1070,6 +1102,7 @@ def create_app(
     app.include_router(scientific_hypotheses_router)
     app.include_router(replication_router)
     app.include_router(scientific_models_router)
+    app.include_router(competing_theories_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

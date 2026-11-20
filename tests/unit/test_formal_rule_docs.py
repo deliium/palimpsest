@@ -60,7 +60,7 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     assert "V4-06 formal rules seam" in architecture
     assert "V4-07 dispute resolution seam" in architecture
-    assert "262 metric families" in architecture
+    assert "268 metric families" in architecture
     assert "Owned V4 flags" in architecture
     assert "`formal_rules`" in architecture
 
