@@ -54,7 +54,7 @@ def test_science_ownership_pins() -> None:
 
 
 def test_catalog_and_wire_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275
     assert tuple(item.value for item in MetricFamilyId)[244:250] == (
         "scientific_hypothesis_structure",
         "scientific_hypothesis_evidence",

@@ -29,10 +29,10 @@ FIRST_154_DIGEST = "d7882d7890d17ae8c6fcb36eb9152c2c1d56562bf879c0beb5d28e10e40f
 
 def test_metric_catalog_count_is_160() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 271
-    assert len(specs) == 271
-    assert len({spec.family_id for spec in specs}) == 271
-    assert len(all_metric_specifications()) == 271
+    assert METRIC_FAMILY_COUNT == 275
+    assert len(specs) == 275
+    assert len({spec.family_id for spec in specs}) == 275
+    assert len(all_metric_specifications()) == 275
 
 
 def test_first_154_families_are_unchanged() -> None:

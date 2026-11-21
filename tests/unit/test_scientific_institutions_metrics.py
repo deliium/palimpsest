@@ -275,13 +275,19 @@ def _inputs() -> ScientificInstitutionsMetricInputs:
     )
 
 
-def test_catalog_appends_exactly_three_families_without_moving_legacy() -> None:
-    assert METRIC_FAMILY_COUNT == 271
+def test_catalog_keeps_v4_32_families_at_their_absolute_indices() -> None:
+    assert METRIC_FAMILY_COUNT == 275
     specs = all_metric_specifications()
-    assert [spec.family_id.value for spec in specs[-3:]] == [
+    assert [spec.family_id.value for spec in specs[268:271]] == [
         "scientific_institution_practice",
         "scientific_institution_roles_and_carriers",
         "scientific_institution_lineage",
+    ]
+    assert [spec.family_id.value for spec in specs[271:275]] == [
+        "science_diffusion_channels",
+        "science_diffusion_fidelity",
+        "science_diffusion_persistence",
+        "science_diffusion_genealogy",
     ]
     legacy = metric_specification("scientific_model_comparison")
     assert legacy.value_keys

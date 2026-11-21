@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_current_catalog_has_six_predictive_suffix_families() -> None:
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275
     values = tuple(item.value for item in MetricFamilyId)
     assert values[255] == "scientific_replication_social_interpretation"
     assert values[256:262] == (

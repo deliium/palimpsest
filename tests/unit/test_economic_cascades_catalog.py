@@ -33,9 +33,9 @@ _APPENDED = (
 def test_catalog_count_is_244_and_validates() -> None:
     validate_metric_catalog()
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 271
-    assert len(specs) == 271
-    assert len({spec.family_id for spec in specs}) == 271
+    assert METRIC_FAMILY_COUNT == 275
+    assert len(specs) == 275
+    assert len({spec.family_id for spec in specs}) == 275
 
 
 def test_first_236_ids_are_byte_identical() -> None:

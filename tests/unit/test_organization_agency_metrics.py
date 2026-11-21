@@ -99,13 +99,13 @@ def _analysis(*, with_agency: bool = True) -> tuple[Any, Any]:
 
 def test_catalog_appends_two_agency_families() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 271
-    assert len(specs) == 271
+    assert METRIC_FAMILY_COUNT == 275
+    assert len(specs) == 275
     assert [spec.family_id for spec in specs[146:148]] == [
         MetricFamilyId.ORGANIZATION_COLLECTIVE_AGENCY,
         MetricFamilyId.ORGANIZATION_COLLECTIVE_IMPLEMENTATION,
     ]
-    assert len({spec.family_id for spec in specs}) == 271
+    assert len({spec.family_id for spec in specs}) == 275
 
 
 def test_first_146_families_are_unchanged() -> None:

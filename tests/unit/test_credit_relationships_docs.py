@@ -96,7 +96,7 @@ def test_tokens_match_code_and_docs() -> None:
 def test_active_catalog_is_228() -> None:
     from analysis.specifications import METRIC_FAMILY_COUNT
 
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275
     for path in (
         "docs/credit-relationships.md",
         "docs/analysis-metrics.md",

@@ -24,9 +24,9 @@ ORGANIZATION_FAMILIES = (
 
 def test_catalog_validates_at_154() -> None:
     specs = validate_metric_catalog()
-    assert METRIC_FAMILY_COUNT == 271
-    assert len(specs) == 271
-    assert len({spec.family_id for spec in specs}) == 271
+    assert METRIC_FAMILY_COUNT == 275
+    assert len(specs) == 275
+    assert len({spec.family_id for spec in specs}) == 275
     assert tuple(spec.family_id for spec in specs[140:144]) == ORGANIZATION_FAMILIES
     assert tuple(spec.family_id for spec in specs[136:140]) == (
         MetricFamilyId.MACRO_SOCIETY_STRUCTURE,

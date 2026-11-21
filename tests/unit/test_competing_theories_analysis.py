@@ -191,4 +191,4 @@ def test_six_metric_families_extend_the_catalog() -> None:
         "competing_theory_transmission",
     }
     assert expected.issubset(set(families))
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275

@@ -53,9 +53,9 @@ ALIGNMENT_KEYS = (
 
 def test_catalog_is_164_with_diplomacy_last() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 271
-    assert len(specs) == 271
-    assert len(validate_metric_catalog()) == 271
+    assert METRIC_FAMILY_COUNT == 275
+    assert len(specs) == 275
+    assert len(validate_metric_catalog()) == 275
     assert [spec.family_id for spec in specs[157:160]] == [
         MetricFamilyId.REPRESENTATION_MANDATE_STRUCTURE,
         MetricFamilyId.REPRESENTATION_RECOGNITION_SUPPORT,

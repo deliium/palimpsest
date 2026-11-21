@@ -71,7 +71,7 @@ def test_feature_page_contains_required_tokens() -> None:
 
 
 def test_current_docs_carry_live_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
