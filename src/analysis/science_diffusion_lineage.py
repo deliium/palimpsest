@@ -164,6 +164,7 @@ class DiffusionTransmission:
     lane: str
     stage: str
     tick: int
+    confirmation_boundary: int
     actor_id: str | None
     counterparty_id: str | None
     source_version: ScienceVersionKey | None
@@ -269,6 +270,11 @@ def _transmission_rows(
                 lane=occurrence.lane.value,
                 stage=occurrence.stage.value,
                 tick=occurrence.tick,
+                confirmation_boundary=(
+                    occurrence.confirmation_boundary
+                    if occurrence.confirmation_boundary is not None
+                    else occurrence.tick
+                ),
                 actor_id=occurrence.actor_id,
                 counterparty_id=occurrence.counterparty_id,
                 source_version=occurrence.source_version,
@@ -740,7 +746,7 @@ def _rediscoveries(
     roots: tuple[RediscoveryRoot, ...],
 ) -> tuple[tuple[DiffusionRediscovery, ...], int, int, tuple[str, ...]]:
     confirmed = [row for row in losses if row.confirmed]
-    rediscoveries: list[DiffusionRediscovery] = []
+    rediscoveries: dict[str, DiffusionRediscovery] = {}
     origin_unresolved = 0
     convergence = 0
     diagnostics: list[str] = []
@@ -767,15 +773,17 @@ def _rediscoveries(
                 and row.source_version is not None
             ]
             if linked:
-                rediscoveries.append(
+                key = f"reacquired:{candidate.key.token()}"
+                rediscoveries.setdefault(
+                    key,
                     DiffusionRediscovery(
-                        rediscovery_key=f"reacquired:{candidate.key.token()}",
+                        rediscovery_key=key,
                         kind=DiffusionRediscoveryKind.REACQUIRED,
                         version_key=candidate.key,
                         root_kind="linked_uptake",
                         root_ref=_transmission_key(linked[0]),
                         confirmation_boundary=candidate.first_observed_boundary,
-                    )
+                    ),
                 )
                 continue
             root = root_by_version.get(candidate.key)
@@ -785,15 +793,17 @@ def _rediscoveries(
                 and root.committed
                 and _complete_prior_coverage(inputs, candidate.occurrence_tick)
             ):
-                rediscoveries.append(
+                key = f"independent:{candidate.key.token()}"
+                rediscoveries.setdefault(
+                    key,
                     DiffusionRediscovery(
-                        rediscovery_key=f"independent:{candidate.key.token()}",
+                        rediscovery_key=key,
                         kind=DiffusionRediscoveryKind.INDEPENDENT,
                         version_key=candidate.key,
                         root_kind=root.root_kind,
                         root_ref=root.root_ref,
                         confirmation_boundary=candidate.first_observed_boundary,
-                    )
+                    ),
                 )
             elif root is not None:
                 origin_unresolved += 1
@@ -807,7 +817,7 @@ def _rediscoveries(
     return (
         tuple(
             sorted(
-                rediscoveries,
+                rediscoveries.values(),
                 key=lambda row: (row.confirmation_boundary, row.rediscovery_key),
             )
         ),

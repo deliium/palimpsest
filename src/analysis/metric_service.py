@@ -460,6 +460,7 @@ class MetricComputationInputs:
     scientific_hypotheses_analysis: ScientificHypothesesAnalysis | None = None
     scientific_models_analysis: ScientificModelsAnalysis | None = None
     competing_theories_analysis: object | None = None
+    science_diffusion_analysis: object | None = None
     scientific_institutions_analysis: object | None = None
     replication_analysis: object | None = None
     contact_analysis: object | None = None
@@ -3087,6 +3088,42 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("competing_theories_metrics_emitted families=6 catalog=268")
     else:
         _LOG.debug("competing_theories_metrics_disabled")
+    if inputs.science_diffusion_analysis is not None:
+        diffusion_analysis = inputs.science_diffusion_analysis
+        from analysis.science_diffusion_metrics import (
+            compute_science_diffusion_channels,
+            compute_science_diffusion_fidelity,
+            compute_science_diffusion_genealogy,
+            compute_science_diffusion_persistence,
+        )
+
+        _safe(
+            "science_diffusion_channels",
+            lambda: compute_science_diffusion_channels(
+                diffusion_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "science_diffusion_fidelity",
+            lambda: compute_science_diffusion_fidelity(
+                diffusion_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "science_diffusion_persistence",
+            lambda: compute_science_diffusion_persistence(
+                diffusion_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "science_diffusion_genealogy",
+            lambda: compute_science_diffusion_genealogy(
+                diffusion_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info("science_diffusion_metrics_emitted families=4 catalog=275")
+    else:
+        _LOG.debug("science_diffusion_metrics_disabled")
     if inputs.scientific_institutions_analysis is not None:
         institution_analysis = inputs.scientific_institutions_analysis
         from analysis.scientific_institutions_metrics import (

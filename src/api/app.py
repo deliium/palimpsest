@@ -57,6 +57,7 @@ from api.routes import (
     replication_router,
     research_matrix_router,
     research_router,
+    science_diffusion_router,
     scientific_hypotheses_router,
     scientific_institutions_router,
     scientific_models_router,
@@ -823,6 +824,36 @@ def _attach_scientific_institutions_reader(app: FastAPI) -> None:
     _LOGGER.info("scientific_institutions_reader_attached enabled=true")
 
 
+def _attach_science_diffusion_reader(app: FastAPI) -> None:
+    from api.science_diffusion_cursor import ScienceDiffusionCursorCodec
+    from persistence.science_diffusion_filesystem import (
+        FilesystemScienceDiffusionStore,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.science_diffusion_cursor_codec = None
+        app.state.science_diffusion_reader = None
+        return
+    secret = (
+        settings.science_diffusion_cursor_key.get_secret_value().encode("utf-8")
+        if settings.science_diffusion_cursor_key is not None
+        else None
+    )
+    if settings.science_diffusion_root is None or secret is None:
+        app.state.science_diffusion_cursor_codec = None
+        app.state.science_diffusion_reader = None
+        _LOGGER.info("science_diffusion_attach enabled=false")
+        return
+    app.state.science_diffusion_cursor_codec = (
+        ScienceDiffusionCursorCodec.from_secret(secret)
+    )
+    app.state.science_diffusion_reader = FilesystemScienceDiffusionStore(
+        settings.science_diffusion_root
+    )
+    _LOGGER.info("science_diffusion_reader_attached enabled=true")
+
+
 def _attach_scientific_hypotheses_reader(app: FastAPI) -> None:
     from api.scientific_hypotheses_cursor import (
         ScientificHypothesesCursorCodec,
@@ -1092,6 +1123,7 @@ def create_app(
     _attach_scientific_models_reader(app)
     _attach_competing_theories_reader(app)
     _attach_scientific_institutions_reader(app)
+    _attach_science_diffusion_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -1142,6 +1174,7 @@ def create_app(
     app.include_router(scientific_models_router)
     app.include_router(competing_theories_router)
     app.include_router(scientific_institutions_router)
+    app.include_router(science_diffusion_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)

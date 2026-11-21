@@ -297,6 +297,10 @@ class Settings(BaseSettings):
     scientific_institutions_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    science_diffusion_root: Path | None = None
+    science_diffusion_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -604,6 +608,17 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("science_diffusion_cursor_key")
+    @classmethod
+    def validate_science_diffusion_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "science_diffusion cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
     @field_validator("economic_cascades_cursor_key")
     @classmethod
     def validate_economic_cascades_cursor_key(
@@ -781,6 +796,13 @@ class Settings(BaseSettings):
                 "PALIMPSEST_SCIENTIFIC_INSTITUTIONS_ROOT and "
                 "PALIMPSEST_SCIENTIFIC_INSTITUTIONS_CURSOR_KEY must be set "
                 "together"
+            )
+        if (self.science_diffusion_root is None) != (
+            self.science_diffusion_cursor_key is None
+        ):
+            raise ValueError(
+                "PALIMPSEST_SCIENCE_DIFFUSION_ROOT and "
+                "PALIMPSEST_SCIENCE_DIFFUSION_CURSOR_KEY must be set together"
             )
         return self
 

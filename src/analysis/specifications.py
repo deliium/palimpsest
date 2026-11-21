@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 271
+METRIC_FAMILY_COUNT: Final[int] = 275
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -358,6 +358,10 @@ class MetricFamilyId(StrEnum):
         "scientific_institution_roles_and_carriers"
     )
     SCIENTIFIC_INSTITUTION_LINEAGE = "scientific_institution_lineage"
+    SCIENCE_DIFFUSION_CHANNELS = "science_diffusion_channels"
+    SCIENCE_DIFFUSION_FIDELITY = "science_diffusion_fidelity"
+    SCIENCE_DIFFUSION_PERSISTENCE = "science_diffusion_persistence"
+    SCIENCE_DIFFUSION_GENEALOGY = "science_diffusion_genealogy"
 
 
 class DenominatorKind(StrEnum):
@@ -10687,6 +10691,86 @@ def _spec_scientific_institution_roles_and_carriers() -> MetricSpecification:
     )
 
 
+def _spec_science_diffusion_channels() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENCE_DIFFUSION_CHANNELS,
+        population="qualified_science_carrier_occurrences",
+        denominator="carrier_occurrences",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=(
+            "delivered_count",
+            "interpreted_count",
+            "adopted_count",
+            "locally_derived_count",
+            "reported_reference_count",
+            "carried_count",
+            "speech_count",
+            "teaching_count",
+            "records_count",
+            "organizations_count",
+            "migration_count",
+            "societies_count",
+            "translation_count",
+            "science_count",
+            "context_flagged_count",
+        ),
+        opportunity="addressed delivery is not uptake; context flags are nonadditive",
+    )
+
+
+def _spec_science_diffusion_fidelity() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENCE_DIFFUSION_FIDELITY,
+        population="comparable_science_representations",
+        denominator="comparable_pairs",
+        denominator_kind=DenominatorKind.EVALUABLE_CLAIMS,
+        keys=(
+            "comparable_pair_count",
+            "mutation_count",
+            "divergent_reading_count",
+            "bound_translation_count",
+        ),
+        opportunity="confidence-only changes and unwired conditions are not mutation",
+    )
+
+
+def _spec_science_diffusion_persistence() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENCE_DIFFUSION_PERSISTENCE,
+        population="complete_absolute_windows",
+        denominator="complete_windows",
+        denominator_kind=DenominatorKind.OPPORTUNITY,
+        keys=(
+            "complete_window_count",
+            "scoped_loss_count",
+            "confirmed_observed_loss_count",
+            "reuptake_count",
+            "independent_rediscovery_count",
+        ),
+        opportunity=(
+            "loss requires explicit closure; death or eviction is not forgetting"
+        ),
+    )
+
+
+def _spec_science_diffusion_genealogy() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENCE_DIFFUSION_GENEALOGY,
+        population="eligible_recipient_carriers",
+        denominator="eligible_carriers",
+        denominator_kind=DenominatorKind.ADOPTION_ELIGIBLE,
+        keys=(
+            "eligible_recipient_carrier_count",
+            "exact_link_count",
+            "ambiguous_link_count",
+            "unresolved_link_count",
+            "teaching_link_count",
+            "written_record_link_count",
+        ),
+        opportunity="only exact V3 refs link; ambiguous roots stay explicit",
+    )
+
+
 def _spec_scientific_institution_lineage() -> MetricSpecification:
     return _scientific_hypotheses_spec(
         family_id=MetricFamilyId.SCIENTIFIC_INSTITUTION_LINEAGE,
@@ -11275,6 +11359,10 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_scientific_institution_practice,
     _spec_scientific_institution_roles_and_carriers,
     _spec_scientific_institution_lineage,
+    _spec_science_diffusion_channels,
+    _spec_science_diffusion_fidelity,
+    _spec_science_diffusion_persistence,
+    _spec_science_diffusion_genealogy,
 )
 
 
