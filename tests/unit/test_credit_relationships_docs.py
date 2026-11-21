@@ -179,4 +179,4 @@ def test_experiment_is_off_gate() -> None:
 def test_historical_counts_are_not_active_pins() -> None:
     metrics = _read("docs/analysis-metrics.md")
     assert "208 -> 212" in metrics or "208 -> **212**" in metrics
-    assert "Closed catalog cardinality: **271**" in metrics
+    assert "Closed catalog cardinality: **275**" in metrics

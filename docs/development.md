@@ -632,7 +632,7 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 271 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25` and 28/`v26`; Alembic `0017`.
+Current catalog: 275 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25` and 28/`v26`; Alembic `0017`.
 
 V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v6`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
 
@@ -678,7 +678,7 @@ controlled admitted experiment/record/contribution schedule and asserts the
 real runner → analysis → digest → filesystem → authorized read path, then runs
 the four `scientific_institutions@1` arms unassisted. An autonomous zero is
 valid; unavailable evidence is reported separately. See
-[Scientific institutions](scientific-institutions.md).
+[Scientific diffusion](science-diffusion.md) and [Scientific institutions](scientific-institutions.md).
 
 ## Competing-theory verification
 
@@ -694,3 +694,30 @@ recovery, detached analysis, six metric families, canonical snapshots, atomic
 storage, routes and the off-gate scenario. The controlled and autonomous
 outcomes remain empirical; null runs are legal. See
 [Competing theories](competing-theories.md).
+## Science diffusion verification
+
+Focused V4-33 checks:
+
+```
+uv run --frozen --python 3.12.14 pytest \
+  tests/unit/test_science_diffusion_contract.py \
+  tests/unit/test_science_diffusion_capture.py \
+  tests/unit/test_science_diffusion_carriers.py \
+  tests/unit/test_science_diffusion_genealogy.py \
+  tests/unit/test_science_diffusion_lineage.py \
+  tests/unit/test_science_diffusion_snapshot.py \
+  tests/unit/test_science_diffusion_store.py \
+  tests/unit/test_science_diffusion_metrics.py \
+  tests/unit/test_science_diffusion_routes.py \
+  tests/unit/test_science_diffusion_scenario.py -q
+
+uv run --frozen --python 3.12.14 pytest -m integration \
+  tests/integration/test_science_diffusion_runner.py -q
+
+npm --prefix clients/research-ui run test
+npm --prefix clients/research-ui run check
+npm --prefix clients/research-ui run build
+```
+
+The default suite, V1/V2 gates, V4 architecture invariants, import-linter,
+Ruff and mypy are recorded in the plan bundle.

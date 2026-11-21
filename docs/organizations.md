@@ -256,7 +256,7 @@ resolve read-only from the owner's own ledgers and are never rewritten. Physical
 movement stays ordinary world admission. See
 [migration and displacement](migration-displacement.md).
 
-Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## Accounting ledgers
 

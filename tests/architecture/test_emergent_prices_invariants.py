@@ -91,7 +91,7 @@ def test_version_pins_are_unchanged() -> None:
 
 
 def test_catalog_and_prefix_digest() -> None:
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275
     specs = all_metric_specifications()
     material = "\x1e".join(
         "\x1f".join(

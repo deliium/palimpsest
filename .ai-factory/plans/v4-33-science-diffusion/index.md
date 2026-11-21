@@ -99,9 +99,9 @@ Authority: the Original Request sets feature scope; `.ai-factory/RULES.md`, `.ai
 ### Phase 4: Research UI, executable evidence, and release checks
 
 - [x] Task 9: Build the read-only Science diffusion view ([details](phase-04-validation.md#task-9-build-the-read-only-science-diffusion-view)) (depends on 6, 8)
-- [ ] Task 10: Prove the mechanism with an off-gate experiment ([details](phase-04-validation.md#task-10-prove-the-mechanism-with-an-off-gate-experiment)) (depends on 6, 7, 8)
-- [ ] Task 11: Verify authority, compatibility and deterministic behavior ([details](phase-04-validation.md#task-11-verify-authority-compatibility-and-deterministic-behavior)) (depends on 9, 10)
-- [ ] Task 12: Complete the docs checkpoint ([details](phase-04-validation.md#task-12-complete-the-docs-checkpoint)) (depends on 11)
+- [x] Task 10: Prove the mechanism with an off-gate experiment ([details](phase-04-validation.md#task-10-prove-the-mechanism-with-an-off-gate-experiment)) (depends on 6, 7, 8)
+- [x] Task 11: Verify authority, compatibility and deterministic behavior ([details](phase-04-validation.md#task-11-verify-authority-compatibility-and-deterministic-behavior)) (depends on 9, 10)
+- [x] Task 12: Complete the docs checkpoint ([details](phase-04-validation.md#task-12-complete-the-docs-checkpoint)) (depends on 11)
 
 ## Commit Plan
 

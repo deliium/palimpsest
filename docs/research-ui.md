@@ -357,7 +357,7 @@ cross-society flows, and analytical network lineage. It provides a
 `trade_networks_disabled` plus an empty state without inventing a network. It
 never displays price, money, a composite trade score, or a planned route.
 
-Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated economic-inequality routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).
@@ -402,3 +402,7 @@ a disabled state and a missing run or publication renders separately. The panel
 pins the selected publication and cursor, ignores stale responses, exposes no
 champion/rank/score badge, performs no mutation and never advances ticks. See
 [Competing theories](competing-theories.md).
+
+## Science diffusion view
+
+The read-only `science-diffusion` view shows coverage, versions, transmissions, changes, and knowledge-genealogy links for a pinned publication. Carrier occurrences, owner uptake, and analytical joins are labeled separately; cursor expiry reloads the same publication.

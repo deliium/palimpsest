@@ -47,4 +47,4 @@ teleport, never mint refugee status, and never bind world rules. See
 - [Architecture](architecture.md)
 - [Experiments](experiments.md)
 
-Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

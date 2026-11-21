@@ -82,9 +82,9 @@ def test_no_predefined_university_or_academy_class() -> None:
 
 
 def test_catalog_and_command_pins_move_only_by_the_append() -> None:
-    assert METRIC_FAMILY_COUNT == 271
+    assert METRIC_FAMILY_COUNT == 275
     families = [spec.family_id.value for spec in all_metric_specifications()]
-    assert families[-3:] == [
+    assert families[268:271] == [
         "scientific_institution_practice",
         "scientific_institution_roles_and_carriers",
         "scientific_institution_lineage",

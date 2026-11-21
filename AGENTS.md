@@ -86,6 +86,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | Scientific replication | `docs/scientific-replication.md` | Owner-scoped designs, `rep_v1` testimony, conditions, categorical uncertainty, conflicting outcomes, snapshot/store/routes, Research UI panel |
 | Scientific models | `docs/scientific-models.md` | Owner-scoped predictive models, prior forecasts, observed outcomes, calibration, revisions, comparison, snapshot/store/routes |
 | Competing theories | `docs/competing-theories.md` | Owner-scoped incompatible explanations, citations, support networks, teaching, frozen forecasts/failures, snapshot/store/routes |
+| Scientific diffusion | `docs/science-diffusion.md` | Detached hypothesis/model transmission through teaching, records, organizations, migration and societies; five transformations; snapshot/store/routes and Research UI |
 | Scientific institutions | `docs/scientific-institutions.md` | Composed detached practice detection, stable windows, forward-only `sci-inst-` lineage, three metric families, snapshot/store/routes, Research UI panel |
 | Measurement instruments | `docs/measurement-instruments.md` | Fallible physical tools, five dimensions, calibration, owner reliability beliefs, bounded `msr_v1` testimony, v57/event-28 lifecycle |
 | Lineage explorer | `docs/lineage-explorer.md` | Eight-family read-only lineage graph API, optional capture, cursors and availability semantics |

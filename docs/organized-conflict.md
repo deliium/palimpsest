@@ -130,4 +130,4 @@ write pair, observer semantic type, `/v2` route, or SQL migration exists.
 Physical structure damage and physical route closure require a separate plan
 that extends world semantics.
 
-Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

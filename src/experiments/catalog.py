@@ -5875,6 +5875,28 @@ def experiment_scientific_models(
     return definition
 
 
+def experiment_science_diffusion(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 128,
+) -> ExperimentDefinition:
+    """Off-gate V4-33 experiment: scientific knowledge diffusion."""
+
+    from experiments.science_diffusion_scenario import (
+        science_diffusion_scenario,
+    )
+
+    definition = science_diffusion_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_science_diffusion_registered arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
 def experiment_scientific_institutions(
     base: SimulationRunnerConfig,
     *,

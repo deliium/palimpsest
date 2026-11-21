@@ -181,7 +181,7 @@ are presentation only; neither client advances the simulation.
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v57` for measurement instruments (the v56 family root plus one mandatory sibling); accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 271 (268 after V4-31, plus three V4-32 scientific-institution families) |
+| Metric families | 275 (271 after V4-32, plus four V4-33 diffusion families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V28` / `v26` when measurement instruments are active; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Subjective pending codec | `finalization-command-v5` adds `competing-theory-state-v1` to the v4 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
@@ -189,7 +189,7 @@ are presentation only; neither client advances the simulation.
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 271 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 275 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -1395,6 +1395,35 @@ University/Academy class, profession, permission, or global registry exists.
 semantics, and clients never read the read model or its publications.
 
 Pins: 271 metric families, 17 V4 contexts, 12 V4 flags (nine owned / three
+unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner
+v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2.
+
+### V4-33 scientific-diffusion seam
+
+V4-33 composes the owned `science` and `organizations` contexts without a new
+flag, context, runner/result schema, command, event, observer semantic type,
+write pair, `/v2` route, migration, or Godot overlay.
+`analysis.science_diffusion_*` owns the closed detached vocabulary, canonical
+version fingerprints, forward evidence edges, change/loss/rediscovery
+classification, and four metric families (catalog 271 -> **275**).
+`experiments.science_diffusion_*` owns explicit finalized-boundary capture,
+structural projection of checkpoint rows, carrier markers, context joins, the
+only analysis-to-artifact bridge, and the off-gate scenario.
+`simulation.science_diffusion_*` owns the canonical bounded
+`science-diffusion-snapshot-v1`, strict codec, paging, and separate read/
+publication ports; `persistence.science_diffusion_filesystem` implements
+`science-diffusion-store-v1` atomically; `api.routes.science_diffusion` serves
+six GET-only routes requiring `SUBJECTIVE_DEBUG`; the Research UI adds a
+read-only panel.
+
+Delivery is not uptake; a model reference or record read installs no model.
+Loss requires explicit closure and two adjacent complete windows; death,
+eviction, gaps, and shared roots never confirm loss or independent
+rediscovery. `WorldEngine`, perception, admission, stop selectors, memory,
+prompts, observer semantics, and clients never read the read model.
+
+Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (nine owned / three
 unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner
 v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2.

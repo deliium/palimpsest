@@ -92,8 +92,8 @@ def test_current_docs_carry_live_pins() -> None:
     ):
         text = _read(ROOT / relative)
         assert "scientific-hypotheses" in text or "V4-27" in text, relative
-        assert "271" in text, relative
-    assert "271" in _read(ROOT / "docs" / "configuration.md")
+        assert "275" in text, relative
+    assert "275" in _read(ROOT / "docs" / "configuration.md")
     assert "V4-27 owned" in _read(ROOT / "docs" / "v4-architecture.md")
     assert "9 owned / 3 unowned" in _read(ROOT / ".ai-factory" / "ARCHITECTURE.md")
     configuration = _read(ROOT / "docs" / "configuration.md")

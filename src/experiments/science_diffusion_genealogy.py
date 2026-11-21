@@ -11,12 +11,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Final
+from typing import Any, Final
 
-from agents.cognition.practical_knowledge import (
-    PracticalKnowledgeLedger,
-    entry_to_audit,
-)
 from analysis.knowledge_genealogy import build_qualified_knowledge_lineage
 from analysis.science_diffusion_contract import (
     DiffusionContextFlag,
@@ -49,6 +45,26 @@ __all__ = [
 _LOG: Final[logging.Logger] = logging.getLogger(
     "experiments.science_diffusion_genealogy"
 )
+
+@dataclass(frozen=True, slots=True)
+class _EntryAudit:
+    owner_id: Any
+    entry_id: str
+    kind: str
+    content_key: str
+    origin: str
+    parent_entry_ids: tuple[str, ...]
+    lineage_root_id: str
+    hop_index: int
+    mutated: bool
+    acquired_tick: int
+    tick: int
+    active: bool
+    reason_code: str
+    capability_anchor: str | None
+    source_agent_id: str | None
+    teacher_agent_id: str | None
+
 
 _CONTEXT_WINDOW_TICKS: Final[int] = 32
 
@@ -199,14 +215,34 @@ def _practical_audits(
         if checkpoint is None:
             continue
         ledger = getattr(checkpoint, "practical_knowledge", None)
-        if type(ledger) is not PracticalKnowledgeLedger:
-            continue
-        for entry in ledger.entries:
+        entries = getattr(ledger, "entries", ())
+        for entry in entries:
             audits.append(
-                entry_to_audit(
-                    entry,
+                _EntryAudit(
+                    owner_id=entry.owner_id,
+                    entry_id=entry.entry_id,
+                    kind=getattr(entry.kind, "value", entry.kind),
+                    content_key=entry.content_key,
+                    origin=getattr(entry.origin, "value", entry.origin),
+                    parent_entry_ids=tuple(entry.parent_entry_ids),
+                    lineage_root_id=entry.lineage_root_id,
+                    hop_index=entry.hop_index,
+                    mutated=entry.mutated,
+                    acquired_tick=entry.acquired_tick,
                     tick=entry.acquired_tick,
+                    active=entry.active,
                     reason_code="diffusion_context",
+                    capability_anchor=getattr(entry, "capability_anchor", None),
+                    source_agent_id=(
+                        None
+                        if entry.source_agent_id is None
+                        else entry.source_agent_id.value
+                    ),
+                    teacher_agent_id=(
+                        None
+                        if entry.teacher_agent_id is None
+                        else entry.teacher_agent_id.value
+                    ),
                 )
             )
             refs_by_entry[(entry.owner_id.value, entry.entry_id)] = tuple(

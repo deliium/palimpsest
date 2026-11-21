@@ -79,7 +79,7 @@ Four families append the catalog (212 -> 216):
 - `credit_distribution_structure`
 
 The first 212 families keep their ids, order, algorithm versions, and value
-keys. Current catalog: 271 metric families.
+keys. Current catalog: 275 metric families.
 
 ## Snapshot, store, and routes
 

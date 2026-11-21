@@ -858,7 +858,7 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 271 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
 Nine V4 flags are owned; three remain unowned.
 
@@ -911,3 +911,18 @@ GET-only routes under `SUBJECTIVE_DEBUG`. Default runner/result stay v4/v2,
 latest opt-in runner v57; event 28/`v26` remains measurement-selected, event
 27/`v25` travel-selected; Alembic stays `0017`, `/v1` and
 `observer-protocol-v1` unchanged. See [Scientific models](scientific-models.md).
+## V4-33 scientific knowledge diffusion
+
+V4-33 composes the owned `science` and `organizations` contexts without a new
+capability flag, context, runner/result schema, command, event, observer
+semantic type, write pair, `/v2` route, migration, or Godot overlay. Capture is
+explicit and default off; terminal evidence is exported only after
+`finish_run`, and a cap seals only a trusted prefix. `analysis.science_diffusion_*`
+folds forward edges, mutation/misunderstanding/translation, explicit and
+observed lineage loss, reacquisition, and independent rediscovery; exact
+`teach:<occurrence>`, `artifact:`, and `durable:` refs link to existing V3
+knowledge-genealogy nodes without rewriting that graph. Four families raise the
+catalog to **275**. `science-diffusion-snapshot-v1` /
+`science-diffusion-store-v1` publish programmatically and atomically; six
+GET-only dual-gated routes require `SUBJECTIVE_DEBUG`; the Research UI adds a
+read-only panel. See [Scientific diffusion](science-diffusion.md).

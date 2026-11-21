@@ -521,7 +521,7 @@ keep 27/`v25`. Off-gate experiment `supply_chains@1` is registered. Pins: 43
 commands, 73 observer semantic types, 212 metric families, Alembic `0017`,
 `/v1`, `observer-protocol-v1`.
 
-Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 

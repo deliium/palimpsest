@@ -471,7 +471,7 @@ window filter. Failure codes are `credit_relationships_disabled`,
 No route returns a bank, money, enforceable debt, credit score, ranking, or
 canonical credit. See [credit relationships](credit-relationships.md).
 
-Current catalog: 271 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger routes
 

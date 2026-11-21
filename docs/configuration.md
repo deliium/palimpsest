@@ -599,7 +599,7 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 275 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -681,4 +681,18 @@ Optional read-only inspection uses a paired configuration:
 Neither set means disabled; exactly one is a startup validation error. All
 routes require `SUBJECTIVE_DEBUG` and fail closed with
 `scientific_institutions_disabled` when unconfigured. See
-[Scientific institutions](scientific-institutions.md).
+[Scientific diffusion](science-diffusion.md) and [Scientific institutions](scientific-institutions.md).
+## Scientific diffusion reads
+
+V4-33 science-diffusion reads are opt-in and disabled by default. Set both
+settings together or neither:
+
+```
+PALIMPSEST_SCIENCE_DIFFUSION_ROOT=/path/to/science-diffusion-store
+PALIMPSEST_SCIENCE_DIFFUSION_CURSOR_KEY=<at least 32 UTF-8 bytes>
+```
+
+Exactly one setting or a short cursor key fails settings validation. Six
+GET-only `/v1/simulations/{run_id}/science-diffusion` routes require
+`SUBJECTIVE_DEBUG`; unconfigured reads return
+`503 science_diffusion_disabled`.

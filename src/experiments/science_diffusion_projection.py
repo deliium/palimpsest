@@ -12,20 +12,8 @@ import hashlib
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
-from agents.cognition.experimentation import (
-    ExperimentHypothesis,
-    ExperimentLedger,
-    HypothesisRevision,
-    HypothesisSourceKind,
-)
-from agents.cognition.scientific_models import (
-    ModelHypothesis,
-    ModelRevision,
-    PredictiveModel,
-    ScientificModelLedger,
-)
 from analysis.science_diffusion_contract import (
     DiffusionError,
     DiffusionLane,
@@ -438,7 +426,7 @@ def _typed_entity_ref(value: str, kinds: Mapping[str, str]) -> str:
 
 
 def _deliberate_trials(
-    ledger: ExperimentLedger,
+    ledger: Any,
 ) -> dict[str, tuple[tuple[int, str], ...]]:
     trials: dict[str, list[tuple[int, str]]] = {}
     for trial in ledger.trials:
@@ -453,8 +441,8 @@ def _deliberate_trials(
 
 
 def _hypothesis_root(
-    hypothesis: ExperimentHypothesis,
-    revision: HypothesisRevision,
+    hypothesis: Any,
+    revision: Any,
     *,
     trials: Mapping[str, tuple[tuple[int, str], ...]],
 ) -> tuple[str, str]:
@@ -464,29 +452,32 @@ def _hypothesis_root(
             return ("experiment", event_id)
     source_kind = hypothesis.source_kind
     token = hypothesis.source_token
-    if source_kind is HypothesisSourceKind.COMMUNICATED and token.startswith("evt:"):
+    if (
+        getattr(source_kind, "value", source_kind) == "communicated"
+        and token.startswith("evt:")
+    ):
         return ("communicated", token)
     if (
-        source_kind is HypothesisSourceKind.RECORDED
+        getattr(source_kind, "value", source_kind) == "recorded"
         and token not in _GENERIC_OBSERVATION_TOKENS
     ):
         return ("recorded", token)
     if (
-        source_kind is HypothesisSourceKind.OBSERVED
+        getattr(source_kind, "value", source_kind) == "observed"
         and token not in _GENERIC_OBSERVATION_TOKENS
     ):
         return ("observation", token)
     if (
-        source_kind is HypothesisSourceKind.SELF_FORMULATED
-        and revision.reason.value == "formulated"
+        getattr(source_kind, "value", source_kind) == "self_formulated"
+        and getattr(revision.reason, "value", revision.reason) == "formulated"
     ):
         return ("self_formulated", f"hypothesis:{hypothesis.hypothesis_id}")
     return ("", "")
 
 
 def _hypothesis_descriptor(
-    hypothesis: ExperimentHypothesis,
-    revision: HypothesisRevision,
+    hypothesis: Any,
+    revision: Any,
     *,
     kinds: Mapping[str, str],
 ) -> HypothesisDescriptor:
@@ -513,7 +504,7 @@ def _hypothesis_descriptor(
 
 
 def _hypothesis_wire(
-    hypothesis: ExperimentHypothesis, revision: HypothesisRevision
+    hypothesis: Any, revision: Any
 ) -> tuple[tuple[str, str], ...]:
     return tuple(
         sorted(
@@ -529,14 +520,14 @@ def _hypothesis_wire(
     )
 
 
-def _model_target_ref(model: PredictiveModel) -> str:
+def _model_target_ref(model: Any) -> str:
     if ":" in model.target_ref:
-        return model.target_ref
-    return f"{model.target_kind.value}:{model.target_ref}"
+        return str(model.target_ref)
+    return str(f"{model.target_kind.value}:{model.target_ref}")
 
 
 def _model_descriptor(
-    model: PredictiveModel, revision: ModelRevision
+    model: Any, revision: Any
 ) -> ModelDescriptor:
     conditions = tuple(
         sorted(
@@ -572,9 +563,9 @@ def _model_descriptor(
 
 
 def _model_wire(
-    model: PredictiveModel,
-    revision: ModelRevision,
-    hypothesis: ModelHypothesis | None,
+    model: Any,
+    revision: Any,
+    hypothesis: Any | None,
     *,
     case_count: int,
     observed_count: int,
@@ -598,7 +589,7 @@ def _model_wire(
 
 
 def _model_root(
-    model: PredictiveModel, hypothesis: ModelHypothesis | None
+    model: Any, hypothesis: Any | None
 ) -> tuple[str, str]:
     if hypothesis is None or not hypothesis.source_refs:
         return ("", "")
@@ -650,9 +641,9 @@ def project_science_versions(
         if experiment_ledger is not None:
             owners_with_science += 1
         if experiment_ledger is not None:
-            if type(experiment_ledger) is not ExperimentLedger:
+            if not hasattr(experiment_ledger, "hypotheses"):
                 missing_ledgers += 1
-            elif experiment_ledger.owner_id != owner.owner_id:
+            elif getattr(experiment_ledger, "owner_id", None) != owner.owner_id:
                 raise DiffusionError(DiffusionReason.IDENTITY_CONFLICT.value)
             else:
                 trials = _deliberate_trials(experiment_ledger)
@@ -669,9 +660,9 @@ def project_science_versions(
                         )
                     )
         if model_ledger is not None:
-            if type(model_ledger) is not ScientificModelLedger:
+            if not hasattr(model_ledger, "models"):
                 missing_ledgers += 1
-            elif model_ledger.owner_id != owner.owner_id:
+            elif getattr(model_ledger, "owner_id", None) != owner.owner_id:
                 raise DiffusionError(DiffusionReason.IDENTITY_CONFLICT.value)
             else:
                 cases_by_model = _cases_by_model(model_ledger)
@@ -720,7 +711,7 @@ def project_science_versions(
 
 
 def _project_hypothesis(
-    hypothesis: ExperimentHypothesis,
+    hypothesis: Any,
     *,
     owner: FinalizedResearchOwnerSnapshot,
     run_id: str,
@@ -729,14 +720,10 @@ def _project_hypothesis(
     trials: Mapping[str, tuple[tuple[int, str], ...]],
     kinds: Mapping[str, str],
 ) -> list[ScienceVersion]:
-    if type(hypothesis) is not ExperimentHypothesis:
-        raise DiffusionError(DiffusionReason.UNSUPPORTED_SCHEMA.value)
     if hypothesis.owner_id != owner.owner_id:
         raise DiffusionError(DiffusionReason.IDENTITY_CONFLICT.value)
     rows: list[ScienceVersion] = []
     for revision in hypothesis.revisions:
-        if type(revision) is not HypothesisRevision:
-            raise DiffusionError(DiffusionReason.UNSUPPORTED_SCHEMA.value)
         key = ScienceVersionKey(
             run_id=run_id,
             owner_id=owner.owner_id.value,
@@ -766,7 +753,7 @@ def _project_hypothesis(
 
 
 def _cases_by_model(
-    ledger: ScientificModelLedger,
+    ledger: Any,
 ) -> dict[str, tuple[tuple[str, bool], ...]]:
     rows: dict[str, list[tuple[str, bool]]] = {}
     for case in ledger.cases:
@@ -778,17 +765,15 @@ def _cases_by_model(
 
 
 def _project_model(
-    model: PredictiveModel,
+    model: Any,
     *,
-    hypothesis: ModelHypothesis | None,
+    hypothesis: Any | None,
     owner: FinalizedResearchOwnerSnapshot,
     run_id: str,
     observed: int,
     known: Mapping[ScienceVersionKey, ScienceVersion],
     cases: tuple[tuple[str, bool], ...],
 ) -> list[ScienceVersion]:
-    if type(model) is not PredictiveModel:
-        raise DiffusionError(DiffusionReason.UNSUPPORTED_SCHEMA.value)
     if model.owner_id != owner.owner_id:
         raise DiffusionError(DiffusionReason.IDENTITY_CONFLICT.value)
     latest_case_ref = cases[-1][0] if cases else ""
@@ -796,8 +781,6 @@ def _project_model(
     root_kind, root_ref = _model_root(model, hypothesis)
     rows: list[ScienceVersion] = []
     for revision in model.revisions:
-        if type(revision) is not ModelRevision:
-            raise DiffusionError(DiffusionReason.UNSUPPORTED_SCHEMA.value)
         key = ScienceVersionKey(
             run_id=run_id,
             owner_id=owner.owner_id.value,

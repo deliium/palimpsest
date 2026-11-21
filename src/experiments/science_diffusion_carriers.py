@@ -14,15 +14,8 @@ import json
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
-from agents.cognition.artifacts import ArtifactInterpretationLedger
-from agents.cognition.experimentation import ExperimentHypothesis, ExperimentLedger
-from agents.cognition.scientific_hypothesis_communication import (
-    CommunicatedScientificHypothesis,
-    parse_scientific_hypothesis_claim_relation,
-)
-from agents.cognition.teaching import AdviceStore
 from analysis.science_diffusion_contract import (
     DiffusionContextFlag,
     DiffusionError,
@@ -128,6 +121,64 @@ class CarrierProjection:
     diagnostics: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class _Claim:
+    operator: str
+    operand_a_id: str
+    operand_b_id: str | None
+    process_token: str
+    predicted_outcome: str | None
+    conditions: tuple[tuple[str, str], ...]
+    claim_token: str
+    source_kind: str
+    source_token: str
+
+
+def _parse_hypothesis_claim(relation: Any) -> _Claim | None:
+    subject = getattr(relation, "subject", None)
+    predicate = getattr(relation, "predicate", None)
+    body = getattr(relation, "object", None)
+    if subject != "hyp_v1" or predicate != "claim":
+        return None
+    if type(body) is not str or not body or len(body) > 512:
+        return None
+    parts = body.split(":")
+    if len(parts) != 10:
+        return None
+    (
+        operator,
+        operand_a,
+        operand_b,
+        process,
+        predicted,
+        _confidence,
+        conds,
+        source_kind,
+        source_token,
+        claim_token,
+    ) = parts
+    conditions: tuple[tuple[str, str], ...] = ()
+    if conds not in {"", "none"}:
+        rows: list[tuple[str, str]] = []
+        for item in conds.split("|"):
+            if "=" not in item:
+                return None
+            slot, value = item.split("=", 1)
+            rows.append((slot, value))
+        conditions = tuple(sorted(rows))
+    return _Claim(
+        operator=operator,
+        operand_a_id=operand_a,
+        operand_b_id=None if operand_b in {"", "none"} else operand_b,
+        process_token=process,
+        predicted_outcome=None if predicted in {"", "none"} else predicted,
+        conditions=conditions,
+        claim_token=claim_token,
+        source_kind=source_kind,
+        source_token=source_token,
+    )
+
+
 def _b32_digest(payload: bytes) -> str:
     encoded = base64.b32encode(payload).decode("ascii").lower().rstrip("=")
     return encoded
@@ -148,7 +199,7 @@ def _valid_digest(value: str) -> bool:
     return all(char in _BASE32 for char in value)
 
 
-def _require_digest(value: object) -> str:
+def _require_digest(value: Any) -> str:
     if type(value) is not str or not _valid_digest(value):
         raise DiffusionError(DiffusionReason.MARKER_INCOMPLETE.value)
     return value
@@ -159,7 +210,7 @@ def _split_digest(digest: str) -> tuple[str, str]:
     return (f"a{value[:_SPLIT]}", f"b{value[_SPLIT:]}")
 
 
-def _join_tokens(left: object, right: object) -> str:
+def _join_tokens(left: Any, right: Any) -> str:
     if type(left) is not str or type(right) is not str:
         raise DiffusionError(DiffusionReason.MARKER_INCOMPLETE.value)
     if not _valid_token(left) or not _valid_token(right):
@@ -331,7 +382,7 @@ def encode_call_triples(
     )
 
 
-def _as_triple(relation: object) -> tuple[str, str, str]:
+def _as_triple(relation: Any) -> tuple[str, str, str]:
     if isinstance(relation, tuple) and len(relation) == 3:
         subject, predicate, object_token = relation
         if (
@@ -442,24 +493,21 @@ def _owner_row_ref(
 
 
 def _hypothesis_wire_from_claim(
-    claim: CommunicatedScientificHypothesis,
+    claim: Any,
 ) -> dict[str, str]:
     conditions = "none"
     if claim.conditions:
         conditions = "|".join(
             sorted(
-                f"{condition.slot.value}={condition.value_token}"
-                for condition in claim.conditions
+                f"{slot}={value}" for slot, value in claim.conditions
             )
         )
-    outcome = (
-        "none" if claim.predicted_outcome is None else claim.predicted_outcome.value
-    )
+    outcome = "none" if claim.predicted_outcome is None else claim.predicted_outcome
     return {
-        "operator": claim.operator.value,
+        "operator": claim.operator,
         "operand_a": claim.operand_a_id,
         "operand_b": "none" if claim.operand_b_id is None else claim.operand_b_id,
-        "process": claim.process_token.value,
+        "process": claim.process_token,
         "predicted_outcome": outcome,
         "conditions": conditions,
     }
@@ -494,7 +542,7 @@ def _hypothesis_wire_from_version(version: ScienceVersion) -> dict[str, str]:
 
 
 def _match_hypothesis_source(
-    claim: CommunicatedScientificHypothesis,
+    claim: Any,
     *,
     sender_owner: str,
     event_tick: int,
@@ -545,12 +593,10 @@ def _adopted_by_recipient(
     if checkpoint is None:
         return False
     ledger = getattr(checkpoint, "experiment_ledger", None)
-    if type(ledger) is not ExperimentLedger:
+    if ledger is None or not hasattr(ledger, "hypotheses"):
         return False
     token = f"evt:{event_id}"
     for hypothesis in ledger.hypotheses:
-        if type(hypothesis) is not ExperimentHypothesis:
-            continue
         for revision in hypothesis.revisions:
             if (
                 revision.evidence_ref == token
@@ -567,11 +613,11 @@ def _advice_occurrence(
     if checkpoint is None:
         return None
     store = getattr(checkpoint, "declarative_advice", None)
-    if type(store) is not AdviceStore:
+    if store is None or not hasattr(store, "rows"):
         return None
     for row in store.rows:
         if row.occurrence_id == event_id:
-            return row.act.value
+            return str(row.act.value)
     return None
 
 
@@ -651,9 +697,9 @@ def project_carrier_occurrences(
             continue
         relations = tuple(details.utterance.content.relations)
         science_sources: list[ScienceVersionKey | None] = []
-        hyp_claims: list[CommunicatedScientificHypothesis] = []
+        hyp_claims: list[_Claim] = []
         for relation in relations:
-            claim = parse_scientific_hypothesis_claim_relation(relation)
+            claim = _parse_hypothesis_claim(relation)
             if claim is not None:
                 hyp_claims.append(claim)
         for claim in hyp_claims:
@@ -744,7 +790,7 @@ def project_carrier_occurrences(
         ledger = getattr(checkpoint, "artifact_interpretations", None)
         if ledger is None:
             continue
-        if type(ledger) is not ArtifactInterpretationLedger:
+        if not hasattr(ledger, "interpretations"):
             continue
         for reading in ledger.interpretations:
             artifact = artifacts_by_id.get(reading.artifact_id.value)

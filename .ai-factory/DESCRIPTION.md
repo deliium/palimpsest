@@ -912,3 +912,29 @@ unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner
 v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
 `docs/scientific-institutions.md`.
+
+V4-33 (scientific knowledge diffusion, 2026-11-21) deepens the owned `science`
+and `organizations` contexts through composition and a detached read model
+without adding a capability flag, context, runner/result schema, command, world
+event, codec, SQL migration, pending format, command count, observer semantic
+type, or Godot overlay. Ordinary admitted experiments, durable records,
+repositories, teaching, replication, offices, institutional memory, and
+physical instruments remain existing channels. Capture is explicit and default
+off; a terminal export happens only after `finish_run`, and a cap seals only a
+trusted prefix. Detached `analysis.science_diffusion_*` folds forward evidence
+edges, mutation/misunderstanding/translation signals, scoped and observed
+lineage loss, reacquisition, and independent rediscovery; exact V3
+knowledge-genealogy links use `teach:<occurrence>`, `artifact:`, or `durable:`
+refs and never rewrite that graph. Four families append the catalog (271 ->
+**275**): `science_diffusion_channels@1`, `science_diffusion_fidelity@1`,
+`science_diffusion_persistence@1`, and `science_diffusion_genealogy@1`.
+`science-diffusion-snapshot-v1` / `science-diffusion-store-v1` publish
+programmatically and atomically; six GET-only dual-gated
+`/v1/simulations/{run_id}/science-diffusion` routes require `SUBJECTIVE_DEBUG`;
+the Research UI adds a read-only Science diffusion panel. Off-gate
+`science_diffusion@1` has two paired 128-tick v56 arms and a v57 instrument
+companion. Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (nine owned /
+three unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types,
+runner v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
+`docs/science-diffusion.md`.
