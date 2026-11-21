@@ -460,6 +460,7 @@ class MetricComputationInputs:
     scientific_hypotheses_analysis: ScientificHypothesesAnalysis | None = None
     scientific_models_analysis: ScientificModelsAnalysis | None = None
     competing_theories_analysis: object | None = None
+    scientific_institutions_analysis: object | None = None
     replication_analysis: object | None = None
     contact_analysis: object | None = None
     symbolic_analysis: object | None = None
@@ -3086,6 +3087,37 @@ def assemble_metric_documents(inputs: MetricComputationInputs) -> MetricBundle:
         _LOG.info("competing_theories_metrics_emitted families=6 catalog=268")
     else:
         _LOG.debug("competing_theories_metrics_disabled")
+    if inputs.scientific_institutions_analysis is not None:
+        institution_analysis = inputs.scientific_institutions_analysis
+        from analysis.scientific_institutions_metrics import (
+            compute_scientific_institution_lineage,
+            compute_scientific_institution_practice,
+            compute_scientific_institution_roles_and_carriers,
+        )
+
+        _safe(
+            "scientific_institution_practice",
+            lambda: compute_scientific_institution_practice(
+                institution_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_institution_roles_and_carriers",
+            lambda: compute_scientific_institution_roles_and_carriers(
+                institution_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _safe(
+            "scientific_institution_lineage",
+            lambda: compute_scientific_institution_lineage(
+                institution_analysis, run_id=run_id, input_revision=revision
+            ),
+        )
+        _LOG.info(
+            "scientific_institutions_metrics_emitted families=3 catalog=271"
+        )
+    else:
+        _LOG.debug("scientific_institutions_metrics_disabled")
     if inputs.contact_analysis is not None:
         if type(inputs.contact_analysis) is ContactAnalysisInputs:
             contact = inputs.contact_analysis

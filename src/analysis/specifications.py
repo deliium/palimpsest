@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 METRIC_CATALOG_VERSION: Final[str] = "metric-catalog-v1"
-METRIC_FAMILY_COUNT: Final[int] = 268
+METRIC_FAMILY_COUNT: Final[int] = 271
 
 # Align with existing memory-drift / transmission document versions.
 _ALGO_V1: Final[str] = "1"
@@ -353,6 +353,11 @@ class MetricFamilyId(StrEnum):
     COMPETING_THEORY_PREDICTIONS = "competing_theory_predictions"
     COMPETING_THEORY_FAILURES = "competing_theory_failures"
     COMPETING_THEORY_TRANSMISSION = "competing_theory_transmission"
+    SCIENTIFIC_INSTITUTION_PRACTICE = "scientific_institution_practice"
+    SCIENTIFIC_INSTITUTION_ROLES_AND_CARRIERS = (
+        "scientific_institution_roles_and_carriers"
+    )
+    SCIENTIFIC_INSTITUTION_LINEAGE = "scientific_institution_lineage"
 
 
 class DenominatorKind(StrEnum):
@@ -10635,6 +10640,78 @@ def _spec_competing_theory_transmission() -> MetricSpecification:
     )
 
 
+def _spec_scientific_institution_practice() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_INSTITUTION_PRACTICE,
+        population="scientific_practice_windows",
+        denominator="complete_windows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=(
+            "complete_window_count",
+            "complete_empty_window_count",
+            "partial_window_count",
+            "unavailable_window_count",
+            "supported_row_count",
+            "stable_row_count",
+            "observed_only_row_count",
+            "not_observed_row_count",
+            "unavailable_row_count",
+            "eligible_row_count",
+            "unassigned_count",
+            "ambiguous_count",
+        ),
+        opportunity="repeat practice only; no quality or prevalence claim",
+    )
+
+
+def _spec_scientific_institution_roles_and_carriers() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_INSTITUTION_ROLES_AND_CARRIERS,
+        population="scientific_practice_signals",
+        denominator="organization_windows",
+        denominator_kind=DenominatorKind.POPULATION_SIZE,
+        keys=(
+            "experimenter_signal_count",
+            "record_keeper_signal_count",
+            "teacher_signal_count",
+            "replication_expectation_signal_count",
+            "archive_signal_count",
+            "shared_instrument_signal_count",
+            "procedure_signal_count",
+            "institutional_memory_signal_count",
+            "office_signal_count",
+            "distinct_linked_actor_count",
+            "distinct_carrier_count",
+        ),
+        opportunity="contextual descriptions; never preset actor classes",
+    )
+
+
+def _spec_scientific_institution_lineage() -> MetricSpecification:
+    return _scientific_hypotheses_spec(
+        family_id=MetricFamilyId.SCIENTIFIC_INSTITUTION_LINEAGE,
+        population="scientific_practice_episodes",
+        denominator="stable_windows",
+        denominator_kind=DenominatorKind.OCCURRENCE,
+        keys=(
+            "episode_count",
+            "node_count",
+            "continued_count",
+            "emerged_count",
+            "handoff_count",
+            "split_count",
+            "merged_count",
+            "split_merged_count",
+            "lapsed_count",
+            "continuity_unknown_count",
+            "reobserved_after_gap_count",
+            "max_observed_length_windows",
+            "mean_observed_length_milli",
+        ),
+        opportunity="forward-only episodes; no gap bridging or cross-run link",
+    )
+
+
 def _spec_infrastructure_network_structure() -> MetricSpecification:    return _base(
         family_id=MetricFamilyId.INFRASTRUCTURE_NETWORK_STRUCTURE,
         evidence_inputs=frozenset(
@@ -11195,6 +11272,9 @@ _BUILDERS: Final[tuple[Callable[[], MetricSpecification], ...]] = (
     _spec_competing_theory_predictions,
     _spec_competing_theory_failures,
     _spec_competing_theory_transmission,
+    _spec_scientific_institution_practice,
+    _spec_scientific_institution_roles_and_carriers,
+    _spec_scientific_institution_lineage,
 )
 
 
