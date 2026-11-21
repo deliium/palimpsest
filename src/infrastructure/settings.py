@@ -293,6 +293,10 @@ class Settings(BaseSettings):
     competing_theories_cursor_key: SecretStr | None = Field(
         default=None, repr=False
     )
+    scientific_institutions_root: Path | None = None
+    scientific_institutions_cursor_key: SecretStr | None = Field(
+        default=None, repr=False
+    )
     revision: str = ""
 
     @field_validator(
@@ -589,6 +593,17 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("scientific_institutions_cursor_key")
+    @classmethod
+    def validate_scientific_institutions_cursor_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value().encode("utf-8")) < 32:
+            raise ValueError(
+                "scientific_institutions cursor key must be at least 32 UTF-8 bytes"
+            )
+        return value
+
     @field_validator("economic_cascades_cursor_key")
     @classmethod
     def validate_economic_cascades_cursor_key(
@@ -754,6 +769,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "PALIMPSEST_COMPETING_THEORIES_ROOT and "
                 "PALIMPSEST_COMPETING_THEORIES_CURSOR_KEY must be set together"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_scientific_institutions_pairing(self) -> Settings:
+        if (self.scientific_institutions_root is None) != (
+            self.scientific_institutions_cursor_key is None
+        ):
+            raise ValueError(
+                "PALIMPSEST_SCIENTIFIC_INSTITUTIONS_ROOT and "
+                "PALIMPSEST_SCIENTIFIC_INSTITUTIONS_CURSOR_KEY must be set "
+                "together"
             )
         return self
 

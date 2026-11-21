@@ -56,6 +56,7 @@
   import ReplicationPanel from './ReplicationPanel.svelte'
   import ScientificModelsPanel from './ScientificModelsPanel.svelte'
   import CompetingTheoriesPanel from './CompetingTheoriesPanel.svelte'
+  import ScientificInstitutionsPanel from './ScientificInstitutionsPanel.svelte'
   import EconomicInequalityPanel from './EconomicInequalityPanel.svelte'
   import CreditRelationshipsPanel from './CreditRelationshipsPanel.svelte'
   import MarketInstitutionsPanel from './MarketInstitutionsPanel.svelte'
@@ -141,6 +142,7 @@
           { id: 'scientific-replication', label: 'Scientific replication' },
           { id: 'scientific-models', label: 'Scientific models' },
           { id: 'competing-theories', label: 'Competing theories' },
+          { id: 'scientific-institutions', label: 'Scientific institutions' },
           { id: 'supply-chains', label: 'Supply chains' },
           { id: 'contact', label: 'Contact' },
         ],
@@ -398,6 +400,8 @@
     <ScientificModelsPanel {runId} {selection} />
   {:else if view === 'competing-theories'}
     <CompetingTheoriesPanel {runId} {selection} />
+  {:else if view === 'scientific-institutions'}
+    <ScientificInstitutionsPanel {runId} {selection} />
   {:else if view === 'supply-chains'}
     <SupplyChainsPanel {runId} />
   {:else if view === 'institutions'}

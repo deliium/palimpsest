@@ -46,6 +46,9 @@ from api.routes.research_matrix import router as research_matrix_router
 from api.routes.scientific_hypotheses import (
     router as scientific_hypotheses_router,
 )
+from api.routes.scientific_institutions import (
+    router as scientific_institutions_router,
+)
 from api.routes.scientific_models import router as scientific_models_router
 from api.routes.simulations import router as simulations_router
 from api.routes.social_mobility import router as social_mobility_router
@@ -89,6 +92,7 @@ __all__ = [
     "research_matrix_router",
     "research_router",
     "scientific_hypotheses_router",
+    "scientific_institutions_router",
     "scientific_models_router",
     "simulations_router",
     "social_mobility_router",

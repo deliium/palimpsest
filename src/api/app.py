@@ -58,6 +58,7 @@ from api.routes import (
     research_matrix_router,
     research_router,
     scientific_hypotheses_router,
+    scientific_institutions_router,
     scientific_models_router,
     simulations_router,
     social_mobility_router,
@@ -786,6 +787,42 @@ def _attach_competing_theories_reader(app: FastAPI) -> None:
     _LOGGER.info("competing_theories_reader_attached enabled=true")
 
 
+def _attach_scientific_institutions_reader(app: FastAPI) -> None:
+    from api.scientific_institutions_cursor import (
+        ScientificInstitutionsCursorCodec,
+    )
+    from persistence.scientific_institutions_filesystem import (
+        FilesystemScientificInstitutionsStore,
+    )
+
+    settings = getattr(app.state, "settings", None)
+    if not isinstance(settings, Settings):
+        app.state.scientific_institutions_cursor_codec = None
+        app.state.scientific_institutions_reader = None
+        return
+    secret = (
+        settings.scientific_institutions_cursor_key.get_secret_value().encode(
+            "utf-8"
+        )
+        if settings.scientific_institutions_cursor_key is not None
+        else None
+    )
+    if settings.scientific_institutions_root is None or secret is None:
+        app.state.scientific_institutions_cursor_codec = None
+        app.state.scientific_institutions_reader = None
+        _LOGGER.info("scientific_institutions_attach enabled=false")
+        return
+    app.state.scientific_institutions_cursor_codec = (
+        ScientificInstitutionsCursorCodec.from_secret(secret)
+    )
+    app.state.scientific_institutions_reader = (
+        FilesystemScientificInstitutionsStore(
+            settings.scientific_institutions_root
+        )
+    )
+    _LOGGER.info("scientific_institutions_reader_attached enabled=true")
+
+
 def _attach_scientific_hypotheses_reader(app: FastAPI) -> None:
     from api.scientific_hypotheses_cursor import (
         ScientificHypothesesCursorCodec,
@@ -1054,6 +1091,7 @@ def create_app(
     _attach_scientific_replication_reader(app)
     _attach_scientific_models_reader(app)
     _attach_competing_theories_reader(app)
+    _attach_scientific_institutions_reader(app)
     _attach_credit_relationships_reader(app)
     _attach_research_cultural_service(app)
     if getattr(app.state, "research_cultural_cursor_codec", None) is None:
@@ -1103,6 +1141,7 @@ def create_app(
     app.include_router(replication_router)
     app.include_router(scientific_models_router)
     app.include_router(competing_theories_router)
+    app.include_router(scientific_institutions_router)
     app.include_router(credit_relationships_router)
     app.include_router(replay_router)
     app.include_router(streams_router)
