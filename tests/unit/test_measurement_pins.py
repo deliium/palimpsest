@@ -41,7 +41,7 @@ def test_current_version_and_count_pins() -> None:
     assert "finalization-command-v3" in PENDING_FINALIZATION_ACCEPTED_VERSIONS
     assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert METRIC_FAMILY_COUNT == 268
+    assert METRIC_FAMILY_COUNT == 271
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"

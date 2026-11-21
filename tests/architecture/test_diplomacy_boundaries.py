@@ -284,7 +284,7 @@ def test_no_new_wire_surfaces() -> None:
     from world._rules import COMMAND_RULE_MATRIX
     from world.events import EVENT_SCHEMA_REPLAY_V22
 
-    assert METRIC_FAMILY_COUNT == 268
+    assert METRIC_FAMILY_COUNT == 271
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73

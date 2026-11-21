@@ -101,7 +101,7 @@ be served only after a plan lands its frames, mirror pins, and client support.
 - Removing an accepted version is a compatibility break and needs an explicit,
   scoped architectural decision.
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-27 owns `science` on `runner-config-v56` and adds no `runner-config-v57`. It appends six scientific-hypothesis families (244 -> 250) and uses existing events only.

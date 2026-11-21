@@ -858,7 +858,7 @@ GET-only `/v1/simulations/{run_id}/credit-relationships` routes require
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score,
 or canonical credit is added. See `docs/credit-relationships.md`.
 
-Current catalog: 268 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
 Nine V4 flags are owned; three remain unowned.
 

@@ -143,7 +143,7 @@ analytical rows, the snapshot, routes, or the Research UI.
 ## Pins
 
 17 V4 contexts, 12 flags, 9 owned / 3 unowned (`epidemics`,
-`ecological_feedback`, `disasters`), `v4-context-map-v6`, 250 metric families,
+`ecological_feedback`, `disasters`), `v4-context-map-v6`, 271 metric families (268 at the V4-31 landing),
 45 commands, 73 observer semantic types, replay-v27/codec `v25`, Alembic
 `0017`, `/v1`, and `observer-protocol-v1`.
 

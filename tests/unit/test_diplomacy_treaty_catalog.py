@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_catalog_is_176_and_treaty_families_are_last() -> None:
     specs = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 268
-    assert len(specs) == 268
+    assert METRIC_FAMILY_COUNT == 271
+    assert len(specs) == 271
     assert [spec.family_id for spec in specs[164:168]] == [
         MetricFamilyId.TREATY_STRUCTURE,
         MetricFamilyId.TREATY_VERSION_LINEAGE,

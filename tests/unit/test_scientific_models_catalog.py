@@ -22,7 +22,7 @@ _TAIL = [
 
 def test_catalog_appends_exactly_six_families() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == 268
+    assert len(specs) == 271
     ids = [spec.family_id.value for spec in specs]
     assert ids[255] == "scientific_replication_social_interpretation"
     assert ids[256:262] == _TAIL

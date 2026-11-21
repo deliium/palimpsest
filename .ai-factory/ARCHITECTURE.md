@@ -174,14 +174,14 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-30
+### Current baseline through V4-32
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
 | Latest feature runner | `runner-config-v57` for measurement instruments (the v56 family root plus one mandatory sibling); accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
-| Metric families | 268 (V4-24's 228, V4-25's 236, V4-26's 244, 250 after V4-27, 256 after V4-28, 262 after V4-30's six predictive families, plus six V4-31 competing-theory families) |
+| Metric families | 271 (268 after V4-31, plus three V4-32 scientific-institution families) |
 | Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V28` / `v26` when measurement instruments are active; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
 | Subjective pending codec | `finalization-command-v5` adds `competing-theory-state-v1` to the v4 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
@@ -189,7 +189,7 @@ are presentation only; neither client advances the simulation.
 
 These are a dated baseline, not grounds to rewrite legacy runs. The executable
 version taxonomy is `simulation.compatibility`; version-specific codecs and
-feature gates determine accepted inputs and actual writes. Current catalog: 268 metric families. Older sections of
+feature gates determine accepted inputs and actual writes. Current catalog: 271 metric families. Older sections of
 `docs/architecture.md` and the roadmap retain historical counts; do not treat
 those as current pins or silently drop their legacy accepted versions.
 
@@ -1364,3 +1364,37 @@ families (262 -> **268**) and publishes `competing-theories-snapshot-v1` /
 (nine owned), `v4-context-map-v6`, 45 commands, 73 observer semantic types,
 runner v4/v55/v56 with latest opt-in v57, pending v1 default/v5 competing,
 replay 27/`v25` and 28/`v26`, `/v1`, `observer-protocol-v1`, Alembic `0017`.
+
+
+### V4-32 scientific-institutions seam
+
+V4-32 composes the owned `science` and `organizations` contexts through existing
+primitives; it adds no capability flag, context, runner/result schema, command,
+event, observer semantic type, write pair, `/v2` route, migration, or Godot
+overlay. `analysis.scientific_institutions_*` owns the closed detached
+vocabulary, exact contributor detection, window classification, forward-only
+`sci-inst-` episode lineage, and three metric families (catalog 268 -> **271**).
+`experiments.scientific_institutions_*` owns bounded completion projection,
+owner-context joins, explicit capture, scenario composition, and the only
+analysis-to-artifact bridge. `simulation.scientific_institutions_*` owns the
+canonical bounded `scientific-institutions-snapshot-v1`, codec, paging, and
+separate read/publication ports; `persistence.scientific_institutions_filesystem`
+implements `scientific-institutions-store-v1` with a single atomic `state.json`
+index and content-addressed blobs; five GET-only
+`/v1/simulations/{run_id}/scientific-institutions` routes require
+`SUBJECTIVE_DEBUG` and fail closed with `scientific_institutions_disabled`; the
+Research UI adds a read-only panel.
+
+Stability is analytical and non-backdated: it requires two adjacent complete
+windows, the same organization and activity key, a shared surviving typed
+carrier, and at least two distinct committed actors. Handoffs and split/merge
+edges require exact carriers, an upstream organization transition, and
+confirmation at `w+2`. No gap bridging, cross-run identity, predefined
+University/Academy class, profession, permission, or global registry exists.
+`WorldEngine`, perception, admission, stop selectors, memory, prompts, observer
+semantics, and clients never read the read model or its publications.
+
+Pins: 271 metric families, 17 V4 contexts, 12 V4 flags (nine owned / three
+unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner
+v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2.

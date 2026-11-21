@@ -887,3 +887,28 @@ observer semantic types, runner v4/v55/v56 with latest opt-in v57, pending v1
 default/v5 competing, replay 27/`v25` and 28/`v26`, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
 `docs/competing-theories.md`.
+
+V4-32 (scientific institutions, 2026-11-21) deepens the owned `science` and
+`organizations` contexts through composition and a detached read model without
+adding a capability flag, context, runner/result schema, command, world event,
+codec, SQL migration, pending format, or Godot overlay. Ordinary agents execute
+experiments; durable records, repositories, owner-recognized roles/procedures,
+teaching, replication, offices, institutional memory, and physical instruments
+remain existing channels. A conservative detector requires committed deliberate
+executions and carrier service on a surviving typed carrier by uniquely
+attributable organization participants in two adjacent complete 32-tick windows,
+with at least two distinct actors. Lineage uses separate `sci-inst-` episodes
+with forward-only continuation, lapse, unknown continuity, and confirmed
+handoff/split/merge rules; gaps and cross-run links are never bridged. Three
+detached metric families append the catalog (268 -> **271**):
+`scientific_institution_practice@1`,
+`scientific_institution_roles_and_carriers@1`, and
+`scientific_institution_lineage@1`. `scientific-institutions-snapshot-v1` and
+`scientific-institutions-store-v1` publish programmatically and atomically;
+five GET-only dual-gated `/v1/simulations/{run_id}/scientific-institutions`
+routes require `SUBJECTIVE_DEBUG`; the Research UI adds a read-only panel.
+Pins: 271 metric families, 17 V4 contexts, 12 V4 flags (nine owned / three
+unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner
+v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
+`observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
+`docs/scientific-institutions.md`.

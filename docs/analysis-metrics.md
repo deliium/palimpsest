@@ -38,7 +38,7 @@ Executable formula, population, and edge-case policy for all metric families liv
 | `caregiving_burden` | `caregiving_burden@1` | detached care-act rows |
 | `intergenerational_cooperation` | `intergenerational_cooperation@1` | detached care-act + kinship rows |
 
-Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **268** families (`METRIC_FAMILY_COUNT`); the V4-27 landing reported **250**. New opt-in families assemble only when their detached inputs are present.
+Catalog version: `metric-catalog-v1`. Document schema: `MetricDocument` schema `1`. Closed catalog cardinality: **271** families (`METRIC_FAMILY_COUNT`); the V4-27 landing reported **250**. New opt-in families assemble only when their detached inputs are present.
 
 ### Additive analysis surfaces (off the V1 gate)
 
@@ -771,7 +771,7 @@ emerged/continued/transformed/split/merge/dissolved counts. No composite
 persistence score, price, money, ranking, severity, recommendation, allocation,
 or quota exists.
 
-Current catalog: 268 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledger families
 

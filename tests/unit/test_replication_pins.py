@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_catalog_appends_six_without_widening_truth() -> None:
-    assert METRIC_FAMILY_COUNT == 268
+    assert METRIC_FAMILY_COUNT == 271
     values = tuple(item.value for item in MetricFamilyId)
     assert values[244:250] == (
         "scientific_hypothesis_structure",

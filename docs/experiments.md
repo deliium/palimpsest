@@ -593,7 +593,7 @@ evidence ids, rule ids, mediation ids, resolution terms, prompts, or
 credentials. See [Disputes](disputes.md) and
 [Persistence](persistence.md).
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-27 registers off-gate `scientific_hypotheses@1` with baseline, enabled, and communicated arms over the owned `science` flag.

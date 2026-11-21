@@ -357,7 +357,7 @@ cross-society flows, and analytical network lineage. It provides a
 `trade_networks_disabled` plus an empty state without inventing a network. It
 never displays price, money, a composite trade score, or a planned route.
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 
 V4-24 appends eight economic-inequality families (220 -> 228) and adds seven GET-only dual-gated economic-inequality routes plus a read-only Research UI panel; see [Economic inequality](economic-inequality.md).

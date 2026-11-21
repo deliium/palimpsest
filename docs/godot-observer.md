@@ -425,4 +425,4 @@ and three-class evidence model remain unchanged. Payloads with unknown layers or
 forbidden authority/raw-id fields are rejected without affecting playback or
 physics.
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

@@ -210,7 +210,7 @@ account is true, who is guilty or liable, or which party should win.
 Current catalog note: the evidence families remain in place, and the current
 closed catalog is **204** families after the V4-09 through V4-17 appends.
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 Accounting records can project opt-in evidence candidates; see
 [Accounting ledgers](accounting-ledgers.md). Evidence remains belief, never truth.

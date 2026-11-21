@@ -101,4 +101,4 @@ Experiment BI (`mediation_opportunities@1`) exposes baseline, prior-schema
 off-control, mediation-on, and opportunity-limited arms. It seeds no dispute,
 account, mediator role, acceptance, or settlement.
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

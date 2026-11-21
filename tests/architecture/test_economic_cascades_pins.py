@@ -32,7 +32,7 @@ def test_context_pins() -> None:
 
 
 def test_metric_catalog_pin() -> None:
-    assert METRIC_FAMILY_COUNT == 268
+    assert METRIC_FAMILY_COUNT == 271
 
 
 def test_closed_surface_pins() -> None:

@@ -39,7 +39,7 @@ def test_readme_and_context_artifacts_link_the_feature() -> None:
     assert "250 metric families" in description
     architecture = (ROOT / ".ai-factory" / "ARCHITECTURE.md").read_text()
     assert "V4-03 organizations seam" in architecture
-    assert "268 metric families" in architecture
+    assert "271 metric families" in architecture
 
     docs_architecture = (ROOT / "docs" / "architecture.md").read_text()
     assert "Downstream V4 organization contract" in docs_architecture

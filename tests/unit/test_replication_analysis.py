@@ -179,7 +179,7 @@ def test_reported_pairs_stay_declared_only() -> None:
 
 
 def test_six_metric_families_append_after_the_unchanged_science_slice() -> None:
-    assert METRIC_FAMILY_COUNT == 268
+    assert METRIC_FAMILY_COUNT == 271
     assert tuple(item.value for item in MetricFamilyId)[244:250] == (
         "scientific_hypothesis_structure",
         "scientific_hypothesis_evidence",

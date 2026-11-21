@@ -34,8 +34,8 @@ _KEYS = {
 
 def test_six_families_append_without_moving_the_prior_tail() -> None:
     specs = all_metric_specifications()
-    assert len(specs) == METRIC_FAMILY_COUNT == 268
-    assert tuple(spec.family_id.value for spec in specs[-6:]) == _FAMILIES
+    assert len(specs) == METRIC_FAMILY_COUNT == 271
+    assert tuple(spec.family_id.value for spec in specs[-9:-3]) == _FAMILIES
     assert not {
         spec.family_id.value for spec in specs[:262]
     } & set(_FAMILIES)

@@ -270,4 +270,4 @@ trade-network append.
 - [Research API](research-api.md)
 - [Analysis metrics](analysis-metrics.md)
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

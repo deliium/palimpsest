@@ -71,7 +71,7 @@ def test_feature_page_contains_required_tokens() -> None:
 
 
 def test_current_docs_carry_live_pins() -> None:
-    assert METRIC_FAMILY_COUNT == 268
+    assert METRIC_FAMILY_COUNT == 271
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
@@ -92,8 +92,8 @@ def test_current_docs_carry_live_pins() -> None:
     ):
         text = _read(ROOT / relative)
         assert "scientific-hypotheses" in text or "V4-27" in text, relative
-        assert "268" in text, relative
-    assert "268" in _read(ROOT / "docs" / "configuration.md")
+        assert "271" in text, relative
+    assert "271" in _read(ROOT / "docs" / "configuration.md")
     assert "V4-27 owned" in _read(ROOT / "docs" / "v4-architecture.md")
     assert "9 owned / 3 unowned" in _read(ROOT / ".ai-factory" / "ARCHITECTURE.md")
     configuration = _read(ROOT / "docs" / "configuration.md")

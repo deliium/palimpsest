@@ -25,8 +25,8 @@ pytestmark = pytest.mark.unit
 
 def test_catalog_appends_exactly_four_accounting_families() -> None:
     specifications = all_metric_specifications()
-    assert METRIC_FAMILY_COUNT == 268
-    assert len(specifications) == 268
+    assert METRIC_FAMILY_COUNT == 271
+    assert len(specifications) == 271
     assert [spec.family_id for spec in specifications[216:220]] == [
         MetricFamilyId.ACCOUNTING_RECORD_COVERAGE,
         MetricFamilyId.ACCOUNTING_ENTRY_ALIGNMENT,
@@ -85,7 +85,7 @@ def test_accounting_family_ids_versions_and_keys_are_exact(
 
 
 def test_catalog_validates() -> None:
-    assert len(validate_metric_catalog()) == 268
+    assert len(validate_metric_catalog()) == 271
 
 
 def test_lookup_works_for_both_enum_and_string() -> None:

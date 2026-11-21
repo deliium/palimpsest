@@ -118,6 +118,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Scientific replication](docs/scientific-replication.md) | Owner-scoped designs, repeat/adapted relations, conditions, categorical uncertainty, conflicting outcomes, snapshot/store/routes, Research UI panel |
 | [Scientific models](docs/scientific-models.md) | Owner-scoped predictive models, frozen prior forecasts, observed outcomes, calibration, revisions, paired comparison, snapshot/store/routes, Research UI panel |
 | [Competing theories](docs/competing-theories.md) | Owner-scoped incompatible explanations, citations, support networks, teaching, frozen same-case forecasts/failures, snapshot/store/routes, Research UI panel |
+| [Scientific institutions](docs/scientific-institutions.md) | Composed detached practice detection, stable windows, forward-only `sci-inst-` lineage, three metric families, snapshot/store/routes, Research UI panel |
 | [Measurement instruments](docs/measurement-instruments.md) | Fallible physical tools, five dimensions, calibration, owner reliability beliefs, bounded testimony, v57/event-28 lifecycle |
 | [Economic cascades](docs/economic-cascades.md) | Five objective disruption classes, observable dependency edges, bounded `linked`/`unlinked`/`unresolved` chains, snapshot/store, seven GET routes, and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
@@ -153,6 +154,7 @@ Optional V3 civilization overlays (regions, settlements, migration, completed-ex
 - [Scientific replication](docs/scientific-replication.md)
 - [Scientific models](docs/scientific-models.md)
 - [Competing theories](docs/competing-theories.md)
+- [Scientific institutions](docs/scientific-institutions.md)
 - [Measurement instruments](docs/measurement-instruments.md)
 
-Current catalog: 268 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 9 owned / 3 unowned; replay-v27/codec `v25`; Alembic `0017`.
+Current catalog: 271 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 9 owned / 3 unowned; replay-v27/codec `v25` and 28/`v26`; Alembic `0017`.

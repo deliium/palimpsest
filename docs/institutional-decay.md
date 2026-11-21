@@ -159,4 +159,4 @@ valid research outcome.
 - [Experiments](experiments.md)
 - [Architecture](architecture.md)
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

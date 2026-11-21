@@ -142,6 +142,6 @@ analysis bounds, eight metric families, snapshot/codec/paging/ports, the atomic
 store, publication receipts, seven routes, the Research UI panel, determinism,
 and leakage guards. See the V4-25 plan bundle for the verification receipt.
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 See also: [Economic cascades](economic-cascades.md) measures how objective disruptions propagate through these production and infrastructure dependencies.

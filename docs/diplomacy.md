@@ -290,4 +290,4 @@ diplomacy ledger. The treaty contract is never rewritten, and an absent
 diplomacy ledger leaves anchors unresolved. See
 [borders and claims](borders-and-claims.md).
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.

@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
+import httpx
 import pytest
+from pydantic import SecretStr
 from tests.simulation_helpers import (
     alive_body,
     make_item,
@@ -14,7 +17,20 @@ from tests.simulation_helpers import (
 )
 
 from agents.models import AgentId
+from analysis.organization_contract import OrganizationCoverage
+from analysis.organization_identity import OrganizationIdentityAssignment
+from analysis.scientific_institutions_detection import detect_scientific_practice
+from analysis.scientific_institutions_lineage import (
+    build_scientific_practice_lineage,
+)
+from analysis.scientific_institutions_metrics import (
+    ScientificInstitutionsMetricInputs,
+)
+from api.app import create_app
 from experiments.catalog import base_runner_config_from_scenario
+from experiments.scientific_institutions_capture import (
+    run_with_scientific_institution_capture,
+)
 from experiments.scientific_institutions_completed_run import (
     ScientificInstitutionBoundaryInput,
     build_scientific_institution_windows,
@@ -22,7 +38,17 @@ from experiments.scientific_institutions_completed_run import (
 from experiments.scientific_institutions_context import (
     build_scientific_institution_context,
 )
+from experiments.scientific_institutions_publication import (
+    compose_scientific_institutions_snapshot,
+)
+from experiments.scientific_institutions_scenario import (
+    scientific_institutions_scenario,
+)
 from experiments.scientific_models_scenario import scientific_models_scenario
+from infrastructure.settings import Settings
+from persistence.scientific_institutions_filesystem import (
+    FilesystemScientificInstitutionsStore,
+)
 from simulation.models import RunId, StochasticIdentity
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import (
@@ -231,7 +257,7 @@ class _Arbiter:
 
 
 @pytest.mark.asyncio
-async def test_live_context() -> None:
+async def test_live_context(tmp_path: Path) -> None:
     runner = await SimulationRunner.from_config(
         _config(),
         run_id=RunId(RUN),
@@ -288,9 +314,219 @@ async def test_live_context() -> None:
     )
     for window in context.windows:
         assert window.organizations
-        assert any(fact.links for fact in window.organizations)
+        assert any(
+            fact.links for fact in window.organizations
+        )
         assert any(
             link.contribution_token is not None
             for fact in window.organizations
             for link in fact.links
         )
+    assessment = detect_scientific_practice(context)
+    stable = assessment.stable_rows()
+    assert stable
+    assert stable[0].window_index == 1
+    empty_assignment = OrganizationIdentityAssignment(
+        policy_version="organization-identity.v1",
+        records=(),
+        transitions=(),
+        windows=(),
+        coverage=OrganizationCoverage.of(0, 0),
+    )
+    lineage = build_scientific_practice_lineage(
+        assessment, empty_assignment, ()
+    )
+    assert lineage.episodes
+    publication = compose_scientific_institutions_snapshot(
+        ScientificInstitutionsMetricInputs(
+            assessment=assessment, lineage=lineage, context=context
+        ),
+        run_id=RUN,
+        publication_id="pub-live",
+        input_revision=result.objective_state_hash or "rev-live",
+        boundary_tick=result.ticks_committed,
+    )
+    store = FilesystemScientificInstitutionsStore(tmp_path)
+    receipt = store.publish(publication)
+    assert receipt.stored is True
+    token = "integration-scientific-institutions-token-" + "x" * 32
+    app = create_app(
+        Settings(
+            _env_file=None,
+            api_debug_enabled=True,
+            api_debug_credential=SecretStr(token),
+            scientific_institutions_root=tmp_path,
+            scientific_institutions_cursor_key=SecretStr("k" * 32),
+        ),
+        attach_default_manager=False,
+    )
+    base_url = f"/v1/simulations/{RUN}/scientific-institutions"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        summary = await client.get(
+            base_url, headers={"x-palimpsest-token": token}
+        )
+        assert summary.status_code == 200, summary.text
+        payload = summary.json()
+        assert payload["publication_id"] == "pub-live"
+        assert payload["summary"]["stable_row_count"] >= 1
+        practice = await client.get(
+            f"{base_url}/practice",
+            headers={"x-palimpsest-token": token},
+            params={"publication_id": "pub-live", "limit": 1},
+        )
+        assert practice.status_code == 200, practice.text
+        assert practice.json()["publication_id"] == "pub-live"
+
+
+def _autonomous_base():
+    from experiments.catalog import base_runner_config_from_scenario
+
+    body_1 = alive_body("body-1", inventory=(EntityId("wood-1"), EntityId("tool-1")))
+    body_2 = alive_body(
+        "body-2",
+        location_id="loc-2",
+        inventory=(EntityId("wood-2"), EntityId("tool-2")),
+    )
+    return base_runner_config_from_scenario(
+        seed=41,
+        stochastic_identity=StochasticIdentity("sci-inst-autonomous"),
+        scenario=WorldScenarioSpec(
+            world_id=WorldId("world-sci-inst-autonomous"),
+            revision=WorldRevision(0),
+            physical_rules=default_physical_rules(),
+            locations=(
+                make_location("loc-1", adjacent=("loc-2",)),
+                make_location("loc-2", adjacent=("loc-1",)),
+            ),
+            bodies=(body_1, body_2),
+            items=(
+                make_item(
+                    "wood-1",
+                    name="wood",
+                    kind=ItemKind.MATERIAL,
+                    location_id=None,
+                    holder_id="body-1",
+                ),
+                make_item(
+                    "wood-2",
+                    name="wood",
+                    kind=ItemKind.MATERIAL,
+                    location_id=None,
+                    holder_id="body-2",
+                ),
+                make_item(
+                    "tool-1",
+                    name="Chisel",
+                    kind=ItemKind.TOOL,
+                    location_id=None,
+                    holder_id="body-1",
+                ),
+                make_item(
+                    "tool-2",
+                    name="Chisel",
+                    kind=ItemKind.TOOL,
+                    location_id=None,
+                    holder_id="body-2",
+                ),
+            ),
+            weather=(make_weather("loc-1"), make_weather("loc-2")),
+        ),
+        agents=(
+            AgentRunnerSpec(
+                agent_id=AgentId("agent-1"),
+                entity_id=body_1.entity_id,
+                cognition=AgentCognitionSpec(agent_id=AgentId("agent-1")),
+            ),
+            AgentRunnerSpec(
+                agent_id=AgentId("agent-2"),
+                entity_id=body_2.entity_id,
+                cognition=AgentCognitionSpec(agent_id=AgentId("agent-2")),
+            ),
+        ),
+        max_ticks=96,
+    )
+
+
+def _scenario_conditions():
+    definition = scientific_institutions_scenario(
+        _autonomous_base(), max_ticks=96
+    )
+    return {
+        row.condition_id: row.runner_config for row in definition.conditions
+    }
+
+
+@pytest.mark.asyncio
+async def test_autonomous_lanes_do_not_require_emergence() -> None:
+    conditions = _scenario_conditions()
+    captured: dict[str, object] = {}
+    for condition in (
+        "institutions-combined-v56",
+        "institutions-instruments-v57",
+        "institutions-org-off",
+        "institutions-science-off",
+    ):
+        runner = await SimulationRunner.from_config(
+            conditions[condition],
+            run_id=RunId(f"run-{condition}"),
+            factories=RunnerDependencyFactories(),
+        )
+        async with runner:
+            receipt = await run_with_scientific_institution_capture(runner)
+        assert receipt.result.ticks_committed == 96
+        captured[condition] = receipt
+        if condition in {
+            "institutions-combined-v56",
+            "institutions-instruments-v57",
+        }:
+            assert receipt.status == "captured"
+            assert receipt.evidence is not None
+            assert all(
+                window.window.complete for window in receipt.evidence.windows
+            )
+            # Autonomous stability is allowed to be absent.
+            assert isinstance(
+                receipt.context.windows if receipt.context else (), tuple
+            )
+        else:
+            assert receipt.status == "unavailable"
+            assert receipt.evidence is None
+            assert receipt.boundaries == ()
+
+    twin = await SimulationRunner.from_config(
+        conditions["institutions-combined-v56"],
+        run_id=RunId("run-institutions-combined-v56-twin"),
+        factories=RunnerDependencyFactories(),
+    )
+    async with twin:
+        twin_receipt = await run_with_scientific_institution_capture(twin)
+    primary = captured["institutions-combined-v56"]
+    assert (
+        twin_receipt.result.objective_state_hash
+        == primary.result.objective_state_hash
+    )
+
+
+@pytest.mark.asyncio
+async def test_competing_theories_config_reports_unavailable() -> None:
+    from experiments.competing_theories_scenario import (
+        competing_theories_scenario,
+    )
+
+    definition = competing_theories_scenario(
+        _autonomous_base(), max_ticks=96
+    )
+    condition = definition.conditions[0]
+    runner = await SimulationRunner.from_config(
+        condition.runner_config,
+        run_id=RunId("run-competing-compat"),
+        factories=RunnerDependencyFactories(),
+    )
+    async with runner:
+        receipt = await run_with_scientific_institution_capture(runner)
+    assert receipt.status == "unavailable"
+    assert receipt.evidence is None
+    assert receipt.boundaries == ()
+    assert receipt.result.ticks_committed == 96

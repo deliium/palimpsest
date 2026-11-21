@@ -599,7 +599,7 @@ added. Off-gate experiment `credit_relationships@1` composes `markets_credit`,
 `structured_commitments`, and `subjective_valuation`; it is never on the V1 A–E
 gate. See [credit relationships](credit-relationships.md).
 
-Current catalog: 268 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
+Current catalog: 271 metric families; 45 commands; 73 observer semantic types; Alembic `0017`.
 
 ## V4-23 accounting ledgers
 
@@ -664,3 +664,21 @@ Optional read-only inspection uses a paired configuration:
 
 Neither set means disabled; exactly one is invalid. See
 [Scientific models](scientific-models.md) and [Competing theories](competing-theories.md).
+
+## Optional scientific institutions (V4-32)
+
+Scientific-institution analysis composes the owned `science` and `organizations`
+flags with durable records and, optionally, repositories, collective projects,
+teaching, replication, offices, institutional memory, and instruments. It adds
+no capability flag, runner field, command, event, write pair, or migration.
+Capture is explicit and in-process; nothing is published automatically.
+
+Optional read-only inspection uses a paired configuration:
+
+- `PALIMPSEST_SCIENTIFIC_INSTITUTIONS_ROOT` — immutable snapshot store root;
+- `PALIMPSEST_SCIENTIFIC_INSTITUTIONS_CURSOR_KEY` — at least 32 UTF-8 bytes.
+
+Neither set means disabled; exactly one is a startup validation error. All
+routes require `SUBJECTIVE_DEBUG` and fail closed with
+`scientific_institutions_disabled` when unconfigured. See
+[Scientific institutions](scientific-institutions.md).

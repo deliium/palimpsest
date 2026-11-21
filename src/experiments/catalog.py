@@ -5875,6 +5875,28 @@ def experiment_scientific_models(
     return definition
 
 
+def experiment_scientific_institutions(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 96,
+) -> ExperimentDefinition:
+    """Off-gate V4-32 experiment: composed scientific-institution practice."""
+
+    from experiments.scientific_institutions_scenario import (
+        scientific_institutions_scenario,
+    )
+
+    definition = scientific_institutions_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=scientific_institutions@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
 def experiment_measurement_instruments(
     base: SimulationRunnerConfig,
     *,
