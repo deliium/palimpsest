@@ -101,6 +101,7 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/measurement_scenario.py",
     "experiments/scientific_models_scenario.py",
     "experiments/competing_theories_scenario.py",
+    "experiments/scientific_institutions_context.py",
     "experiments/civilization_benchmark_forks.py",
     "experiments/infrastructure_networks_scenario.py",
     "experiments/market_institution_scenario.py",

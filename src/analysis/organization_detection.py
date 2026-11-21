@@ -29,10 +29,12 @@ from analysis.organizations import OrganizationConceptRow
 
 __all__ = [
     "OrganizationCandidate",
+    "OrganizationDetectionAttribution",
     "OrganizationDetectionResult",
     "OrganizationMemberClaim",
     "OrganizationWindowResult",
     "detect_organization_candidates",
+    "detect_organization_candidates_with_contributors",
 ]
 
 _LOG: Final[logging.Logger] = logging.getLogger("analysis.organization_detection")
@@ -101,6 +103,15 @@ class OrganizationWindowResult:
     end_tick: int
     candidate_keys: tuple[str, ...]
     lane_presence: tuple[tuple[str, bool], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OrganizationDetectionAttribution:
+    """Legacy detection output plus exact candidate contributors."""
+
+    result: OrganizationDetectionResult
+    contributors: tuple[tuple[int, str, str, str], ...] = ()
+    duplicate_candidate_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,11 +275,11 @@ def _member_claims(
     return tuple(claims)
 
 
-def _candidate_from_group(
+def _candidate_with_contributors(
     window: OrganizationWindowEvidence,
     indices: Sequence[int],
     contributions: Sequence[tuple[str, OrganizationConceptRow, set[str], set[str]]],
-) -> OrganizationCandidate:
+) -> tuple[OrganizationCandidate, tuple[tuple[int, str, str, str], ...]]:
     members: set[str] = set()
     anchors: set[str] = set()
     owners: set[str] = set()
@@ -354,7 +365,7 @@ def _candidate_from_group(
             else OrganizationTemporalScope.UNKNOWN
         )
     )
-    return OrganizationCandidate(
+    candidate = OrganizationCandidate(
         candidate_key=_candidate_key(window.window_index, members, anchors),
         window_index=window.window_index,
         member_ids=tuple(sorted(members)),
@@ -373,17 +384,40 @@ def _candidate_from_group(
         first_tick=first_tick,
         last_tick=last_tick,
     )
+    attribution = tuple(
+        sorted(
+            {
+                (
+                    window.window_index,
+                    candidate.candidate_key,
+                    contributions[index][0],
+                    contributions[index][1].organization_id,
+                )
+                for index in indices
+            }
+        )
+    )
+    return candidate, attribution
 
 
-def detect_organization_candidates(
+def _candidate_from_group(
+    window: OrganizationWindowEvidence,
+    indices: Sequence[int],
+    contributions: Sequence[tuple[str, OrganizationConceptRow, set[str], set[str]]],
+) -> OrganizationCandidate:
+    return _candidate_with_contributors(window, indices, contributions)[0]
+
+
+def _detect_organization_candidates(
     windows: Sequence[OrganizationWindowEvidence],
     *,
     known_person_ids: Sequence[str] = (),
-) -> OrganizationDetectionResult:
-    """Compose overlapping cross-owner candidates from windowed evidence."""
-
+    collect_contributors: bool,
+) -> OrganizationDetectionAttribution:
     known = set(known_person_ids)
     candidates: list[OrganizationCandidate] = []
+    contributors: list[tuple[int, str, str, str]] = []
+    group_counts: dict[str, int] = {}
     window_results: list[OrganizationWindowResult] = []
     lane_presence: dict[str, bool] = dict.fromkeys(ANCHOR_FAMILIES, False)
     observed_lanes = 0
@@ -411,9 +445,16 @@ def detect_organization_candidates(
             groups.setdefault(union.find(index), []).append(index)
         keys: list[str] = []
         for indices in sorted(groups.values()):
-            candidate = _candidate_from_group(window, indices, contributions)
+            candidate, attribution = _candidate_with_contributors(
+                window, indices, contributions
+            )
             candidates.append(candidate)
             keys.append(candidate.candidate_key)
+            group_counts[candidate.candidate_key] = (
+                group_counts.get(candidate.candidate_key, 0) + 1
+            )
+            if collect_contributors:
+                contributors.extend(attribution)
         if len(keys) > MAX_WINDOW_CANDIDATES:
             raise OrganizationAnalysisError("organization_detection_empty")
         for family, present in window.lane_presence:
@@ -475,10 +516,46 @@ def detect_organization_candidates(
         len(enriched),
         len(overlap),
     )
-    return OrganizationDetectionResult(
+    result = OrganizationDetectionResult(
         windows=tuple(window_results),
         candidates=tuple(enriched),
         overlap_person_ids=overlap,
         lane_presence=tuple(sorted(lane_presence.items())),
         coverage=OrganizationCoverage.of(observed_lanes, len(ANCHOR_FAMILIES)),
+    )
+    duplicates = {
+        key for key, count in group_counts.items() if count > 1
+    }
+    return OrganizationDetectionAttribution(
+        result=result,
+        contributors=tuple(sorted(set(contributors))),
+        duplicate_candidate_keys=tuple(sorted(duplicates)),
+    )
+
+
+def detect_organization_candidates(
+    windows: Sequence[OrganizationWindowEvidence],
+    *,
+    known_person_ids: Sequence[str] = (),
+) -> OrganizationDetectionResult:
+    """Compose overlapping cross-owner candidates from windowed evidence."""
+
+    return _detect_organization_candidates(
+        windows,
+        known_person_ids=known_person_ids,
+        collect_contributors=False,
+    ).result
+
+
+def detect_organization_candidates_with_contributors(
+    windows: Sequence[OrganizationWindowEvidence],
+    *,
+    known_person_ids: Sequence[str] = (),
+) -> OrganizationDetectionAttribution:
+    """Return the legacy result plus exact candidate attribution tuples."""
+
+    return _detect_organization_candidates(
+        windows,
+        known_person_ids=known_person_ids,
+        collect_contributors=True,
     )
