@@ -47,6 +47,8 @@ def test_only_the_owned_science_flag_differs_between_paired_arms() -> None:
     assert off.v4_capability_flags.science is False
     assert science.v4_capability_flags.organizations
     assert science.knowledge_genealogy is not None
+    assert science.knowledge_genealogy.uptake_compose.teaching is True
+    assert science.knowledge_genealogy.uptake_compose.written_record is True
     assert science.durable_records is not None
     assert science.artifacts_enabled is True
     assert all(

@@ -123,18 +123,30 @@ composite score exists.
 `diffusion-science-off`) that differ only in the owned science flag, plus a v57
 instrument companion. `diffusion-science` enables deterministic artifact
 interpretation, teaching, skill learning, durable records, and knowledge
-genealogy. The controlled lane may schedule normally admitted commands; the
-unassisted lane may retain legal nulls. Analytical classification coverage is
-not an autonomous observation.
+genealogy with teaching and written-record uptake compose. The controlled lane
+may schedule normally admitted commands; the unassisted lane may retain legal
+nulls. Analytical classification coverage is not an autonomous observation.
+
+Controlled mechanism evidence (finite `CommandOverrideArbiter`, seeded sender
+ledger hypothesis without colon operands, co-presence `Move`, then
+`hyp_v1` + teaching `Talk`, then recipient `Inscribe` of an `sdf_v1` marker)
+proves native uptake, teaching advice, a V3 `teach:` genealogy bridge through
+the read-only API, and a durable marker record without copied model state.
+Organization, macro-society, translation, and migration joins are covered by
+composed fixture tests that feed the actual join helpers; live
+`experiment_ay_regional_migration` carriage and unassisted spontaneous uptake
+remain unexecuted in this release and are not certified.
 
 ## Limitations
 
 - Exact provenance is often absent in free runs; missing evidence remains
-  unresolved rather than being treated as a null uptake.
+  unresolved rather than being treated as a null uptake. Absence of evidence is
+  not forgetting or independent rediscovery.
 - A stable diffusion label is evidence of a carrier event, not scientific
   quality, truth, consensus, or a predefined institution.
 - Organization and cross-society joins are analytical context only.
 - No cross-run identity, gap bridging, or truth verdict exists.
+- Unassisted runs are reported separately from controlled mechanism proofs.
 
 ## See Also
 

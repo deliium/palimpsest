@@ -174,7 +174,7 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-32
+### Current baseline through V4-33
 
 | Surface | Current contract |
 | --- | --- |

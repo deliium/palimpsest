@@ -185,7 +185,14 @@ def organization_context_present(
 
 
 def _occurrence_key(occurrence: DiffusionOccurrence) -> str:
-    return occurrence.evidence.qualified_key().__repr__()
+    return "\x1f".join(
+        (
+            occurrence.evidence.qualified_key().__repr__(),
+            occurrence.lane.value,
+            occurrence.stage.value,
+            occurrence.occurrence_kind,
+        )
+    )
 
 
 def _latest_window(

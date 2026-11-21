@@ -120,13 +120,20 @@ def _profile(trust: float) -> DirectedRelationshipProfile:
     )
 
 
-def _heard(predicate: str, obj: str, *, event: str = "evt-1") -> Observation:
+def _heard(
+    predicate: str,
+    obj: str,
+    *,
+    event: str = "evt-1",
+    extra_relations: tuple[CommunicationRelation, ...] = (),
+) -> Observation:
     utterance = origin_utterance(
         text="a public act",
         speaker_id=EntityId("body-1"),
         communication_id="comm-1",
         relations=(
             CommunicationRelation(subject="skill", predicate=predicate, object=obj),
+            *extra_relations,
         ),
     )
     return Observation(
@@ -156,6 +163,37 @@ def _fresh() -> tuple[AdviceStore, CompetenceSelfModel, TeachingClaimPolicy]:
         empty_competence_model(_LEARNER),
         TeachingClaimPolicy(),
     )
+
+
+def test_multi_relation_utterance_keeps_unique_teaching_act(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Science claim relations must not mask a unique teaching predicate."""
+
+    caplog.set_level(logging.DEBUG, logger="agents.cognition.teaching")
+    advice, _model, policy = _fresh()
+    stored = record_teaching(
+        advice,
+        _heard(
+            "explain",
+            "crafting:high",
+            extra_relations=(
+                CommunicationRelation(
+                    subject="hyp_v1",
+                    predicate="claim",
+                    object="vary_process:tool-1:none:harvest:success:500:none:"
+                    "self_formulated:self:claim-deadbeef",
+                ),
+            ),
+        ),
+        (_profile(1.0),),
+        policy,
+        _identity(),
+    )
+    assert len(stored.rows) == 1
+    assert stored.rows[0].act is AdviceAct.EXPLAIN
+    assert stored.rows[0].domain is AdviceDomain.CRAFTING
+    assert "teaching_parse_selected predicate=explain" in caplog.text
 
 
 def test_false_high_band_moves_belief_and_leaves_objective_skill(

@@ -145,7 +145,14 @@ def _snapshot():
 
 
 def assessment_key(occurrence):
-    return repr(occurrence.evidence.qualified_key())
+    return "\x1f".join(
+        (
+            repr(occurrence.evidence.qualified_key()),
+            occurrence.lane.value,
+            occurrence.stage.value,
+            occurrence.occurrence_kind,
+        )
+    )
 
 
 def test_snapshot_is_canonical_sorted_and_self_identifying() -> None:

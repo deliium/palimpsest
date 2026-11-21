@@ -57,12 +57,20 @@ def science_diffusion_scenario(
         for row in institutions.conditions
         if row.condition_id == "institutions-combined-v56"
     )
+    genealogy = example_knowledge_genealogy_spec(teaching=True)
+    genealogy = replace(
+        genealogy,
+        uptake_compose=replace(
+            genealogy.uptake_compose,
+            written_record=True,
+        ),
+    )
     shared = replace(
         shared,
         v3_capability_flags=replace(
             shared.v3_capability_flags, cultural_historical_memory=True
         ),
-        knowledge_genealogy=example_knowledge_genealogy_spec(),
+        knowledge_genealogy=genealogy,
         artifacts_enabled=True,
         agents=tuple(
             replace(

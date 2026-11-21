@@ -521,15 +521,33 @@ def _identity_bindings(identity: object | None) -> dict[str, AgentId]:
 
 def _parse_act(utterance: object) -> tuple[AdviceAct, AdviceDomain, AdviceBand] | None:
     content = getattr(utterance, "content", None)
-    relations = getattr(content, "relations", ())
-    if len(tuple(relations)) != 1:
+    relations = tuple(getattr(content, "relations", ()))
+    teaching_relations = [
+        relation
+        for relation in relations
+        if getattr(relation, "predicate", "") in _ACT_BY_PREDICATE
+    ]
+    if not teaching_relations:
         return None
-    relation = next(iter(relations))
+    if len(teaching_relations) > 1:
+        _LOG.error(
+            "[FIX:v4-33-task10] teaching_validation_failed field=act "
+            "reason_code=ambiguous_teaching_relation relation_count=%s",
+            len(relations),
+        )
+        return None
+    relation = teaching_relations[0]
     predicate = getattr(relation, "predicate", "")
     act = _ACT_BY_PREDICATE.get(predicate)
     if act is None:
         return None
     token = getattr(relation, "object", "")
+    _LOG.debug(
+        "[FIX:v4-33-task10] teaching_parse_selected predicate=%s "
+        "relation_count=%s",
+        predicate,
+        len(relations),
+    )
     if act is AdviceAct.EXPLAIN:
         domain_token, separator, band_token = token.partition(":")
         if separator == "":

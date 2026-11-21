@@ -256,17 +256,29 @@ class DiffusionAssessment:
 
 
 def _transmission_key(occurrence: DiffusionOccurrence) -> str:
-    return repr(occurrence.evidence.qualified_key())
+    return "\x1f".join(
+        (
+            repr(occurrence.evidence.qualified_key()),
+            occurrence.lane.value,
+            occurrence.stage.value,
+            occurrence.occurrence_kind,
+        )
+    )
 
 
 def _transmission_rows(
     occurrences: tuple[DiffusionOccurrence, ...],
 ) -> tuple[DiffusionTransmission, ...]:
     rows: list[DiffusionTransmission] = []
+    seen: set[str] = set()
     for occurrence in occurrences:
+        key = _transmission_key(occurrence)
+        if key in seen:
+            continue
+        seen.add(key)
         rows.append(
             DiffusionTransmission(
-                transmission_key=_transmission_key(occurrence),
+                transmission_key=key,
                 lane=occurrence.lane.value,
                 stage=occurrence.stage.value,
                 tick=occurrence.tick,

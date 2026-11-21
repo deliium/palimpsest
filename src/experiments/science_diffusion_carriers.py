@@ -917,6 +917,26 @@ def project_carrier_occurrences(
             )
         )
 
+    seen_prior = {
+        (
+            row.evidence.qualified_key(),
+            row.lane,
+            row.stage,
+            row.occurrence_kind,
+        )
+        for row in prior_occurrences
+    }
+    fresh = [
+        row
+        for row in occurrences
+        if (
+            row.evidence.qualified_key(),
+            row.lane,
+            row.stage,
+            row.occurrence_kind,
+        )
+        not in seen_prior
+    ]
     speech_state = "complete"
     teaching_state = (
         "complete"
@@ -936,11 +956,11 @@ def project_carrier_occurrences(
             for owner in owners.values()
             if owner.runtime_checkpoint is not None
         )
-        or any(row.lane is DiffusionLane.RECORDS for row in occurrences)
+        or any(row.lane is DiffusionLane.RECORDS for row in fresh)
         else "unavailable"
     )
     return CarrierProjection(
-        occurrences=tuple(sorted(occurrences, key=lambda row: row.sort_key())),
+        occurrences=tuple(sorted(fresh, key=lambda row: row.sort_key())),
         speech_state=speech_state,
         teaching_state=teaching_state,
         records_state=records_state,
