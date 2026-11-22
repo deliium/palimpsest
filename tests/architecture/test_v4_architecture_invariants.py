@@ -111,10 +111,21 @@ ALLOWED_FLAG_REFERENCES = {
     "experiments/market_institution_scenario.py",
     "experiments/matrix_schema.py",
     "experiments/supply_chain_scenario.py",
+    "experiments/disease_scenario.py",
     "research_runner/path_dependence_cli.py",
     "research_runner/path_dependence_composition.py",
     "simulation/replay.py",
 }
+
+_V58_ALLOWED = frozenset(
+    {
+        "simulation/runner_models.py",
+        "simulation/runner_serialization.py",
+        "simulation/compatibility.py",
+        "simulation/disease_config.py",
+        "experiments/disease_scenario.py",
+    }
+)
 
 
 def _first_party_python_files() -> list[Path]:
@@ -154,7 +165,7 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert METRIC_FAMILY_COUNT == 275
@@ -217,6 +228,7 @@ def test_context_registry_and_capability_ownership() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
@@ -273,6 +285,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
         str(path.relative_to(SRC))
         for path in _first_party_python_files()
         if "runner-config-v58" in path.read_text(encoding="utf-8")
+        and str(path.relative_to(SRC)) not in _V58_ALLOWED
     ]
     assert offenders == []
 
@@ -463,5 +476,6 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
         str(path.relative_to(SRC))
         for path in _first_party_python_files()
         if "runner-config-v58" in path.read_text(encoding="utf-8")
+        and str(path.relative_to(SRC)) not in _V58_ALLOWED
     ]
     assert offenders == []

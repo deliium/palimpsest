@@ -15,7 +15,7 @@ from api.observer_service import ObserverReadService
 from api.security import ApiCapability, require_websocket_capability
 from api.streaming import SlowConsumerError
 from infrastructure.logging import get_logger
-from observer.adapt import adapt_event
+from observer.adapt import HIDDEN_OBSERVER_EVENT_TYPE, adapt_event
 from observer.version import DEFAULT_LAYOUT_ID
 from simulation.models import RunId
 from simulation.replay import ReplayService
@@ -23,7 +23,18 @@ from simulation.replay import ReplayService
 router = APIRouter(tags=["observer"])
 _LOGGER = get_logger("api.routes.observer_stream")
 
-EventReader = Callable[[int, int, int], Awaitable[tuple[object, ...]]]
+
+@dataclass(frozen=True, slots=True)
+class ObserverStreamPage:
+    """Visible rows plus verified exhaustion through the pinned head."""
+
+    events: tuple[object, ...]
+    exhausted: bool
+
+
+EventReader = Callable[
+    [int, int, int], Awaitable[ObserverStreamPage | tuple[object, ...]]
+]
 HeadReader = Callable[[], Awaitable[int]]
 DoneReader = Callable[[], Awaitable[bool]]
 
@@ -39,6 +50,14 @@ class ObserverStreamConfig:
     poll_seconds: float
     hello: Mapping[str, object]
     head_tick: int
+
+
+def _normalize_page(
+    raw: ObserverStreamPage | tuple[object, ...], *, limit: int
+) -> ObserverStreamPage:
+    if isinstance(raw, ObserverStreamPage):
+        return raw
+    return ObserverStreamPage(events=raw, exhausted=len(raw) < limit)
 
 
 class ObserverStreamSession:
@@ -78,9 +97,13 @@ class ObserverStreamSession:
             try:
                 await _offer(queue, config.hello)
                 while not self._closed:
-                    batch = await self._read_events(
-                        cursor[0], cursor[1], config.catchup_batch_size
+                    page = _normalize_page(
+                        await self._read_events(
+                            cursor[0], cursor[1], config.catchup_batch_size
+                        ),
+                        limit=config.catchup_batch_size,
                     )
+                    batch = page.events
                     if batch:
                         _LOGGER.debug(
                             "catchup_batch",
@@ -116,6 +139,9 @@ class ObserverStreamSession:
                         )
                         last_head = head
                     if await self._completed():
+                        if not page.exhausted:
+                            # Drain remaining visible pages before completion.
+                            continue
                         await _offer(
                             queue,
                             {
@@ -313,12 +339,13 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
 
     async def read_events(
         cursor_tick: int, cursor_sequence: int, limit: int
-    ) -> tuple[object, ...]:
+    ) -> ObserverStreamPage:
         page = await replay.read_event_keyset_page(
             RunId(run_id),
             after_tick=cursor_tick,
             after_sequence=cursor_sequence,
             limit=limit,
+            exclude_event_type=HIDDEN_OBSERVER_EVENT_TYPE,
         )
         adapted = tuple(adapt_event(event) for event in page.events)
         if adapted:
@@ -331,7 +358,10 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
                 to_sequence=adapted[-1].sequence,
                 event_count=len(adapted),
             )
-        return adapted
+        return ObserverStreamPage(
+            events=adapted,
+            exhausted=page.next_offset is None,
+        )
 
     async def current_head() -> int:
         live = await service.state(run_id, tick=None, layout_id=layout_id)

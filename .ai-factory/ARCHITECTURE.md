@@ -174,15 +174,15 @@ are presentation only; neither client advances the simulation.
 
 ## Versioned Extension Contract
 
-### Current baseline through V4-33
+### Current baseline through V4-34
 
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v57` for measurement instruments (the v56 family root plus one mandatory sibling); accepted `runner-config-v56` carries V4 capability flags |
+| Latest feature runner | `runner-config-v58` for disease mechanics (v56 family root plus mandatory `disease_mechanics`); `runner-config-v57` remains measurement instruments; accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
 | Metric families | 275 (271 after V4-32, plus four V4-33 diffusion families) |
-| Latest replay / codec pair | `EVENT_SCHEMA_REPLAY_V28` / `v26` when measurement instruments are active; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted; epidemic codec `v22` stays unaccepted |
+| Latest replay / codec pair | Disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
 | Subjective pending codec | `finalization-command-v5` adds `competing-theory-state-v1` to the v4 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
@@ -205,11 +205,10 @@ those as current pins or silently drop their legacy accepted versions.
 - Owned V4 flags: `organizations` (V4-03/V4-04/V4-05), `formal_rules`
   (V4-06), `legal_disputes` (V4-07), `diplomacy` (V4-10/V4-11),
   `organized_conflict` (V4-12), `infrastructure_networks` (V4-16),
-  `supply_chains` (V4-19), `markets_credit` (V4-20/V4-21), and `science`
-  (V4-27/V4-28).
-  There are nine owned V4 flags and three unowned flags.
-  `epidemics`, `ecological_feedback`, and `disasters` remain unowned and fail
-  closed.
+  `supply_chains` (V4-19), `markets_credit` (V4-20/V4-21), `science`
+  (V4-27/V4-28), and `epidemics` (V4-34).
+  There are ten owned V4 flags and two unowned flags.
+  `ecological_feedback` and `disasters` remain unowned and fail closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 

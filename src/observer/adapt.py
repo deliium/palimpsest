@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from typing import Final
 
 from observer.contracts import ObserverEvent, ObserverJourney
 from observer.version import OBSERVER_PROTOCOL_VERSION, SEMANTIC_TYPE_BY_KIND
@@ -74,6 +75,19 @@ def _text(value: EntityId | None) -> str | None:
     return value.value
 
 
+HIDDEN_OBSERVER_EVENT_TYPE: Final[str] = "disease_state_changed"
+_HIDDEN_OBSERVER_KINDS: Final[frozenset[str]] = frozenset(
+    {HIDDEN_OBSERVER_EVENT_TYPE}
+)
+
+
+def is_hidden_observer_event(event: WorldEvent | object) -> bool:
+    """True when an objective event must never enter observer presentation."""
+    details = getattr(event, "details", None)
+    kind = getattr(details, "kind", None)
+    return kind in _HIDDEN_OBSERVER_KINDS
+
+
 def adapt_event(event: WorldEvent) -> ObserverEvent:
     if type(event) is not WorldEvent:
         _LOGGER.error(
@@ -83,6 +97,13 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
         )
         raise TypeError("unknown_event_kind")
     kind = event.details.kind
+    if kind in _HIDDEN_OBSERVER_KINDS:
+        _LOGGER.error(
+            "observer_event_rejected event_id=%s reason_code=%s",
+            event.event_id.value,
+            "observer_event_not_found",
+        )
+        raise ValueError("observer_event_not_found")
     semantic = SEMANTIC_TYPE_BY_KIND.get(kind)
     if semantic is None:
         _LOGGER.error(
@@ -299,7 +320,16 @@ def adapt_event(event: WorldEvent) -> ObserverEvent:
 
 
 def adapt_events(events: Sequence[WorldEvent]) -> tuple[ObserverEvent, ...]:
-    return tuple(adapt_event(event) for event in events)
+    return tuple(
+        adapt_event(event)
+        for event in events
+        if not is_hidden_observer_event(event)
+    )
 
 
-__all__ = ["adapt_event", "adapt_events"]
+__all__ = [
+    "HIDDEN_OBSERVER_EVENT_TYPE",
+    "adapt_event",
+    "adapt_events",
+    "is_hidden_observer_event",
+]

@@ -89,6 +89,7 @@ also cover searches and shell access; they are behavioral rules for other agents
 | Scientific diffusion | `docs/science-diffusion.md` | Detached hypothesis/model transmission through teaching, records, organizations, migration and societies; five transformations; snapshot/store/routes and Research UI |
 | Scientific institutions | `docs/scientific-institutions.md` | Composed detached practice detection, stable windows, forward-only `sci-inst-` lineage, three metric families, snapshot/store/routes, Research UI panel |
 | Measurement instruments | `docs/measurement-instruments.md` | Fallible physical tools, five dimensions, calibration, owner reliability beliefs, bounded `msr_v1` testimony, v57/event-28 lifecycle |
+| Disease mechanics | `docs/disease-mechanics.md` | Opt-in abstract epidemics channel, private infection state, symptom cues only, v58/event-24/`v22` replay |
 | Lineage explorer | `docs/lineage-explorer.md` | Eight-family read-only lineage graph API, optional capture, cursors and availability semantics |
 | Observer | `docs/observer.md` | Read-only region and journey presentation |
 | Physical simulation | `docs/physical-simulation.md` | Discrete journeys, fatigue, capacity, and death |

@@ -314,7 +314,7 @@ that may construct on the accepted v56 seam: `organizations`
 `diplomacy`), `infrastructure_networks` (V4-16), `supply_chains` (V4-19),
 `markets_credit` (V4-20/V4-21), and `science` (V4-27, requiring
 `predictive_world_model` and `bounded_experimentation`). The other three V4
-flags — `epidemics`, `ecological_feedback`, and `disasters` — remain unowned
+flags — `ecological_feedback` and `disasters` — remain unowned
 and fail closed at `SimulationRunner.from_config`.
 
 ## Organized conflict (`runner-config-v56`)
@@ -647,6 +647,13 @@ and requires `science`; v1–v56 reject the sibling. The spec is bounded to 64
 instruments and 64 references, anchored to scenario `TOOL` items, and uses
 `measurement-instruments.v1`. Active instrument runs write replay event 28 /
 codec `v26`. See [Measurement instruments](measurement-instruments.md).
+
+`runner-config-v58` is the accepted v56 family root plus mandatory
+`disease_mechanics`. It is selected only when the epidemics channel is
+configured and requires owned `infrastructure_networks` (and collective
+projects). Active disease runs write reserved replay event 24 / codec `v22`.
+Agents never receive objective infection state. See
+[Disease mechanics](disease-mechanics.md).
 
 ## Optional scientific models (V4-30)
 

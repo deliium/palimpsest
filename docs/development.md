@@ -632,7 +632,7 @@ leaves the lane unexecuted with its blocker; it is never reported as a pass.
 See [Disputes](disputes.md) and
 [Research UI](research-ui.md).
 
-Current catalog: 275 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; replay-v27/codec `v25` and 28/`v26`; Alembic `0017`.
+Current catalog: 275 metric families; 17 V4 contexts / `v4-context-map-v6`; 45 commands; 73 observer semantic types; 10 owned / 2 unowned V4 flags; replay-v27/codec `v25`, 28/`v26`, and disease 24/`v22`; Alembic `0017`.
 
 V4-27 scientific hypotheses: verify with `uv run pytest tests/unit/test_scientific_hypotheses_*.py tests/architecture/test_scientific_hypotheses_*.py -q`. The science seam keeps 17 V4 contexts / `v4-context-map-v6`, 250 families, replay-v27/codec `v25`, and Alembic `0017`.
 
@@ -645,6 +645,19 @@ Measurement instruments add focused suites:
 ```bash
 uv run --frozen --python 3.12.14 pytest tests/unit/test_measurement_*.py -q
 ```
+
+## Disease mechanics verification
+
+```bash
+uv run --frozen --python 3.12.14 pytest tests/unit/test_disease_*.py \
+  tests/unit/test_observer_stream.py tests/unit/test_observer_authority.py \
+  tests/unit/test_v1_regression_gate.py tests/architecture/test_v4_architecture_invariants.py -q
+PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 \
+  pytest -m integration tests/integration/test_disease_durable_replay.py -q
+```
+
+The disposable-DB lane is unexecuted when `PALIMPSEST_TEST_DATABASE_URL` is
+unset; that is not a pass. See [Disease mechanics](disease-mechanics.md).
 
 ## Scientific-model verification
 

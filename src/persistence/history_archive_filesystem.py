@@ -1245,6 +1245,7 @@ class FilesystemHistoryArchiveReader:
         limit: int,
         actor_id: str | None = None,
         event_type: str | None = None,
+        exclude_event_type: str | None = None,
     ) -> tuple[WorldEvent, ...]:
         if type(limit) is not int or limit < 0:
             raise ValueError("limit must be a non-negative int")
@@ -1275,6 +1276,11 @@ class FilesystemHistoryArchiveReader:
                 }:
                     continue
                 if event_type is not None and record.details.kind != event_type:
+                    continue
+                if (
+                    exclude_event_type is not None
+                    and record.details.kind == exclude_event_type
+                ):
                     continue
                 rows.append(record)
                 if len(rows) >= limit:

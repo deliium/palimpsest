@@ -341,8 +341,6 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 # and V4-34 owns ``epidemics``; the remaining two V4 flags
 # (``ecological_feedback``, ``disasters``) stay unowned and fail closed at
 # runtime construction until their behavior plans land and claim ownership.
-# Public runner activation for epidemics remains fail-closed in
-# ``SimulationRunner.from_config`` until Task 6 lands read redaction.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
         "organizations",

@@ -89,6 +89,7 @@ from experiments.catalog import (
     experiment_competing_theories,
     experiment_credit_relationships,
     experiment_d_drives,
+    experiment_disease_mechanics,
     experiment_e_false_story,
     experiment_emergent_prices,
     experiment_f_sleep_consolidation,
@@ -274,6 +275,10 @@ from experiments.delegation_representation_publication import (
     build_representation_harvest_result,
     publish_representation_snapshot,
     representations_publication_document,
+)
+from experiments.disease_scenario import (
+    DISEASE_MECHANICS_EXPERIMENT_ID,
+    disease_mechanics_scenario,
 )
 from experiments.dispute_harvest import (
     DisputeHarvest,
@@ -585,6 +590,7 @@ __all__ = [
     "DEFAULT_SMOKE_TICK_BUDGET",
     "DEFAULT_SUCCESS_STOP_REASONS",
     "DESCRIPTIVE_METHOD",
+    "DISEASE_MECHANICS_EXPERIMENT_ID",
     "ECONOMIC_CASCADES_EXPERIMENT_ID",
     "EMERGENT_PRICES_EXPERIMENT_ID",
     "ENVIRONMENTAL_DYNAMICS_METRIC_VERSION",
@@ -851,6 +857,7 @@ __all__ = [
     "dependency_caregiving_profile",
     "developmental_learning_profile",
     "developmental_stages_profile",
+    "disease_mechanics_scenario",
     "dispute_publication_document",
     "distributed_reputation_scenario",
     "durable_records_profile",
@@ -910,6 +917,7 @@ __all__ = [
     "experiment_competing_theories",
     "experiment_credit_relationships",
     "experiment_d_drives",
+    "experiment_disease_mechanics",
     "experiment_e_false_story",
     "experiment_emergent_prices",
     "experiment_f_sleep_consolidation",

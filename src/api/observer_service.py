@@ -39,7 +39,11 @@ from api.observer_schemas import (
     ObserverTickPageOut,
     ObserverTickSummaryOut,
 )
-from observer.adapt import adapt_event
+from observer.adapt import (
+    HIDDEN_OBSERVER_EVENT_TYPE,
+    adapt_event,
+    is_hidden_observer_event,
+)
 from observer.contracts import (
     ObserverEvent,
     ObserverFrame,
@@ -463,6 +467,7 @@ class ObserverReadService:
                 limit=limit,
                 actor_id=agent_id,
                 event_type=domain_event_type,
+                exclude_event_type=HIDDEN_OBSERVER_EVENT_TYPE,
             )
             pages += 1
             if not page.events:
@@ -524,14 +529,31 @@ class ObserverReadService:
         if limit < 1:
             raise bad_request(code="invalid_page_limit", run_id=run_id)
         typed = _run_id(run_id)
-        page = await self._replay.read_event_page(
-            typed,
-            from_tick=Tick(from_tick),
-            to_tick=Tick(to_tick),
-            limit=limit,
-        )
+        # Visible rows only: exclude private transitions before limiting.
+        after_tick = from_tick
+        after_sequence = -1
+        visible: list[object] = []
+        remaining = limit
+        while remaining > 0:
+            page = await self._replay.read_event_keyset_page(
+                typed,
+                after_tick=after_tick,
+                after_sequence=after_sequence,
+                to_tick=Tick(to_tick),
+                limit=remaining,
+                exclude_event_type=HIDDEN_OBSERVER_EVENT_TYPE,
+            )
+            if not page.events:
+                break
+            visible.extend(page.events)
+            remaining = limit - len(visible)
+            last = page.events[-1]
+            after_tick = last.tick
+            after_sequence = last.sequence
+            if page.next_offset is None:
+                break
         grouped: dict[int, list[int]] = {}
-        for event in page.events:
+        for event in visible:
             grouped.setdefault(event.tick, []).append(event.sequence)
         summaries = tuple(
             ObserverTickSummaryOut(
@@ -547,7 +569,7 @@ class ObserverReadService:
     async def event(self, run_id: str, event_id: str) -> ObserverEventOut:
         typed = _run_id(run_id)
         item = await self._replay.read_event(typed, event_id)
-        if item is None:
+        if item is None or is_hidden_observer_event(item):
             raise not_found(code="observer_event_not_found", run_id=run_id)
         return _event_out(adapt_event(item))
 

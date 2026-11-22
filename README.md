@@ -121,6 +121,7 @@ Development credentials in `compose.yaml` are **not production**. `docker compos
 | [Scientific diffusion](docs/science-diffusion.md) | Track hypotheses and model representations through teaching, records, organizations, migration and cross-society communication; mutation, misunderstanding, translation, loss and rediscovery; canonical snapshot/store/routes and Research UI |
 | [Scientific institutions](docs/scientific-institutions.md) | Composed detached practice detection, stable windows, forward-only `sci-inst-` lineage, three metric families, snapshot/store/routes, Research UI panel |
 | [Measurement instruments](docs/measurement-instruments.md) | Fallible physical tools, five dimensions, calibration, owner reliability beliefs, bounded testimony, v57/event-28 lifecycle |
+| [Disease mechanics](docs/disease-mechanics.md) | Opt-in abstract epidemics channel, private infection state, symptom cues only, v58/event-24/`v22` replay |
 | [Economic cascades](docs/economic-cascades.md) | Five objective disruption classes, observable dependency edges, bounded `linked`/`unlinked`/`unresolved` chains, snapshot/store, seven GET routes, and Research UI panel |
 | [Long-horizon scalability](docs/long-horizon-scalability.md) | Measured 10k/100k lanes, historical query/latency evidence, verified envelope, retirement/archive/client limits |
 | [Persistence](docs/persistence.md) | Event store, Alembic through `0017`, subjective + scientific evidence, run control, stream outbox, replay |
@@ -158,5 +159,6 @@ Optional V3 civilization overlays (regions, settlements, migration, completed-ex
 - [Scientific diffusion](docs/science-diffusion.md)
 - [Scientific institutions](docs/scientific-institutions.md)
 - [Measurement instruments](docs/measurement-instruments.md)
+- [Disease mechanics](docs/disease-mechanics.md)
 
-Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 9 owned / 3 unowned; replay-v27/codec `v25` and 28/`v26`; Alembic `0017`.
+Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 17 V4 contexts / `v4-context-map-v6`; 10 owned / 2 unowned; replay-v27/codec `v25`, 28/`v26`, and disease 24/`v22`; Alembic `0017`.

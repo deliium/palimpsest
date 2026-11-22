@@ -311,6 +311,26 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
     return World(bootstrap.world_id, state)
 
 
+def _disease_state_from_snapshot(snapshot: object) -> object | None:
+    """Rebuild private disease rows from the v22 checkpoint section."""
+    from simulation.disease_checkpoint import DiseaseCheckpointSection
+    from world._disease import DiseaseConditionRow, DiseasePhase
+
+    section = getattr(snapshot, "disease_mechanics", None)
+    if section is None:
+        return None
+    if type(section) is not DiseaseCheckpointSection:
+        raise TypeError("snapshot.disease_mechanics must be DiseaseCheckpointSection")
+    return {
+        row.body_id: DiseaseConditionRow(
+            phase=DiseasePhase(row.phase),
+            due_tick=row.due_tick,
+            symptomatic=row.symptomatic,
+        )
+        for row in section.rows
+    }
+
+
 def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
     """Internal: derive a WorldBootstrap view from an immutable checkpoint."""
     from simulation.persistence import WorldSnapshot
@@ -334,7 +354,7 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         ),
         regions_migration=getattr(snapshot, "regions_migration", None),
         journeys=getattr(snapshot, "journeys", None),
-        disease_state=getattr(snapshot, "disease_state", None),
+        disease_state=_disease_state_from_snapshot(snapshot),
     )
 
 

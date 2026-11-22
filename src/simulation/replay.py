@@ -688,6 +688,40 @@ class ReplayService:
                 population_lifecycle=request.population_lifecycle,
                 new_agent_initialization=request.new_agent_initialization,
                 kinship_spec=request.kinship_spec,
+                disease_mechanics=request.disease_mechanics,
+            )
+        except ValueError as exc:
+            if str(exc) == "disease_policy_mismatch":
+                _LOGGER.error(
+                    "%s code=disease_policy_mismatch run_id=%s",
+                    EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                    run_id.value,
+                )
+                return self._failed(
+                    run_id,
+                    ReplayStatus.VERSION_INCOMPATIBLE,
+                    target_tick,
+                    snapshot_id=snapshot.snapshot_id,
+                    snapshot_next_tick=snapshot.next_tick,
+                    event_schema_version=manifest.event_schema_version,
+                    projector_version=manifest.projector_version,
+                    persistence_codec_version=manifest.persistence_codec_version,
+                )
+            _LOGGER.error(
+                "%s code=restore_failed error=%s run_id=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                type(exc).__name__,
+                run_id.value,
+            )
+            return self._failed(
+                run_id,
+                ReplayStatus.STREAM_DISCONTINUITY,
+                target_tick,
+                snapshot_id=snapshot.snapshot_id,
+                snapshot_next_tick=snapshot.next_tick,
+                event_schema_version=manifest.event_schema_version,
+                projector_version=manifest.projector_version,
+                persistence_codec_version=manifest.persistence_codec_version,
             )
         except Exception as exc:
             _LOGGER.error(
@@ -707,8 +741,13 @@ class ReplayService:
                 persistence_codec_version=manifest.persistence_codec_version,
             )
 
+        disease_channel = getattr(snapshot, "disease_mechanics", None) is not None
+        disease_policy_bound = engine._disease_mechanics is not None
         mode = (
-            ReplayMode.CONTINUATION if target_tick == head_next else ReplayMode.READONLY
+            ReplayMode.CONTINUATION
+            if target_tick == head_next
+            and (not disease_channel or disease_policy_bound)
+            else ReplayMode.READONLY
         )
         predecessor = (
             commits[-1].commit_hash if commits else snapshot.predecessor_commit_hash
@@ -753,6 +792,11 @@ class ReplayService:
             raise RuntimeError("open_durable rejects read-only historical replay")
         if outcome.engine is None:
             raise RuntimeError("open_durable requires a restored engine")
+        disease_state = getattr(
+            outcome.engine._snapshot.world.state, "disease_state", None
+        )
+        if disease_state is not None and outcome.engine._disease_mechanics is None:
+            raise RuntimeError("open_durable requires disease policy")
         return PersistentSimulationService(
             outcome.engine,
             journal,
@@ -817,6 +861,7 @@ class ReplayService:
         limit: int = _DEFAULT_PAGE_SIZE,
         actor_id: str | None = None,
         event_type: str | None = None,
+        exclude_event_type: str | None = None,
     ) -> ReplayEventPage:
         """Detached keyset page of events ordered by ``(tick, sequence)``.
 
@@ -841,22 +886,81 @@ class ReplayService:
         if after_sequence < -1:
             raise ValueError("after_sequence must be >= -1")
         list_events_keyset = getattr(self._journal, "list_events_keyset", None)
+
+        def _matches_filters(event: object) -> bool:
+            if actor_id is not None and not _event_matches_actor(event, actor_id):
+                return False
+            event_kind = getattr(event, "event_type", None)
+            if event_kind is None:
+                details = getattr(event, "details", None)
+                event_kind = getattr(details, "kind", None)
+            if event_type is not None and event_kind != event_type:
+                return False
+            if exclude_event_type is not None and event_kind == exclude_event_type:
+                return False
+            return True
+
+        async def _exclusive_scan() -> tuple[object, ...]:
+            # Advance a private cursor through hidden-only batches before limit.
+            cursor_tick = after_tick
+            cursor_sequence = after_sequence
+            collected: list[object] = []
+            budget = 0
+            max_budget = max(64, (limit + 1) * 16)
+            while len(collected) < limit + 1 and budget < max_budget:
+                if list_events_keyset is not None:
+                    try:
+                        raw = await list_events_keyset(
+                            run_id,
+                            after_tick=cursor_tick,
+                            after_sequence=cursor_sequence,
+                            to_tick=to_tick,
+                            limit=limit + 1,
+                            actor_id=actor_id,
+                            event_type=event_type,
+                        )
+                    except TypeError:
+                        raw = await list_events_keyset(
+                            run_id,
+                            after_tick=cursor_tick,
+                            after_sequence=cursor_sequence,
+                            to_tick=to_tick,
+                            limit=limit + 1,
+                        )
+                    batch = tuple(raw)
+                else:
+                    raw = await self._journal.list_events(
+                        run_id,
+                        from_tick=Tick(cursor_tick),
+                        to_tick=to_tick,
+                        limit=limit + 1 + max(0, cursor_sequence + 1),
+                        offset=0,
+                    )
+                    batch = tuple(
+                        event
+                        for event in raw
+                        if (event.tick, event.sequence)
+                        > (cursor_tick, cursor_sequence)
+                    )
+                if not batch:
+                    break
+                for event in batch:
+                    budget += 1
+                    cursor_tick = event.tick
+                    cursor_sequence = event.sequence
+                    if _matches_filters(event):
+                        collected.append(event)
+                        if len(collected) >= limit + 1:
+                            break
+                else:
+                    continue
+                break
+            if len(collected) < limit + 1 and budget >= max_budget:
+                raise ValueError("observer_read_budget_exhausted")
+            return tuple(collected)
+
         if list_events_keyset is None:
-            # Fallback: offset scan from from_tick (tests/fakes without keyset).
-            raw = await self._journal.list_events(
-                run_id,
-                from_tick=Tick(after_tick),
-                to_tick=to_tick,
-                limit=limit + 1 + max(0, after_sequence + 1),
-                offset=0,
-            )
-            filtered = tuple(
-                event
-                for event in raw
-                if (event.tick, event.sequence) > (after_tick, after_sequence)
-                and (actor_id is None or _event_matches_actor(event, actor_id))
-                and (event_type is None or event.event_type == event_type)
-            )[: limit + 1]
+            filtered = await _exclusive_scan()
         else:
             kwargs: dict[str, object] = {
                 "after_tick": after_tick,
@@ -864,22 +968,31 @@ class ReplayService:
                 "to_tick": to_tick,
                 "limit": limit + 1,
             }
-            # Older fakes may omit filter kwargs; only pass when supported.
             try:
                 filtered = await list_events_keyset(
                     run_id,
                     actor_id=actor_id,
                     event_type=event_type,
+                    exclude_event_type=exclude_event_type,
                     **kwargs,
                 )
             except TypeError:
-                filtered = await list_events_keyset(run_id, **kwargs)
-                filtered = tuple(
-                    event
-                    for event in filtered
-                    if (actor_id is None or _event_matches_actor(event, actor_id))
-                    and (event_type is None or event.event_type == event_type)
-                )
+                # Never return unfiltered rows when exclude is required.
+                if exclude_event_type is not None:
+                    filtered = await _exclusive_scan()
+                else:
+                    try:
+                        filtered = await list_events_keyset(
+                            run_id,
+                            actor_id=actor_id,
+                            event_type=event_type,
+                            **kwargs,
+                        )
+                    except TypeError:
+                        filtered = await list_events_keyset(run_id, **kwargs)
+                    filtered = tuple(
+                        event for event in filtered if _matches_filters(event)
+                    )
         page = filtered[:limit]
         next_offset = None
         if len(filtered) > limit:
@@ -1092,6 +1205,43 @@ class ReplayService:
                 population_lifecycle=request.population_lifecycle,
                 new_agent_initialization=request.new_agent_initialization,
                 kinship_spec=request.kinship_spec,
+                disease_mechanics=request.disease_mechanics,
+            )
+        except ValueError as exc:
+            if str(exc) == "disease_policy_mismatch":
+                _LOGGER.error(
+                    "%s code=disease_policy_mismatch run_id=%s",
+                    EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                    run_id.value,
+                )
+                return self._failed(
+                    run_id,
+                    ReplayStatus.VERSION_INCOMPATIBLE,
+                    target_tick,
+                    snapshot_id=snapshot.snapshot_id,
+                    snapshot_next_tick=snapshot.next_tick,
+                    event_schema_version=manifest.event_schema_version,
+                    projector_version=manifest.projector_version,
+                    persistence_codec_version=manifest.persistence_codec_version,
+                )
+            _LOGGER.error(
+                "%s code=bounded_restore_failed error=%s detail=%s run_id=%s "
+                "target_tick=%s",
+                EngineDiagnosticCode.PROJECTION_FAILED.value,
+                type(exc).__name__,
+                str(exc)[:200],
+                run_id.value,
+                target_tick.value,
+            )
+            return self._failed(
+                run_id,
+                ReplayStatus.STREAM_DISCONTINUITY,
+                target_tick,
+                snapshot_id=snapshot.snapshot_id,
+                snapshot_next_tick=snapshot.next_tick,
+                event_schema_version=manifest.event_schema_version,
+                projector_version=manifest.projector_version,
+                persistence_codec_version=manifest.persistence_codec_version,
             )
         except Exception as exc:
             _LOGGER.error(
@@ -1113,8 +1263,13 @@ class ReplayService:
                 projector_version=manifest.projector_version,
                 persistence_codec_version=manifest.persistence_codec_version,
             )
+        disease_channel = getattr(snapshot, "disease_mechanics", None) is not None
+        disease_policy_bound = engine._disease_mechanics is not None
         mode = (
-            ReplayMode.CONTINUATION if target_tick == head_next else ReplayMode.READONLY
+            ReplayMode.CONTINUATION
+            if target_tick == head_next
+            and (not disease_channel or disease_policy_bound)
+            else ReplayMode.READONLY
         )
         predecessor = (
             last_commits[-1].commit_hash

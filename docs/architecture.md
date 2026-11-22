@@ -926,3 +926,13 @@ catalog to **275**. `science-diffusion-snapshot-v1` /
 `science-diffusion-store-v1` publish programmatically and atomically; six
 GET-only dual-gated routes require `SUBJECTIVE_DEBUG`; the Research UI adds a
 read-only panel. See [Scientific diffusion](science-diffusion.md).
+
+## V4-34 disease mechanics
+
+V4-34 owns the reserved `epidemics` capability with abstract, experiment-facing
+disease mechanics on `runner-config-v58`. WorldEngine holds private infection
+rows; agents perceive only optional owner `unwell` cues, ordinary co-presence,
+and non-diagnostic death. Enabled runs select reserved write pair event 24 /
+codec `v22`. No new command, public disease route, metric family, SQL migration,
+or observer semantic type is added. `/v1`, `observer-protocol-v1`, and Alembic
+`0017` are unchanged. See [Disease mechanics](disease-mechanics.md).

@@ -112,5 +112,6 @@ experiment does not script scientific success or consensus.
 - [Scientific Hypotheses](scientific-hypotheses.md)
 - [Scientific Replication](scientific-replication.md)
 - [Scientific Models](scientific-models.md)
+- [Disease mechanics](disease-mechanics.md)
 - [Persistence](persistence.md)
 - [Configuration](configuration.md)

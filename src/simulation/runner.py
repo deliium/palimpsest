@@ -2559,20 +2559,6 @@ class SimulationRunner:
                     RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
                     stage="v4_capability_flags",
                 )
-            # Public epidemics activation stays fail-closed until Task 6 lands
-            # observer/read redaction. Ownership allowlists already include the
-            # flag so typed config and trusted tests can compose v58 directly.
-            if config.v4_capability_flags.epidemics:
-                _LOG.error(
-                    "runner_construction_epidemics_activation_deferred "
-                    "schema_version=%s stage=v4_capability_flags reason_code=%s",
-                    config.schema_version,
-                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED.value,
-                )
-                raise RunnerConstructionError(
-                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
-                    stage="v4_capability_flags",
-                )
             if (
                 config.v4_capability_flags.organized_conflict
                 and not config.v4_capability_flags.diplomacy
@@ -2607,6 +2593,29 @@ class SimulationRunner:
 
             stage = "bootstrap"
             registrations = config.ordered_registrations()
+            disease_bootstrap_state = None
+            if (
+                config.v4_capability_flags.epidemics
+                and config.disease_mechanics is not None
+            ):
+                from world._disease import bootstrap_disease_rows
+
+                body_index = {
+                    body.entity_id: body for body in config.scenario.bodies
+                }
+                disease_bootstrap_state = bootstrap_disease_rows(
+                    founder_ids=config.disease_mechanics.initial_latent_entity_ids,
+                    latent_ticks=config.disease_mechanics.latent_ticks,
+                    tick0=0,
+                    body_index=body_index,
+                )
+                _LOG.info(
+                    "runner_construction_disease_channel founder_count=%s "
+                    "latent_ticks=%s schema_version=%s",
+                    len(disease_bootstrap_state),
+                    config.disease_mechanics.latent_ticks,
+                    config.schema_version,
+                )
             bootstrap = WorldBootstrap(
                 world_id=config.scenario.world_id,
                 revision=config.scenario.revision,
@@ -2628,6 +2637,7 @@ class SimulationRunner:
                     else config.measurement_instruments.references
                 ),
                 regions_migration=config.regions_migration,
+                disease_state=disease_bootstrap_state,
             )
             translator = registration_translator(bootstrap)
             _validate_registration_ownership(config, bootstrap)
@@ -2831,6 +2841,11 @@ class SimulationRunner:
                 )
                 if teaching_ids
                 else None,
+                disease_mechanics=(
+                    config.disease_mechanics
+                    if config.v4_capability_flags.epidemics
+                    else None
+                ),
             )
             _LOG.debug(
                 "artifact_write_pair_inputs artifacts_active=%s "

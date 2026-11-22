@@ -943,7 +943,6 @@ class WorldSnapshot:
         if self.persistence_codec_version == "v22":
             from simulation.disease_checkpoint import DiseaseCheckpointSection
             from simulation.versioning import (
-                EPIDEMICS_WRITE_PAIR_CODEC,
                 EPIDEMICS_WRITE_PAIR_EVENT,
             )
 
@@ -1823,6 +1822,7 @@ class ReplayRequest:
     population_lifecycle: object | None = None
     new_agent_initialization: object | None = None
     kinship_spec: object | None = None
+    disease_mechanics: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:
@@ -1833,6 +1833,14 @@ class ReplayRequest:
             raise TypeError(
                 "ReplayRequest.fallback_policy must be ReplayFallbackPolicy"
             )
+        if self.disease_mechanics is not None:
+            from simulation.disease_config import DiseaseMechanicsSpec
+
+            if type(self.disease_mechanics) is not DiseaseMechanicsSpec:
+                raise TypeError(
+                    "ReplayRequest.disease_mechanics must be DiseaseMechanicsSpec "
+                    "or None"
+                )
 
 
 @dataclass(frozen=True, slots=True)

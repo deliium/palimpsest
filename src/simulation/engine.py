@@ -1324,6 +1324,7 @@ class WorldEngine:
         population_lifecycle: object | None = None,
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
+        disease_mechanics: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -1372,7 +1373,34 @@ class WorldEngine:
             raise ValueError("integrity_hash_mismatch")
 
         bootstrap = _bootstrap_from_snapshot(snapshot)
+        from simulation.disease_checkpoint import (
+            DiseaseCheckpointSection,
+            policy_sha256_for_spec,
+        )
+        from simulation.disease_config import DiseaseMechanicsSpec
         from world._state import WorldState
+
+        disease_section = getattr(snapshot, "disease_mechanics", None)
+        if disease_section is not None and type(disease_section) is not (
+            DiseaseCheckpointSection
+        ):
+            raise TypeError(
+                "snapshot.disease_mechanics must be DiseaseCheckpointSection"
+            )
+        if disease_mechanics is not None and type(disease_mechanics) is not (
+            DiseaseMechanicsSpec
+        ):
+            raise TypeError("disease_mechanics must be DiseaseMechanicsSpec or None")
+        if disease_mechanics is not None:
+            if disease_section is None:
+                raise ValueError("disease_mechanics_without_channel")
+            digest = policy_sha256_for_spec(disease_mechanics)
+            if digest != disease_section.policy_sha256:
+                _LOGGER.error(
+                    "disease_policy_mismatch reason_code=disease_policy_mismatch"
+                )
+                raise ValueError("disease_policy_mismatch")
+        disease_state = bootstrap.disease_state
 
         base_state = WorldState(
             snapshot.revision,
@@ -1394,6 +1422,8 @@ class WorldEngine:
             journeys=getattr(snapshot, "journeys", None),
             infrastructure=getattr(snapshot, "infrastructure", None),
             travel_network=getattr(snapshot, "travel_network", None),
+            disease_state=disease_state,
+            disease_require_living=False,
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -1453,6 +1483,13 @@ class WorldEngine:
         engine._measurement_active = bool(
             getattr(projected, "instrument_states", {})
         )
+        engine._disease_mechanics = disease_mechanics
+        if disease_section is not None:
+            _LOGGER.debug(
+                "disease_channel_restored row_count=%s policy_bound=%s",
+                len(disease_section.rows),
+                disease_mechanics is not None,
+            )
         engine._run_id = snapshot.run_id
         engine._translator = registration_translator(bootstrap)
         engine._registrations = bootstrap.registrations
@@ -2017,6 +2054,7 @@ class WorldEngine:
         population_lifecycle: object | None = None,
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
+        disease_mechanics: object | None = None,
     ) -> WorldEngine:
         """Restore an engine by consuming bounded, pre-verified replay batches.
 
@@ -2049,6 +2087,7 @@ class WorldEngine:
             population_lifecycle=population_lifecycle,
             new_agent_initialization=new_agent_initialization,
             kinship_spec=kinship_spec,
+            disease_mechanics=disease_mechanics,
         )
         builder = _BatchRestoreBuilder(
             engine,

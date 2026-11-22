@@ -98,12 +98,12 @@ Authority: The original request sets behavior; `.ai-factory/RULES.md` and `.ai-f
 
 ### Phase 3: Replay and read boundaries
 - [x] Task 5: Activate reserved replay 24 and checkpoint codec v22 ([details](phase-03-replay-and-read-boundaries.md#task-5-activate-reserved-replay-24-and-checkpoint-codec-v22)) (depends on 3, 4)
-- [ ] Task 6: Redact internal transitions across observer reads ([details](phase-03-replay-and-read-boundaries.md#task-6-redact-internal-transitions-across-observer-reads)) (depends on 3, 5)
+- [x] Task 6: Redact internal transitions across observer reads ([details](phase-03-replay-and-read-boundaries.md#task-6-redact-internal-transitions-across-observer-reads)) (depends on 3, 5)
 
 ### Phase 4: Experiment, verification, and docs
-- [ ] Task 7: Register a paired synthetic experiment ([details](phase-04-verification-and-docs.md#task-7-register-a-paired-synthetic-experiment)) (depends on 6)
-- [ ] Task 8: Verify durability, compatibility, and trust boundaries ([details](phase-04-verification-and-docs.md#task-8-verify-durability-compatibility-and-trust-boundaries)) (depends on 6, 7)
-- [ ] Task 9: Complete the mandatory documentation checkpoint ([details](phase-04-verification-and-docs.md#task-9-complete-the-mandatory-documentation-checkpoint)) (depends on 8)
+- [x] Task 7: Register a paired synthetic experiment ([details](phase-04-verification-and-docs.md#task-7-register-a-paired-synthetic-experiment)) (depends on 6)
+- [x] Task 8: Verify durability, compatibility, and trust boundaries ([details](phase-04-verification-and-docs.md#task-8-verify-durability-compatibility-and-trust-boundaries)) (depends on 6, 7)
+- [x] Task 9: Complete the mandatory documentation checkpoint ([details](phase-04-verification-and-docs.md#task-9-complete-the-mandatory-documentation-checkpoint)) (depends on 8)
 
 ## Commit Plan
 
