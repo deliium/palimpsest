@@ -89,6 +89,7 @@ class WorldBootstrap:
     )
     regions_migration: RegionsMigrationSpec | None = None
     journeys: Sequence[Journey] | None = None
+    disease_state: Mapping[EntityId, object] | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -164,6 +165,15 @@ class WorldBootstrap:
             self, "measurement_references", measurement_references
         )
         object.__setattr__(self, "journeys", journeys)
+        if self.disease_state is not None and not isinstance(
+            self.disease_state, Mapping
+        ):
+            raise TypeError("WorldBootstrap.disease_state must be a mapping or None")
+        object.__setattr__(
+            self,
+            "disease_state",
+            None if self.disease_state is None else MappingProxyType(self.disease_state),
+        )
         _validate_registrations_against_models(
             locations=locations,
             items=items,
@@ -189,6 +199,7 @@ class WorldBootstrap:
                 measurement_references=measurement_references,
                 regions_migration=self.regions_migration,
                 journeys=journeys,
+                disease_state=self.disease_state,
             )
         except ValueError as exc:
             message = str(exc)
@@ -277,6 +288,7 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             measurement_references=bootstrap.measurement_references,
             regions_migration=bootstrap.regions_migration,
             journeys=bootstrap.journeys,
+            disease_state=bootstrap.disease_state,
         )
     except ValueError as exc:
         message = str(exc)
@@ -291,6 +303,11 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             )
         raise
     _LOGGER.debug("artifacts_seeded count=%s", len(bootstrap.artifacts))
+    _LOGGER.debug(
+        "disease_seeded channel=%s row_count=%s",
+        "on" if bootstrap.disease_state is not None else "off",
+        0 if bootstrap.disease_state is None else len(bootstrap.disease_state),
+    )
     return World(bootstrap.world_id, state)
 
 
@@ -317,6 +334,7 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         ),
         regions_migration=getattr(snapshot, "regions_migration", None),
         journeys=getattr(snapshot, "journeys", None),
+        disease_state=getattr(snapshot, "disease_state", None),
     )
 
 

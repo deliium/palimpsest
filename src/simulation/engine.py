@@ -769,6 +769,7 @@ class WorldEngine:
         "_cultural_contact_active",
         "_dependency_care_spec",
         "_dependency_need_registers",
+        "_disease_mechanics",
         "_durable_records_spec",
         "_engine_id",
         "_environmental_dynamics",
@@ -847,6 +848,7 @@ class WorldEngine:
         infrastructure_networks_active: bool = False,
         travel_network_active: bool = False,
         supply_chains_active: bool = False,
+        disease_mechanics: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -855,6 +857,24 @@ class WorldEngine:
         self._config = config
         self._bootstrap = bootstrap
         self._measurement_active = bool(bootstrap.instrument_states)
+        from simulation.disease_config import DiseaseMechanicsSpec
+
+        if disease_mechanics is not None and type(disease_mechanics) is not DiseaseMechanicsSpec:
+            raise TypeError("disease_mechanics must be DiseaseMechanicsSpec or None")
+        channel_on = bootstrap.disease_state is not None
+        if disease_mechanics is None and channel_on:
+            raise ValueError("disease_channel_requires_mechanics")
+        if disease_mechanics is not None and not channel_on:
+            raise ValueError("disease_mechanics_requires_channel")
+        self._disease_mechanics = disease_mechanics
+        if self._disease_mechanics is not None:
+            _LOGGER.debug(
+                "disease_mechanics_bound founder_count=%s latent_ticks=%s "
+                "active_ticks=%s",
+                len(self._disease_mechanics.initial_latent_entity_ids),
+                self._disease_mechanics.latent_ticks,
+                self._disease_mechanics.active_ticks,
+            )
         self._run_id = run_id if run_id is not None else derive_run_id(config)
         if type(self._run_id) is not RunId:
             raise TypeError("run_id must be RunId")
@@ -2267,7 +2287,8 @@ class WorldEngine:
                 cultural_contact_active=self._cultural_contact_active,
                 infrastructure_networks_active=self._infrastructure_networks_active,
                 travel_network_active=self._travel_network_active,
-                measurement_active=self._measurement_active,
+        measurement_active=self._measurement_active,
+            disease_active=self._disease_mechanics is not None,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2514,7 +2535,8 @@ class WorldEngine:
             cultural_contact_active=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
             travel_network_active=self._travel_network_active,
-            measurement_active=self._measurement_active,
+        measurement_active=self._measurement_active,
+        disease_active=self._disease_mechanics is not None,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4679,6 +4701,28 @@ class WorldEngine:
             or completion_state is not action_pending.working_state
             or bool(route_transitions)
         )
+        disease_death_pending: list[PendingEvent] = []
+        disease_net_pending: list[PendingEvent] = []
+        disease_start_rows = None
+        disease_mortality_ids: tuple[EntityId, ...] = ()
+        if self._disease_mechanics is not None:
+            (
+                working_state,
+                disease_death_pending,
+                disease_start_rows,
+                disease_mortality_ids,
+                disease_mutation,
+            ) = self._apply_disease_pass(
+                snap=snap,
+                start_state=snap.world.state,
+                working_state=working_state,
+            )
+            semantic_mutation = semantic_mutation or disease_mutation
+            _LOGGER.debug(
+                "disease_pass_applied tick=%s mortality_count=%s",
+                snap.tick.value,
+                len(disease_mortality_ids),
+            )
         lifecycle_pending: list[PendingEvent] = []
         next_registrations = tuple(self._registrations)
         next_lifecycle_records = tuple(self._lifecycle_records)
@@ -4718,6 +4762,58 @@ class WorldEngine:
             ordinal_offset=len(journey_transitions) + len(route_transitions),
         )
         semantic_mutation = semantic_mutation or bool(death_journey_transitions)
+        if self._disease_mechanics is not None:
+            from world._disease import (
+                disease_net_transitions,
+                disease_row_view,
+                reconcile_disease_rows_for_dead_bodies,
+            )
+            from world._state import rebuild_world_state
+            from world.events import DiseaseStateChanged
+
+            reconciled = reconcile_disease_rows_for_dead_bodies(
+                working_state.disease_state,
+                body_index=working_state.bodies,
+            )
+            if reconciled != working_state.disease_state:
+                working_state = rebuild_world_state(
+                    working_state,
+                    disease_state=reconciled,
+                    replace_disease_state=True,
+                )
+                semantic_mutation = True
+            net_changes = disease_net_transitions(disease_start_rows, reconciled)
+            disease_effect_ordinal = 0
+            for entity_id, before, after in net_changes:
+                details = DiseaseStateChanged(
+                    body_id=entity_id,
+                    before=disease_row_view(before),  # type: ignore[arg-type]
+                    after=disease_row_view(after),  # type: ignore[arg-type]
+                )
+                cause_id = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=snap.tick.value,
+                    effect_family=SystemEffectFamily.DISEASE.value,
+                    entity_id=entity_id,
+                    family_ordinal=disease_effect_ordinal,
+                )
+                disease_net_pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id=cause_id,
+                            effect_family=SystemEffectFamily.DISEASE,
+                            entity_id=entity_id,
+                            family_ordinal=disease_effect_ordinal,
+                        ),
+                        details=details,
+                        occurrence=build_occurrence_context(
+                            details, origin_location_id=None
+                        ),
+                    )
+                )
+                disease_effect_ordinal += 1
         working_state.validate_finalized_boundary(snap.tick.value)
 
         repository_pending: list[PendingEvent] = []
@@ -4729,14 +4825,18 @@ class WorldEngine:
             )
             semantic_mutation = semantic_mutation or repo_mutation
 
+        # Disease deaths sit with ordinary system/lifecycle events; private net
+        # transitions trail so hidden-only changes do not shift visible sequences.
         opened = (
             action_pending.pending_events
             + tuple(journey_pending)
             + tuple(production_pending)
             + tuple(system_pending)
+            + tuple(disease_death_pending)
             + tuple(lifecycle_pending)
             + tuple(journey_cleanup_pending)
             + tuple(repository_pending)
+            + tuple(disease_net_pending)
         )
         working_state = _fold_opened_custody(working_state, opened)
         merged = PendingBatch(
@@ -4826,7 +4926,8 @@ class WorldEngine:
             cultural_contact_active=self._cultural_contact_active,
             infrastructure_networks_active=self._infrastructure_networks_active,
             travel_network_active=self._travel_network_active,
-            measurement_active=self._measurement_active,
+        measurement_active=self._measurement_active,
+        disease_active=self._disease_mechanics is not None,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -6648,6 +6749,146 @@ class WorldEngine:
             decay_millis=self._public_goods_decay_millis,
         )
 
+    def _apply_disease_pass(
+        self,
+        *,
+        snap: _EngineSnapshot,
+        start_state: object,
+        working_state: object,
+    ) -> tuple[
+        object,
+        list[PendingEvent],
+        object,
+        tuple[EntityId, ...],
+        bool,
+    ]:
+        """Run the private disease lifecycle and emit ordinary disease deaths."""
+        from simulation.disease_config import DiseaseMechanicsSpec, DISEASE_POLICY_ID
+        from simulation.randomness import StreamScope, create_rng, derive_stream_seed
+        from world._disease import advance_disease_pass
+        from world._state import WorldState, rebuild_world_state
+        from world.models import LifeStatus
+
+        if type(working_state) is not WorldState:
+            raise TypeError("working_state must be WorldState")
+        spec = self._disease_mechanics
+        if type(spec) is not DiseaseMechanicsSpec:
+            raise TypeError("disease_mechanics must be DiseaseMechanicsSpec")
+        tick = snap.tick.value
+        thresholds = {
+            "exposure": spec.exposure_chance_milli,
+            "transmission": spec.transmission_chance_milli,
+            "symptom": spec.symptom_chance_milli,
+            "terminal": spec.mortality_chance_milli,
+        }
+
+        def draw(entity_id: EntityId, kind: str) -> bool:
+            threshold = thresholds[kind]
+            stream = create_rng(
+                derive_stream_seed(
+                    self._config,
+                    StreamScope(
+                        DISEASE_POLICY_ID,
+                        (str(tick), entity_id.value, kind),
+                    ),
+                )
+            )
+            return stream.randrange(1000) < threshold
+
+        result = advance_disease_pass(
+            tick=tick,
+            start_state=start_state,
+            working_state=working_state,
+            latent_ticks=spec.latent_ticks,
+            active_ticks=spec.active_ticks,
+            immunity_after_recovery=spec.immunity_after_recovery,
+            draw=draw,
+        )
+        next_state = rebuild_world_state(
+            working_state,
+            bodies=result.bodies,
+            disease_state=result.disease_state,
+            replace_disease_state=True,
+        )
+        pending: list[PendingEvent] = []
+        family_ordinal = 0
+        for entity_id in result.mortality_body_ids:
+            body = next_state.bodies[entity_id]
+            if body.life_status is not LifeStatus.DEAD:
+                continue
+            details = Died(
+                body_id=entity_id,
+                death_cause=DeathCause.DISEASE,
+            )
+            cause_id = derive_system_cause_id(
+                self._config,
+                run_id=self._run_id,
+                world_id=self.world_id,
+                tick=tick,
+                effect_family=SystemEffectFamily.DISEASE.value,
+                entity_id=entity_id,
+                family_ordinal=family_ordinal,
+            )
+            pending.append(
+                PendingEvent(
+                    cause=SystemCause(
+                        cause_id=cause_id,
+                        effect_family=SystemEffectFamily.DISEASE,
+                        entity_id=entity_id,
+                        family_ordinal=family_ordinal,
+                    ),
+                    details=details,
+                    occurrence=build_occurrence_context(
+                        details, origin_location_id=body.location_id
+                    ),
+                )
+            )
+            family_ordinal += 1
+            if self.possession_succession_active:
+                custody = CorpseCustodyOpened(
+                    body_id=body.entity_id,
+                    location_id=body.location_id,
+                    item_ids=tuple(body.inventory),
+                )
+                custody_cause = derive_system_cause_id(
+                    self._config,
+                    run_id=self._run_id,
+                    world_id=self.world_id,
+                    tick=tick,
+                    effect_family=SystemEffectFamily.DISEASE.value,
+                    entity_id=entity_id,
+                    family_ordinal=family_ordinal,
+                )
+                pending.append(
+                    PendingEvent(
+                        cause=SystemCause(
+                            cause_id=custody_cause,
+                            effect_family=SystemEffectFamily.DISEASE,
+                            entity_id=entity_id,
+                            family_ordinal=family_ordinal,
+                        ),
+                        details=custody,
+                        occurrence=build_occurrence_context(
+                            custody, origin_location_id=body.location_id
+                        ),
+                    )
+                )
+                family_ordinal += 1
+                _LOGGER.debug(
+                    "corpse_custody_opened_cause death_cause=disease"
+                )
+        mutated = (
+            next_state.disease_state != working_state.disease_state
+            or dict(next_state.bodies) != dict(working_state.bodies)
+        )
+        return (
+            next_state,
+            pending,
+            result.start_rows,
+            result.mortality_body_ids,
+            mutated,
+        )
+
     def _measurement_rule_context(
         self, snap: _EngineSnapshot
     ) -> object | None:
@@ -6954,6 +7195,7 @@ def select_checkpoint_schema(
     infrastructure_networks_active: bool = False,
     travel_network_active: bool = False,
     measurement_active: bool = False,
+    disease_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -6980,6 +7222,7 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
     )
 
     schema_version, codec = checkpoint_schema_for_production(
@@ -7004,7 +7247,29 @@ def select_checkpoint_schema(
         infrastructure_networks_active=infrastructure_networks_active,
         travel_network_active=travel_network_active,
         measurement_active=measurement_active,
+        disease_active=disease_active,
     )
+
+    if disease_active:
+        from simulation.versioning import (
+            EPIDEMICS_WRITE_PAIR_CODEC,
+            EPIDEMICS_WRITE_PAIR_EVENT,
+        )
+
+        if (
+            schema_version != EPIDEMICS_WRITE_PAIR_EVENT
+            or codec != EPIDEMICS_WRITE_PAIR_CODEC
+        ):
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=%s "
+                "reason=disease_active",
+                schema_version,
+                codec,
+                EPIDEMICS_WRITE_PAIR_EVENT,
+                EPIDEMICS_WRITE_PAIR_CODEC,
+            )
+        return schema_version, codec
     if measurement_active:
         from simulation.versioning import (
             MEASUREMENT_WRITE_PAIR_CODEC,

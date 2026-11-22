@@ -26,7 +26,7 @@ def test_v4_20_owns_markets_credit_without_v57() -> None:
     )
     assert "markets_credit" in V4_OWNED_CAPABILITY_FLAGS
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert not list(SRC.rglob("*v57*"))
 
 
@@ -47,4 +47,4 @@ def test_market_modules_exist_and_own_no_world_event() -> None:
 
 def test_catalog_and_pins() -> None:
     assert METRIC_FAMILY_COUNT == 275
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10

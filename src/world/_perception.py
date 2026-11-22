@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from typing import Any, Final, cast
+from typing import Any, Final, Literal, cast
 
 from world._ambient import ambient_temperature
 from world._state import WorldState
@@ -44,6 +44,7 @@ from world.events import (
     ContactRecorded,
     CorpseCustodyOpened,
     CraftStarted,
+    DiseaseStateChanged,
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
@@ -410,6 +411,7 @@ def _project_one(
             kinship_visible=_kinship_self_for(context, observer_id),
             dependency_needs=_dependency_needs_for(context, observer_id),
             journey=_observed_journey(state, observer_id, tick=context.tick),
+            symptom_cue=_symptom_cue_for(state, observer_id),
         ),
         locations=_sorted_locations(state, location_id),
         items=_sorted_items(
@@ -567,6 +569,26 @@ def _regional_context(
         region_id=region_id,
         label=None if region is None else region.label,
     )
+
+
+def _symptom_cue_for(
+    state: WorldState, observer_id: EntityId
+) -> Literal["unwell"] | None:
+    """Owner-only coarse cue from a currently symptomatic active row."""
+    from world._disease import DiseasePhase
+
+    body = state.bodies.get(observer_id)
+    if body is None or body.life_status is not LifeStatus.ALIVE:
+        return None
+    rows = state.disease_state
+    if rows is None:
+        return None
+    row = rows.get(observer_id)
+    if row is None or row.phase is not DiseasePhase.ACTIVE:
+        return None
+    if row.symptomatic is not True:
+        return None
+    return "unwell"
 
 
 def _observed_journey(
@@ -1056,6 +1078,10 @@ def _project_event_window(
     occurrences: list[ObservedOccurrence] = []
     communications: list[ObservedCommunication] = []
     for event in prior_events:
+        if type(event.details) is DiseaseStateChanged:
+            # Private net effect: drop before audience classification.
+            _LOG.debug("disease_occurrence_suppressed reason_code=private_transition")
+            continue
         if not subjective_valuation_active and type(event.details) in {
             ExchangeProposed,
             ExchangeWithdrawn,

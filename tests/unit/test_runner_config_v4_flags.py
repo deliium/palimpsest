@@ -118,6 +118,7 @@ def test_every_enabled_flag_is_owned_or_unimplemented() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
@@ -138,6 +139,7 @@ def test_owned_flag_pins_agree() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }
     )
     assert _V4_OWNED_CAPABILITY_FLAGS == V4_OWNED_CAPABILITY_FLAGS

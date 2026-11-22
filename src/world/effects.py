@@ -51,6 +51,7 @@ class DeathCause(StrEnum):
     COMBINED_NEEDS = "combined_needs"
     EXPOSURE = "exposure"
     LIFESPAN = "lifespan"
+    DISEASE = "disease"
 
 
 class SystemEffectFamily(StrEnum):
@@ -69,6 +70,7 @@ class SystemEffectFamily(StrEnum):
     KNOWLEDGE_REPOSITORY = "knowledge_repository"
     COLLECTIVE_PROJECT = "collective_project"
     TRAVEL = "travel"
+    DISEASE = "disease"
 
 
 @dataclass(frozen=True, slots=True)

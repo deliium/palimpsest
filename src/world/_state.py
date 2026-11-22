@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
+from world._disease import DiseaseConditionRow, index_disease_state
 from world._infrastructure import index_infrastructure
 from world.artifacts import (
     MAX_HELD_ARTIFACTS_PER_BODY,
@@ -67,6 +68,10 @@ def rebuild_world_state(
     travel_network: Sequence[RouteCondition]
     | Mapping[tuple[str, str], RouteCondition]
     | None = None,
+    disease_state: Mapping[EntityId, DiseaseConditionRow]
+    | Sequence[tuple[EntityId, DiseaseConditionRow]]
+    | None = None,
+    replace_disease_state: bool = False,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -129,6 +134,14 @@ def rebuild_world_state(
     travel_network_src = (
         state.travel_network if travel_network is None else travel_network
     )
+    if replace_disease_state:
+        disease_src: Mapping[EntityId, DiseaseConditionRow] | Sequence[
+            tuple[EntityId, DiseaseConditionRow]
+        ] | None = disease_state
+    else:
+        disease_src = (
+            state.disease_state if disease_state is None else disease_state
+        )
     return WorldState(
         state.revision if revision is None else revision,
         locations=tuple(
@@ -199,6 +212,10 @@ def rebuild_world_state(
             )
         ),
         travel_network=travel_network_src,
+        disease_state=disease_src,
+        # Intermediate folds may briefly retain rows on newly dead bodies;
+        # living-key checks run at bootstrap and validate_finalized_boundary.
+        disease_require_living=False,
     )
 
 
@@ -434,6 +451,7 @@ class WorldState:
         "_structures",
         "_tool_marks",
         "_travel_network",
+        "_disease_state",
         "_weather",
     )
 
@@ -465,6 +483,10 @@ class WorldState:
         travel_network: Sequence[RouteCondition]
         | Mapping[tuple[str, str], RouteCondition]
         | None = None,
+        disease_state: Mapping[EntityId, DiseaseConditionRow]
+        | Sequence[tuple[EntityId, DiseaseConditionRow]]
+        | None = None,
+        disease_require_living: bool = True,
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -564,6 +586,11 @@ class WorldState:
         self._travel_network = _index_travel_network(
             travel_network, location_index=location_index
         )
+        self._disease_state = index_disease_state(
+            disease_state,
+            body_index=body_index,
+            require_living=disease_require_living,
+        )
         if (
             regions_migration is not None
             and type(regions_migration) is not RegionsMigrationSpec
@@ -598,24 +625,31 @@ class WorldState:
         )
 
     def validate_finalized_boundary(self, completed_tick: int) -> None:
-        """Reject pending journey state that is invalid at a committed boundary."""
+        """Reject pending journey/disease state invalid at a committed boundary."""
         if type(completed_tick) is not int or completed_tick < 0:
             raise ValueError("completed_tick must be non-negative (code=invalid_tick)")
-        if self._journeys is None:
-            return
-        for journey in self._journeys.values():
-            for participant_id in journey.participant_body_ids:
-                body = self._bodies[participant_id]
-                if body.life_status is not LifeStatus.ALIVE:
+        if self._journeys is not None:
+            for journey in self._journeys.values():
+                for participant_id in journey.participant_body_ids:
+                    body = self._bodies[participant_id]
+                    if body.life_status is not LifeStatus.ALIVE:
+                        raise ValueError(
+                            "pending journey participant is dead "
+                            "(code=journey_participant_dead)"
+                        )
+                if completed_tick >= journey.arrival_wait_deadline_tick:
                     raise ValueError(
-                        "pending journey participant is dead "
-                        "(code=journey_participant_dead)"
+                        "overdue journey at finalized boundary "
+                        "(code=journey_overdue_at_boundary)"
                     )
-            if completed_tick >= journey.arrival_wait_deadline_tick:
-                raise ValueError(
-                    "overdue journey at finalized boundary "
-                    "(code=journey_overdue_at_boundary)"
-                )
+        from world._disease import validate_disease_boundary
+
+        # Next executable tick after a completed boundary is completed_tick + 1.
+        validate_disease_boundary(
+            self._disease_state,
+            body_index=self._bodies,
+            next_tick=completed_tick + 1,
+        )
 
     @property
     def revision(self) -> WorldRevision:
@@ -694,6 +728,13 @@ class WorldState:
     @property
     def travel_network(self) -> tuple[RouteCondition, ...]:
         return self._travel_network
+
+    @property
+    def disease_state(
+        self,
+    ) -> Mapping[EntityId, DiseaseConditionRow] | None:
+        """Private condition rows; ``None`` means the disease channel is off."""
+        return self._disease_state
 
     def route_condition(
         self, origin_id: EntityId, destination_id: EntityId

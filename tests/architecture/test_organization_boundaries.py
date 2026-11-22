@@ -246,7 +246,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION == "runner-config-v4"
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_v4_registry_keeps_fourteen_contexts_and_ownership_split() -> None:

@@ -2559,6 +2559,20 @@ class SimulationRunner:
                     RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
                     stage="v4_capability_flags",
                 )
+            # Public epidemics activation stays fail-closed until Task 6 lands
+            # observer/read redaction. Ownership allowlists already include the
+            # flag so typed config and trusted tests can compose v58 directly.
+            if config.v4_capability_flags.epidemics:
+                _LOG.error(
+                    "runner_construction_epidemics_activation_deferred "
+                    "schema_version=%s stage=v4_capability_flags reason_code=%s",
+                    config.schema_version,
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED.value,
+                )
+                raise RunnerConstructionError(
+                    RunnerConstructionErrorCode.CAPABILITY_UNIMPLEMENTED,
+                    stage="v4_capability_flags",
+                )
             if (
                 config.v4_capability_flags.organized_conflict
                 and not config.v4_capability_flags.diplomacy

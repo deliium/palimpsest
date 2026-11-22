@@ -85,7 +85,7 @@ def test_runner_seam_keeps_v56_and_allocates_the_market_policy() -> None:
 
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V55 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert V4CapabilityFlags(markets_credit=True).owned_enabled_names() == (
         "markets_credit",
     )

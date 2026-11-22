@@ -58,6 +58,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V24,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     AgentCreated,
@@ -97,6 +98,7 @@ from world.events import (
     InfrastructureDecayed,
     InfrastructureDestroyed,
     InfrastructureRepaired,
+    DiseaseStateChanged,
     InstrumentCalibrated,
     ItemCrafted,
     ItemStored,
@@ -425,6 +427,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V21,
             EVENT_SCHEMA_REPLAY_V22,
             EVENT_SCHEMA_REPLAY_V23,
+            EVENT_SCHEMA_REPLAY_V24,
             EVENT_SCHEMA_REPLAY_V27,
             EVENT_SCHEMA_REPLAY_V28,
         }:
@@ -728,6 +731,18 @@ def _apply_event_effect(
             try:
                 next_state = project_instrument_calibrated(
                     state, details=calibrated
+                )
+            except ValueError as exc:
+                raise ProjectionError(
+                    ProjectionErrorCode.INVARIANT_FAILED
+                ) from exc
+            return next_state, next_state is not state
+        case DiseaseStateChanged() as disease_changed:
+            from world._disease import project_disease_state_changed
+
+            try:
+                next_state = project_disease_state_changed(
+                    state, details=disease_changed
                 )
             except ValueError as exc:
                 raise ProjectionError(

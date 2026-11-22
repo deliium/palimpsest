@@ -272,7 +272,7 @@ def test_compatibility_pins_are_unchanged() -> None:
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert next_revision() == "0018"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_v4_registry_and_reservations_are_unchanged() -> None:

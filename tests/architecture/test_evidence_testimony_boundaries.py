@@ -320,6 +320,7 @@ def test_compatibility_pins_are_exact() -> None:
         "supply_chains",
         "markets_credit", 
             "science",
+            "epidemics",
         }
     )
     assert "runner-config-v58" not in (

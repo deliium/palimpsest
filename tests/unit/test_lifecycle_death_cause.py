@@ -20,12 +20,14 @@ def test_death_cause_includes_lifespan() -> None:
         DeathCause.COMBINED_NEEDS,
         DeathCause.EXPOSURE,
         DeathCause.LIFESPAN,
+        DeathCause.DISEASE,
     ]
     assert {cause.value for cause in DeathCause} == {
         "attack",
         "combined_needs",
         "exposure",
         "lifespan",
+        "disease",
     }
 
 

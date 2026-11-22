@@ -535,6 +535,7 @@ def bind_snapshot_commit_hash(
         travel_network=snapshot.travel_network,
         instrument_states=snapshot.instrument_states,
         measurement_references=snapshot.measurement_references,
+        disease_mechanics=getattr(snapshot, "disease_mechanics", None),
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -574,6 +575,7 @@ def bind_snapshot_commit_hash(
         travel_network=draft.travel_network,
         instrument_states=draft.instrument_states,
         measurement_references=draft.measurement_references,
+        disease_mechanics=getattr(draft, "disease_mechanics", None),
     )
 
 
@@ -878,6 +880,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -909,6 +912,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -933,6 +937,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -956,6 +961,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -977,6 +983,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -997,6 +1004,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -1016,6 +1024,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -1042,6 +1051,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -1060,6 +1070,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -1083,6 +1094,7 @@ def _encode_world_snapshot(
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
             "v26",
         }:
@@ -1106,7 +1118,7 @@ def _encode_world_snapshot(
             assert value.journeys is not None
             payload["regions_migration"] = value.regions_migration.canonical()
             payload["journeys"] = [_encode_journey(item) for item in value.journeys]
-        elif value.persistence_codec_version in {"v21", "v25", "v26"}:
+        elif value.persistence_codec_version in {"v21", "v22", "v25", "v26"}:
             if value.regions_migration is not None:
                 assert value.journeys is not None
                 payload["regions_migration"] = value.regions_migration.canonical()
@@ -1119,7 +1131,7 @@ def _encode_world_snapshot(
                 "infrastructure_snapshot_encode asset_count=%s",
                 len(value.infrastructure),
             )
-            if value.persistence_codec_version in {"v25", "v26"}:
+            if value.persistence_codec_version in {"v22", "v25", "v26"}:
                 assert value.travel_network is not None
                 payload["travel_network"] = [
                     _encode_route_condition(item) for item in value.travel_network
@@ -1146,6 +1158,32 @@ def _encode_world_snapshot(
                     "reference_count=%s",
                     len(value.instrument_states),
                     len(value.measurement_references),
+                )
+            if value.persistence_codec_version == "v22":
+                from simulation.disease_checkpoint import (
+                    encode_disease_checkpoint_section,
+                )
+                from simulation.measurement_serialization import (
+                    encode_instrument_state,
+                    encode_measurement_reference,
+                )
+
+                if value.instrument_states or value.measurement_references:
+                    payload["instrument_states"] = [
+                        encode_instrument_state(item)
+                        for item in value.instrument_states
+                    ]
+                    payload["measurement_references"] = [
+                        encode_measurement_reference(item)
+                        for item in value.measurement_references
+                    ]
+                assert value.disease_mechanics is not None
+                payload.update(
+                    encode_disease_checkpoint_section(value.disease_mechanics)
+                )
+                _LOGGER.debug(
+                    "disease_snapshot_encode row_count=%s",
+                    len(value.disease_mechanics.rows),
                 )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -1284,7 +1322,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     wire_codec = data.get("persistence_codec_version")
     codec = (
         "v18"
-        if wire_codec in {"v19", "v20", "v21", "v25", "v26"}
+        if wire_codec in {"v19", "v20", "v21", "v22", "v25", "v26"}
         else wire_codec
     )
     keys = {
@@ -1440,6 +1478,17 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             keys |= {"regions_migration", "journeys"}
         if wire_codec == "v26":
             keys |= {"instrument_states", "measurement_references"}
+    elif wire_codec == "v22":
+        # Disease pair: mandatory disease_mechanics; inherited channels optional.
+        keys.add("disease_mechanics")
+        if "infrastructure" in data:
+            keys.add("infrastructure")
+        if "travel_network" in data:
+            keys.add("travel_network")
+        if "regions_migration" in data or "journeys" in data:
+            keys |= {"regions_migration", "journeys"}
+        if "instrument_states" in data or "measurement_references" in data:
+            keys |= {"instrument_states", "measurement_references"}
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -1449,7 +1498,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     infrastructure = None
     travel_network = None
     if wire_codec in {"v19", "v20"} or (
-        wire_codec in {"v21", "v25", "v26"} and "regions_migration" in data
+        wire_codec in {"v21", "v22", "v25", "v26"} and "regions_migration" in data
     ):
         from simulation.runner_serialization import (
             RunnerSerializationError,
@@ -1470,13 +1519,17 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         journeys = _decode_object_list(
             data["journeys"], _decode_journey, path=f"{path}.journeys"
         )
-    if wire_codec in {"v21", "v25", "v26"}:
+    if wire_codec in {"v21", "v25", "v26"} or (
+        wire_codec == "v22" and "infrastructure" in data
+    ):
         infrastructure = _decode_object_list(
             data["infrastructure"],
             _decode_infrastructure_asset,
             path=f"{path}.infrastructure",
         )
-    if wire_codec in {"v25", "v26"}:
+    if wire_codec in {"v25", "v26"} or (
+        wire_codec == "v22" and "travel_network" in data
+    ):
         travel_network = _decode_object_list(
             data["travel_network"],
             _decode_route_condition,
@@ -1484,7 +1537,19 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
         )
     instrument_states: tuple[Any, ...] = ()
     measurement_references: tuple[Any, ...] = ()
-    if wire_codec == "v26":
+    disease_mechanics = None
+    if wire_codec == "v22":
+        from simulation.disease_checkpoint import decode_disease_checkpoint_section
+
+        disease_raw = data["disease_mechanics"]
+        disease_mechanics = decode_disease_checkpoint_section(
+            {"disease_mechanics": disease_raw}
+            if isinstance(disease_raw, dict) and "rows" in disease_raw
+            else disease_raw
+        )
+    if wire_codec == "v26" or (
+        wire_codec == "v22" and "instrument_states" in data
+    ):
         from simulation.measurement_serialization import (
             MeasurementSerializationError,
             decode_instrument_state,
@@ -1767,6 +1832,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             travel_network=travel_network,
             instrument_states=instrument_states,
             measurement_references=measurement_references,
+            disease_mechanics=disease_mechanics,
         )
     except PersistenceSerializationError:
         raise

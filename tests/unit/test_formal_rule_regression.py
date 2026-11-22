@@ -44,7 +44,7 @@ def test_exact_pins() -> None:
 
 
 def test_no_v57_runner_schema_exists() -> None:
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_no_new_write_pair_reservation() -> None:

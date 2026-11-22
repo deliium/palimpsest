@@ -96,6 +96,7 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
         "supply_chains",
         "markets_credit", 
             "science",
+            "epidemics",
         }
     )
 

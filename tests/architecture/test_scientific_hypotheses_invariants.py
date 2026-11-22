@@ -48,7 +48,7 @@ def test_science_is_owned_without_adding_a_context_or_flag() -> None:
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
     assert "science" in V4_OWNED_CAPABILITY_FLAGS
     assert V4_CAPABILITY_FLAGS.count("science") == 1
 
@@ -72,7 +72,7 @@ def test_no_new_write_pair_is_claimed() -> None:
 
 
 def test_no_runner_schema_or_migration_is_added() -> None:
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
         assert "runner-config-v58" not in path.read_text(encoding="utf-8"), path
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []

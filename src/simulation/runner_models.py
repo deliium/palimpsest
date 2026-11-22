@@ -45,6 +45,7 @@ from simulation.lifecycle import (
     ActionResolutionReason,
     ActionResolutionStatus,
 )
+from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.measurement_config import MeasurementInstrumentsSpec
 from simulation.models import (
     DERIVATION_VERSION_V3,
@@ -152,8 +153,13 @@ RUNNER_SCHEMA_VERSION_V54: Final[str] = "runner-config-v54"
 RUNNER_SCHEMA_VERSION_V55: Final[str] = "runner-config-v55"
 RUNNER_SCHEMA_VERSION_V56: Final[str] = "runner-config-v56"
 RUNNER_SCHEMA_VERSION_V57: Final[str] = "runner-config-v57"
+RUNNER_SCHEMA_VERSION_V58: Final[str] = "runner-config-v58"
 V4_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
-    {RUNNER_SCHEMA_VERSION_V56, RUNNER_SCHEMA_VERSION_V57}
+    {
+        RUNNER_SCHEMA_VERSION_V56,
+        RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
+    }
 )
 RUNNER_SCHEMA_VERSION: Final[str] = RUNNER_SCHEMA_VERSION_V4
 SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
@@ -215,6 +221,7 @@ SUPPORTED_RUNNER_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 EXPLICIT_NEW_AGENT_INITIALIZATION_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -252,6 +259,7 @@ EXPLICIT_NEW_AGENT_INITIALIZATION_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 
@@ -329,10 +337,12 @@ _V4_CAPABILITY_FLAG_NAMES: Final[tuple[str, ...]] = (
 # V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns ``formal_rules``,
 # V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``, V4-12 owns
 # ``organized_conflict``, V4-16 owns ``infrastructure_networks``, V4-19 owns
-# ``supply_chains``, V4-20 owns ``markets_credit``, and V4-27 owns ``science``;
-# the remaining three V4 flags (``epidemics``, ``ecological_feedback``,
-# ``disasters``) stay unowned and fail closed at runtime construction until
-# their behavior plans land and claim ownership.
+# ``supply_chains``, V4-20 owns ``markets_credit``, V4-27 owns ``science``,
+# and V4-34 owns ``epidemics``; the remaining two V4 flags
+# (``ecological_feedback``, ``disasters``) stay unowned and fail closed at
+# runtime construction until their behavior plans land and claim ownership.
+# Public runner activation for epidemics remains fail-closed in
+# ``SimulationRunner.from_config`` until Task 6 lands read redaction.
 _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
     {
         "organizations",
@@ -344,6 +354,7 @@ _V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "supply_chains",
         "markets_credit",
         "science",
+        "epidemics",
     }
 )
 
@@ -953,6 +964,7 @@ _SKILL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 
@@ -1142,12 +1154,12 @@ class V4CapabilityFlags:
     Defaults are all off. V4-03/V4-04/V4-05 own ``organizations``, V4-06 owns
     ``formal_rules``, V4-07 owns ``legal_disputes``, V4-10 owns ``diplomacy``,
     V4-12 owns ``organized_conflict``, V4-16 owns ``infrastructure_networks``,
-    V4-19 owns ``supply_chains``, V4-20 owns ``markets_credit``, and V4-27 owns
-    ``science``. Enabling an unowned flag fails closed at
-    ``SimulationRunner.from_config`` with ``capability_unimplemented`` and
-    ``stage="v4_capability_flags"`` until an owning plan lands. Wire key
-    ``v4_capability_flags`` is a sibling of ``capability_flags`` and
-    ``v3_capability_flags`` on ``runner-config-v56``.
+    V4-19 owns ``supply_chains``, V4-20 owns ``markets_credit``, V4-27 owns
+    ``science``, and V4-34 owns ``epidemics``. Enabling an unowned flag fails
+    closed at ``SimulationRunner.from_config`` with
+    ``capability_unimplemented`` and ``stage="v4_capability_flags"`` until an
+    owning plan lands. Wire key ``v4_capability_flags`` is a sibling of
+    ``capability_flags`` and ``v3_capability_flags`` on ``runner-config-v56``.
     """
 
     organizations: bool = False
@@ -3200,6 +3212,7 @@ _HISTORICAL_MEMORY_CULTURAL_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -3229,6 +3242,7 @@ _DURABLE_RECORDS_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -3259,6 +3273,7 @@ _HISTORICAL_MEMORY_LAYER_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -3287,6 +3302,7 @@ _KNOWLEDGE_REPOSITORIES_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
@@ -3314,6 +3330,7 @@ _KNOWLEDGE_GENEALOGY_SCHEMAS: Final[frozenset[str]] = frozenset(
         RUNNER_SCHEMA_VERSION_V55,
         RUNNER_SCHEMA_VERSION_V56,
         RUNNER_SCHEMA_VERSION_V57,
+        RUNNER_SCHEMA_VERSION_V58,
     }
 )
 
@@ -7986,6 +8003,7 @@ class SimulationRunnerConfig:
     generational_narratives: GenerationalNarrativesSpec | None = None
     generational_run: GenerationalRunSpec | None = None
     measurement_instruments: MeasurementInstrumentsSpec | None = None
+    disease_mechanics: DiseaseMechanicsSpec | None = None
 
     def __post_init__(self) -> None:
         # Late import avoids circular import with new_agent_initialization.
@@ -8033,6 +8051,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V55,
                     RUNNER_SCHEMA_VERSION_V56,
                     RUNNER_SCHEMA_VERSION_V57,
+                    RUNNER_SCHEMA_VERSION_V58,
                 }
             ):
                 _LOGGER.error(
@@ -8059,6 +8078,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V55,
                     RUNNER_SCHEMA_VERSION_V56,
                     RUNNER_SCHEMA_VERSION_V57,
+                    RUNNER_SCHEMA_VERSION_V58,
                 }
             ):
                 _LOGGER.error(
@@ -8078,6 +8098,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V55,
                     RUNNER_SCHEMA_VERSION_V56,
                     RUNNER_SCHEMA_VERSION_V57,
+                    RUNNER_SCHEMA_VERSION_V58,
                 }:
                     _LOGGER.error(
                         "invalid_fields path=new_agent_initialization "
@@ -8201,6 +8222,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V55,
                     RUNNER_SCHEMA_VERSION_V56,
                     RUNNER_SCHEMA_VERSION_V57,
+                    RUNNER_SCHEMA_VERSION_V58,
                 }
                 or self.generational_run is None
             ):
@@ -8394,7 +8416,10 @@ class SimulationRunnerConfig:
                     "(code=measurement_spec_required)"
                 )
         else:
-            if self.schema_version != RUNNER_SCHEMA_VERSION_V57:
+            if self.schema_version not in {
+                RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
+            }:
                 _LOGGER.error(
                     "measurement_schema_required schema_version=%s "
                     "reason_code=measurement_schema_required",
@@ -8402,6 +8427,7 @@ class SimulationRunnerConfig:
                 )
                 raise ValueError(
                     "measurement_instruments requires runner-config-v57 "
+                    "or runner-config-v58 "
                     "(code=measurement_schema_required)"
                 )
             if not self.v4_capability_flags.science:
@@ -8472,6 +8498,107 @@ class SimulationRunnerConfig:
                 self.measurement_instruments.policy_version,
                 len(self.measurement_instruments.instruments),
                 len(self.measurement_instruments.references),
+            )
+        if (
+            self.disease_mechanics is not None
+            and type(self.disease_mechanics) is not DiseaseMechanicsSpec
+        ):
+            raise TypeError("disease_mechanics must be DiseaseMechanicsSpec or None")
+        if self.disease_mechanics is None:
+            if self.schema_version == RUNNER_SCHEMA_VERSION_V58:
+                _LOGGER.error(
+                    "disease_spec_required schema_version=%s "
+                    "reason_code=disease_spec_required",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "runner-config-v58 requires disease_mechanics "
+                    "(code=disease_spec_required)"
+                )
+            if self.v4_capability_flags.epidemics:
+                _LOGGER.error(
+                    "disease_flag_spec_mismatch schema_version=%s "
+                    "reason_code=disease_flag_spec_mismatch",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "epidemics requires disease_mechanics on runner-config-v58 "
+                    "(code=disease_flag_spec_mismatch)"
+                )
+        else:
+            if self.schema_version != RUNNER_SCHEMA_VERSION_V58:
+                _LOGGER.error(
+                    "disease_schema_required schema_version=%s "
+                    "reason_code=disease_schema_required",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "disease_mechanics requires runner-config-v58 "
+                    "(code=disease_schema_required)"
+                )
+            if not self.v4_capability_flags.epidemics:
+                _LOGGER.error(
+                    "disease_flag_required schema_version=%s "
+                    "reason_code=disease_flag_required",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "disease_mechanics requires epidemics "
+                    "(code=disease_flag_required)"
+                )
+            if not self.v4_capability_flags.infrastructure_networks:
+                _LOGGER.error(
+                    "disease_infrastructure_required schema_version=%s "
+                    "reason_code=disease_infrastructure_required",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "epidemics requires infrastructure_networks "
+                    "(code=disease_infrastructure_required)"
+                )
+            if self.collective_projects is None:
+                _LOGGER.error(
+                    "disease_collective_projects_required schema_version=%s "
+                    "reason_code=disease_collective_projects_required",
+                    self.schema_version,
+                )
+                raise ValueError(
+                    "epidemics requires collective_projects via infrastructure "
+                    "(code=disease_collective_projects_required)"
+                )
+            living_bodies = {
+                body.entity_id: body
+                for body in self.scenario.bodies
+                if body.life_status is LifeStatus.ALIVE
+            }
+            for index, founder_id in enumerate(
+                self.disease_mechanics.initial_latent_entity_ids
+            ):
+                body = living_bodies.get(founder_id)
+                if body is None:
+                    _LOGGER.error(
+                        "disease_founder_invalid path=initial_latent_entity_ids "
+                        "index=%s reason_code=disease_founder_invalid",
+                        index,
+                    )
+                    raise ValueError(
+                        "disease founder must be a living scenario body "
+                        "(code=disease_founder_invalid)"
+                    )
+            _LOGGER.info(
+                "disease_mechanics_enabled policy_id=%s founder_count=%s "
+                "schema_version=%s",
+                self.disease_mechanics.policy_id,
+                len(self.disease_mechanics.initial_latent_entity_ids),
+                self.schema_version,
+            )
+            _LOGGER.debug(
+                "disease_mechanics_bind epidemics=%s infrastructure=%s "
+                "measurement=%s travel=%s",
+                self.v4_capability_flags.epidemics,
+                self.v4_capability_flags.infrastructure_networks,
+                self.measurement_instruments is not None,
+                self.regions_migration is not None,
             )
         if self.v4_capability_flags.infrastructure_networks:
             if self.schema_version not in V4_RUNNER_SCHEMA_VERSIONS:
@@ -8572,6 +8699,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if (
             self.v3_capability_flags.generational_population
@@ -8621,6 +8749,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if self.v3_capability_flags.kinship_inheritance:
             if self.schema_version not in _kinship_schemas:
@@ -8687,6 +8816,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "dependency_care_requires_v28 schema_version=%s "
@@ -8760,6 +8890,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "developmental_learning_requires_v29 schema_version=%s "
@@ -8845,6 +8976,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "mentorship_requires_v30 schema_version=%s "
@@ -8970,6 +9102,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "technique_lifecycle_requires_v37 schema_version=%s "
@@ -9064,6 +9197,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }
             and self.v3_capability_flags.cultural_historical_memory
         ):
@@ -9356,6 +9490,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if self.bounded_experimentation is not None:
             if self.schema_version not in _experiment_schemas:
@@ -9501,6 +9636,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "possession_succession_requires_v38 schema_version=%s "
@@ -9553,6 +9689,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "structured_commitments_requires_v39 schema_version=%s "
@@ -9605,6 +9742,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "subjective_valuation_requires_v40 schema_version=%s "
@@ -9657,6 +9795,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.info(
                     "resource_exchange_profile_requires_v41 schema_version=%s "
@@ -9750,6 +9889,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.info(
                     "collective_projects_requires_v42 schema_version=%s "
@@ -9805,6 +9945,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.info(
                     "public_goods_requires_v43 schema_version=%s "
@@ -9909,6 +10050,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 raise ValueError(
                     "regions_migration requires runner-config-v44 "
@@ -9936,6 +10078,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 raise ValueError(
                     "cultural_contact requires runner-config-v45 "
@@ -9975,6 +10118,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "generational_narratives_requires_v48 schema_version=%s "
@@ -10040,6 +10184,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }:
                 _LOGGER.error(
                     "generational_run_requires_v55 schema_version=%s "
@@ -10171,6 +10316,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }
             and self.regions_migration is not None
         ):
@@ -10230,6 +10376,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "v3_capability_requires_v23 schema_version=%s "
@@ -10360,6 +10507,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V55,
                     RUNNER_SCHEMA_VERSION_V56,
                     RUNNER_SCHEMA_VERSION_V57,
+                    RUNNER_SCHEMA_VERSION_V58,
                 }
                 or self.v3_capability_flags.generational_population
             )
@@ -10448,6 +10596,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }
         ):
             _LOGGER.error(
@@ -10496,6 +10645,7 @@ class SimulationRunnerConfig:
                 RUNNER_SCHEMA_VERSION_V55,
                 RUNNER_SCHEMA_VERSION_V56,
                 RUNNER_SCHEMA_VERSION_V57,
+                RUNNER_SCHEMA_VERSION_V58,
             }
             and self.v3_capability_flags.generational_population
         )
@@ -10562,6 +10712,7 @@ class SimulationRunnerConfig:
                     RUNNER_SCHEMA_VERSION_V55,
                     RUNNER_SCHEMA_VERSION_V56,
                     RUNNER_SCHEMA_VERSION_V57,
+                    RUNNER_SCHEMA_VERSION_V58,
                 }
             )
             if (
@@ -10691,6 +10842,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if non_disabled and self.schema_version not in consolidation_schemas:
             _LOGGER.error(
@@ -10774,6 +10926,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if reflecting and self.schema_version not in reflection_schemas:
             _LOGGER.error(
@@ -10857,6 +11010,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if planning and self.schema_version not in prospective_schemas:
             _LOGGER.error(
@@ -10939,6 +11093,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if considering and self.schema_version not in counterfactual_schemas:
             _LOGGER.error(
@@ -11020,6 +11175,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.communication_strategy_mode "
@@ -11099,6 +11255,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.reputation_mode "
@@ -11220,6 +11377,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.teaching_interaction_mode "
@@ -11290,6 +11448,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if (dynamics is not None and self.schema_version not in dynamics_schemas) or (
             self.schema_version == RUNNER_SCHEMA_VERSION_V14 and dynamics is None
@@ -11355,6 +11514,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.territorial_claim_mode "
@@ -11424,6 +11584,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.group_formation_mode "
@@ -11489,6 +11650,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.social_norm_mode "
@@ -11557,6 +11719,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if conventions_on and self.schema_version not in convention_schemas:
             _LOGGER.error(
@@ -11630,6 +11793,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if artifacts_on and self.schema_version not in artifact_schemas:
             runner_log.error(
@@ -11699,6 +11863,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if naming_on and self.schema_version not in naming_schemas:
             runner_log.error(
@@ -11740,6 +11905,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.symbolic_language_mode "
@@ -11795,6 +11961,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.translation_mode "
@@ -11848,6 +12015,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.institution_concept_mode "
@@ -11884,6 +12052,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if office_on and self.schema_version not in office_schemas:
             runner_log.error(
@@ -11910,6 +12079,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         if collective_on and self.schema_version not in collective_schemas:
             runner_log.error(
@@ -11943,6 +12113,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.mediation_mode "
@@ -11976,6 +12147,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.institutional_memory_mode "
@@ -12008,6 +12180,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             runner_log.error(
                 "invalid_fields path=agents.cognition.institutional_decay_mode "
@@ -12132,6 +12305,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         budget_modes = tuple(
             agent.cognition.cognitive_budget_mode for agent in self.agents
@@ -12174,6 +12348,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }
         budget_schemas.add(RUNNER_SCHEMA_VERSION_V44)
         budget_schemas.add(RUNNER_SCHEMA_VERSION_V45)
@@ -12312,6 +12487,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             _LOGGER.error(
                 "invalid_fields path=agents.cognition.production_knowledge_mode "
@@ -12370,6 +12546,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             from world.production import production_catalog_digest
 
@@ -12482,6 +12659,7 @@ class SimulationRunnerConfig:
             RUNNER_SCHEMA_VERSION_V55,
             RUNNER_SCHEMA_VERSION_V56,
             RUNNER_SCHEMA_VERSION_V57,
+            RUNNER_SCHEMA_VERSION_V58,
         }:
             shared_teaching = teaching_weight_tuple(self.agents[0].cognition)
             if any(

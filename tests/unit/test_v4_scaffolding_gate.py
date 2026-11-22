@@ -19,6 +19,7 @@ from simulation.runner import (
 from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V56,
+    RUNNER_SCHEMA_VERSION_V58,
     AgentCognitionSpec,
     AgentRunnerSpec,
     BoundedExperimentationSpec,
@@ -115,6 +116,25 @@ def test_each_enabled_flag_fails_the_profile(flag_name: str) -> None:
         extras["bounded_experimentation"] = BoundedExperimentationSpec(
             laws=(example_experiment_law(),)
         )
+    if flag_name == "epidemics":
+        from simulation.disease_config import DISEASE_POLICY_ID, DiseaseMechanicsSpec
+
+        extras["schema_version"] = RUNNER_SCHEMA_VERSION_V58
+        extras["collective_projects"] = CollectiveProjectsSpec()
+        extras["v4_capability_flags"] = V4CapabilityFlags(
+            infrastructure_networks=True, epidemics=True
+        )
+        extras["disease_mechanics"] = DiseaseMechanicsSpec(
+            policy_id=DISEASE_POLICY_ID,
+            initial_latent_entity_ids=(),
+            exposure_chance_milli=0,
+            transmission_chance_milli=0,
+            symptom_chance_milli=0,
+            mortality_chance_milli=0,
+            latent_ticks=1,
+            active_ticks=1,
+            immunity_after_recovery=False,
+        )
     config = replace(_v56_config(), **extras)
     decoded = decode_runner_config(encode_runner_config(config))
     assert getattr(decoded.v4_capability_flags, flag_name) is True
@@ -147,6 +167,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }
     ),
 )

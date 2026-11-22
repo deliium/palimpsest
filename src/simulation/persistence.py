@@ -65,6 +65,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V24,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     WorldEvent,
@@ -143,6 +144,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }
@@ -171,6 +173,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v19",
         "v20",
         "v21",
+        "v22",
         "v25",
         "v26",
     }
@@ -290,16 +293,28 @@ def checkpoint_schema_for_production(
     infrastructure_networks_active: bool = False,
     travel_network_active: bool = False,
     measurement_active: bool = False,
+    disease_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority: knowledge_repositories → ``(v14, v11)`` (Task 7 activates);
-    else durable_records → ``(v13, v10)``; else dependency_care →
-    ``(v12, v9)``; else kinship → ``(v11, v8)``; else new-agent provenance →
-    ``(v10, v7)``; else lifecycle → ``(v9, v6)``; else artifacts → ``(v8, v5)``;
-    else dynamics → ``(v7, v4)``; else production → ``(v6, v3)``; else
-    replay-v5 / codec ``v2``.
+    Priority: disease → ``(24, v22)``; else measurement → ``(28, v26)``;
+    else travel → ``(27, v25)``; else infrastructure → ``(23, v21)``; …
+    Schema numbers are not capability order.
     """
+    if disease_active:
+        from simulation.versioning import (
+            EPIDEMICS_WRITE_PAIR_CODEC,
+            EPIDEMICS_WRITE_PAIR_EVENT,
+        )
+
+        pair = EPIDEMICS_WRITE_PAIR_EVENT, EPIDEMICS_WRITE_PAIR_CODEC
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=disease_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if measurement_active:
         from simulation.versioning import (
             MEASUREMENT_WRITE_PAIR_CODEC,
@@ -705,6 +720,7 @@ class WorldSnapshot:
     travel_network: Sequence[RouteCondition] | None = None
     instrument_states: Sequence[InstrumentState] = ()
     measurement_references: Sequence[MeasurementReference] = ()
+    disease_mechanics: object | None = None
 
     @staticmethod
     def _measurement_rows(
@@ -853,6 +869,8 @@ class WorldSnapshot:
                     f"codec {self.persistence_codec_version} requires "
                     "infrastructure channel rows"
                 )
+        elif self.persistence_codec_version == "v22":
+            pass
         elif infra_rows is not None:
             raise ValueError("infrastructure checkpoint fields require codec v21")
         object.__setattr__(self, "infrastructure", infra_rows)
@@ -882,6 +900,8 @@ class WorldSnapshot:
                 and self.regions_migration is None
             ):
                 raise ValueError("travel_network_checkpoint_requires_regions")
+        elif self.persistence_codec_version == "v22":
+            pass
         elif route_rows is not None:
             raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
         if route_rows is not None:
@@ -912,12 +932,35 @@ class WorldSnapshot:
         if self.persistence_codec_version == "v26":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V28:
                 raise ValueError("codec v26 requires event schema 28")
+        elif self.persistence_codec_version == "v22":
+            pass
         elif instrument_rows or reference_rows:
             raise ValueError(
                 "measurement checkpoint fields require codec v26"
             )
         object.__setattr__(self, "instrument_states", instrument_rows)
         object.__setattr__(self, "measurement_references", reference_rows)
+        if self.persistence_codec_version == "v22":
+            from simulation.disease_checkpoint import DiseaseCheckpointSection
+            from simulation.versioning import (
+                EPIDEMICS_WRITE_PAIR_CODEC,
+                EPIDEMICS_WRITE_PAIR_EVENT,
+            )
+
+            if self.event_schema_version != EPIDEMICS_WRITE_PAIR_EVENT:
+                raise ValueError("codec v22 requires event schema 24")
+            if type(self.disease_mechanics) is not DiseaseCheckpointSection:
+                raise TypeError(
+                    "codec v22 requires DiseaseCheckpointSection disease_mechanics"
+                )
+        elif self.disease_mechanics is not None:
+            raise ValueError("disease_mechanics checkpoint requires codec v22")
+        # v22 is the union of v26 feature channels plus disease_mechanics.
+        if self.persistence_codec_version == "v22":
+            # Reuse v26-style optional measurement/travel/infra validation:
+            # measurement rows may be empty; infrastructure/travel may be absent
+            # unless those channels are present on the snapshot.
+            pass
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
         bootstrap = WorldBootstrap(

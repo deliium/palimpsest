@@ -157,6 +157,7 @@ class PersistentSimulationService:
             ),
             travel_network_active=self._engine.travel_network_active,
             measurement_active=bool(state.instrument_states),
+            disease_active=self._engine._disease_mechanics is not None,
         )
         production_rows: SnapshotExtensions = {}
         if codec_version in {
@@ -179,6 +180,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows = {
@@ -205,6 +207,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows["active_hazards"] = tuple(state.active_hazards)
@@ -226,6 +229,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows["artifacts"] = tuple(state.artifacts.values())
@@ -246,6 +250,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows["lifecycle_records"] = tuple(self._engine.lifecycle_records)
@@ -264,6 +269,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             graph = self._engine.kinship_graph
@@ -285,6 +291,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows["dependency_need_registers"] = tuple(
@@ -302,6 +309,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows["repositories"] = tuple(state.repositories.values())
@@ -315,6 +323,7 @@ class PersistentSimulationService:
             "v19",
             "v20",
             "v21",
+            "v22",
             "v25",
         }:
             production_rows["corpse_custody_item_ids"] = tuple(
@@ -352,6 +361,44 @@ class PersistentSimulationService:
                     key=lambda row: row.item_id.value,
                 )
             )
+        if codec_version == "v22":
+            from simulation.disease_checkpoint import (
+                DiseaseCheckpointRow,
+                DiseaseCheckpointSection,
+                policy_sha256_for_spec,
+            )
+
+            spec = self._engine._disease_mechanics
+            assert spec is not None
+            rows = state.disease_state or {}
+            checkpoint_rows = tuple(
+                DiseaseCheckpointRow(
+                    body_id=entity_id,
+                    phase=row.phase.value,
+                    due_tick=row.due_tick,
+                    symptomatic=row.symptomatic,
+                )
+                for entity_id, row in sorted(
+                    rows.items(), key=lambda item: item[0].value
+                )
+            )
+            production_rows["disease_mechanics"] = DiseaseCheckpointSection(
+                rows=checkpoint_rows,
+                policy_sha256=policy_sha256_for_spec(spec),
+            )
+            if state.instrument_states:
+                production_rows["instrument_states"] = tuple(
+                    sorted(
+                        state.instrument_states.values(),
+                        key=lambda row: row.item_id.value,
+                    )
+                )
+                production_rows["measurement_references"] = tuple(
+                    sorted(
+                        state.measurement_references.values(),
+                        key=lambda row: row.item_id.value,
+                    )
+                )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -409,6 +456,7 @@ class PersistentSimulationService:
             travel_network=draft.travel_network,
             instrument_states=draft.instrument_states,
             measurement_references=draft.measurement_references,
+            disease_mechanics=getattr(draft, "disease_mechanics", None),
         )
 
     async def resolve_tick(

@@ -39,6 +39,7 @@ def test_owned_flags_are_eight() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }
     )
 

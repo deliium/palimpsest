@@ -51,6 +51,7 @@ _OWNED_FLAGS = frozenset(
         "supply_chains",
         "markets_credit", 
             "science",
+            "epidemics",
         }
 )
 
@@ -87,7 +88,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == _OWNED_FLAGS
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
 
     diplomacy = V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY]
     assert diplomacy.authority is V4Authority.OWNER_SCOPED

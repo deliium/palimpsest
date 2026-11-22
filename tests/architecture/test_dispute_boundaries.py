@@ -467,7 +467,7 @@ def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
     assert SUPPORTED_OBSERVER_PROTOCOLS == ("observer-protocol-v1",)
 
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v56" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     spec = V4_CONTEXT_BY_ID[V4ContextId.LEGAL_DISPUTES]
     assert spec.uses_existing_events is True

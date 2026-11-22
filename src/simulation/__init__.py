@@ -1046,6 +1046,7 @@ from simulation.market_institutions_ports import (
     MarketInstitutionsSummary,
     market_institutions_query_fingerprint,
 )
+from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.measurement_config import MeasurementInstrumentsSpec
 from simulation.migration_plan import (
     V4_MIGRATION_PLAN_SCHEMA,
@@ -1309,6 +1310,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V55,
     RUNNER_SCHEMA_VERSION_V56,
     RUNNER_SCHEMA_VERSION_V57,
+    RUNNER_SCHEMA_VERSION_V58,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
@@ -1884,6 +1886,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V55",
     "RUNNER_SCHEMA_VERSION_V56",
     "RUNNER_SCHEMA_VERSION_V57",
+    "RUNNER_SCHEMA_VERSION_V58",
     "SCALE_CONTRACT_VERSION",
     "SCALE_MAX_PARTITIONS",
     "SCALE_MAX_POPULATION",
@@ -2345,6 +2348,7 @@ __all__ = [
     "MarketRoleRecord",
     "MarketVenueRecord",
     "MeasurementInstrumentsSpec",
+    "DiseaseMechanicsSpec",
     "MemoryDerivationLineage",
     "MemoryDerivationLineagePort",
     "MemoryKeysetCursor",

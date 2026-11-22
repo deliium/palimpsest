@@ -97,7 +97,7 @@ def test_runner_activation_requires_organizations_and_durable_records() -> None:
     from simulation.runner import _cognition_config_for
 
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     spec = AgentCognitionSpec(agent_id=AgentId("agent-1"))
     flag_off = _cognition_config_for(
         spec,

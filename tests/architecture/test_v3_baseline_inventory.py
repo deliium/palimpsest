@@ -82,7 +82,7 @@ def test_v3_baseline_runner_and_result_pins() -> None:
     # V4-01 accepts runner-config-v56 for explicit scaffolding identity only:
     # it is never the default and no feature selects it automatically.
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RESULT_SCHEMA_VERSION_V3 == V3_BASELINE["generational_result_schema"]
 
 

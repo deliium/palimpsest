@@ -147,7 +147,7 @@ def test_no_new_flag_context_or_v57() -> None:
     spec = V4_CONTEXT_BY_ID[V4ContextId.MACRO_SOCIETY_IDENTITY]
     assert spec.capability_flag is None
     assert V4CapabilityFlags().any_enabled() is False
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
     for path in ISR_PATHS:
         text = path.read_text(encoding="utf-8")
         assert "runner-config-v58" not in text, path

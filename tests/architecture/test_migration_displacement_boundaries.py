@@ -385,7 +385,7 @@ def test_exactly_six_get_routes_require_subjective_debug() -> None:
 def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -397,6 +397,7 @@ def test_no_new_flag_context_or_v57() -> None:
         "supply_chains",
         "markets_credit", 
             "science",
+            "epidemics",
         }
     )
     offenders = [

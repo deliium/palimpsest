@@ -261,6 +261,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }
     )
     assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
@@ -444,6 +445,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }
     )
     assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (

@@ -66,7 +66,7 @@ def test_unchanged_surfaces_and_versions() -> None:
 
 
 def test_no_new_runner_schema_or_migration() -> None:
-    assert "runner-config-v58" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
 
 

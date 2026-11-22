@@ -354,6 +354,7 @@ type = "protected"
 protected_modules = [
     "world._ambient",
     "world._measurement",
+    "world._disease",
     "world._collective_projects",
     "world._production",
     "world._travel",
@@ -374,6 +375,7 @@ protected_modules = [
 allowed_importers = [
     "world._ambient",
     "world._measurement",
+    "world._disease",
     "world._collective_projects",
     "world._production",
     "world._travel",

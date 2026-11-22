@@ -952,6 +952,7 @@ class ObservedSelf:
     kinship_visible: ObservedKinshipVisible | None = None
     dependency_needs: ObservedDependencyNeeds | None = None
     journey: ObservedJourney | None = None
+    symptom_cue: Literal["unwell"] | None = None
 
     def __post_init__(self) -> None:
         if type(self.entity_id) is not EntityId:
@@ -990,6 +991,8 @@ class ObservedSelf:
             )
         if self.journey is not None and type(self.journey) is not ObservedJourney:
             raise TypeError("ObservedSelf.journey must be ObservedJourney or None")
+        if self.symptom_cue is not None and self.symptom_cue != "unwell":
+            raise ValueError("ObservedSelf.symptom_cue must be 'unwell' or None")
         if isinstance(self.inventory, (set, frozenset, Mapping)):
             raise TypeError("ObservedSelf.inventory must be an ordered sequence")
         if isinstance(self.inventory, (str, bytes, bytearray)) or not isinstance(
@@ -1018,6 +1021,7 @@ def observed_self_from_body(
     kinship_visible: ObservedKinshipVisible | None = None,
     dependency_needs: ObservedDependencyNeeds | None = None,
     journey: ObservedJourney | None = None,
+    symptom_cue: Literal["unwell"] | None = None,
 ) -> ObservedSelf:
     """Project an authoritative body into the explicit self observation DTO."""
     if type(body) is not AgentBody:
@@ -1037,6 +1041,7 @@ def observed_self_from_body(
         kinship_visible=kinship_visible,
         dependency_needs=dependency_needs,
         journey=journey,
+        symptom_cue=symptom_cue,
     )
 
 

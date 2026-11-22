@@ -87,6 +87,8 @@ class DeepeningWritePair:
     reason: str
 
 
+EPIDEMICS_WRITE_PAIR_EVENT: Final[int] = 24
+EPIDEMICS_WRITE_PAIR_CODEC: Final[str] = "v22"
 TRAVEL_NETWORK_WRITE_PAIR_EVENT: Final[int] = 27
 TRAVEL_NETWORK_WRITE_PAIR_CODEC: Final[str] = "v25"
 MEASUREMENT_WRITE_PAIR_EVENT: Final[int] = 28

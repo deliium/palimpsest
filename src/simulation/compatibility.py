@@ -102,6 +102,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V55,
     RUNNER_SCHEMA_VERSION_V56,
     RUNNER_SCHEMA_VERSION_V57,
+    RUNNER_SCHEMA_VERSION_V58,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -164,6 +165,7 @@ V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "supply_chains",
         "markets_credit",
         "science",
+        "epidemics",
     }
 )
 
@@ -553,8 +555,11 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "instrument family: the exact v56 family root plus one mandatory "
             "measurement_instruments sibling, selected only when the spec is "
             "present; active instrument runs use event 28 / codec v26; "
+            f"{RUNNER_SCHEMA_VERSION_V58} is the accepted V4-34 disease family: "
+            "the exact v56 family root plus mandatory disease_mechanics, with "
+            "optional measurement_instruments when that channel is selected; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
-            f"feature runner remains {RUNNER_SCHEMA_VERSION_V57})."
+            f"opt-in disease runner is {RUNNER_SCHEMA_VERSION_V58})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -795,8 +800,8 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"is owned by V4-16 on "
             f"{RUNNER_SCHEMA_VERSION_V56}; V4-17 deepens infrastructure_networks "
             "without adding a V4 flag or v57; V4-20 owns markets_credit and V4-27 "
-            "owns science, so nine flags are owned and three remain unowned; any "
-            "enabled unowned flag fails closed at "
+            "owns science and V4-34 owns epidemics, so ten flags are owned and "
+            "two remain unowned; any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"
         ),

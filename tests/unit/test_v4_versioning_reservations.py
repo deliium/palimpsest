@@ -54,9 +54,10 @@ def test_current_wire_maxima_are_unchanged() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
+    assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V24")
 
 
 def test_deepening_pair_is_separate_and_contiguous() -> None:

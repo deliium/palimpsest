@@ -71,7 +71,7 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
     assert "credit_relationships" not in V4_CAPABILITY_FLAGS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 9
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -83,10 +83,11 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
             "supply_chains",
             "markets_credit",
             "science",
+            "epidemics",
         }
     )
-    token = "runner-config-" + "v58"
-    assert token not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    token = "runner-config-" + "v59"
+    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*credit_relationships*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
 

@@ -93,6 +93,7 @@ EVENT_SCHEMA_REPLAY_V20: Final[int] = 20
 EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
 EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
 EVENT_SCHEMA_REPLAY_V23: Final[int] = 23
+EVENT_SCHEMA_REPLAY_V24: Final[int] = 24
 EVENT_SCHEMA_REPLAY_V27: Final[int] = 27
 EVENT_SCHEMA_REPLAY_V28: Final[int] = 28
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -120,6 +121,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }
@@ -148,6 +150,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }
@@ -176,6 +179,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -200,6 +204,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -223,6 +228,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -245,6 +251,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -266,6 +273,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -286,6 +294,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -305,6 +314,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -323,6 +333,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -2342,6 +2353,56 @@ class MeasurementTaken:
 
 
 @dataclass(frozen=True, slots=True)
+class DiseaseRowView:
+    """Detached transport row for private disease net effects."""
+
+    phase: Literal["latent", "active", "immune"]
+    due_tick: int | None = None
+    symptomatic: bool | None = None
+
+    def __post_init__(self) -> None:
+        if self.phase not in {"latent", "active", "immune"}:
+            raise ValueError("disease_row_phase_invalid")
+        if self.phase == "immune":
+            if self.due_tick is not None or self.symptomatic is not None:
+                raise ValueError("disease_row_immune_shape")
+            return
+        if type(self.due_tick) is not int or isinstance(self.due_tick, bool):
+            raise ValueError("disease_row_due_tick_invalid")
+        if self.due_tick < 0:
+            raise ValueError("disease_row_due_tick_invalid")
+        if self.phase == "latent":
+            if self.symptomatic is not None:
+                raise ValueError("disease_row_latent_symptom")
+            return
+        if type(self.symptomatic) is not bool:
+            raise ValueError("disease_row_active_symptom_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class DiseaseStateChanged:
+    """Private net before/after disease row for one body in a tick."""
+
+    body_id: EntityId
+    before: DiseaseRowView | None
+    after: DiseaseRowView | None
+    kind: Literal["disease_state_changed"] = field(
+        default="disease_state_changed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.body_id) is not EntityId:
+            raise TypeError("DiseaseStateChanged.body_id must be EntityId")
+        if self.before is not None and type(self.before) is not DiseaseRowView:
+            raise TypeError("DiseaseStateChanged.before must be DiseaseRowView or None")
+        if self.after is not None and type(self.after) is not DiseaseRowView:
+            raise TypeError("DiseaseStateChanged.after must be DiseaseRowView or None")
+        if self.before == self.after:
+            raise ValueError("disease_state_changed_no_change")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
 class InstrumentCalibrated:
     """Effect-complete adjustment against a physical reference."""
 
@@ -3275,6 +3336,7 @@ EventDetails = (
     | ExperimentResolved
     | MeasurementTaken
     | InstrumentCalibrated
+    | DiseaseStateChanged
     | CorpseCustodyOpened
     | TakenFromCorpse
     | PossessionClaimAsserted
@@ -3355,6 +3417,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         ExperimentResolved,
         MeasurementTaken,
         InstrumentCalibrated,
+        DiseaseStateChanged,
         CorpseCustodyOpened,
         TakenFromCorpse,
         PossessionClaimAsserted,
@@ -3388,22 +3451,32 @@ _INFRASTRUCTURE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V28}
+    {EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V28}
 )
 
 _TRAVEL_NETWORK_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {RouteConditionChanged}
 )
 _TRAVEL_NETWORK_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V28}
+    {EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V28}
 )
 
 _MEASUREMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {MeasurementTaken, InstrumentCalibrated}
 )
 _MEASUREMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V28}
+    {EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V28}
 )
+_DISEASE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {DiseaseStateChanged}
+)
+_DISEASE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V24}
+)
+
 
 _KINSHIP_DETAIL_TYPES: Final[frozenset[type]] = frozenset({KinshipEdgeRecorded})
 _DEPENDENCY_CARE_DETAIL_TYPES: Final[frozenset[type]] = frozenset({Fed, Transported})
@@ -3430,6 +3503,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3445,6 +3519,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3459,6 +3534,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3475,6 +3551,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3488,6 +3565,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3508,6 +3586,7 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3521,6 +3600,7 @@ _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3533,6 +3613,7 @@ _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3602,6 +3683,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3728,6 +3810,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         return schema_version in _TRAVEL_NETWORK_EVENT_SCHEMAS
     if type(details) in _MEASUREMENT_DETAIL_TYPES:
         return schema_version in _MEASUREMENT_EVENT_SCHEMAS
+    if type(details) in _DISEASE_DETAIL_TYPES:
+        return schema_version in _DISEASE_EVENT_SCHEMAS
     if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
         return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
@@ -4023,6 +4107,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return reading.target_id
         case InstrumentCalibrated(reference_id=reference_id):
             return reference_id
+        case DiseaseStateChanged(body_id=body_id):
+            return body_id
         case (
             CorpseCustodyOpened(body_id=body_id)
             | PossessionClaimAsserted(decedent_id=body_id)
@@ -4230,6 +4316,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=measurement_instruments_requires_v28",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _DISEASE_DETAIL_TYPES:
+            if self.schema_version not in _DISEASE_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=disease_mechanics_requires_v24",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -4853,6 +4948,14 @@ def build_occurrence_context(
                 origin_location_id=origin_location_id,
                 destination_location_id=None,
                 affected_entity_ids=(instrument.item_id, reference_id),
+                private_recipient_ids=(),
+            )
+        case DiseaseStateChanged():
+            # Private net effect: no local actor audience and no peer spill.
+            return OccurrenceContext(
+                origin_location_id=None,
+                destination_location_id=None,
+                affected_entity_ids=(),
                 private_recipient_ids=(),
             )
         case (
