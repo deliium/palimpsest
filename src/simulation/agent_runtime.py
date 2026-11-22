@@ -302,7 +302,16 @@ class PendingRuntimeFinalization:
         competing_theory_candidate = getattr(
             self.loop_result, "competing_theory_ledger", None
         )
-        if competing_theory_candidate is not None:
+        medical_candidate = getattr(
+            self.loop_result, "medical_belief_ledger", None
+        )
+        if medical_candidate is not None:
+            from simulation.run_control import (
+                FINALIZATION_COMMAND_CODEC_VERSION_V6,
+            )
+
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V6
+        elif competing_theory_candidate is not None:
             from simulation.run_control import (
                 FINALIZATION_COMMAND_CODEC_VERSION_V5,
             )
@@ -345,6 +354,7 @@ class PendingRuntimeFinalization:
             measurement_ledger=measurement_candidate,
             scientific_model_ledger=scientific_model_candidate,
             competing_theory_ledger=competing_theory_candidate,
+            medical_belief_ledger=medical_candidate,
         )
 
 
@@ -381,6 +391,7 @@ def pending_from_finalization_command(command: object) -> PendingRuntimeFinaliza
         measurement_ledger=command.measurement_ledger,
         scientific_model_ledger=command.scientific_model_ledger,
         competing_theory_ledger=command.competing_theory_ledger,
+        medical_belief_ledger=command.medical_belief_ledger,
     )
     return PendingRuntimeFinalization(
         observation_key=command.observation_key,
@@ -2941,6 +2952,7 @@ class AgentRuntime:
                 effective_command=command,
                 reflection_cursor=self._reflection_cursor,
                 decision_journal=self._decision_journal,
+                command_override=effective_command is not None,
             )
         except CognitiveLoopError as exc:
             await self._soft_append_cognition_trace(
@@ -3045,63 +3057,10 @@ class AgentRuntime:
                 loop_result = replace(
                     loop_result, scientific_model_ledger=adjusted
                 )
-        candidate_digest = ""
-        if loop_result.replication_ledger is not None:
-            from typing import cast as _cast
-
-            from agents.cognition.experimentation import ExperimentLedger as _EL
-            from agents.cognition.replication import ReplicationLedger as _RL
-            from simulation.replication_checkpoint import (
-                replication_state_digest,
-                scientific_experiment_state_digest,
-            )
-
-            candidate_digest = (
-                replication_state_digest(
-                    _cast(_RL, loop_result.replication_ledger)
-                )
-                + ":"
-                + scientific_experiment_state_digest(
-                    _cast(_EL, loop_result.experiment_ledger)
-                )
-            )
-            if getattr(loop_result, "measurement_ledger", None) is not None:
-                from agents.cognition.measurement import (
-                    MeasurementLedger as _ML,
-                )
-                from simulation.measurement_checkpoint import (
-                    measurement_state_digest,
-                )
-
-                candidate_digest += ":" + measurement_state_digest(
-                    _cast(_ML, loop_result.measurement_ledger)
-                )
-        if getattr(loop_result, "scientific_model_ledger", None) is not None:
-            from typing import cast as _cast_sm
-
-            from agents.cognition.scientific_models import (
-                ScientificModelLedger as _SML,
-            )
-            from simulation.scientific_model_checkpoint import (
-                scientific_model_state_digest,
-            )
-
-            candidate_digest += ":" + scientific_model_state_digest(
-                _cast_sm(_SML, loop_result.scientific_model_ledger)
-            )
-        if getattr(loop_result, "competing_theory_ledger", None) is not None:
-            from typing import cast as _cast_ct
-
-            from agents.cognition.competing_theories import (
-                CompetingTheoryLedger as _CTL,
-            )
-            from simulation.competing_theory_checkpoint import (
-                competing_theory_state_digest,
-            )
-
-            candidate_digest += ":" + competing_theory_state_digest(
-                _cast_ct(_CTL, loop_result.competing_theory_ledger)
-            )
+        candidate_digest = _candidate_digest(
+            loop_result,
+            v6=getattr(loop_result, "medical_belief_ledger", None) is not None,
+        )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -3504,6 +3463,13 @@ class AgentRuntime:
             self._loop.restore_competing_theory_ledger(
                 competing_theory_candidate, self._agent.agent_id
             )
+        medical_candidate = getattr(
+            pending.loop_result, "medical_belief_ledger", None
+        )
+        if medical_candidate is not None:
+            self._loop.restore_medical_belief_ledger(
+                medical_candidate, self._agent.agent_id
+            )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
         self._processed_invocations.add(pending.invocation_id)
@@ -3826,6 +3792,55 @@ class AgentRuntime:
                 invocation_id=command.invocation_id,
                 tick=command.tick,
             )
+        from simulation.run_control import (
+            FINALIZATION_COMMAND_CODEC_VERSION_V6,
+        )
+
+        if command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V6:
+            from agents.cognition.medical_beliefs import MedicalBeliefLedger
+
+            ledger = command.medical_belief_ledger
+            if (
+                type(ledger) is not MedicalBeliefLedger
+                or ledger.owner_id != self._agent.agent_id
+                or ledger.last_processed_tick != command.tick
+                or command.observation_key[0] != command.tick
+            ):
+                _LOG.warning(
+                    "runtime_restore_pending_rejected reason=%s",
+                    "medical_candidate_mismatch",
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.RECOVERY_CORRUPT,
+                    agent_id=self._agent.agent_id.value,
+                    invocation_id=command.invocation_id,
+                    tick=command.tick,
+                )
+            candidate_digest = _v6_candidate_digest(command)
+            revision_hint = (
+                0
+                if command.subjective_batch is None
+                else (command.subjective_batch.expected_revision or 0)
+            )
+            expected = _pending_integrity_hash(
+                invocation_id=command.invocation_id,
+                tick=command.tick,
+                command_kind=command.effective_command_kind,
+                next_status=command.prior_status.value,
+                revision_hint=revision_hint,
+                candidate_digest=candidate_digest,
+            )
+            if expected != command.integrity_hash:
+                _LOG.warning(
+                    "runtime_restore_pending_rejected reason=%s",
+                    "medical_candidate_digest",
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.RECOVERY_CORRUPT,
+                    agent_id=self._agent.agent_id.value,
+                    invocation_id=command.invocation_id,
+                    tick=command.tick,
+                )
         if command.integrity_hash in self._finalized_hashes:
             _LOG.warning(
                 "runtime_restore_pending_idempotent",
@@ -3862,6 +3877,41 @@ class AgentRuntime:
             },
         )
         return pending
+
+    def _preflight_checkpoint_medical_beliefs(self, checkpoint: object) -> None:
+        """Validate the medical-belief sidecar before any runtime mutation."""
+        from agents.cognition.medical_beliefs import MedicalBeliefLedger
+        from simulation.medical_beliefs_config import MEDICAL_BELIEFS_POLICY_ID
+
+        value = getattr(checkpoint, "medical_belief_ledger", None)
+        if value is None:
+            if (
+                self._loop._medical_beliefs_enabled
+                and getattr(checkpoint, "processed_invocation_count", 0) > 0
+            ):
+                _LOG.warning(
+                    "medical_beliefs_restore_rejected reason=%s",
+                    "missing_required_checkpoint_ledger",
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=self._agent.agent_id.value,
+                )
+            return
+        if (
+            type(value) is not MedicalBeliefLedger
+            or not self._loop._medical_beliefs_enabled
+            or value.owner_id != self._agent.agent_id
+            or value.policy_id != MEDICAL_BELIEFS_POLICY_ID
+        ):
+            _LOG.warning(
+                "medical_beliefs_restore_rejected reason=%s",
+                "incompatible_checkpoint",
+            )
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
 
     def _preflight_checkpoint_mediation(self, checkpoint: object) -> None:
         """Validate the mediation field before mutating any runtime state."""
@@ -3978,6 +4028,7 @@ class AgentRuntime:
         self._preflight_checkpoint_mediation(checkpoint)
         self._preflight_checkpoint_institutional_memory(checkpoint)
         self._preflight_checkpoint_institutional_decay(checkpoint)
+        self._preflight_checkpoint_medical_beliefs(checkpoint)
         goals = tuple(checkpoint.goals)
         for goal in goals:
             if type(goal) is not Goal:
@@ -4120,6 +4171,13 @@ class AgentRuntime:
         if competing_theory_ledger is not None:
             self._loop.restore_competing_theory_ledger(
                 competing_theory_ledger, self._agent.agent_id
+            )
+        medical_belief_ledger = getattr(
+            checkpoint, "medical_belief_ledger", None
+        )
+        if medical_belief_ledger is not None:
+            self._loop.restore_medical_belief_ledger(
+                medical_belief_ledger, self._agent.agent_id
             )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
@@ -4286,6 +4344,9 @@ class AgentRuntime:
             ),
             competing_theory_ledger=(
                 self._loop.competing_theory_ledger_if_present()
+            ),
+            medical_belief_ledger=(
+                self._loop.medical_belief_ledger_if_present()
             ),
             disputes=self._disputes,
             evidence=self._evidence,
@@ -5676,6 +5737,89 @@ def _intent_reason_to_receipt_code(
 def _is_dead_self(observation: Observation) -> bool:
     self_body = observation.self_body
     return self_body is not None and self_body.life_status is LifeStatus.DEAD
+
+
+def _candidate_digest(value: object, *, v6: bool) -> str:
+    """Fixed-order digest of present subjective candidates.
+
+    ``v6`` includes the medical sidecar and treats measurement as an
+    independent candidate; legacy versions preserve their exact historical
+    nesting so existing pending bytes stay stable.
+    """
+    from typing import cast
+
+    digest = ""
+    replication = getattr(value, "replication_ledger", None)
+    experiment = getattr(value, "experiment_ledger", None)
+    measurement = getattr(value, "measurement_ledger", None)
+    if replication is not None and experiment is not None:
+        from agents.cognition.experimentation import ExperimentLedger
+        from agents.cognition.replication import ReplicationLedger
+        from simulation.replication_checkpoint import (
+            replication_state_digest,
+            scientific_experiment_state_digest,
+        )
+
+        digest = (
+            replication_state_digest(cast(ReplicationLedger, replication))
+            + ":"
+            + scientific_experiment_state_digest(
+                cast(ExperimentLedger, experiment)
+            )
+        )
+        if measurement is not None:
+            from agents.cognition.measurement import MeasurementLedger
+            from simulation.measurement_checkpoint import (
+                measurement_state_digest,
+            )
+
+            digest += ":" + measurement_state_digest(
+                cast(MeasurementLedger, measurement)
+            )
+    elif v6 and measurement is not None:
+        from agents.cognition.measurement import MeasurementLedger
+        from simulation.measurement_checkpoint import measurement_state_digest
+
+        digest += ":" + measurement_state_digest(
+            cast(MeasurementLedger, measurement)
+        )
+    scientific_model = getattr(value, "scientific_model_ledger", None)
+    if scientific_model is not None:
+        from agents.cognition.scientific_models import ScientificModelLedger
+        from simulation.scientific_model_checkpoint import (
+            scientific_model_state_digest,
+        )
+
+        digest += ":" + scientific_model_state_digest(
+            cast(ScientificModelLedger, scientific_model)
+        )
+    competing = getattr(value, "competing_theory_ledger", None)
+    if competing is not None:
+        from agents.cognition.competing_theories import CompetingTheoryLedger
+        from simulation.competing_theory_checkpoint import (
+            competing_theory_state_digest,
+        )
+
+        digest += ":" + competing_theory_state_digest(
+            cast(CompetingTheoryLedger, competing)
+        )
+    if v6:
+        medical = getattr(value, "medical_belief_ledger", None)
+        if medical is not None:
+            from agents.cognition.medical_beliefs import MedicalBeliefLedger
+            from simulation.medical_beliefs_checkpoint import (
+                medical_beliefs_state_digest,
+            )
+
+            digest += ":" + medical_beliefs_state_digest(
+                cast(MedicalBeliefLedger, medical)
+            )
+    return digest
+
+
+def _v6_candidate_digest(command: object) -> str:
+    """Recompute the v6 candidate digest from a recovered finalization command."""
+    return _candidate_digest(command, v6=True)
 
 
 def _pending_integrity_hash(

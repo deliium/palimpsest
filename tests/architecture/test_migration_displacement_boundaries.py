@@ -404,11 +404,11 @@ def test_no_new_flag_context_or_v57() -> None:
         str(path.relative_to(ROOT / "src"))
         for path in sorted((ROOT / "src").rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v59" in path.read_text(encoding="utf-8")
+        and "runner-config-v60" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     for path in MIGRATION_PATHS:
-        assert "runner-config-v59" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v60" not in path.read_text(encoding="utf-8")
 
 
 def test_pins_are_unchanged() -> None:

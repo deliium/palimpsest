@@ -88,4 +88,4 @@ def test_v3_38_preserves_current_contract_pins() -> None:
 def test_no_unplanned_runner_or_replay_schema_files() -> None:
     for path in (SRC / "simulation").rglob("*.py"):
         source = path.read_text(encoding="utf-8")
-        assert "runner-config-v59" not in source, path
+        assert "runner-config-v60" not in source, path

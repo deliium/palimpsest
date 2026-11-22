@@ -38,7 +38,7 @@ def test_exact_pins() -> None:
     assert len(COMMAND_RULE_MATRIX) == 45
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(SEMANTIC_EVENT_TYPES) == 73
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_six_get_routes() -> None:

@@ -2841,6 +2841,7 @@ OFF_GATE_MATRIX_EXPERIMENT_IDS: Final[frozenset[str]] = frozenset(
         "scientific_replication@1",
         "measurement_instruments@1",
         "disease_mechanics@1",
+        "medical_beliefs@1",
     }
 )
 
@@ -5953,6 +5954,25 @@ def experiment_disease_mechanics(
     )
     _LOG.info(
         "experiment_registered experiment_id=disease_mechanics@1 arms=%s",
+        len(definition.conditions),
+    )
+    return definition
+
+
+def experiment_medical_beliefs(
+    base: SimulationRunnerConfig,
+    *,
+    seed_matrix: ExperimentSeedMatrix | None = None,
+    max_ticks: int = 8,
+) -> ExperimentDefinition:
+    """Off-gate V4-35 experiment: paired disease contact with medical beliefs."""
+    from experiments.medical_beliefs_scenario import medical_beliefs_scenario
+
+    definition = medical_beliefs_scenario(
+        base, seed_matrix=seed_matrix, max_ticks=max_ticks
+    )
+    _LOG.info(
+        "experiment_registered experiment_id=medical_beliefs@1 arms=%s",
         len(definition.conditions),
     )
     return definition

@@ -113,7 +113,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
         str(path.relative_to(_SRC))
         for path in sorted(_SRC.rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v59" in path.read_text(encoding="utf-8")
+        and "runner-config-v60" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 

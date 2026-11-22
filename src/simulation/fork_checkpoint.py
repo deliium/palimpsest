@@ -664,6 +664,16 @@ def fork_state_digest(checkpoint: RunnerForkCheckpoint) -> str:
             )
 
             theory_digest = competing_theory_state_digest(theory_ledger)
+        medical_digest = None
+        medical_ledger = getattr(
+            runtime_state.checkpoint, "medical_belief_ledger", None
+        )
+        if medical_ledger is not None:
+            from simulation.medical_beliefs_checkpoint import (
+                medical_beliefs_state_digest,
+            )
+
+            medical_digest = medical_beliefs_state_digest(medical_ledger)
         runtimes.append(
             {
                 "agent_id": runtime_state.checkpoint.agent_id.value,
@@ -741,6 +751,11 @@ def fork_state_digest(checkpoint: RunnerForkCheckpoint) -> str:
                 **(
                     {"competing_theory_state_digest": theory_digest}
                     if theory_digest is not None
+                    else {}
+                ),
+                **(
+                    {"medical_beliefs_state_digest": medical_digest}
+                    if medical_digest is not None
                     else {}
                 ),
             }

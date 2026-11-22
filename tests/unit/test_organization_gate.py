@@ -120,7 +120,7 @@ def test_enabling_organizations_below_v56_fails_closed(schema_version: str) -> N
 
 def test_v56_is_accepted_and_v57_stays_absent() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_organization_modules_do_not_reference_the_v4_flag_seam() -> None:

@@ -90,7 +90,7 @@ def test_build_cognitive_loop_forwards_the_agency_policy() -> None:
 def test_runner_seam_keeps_v56_and_allocates_the_agency_policy() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION_V55 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert V4CapabilityFlags(organizations=True).owned_enabled_names() == (
         "organizations",
     )

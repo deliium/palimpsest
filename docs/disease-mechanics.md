@@ -90,6 +90,9 @@ PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 \
 - No real-world prevalence, forecasting, or efficacy claims.
 - No new command, public disease route, metric family, or Godot overlay.
 - Agents cannot query infection state or confirm transmission.
+- V4-35 may add subjective explanations and ordinary interventions on
+  `runner-config-v59`, but it never adds a fictional cure or changes objective
+  disease policy.
 
 ## See Also
 
@@ -97,4 +100,5 @@ PALIMPSEST_TEST_DATABASE_URL=... uv run --frozen --python 3.12.14 \
 - [Architecture](architecture.md)
 - [Physical Simulation](physical-simulation.md)
 - [Measurement instruments](measurement-instruments.md)
+- [Medical beliefs](medical-beliefs.md)
 - [Persistence](persistence.md)

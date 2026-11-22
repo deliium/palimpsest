@@ -103,7 +103,7 @@ def test_compatibility_pins_are_exact() -> None:
     assert len(families) == 275
     assert families[146].family_id.value == "organization_collective_agency"
     assert families[147].family_id.value == "organization_collective_implementation"
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73

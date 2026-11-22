@@ -297,6 +297,8 @@ class CognitiveLoop:
     _replication_ledger: object | None
     _measurement_ledger: object | None
     _measurement_enabled: bool
+    _medical_belief_ledger: object | None
+    _medical_beliefs_enabled: bool
 
     __slots__ = (
         "_acceptance_window_ticks",
@@ -379,6 +381,8 @@ class CognitiveLoop:
         "_measurement_ledger",
         "_mediation_mode",
         "_mediation_policy",
+        "_medical_belief_ledger",
+        "_medical_beliefs_enabled",
         "_memory",
         "_memory_updates",
         "_mentorship_spec",
@@ -526,6 +530,7 @@ class CognitiveLoop:
         knowledge_genealogy_seed_material: object | None = None,
         bounded_experimentation_spec: object | None = None,
         measurement_enabled: bool = False,
+        medical_beliefs_enabled: bool = False,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
         borders_mode: object | None = None,
@@ -1238,6 +1243,11 @@ class CognitiveLoop:
         self._competing_theory_enabled = self._scientific_model_enabled
         self._measurement_ledger = None
         self._measurement_enabled = False
+        self._medical_belief_ledger = None
+        self._medical_beliefs_enabled = False
+        if type(medical_beliefs_enabled) is not bool:
+            raise TypeError("medical_beliefs_enabled must be bool")
+        self._medical_beliefs_enabled = medical_beliefs_enabled
         from agents.cognition.configuration import CognitionDisputeMode
         from agents.cognition.legal_disputes import (
             DisputePolicy,
@@ -4885,6 +4895,34 @@ class CognitiveLoop:
         self._measurement_ledger = ledger
         self._measurement_enabled = True
 
+    def bind_medical_beliefs(self, enabled: bool) -> None:
+        """Enable or disable this owner's subjective medical-belief channel."""
+        if type(enabled) is not bool:
+            raise TypeError("enabled must be bool")
+        self._medical_beliefs_enabled = enabled
+        if not enabled:
+            self._medical_belief_ledger = None
+
+    def medical_belief_ledger_if_present(self) -> object | None:
+        """Return the committed medical-belief sidecar without constructing one."""
+        return self._medical_belief_ledger
+
+    def restore_medical_belief_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install a validated committed medical-belief sidecar."""
+        if ledger is None:
+            self._medical_belief_ledger = None
+            return
+        from agents.cognition.medical_beliefs import MedicalBeliefLedger
+
+        if type(ledger) is not MedicalBeliefLedger:
+            raise ValueError("medical_belief_ledger: invalid_type")
+        if owner_id is not None and ledger.owner_id != owner_id:
+            raise ValueError("medical_belief_ledger: owner mismatch")
+        self._medical_belief_ledger = ledger
+        self._medical_beliefs_enabled = True
+
     def scientific_model_ledger_if_present(self) -> object | None:
         """Return the committed predictive sidecar without constructing one."""
 
@@ -6786,6 +6824,30 @@ class CognitiveLoop:
                 measurement_candidate = ingest_measurement_communication(
                     measurement_candidate, communication
                 )
+        medical_candidate = None
+        if self._medical_beliefs_enabled:
+            from agents.cognition.medical_beliefs import (
+                MedicalBeliefLedger,
+            )
+            from agents.cognition.medical_beliefs import (
+                advance as advance_medical_beliefs,
+            )
+
+            medical_candidate = (
+                getattr(loop_input.snapshot, "medical_belief_ledger", None)
+                if loop_input.snapshot is not None
+                else None
+            )
+            if type(medical_candidate) is not MedicalBeliefLedger:
+                medical_candidate = self._medical_belief_ledger
+            if type(medical_candidate) is not MedicalBeliefLedger:
+                medical_candidate = MedicalBeliefLedger(
+                    owner_id=loop_input.agent_id,
+                    observer_entity_id=loop_input.observation.observer_id,
+                )
+            medical_candidate = advance_medical_beliefs(
+                medical_candidate, loop_input.observation
+            )
         from agents.cognition.measurement_actions import (
             measurement_evidence_candidates,
         )
@@ -7269,6 +7331,7 @@ class CognitiveLoop:
             recipe_beliefs=recipe_beliefs,
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
+            medical_belief_ledger=medical_candidate,
         )
         if type(budget_ledger) is TickBudgetLedger:
             self._last_cognitive_budget_audit = budget_ledger.snapshot()
@@ -7359,6 +7422,7 @@ class CognitiveLoop:
         effective_command: AgentCommand,
         reflection_cursor: object | None = None,
         decision_journal: tuple[object, ...] | None = None,
+        command_override: bool = False,
     ) -> CognitiveLoopResult:
         """Bind the effective command and complete memory-update / next state.
 
@@ -8085,6 +8149,90 @@ class CognitiveLoop:
                             frame_digest=theory_message.frame_digest,
                             send_tick=loop_input.observation.tick,
                         )
+        if type(command_override) is not bool:
+            raise TypeError("command_override must be bool")
+        medical_candidate = None
+        if self._medical_beliefs_enabled:
+            from agents.cognition.medical_beliefs import (
+                MedicalBeliefLedger,
+                recent_outbound_proposal,
+                record_outbound_proposal,
+            )
+
+            raw_medical = proposal.medical_belief_ledger
+            if type(raw_medical) is MedicalBeliefLedger:
+                medical_candidate = raw_medical
+        if medical_candidate is not None and not command_override:
+            from agents.cognition.medical_beliefs_actions import (
+                select_medical_intervention,
+            )
+            from agents.cognition.medical_beliefs_communication import (
+                attach_medical_belief_message,
+                build_medical_belief_talk,
+                select_medical_belief_message,
+                select_medical_recipient,
+            )
+
+            tick = loop_input.observation.tick
+            message = select_medical_belief_message(medical_candidate, tick=tick)
+            medical_command: AgentCommand | None = None
+            recipient_entity_id = None
+            if message is not None and isinstance(command, (Talk, Tell)):
+                attached_medical = attach_medical_belief_message(command, message)
+                if attached_medical is not command:
+                    medical_command = cast(AgentCommand, attached_medical)
+                    recipient_entity_id = command.recipient_id
+            elif message is not None and type(command) is Wait and tick % 4 == 0:
+                peer = select_medical_recipient(loop_input.observation)
+                if peer is not None:
+                    talk = build_medical_belief_talk(
+                        loop_input.observation,
+                        medical_candidate,
+                        tick=tick,
+                        recipient_id=peer,
+                        message=message,
+                    )
+                    if talk is not None:
+                        medical_command = talk
+                        recipient_entity_id = peer
+            if (
+                medical_command is not None
+                and recipient_entity_id is not None
+                and message is not None
+                and not recent_outbound_proposal(
+                    medical_candidate,
+                    tick=tick,
+                    recipient_entity_id=recipient_entity_id,
+                    root=message.root,
+                    outlook=message.outlook,
+                )
+            ):
+                command = medical_command
+                medical_candidate = record_outbound_proposal(
+                    medical_candidate,
+                    tick=tick,
+                    recipient_entity_id=recipient_entity_id,
+                    root=message.root,
+                    outlook=message.outlook,
+                )
+            elif type(command) is Wait:
+                intervention = select_medical_intervention(
+                    loop_input.observation,
+                    medical_candidate,
+                    tick=tick,
+                )
+                if intervention is not None:
+                    command = cast(AgentCommand, intervention.command)
+                    from agents.cognition.medical_beliefs import (
+                        begin_attempt,
+                    )
+
+                    medical_candidate = begin_attempt(
+                        medical_candidate,
+                        tick=tick,
+                        cause=intervention.cause,
+                        practice=intervention.practice,
+                    )
         result = CognitiveLoopResult(
             invocation_id=invocation_id,
             agent_id=loop_input.agent_id,
@@ -8159,6 +8307,7 @@ class CognitiveLoop:
             experiment_ledger=experiment_candidate,
             replication_ledger=replication_candidate,
             measurement_ledger=measurement_candidate,
+            medical_belief_ledger=medical_candidate,
             scientific_model_ledger=scientific_model_candidate,
             competing_theory_ledger=competing_theory_candidate,
         )

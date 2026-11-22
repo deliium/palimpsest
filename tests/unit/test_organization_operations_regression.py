@@ -98,7 +98,7 @@ def test_snapshot_accepts_v1_v2_v3() -> None:
 
 
 def test_no_v57_runner_schema_exists() -> None:
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v56" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 

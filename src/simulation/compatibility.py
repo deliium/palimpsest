@@ -103,6 +103,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V56,
     RUNNER_SCHEMA_VERSION_V57,
     RUNNER_SCHEMA_VERSION_V58,
+    RUNNER_SCHEMA_VERSION_V59,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -558,8 +559,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"{RUNNER_SCHEMA_VERSION_V58} is the accepted V4-34 disease family: "
             "the exact v56 family root plus mandatory disease_mechanics, with "
             "optional measurement_instruments when that channel is selected; "
+            f"{RUNNER_SCHEMA_VERSION_V59} is the accepted V4-35 medical-beliefs "
+            "family: the exact v58 disease family plus mandatory "
+            "medical_beliefs, preserving the optional measurement_instruments "
+            "sibling; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
-            f"opt-in disease runner is {RUNNER_SCHEMA_VERSION_V58})."
+            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V59})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -872,6 +877,8 @@ _LOG.debug(
         "runner_v55": RUNNER_SCHEMA_VERSION_V55,
         "runner_v56": RUNNER_SCHEMA_VERSION_V56,
         "runner_v57": RUNNER_SCHEMA_VERSION_V57,
+        "runner_v58": RUNNER_SCHEMA_VERSION_V58,
+        "runner_v59": RUNNER_SCHEMA_VERSION_V59,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

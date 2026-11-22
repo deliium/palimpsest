@@ -273,3 +273,14 @@ predictive state. Runtime checkpoints and forks carry the committed ledger and
 its digest. `scientific-models-snapshot-v1` and `scientific-models-store-v1` are
 independent publication versions stored outside SQL. See
 [Scientific models](scientific-models.md).
+
+## Medical-belief codec (V4-35)
+
+`medical-beliefs-state-v1` is the strict owner-safe checkpoint codec for the
+subjective medical ledger. Pending transitions use `finalization-command-v6`,
+which adds exactly `medical_beliefs_state` to the v5 keyset while allowing
+science, measurement, and competing-theory candidates to remain null. Runtime
+checkpoints carry the committed ledger and fork integrity includes its digest
+only when present. Medical recovery is a pending transition, not full durable
+subjective restart. Disease replay remains event 24 / codec `v22` and Alembic
+stays `0017`. See [Medical beliefs](medical-beliefs.md).

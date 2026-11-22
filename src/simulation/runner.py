@@ -769,6 +769,7 @@ class _ChannelLoopOptions(TypedDict, total=False):
     knowledge_genealogy_seed_material: object | None
     bounded_experimentation_spec: object | None
     measurement_enabled: bool
+    medical_beliefs_enabled: bool
 
 
 def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
@@ -790,6 +791,7 @@ def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
         _knowledge_genealogy_loop_kwargs,
         _bounded_experimentation_loop_kwargs,
         _measurement_loop_kwargs,
+        _medical_beliefs_loop_kwargs,
     ):
         options.update(factory(config))
     return options
@@ -1005,6 +1007,14 @@ def _measurement_loop_kwargs(config: object) -> _ChannelLoopOptions:
     """
     return {
         "measurement_enabled": getattr(config, "measurement_instruments", None)
+        is not None
+    }
+
+
+def _medical_beliefs_loop_kwargs(config: object) -> _ChannelLoopOptions:
+    """Enable owner medical beliefs only when the exact v59 spec is present."""
+    return {
+        "medical_beliefs_enabled": getattr(config, "medical_beliefs", None)
         is not None
     }
 
@@ -5986,6 +5996,68 @@ class SimulationRunner:
             len(ledgers),
         )
         return tuple(ledgers)
+
+    def export_medical_belief_ledgers(self) -> object:
+        """Export bounded owner medical-belief ledgers with availability state."""
+        from agents.cognition.medical_beliefs import MedicalBeliefLedger
+        from simulation.medical_beliefs_checkpoint import (
+            MedicalBeliefLedgerExport,
+        )
+
+        registrations = sorted(
+            self._engine.ordered_registrations,
+            key=lambda item: item.agent_id.value,
+        )
+        expected = len(registrations)
+        selected = registrations[:128]
+        runtime_by_owner = {runtime.agent_id: runtime for runtime in self._runtimes}
+        ledgers: list[MedicalBeliefLedger] = []
+        unavailable: list[AgentId] = []
+        enabled = self._config.medical_beliefs is not None
+        for registration in selected:
+            owner = registration.agent_id
+            runtime = runtime_by_owner.get(owner)
+            if runtime is None:
+                unavailable.append(owner)
+                continue
+            ledger = runtime._loop.medical_belief_ledger_if_present()
+            record = getattr(runtime, "retired_record", None)
+            retired = record is not None
+            if ledger is None:
+                retired_checkpoint = getattr(record, "runtime_checkpoint", None)
+                ledger = getattr(
+                    retired_checkpoint, "medical_belief_ledger", None
+                )
+            if ledger is None:
+                loop_enabled = bool(
+                    getattr(runtime._loop, "_medical_beliefs_enabled", False)
+                )
+                if enabled and loop_enabled and not retired:
+                    # Intentional uninvoked owner: an initialized empty ledger.
+                    ledger = MedicalBeliefLedger(
+                        owner_id=owner,
+                        observer_entity_id=registration.entity_id,
+                    )
+                else:
+                    unavailable.append(owner)
+                    continue
+            if type(ledger) is MedicalBeliefLedger:
+                ledgers.append(ledger)
+            else:
+                unavailable.append(owner)
+        _LOG.info(
+            "runner_medical_belief_ledger_export expected=%s exported=%s "
+            "unavailable=%s truncated=%s",
+            expected,
+            len(ledgers),
+            len(unavailable),
+            expected > len(selected),
+        )
+        return MedicalBeliefLedgerExport(
+            expected_count=expected,
+            unavailable_owner_ids=tuple(unavailable),
+            ledgers=tuple(ledgers),
+        )
 
     def export_scientific_model_ledgers(self) -> tuple[object, ...]:
         """Export owner-ordered predictive sidecars, including retired owners."""

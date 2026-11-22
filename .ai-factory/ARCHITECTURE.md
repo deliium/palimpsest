@@ -179,11 +179,11 @@ are presentation only; neither client advances the simulation.
 | Surface | Current contract |
 | --- | --- |
 | Default runner write | `runner-config-v4`; newer writes selected by enabled features |
-| Latest feature runner | `runner-config-v58` for disease mechanics (v56 family root plus mandatory `disease_mechanics`); `runner-config-v57` remains measurement instruments; accepted `runner-config-v56` carries V4 capability flags |
+| Latest feature runner | `runner-config-v59` for medical beliefs (v58 disease family plus mandatory `medical_beliefs`); `runner-config-v58` remains disease mechanics; `runner-config-v57` remains measurement instruments; accepted `runner-config-v56` carries V4 capability flags |
 | Closed commands / observer semantic types | 45 / 73 |
 | Metric families | 275 (271 after V4-32, plus four V4-33 diffusion families) |
 | Latest replay / codec pair | Disease-active runs use reserved event 24 / codec `v22`; measurement instruments still select `EVENT_SCHEMA_REPLAY_V28` / `v26`; travel-network runs use replay-v27 / `v25`; infrastructure-only runs keep replay-v23 / `v21`; prior maxima remain accepted |
-| Subjective pending codec | `finalization-command-v5` adds `competing-theory-state-v1` to the v4 science/measurement/replication state; default is `finalization-command-v1` and this is not a world replay codec |
+| Subjective pending codec | `finalization-command-v6` adds `medical-beliefs-state-v1` to the v5 science/measurement/replication/theory state; `finalization-command-v5` remains competing theories, and default is `finalization-command-v1`; this is not a world replay codec |
 | Alembic head | `0017` |
 | Stable API / observer protocol | `/v1` / `observer-protocol-v1` |
 
@@ -1460,3 +1460,41 @@ families, 17 V4 contexts, 12 V4 flags (ten owned / two unowned),
 with latest opt-in v58, replay 24/`v22` for disease, 27/`v25`, and 28/`v26`,
 `/v1`, `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
 `docs/disease-mechanics.md`.
+
+### V4-35 medical-beliefs seam
+
+V4-35 deepens the owned `epidemics` context with an owner-scoped subjective
+ledger on the accepted `runner-config-v59` seam (the exact v58 disease family
+plus mandatory `medical_beliefs: {"policy_id":"medical-beliefs.v1"}`). The
+objective disease model, replay pair 24/`v22`, commands, event schemas, observer
+semantics, metric families, routes, and Alembic head are unchanged.
+`agents.cognition.medical_beliefs` keeps five cause slots, bounded practice
+support, observation frames, chronology-bounded transition rows, seen testimony
+roots, cooldowns, and relay anchors. Only consecutive owner observations and
+actually delivered `mb_v1` testimony contribute; absence, gaps, and
+malformed/oversized frames establish no evidence. No association is a diagnosis
+or confirmed cause.
+
+`medical_beliefs_actions` compiles a supported pair into one existing `Move`,
+`Sleep`, or `Wait` after science and measurement priority, subject to ordinary
+admission and a three-tick cooldown. `medical_beliefs_communication` attaches at
+most one bounded `mb_v1` relation to existing `Talk`/`Tell` or, on an eligible
+remaining `Wait`, synthesizes ordinary belief-basis speech. A hop-4 root is not
+relayed and testimony alone mints no root. An explicit effective-command
+override suppresses medical command/speech changes while retaining owner
+evidence. Pending medical transitions use `finalization-command-v6` with
+`medical-beliefs-state-v1`; v1-v5 bytes stay unchanged. Runtime checkpoints carry
+the owner ledger and fork integrity includes its digest only when present.
+
+`experiments.medical_beliefs_capture` runs once and returns detached
+`medical-beliefs-evidence-v1` evidence with five lanes: belief, attempt,
+owner-observed cue outcome, interpretation, and receiver transmission. Objective
+resolutions join by `(owner, tick, command kind)`; `APPLIED` is not relief.
+Capture is programmatic and default off, reports `partial` for gaps/caps/
+omissions, and never feeds cognition, prompts, world state, observer semantics,
+or stop selectors. Off-gate `medical_beliefs@1` pairs v58 and v59 contact-enabled
+disease arms. Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (ten owned
+/ two unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types,
+runner v4/v55/v56 with latest opt-in v59, pending default v1/latest v6, replay
+24/`v22` for disease, 27/`v25`, and 28/`v26`, `/v1`, `observer-protocol-v1`,
+Alembic `0017`; default runner/result v4/v2. See `docs/medical-beliefs.md`.

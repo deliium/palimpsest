@@ -657,6 +657,13 @@ projects). Active disease runs write reserved replay event 24 / codec `v22`.
 Agents never receive objective infection state. See
 [Disease mechanics](disease-mechanics.md).
 
+`runner-config-v59` is the exact v58 disease family plus mandatory
+`medical_beliefs: {"policy_id": "medical-beliefs.v1"}`. It is selected only when
+that spec is present, requires the v58 disease spec and owned `epidemics`, and
+keeps replay event 24 / codec `v22` for disease-active runs. Older versions
+reject the sibling. No environment variable is added; evidence capture is
+programmatic and default off. See [Medical beliefs](medical-beliefs.md).
+
 ## Optional scientific models (V4-30)
 
 Scientific models deepen the owned `science` flag and require

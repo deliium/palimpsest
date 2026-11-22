@@ -19,6 +19,7 @@ from simulation.run_control import (
     FINALIZATION_COMMAND_CODEC_VERSION_V3,
     FINALIZATION_COMMAND_CODEC_VERSION_V4,
     FINALIZATION_COMMAND_CODEC_VERSION_V5,
+    FINALIZATION_COMMAND_CODEC_VERSION_V6,
 )
 from simulation.runner import (
     RunnerDependencyFactories,
@@ -154,7 +155,7 @@ def test_predictive_versions_are_independent_of_runner_and_replay() -> None:
     )
     assert not hasattr(
         __import__("simulation.runner_models", fromlist=["x"]),
-        "RUNNER_SCHEMA_VERSION_V59",
+        "RUNNER_SCHEMA_VERSION_V60",
     )
     assert FINALIZATION_COMMAND_ACCEPTED_VERSIONS == frozenset(
         {
@@ -163,6 +164,7 @@ def test_predictive_versions_are_independent_of_runner_and_replay() -> None:
             FINALIZATION_COMMAND_CODEC_VERSION_V3,
             FINALIZATION_COMMAND_CODEC_VERSION_V4,
             FINALIZATION_COMMAND_CODEC_VERSION_V5,
+            FINALIZATION_COMMAND_CODEC_VERSION_V6,
         }
     )
     from world.events import EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V28

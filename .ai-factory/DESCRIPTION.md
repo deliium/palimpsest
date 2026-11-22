@@ -959,3 +959,24 @@ SQL migration. Off-gate `disease_mechanics@1` pairs `no-transmission` and
 types, runner v4/v55/v56 with latest opt-in v58, replay 24/`v22` for disease,
 27/`v25`, and 28/`v26`, `/v1`, `observer-protocol-v1`, Alembic `0017`; default
 runner/result v4/v2. See `docs/disease-mechanics.md`.
+
+V4-35 (medical beliefs, 2026-11-22) deepens the owned `epidemics` context with
+owner-scoped subjective explanations on the accepted `runner-config-v59` seam
+(exact v58 disease family plus mandatory `medical_beliefs`). Agents fold only
+their own consecutive observations and actually delivered `mb_v1` testimony
+into five bounded cause slots and practice support; absence, gaps, and malformed
+frames establish no evidence, and no association is a diagnosis. A supported
+pair can replace a remaining `Wait` with existing `Move`, `Sleep`, or `Wait`
+after science/measurement priority and a three-tick cooldown, while bounded
+speech may carry or relay one practice before a receiver ever observes its own
+cue. Pending transitions use `finalization-command-v6` with
+`medical-beliefs-state-v1`; v1-v5 bytes and disease replay 24/`v22` stay
+unchanged. Detached, default-off capture returns five evidence lanes and never
+feeds cognition. Off-gate `medical_beliefs@1` pairs v58 and v59 contact-enabled
+disease arms. No command, event, public route, metric family, observer semantic
+type, Godot overlay, capability flag, or SQL migration is added. Pins: 275
+metric families, 17 V4 contexts, 12 V4 flags (ten owned / two unowned),
+`v4-context-map-v6`, 45 commands, 73 observer semantic types, runner v4/v55/v56
+with latest opt-in v59, pending default v1/latest v6, replay 24/`v22` for
+disease, 27/`v25`, and 28/`v26`, `/v1`, `observer-protocol-v1`, Alembic `0017`;
+default runner/result v4/v2. See `docs/medical-beliefs.md`.

@@ -87,7 +87,7 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
         }
     )
     token = "runner-config-" + "v59"
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*credit_relationships*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
 
@@ -199,7 +199,7 @@ def test_credit_modules_do_not_add_v2_routes_or_extra_events() -> None:
     for path in SRC.rglob("*credit_relationship*.py"):
         text = path.read_text(encoding="utf-8")
         assert "/v2" not in text, path.name
-        assert "runner-config-v59" not in text, path.name
+        assert "runner-config-v60" not in text, path.name
 
 
 def test_credit_routes_are_get_only() -> None:

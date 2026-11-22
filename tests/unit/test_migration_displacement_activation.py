@@ -192,10 +192,10 @@ def test_loop_constructor_slots_validation_and_updater_exist() -> None:
 
 def test_no_runner_v57_or_new_flag_key_exists() -> None:
     source = inspect.getsource(runner_module)
-    assert "runner-config-v59" not in source
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in source
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V58")
-    assert not hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V59")
+    assert not hasattr(runner_models_module, "RUNNER_SCHEMA_VERSION_V60")
     names = set(V4CapabilityFlags.__dataclass_fields__)
     assert len(names) == 12
     assert not any("migration" in name or "displacement" in name for name in names)

@@ -75,7 +75,7 @@ def test_no_price_context_flag_or_schema_bump() -> None:
     }
     assert "emergent_prices" not in V4_CAPABILITY_FLAGS
     token = "runner-config-" + "v59"
-    assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*emergent_prices*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
 

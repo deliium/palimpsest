@@ -936,3 +936,15 @@ and non-diagnostic death. Enabled runs select reserved write pair event 24 /
 codec `v22`. No new command, public disease route, metric family, SQL migration,
 or observer semantic type is added. `/v1`, `observer-protocol-v1`, and Alembic
 `0017` are unchanged. See [Disease mechanics](disease-mechanics.md).
+
+## V4-35 medical beliefs
+
+V4-35 adds owner-scoped subjective explanations on `runner-config-v59` without
+changing objective disease policy or replay selection. Agents fold only their
+own consecutive observations and delivered `mb_v1` testimony into bounded
+cause/practice support; a supported pair can replace a remaining `Wait` with an
+existing `Move`, `Sleep`, or `Wait` after ordinary admission. Pending
+transitions use `finalization-command-v6` with `medical-beliefs-state-v1`;
+v1-v5 bytes remain unchanged. Detached capture is programmatic and default off;
+it never feeds cognition, prompts, world state, observer semantics, or stop
+selectors. See [Medical beliefs](medical-beliefs.md).

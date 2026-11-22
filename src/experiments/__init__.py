@@ -102,6 +102,7 @@ from experiments.catalog import (
     experiment_l_theory_of_mind,
     experiment_m_epistemic_asymmetry,
     experiment_market_institutions,
+    experiment_medical_beliefs,
     experiment_n_communication_trust,
     experiment_o_deception_detection,
     experiment_p_information_cascade,
@@ -470,6 +471,15 @@ from experiments.measurement_scenario import (
     MEASUREMENT_INSTRUMENTS_EXPERIMENT_ID,
     measurement_instruments_scenario,
 )
+from experiments.medical_beliefs_capture import (
+    MedicalBeliefsCaptureResult,
+    MedicalBeliefsCaptureStatus,
+    run_with_medical_beliefs_capture,
+)
+from experiments.medical_beliefs_scenario import (
+    MEDICAL_BELIEFS_EXPERIMENT_ID,
+    medical_beliefs_scenario,
+)
 from experiments.memory_repository import InMemoryExperimentRecordRepository
 from experiments.metric_collection import (
     MetricCollectionResult,
@@ -601,6 +611,7 @@ __all__ = [
     "MATRIX_AGGREGATE_SCHEMA_VERSION",
     "MATRIX_MANIFEST_SCHEMA_VERSION",
     "MEASUREMENT_INSTRUMENTS_EXPERIMENT_ID",
+    "MEDICAL_BELIEFS_EXPERIMENT_ID",
     "MILESTONE_ARBITER_POLICY_VERSION",
     "MULTIPLICITY_POLICY",
     "OBSERVER_GRAPHICAL_SCENARIO_ID",
@@ -703,6 +714,8 @@ __all__ = [
     "MatrixManifestStore",
     "MatrixSerializationError",
     "MatrixValidationError",
+    "MedicalBeliefsCaptureResult",
+    "MedicalBeliefsCaptureStatus",
     "MetricCollectionResult",
     "MetricCollectionService",
     "MetricDocumentRecord",
@@ -930,6 +943,7 @@ __all__ = [
     "experiment_l_theory_of_mind",
     "experiment_m_epistemic_asymmetry",
     "experiment_market_institutions",
+    "experiment_medical_beliefs",
     "experiment_n_communication_trust",
     "experiment_o_deception_detection",
     "experiment_p_information_cascade",
@@ -974,6 +988,7 @@ __all__ = [
     "matrix_reference_fixture_base",
     "matrix_spec_fingerprint",
     "measurement_instruments_scenario",
+    "medical_beliefs_scenario",
     "new_agent_bootstrap_profile",
     "organization_publication_document",
     "persist_metric_bundle",
@@ -1003,6 +1018,7 @@ __all__ = [
     "representations_publication_document",
     "run_benchmark_smoke",
     "run_one_assignment",
+    "run_with_medical_beliefs_capture",
     "scientific_hypotheses_scenario",
     "scientific_hypothesis_facts",
     "scientific_models_scenario",
