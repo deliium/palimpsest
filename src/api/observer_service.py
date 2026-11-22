@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import NoReturn, Protocol
+from typing import Any, NoReturn, Protocol
 
 from api.errors import (
     ApiError,
@@ -532,7 +532,7 @@ class ObserverReadService:
         # Visible rows only: exclude private transitions before limiting.
         after_tick = from_tick
         after_sequence = -1
-        visible: list[object] = []
+        visible: list[Any] = []
         remaining = limit
         while remaining > 0:
             page = await self._replay.read_event_keyset_page(

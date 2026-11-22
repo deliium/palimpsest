@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -887,7 +887,7 @@ class ReplayService:
             raise ValueError("after_sequence must be >= -1")
         list_events_keyset = getattr(self._journal, "list_events_keyset", None)
 
-        def _matches_filters(event: object) -> bool:
+        def _matches_filters(event: WorldEvent) -> bool:
             if actor_id is not None and not _event_matches_actor(event, actor_id):
                 return False
             event_kind = getattr(event, "event_type", None)
@@ -900,11 +900,11 @@ class ReplayService:
                 return False
             return True
 
-        async def _exclusive_scan() -> tuple[object, ...]:
+        async def _exclusive_scan() -> tuple[WorldEvent, ...]:
             # Advance a private cursor through hidden-only batches before limit.
             cursor_tick = after_tick
             cursor_sequence = after_sequence
-            collected: list[object] = []
+            collected: list[WorldEvent] = []
             budget = 0
             max_budget = max(64, (limit + 1) * 16)
             while len(collected) < limit + 1 and budget < max_budget:
@@ -959,6 +959,7 @@ class ReplayService:
                 raise ValueError("observer_read_budget_exhausted")
             return tuple(collected)
 
+        filtered: Sequence[WorldEvent]
         if list_events_keyset is None:
             filtered = await _exclusive_scan()
         else:
@@ -993,7 +994,7 @@ class ReplayService:
                     filtered = tuple(
                         event for event in filtered if _matches_filters(event)
                     )
-        page = filtered[:limit]
+        page = tuple(filtered[:limit])
         next_offset = None
         if len(filtered) > limit:
             next_offset = 0  # signal more pages; callers should use keyset cursor

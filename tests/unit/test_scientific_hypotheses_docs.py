@@ -98,9 +98,10 @@ def test_current_docs_carry_live_pins() -> None:
     assert "9 owned / 3 unowned" in _read(ROOT / ".ai-factory" / "ARCHITECTURE.md")
     configuration = _read(ROOT / "docs" / "configuration.md")
     assert "other seven V4 flags" not in configuration
-    assert "nine owned V4 flags" in configuration
-    for unowned in ("`epidemics`", "`ecological_feedback`", "`disasters`"):
+    assert "ten owned V4 flags" in configuration
+    for unowned in ("`ecological_feedback`", "`disasters`"):
         assert unowned in configuration
+    assert "`epidemics`" in configuration
     assert "`formal_rules`, `science` (V4-27)" not in configuration
     for relative, stale in (
         ("docs/architecture.md", "Eight V4 flags are owned"),

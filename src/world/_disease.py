@@ -11,11 +11,15 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from world.identifiers import EntityId
 from world.models import AgentBody, LifeStatus, copy_body
 from world.values import Health
+
+if TYPE_CHECKING:
+    from world._state import WorldState
+    from world.events import DiseaseStateChanged
 
 __all__ = [
     "DiseaseConditionRow",
@@ -291,9 +295,17 @@ def advance_disease_pass(
         )
     if type(tick) is not int or isinstance(tick, bool) or tick < 0:
         raise DiseaseInvariantError("disease_tick_invalid")
-    if type(latent_ticks) is not int or isinstance(latent_ticks, bool) or latent_ticks < 1:
+    if (
+        type(latent_ticks) is not int
+        or isinstance(latent_ticks, bool)
+        or latent_ticks < 1
+    ):
         raise DiseaseInvariantError("disease_latent_ticks_invalid")
-    if type(active_ticks) is not int or isinstance(active_ticks, bool) or active_ticks < 1:
+    if (
+        type(active_ticks) is not int
+        or isinstance(active_ticks, bool)
+        or active_ticks < 1
+    ):
         raise DiseaseInvariantError("disease_active_ticks_invalid")
     if type(immunity_after_recovery) is not bool:
         raise DiseaseInvariantError("disease_immunity_flag_invalid")
@@ -416,7 +428,9 @@ def reconcile_disease_rows_for_dead_bodies(
 def disease_net_transitions(
     start_rows: Mapping[EntityId, DiseaseConditionRow] | None,
     final_rows: Mapping[EntityId, DiseaseConditionRow] | None,
-) -> tuple[tuple[EntityId, DiseaseConditionRow | None, DiseaseConditionRow | None], ...]:
+) -> tuple[
+    tuple[EntityId, DiseaseConditionRow | None, DiseaseConditionRow | None], ...
+]:
     """Sorted net before/after pairs where the private row changed."""
     if start_rows is None and final_rows is None:
         return ()
@@ -442,7 +456,7 @@ def disease_row_view(row: DiseaseConditionRow | None) -> object | None:
     from world.events import DiseaseRowView
 
     return DiseaseRowView(
-        phase=row.phase.value,  # type: ignore[arg-type]
+        phase=row.phase.value,
         due_tick=row.due_tick,
         symptomatic=row.symptomatic,
     )
@@ -464,10 +478,10 @@ def disease_row_from_view(view: object | None) -> DiseaseConditionRow | None:
 
 
 def project_disease_state_changed(
-    state: object,
+    state: WorldState,
     *,
-    details: object,
-) -> object:
+    details: DiseaseStateChanged,
+) -> WorldState:
     """Fold one recorded ``DiseaseStateChanged`` net effect without policy draws."""
     from world._state import WorldState, rebuild_world_state
     from world.events import DiseaseStateChanged
@@ -489,7 +503,11 @@ def project_disease_state_changed(
         raise DiseaseInvariantError("disease_unknown_entity")
     if body.life_status is LifeStatus.ALIVE:
         legal = (
-            (before is None and after is not None and after.phase is DiseasePhase.LATENT)
+            (
+                before is None
+                and after is not None
+                and after.phase is DiseasePhase.LATENT
+            )
             or (
                 before is not None
                 and before.phase is DiseasePhase.LATENT

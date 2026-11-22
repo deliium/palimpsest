@@ -26,6 +26,11 @@ if TYPE_CHECKING:
 from agents.models import AgentId, DriveKind, Goal
 from llm.factory import ProviderAdapterKind
 from llm.models import StructuredOutputMode
+from simulation.disease_config import (
+    DiseaseConfigError,
+    decode_disease_mechanics,
+    encode_disease_mechanics,
+)
 from simulation.generational_serialization import (
     decode_generational_run,
     decode_population_progress,
@@ -38,11 +43,6 @@ from simulation.measurement_config import (
     MeasurementConfigError,
     decode_measurement_instruments,
     encode_measurement_instruments,
-)
-from simulation.disease_config import (
-    DiseaseConfigError,
-    decode_disease_mechanics,
-    encode_disease_mechanics,
 )
 from simulation.models import StochasticIdentity
 from simulation.runner_models import (

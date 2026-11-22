@@ -132,7 +132,7 @@ async def test_diplomacy_runs_without_organizations() -> None:
 
 @pytest.mark.asyncio
 async def test_unowned_v4_flag_still_fails_closed() -> None:
-    config = _v56_config(flags=V4CapabilityFlags(epidemics=True))
+    config = _v56_config(flags=V4CapabilityFlags(ecological_feedback=True))
     with pytest.raises(RunnerConstructionError) as exc:
         await SimulationRunner.from_config(
             config, run_id=RunId("run-v4-treaty-unowned")
@@ -144,7 +144,7 @@ async def test_unowned_v4_flag_still_fails_closed() -> None:
 def test_no_v57_runner_schema_exists() -> None:
     source_root = Path(__file__).resolve().parents[2] / "src"
     for path in source_root.rglob("*.py"):
-        assert "runner-config-v58" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v59" not in path.read_text(encoding="utf-8")
 
 
 def test_no_treaty_key_exists_in_runner_or_agent_specs() -> None:

@@ -133,7 +133,7 @@ These are encoded as types and import rules, and enforced by `WorldEngine` for o
 
 ## Deferred scope
 
-No Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, diseases, revival, or multi-tick sleeping state. Psychological **fear of death** is implemented as subjective opportunity foreclosure inside cognition (see [Cognition and agent runtime](cognition-runtime.md)); it does not alter physical death rules. Reconstructive recall and append-only reconsolidation are **implemented** (see [Memory reconstruction](memory-reconstruction.md)); LLM-backed reconstruction remains optional and provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
+No Anthropic-native adapters, pathfinding beyond one adjacent edge, crafting, revival, or multi-tick sleeping state. Abstract opt-in disease mechanics are implemented separately under V4-34 (see [Disease mechanics](disease-mechanics.md)); there is no real pathogen, epidemiology, or medical model. Psychological **fear of death** is implemented as subjective opportunity foreclosure inside cognition (see [Cognition and agent runtime](cognition-runtime.md)); it does not alter physical death rules. Reconstructive recall and append-only reconsolidation are **implemented** (see [Memory reconstruction](memory-reconstruction.md)); LLM-backed reconstruction remains optional and provider lifecycle is not wired into the API/`compose` composition root yet. No Kafka, Kubernetes, Celery, or extra vector databases.
 
 Production PostgreSQL privilege design for `CREATE EXTENSION` is deferred; development credentials may create `vector`.
 
@@ -860,7 +860,7 @@ or canonical credit is added. See `docs/credit-relationships.md`.
 
 Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
-Nine V4 flags are owned; three remain unowned.
+Ten V4 flags are owned; two remain unowned.
 
 ## V4-23 accounting ledgers
 

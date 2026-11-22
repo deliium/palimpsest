@@ -366,14 +366,13 @@ def test_disease_mortality_and_physics_precedence() -> None:
 def test_engine_disabled_and_onset_and_candidate_abandon() -> None:
     from dataclasses import replace
 
-    from agents.models import AgentId
     from simulation.disease_config import DISEASE_POLICY_ID, DiseaseMechanicsSpec
     from simulation.engine import WorldEngine
     from simulation.lifecycle import ActionSubmission
     from tests.physical_helpers import physical_config, two_location_fixture
     from world._disease import bootstrap_disease_rows
     from world.actions import Wait
-    from world.events import DiseaseStateChanged, Died
+    from world.events import Died, DiseaseStateChanged
     from world.models import non_lethal_physical_rules
 
     fixture = two_location_fixture()

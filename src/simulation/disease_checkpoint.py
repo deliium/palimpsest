@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, Literal
+from typing import Final, Literal
 
 from simulation.disease_config import (
     DISEASE_MECHANICS_KEY,
@@ -141,7 +141,7 @@ def decode_disease_checkpoint_section(value: object) -> DiseaseCheckpointSection
     if not isinstance(raw_rows, list):
         raise ValueError("disease_checkpoint_rows_invalid")
     rows: list[DiseaseCheckpointRow] = []
-    for index, item in enumerate(raw_rows):
+    for item in raw_rows:
         if not isinstance(item, Mapping):
             raise ValueError("disease_checkpoint_row_invalid")
         allowed = {"body_id", "phase", "due_tick", "symptomatic"}
@@ -150,7 +150,7 @@ def decode_disease_checkpoint_section(value: object) -> DiseaseCheckpointSection
         rows.append(
             DiseaseCheckpointRow(
                 body_id=EntityId(str(item["body_id"])),
-                phase=item["phase"],  # type: ignore[arg-type]
+                phase=item["phase"],
                 due_tick=item.get("due_tick"),
                 symptomatic=item.get("symptomatic"),
             )
@@ -185,7 +185,14 @@ def row_from_view(view: object | None) -> DiseaseCheckpointRow | None:
 
 
 def checkpoint_rows_from_views(
-    rows: Sequence[tuple[EntityId, Literal["latent", "active", "immune"], int | None, bool | None]],
+    rows: Sequence[
+        tuple[
+            EntityId,
+            Literal["latent", "active", "immune"],
+            int | None,
+            bool | None,
+        ]
+    ],
 ) -> tuple[DiseaseCheckpointRow, ...]:
     """Build sorted checkpoint rows from detached tuples (engine-owned)."""
     built = [

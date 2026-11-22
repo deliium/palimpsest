@@ -410,6 +410,7 @@ from simulation.delegation_representation_ports import (
 from simulation.delegation_representation_ports import (
     MAX_CANDIDATE_DETAIL_ROWS as DELEGATION_REPRESENTATION_MAX_CANDIDATE_DETAIL_ROWS,
 )
+from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.dispute_codec import (
     compute_dispute_publication_id,
     decode_dispute_snapshot,
@@ -1046,7 +1047,6 @@ from simulation.market_institutions_ports import (
     MarketInstitutionsSummary,
     market_institutions_query_fingerprint,
 )
-from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.measurement_config import MeasurementInstrumentsSpec
 from simulation.migration_plan import (
     V4_MIGRATION_PLAN_SCHEMA,
@@ -2120,6 +2120,7 @@ __all__ = [
     "DependencyBindingPolicy",
     "DetachedInspectionProjector",
     "DetachedObjectiveProjection",
+    "DiseaseMechanicsSpec",
     "DisputeArtifactError",
     "DisputeAuthorityReferenceRecord",
     "DisputeCandidateDetail",
@@ -2348,7 +2349,6 @@ __all__ = [
     "MarketRoleRecord",
     "MarketVenueRecord",
     "MeasurementInstrumentsSpec",
-    "DiseaseMechanicsSpec",
     "MemoryDerivationLineage",
     "MemoryDerivationLineagePort",
     "MemoryKeysetCursor",

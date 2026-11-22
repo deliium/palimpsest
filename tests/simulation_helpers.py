@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from agents.models import AgentId
 from simulation.bootstrap import AgentRegistration
@@ -34,6 +35,9 @@ from world.values import (
     UnitInterval,
     WeatherCondition,
 )
+
+if TYPE_CHECKING:
+    from simulation.disease_checkpoint import DiseaseCheckpointSection
 
 
 def make_location(
@@ -176,6 +180,7 @@ def hashed_bootstrap_snapshot(
     inventory: tuple[EntityId, ...] = (),
     next_tick: int = 0,
     revision: int = 0,
+    disease_mechanics: DiseaseCheckpointSection | None = None,
 ) -> WorldSnapshot:
     draft = WorldSnapshot(
         snapshot_id=SnapshotId("snap-bootstrap"),
@@ -191,12 +196,19 @@ def hashed_bootstrap_snapshot(
         weather=(make_weather(),),
         next_tick=Tick(next_tick),
         revision=WorldRevision(revision),
-        event_schema_version=EVENT_SCHEMA_VERSION,
+        event_schema_version=(
+            EVENT_SCHEMA_VERSION if disease_mechanics is None else 24
+        ),
         projector_version=PROJECTOR_VERSION,
-        persistence_codec_version=PERSISTENCE_CODEC_VERSION,
+        persistence_codec_version=(
+            PERSISTENCE_CODEC_VERSION if disease_mechanics is None else "v22"
+        ),
         derivation_version=DERIVATION_VERSION,
         integrity_hash=PayloadHash("a" * 64),
         predecessor_commit_hash=None,
+        infrastructure=() if disease_mechanics is not None else None,
+        travel_network=() if disease_mechanics is not None else None,
+        disease_mechanics=disease_mechanics,
     )
     return WorldSnapshot(
         snapshot_id=draft.snapshot_id,
@@ -218,4 +230,7 @@ def hashed_bootstrap_snapshot(
         derivation_version=draft.derivation_version,
         integrity_hash=hash_snapshot(draft),
         predecessor_commit_hash=None,
+        infrastructure=draft.infrastructure,
+        travel_network=draft.travel_network,
+        disease_mechanics=disease_mechanics,
     )

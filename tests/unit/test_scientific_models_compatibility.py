@@ -148,9 +148,13 @@ async def test_v57_measurement_coexistence_carries_both_ledgers() -> None:
 def test_predictive_versions_are_independent_of_runner_and_replay() -> None:
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 == "runner-config-v56"
-    assert not hasattr(
+    assert hasattr(
         __import__("simulation.runner_models", fromlist=["x"]),
         "RUNNER_SCHEMA_VERSION_V58",
+    )
+    assert not hasattr(
+        __import__("simulation.runner_models", fromlist=["x"]),
+        "RUNNER_SCHEMA_VERSION_V59",
     )
     assert FINALIZATION_COMMAND_ACCEPTED_VERSIONS == frozenset(
         {

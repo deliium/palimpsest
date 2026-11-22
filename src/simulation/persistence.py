@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, TypedDict
 
 if TYPE_CHECKING:
     from simulation.branching import BranchLineage
+    from simulation.disease_checkpoint import DiseaseCheckpointSection
+    from simulation.disease_config import DiseaseMechanicsSpec
 
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.clock import Tick, require_exact_nonneg_int
@@ -111,6 +113,7 @@ class SnapshotExtensions(TypedDict, total=False):
     travel_network: Sequence[RouteCondition] | None
     instrument_states: Sequence[InstrumentState]
     measurement_references: Sequence[MeasurementReference]
+    disease_mechanics: DiseaseCheckpointSection
 
 
 # New-write versions for physical replay-v5 runs (structured communication).
@@ -534,6 +537,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }:
@@ -720,7 +724,7 @@ class WorldSnapshot:
     travel_network: Sequence[RouteCondition] | None = None
     instrument_states: Sequence[InstrumentState] = ()
     measurement_references: Sequence[MeasurementReference] = ()
-    disease_mechanics: object | None = None
+    disease_mechanics: DiseaseCheckpointSection | None = None
 
     @staticmethod
     def _measurement_rows(
@@ -1822,7 +1826,7 @@ class ReplayRequest:
     population_lifecycle: object | None = None
     new_agent_initialization: object | None = None
     kinship_spec: object | None = None
-    disease_mechanics: object | None = None
+    disease_mechanics: DiseaseMechanicsSpec | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:

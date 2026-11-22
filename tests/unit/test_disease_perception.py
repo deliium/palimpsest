@@ -21,13 +21,13 @@ from world._state import WorldState, rebuild_world_state
 from world.actions import Wait
 from world.effects import SystemCause, SystemEffectFamily
 from world.events import (
+    Died,
     DiseaseRowView,
     DiseaseStateChanged,
-    Died,
     OccurrenceContext,
     WorldEvent,
 )
-from world.identifiers import EntityId, EventId, RequestId, WorldId, WorldRevision
+from world.identifiers import EventId, RequestId, WorldId, WorldRevision
 from world.models import LifeStatus, non_lethal_physical_rules
 from world.observations import ObservationContext
 
@@ -91,8 +91,9 @@ def test_symptom_cue_owner_only_and_wire_omission() -> None:
     peer_doc = json.loads(encode_domain(by_id[peer.entity_id]))
     assert owner_doc["data"]["self_body"]["symptom_cue"] == "unwell"
     assert "symptom_cue" not in peer_doc["data"]["self_body"]
-    assert decode_domain(encode_domain(by_id[owner.entity_id])).self_body.symptom_cue == (
-        "unwell"
+    assert (
+        decode_domain(encode_domain(by_id[owner.entity_id])).self_body.symptom_cue
+        == "unwell"
     )
 
     latent_only = rebuild_world_state(

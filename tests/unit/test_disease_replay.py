@@ -144,3 +144,43 @@ def test_reject_disease_event_on_legacy_schema() -> None:
                 private_recipient_ids=(),
             ),
         )
+
+
+def test_restore_requires_matching_policy_digest() -> None:
+    from dataclasses import replace
+
+    from simulation.disease_checkpoint import (
+        DiseaseCheckpointSection,
+        policy_sha256_for_spec,
+    )
+    from simulation.disease_config import DISEASE_POLICY_ID, DiseaseMechanicsSpec
+    from simulation.engine import WorldEngine
+    from tests.simulation_helpers import hashed_bootstrap_snapshot
+
+    spec = DiseaseMechanicsSpec(
+        policy_id=DISEASE_POLICY_ID,
+        initial_latent_entity_ids=(),
+        exposure_chance_milli=1000,
+        transmission_chance_milli=1000,
+        symptom_chance_milli=1000,
+        mortality_chance_milli=0,
+        latent_ticks=1,
+        active_ticks=2,
+        immunity_after_recovery=True,
+    )
+    section = DiseaseCheckpointSection(
+        rows=(), policy_sha256=policy_sha256_for_spec(spec)
+    )
+    snapshot = hashed_bootstrap_snapshot(disease_mechanics=section)
+
+    read_only = WorldEngine.restore_from_snapshot(snapshot)
+    assert read_only._disease_mechanics is None
+
+    with pytest.raises(ValueError, match="disease_policy_mismatch"):
+        WorldEngine.restore_from_snapshot(
+            snapshot,
+            disease_mechanics=replace(spec, exposure_chance_milli=0),
+        )
+
+    bound = WorldEngine.restore_from_snapshot(snapshot, disease_mechanics=spec)
+    assert bound._disease_mechanics is spec

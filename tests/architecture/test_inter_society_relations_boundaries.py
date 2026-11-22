@@ -150,7 +150,7 @@ def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
     for path in ISR_PATHS:
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v58" not in text, path
+        assert "runner-config-v59" not in text, path
         assert "V4CapabilityFlags" not in text, path
         assert "v4_capability_flags" not in text, path
 
@@ -273,7 +273,8 @@ def test_pins_and_catalog_append() -> None:
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert METRIC_FAMILY_COUNT == 275

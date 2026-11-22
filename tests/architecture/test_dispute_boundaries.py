@@ -457,7 +457,8 @@ def test_no_new_event_command_observer_semantic_or_migration() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert len(COMMAND_RULE_MATRIX) == 45
     assert METRIC_FAMILY_COUNT == 275

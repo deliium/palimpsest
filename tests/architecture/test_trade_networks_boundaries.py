@@ -74,7 +74,8 @@ def test_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -115,7 +116,7 @@ def test_no_v57_or_new_flag_reference() -> None:
     offenders = [
         path
         for path in SRC.rglob("*.py")
-        if "runner-config-v58" in path.read_text(encoding="utf-8")
+        if "runner-config-v59" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     assert len(V4_CAPABILITY_FLAGS) == 12

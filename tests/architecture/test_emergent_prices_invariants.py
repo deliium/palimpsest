@@ -88,7 +88,8 @@ def test_version_pins_are_unchanged() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_catalog_and_prefix_digest() -> None:

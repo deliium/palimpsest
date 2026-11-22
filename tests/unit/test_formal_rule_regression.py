@@ -79,7 +79,7 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
     ]
 
 
-def test_formal_rules_flag_is_owned_and_five_flags_remain_unowned() -> None:
+def test_formal_rules_flag_is_owned_and_two_flags_remain_unowned() -> None:
     assert Flags(formal_rules=True).owned_enabled_names() == ("formal_rules",)
     assert Flags(legal_disputes=True).owned_enabled_names() == ("legal_disputes",)
     assert (
@@ -87,14 +87,13 @@ def test_formal_rules_flag_is_owned_and_five_flags_remain_unowned() -> None:
             [
                 name
                 for name in (
-                    "epidemics",
                     "ecological_feedback",
                     "disasters",
                 )
                 if Flags(**{name: True}).unimplemented_enabled_names()
             ]
         )
-        == 3
+        == 2
     )
 
 

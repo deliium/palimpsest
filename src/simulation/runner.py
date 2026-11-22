@@ -94,6 +94,9 @@ from simulation.bootstrap import (
     WorldBootstrap,
     registration_translator,
 )
+from simulation.bootstrap import (
+    disease_bootstrap_state as build_disease_bootstrap_state,
+)
 from simulation.civilization_boundaries import (
     CivilizationCaptureCoordinator,
     CivilizationCaptureSink,
@@ -2593,22 +2596,9 @@ class SimulationRunner:
 
             stage = "bootstrap"
             registrations = config.ordered_registrations()
-            disease_bootstrap_state = None
-            if (
-                config.v4_capability_flags.epidemics
-                and config.disease_mechanics is not None
-            ):
-                from world._disease import bootstrap_disease_rows
-
-                body_index = {
-                    body.entity_id: body for body in config.scenario.bodies
-                }
-                disease_bootstrap_state = bootstrap_disease_rows(
-                    founder_ids=config.disease_mechanics.initial_latent_entity_ids,
-                    latent_ticks=config.disease_mechanics.latent_ticks,
-                    tick0=0,
-                    body_index=body_index,
-                )
+            disease_bootstrap_state = build_disease_bootstrap_state(config)
+            if disease_bootstrap_state is not None:
+                assert config.disease_mechanics is not None
                 _LOG.info(
                     "runner_construction_disease_channel founder_count=%s "
                     "latent_ticks=%s schema_version=%s",

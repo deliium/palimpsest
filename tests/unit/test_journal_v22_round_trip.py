@@ -35,6 +35,7 @@ from world.effects import ActionCause, SystemCause, SystemEffectFamily
 from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
+    EVENT_SCHEMA_REPLAY_V24,
     ContactRecorded,
     ProjectCompleted,
     WorldEvent,
@@ -151,12 +152,12 @@ def test_replay_v21_event_still_decodes() -> None:
     assert decode_persistence(encode_persistence(event), WorldEvent) == event
 
 
-def test_replay_v24_event_is_rejected_as_unsupported() -> None:
+def test_replay_v25_event_is_rejected_as_unsupported() -> None:
     document = json.loads(encode_persistence(_contact_event()))
-    document["data"]["schema_version"] = EVENT_SCHEMA_REPLAY_V22 + 2
+    document["data"]["schema_version"] = EVENT_SCHEMA_REPLAY_V24 + 1
     payload = json.dumps(document).encode("utf-8")
     with pytest.raises(PersistenceSerializationError) as excinfo:
         decode_persistence(payload, WorldEvent)
     assert excinfo.value.code == "unsupported_version"
     assert excinfo.value.path == "$.data.schema_version"
-    assert excinfo.value.version == EVENT_SCHEMA_REPLAY_V22 + 2
+    assert excinfo.value.version == EVENT_SCHEMA_REPLAY_V24 + 1

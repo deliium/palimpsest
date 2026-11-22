@@ -938,3 +938,24 @@ three unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types,
 runner v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
 `docs/science-diffusion.md`.
+
+V4-34 (disease mechanics, 2026-11-22) owns the declared `epidemics` V4 capability
+on the new accepted `runner-config-v58` seam (v56 family root plus mandatory
+`disease_mechanics`, and optional `measurement_instruments` when that channel is
+selected). One fictional condition per enabled run exposes configurable exposure,
+transmission, latent and active durations, one coarse symptom draw, recovery, and
+mortality, plus run-scoped immunity after recovery; all draws use the seeded
+`disease-mechanics.v1` stream. `WorldEngine` alone holds the private sparse rows;
+agents receive at most the owner-only `unwell` cue, ordinary visible co-presence,
+and an ordinary observable death without diagnostic attributes. Replay folds
+recorded `DiseaseStateChanged` net effects without re-running policy, and
+continuation requires a verified matching policy digest. Disease-active runs
+write reserved event **24** / codec **`v22`**; all prior pairs stay accepted and
+non-disease runs keep their existing selections. There is no command, public
+disease route, metric family, observer semantic type, cognition mode, overlay, or
+SQL migration. Off-gate `disease_mechanics@1` pairs `no-transmission` and
+`contact-enabled` arms. Pins: 275 metric families, 17 V4 contexts, 12 V4 flags
+(ten owned / two unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic
+types, runner v4/v55/v56 with latest opt-in v58, replay 24/`v22` for disease,
+27/`v25`, and 28/`v26`, `/v1`, `observer-protocol-v1`, Alembic `0017`; default
+runner/result v4/v2. See `docs/disease-mechanics.md`.

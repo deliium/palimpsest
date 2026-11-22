@@ -63,11 +63,11 @@ def _imports(path: Path) -> set[str]:
 
 def test_owned_flags_include_infrastructure_and_stay_equal() -> None:
     assert COMPAT_OWNED == RUNNER_OWNED
-    assert len(COMPAT_OWNED) == 9
+    assert len(COMPAT_OWNED) == 10
     assert "infrastructure_networks" in COMPAT_OWNED
     assert "supply_chains" in COMPAT_OWNED
     unowned = set(V4_CAPABILITY_FLAGS) - set(COMPAT_OWNED)
-    assert len(unowned) == 3
+    assert len(unowned) == 2
     assert "supply_chains" not in unowned
 
 
@@ -78,7 +78,8 @@ def test_wire_pins_for_infrastructure_landing() -> None:
     assert EVENT_SCHEMA_REPLAY_V23 in ACCEPTED_EVENT_SCHEMA_VERSIONS
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73

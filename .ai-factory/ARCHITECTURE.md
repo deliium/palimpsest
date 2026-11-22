@@ -1168,8 +1168,8 @@ programmatically and atomically; seven GET-only
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score, or
 canonical credit exists. See `docs/credit-relationships.md`.
 
-three remain unowned (`epidemics`, `ecological_feedback`,
-`disasters`); `markets_credit` is owned by V4-20/V4-21/V4-22.
+two remain unowned (`ecological_feedback`, `disasters`); `markets_credit` is
+owned by V4-20/V4-21/V4-22.
 
 
 ### V4-23 accounting-ledger seam
@@ -1426,3 +1426,37 @@ Pins: 275 metric families, 17 V4 contexts, 12 V4 flags (nine owned / three
 unowned), `v4-context-map-v6`, 45 commands, 73 observer semantic types, runner
 v4/v55/v56 with latest opt-in v57, replay 27/`v25` and 28/`v26`, `/v1`,
 `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2.
+
+### V4-34 disease-mechanics seam
+
+V4-34 owns the declared `epidemics` capability and activates the reserved write
+pair event 24 / codec `v22` for disease-active runs. `simulation.disease_config`
+owns the exact `DiseaseMechanicsSpec` (policy id, sorted founder ids, four
+milli thresholds, latent/active durations, recovery immunity) and
+`runner-config-v58`; `simulation.disease_checkpoint` owns neutral canonical rows
+and the policy digest. `world._disease` owns private sparse `latent` / `active` /
+`immune` rows, the simultaneous candidate pass, dead-body reconciliation, and
+recorded-effect projection; only `simulation.engine` and `simulation.bootstrap`
+import it outside private world modules. Founder latent rows are composed in
+`simulation.bootstrap`, never in the runner.
+
+Exposure, transmission, symptom, and terminal draws use one private generator per
+`StreamScope("disease-mechanics.v1", (tick, entity, draw_kind))`; disabled runs
+never draw. Disease mortality precedes lifespan mortality and reuses ordinary
+death, corpse custody, and journey cleanup. `ObservedSelf.symptom_cue` exposes
+only the present token `unwell` to the living owner; perception, prompts, memory,
+agent-visible API schemas, and observer frames never receive phase, immunity,
+source attribution, or transmission confirmation. The ordinary death projection
+carries no diagnostic payload, and `DiseaseStateChanged` is excluded before
+observer pagination, ticks, detail reads, and stream publication while the
+`OBJECTIVE_INSPECTION` raw lanes stay unfiltered. Replay folds recorded net
+effects without policy; objective continuation requires a trusted typed spec
+whose digest matches the checkpoint.
+
+No command, cognition mode, ledger, metric family, public disease route,
+observer semantic type, overlay, or SQL migration is added. Pins: 275 metric
+families, 17 V4 contexts, 12 V4 flags (ten owned / two unowned),
+`v4-context-map-v6`, 45 commands, 73 observer semantic types, runner v4/v55/v56
+with latest opt-in v58, replay 24/`v22` for disease, 27/`v25`, and 28/`v26`,
+`/v1`, `observer-protocol-v1`, Alembic `0017`; default runner/result v4/v2. See
+`docs/disease-mechanics.md`.

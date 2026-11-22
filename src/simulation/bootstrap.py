@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from agents.models import AgentId
 from simulation.registrations import AgentRegistration as AgentRegistration
+from world._disease import DiseaseConditionRow
 from world.artifacts import InformationArtifact
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.measurement import InstrumentState, MeasurementReference
@@ -28,6 +29,7 @@ __all__ = [
     "AgentRegistration",
     "RegistrationTranslator",
     "WorldBootstrap",
+    "disease_bootstrap_state",
     "registration_translator",
 ]
 
@@ -89,7 +91,7 @@ class WorldBootstrap:
     )
     regions_migration: RegionsMigrationSpec | None = None
     journeys: Sequence[Journey] | None = None
-    disease_state: Mapping[EntityId, object] | None = None
+    disease_state: Mapping[EntityId, DiseaseConditionRow] | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -172,7 +174,9 @@ class WorldBootstrap:
         object.__setattr__(
             self,
             "disease_state",
-            None if self.disease_state is None else MappingProxyType(self.disease_state),
+            None
+            if self.disease_state is None
+            else MappingProxyType(self.disease_state),
         )
         _validate_registrations_against_models(
             locations=locations,
@@ -311,7 +315,30 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
     return World(bootstrap.world_id, state)
 
 
-def _disease_state_from_snapshot(snapshot: object) -> object | None:
+def disease_bootstrap_state(
+    config: object,
+) -> Mapping[EntityId, DiseaseConditionRow] | None:
+    """Internal: build founder latent rows for one enabled disease channel."""
+    spec = getattr(config, "disease_mechanics", None)
+    if spec is None:
+        return None
+    from world._disease import bootstrap_disease_rows
+
+    scenario = getattr(config, "scenario", None)
+    if scenario is None:
+        raise TypeError("disease_bootstrap_state requires a scenario")
+    body_index = {body.entity_id: body for body in scenario.bodies}
+    return bootstrap_disease_rows(
+        founder_ids=spec.initial_latent_entity_ids,
+        latent_ticks=spec.latent_ticks,
+        tick0=0,
+        body_index=body_index,
+    )
+
+
+def _disease_state_from_snapshot(
+    snapshot: object,
+) -> Mapping[EntityId, DiseaseConditionRow] | None:
     """Rebuild private disease rows from the v22 checkpoint section."""
     from simulation.disease_checkpoint import DiseaseCheckpointSection
     from world._disease import DiseaseConditionRow, DiseasePhase

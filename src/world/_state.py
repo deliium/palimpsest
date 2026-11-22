@@ -436,6 +436,7 @@ class WorldState:
         "_bodies",
         "_collective_projects",
         "_corpse_custody_item_ids",
+        "_disease_state",
         "_exchange_offers",
         "_infrastructure",
         "_instrument_states",
@@ -451,7 +452,6 @@ class WorldState:
         "_structures",
         "_tool_marks",
         "_travel_network",
-        "_disease_state",
         "_weather",
     )
 

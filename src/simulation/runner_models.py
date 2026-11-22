@@ -35,6 +35,7 @@ from llm.factory import ProviderAdapterKind
 from llm.models import StructuredOutputMode
 from simulation.bootstrap import AgentRegistration
 from simulation.clock import require_exact_nonneg_int
+from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.generational_models import (
     GenerationalRunSpec,
     PopulationProgress,
@@ -45,7 +46,6 @@ from simulation.lifecycle import (
     ActionResolutionReason,
     ActionResolutionStatus,
 )
-from simulation.disease_config import DiseaseMechanicsSpec
 from simulation.measurement_config import MeasurementInstrumentsSpec
 from simulation.models import (
     DERIVATION_VERSION_V3,

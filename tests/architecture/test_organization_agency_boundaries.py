@@ -213,7 +213,8 @@ def test_v4_reservations_observer_and_migration_are_unchanged() -> None:
     assert ObserverCapability.ORGANIZATION_ROWS in RESERVED_OBSERVER_CAPABILITIES
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert next_revision() == "0018"

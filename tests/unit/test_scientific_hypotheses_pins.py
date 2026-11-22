@@ -93,7 +93,7 @@ def test_no_v57_or_v2_route_exists() -> None:
     assert "runner-config-v59" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v58" not in text, path
+        assert "runner-config-v59" not in text, path
         assert '"/v2' not in text, path
 
 

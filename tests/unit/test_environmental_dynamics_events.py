@@ -136,7 +136,7 @@ def test_default_write_stays_replay_v5_and_v7_is_accepted() -> None:
         "lifecycle",
         "knowledge_repository",
     ]
-    assert names[11:] == ["collective_project", "travel"]
+    assert names[11:] == ["collective_project", "travel", "disease"]
 
 
 def test_lower_schemas_reject_environment_details(

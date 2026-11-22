@@ -41,7 +41,7 @@ def test_current_pins_are_176_and_five_owned() -> None:
     assert "208" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/ARCHITECTURE.md")
     assert "five V4" in _read(".ai-factory/DESCRIPTION.md")
-    assert "nine owned V4 flags" in _read("docs/configuration.md")
+    assert "ten owned V4 flags" in _read("docs/configuration.md")
 
 
 def test_routes_settings_and_links_are_documented() -> None:

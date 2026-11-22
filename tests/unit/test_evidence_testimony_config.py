@@ -108,6 +108,7 @@ def test_v4_registry_keeps_fourteen_contexts_and_twelve_flags() -> None:
         "supply_chains",
         "markets_credit",
         "science",
+        "epidemics",
     }
 
 

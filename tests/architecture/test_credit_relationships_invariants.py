@@ -100,7 +100,8 @@ def test_version_pins_are_unchanged() -> None:
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_markets_credit_context_stays_owner_scoped() -> None:
@@ -198,7 +199,7 @@ def test_credit_modules_do_not_add_v2_routes_or_extra_events() -> None:
     for path in SRC.rglob("*credit_relationship*.py"):
         text = path.read_text(encoding="utf-8")
         assert "/v2" not in text, path.name
-        assert "runner-config-v58" not in text, path.name
+        assert "runner-config-v59" not in text, path.name
 
 
 def test_credit_routes_are_get_only() -> None:

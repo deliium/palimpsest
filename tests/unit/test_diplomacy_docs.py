@@ -50,11 +50,11 @@ def test_docs_state_four_owned_and_eight_unowned() -> None:
     assert "fourth owned V4 flag" in text
     assert "four V4 flags unowned" in text
     architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    assert "Nine V4 flags are owned" in architecture
-    assert "three remain" in architecture
+    assert "Ten V4 flags are owned" in architecture
+    assert "two remain" in architecture
     configuration = (ROOT / "docs" / "configuration.md").read_text(encoding="utf-8")
-    assert "nine owned V4 flags" in configuration
-    assert "other three V4" in configuration
+    assert "ten owned V4 flags" in configuration
+    assert "other two V4" in configuration
 
 
 def test_catalog_and_families_match_code() -> None:
@@ -96,7 +96,7 @@ def test_agent_context_artifacts_state_v4_10() -> None:
     assert "V4-10" in description
     assert "V4-10 diplomacy seam" in architecture
     assert "`diplomacy`" in description
-    assert "three remain unowned" in architecture
+    assert "two remain unowned" in architecture
 
 
 def test_no_current_document_claims_diplomacy_is_unowned() -> None:

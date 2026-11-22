@@ -37,7 +37,8 @@ def test_current_version_and_count_pins() -> None:
     assert RUNNER_SCHEMA_VERSION_V57 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert 28 in SUPPORTED_EVENT_SCHEMA_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v22" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "finalization-command-v3" in PENDING_FINALIZATION_ACCEPTED_VERSIONS
     assert len(get_args(AgentCommand)) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73

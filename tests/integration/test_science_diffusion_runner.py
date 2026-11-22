@@ -49,7 +49,12 @@ from simulation.models import RunId
 from simulation.runner import RunnerDependencyFactories, SimulationRunner
 from simulation.runner_models import ImaginationMode, RunnerStopPolicy
 from world.actions import Experiment, Inscribe, Move, Talk, Wait
-from world.artifacts import ArtifactContent, ArtifactKind, ArtifactRelation, DurableRecordGenre
+from world.artifacts import (
+    ArtifactContent,
+    ArtifactKind,
+    ArtifactRelation,
+    DurableRecordGenre,
+)
 from world.communications import CommunicationRelation, origin_utterance
 from world.experimentation import (
     ExperimentOperator,

@@ -29,7 +29,6 @@ from simulation.runner_models import (
     AgentCognitionSpec,
     AgentRunnerSpec,
     SimulationRunnerConfig,
-    V2CapabilityFlags,
     V3CapabilityFlags,
     V4CapabilityFlags,
     WorldScenarioSpec,

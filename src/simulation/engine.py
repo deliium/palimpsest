@@ -8,7 +8,7 @@ commits with one reference swap.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterable, Sequence
+from collections.abc import AsyncIterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -175,6 +175,7 @@ if TYPE_CHECKING:
         DetachedObjectiveProjection,
         PopulationLifecycleSpec,
     )
+    from world._disease import DiseaseConditionRow
     from world._skills import (
         ObjectiveSkillLedger,
         ObjectiveSkillPolicy,
@@ -859,7 +860,10 @@ class WorldEngine:
         self._measurement_active = bool(bootstrap.instrument_states)
         from simulation.disease_config import DiseaseMechanicsSpec
 
-        if disease_mechanics is not None and type(disease_mechanics) is not DiseaseMechanicsSpec:
+        if (
+            disease_mechanics is not None
+            and type(disease_mechanics) is not DiseaseMechanicsSpec
+        ):
             raise TypeError("disease_mechanics must be DiseaseMechanicsSpec or None")
         channel_on = bootstrap.disease_state is not None
         if disease_mechanics is None and channel_on:
@@ -4742,7 +4746,7 @@ class WorldEngine:
         )
         disease_death_pending: list[PendingEvent] = []
         disease_net_pending: list[PendingEvent] = []
-        disease_start_rows = None
+        disease_start_rows: Mapping[EntityId, DiseaseConditionRow] | None = None
         disease_mortality_ids: tuple[EntityId, ...] = ()
         if self._disease_mechanics is not None:
             (
@@ -6792,17 +6796,17 @@ class WorldEngine:
         self,
         *,
         snap: _EngineSnapshot,
-        start_state: object,
-        working_state: object,
+        start_state: WorldState,
+        working_state: WorldState,
     ) -> tuple[
-        object,
+        WorldState,
         list[PendingEvent],
-        object,
+        Mapping[EntityId, DiseaseConditionRow] | None,
         tuple[EntityId, ...],
         bool,
     ]:
         """Run the private disease lifecycle and emit ordinary disease deaths."""
-        from simulation.disease_config import DiseaseMechanicsSpec, DISEASE_POLICY_ID
+        from simulation.disease_config import DISEASE_POLICY_ID, DiseaseMechanicsSpec
         from simulation.randomness import StreamScope, create_rng, derive_stream_seed
         from world._disease import advance_disease_pass
         from world._state import WorldState, rebuild_world_state
@@ -7261,7 +7265,6 @@ def select_checkpoint_schema(
         EVENT_SCHEMA_REPLAY_V21,
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
-        EVENT_SCHEMA_REPLAY_V24,
     )
 
     schema_version, codec = checkpoint_schema_for_production(

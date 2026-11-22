@@ -185,8 +185,8 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V21,
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
-    EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V24,
+    EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     AgentCreated,
     AgentEnteredWorld,
@@ -4102,7 +4102,7 @@ def _decode_observed_self(data: dict[str, Any], *, path: str) -> ObservedSelf:
             if not isinstance(data["journey"], dict):
                 raise DomainSerializationError("invalid_object", f"{path}.journey")
             journey = _decode_observed_journey(data["journey"], path=f"{path}.journey")
-        symptom_cue = None
+        symptom_cue: Literal["unwell"] | None = None
         if "symptom_cue" in data and data["symptom_cue"] is not None:
             cue = data["symptom_cue"]
             if cue != "unwell":
@@ -5204,10 +5204,10 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "instrument_after": encode_instrument_state(after),
             }
         case DiseaseStateChanged(body_id=body_id, before=before, after=after):
-            def _row(view):
+            def _row(view: DiseaseRowView | None) -> dict[str, object] | None:
                 if view is None:
                     return None
-                payload = {"phase": view.phase}
+                payload: dict[str, object] = {"phase": view.phase}
                 if view.due_tick is not None:
                     payload["due_tick"] = view.due_tick
                 if view.symptomatic is not None:
@@ -6681,7 +6681,7 @@ def _decode_event_details(
             if set(fields) != {"body_id", "before", "after"}:
                 raise DomainSerializationError("invalid_fields", path)
 
-            def _decode_row(raw, *, row_path):
+            def _decode_row(raw: object, *, row_path: str) -> DiseaseRowView | None:
                 if raw is None:
                     return None
                 if not isinstance(raw, dict):
@@ -6689,8 +6689,11 @@ def _decode_event_details(
                 allowed = {"phase", "due_tick", "symptomatic"}
                 if "phase" not in raw or not set(raw) <= allowed:
                     raise DomainSerializationError("invalid_fields", row_path)
+                phase = raw["phase"]
+                if phase not in {"latent", "active", "immune"}:
+                    raise DomainSerializationError("invalid_string", row_path)
                 return DiseaseRowView(
-                    phase=raw["phase"],
+                    phase=cast(Literal["latent", "active", "immune"], phase),
                     due_tick=raw.get("due_tick"),
                     symptomatic=raw.get("symptomatic"),
                 )
@@ -8184,7 +8187,10 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
                 "invalid_event_schema_version", "$.schema_version"
             )
     if details_kind in {"measurement_taken", "instrument_calibrated"}:
-        if value.schema_version not in {EVENT_SCHEMA_REPLAY_V24, EVENT_SCHEMA_REPLAY_V28} or wire_schema != 2:
+        if value.schema_version not in {
+            EVENT_SCHEMA_REPLAY_V24,
+            EVENT_SCHEMA_REPLAY_V28,
+        } or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
             )
