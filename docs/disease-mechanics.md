@@ -1,6 +1,6 @@
 # Disease Mechanics
 
-[← Measurement instruments](measurement-instruments.md) · [Back to README](../README.md) · [Next Page →](economic-cascades.md)
+[← Measurement instruments](measurement-instruments.md) · [Back to README](../README.md) · [Next Page →](medical-beliefs.md)
 
 Optional abstract disease channel owned by V4-34 under the reserved
 `epidemics` capability. One fictional condition per enabled run. The engine

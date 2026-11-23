@@ -116,4 +116,4 @@ def test_checkpoint_selection_prefers_travel_network() -> None:
 
 
 def test_no_runner_schema_v57_is_accepted() -> None:
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS

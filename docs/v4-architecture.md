@@ -10,12 +10,13 @@ implements no V4 social mechanic.
 Every V4 capability flag is closed. V4-01 declared all of them unowned and
 fail-closed at runtime construction (`capability_unimplemented`, stage
 `v4_capability_flags`); a later V4 plan must claim ownership explicitly before a
-flag can enable behavior. Today ten flags are owned — `organizations`
+flag can enable behavior. Today eleven flags are owned — `organizations`
 (V4-03/V4-04/V4-05), `formal_rules` (V4-06), `legal_disputes` (V4-07),
 `diplomacy` (V4-10/V4-11), `organized_conflict` (V4-12),
 `infrastructure_networks` (V4-16), `supply_chains` (V4-19), `markets_credit`
-(V4-20/V4-21), `science` (V4-27), and `epidemics` (V4-34) — and the other two
-remain unowned and fail closed. Enabling an unowned flag is an error, not an experiment.
+(V4-20/V4-21), `science` (V4-27), `epidemics` (V4-34), and
+`ecological_feedback` (V4-36) — and only `disasters` remains unowned and fails
+closed. Enabling an unowned flag is an error, not an experiment.
 
 `institutional_economy` and `multi_hop_testimony_tracking` remain unowned from
 V2/V3. V4 does not silently claim them, and they keep failing closed exactly as
@@ -71,7 +72,7 @@ The registry revision is `v4-context-map-v6`.
 | `markets_credit` | `markets_credit` | owner-scoped | `agents.cognition`, `simulation` | exchange profile, commitments | reuse | deferred to V4-02+ |
 | `science` | `science` | owner-scoped | `agents.cognition`, `simulation` | experimentation, practical knowledge, repositories | reuse | V4-27 owned (`formal_rules`) |
 | `epidemics` | `epidemics` | objective-world | `world`, `simulation`, `agents.cognition` | new host/transmission state | reserve event 24 / codec `v22` | deferred to V4-02+ |
-| `ecological_feedback` | `ecological_feedback` | objective-world | `world`, `simulation` | resource regeneration/depletion | reserve event 25 / codec `v23` | deferred to V4-02+ |
+| `ecological_feedback` | `ecological_feedback` | objective-world | `world`, `simulation` | resource regeneration/depletion | event 25 / codec `v23` | owned by V4-36 on `runner-config-v60` |
 | `disasters` | `disasters` | objective-world | `world`, `simulation` | environmental hazards | reserve event 26 / codec `v24` | deferred to V4-02+ |
 | `societal_resilience` | — (analysis-only) | detached-analysis | `analysis` | new detached classification | reuse | deferred to V4-02+ |
 | `macro_society_identity` | — (analysis-only) | detached-analysis | `analysis` | candidate-community analysis, cultural/institutional evidence joins, group persistence | reuse | V4-02 implementation |
@@ -188,10 +189,13 @@ in V4-01.
 
 ### ecological_feedback
 
-Resource regeneration and depletion already exist as engine rules. Ecological
-feedback is the observable coupling between consumption and renewal. It reserves
-a future write pair for additional state. No ecological actor or automatic
-carrying-capacity policy is created.
+Resource regeneration and depletion already exist as engine rules. V4-36 owns
+`ecological_feedback` on `runner-config-v60`: selected renewable nodes accumulate
+withdrawal-induced capacity damage, recover while idle, and regrow under the
+existing seasonal schedule clipped to the local effective ceiling. The write
+pair is event schema 25 / codec `v23`. Local stock ceilings are never population
+quotas, planners, or automatic carrying-capacity policy. See
+[Ecological resources](ecological-resources.md).
 
 ### disasters
 

@@ -207,8 +207,8 @@ those as current pins or silently drop their legacy accepted versions.
   `organized_conflict` (V4-12), `infrastructure_networks` (V4-16),
   `supply_chains` (V4-19), `markets_credit` (V4-20/V4-21), `science`
   (V4-27/V4-28), and `epidemics` (V4-34).
-  There are ten owned V4 flags and two unowned flags.
-  `ecological_feedback` and `disasters` remain unowned and fail closed.
+  There are eleven owned V4 flags and one unowned flag.
+  Only `disasters` remains unowned and fails closed.
 - Per-agent modes and optional run-level specs are not automatically capability
   flags. New behavior must use its owned, versioned configuration seam.
 
@@ -1168,8 +1168,8 @@ programmatically and atomically; seven GET-only
 `SUBJECTIVE_DEBUG`. No bank, money, interest, enforceable debt, credit score, or
 canonical credit exists. See `docs/credit-relationships.md`.
 
-two remain unowned (`ecological_feedback`, `disasters`); `markets_credit` is
-owned by V4-20/V4-21/V4-22.
+only `disasters` remains unowned; `ecological_feedback` is owned by V4-36;
+`markets_credit` is owned by V4-20/V4-21/V4-22.
 
 
 ### V4-23 accounting-ledger seam

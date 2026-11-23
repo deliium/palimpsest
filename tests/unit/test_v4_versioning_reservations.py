@@ -55,6 +55,7 @@ def test_current_wire_maxima_are_unchanged() -> None:
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V23")
     assert hasattr(world.events, "EVENT_SCHEMA_REPLAY_V24")

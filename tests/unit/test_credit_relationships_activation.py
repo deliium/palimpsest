@@ -94,7 +94,7 @@ def test_runner_activation_requires_flag_and_commitments() -> None:
     from simulation.runner import _cognition_config_for
 
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     spec = AgentCognitionSpec(agent_id=AgentId("agent-1"))
     flag_off = _cognition_config_for(
         spec,

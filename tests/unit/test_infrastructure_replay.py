@@ -130,7 +130,7 @@ def test_schema_selection_matrix() -> None:
     ) == (EVENT_SCHEMA_REPLAY_V23, "v21")
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_structure_kind_gate_symbols_exist() -> None:

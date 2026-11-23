@@ -33,6 +33,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION,
     RUNNER_SCHEMA_VERSION_V55,
     RUNNER_SCHEMA_VERSION_V56,
+    RUNNER_SCHEMA_VERSION_V60,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
     V4CapabilityFlags,
 )
@@ -54,7 +55,11 @@ from simulation.versioning import (
     validate_write_pair_reservations,
 )
 from world._rules import COMMAND_RULE_MATRIX
-from world.events import EVENT_SCHEMA_REPLAY_V22, EVENT_SCHEMA_REPLAY_V23
+from world.events import (
+    EVENT_SCHEMA_REPLAY_V22,
+    EVENT_SCHEMA_REPLAY_V23,
+    EVENT_SCHEMA_REPLAY_V25,
+)
 
 pytestmark = pytest.mark.architecture
 
@@ -160,12 +165,15 @@ def test_runner_and_wire_pins_are_unchanged() -> None:
     assert RUNNER_SCHEMA_VERSION == "runner-config-v4"
     assert RUNNER_SCHEMA_VERSION_V55 == "runner-config-v55"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert RUNNER_SCHEMA_VERSION_V60 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert EVENT_SCHEMA_REPLAY_V22 == 22
     assert EVENT_SCHEMA_REPLAY_V23 == 23
+    assert EVENT_SCHEMA_REPLAY_V25 == 25
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v26" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert METRIC_FAMILY_COUNT == 275
@@ -229,6 +237,7 @@ def test_context_registry_and_capability_ownership() -> None:
             "markets_credit",
             "science",
             "epidemics",
+            "ecological_feedback",
         }:
             assert flags.owned_enabled_names() == (name,)
             assert flags.unimplemented_enabled_names() == ()
@@ -274,6 +283,7 @@ def test_v4_08_deepens_legal_disputes_without_new_schema() -> None:
             "markets_credit",
             "science",
             "epidemics",
+            "ecological_feedback",
         }
     )
     assert V4ContextId.LEGAL_DISPUTES in V4_CONTEXT_BY_ID
@@ -459,6 +469,7 @@ def test_v4_09_deepens_organizations_without_new_schema() -> None:
             "markets_credit",
             "science",
             "epidemics",
+            "ecological_feedback",
         }
     )
     assert V4_CONTEXT_BY_ID[V4ContextId.ORGANIZATIONS].authority is (

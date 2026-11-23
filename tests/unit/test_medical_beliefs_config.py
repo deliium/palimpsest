@@ -83,10 +83,10 @@ def _as_v59(config: SimulationRunnerConfig) -> SimulationRunnerConfig:
     )
 
 
-def test_v59_is_supported_and_v60_is_not() -> None:
+def test_v59_is_supported_and_v60_is_supported() -> None:
     assert RUNNER_SCHEMA_VERSION_V59 == "runner-config-v59"
     assert RUNNER_SCHEMA_VERSION_V59 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_medical_spec_round_trip_and_rejects_bad_shapes() -> None:
@@ -153,7 +153,7 @@ def test_activation_matrix_fails_closed() -> None:
             disease_mechanics=None,
             medical_beliefs=_medical_spec(),
         )
-    with pytest.raises(ValueError, match="unsupported runner schema_version"):
+    with pytest.raises(ValueError, match="code=ecological_resources_spec_required"):
         replace(
             contact,
             schema_version="runner-config-v60",

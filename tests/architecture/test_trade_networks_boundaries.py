@@ -75,7 +75,7 @@ def test_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert len(COMMAND_RULE_MATRIX) == 45
     assert len(SEMANTIC_EVENT_TYPES) == 73
     assert ALEMBIC_HEAD_REVISION == "0017"
@@ -98,6 +98,7 @@ def test_v4_contexts_and_flags_are_unchanged() -> None:
         "markets_credit", 
             "science",
             "epidemics",
+        "ecological_feedback",
         }
     )
 
@@ -116,7 +117,7 @@ def test_no_v57_or_new_flag_reference() -> None:
     offenders = [
         path
         for path in SRC.rglob("*.py")
-        if "runner-config-v60" in path.read_text(encoding="utf-8")
+        if "runner-config-v61" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     assert len(V4_CAPABILITY_FLAGS) == 12

@@ -501,3 +501,59 @@ def test_legacy_v4_fingerprint_unchanged() -> None:
     second = encode_runner_config(decode_runner_config(first))
     assert first == second
     assert b"disease_mechanics" not in first
+
+
+@pytest.mark.asyncio
+async def test_runner_bootstrap_snapshot_keeps_disease_and_artifacts_on_v22() -> None:
+    """Runner `_engine_snapshot` must match service disease assembly with artifacts."""
+    from simulation.disease_checkpoint import DiseaseCheckpointSection
+    from simulation.journal import _decode_world_snapshot, _encode_world_snapshot
+    from simulation.models import RunId
+    from simulation.runner import RunnerDependencyFactories, SimulationRunner
+    from simulation.versioning import (
+        EPIDEMICS_WRITE_PAIR_CODEC,
+        EPIDEMICS_WRITE_PAIR_EVENT,
+    )
+    from world.artifacts import ArtifactContent, ArtifactKind, InformationArtifact
+    from world.events import EVENT_SCHEMA_REPLAY_V24
+
+    body = alive_body("body-1", location_id="loc-a")
+    artifact = InformationArtifact(
+        artifact_id=EntityId("artifact-seed"),
+        kind=ArtifactKind.MARK,
+        author_id=body.entity_id,
+        created_tick=0,
+        content=ArtifactContent(marks=("seed",)),
+        location_id=EntityId("loc-a"),
+    )
+    base = _infra_base()
+    config = _as_v58(
+        replace(
+            base,
+            scenario=replace(base.scenario, artifacts=(artifact,)),
+        ),
+        founders=(body.entity_id,),
+    )
+    assert config.disease_mechanics is not None
+    runner = await SimulationRunner.from_config(
+        config,
+        run_id=RunId("run-disease-artifact-snapshot"),
+        factories=RunnerDependencyFactories(),
+    )
+    snapshot = runner._bootstrap_checkpoint
+    assert snapshot.persistence_codec_version == EPIDEMICS_WRITE_PAIR_CODEC == "v22"
+    assert snapshot.event_schema_version == EPIDEMICS_WRITE_PAIR_EVENT
+    assert snapshot.event_schema_version == EVENT_SCHEMA_REPLAY_V24
+    assert type(snapshot.disease_mechanics) is DiseaseCheckpointSection
+    assert snapshot.disease_mechanics.rows[0].body_id == body.entity_id
+    assert snapshot.disease_mechanics.rows[0].phase == "latent"
+    assert len(snapshot.artifacts) == 1
+    assert snapshot.artifacts[0].artifact_id == artifact.artifact_id
+    # Round-trip proves the inherited artifact allowlist accepts codec v22.
+    encoded = _encode_world_snapshot(snapshot, include_integrity_hash=True)
+    assert "disease_mechanics" in encoded
+    assert encoded["artifacts"][0]["artifact_id"] == "artifact-seed"
+    decoded = _decode_world_snapshot(encoded, path="$")
+    assert type(decoded.disease_mechanics) is DiseaseCheckpointSection
+    assert decoded.artifacts[0].artifact_id == artifact.artifact_id
+    assert decoded.persistence_codec_version == "v22"

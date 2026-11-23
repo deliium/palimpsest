@@ -71,7 +71,7 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
     assert "credit_relationships" not in V4_CAPABILITY_FLAGS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -84,10 +84,11 @@ def test_no_credit_context_flag_or_schema_bump() -> None:
             "markets_credit",
             "science",
             "epidemics",
+        "ecological_feedback",
         }
     )
     token = "runner-config-" + "v59"
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*credit_relationships*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
 
@@ -101,7 +102,7 @@ def test_version_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_markets_credit_context_stays_owner_scoped() -> None:
@@ -199,7 +200,7 @@ def test_credit_modules_do_not_add_v2_routes_or_extra_events() -> None:
     for path in SRC.rglob("*credit_relationship*.py"):
         text = path.read_text(encoding="utf-8")
         assert "/v2" not in text, path.name
-        assert "runner-config-v60" not in text, path.name
+        assert "runner-config-v61" not in text, path.name
 
 
 def test_credit_routes_are_get_only() -> None:

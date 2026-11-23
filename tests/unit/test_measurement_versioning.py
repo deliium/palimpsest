@@ -88,7 +88,7 @@ def test_reuse_and_deepening_conflict_is_rejected() -> None:
 
 def test_unowned_deepening_context_is_rejected() -> None:
     pair = DeepeningWritePair(
-        context_id=V4ContextId.ECOLOGICAL_FEEDBACK,
+        context_id=V4ContextId.DISASTERS,
         event_schema=28,
         codec_version="v26",
         reason="not owned",

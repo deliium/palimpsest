@@ -147,7 +147,7 @@ def test_science_requires_v56(schema_version: str) -> None:
         )
 
 
-def test_science_is_owned_and_three_flags_remain_unowned() -> None:
+def test_science_is_owned_and_one_flag_remains_unowned() -> None:
     assert "science" in V4_OWNED_CAPABILITY_FLAGS
     unowned = {
         name
@@ -167,7 +167,7 @@ def test_science_is_owned_and_three_flags_remain_unowned() -> None:
         )
         if name not in V4_OWNED_CAPABILITY_FLAGS
     }
-    assert unowned == {"ecological_feedback", "disasters"}
+    assert unowned == {"disasters"}
 
 
 def test_science_off_is_byte_identical() -> None:
@@ -178,4 +178,4 @@ def test_science_off_is_byte_identical() -> None:
 
 
 def test_runner_config_v57_is_absent() -> None:
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS

@@ -40,6 +40,7 @@ def test_owned_flags_are_eight() -> None:
             "markets_credit",
             "science",
             "epidemics",
+        "ecological_feedback",
         }
     )
 
@@ -73,6 +74,6 @@ def test_no_runner_config_v57_in_source() -> None:
         for path in SRC.rglob("*")
         if path.suffix in {".py", ".md", ".json", ".yaml"}
         and "__pycache__" not in path.parts
-        and "runner-config-v60" in path.read_text(encoding="utf-8", errors="ignore")
+        and "runner-config-v61" in path.read_text(encoding="utf-8", errors="ignore")
     ]
     assert offenders == []

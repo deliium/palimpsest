@@ -45,10 +45,10 @@ def test_science_ownership_pins() -> None:
             "markets_credit",
             "science",
             "epidemics",
+        "ecological_feedback",
         }
     )
     assert set(V4_CAPABILITY_FLAGS) - V4_OWNED_CAPABILITY_FLAGS == {
-                "ecological_feedback",
         "disasters",
     }
 
@@ -90,10 +90,10 @@ def test_science_adds_no_write_pair_or_migration() -> None:
 def test_no_v57_or_v2_route_exists() -> None:
     from simulation.runner_models import SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v60" not in text, path
+        assert "runner-config-v61" not in text, path
         assert '"/v2' not in text, path
 
 

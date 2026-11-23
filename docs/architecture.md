@@ -860,7 +860,7 @@ or canonical credit is added. See `docs/credit-relationships.md`.
 
 Current catalog: 275 metric families (the V4-27 landing reported 250 metric families); 45 commands; 73 observer semantic types; Alembic `0017`.
 
-Ten V4 flags are owned; two remain unowned.
+Eleven V4 flags are owned; only `disasters` remains unowned.
 
 ## V4-23 accounting ledgers
 

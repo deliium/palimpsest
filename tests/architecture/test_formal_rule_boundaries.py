@@ -208,7 +208,7 @@ def test_compatibility_pins_are_exact() -> None:
     assert OBSERVER_PROTOCOL_VERSION == "observer-protocol-v1"
     assert OBSERVER_LAYOUT_SCHEMA_VERSION == "observer-layout-v1"
     assert SUPPORTED_OBSERVER_PROTOCOLS == ("observer-protocol-v1",)
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert "runner-config-v56" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 

@@ -385,7 +385,7 @@ def test_exactly_six_get_routes_require_subjective_debug() -> None:
 def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
         {
             "organizations",
@@ -398,17 +398,18 @@ def test_no_new_flag_context_or_v57() -> None:
         "markets_credit", 
             "science",
             "epidemics",
+        "ecological_feedback",
         }
     )
     offenders = [
         str(path.relative_to(ROOT / "src"))
         for path in sorted((ROOT / "src").rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v60" in path.read_text(encoding="utf-8")
+        and "runner-config-v61" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
     for path in MIGRATION_PATHS:
-        assert "runner-config-v60" not in path.read_text(encoding="utf-8")
+        assert "runner-config-v61" not in path.read_text(encoding="utf-8")
 
 
 def test_pins_are_unchanged() -> None:
@@ -422,7 +423,7 @@ def test_pins_are_unchanged() -> None:
     assert "v20" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v21" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert ALEMBIC_HEAD_REVISION == "0017"
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
     assert MIGRATION_DISPLACEMENT_CURSOR_PURPOSES == (

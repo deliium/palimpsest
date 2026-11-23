@@ -69,10 +69,9 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
     assert "accounting_ledgers" not in V4_CAPABILITY_FLAGS
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
     unowned = set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS)
     assert unowned == {
-                "ecological_feedback",
         "disasters",
     }
     assert V4_OWNED_CAPABILITY_FLAGS == frozenset(
@@ -87,10 +86,11 @@ def test_no_accounting_context_flag_or_schema_bump() -> None:
             "markets_credit",
             "science",
             "epidemics",
+            "ecological_feedback",
         }
     )
-    token = "runner-config-" + "v59"
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    token = "runner-config-" + "v61"
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in SRC.rglob("*accounting_ledgers*.py"):
         assert token not in path.read_text(encoding="utf-8", errors="ignore")
 
@@ -114,7 +114,7 @@ def test_version_pins_are_unchanged() -> None:
     assert max(ACCEPTED_EVENT_SCHEMA_VERSIONS) == 28
     assert "v25" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
     assert "v22" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
-    assert "v23" not in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
+    assert "v23" in ACCEPTED_PERSISTENCE_CODEC_VERSIONS
 
 
 def test_accounting_is_absent_from_observer_and_api_observer() -> None:

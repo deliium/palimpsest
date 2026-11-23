@@ -52,6 +52,7 @@ _OWNED_FLAGS = frozenset(
         "markets_credit", 
             "science",
             "epidemics",
+        "ecological_feedback",
         }
 )
 
@@ -88,7 +89,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
     assert V4_OWNED_CAPABILITY_FLAGS == _OWNED_FLAGS
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
 
     diplomacy = V4_CONTEXT_BY_ID[V4ContextId.DIPLOMACY]
     assert diplomacy.authority is V4Authority.OWNER_SCOPED
@@ -113,7 +114,7 @@ def test_v4_10_owns_diplomacy_without_new_schema() -> None:
         str(path.relative_to(_SRC))
         for path in sorted(_SRC.rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v60" in path.read_text(encoding="utf-8")
+        and "runner-config-v61" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 
@@ -298,7 +299,7 @@ def test_no_new_wire_surfaces() -> None:
     assert "v20" in codecs
     assert "v21" in codecs
     assert "v22" in codecs
-    assert "v23" not in codecs
+    assert "v23" in codecs
 
 
 def test_no_peer_ledger_reads() -> None:

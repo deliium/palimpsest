@@ -27,8 +27,8 @@ def test_context_pins() -> None:
     assert V4_CONTEXT_MAP_VERSION == "v4-context-map-v6"
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
-    assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 2
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
+    assert 12 - len(V4_OWNED_CAPABILITY_FLAGS) == 1
 
 
 def test_metric_catalog_pin() -> None:
@@ -44,7 +44,7 @@ def test_closed_surface_pins() -> None:
 
 def test_no_new_runner_schema_or_migration() -> None:
     for path in (ROOT / "src").rglob("*.py"):
-        assert "runner-config-v60" not in path.read_text(encoding="utf-8"), path
+        assert "runner-config-v61" not in path.read_text(encoding="utf-8"), path
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))
 
 

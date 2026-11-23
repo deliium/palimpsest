@@ -47,9 +47,8 @@ _FORBIDDEN_AUTHORITY = {
 def test_v4_19_owns_supply_chains() -> None:
     assert len(V4_CONTEXTS) == 17
     assert len(V4_CAPABILITY_FLAGS) == 12
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
     assert set(V4_CAPABILITY_FLAGS) - set(V4_OWNED_CAPABILITY_FLAGS) == {
-                "ecological_feedback",
         "disasters",
     }
     assert V4_OWNED_CAPABILITY_FLAGS == _V4_OWNED_CAPABILITY_FLAGS

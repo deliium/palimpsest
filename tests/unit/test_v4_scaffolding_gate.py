@@ -10,6 +10,11 @@ import pytest
 from agents.models import AgentId
 from experiments import v3_regression_profile, v4_scaffolding_profile
 from experiments.catalog import base_runner_config_from_scenario
+from simulation.ecological_resources_config import (
+    ECOLOGICAL_RESOURCES_POLICY_ID,
+    EcologicalResourceNodeSpec,
+    EcologicalResourcesSpec,
+)
 from simulation.models import RunId
 from simulation.runner import (
     RunnerConstructionError,
@@ -20,6 +25,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V4,
     RUNNER_SCHEMA_VERSION_V56,
     RUNNER_SCHEMA_VERSION_V58,
+    RUNNER_SCHEMA_VERSION_V60,
     AgentCognitionSpec,
     AgentRunnerSpec,
     BoundedExperimentationSpec,
@@ -34,10 +40,17 @@ from simulation.runner_models import (
     example_experiment_law,
 )
 from simulation.runner_serialization import decode_runner_config, encode_runner_config
-from tests.simulation_helpers import alive_body, make_location, make_weather
-from world.identifiers import WorldId, WorldRevision
+from tests.simulation_helpers import (
+    alive_body,
+    make_location,
+    make_resource,
+    make_weather,
+)
+from world.environment import example_environmental_dynamics
+from world.identifiers import EntityId, WorldId, WorldRevision
 from world.models import default_physical_rules
 from world.production import example_production_catalog
+from world.supply_chain import supply_chain_production_catalog
 
 pytestmark = pytest.mark.unit
 
@@ -135,6 +148,40 @@ def test_each_enabled_flag_fails_the_profile(flag_name: str) -> None:
             active_ticks=1,
             immunity_after_recovery=False,
         )
+    if flag_name == "ecological_feedback":
+        food = make_resource(
+            "res-food",
+            quantity=4.0,
+            maximum_quantity=4.0,
+            regeneration_per_tick=1.0,
+        )
+        base = _v56_config()
+        catalog = supply_chain_production_catalog(example_production_catalog())
+        extras["schema_version"] = RUNNER_SCHEMA_VERSION_V60
+        extras["scenario"] = replace(base.scenario, resources=(food,))
+        extras["environmental_dynamics"] = example_environmental_dynamics()
+        extras["ecological_resources"] = EcologicalResourcesSpec(
+            policy_id=ECOLOGICAL_RESOURCES_POLICY_ID,
+            nodes=(
+                EcologicalResourceNodeSpec(
+                    resource_id=EntityId("res-food"),
+                    minimum_capacity_tenths=10,
+                    withdrawal_allowance_tenths=0,
+                    recovery_tenths_per_idle_tick=5,
+                ),
+            ),
+        )
+        extras["v4_capability_flags"] = V4CapabilityFlags(
+            supply_chains=True,
+            ecological_feedback=True,
+        )
+        extras["agents"] = tuple(
+            replace(
+                agent,
+                cognition=replace(agent.cognition, production_catalog=catalog),
+            )
+            for agent in base.agents
+        )
     config = replace(_v56_config(), **extras)
     decoded = decode_runner_config(encode_runner_config(config))
     assert getattr(decoded.v4_capability_flags, flag_name) is True
@@ -168,6 +215,7 @@ def test_v4_flag_on_a_v4_config_fails_before_the_profile() -> None:
             "markets_credit",
             "science",
             "epidemics",
+            "ecological_feedback",
         }
     ),
 )

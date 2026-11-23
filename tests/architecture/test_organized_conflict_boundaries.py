@@ -48,6 +48,7 @@ def test_v4_12_owns_organized_conflict_without_new_context() -> None:
         "markets_credit", 
             "science",
             "epidemics",
+        "ecological_feedback",
         }
     )
     spec = V4_CONTEXT_BY_ID[V4ContextId.ORGANIZED_CONFLICT]
@@ -69,7 +70,7 @@ def test_v4_12_adds_no_runner_schema_or_war_state() -> None:
         str(path.relative_to(_SRC))
         for path in sorted(_SRC.rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v60" in path.read_text(encoding="utf-8")
+        and "runner-config-v61" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 

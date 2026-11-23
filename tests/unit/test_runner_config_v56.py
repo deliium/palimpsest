@@ -133,7 +133,7 @@ def _generational_v55() -> SimulationRunnerConfig:
 def test_v56_is_accepted_and_never_the_default() -> None:
     assert RUNNER_SCHEMA_VERSION_V56 == "runner-config-v56"
     assert RUNNER_SCHEMA_VERSION_V56 in SUPPORTED_RUNNER_SCHEMA_VERSIONS
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     assert RUNNER_SCHEMA_VERSION == RUNNER_SCHEMA_VERSION_V4 == "runner-config-v4"
 
 
@@ -256,7 +256,6 @@ def test_matrix_finalize_rejects_v56_with_an_enabled_v4_flag() -> None:
 @pytest.mark.parametrize(
     "flag_name",
     (
-        "ecological_feedback",
         "disasters",
     ),
 )

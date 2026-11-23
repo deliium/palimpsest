@@ -112,7 +112,7 @@ def test_pins_appear_exactly() -> None:
     ):
         assert token in page
     assert SUPPLY_CHAIN_ROUTE_COUNT == 7
-    assert len(V4_OWNED_CAPABILITY_FLAGS) == 10
+    assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
 
 
 def test_architecture_and_configuration_surfaces() -> None:

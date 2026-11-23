@@ -44,7 +44,7 @@ def test_exact_pins() -> None:
 
 
 def test_no_v57_runner_schema_exists() -> None:
-    assert "runner-config-v60" not in SUPPORTED_RUNNER_SCHEMA_VERSIONS
+    assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
 
 
 def test_no_new_write_pair_reservation() -> None:
@@ -79,7 +79,7 @@ def test_catalog_is_160_with_evidence_families_last() -> None:
     ]
 
 
-def test_formal_rules_flag_is_owned_and_two_flags_remain_unowned() -> None:
+def test_formal_rules_flag_is_owned_and_one_flag_remains_unowned() -> None:
     assert Flags(formal_rules=True).owned_enabled_names() == ("formal_rules",)
     assert Flags(legal_disputes=True).owned_enabled_names() == ("legal_disputes",)
     assert (
@@ -87,13 +87,12 @@ def test_formal_rules_flag_is_owned_and_two_flags_remain_unowned() -> None:
             [
                 name
                 for name in (
-                    "ecological_feedback",
                     "disasters",
                 )
                 if Flags(**{name: True}).unimplemented_enabled_names()
             ]
         )
-        == 2
+        == 1
     )
 
 
