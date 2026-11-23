@@ -158,6 +158,9 @@ class PersistentSimulationService:
             travel_network_active=self._engine.travel_network_active,
             measurement_active=bool(state.instrument_states),
             disease_active=self._engine._disease_mechanics is not None,
+            ecological_feedback_active=(
+                self._engine._ecological_resources is not None
+            ),
         )
         production_rows: SnapshotExtensions = {}
         if codec_version in {
@@ -181,6 +184,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows = {
@@ -208,6 +212,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows["active_hazards"] = tuple(state.active_hazards)
@@ -230,6 +235,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows["artifacts"] = tuple(state.artifacts.values())
@@ -251,6 +257,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows["lifecycle_records"] = tuple(self._engine.lifecycle_records)
@@ -270,6 +277,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             graph = self._engine.kinship_graph
@@ -292,6 +300,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows["dependency_need_registers"] = tuple(
@@ -310,6 +319,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows["repositories"] = tuple(state.repositories.values())
@@ -324,6 +334,7 @@ class PersistentSimulationService:
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
         }:
             production_rows["corpse_custody_item_ids"] = tuple(
@@ -361,7 +372,9 @@ class PersistentSimulationService:
                     key=lambda row: row.item_id.value,
                 )
             )
-        if codec_version == "v22":
+        if codec_version == "v22" or (
+            codec_version == "v23" and self._engine._disease_mechanics is not None
+        ):
             from simulation.disease_checkpoint import (
                 DiseaseCheckpointRow,
                 DiseaseCheckpointSection,
@@ -399,6 +412,30 @@ class PersistentSimulationService:
                         key=lambda row: row.item_id.value,
                     )
                 )
+        if codec_version == "v23":
+            from simulation.ecological_resources_checkpoint import (
+                checkpoint_section_from_rows,
+            )
+
+            ecology_spec = self._engine._ecological_resources
+            assert ecology_spec is not None
+            assert state.ecological_resources is not None
+            assert state.ecological_policy_digest is not None
+            assert self._engine._environmental_dynamics is not None
+            production_rows["ecological_resources"] = checkpoint_section_from_rows(
+                policy_sha256=state.ecological_policy_digest,
+                rows=tuple(
+                    (
+                        row.resource_id,
+                        row.minimum_capacity_tenths,
+                        row.damage_tenths,
+                    )
+                    for row in state.ecological_resources.values()
+                ),
+            )
+            production_rows["environmental_dynamics"] = (
+                self._engine._environmental_dynamics
+            )
         draft = WorldSnapshot(
             snapshot_id=snapshot_id,
             run_id=self._engine.run_id,
@@ -457,6 +494,8 @@ class PersistentSimulationService:
             instrument_states=draft.instrument_states,
             measurement_references=draft.measurement_references,
             disease_mechanics=getattr(draft, "disease_mechanics", None),
+            ecological_resources=getattr(draft, "ecological_resources", None),
+            environmental_dynamics=getattr(draft, "environmental_dynamics", None),
         )
 
     async def resolve_tick(

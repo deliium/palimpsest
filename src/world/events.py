@@ -94,6 +94,7 @@ EVENT_SCHEMA_REPLAY_V21: Final[int] = 21
 EVENT_SCHEMA_REPLAY_V22: Final[int] = 22
 EVENT_SCHEMA_REPLAY_V23: Final[int] = 23
 EVENT_SCHEMA_REPLAY_V24: Final[int] = 24
+EVENT_SCHEMA_REPLAY_V25: Final[int] = 25
 EVENT_SCHEMA_REPLAY_V27: Final[int] = 27
 EVENT_SCHEMA_REPLAY_V28: Final[int] = 28
 SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
@@ -122,6 +123,7 @@ SUPPORTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }
@@ -151,6 +153,7 @@ REPLAYABLE_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }
@@ -180,6 +183,7 @@ PHYSICAL_REPLAY_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -205,6 +209,7 @@ _PRODUCTION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -229,6 +234,7 @@ _ENVIRONMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -252,6 +258,7 @@ _ARTIFACT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -274,6 +281,7 @@ _LIFECYCLE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -295,6 +303,7 @@ _NEW_AGENT_INIT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -315,6 +324,7 @@ _KINSHIP_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -334,6 +344,7 @@ _DEPENDENCY_CARE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -2403,6 +2414,35 @@ class DiseaseStateChanged:
 
 
 @dataclass(frozen=True, slots=True)
+class EcologicalResourceChanged:
+    """Local capacity-damage transition for one managed renewable node."""
+
+    resource_id: EntityId
+    before_damage_tenths: int
+    after_damage_tenths: int
+    kind: Literal["ecological_resource_changed"] = field(
+        default="ecological_resource_changed", init=False
+    )
+
+    def __post_init__(self) -> None:
+        if type(self.resource_id) is not EntityId:
+            raise TypeError("EcologicalResourceChanged.resource_id must be EntityId")
+        if type(self.before_damage_tenths) is not int or isinstance(
+            self.before_damage_tenths, bool
+        ):
+            raise ValueError("ecological_resource_changed_before_invalid")
+        if type(self.after_damage_tenths) is not int or isinstance(
+            self.after_damage_tenths, bool
+        ):
+            raise ValueError("ecological_resource_changed_after_invalid")
+        if self.before_damage_tenths < 0 or self.after_damage_tenths < 0:
+            raise ValueError("ecological_resource_changed_damage_negative")
+        if self.before_damage_tenths == self.after_damage_tenths:
+            raise ValueError("ecological_resource_changed_no_change")
+        _reject_presentation_fields(self.kind, self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
 class InstrumentCalibrated:
     """Effect-complete adjustment against a physical reference."""
 
@@ -3337,6 +3377,7 @@ EventDetails = (
     | MeasurementTaken
     | InstrumentCalibrated
     | DiseaseStateChanged
+    | EcologicalResourceChanged
     | CorpseCustodyOpened
     | TakenFromCorpse
     | PossessionClaimAsserted
@@ -3418,6 +3459,7 @@ _DETAIL_TYPES: Final[frozenset[type]] = frozenset(
         MeasurementTaken,
         InstrumentCalibrated,
         DiseaseStateChanged,
+        EcologicalResourceChanged,
         CorpseCustodyOpened,
         TakenFromCorpse,
         PossessionClaimAsserted,
@@ -3451,16 +3493,25 @@ _INFRASTRUCTURE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     }
 )
 _INFRASTRUCTURE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V23, EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V24,
-        EVENT_SCHEMA_REPLAY_V28}
+    {
+        EVENT_SCHEMA_REPLAY_V23,
+        EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
+    }
 )
 
 _TRAVEL_NETWORK_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {RouteConditionChanged}
 )
 _TRAVEL_NETWORK_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V27, EVENT_SCHEMA_REPLAY_V24,
-        EVENT_SCHEMA_REPLAY_V28}
+    {
+        EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
+        EVENT_SCHEMA_REPLAY_V27,
+        EVENT_SCHEMA_REPLAY_V28,
+    }
 )
 
 _MEASUREMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
@@ -3468,13 +3519,20 @@ _MEASUREMENT_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
 )
 _MEASUREMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
     {EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28}
 )
 _DISEASE_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
     {DiseaseStateChanged}
 )
 _DISEASE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
-    {EVENT_SCHEMA_REPLAY_V24}
+    {EVENT_SCHEMA_REPLAY_V24, EVENT_SCHEMA_REPLAY_V25}
+)
+_ECOLOGY_DETAIL_TYPES: Final[frozenset[type]] = frozenset(
+    {EcologicalResourceChanged}
+)
+_ECOLOGY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
+    {EVENT_SCHEMA_REPLAY_V25}
 )
 
 
@@ -3504,6 +3562,7 @@ _KNOWLEDGE_REPOSITORY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3520,6 +3579,7 @@ _EXPERIMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3535,6 +3595,7 @@ _POSSESSION_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3552,6 +3613,7 @@ _COMMITMENT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3566,6 +3628,7 @@ _EXCHANGE_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3587,6 +3650,7 @@ _PROJECT_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3601,6 +3665,7 @@ _PUBLIC_GOOD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3614,6 +3679,7 @@ _JOURNEY_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3684,6 +3750,7 @@ _DURABLE_RECORD_EVENT_SCHEMAS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }
 )
@@ -3812,6 +3879,8 @@ def _payload_effect_complete(details: EventDetails, *, schema_version: int) -> b
         return schema_version in _MEASUREMENT_EVENT_SCHEMAS
     if type(details) in _DISEASE_DETAIL_TYPES:
         return schema_version in _DISEASE_EVENT_SCHEMAS
+    if type(details) in _ECOLOGY_DETAIL_TYPES:
+        return schema_version in _ECOLOGY_EVENT_SCHEMAS
     if type(details) in _INFRASTRUCTURE_DETAIL_TYPES:
         return schema_version in _INFRASTRUCTURE_EVENT_SCHEMAS
     if type(details) in _PUBLIC_GOOD_DETAIL_TYPES:
@@ -4109,6 +4178,8 @@ def target_id_for_details(details: EventDetails) -> EntityId | None:
             return reference_id
         case DiseaseStateChanged(body_id=body_id):
             return body_id
+        case EcologicalResourceChanged(resource_id=resource_id):
+            return resource_id
         case (
             CorpseCustodyOpened(body_id=body_id)
             | PossessionClaimAsserted(decedent_id=body_id)
@@ -4325,6 +4396,15 @@ class WorldEvent:
                 _LOG.error(
                     "invalid_event_schema_version kind=%s schema_version=%s "
                     "reason_code=disease_mechanics_requires_v24",
+                    self.details.kind,
+                    self.schema_version,
+                )
+                raise ValueError(EventValidationCode.INVALID_SCHEMA_VERSION.value)
+        if type(self.details) in _ECOLOGY_DETAIL_TYPES:
+            if self.schema_version not in _ECOLOGY_EVENT_SCHEMAS:
+                _LOG.error(
+                    "invalid_event_schema_version kind=%s schema_version=%s "
+                    "reason_code=ecological_resources_requires_v25",
                     self.details.kind,
                     self.schema_version,
                 )
@@ -4956,6 +5036,13 @@ def build_occurrence_context(
                 origin_location_id=None,
                 destination_location_id=None,
                 affected_entity_ids=(),
+                private_recipient_ids=(),
+            )
+        case EcologicalResourceChanged(resource_id=resource_id):
+            return OccurrenceContext(
+                origin_location_id=origin_location_id,
+                destination_location_id=None,
+                affected_entity_ids=(resource_id,),
                 private_recipient_ids=(),
             )
         case (

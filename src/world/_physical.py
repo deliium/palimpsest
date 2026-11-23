@@ -26,6 +26,7 @@ from world.environment import (
 from world.events import (
     CorpseCustodyOpened,
     Died,
+    EcologicalResourceChanged,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
     EventDetails,
@@ -69,6 +70,14 @@ __all__: list[str] = [
     "PendingSystemStep",
     "apply_autonomous_physical_step",
 ]
+
+
+def _exact_physical_tenths(value: float, *, code: str) -> int:
+    """Require an already-rounded tenth-unit physical quantity."""
+    rounded = round_physical(value)
+    if rounded != float(value):
+        raise ValueError(code)
+    return round(rounded * 10.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +207,8 @@ def apply_autonomous_physical_step(
     dependency_health_damage_by_entity: Mapping[EntityId, float] | None = None,
     possession_succession_active: bool = False,
     public_goods_active: bool = False,
+    ecological_parameters: Mapping[EntityId, tuple[int, int]] | None = None,
+    ecological_tick_start_quantities: Mapping[EntityId, float] | None = None,
 ) -> PendingSystemStep:
     """Apply weather, regeneration, metabolism, and exposure in canonical order.
 
@@ -232,6 +243,24 @@ def apply_autonomous_physical_step(
         raise TypeError(
             "environmental_dynamics must be EnvironmentalDynamicsSpec or None"
         )
+    ecology_rows = state.ecological_resources
+    if ecology_rows is None:
+        if (
+            ecological_parameters is not None
+            or ecological_tick_start_quantities is not None
+        ):
+            raise ValueError("ecological_pressure_without_channel")
+        ecology_params: Mapping[EntityId, tuple[int, int]] | None = None
+        ecology_starts: Mapping[EntityId, float] | None = None
+    else:
+        if ecological_parameters is None or ecological_tick_start_quantities is None:
+            raise ValueError("ecological_channel_requires_pressure")
+        if set(ecological_parameters) != set(ecology_rows):
+            raise ValueError("ecological_parameter_set_mismatch")
+        if set(ecological_tick_start_quantities) != set(ecology_rows):
+            raise ValueError("ecological_tick_start_set_mismatch")
+        ecology_params = ecological_parameters
+        ecology_starts = ecological_tick_start_quantities
 
     working = state
     semantic_mutation = False
@@ -344,9 +373,78 @@ def apply_autonomous_physical_step(
 
     resources = dict(working.resources)
     resources_changed = False
+    ecology_working = None if ecology_rows is None else dict(ecology_rows)
+    ecology_changed = False
+    ecology_damaged = 0
+    ecology_restored = 0
     for resource_id in sorted(resources, key=lambda value: value.value):
         resource = resources[resource_id]
+        managed_row = (
+            None if ecology_working is None else ecology_working.get(resource_id)
+        )
+        capacity_cap = resource.maximum_quantity
+        if managed_row is not None:
+            assert ecology_working is not None
+            assert ecology_params is not None and ecology_starts is not None
+            from world._ecological_resources import (
+                advance_stock_damage,
+                effective_capacity_tenths,
+            )
+
+            if resource_id not in ecology_starts:
+                raise ValueError("ecological_tick_start_missing")
+            start_qty = ecology_starts[resource_id]
+            allowance_tenths, recovery_tenths = ecology_params[resource_id]
+            baseline_tenths = _exact_physical_tenths(
+                resource.maximum_quantity, code="ecological_baseline_grid_invalid"
+            )
+            start_tenths = _exact_physical_tenths(
+                start_qty, code="ecological_start_grid_invalid"
+            )
+            post_tenths = _exact_physical_tenths(
+                resource.quantity, code="ecological_post_grid_invalid"
+            )
+            next_row = advance_stock_damage(
+                managed_row,
+                baseline_tenths=baseline_tenths,
+                start_quantity_tenths=start_tenths,
+                post_command_quantity_tenths=post_tenths,
+                allowance_tenths=allowance_tenths,
+                recovery_tenths=recovery_tenths,
+            )
+            if next_row.damage_tenths != managed_row.damage_tenths:
+                ecology_working[resource_id] = next_row
+                ecology_changed = True
+                semantic_mutation = True
+                if next_row.damage_tenths > managed_row.damage_tenths:
+                    ecology_damaged += 1
+                else:
+                    ecology_restored += 1
+                ordinal = family_ordinals[SystemEffectFamily.REGENERATION]
+                family_ordinals[SystemEffectFamily.REGENERATION] = ordinal + 1
+                pending.append(
+                    _pending_system(
+                        effect_family=SystemEffectFamily.REGENERATION,
+                        entity_id=resource_id,
+                        family_ordinal=ordinal,
+                        details=EcologicalResourceChanged(
+                            resource_id=resource_id,
+                            before_damage_tenths=managed_row.damage_tenths,
+                            after_damage_tenths=next_row.damage_tenths,
+                        ),
+                        origin_location_id=resource.location_id,
+                    )
+                )
+            else:
+                ecology_working[resource_id] = next_row
+            capacity_tenths = effective_capacity_tenths(
+                next_row, baseline_tenths=baseline_tenths
+            )
+            capacity_cap = round_physical(capacity_tenths / 10.0)
+            managed_row = next_row
+
         rate = resource.regeneration_per_tick
+        shortage = False
         if spec is not None:
             season = spec.season_at(tick_value)
             try:
@@ -356,9 +454,12 @@ def apply_autonomous_physical_step(
                     raise ValueError("yield_undefined") from exc
                 raise
             rate = round_physical(resource.regeneration_per_tick * multiplier)
-            if spec.shortage_suppresses(resource.kind, tick_value):
+            shortage = spec.shortage_suppresses(resource.kind, tick_value)
+            if shortage:
                 rate = 0.0
-        if working.infrastructure is not None:
+        if managed_row is not None and shortage:
+            rate = 0.0
+        elif working.infrastructure is not None:
             from world._infrastructure import effective_resource_regen_delta
 
             regen_delta = effective_resource_regen_delta(
@@ -367,10 +468,12 @@ def apply_autonomous_physical_step(
             )
             if regen_delta != 0.0:
                 rate = round_physical(rate + regen_delta)
+            if managed_row is not None and rate < 0.0:
+                rate = 0.0
         if rate == 0.0:
             continue
         uncapped = round_physical(resource.quantity + rate)
-        resulting = min(uncapped, resource.maximum_quantity)
+        resulting = min(uncapped, capacity_cap)
         resulting = round_physical(resulting)
         if resulting == resource.quantity:
             continue
@@ -406,6 +509,22 @@ def apply_autonomous_physical_step(
                         origin_location_id=resource.location_id,
                     )
                 )
+    if ecology_changed:
+        assert ecology_working is not None
+        working = rebuild_world_state(
+            working,
+            ecological_resources=ecology_working,
+            ecological_policy_digest=working.ecological_policy_digest,
+            replace_ecological_resources=True,
+        )
+        _LOG.debug(
+            "ecological_resources_advanced tick=%s managed_count=%s "
+            "damaged_count=%s restored_count=%s",
+            tick_value,
+            len(ecology_working),
+            ecology_damaged,
+            ecology_restored,
+        )
     if resources_changed:
         working = rebuild_world_state(working, resources=resources)
 

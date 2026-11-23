@@ -689,12 +689,18 @@ class ReplayService:
                 new_agent_initialization=request.new_agent_initialization,
                 kinship_spec=request.kinship_spec,
                 disease_mechanics=request.disease_mechanics,
+                ecological_resources=request.ecological_resources,
             )
         except ValueError as exc:
-            if str(exc) == "disease_policy_mismatch":
+            if str(exc) in {
+                "disease_policy_mismatch",
+                "ecology_policy_mismatch",
+                "ecology_environment_mismatch",
+            }:
                 _LOGGER.error(
-                    "%s code=disease_policy_mismatch run_id=%s",
+                    "%s code=%s run_id=%s",
                     EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                    str(exc),
                     run_id.value,
                 )
                 return self._failed(
@@ -743,10 +749,13 @@ class ReplayService:
 
         disease_channel = getattr(snapshot, "disease_mechanics", None) is not None
         disease_policy_bound = engine._disease_mechanics is not None
+        ecology_channel = getattr(snapshot, "ecological_resources", None) is not None
+        ecology_policy_bound = engine._ecological_resources is not None
         mode = (
             ReplayMode.CONTINUATION
             if target_tick == head_next
             and (not disease_channel or disease_policy_bound)
+            and (not ecology_channel or ecology_policy_bound)
             else ReplayMode.READONLY
         )
         predecessor = (
@@ -797,6 +806,14 @@ class ReplayService:
         )
         if disease_state is not None and outcome.engine._disease_mechanics is None:
             raise RuntimeError("open_durable requires disease policy")
+        ecology_state = getattr(
+            outcome.engine._snapshot.world.state, "ecological_resources", None
+        )
+        if (
+            ecology_state is not None
+            and outcome.engine._ecological_resources is None
+        ):
+            raise RuntimeError("open_durable requires ecology policy")
         return PersistentSimulationService(
             outcome.engine,
             journal,
@@ -862,6 +879,7 @@ class ReplayService:
         actor_id: str | None = None,
         event_type: str | None = None,
         exclude_event_type: str | None = None,
+        exclude_event_types: frozenset[str] | set[str] | None = None,
     ) -> ReplayEventPage:
         """Detached keyset page of events ordered by ``(tick, sequence)``.
 
@@ -885,6 +903,17 @@ class ReplayService:
             raise ValueError("after_sequence must be an int")
         if after_sequence < -1:
             raise ValueError("after_sequence must be >= -1")
+        excluded: frozenset[str] = frozenset()
+        if exclude_event_types is not None:
+            if isinstance(exclude_event_types, (str, bytes)) or not isinstance(
+                exclude_event_types, (frozenset, set)
+            ):
+                raise TypeError("exclude_event_types must be a set of strings")
+            excluded = frozenset(exclude_event_types)
+        if exclude_event_type is not None:
+            if type(exclude_event_type) is not str:
+                raise TypeError("exclude_event_type must be str or None")
+            excluded = excluded | {exclude_event_type}
         list_events_keyset = getattr(self._journal, "list_events_keyset", None)
 
         def _matches_filters(event: WorldEvent) -> bool:
@@ -896,7 +925,7 @@ class ReplayService:
                 event_kind = getattr(details, "kind", None)
             if event_type is not None and event_kind != event_type:
                 return False
-            if exclude_event_type is not None and event_kind == exclude_event_type:
+            if event_kind in excluded:
                 return False
             return True
 
@@ -975,11 +1004,12 @@ class ReplayService:
                     actor_id=actor_id,
                     event_type=event_type,
                     exclude_event_type=exclude_event_type,
+                    exclude_event_types=excluded or None,
                     **kwargs,
                 )
             except TypeError:
                 # Never return unfiltered rows when exclude is required.
-                if exclude_event_type is not None:
+                if excluded:
                     filtered = await _exclusive_scan()
                 else:
                     try:
@@ -1207,12 +1237,18 @@ class ReplayService:
                 new_agent_initialization=request.new_agent_initialization,
                 kinship_spec=request.kinship_spec,
                 disease_mechanics=request.disease_mechanics,
+                ecological_resources=request.ecological_resources,
             )
         except ValueError as exc:
-            if str(exc) == "disease_policy_mismatch":
+            if str(exc) in {
+                "disease_policy_mismatch",
+                "ecology_policy_mismatch",
+                "ecology_environment_mismatch",
+            }:
                 _LOGGER.error(
-                    "%s code=disease_policy_mismatch run_id=%s",
+                    "%s code=%s run_id=%s",
                     EngineDiagnosticCode.CHECKPOINT_CORRUPT.value,
+                    str(exc),
                     run_id.value,
                 )
                 return self._failed(
@@ -1266,10 +1302,13 @@ class ReplayService:
             )
         disease_channel = getattr(snapshot, "disease_mechanics", None) is not None
         disease_policy_bound = engine._disease_mechanics is not None
+        ecology_channel = getattr(snapshot, "ecological_resources", None) is not None
+        ecology_policy_bound = engine._ecological_resources is not None
         mode = (
             ReplayMode.CONTINUATION
             if target_tick == head_next
             and (not disease_channel or disease_policy_bound)
+            and (not ecology_channel or ecology_policy_bound)
             else ReplayMode.READONLY
         )
         predecessor = (

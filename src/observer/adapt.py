@@ -76,9 +76,13 @@ def _text(value: EntityId | None) -> str | None:
 
 
 HIDDEN_OBSERVER_EVENT_TYPE: Final[str] = "disease_state_changed"
-_HIDDEN_OBSERVER_KINDS: Final[frozenset[str]] = frozenset(
-    {HIDDEN_OBSERVER_EVENT_TYPE}
+HIDDEN_OBSERVER_EVENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "disease_state_changed",
+        "ecological_resource_changed",
+    }
 )
+_HIDDEN_OBSERVER_KINDS: Final[frozenset[str]] = HIDDEN_OBSERVER_EVENT_TYPES
 
 
 def is_hidden_observer_event(event: WorldEvent | object) -> bool:
@@ -329,6 +333,7 @@ def adapt_events(events: Sequence[WorldEvent]) -> tuple[ObserverEvent, ...]:
 
 __all__ = [
     "HIDDEN_OBSERVER_EVENT_TYPE",
+    "HIDDEN_OBSERVER_EVENT_TYPES",
     "adapt_event",
     "adapt_events",
     "is_hidden_observer_event",

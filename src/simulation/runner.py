@@ -92,6 +92,7 @@ from simulation.bootstrap import (
     AgentRegistration,
     RegistrationTranslator,
     WorldBootstrap,
+    build_initial_ecological_resources,
     registration_translator,
 )
 from simulation.bootstrap import (
@@ -2616,6 +2617,18 @@ class SimulationRunner:
                     config.disease_mechanics.latent_ticks,
                     config.schema_version,
                 )
+            ecological_bootstrap = build_initial_ecological_resources(config)
+            ecological_rows = None
+            ecological_digest = None
+            if ecological_bootstrap is not None:
+                ecological_rows, ecological_digest = ecological_bootstrap
+                assert config.ecological_resources is not None
+                _LOG.info(
+                    "runner_construction_ecology_channel managed_count=%s "
+                    "schema_version=%s",
+                    len(ecological_rows),
+                    config.schema_version,
+                )
             bootstrap = WorldBootstrap(
                 world_id=config.scenario.world_id,
                 revision=config.scenario.revision,
@@ -2638,6 +2651,8 @@ class SimulationRunner:
                 ),
                 regions_migration=config.regions_migration,
                 disease_state=disease_bootstrap_state,
+                ecological_resources=ecological_rows,
+                ecological_policy_digest=ecological_digest,
             )
             translator = registration_translator(bootstrap)
             _validate_registration_ownership(config, bootstrap)
@@ -2844,6 +2859,11 @@ class SimulationRunner:
                 disease_mechanics=(
                     config.disease_mechanics
                     if config.v4_capability_flags.epidemics
+                    else None
+                ),
+                ecological_resources=(
+                    config.ecological_resources
+                    if config.v4_capability_flags.ecological_feedback
                     else None
                 ),
             )
@@ -7643,6 +7663,8 @@ def _engine_snapshot(
         infrastructure_networks_active=engine.infrastructure_networks_active,
         travel_network_active=engine.travel_network_active,
         measurement_active=bool(state.instrument_states),
+        disease_active=engine._disease_mechanics is not None,
+        ecological_feedback_active=engine._ecological_resources is not None,
     )
     production_rows: SnapshotExtensions = {}
     if codec_version in {
@@ -7663,7 +7685,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows = {
             "structures": tuple(state.structures.values()),
@@ -7687,7 +7709,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows["active_hazards"] = tuple(state.active_hazards)
     if codec_version in {
@@ -7706,7 +7728,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows["artifacts"] = tuple(state.artifacts.values())
     if codec_version in {
@@ -7724,7 +7746,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows["lifecycle_records"] = tuple(engine.lifecycle_records)
     if codec_version in {
@@ -7740,7 +7762,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         kinship_graph = engine.kinship_graph
         from world.kinship import KinshipGraph
@@ -7759,7 +7781,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows["dependency_need_registers"] = tuple(
             engine._dependency_need_registers.values()
@@ -7774,7 +7796,7 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows["repositories"] = tuple(state.repositories.values())
     if codec_version in {
@@ -7785,25 +7807,48 @@ def _engine_snapshot(
         "v17",
         "v18",
         "v19",
-        "v20", "v21", "v25", "v26",
+        "v20", "v21", "v22", "v23", "v25", "v26",
     }:
         production_rows["corpse_custody_item_ids"] = tuple(
             sorted(state.corpse_custody_item_ids, key=lambda item: item.value)
         )
-    if codec_version in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25", "v26"}:
+    if codec_version in {
+        "v15",
+        "v16",
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+        "v21",
+        "v22",
+        "v23",
+        "v25",
+        "v26",
+    }:
         production_rows["exchange_offers"] = tuple(state.exchange_offers)
-    if codec_version in {"v17", "v18", "v19", "v20", "v21", "v25", "v26"}:
+    if codec_version in {
+        "v17",
+        "v18",
+        "v19",
+        "v20",
+        "v21",
+        "v22",
+        "v23",
+        "v25",
+        "v26",
+    }:
         production_rows["collective_projects"] = tuple(
             state.collective_projects.values()
         )
     if codec_version in {"v19", "v20"} or (
-        codec_version in {"v21", "v25", "v26"} and state.regions_migration is not None
+        codec_version in {"v21", "v22", "v23", "v25", "v26"}
+        and state.regions_migration is not None
     ):
         production_rows["regions_migration"] = state.regions_migration
         production_rows["journeys"] = (
             None if state.journeys is None else tuple(state.journeys.values())
         )
-    if codec_version in {"v21", "v25", "v26"}:
+    if codec_version in {"v21", "v22", "v23", "v25", "v26"}:
         production_rows["infrastructure"] = (
             ()
             if state.infrastructure is None
@@ -7829,6 +7874,71 @@ def _engine_snapshot(
                 key=lambda row: row.item_id.value,
             )
         )
+    if codec_version == "v22" or (
+        codec_version == "v23" and engine._disease_mechanics is not None
+    ):
+        from simulation.disease_checkpoint import (
+            DiseaseCheckpointRow,
+            DiseaseCheckpointSection,
+            policy_sha256_for_spec,
+        )
+
+        disease_spec = engine._disease_mechanics
+        assert disease_spec is not None
+        disease_rows = state.disease_state or {}
+        production_rows["disease_mechanics"] = DiseaseCheckpointSection(
+            rows=tuple(
+                DiseaseCheckpointRow(
+                    body_id=entity_id,
+                    phase=row.phase.value,
+                    due_tick=row.due_tick,
+                    symptomatic=row.symptomatic,
+                )
+                for entity_id, row in sorted(
+                    disease_rows.items(), key=lambda item: item[0].value
+                )
+            ),
+            policy_sha256=policy_sha256_for_spec(disease_spec),
+        )
+        _LOG.debug(
+            "[FIX] disease checkpoint section assembled codec=%s row_count=%s",
+            codec_version,
+            len(disease_rows),
+        )
+        if state.instrument_states:
+            production_rows["instrument_states"] = tuple(
+                sorted(
+                    state.instrument_states.values(),
+                    key=lambda row: row.item_id.value,
+                )
+            )
+            production_rows["measurement_references"] = tuple(
+                sorted(
+                    state.measurement_references.values(),
+                    key=lambda row: row.item_id.value,
+                )
+            )
+    if codec_version == "v23":
+        from simulation.ecological_resources_checkpoint import (
+            checkpoint_section_from_rows,
+        )
+
+        assert engine._ecological_resources is not None
+        assert state.ecological_resources is not None
+        assert state.ecological_policy_digest is not None
+        assert engine._environmental_dynamics is not None
+        production_rows["ecological_resources"] = checkpoint_section_from_rows(
+            policy_sha256=state.ecological_policy_digest,
+            rows=tuple(
+                (
+                    row.resource_id,
+                    row.minimum_capacity_tenths,
+                    row.damage_tenths,
+                )
+                for row in state.ecological_resources.values()
+            ),
+        )
+        production_rows["environmental_dynamics"] = engine._environmental_dynamics
     draft = WorldSnapshot(
         snapshot_id=snapshot_id,
         run_id=engine.run_id,
@@ -7891,6 +8001,9 @@ def _engine_snapshot(
         measurement_references=getattr(
             draft, "measurement_references", ()
         ),
+        disease_mechanics=getattr(draft, "disease_mechanics", None),
+        ecological_resources=getattr(draft, "ecological_resources", None),
+        environmental_dynamics=getattr(draft, "environmental_dynamics", None),
     )
 
 

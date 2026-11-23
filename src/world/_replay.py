@@ -59,6 +59,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V24,
+    EVENT_SCHEMA_REPLAY_V25,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     AgentCreated,
@@ -83,6 +84,7 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    EcologicalResourceChanged,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
     ExchangeCompleted,
@@ -187,6 +189,7 @@ from world.values import (
     ResourceKind,
     TemperatureCelsius,
     Thirst,
+    round_physical,
 )
 
 _LOG: Final[logging.Logger] = logging.getLogger("simulation.replay")
@@ -428,6 +431,7 @@ def _prepare_events(
             EVENT_SCHEMA_REPLAY_V22,
             EVENT_SCHEMA_REPLAY_V23,
             EVENT_SCHEMA_REPLAY_V24,
+            EVENT_SCHEMA_REPLAY_V25,
             EVENT_SCHEMA_REPLAY_V27,
             EVENT_SCHEMA_REPLAY_V28,
         }:
@@ -634,6 +638,37 @@ def _apply_event_effect(
             return _project_flee_success(state, event, fled), True
         case WeatherChanged() as weather:
             return _project_weather(state, weather), True
+        case EcologicalResourceChanged() as ecology_changed:
+            from world._ecological_resources import (
+                EcologicalInvariantError,
+                project_ecological_resource_changed,
+            )
+            from world.effects import SystemCause, SystemEffectFamily
+
+            cause = event.cause
+            if (
+                type(cause) is not SystemCause
+                or cause.effect_family is not SystemEffectFamily.REGENERATION
+                or cause.entity_id != ecology_changed.resource_id
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            resource = state.resources.get(ecology_changed.resource_id)
+            if resource is None:
+                raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
+            if (
+                event.occurrence is None
+                or event.occurrence.origin_location_id != resource.location_id
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            try:
+                next_state = project_ecological_resource_changed(
+                    state, details=ecology_changed
+                )
+            except EcologicalInvariantError as exc:
+                raise ProjectionError(
+                    ProjectionErrorCode.INVARIANT_FAILED
+                ) from exc
+            return next_state, next_state is not state
         case ResourceRegenerated() as regenerated:
             return _project_regeneration(state, regenerated), True
         case NeedsApplied() as needs:
@@ -2032,6 +2067,27 @@ def _project_regeneration(
     if details.resource_id not in state.resources:
         raise ProjectionError(ProjectionErrorCode.TARGET_MISSING)
     resource = state.resources[details.resource_id]
+    if details.quantity_delta <= 0.0:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    expected = round_physical(resource.quantity + details.quantity_delta)
+    if round_physical(details.resulting_quantity) != expected:
+        raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+    if state.ecological_resources is not None:
+        row = state.ecological_resources.get(details.resource_id)
+        if row is not None:
+            from world._ecological_resources import effective_capacity_tenths
+
+            if round_physical(resource.maximum_quantity) != float(
+                resource.maximum_quantity
+            ):
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
+            baseline_tenths = round(
+                round_physical(resource.maximum_quantity) * 10.0
+            )
+            capacity = effective_capacity_tenths(row, baseline_tenths=baseline_tenths)
+            capacity_qty = round_physical(capacity / 10.0)
+            if details.resulting_quantity > capacity_qty:
+                raise ProjectionError(ProjectionErrorCode.INVARIANT_FAILED)
     resources = dict(state.resources)
     resources[details.resource_id] = copy_resource(
         resource, quantity=details.resulting_quantity

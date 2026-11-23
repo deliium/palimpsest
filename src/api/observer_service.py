@@ -40,7 +40,7 @@ from api.observer_schemas import (
     ObserverTickSummaryOut,
 )
 from observer.adapt import (
-    HIDDEN_OBSERVER_EVENT_TYPE,
+    HIDDEN_OBSERVER_EVENT_TYPES,
     adapt_event,
     is_hidden_observer_event,
 )
@@ -467,7 +467,7 @@ class ObserverReadService:
                 limit=limit,
                 actor_id=agent_id,
                 event_type=domain_event_type,
-                exclude_event_type=HIDDEN_OBSERVER_EVENT_TYPE,
+                exclude_event_types=HIDDEN_OBSERVER_EVENT_TYPES,
             )
             pages += 1
             if not page.events:
@@ -541,7 +541,7 @@ class ObserverReadService:
                 after_sequence=after_sequence,
                 to_tick=Tick(to_tick),
                 limit=remaining,
-                exclude_event_type=HIDDEN_OBSERVER_EVENT_TYPE,
+                exclude_event_types=HIDDEN_OBSERVER_EVENT_TYPES,
             )
             if not page.events:
                 break

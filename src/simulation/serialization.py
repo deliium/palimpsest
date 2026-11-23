@@ -186,6 +186,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V24,
+    EVENT_SCHEMA_REPLAY_V25,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     AgentCreated,
@@ -211,6 +212,7 @@ from world.events import (
     Dropped,
     Drunk,
     Eaten,
+    EcologicalResourceChanged,
     EnvironmentalHazardEnded,
     EnvironmentalHazardStarted,
     ExchangeCompleted,
@@ -384,7 +386,12 @@ class DomainSerializationError(ValueError):
 
 def required_domain_schema(value: object) -> int:
     """Return the minimum domain envelope version for nested measurement data."""
-    from world.events import InstrumentCalibrated, MeasurementTaken
+    from world.events import (
+        DiseaseStateChanged,
+        EcologicalResourceChanged,
+        InstrumentCalibrated,
+        MeasurementTaken,
+    )
 
     if type(value) in {Measure, CalibrateInstrument}:
         return SCHEMA_VERSION_V2
@@ -393,7 +400,13 @@ def required_domain_schema(value: object) -> int:
     if type(value) is WorldEvent:
         return (
             SCHEMA_VERSION_V2
-            if type(value.details) in {MeasurementTaken, InstrumentCalibrated}
+            if type(value.details)
+            in {
+                MeasurementTaken,
+                InstrumentCalibrated,
+                DiseaseStateChanged,
+                EcologicalResourceChanged,
+            }
             else SCHEMA_VERSION
         )
     if type(value) is SimulationExport:
@@ -5219,6 +5232,17 @@ def _encode_event_details(value: object) -> dict[str, Any]:
                 "before": _row(before),
                 "after": _row(after),
             }
+        case EcologicalResourceChanged(
+            resource_id=resource_id,
+            before_damage_tenths=before_damage_tenths,
+            after_damage_tenths=after_damage_tenths,
+        ):
+            return {
+                "kind": "ecological_resource_changed",
+                "resource_id": resource_id.value,
+                "before_damage_tenths": before_damage_tenths,
+                "after_damage_tenths": after_damage_tenths,
+            }
         case Searched(
             target_id=target_id,
             success=success,
@@ -6609,7 +6633,11 @@ def _decode_event_details(
     fields = {key: value for key, value in data.items() if key != "kind"}
     try:
         if kind == "measurement_taken":
-            if schema_version not in {EVENT_SCHEMA_REPLAY_V24, EVENT_SCHEMA_REPLAY_V28}:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V24,
+                EVENT_SCHEMA_REPLAY_V25,
+                EVENT_SCHEMA_REPLAY_V28,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if set(fields) != {
                 "reading",
@@ -6634,7 +6662,11 @@ def _decode_event_details(
             except MeasurementSerializationError as exc:
                 raise DomainSerializationError(exc.code, exc.path) from exc
         if kind == "instrument_calibrated":
-            if schema_version not in {EVENT_SCHEMA_REPLAY_V24, EVENT_SCHEMA_REPLAY_V28}:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V24,
+                EVENT_SCHEMA_REPLAY_V25,
+                EVENT_SCHEMA_REPLAY_V28,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             allowed = {
                 "reference_id",
@@ -6676,7 +6708,10 @@ def _decode_event_details(
             except MeasurementSerializationError as exc:
                 raise DomainSerializationError(exc.code, exc.path) from exc
         if kind == "disease_state_changed":
-            if schema_version != EVENT_SCHEMA_REPLAY_V24:
+            if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V24,
+                EVENT_SCHEMA_REPLAY_V25,
+            }:
                 raise DomainSerializationError("invalid_event_schema_version", path)
             if set(fields) != {"body_id", "before", "after"}:
                 raise DomainSerializationError("invalid_fields", path)
@@ -6704,8 +6739,31 @@ def _decode_event_details(
                 after=_decode_row(fields["after"], row_path=f"{path}.after"),
             )
 
+        if kind == "ecological_resource_changed":
+            if schema_version != EVENT_SCHEMA_REPLAY_V25:
+                raise DomainSerializationError("invalid_event_schema_version", path)
+            if set(fields) != {
+                "resource_id",
+                "before_damage_tenths",
+                "after_damage_tenths",
+            }:
+                raise DomainSerializationError("invalid_fields", path)
+            before = fields["before_damage_tenths"]
+            after = fields["after_damage_tenths"]
+            if type(before) is not int or isinstance(before, bool):
+                raise DomainSerializationError("invalid_int", path)
+            if type(after) is not int or isinstance(after, bool):
+                raise DomainSerializationError("invalid_int", path)
+            return EcologicalResourceChanged(
+                resource_id=EntityId(_str_field(fields, "resource_id", path=path)),
+                before_damage_tenths=before,
+                after_damage_tenths=after,
+            )
+
         if kind == "route_condition_changed":
             if schema_version not in {
+                EVENT_SCHEMA_REPLAY_V24,
+                EVENT_SCHEMA_REPLAY_V25,
                 EVENT_SCHEMA_REPLAY_V27,
                 EVENT_SCHEMA_REPLAY_V28,
             }:
@@ -8182,13 +8240,22 @@ def _decode_experiment_resolved(
 def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str, Any]:
     details_kind = value.details.kind
     if details_kind == "disease_state_changed":
-        if value.schema_version != EVENT_SCHEMA_REPLAY_V24 or wire_schema != 2:
+        if value.schema_version not in {
+            EVENT_SCHEMA_REPLAY_V24,
+            EVENT_SCHEMA_REPLAY_V25,
+        } or wire_schema != 2:
+            raise DomainSerializationError(
+                "invalid_event_schema_version", "$.schema_version"
+            )
+    if details_kind == "ecological_resource_changed":
+        if value.schema_version != EVENT_SCHEMA_REPLAY_V25 or wire_schema != 2:
             raise DomainSerializationError(
                 "invalid_event_schema_version", "$.schema_version"
             )
     if details_kind in {"measurement_taken", "instrument_calibrated"}:
         if value.schema_version not in {
             EVENT_SCHEMA_REPLAY_V24,
+            EVENT_SCHEMA_REPLAY_V25,
             EVENT_SCHEMA_REPLAY_V28,
         } or wire_schema != 2:
             raise DomainSerializationError(
@@ -8208,6 +8275,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8225,6 +8293,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8258,6 +8327,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8292,6 +8362,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8326,6 +8397,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8351,6 +8423,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8379,6 +8452,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8402,6 +8476,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8429,6 +8504,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8450,6 +8526,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8466,6 +8543,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         _LOG.error(
@@ -8490,6 +8568,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         _LOG.error(
@@ -8513,6 +8592,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8524,6 +8604,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8546,6 +8627,7 @@ def _encode_world_event(value: WorldEvent, *, wire_schema: int = 1) -> dict[str,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V28,
     }:
         raise DomainSerializationError(
@@ -8729,8 +8811,9 @@ def _decode_world_event(
             EVENT_SCHEMA_REPLAY_V21,
             EVENT_SCHEMA_REPLAY_V22,
             EVENT_SCHEMA_REPLAY_V23,
+            EVENT_SCHEMA_REPLAY_V24,
+            EVENT_SCHEMA_REPLAY_V25,
             EVENT_SCHEMA_REPLAY_V27,
-            EVENT_SCHEMA_REPLAY_V28,
             EVENT_SCHEMA_REPLAY_V28,
         }:
             raise DomainSerializationError("unsupported_schema_version", path)

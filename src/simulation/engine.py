@@ -11,6 +11,7 @@ import logging
 from collections.abc import AsyncIterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from agents.models import AgentId
@@ -772,6 +773,8 @@ class WorldEngine:
         "_dependency_need_registers",
         "_disease_mechanics",
         "_durable_records_spec",
+        "_ecological_parameters",
+        "_ecological_resources",
         "_engine_id",
         "_environmental_dynamics",
         "_experiment_catalog",
@@ -850,6 +853,7 @@ class WorldEngine:
         travel_network_active: bool = False,
         supply_chains_active: bool = False,
         disease_mechanics: object | None = None,
+        ecological_resources: object | None = None,
     ) -> None:
         if type(config) is not SimulationRunConfig:
             raise TypeError("WorldEngine requires SimulationRunConfig")
@@ -859,6 +863,8 @@ class WorldEngine:
         self._bootstrap = bootstrap
         self._measurement_active = bool(bootstrap.instrument_states)
         from simulation.disease_config import DiseaseMechanicsSpec
+        from simulation.ecological_resources_config import EcologicalResourcesSpec
+        from world._ecological_resources import validate_ecological_resources_state
 
         if (
             disease_mechanics is not None
@@ -878,6 +884,55 @@ class WorldEngine:
                 len(self._disease_mechanics.initial_latent_entity_ids),
                 self._disease_mechanics.latent_ticks,
                 self._disease_mechanics.active_ticks,
+            )
+        if (
+            ecological_resources is not None
+            and type(ecological_resources) is not EcologicalResourcesSpec
+        ):
+            raise TypeError(
+                "ecological_resources must be EcologicalResourcesSpec or None"
+            )
+        ecology_on = bootstrap.ecological_resources is not None
+        if ecological_resources is None and ecology_on:
+            raise ValueError("ecological_channel_requires_spec")
+        if ecological_resources is not None and not ecology_on:
+            raise ValueError("ecological_spec_requires_channel")
+        self._ecological_resources = ecological_resources
+        if self._ecological_resources is None:
+            self._ecological_parameters = None
+        else:
+            from simulation.ecological_resources_config import (
+                policy_sha256_for_ecological_resources,
+            )
+
+            digest = policy_sha256_for_ecological_resources(
+                self._ecological_resources
+            )
+            validate_ecological_resources_state(
+                bootstrap.ecological_resources,
+                resources={
+                    resource.entity_id: resource
+                    for resource in bootstrap.resources
+                },
+                policy_digest=bootstrap.ecological_policy_digest,
+                expected_digest=digest,
+                expected_floors={
+                    node.resource_id: node.minimum_capacity_tenths
+                    for node in self._ecological_resources.nodes
+                },
+            )
+            self._ecological_parameters = MappingProxyType(
+                {
+                    node.resource_id: (
+                        node.withdrawal_allowance_tenths,
+                        node.recovery_tenths_per_idle_tick,
+                    )
+                    for node in self._ecological_resources.nodes
+                }
+            )
+            _LOGGER.debug(
+                "ecological_resources_bound managed_count=%s schema=v60",
+                len(self._ecological_resources.nodes),
             )
         self._run_id = run_id if run_id is not None else derive_run_id(config)
         if type(self._run_id) is not RunId:
@@ -1329,6 +1384,7 @@ class WorldEngine:
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
         disease_mechanics: object | None = None,
+        ecological_resources: object | None = None,
     ) -> WorldEngine:
         """Restore an engine at ``AWAITING_OBSERVATION`` from a checkpoint.
 
@@ -1382,6 +1438,13 @@ class WorldEngine:
             policy_sha256_for_spec,
         )
         from simulation.disease_config import DiseaseMechanicsSpec
+        from simulation.ecological_resources_checkpoint import (
+            EcologicalResourcesCheckpointSection,
+        )
+        from simulation.ecological_resources_config import (
+            EcologicalResourcesSpec,
+            policy_sha256_for_ecological_resources,
+        )
         from world._state import WorldState
 
         disease_section = getattr(snapshot, "disease_mechanics", None)
@@ -1406,6 +1469,49 @@ class WorldEngine:
                 raise ValueError("disease_policy_mismatch")
         disease_state = bootstrap.disease_state
 
+        ecology_section = getattr(snapshot, "ecological_resources", None)
+        if ecology_section is not None and type(ecology_section) is not (
+            EcologicalResourcesCheckpointSection
+        ):
+            raise TypeError(
+                "snapshot.ecological_resources must be "
+                "EcologicalResourcesCheckpointSection"
+            )
+        if ecological_resources is not None and type(ecological_resources) is not (
+            EcologicalResourcesSpec
+        ):
+            raise TypeError(
+                "ecological_resources must be EcologicalResourcesSpec or None"
+            )
+        if ecological_resources is not None:
+            if ecology_section is None:
+                raise ValueError("ecology_policy_without_channel")
+            digest = policy_sha256_for_ecological_resources(ecological_resources)
+            if digest != ecology_section.policy_sha256:
+                _LOGGER.error(
+                    "ecology_policy_mismatch reason_code=ecology_policy_mismatch"
+                )
+                raise ValueError("ecology_policy_mismatch")
+        from world.environment import EnvironmentalDynamicsSpec as _EnvSpec
+
+        snapshot_dynamics = getattr(snapshot, "environmental_dynamics", None)
+        if snapshot_dynamics is not None and type(snapshot_dynamics) is not _EnvSpec:
+            raise TypeError(
+                "snapshot.environmental_dynamics must be EnvironmentalDynamicsSpec"
+            )
+        caller_dynamics = _optional_environmental_dynamics(environmental_dynamics)
+        if (
+            caller_dynamics is not None
+            and snapshot_dynamics is not None
+            and caller_dynamics.digest != snapshot_dynamics.digest
+        ):
+            raise ValueError("ecology_environment_mismatch")
+        fold_dynamics = (
+            snapshot_dynamics
+            if snapshot_dynamics is not None
+            else caller_dynamics
+        )
+
         base_state = WorldState(
             snapshot.revision,
             locations=snapshot.locations,
@@ -1428,6 +1534,8 @@ class WorldEngine:
             travel_network=getattr(snapshot, "travel_network", None),
             disease_state=disease_state,
             disease_require_living=False,
+            ecological_resources=bootstrap.ecological_resources,
+            ecological_policy_digest=bootstrap.ecological_policy_digest,
         )
         resolved_catalog = _optional_production_catalog(production_catalog)
         if snapshot.persistence_codec_version == "v3" and resolved_catalog is None:
@@ -1446,7 +1554,7 @@ class WorldEngine:
                 expected_run_id=snapshot.run_id.value,
                 expected_world_id=snapshot.world_id,
                 production_catalog=resolved_catalog,
-                environmental_dynamics=environmental_dynamics,
+                environmental_dynamics=fold_dynamics,
             )
         except ProjectionError as exc:
             _LOGGER.error(
@@ -1493,6 +1601,25 @@ class WorldEngine:
                 "disease_channel_restored row_count=%s policy_bound=%s",
                 len(disease_section.rows),
                 disease_mechanics is not None,
+            )
+        engine._ecological_resources = ecological_resources
+        if ecological_resources is None:
+            engine._ecological_parameters = None
+        else:
+            engine._ecological_parameters = MappingProxyType(
+                {
+                    node.resource_id: (
+                        node.withdrawal_allowance_tenths,
+                        node.recovery_tenths_per_idle_tick,
+                    )
+                    for node in ecological_resources.nodes
+                }
+            )
+        if ecology_section is not None:
+            _LOGGER.debug(
+                "ecological_channel_restored managed_count=%s policy_bound=%s",
+                len(ecology_section.rows),
+                ecological_resources is not None,
             )
         engine._run_id = snapshot.run_id
         engine._translator = registration_translator(bootstrap)
@@ -1559,7 +1686,7 @@ class WorldEngine:
         # Bind them before refolding, just as construction does before live ticks.
         engine._production_catalog = resolved_catalog
         engine._environmental_dynamics = _optional_environmental_dynamics(
-            environmental_dynamics
+            fold_dynamics
         )
         engine._bind_skill_state(
             skill_policy=skill_policy,
@@ -1641,8 +1768,10 @@ class WorldEngine:
             codec_version=snapshot.persistence_codec_version,
             infrastructure=engine._snapshot.world.state.infrastructure,
         )
+        # Prefer snapshot-carried dynamics (v23 ecology) over a caller override;
+        # fold_dynamics already reconciled digest match earlier.
         engine._environmental_dynamics = _optional_environmental_dynamics(
-            environmental_dynamics
+            fold_dynamics
         )
         if type(artifacts_enabled) is not bool:
             raise TypeError("artifacts_enabled must be bool")
@@ -2059,6 +2188,7 @@ class WorldEngine:
         new_agent_initialization: object | None = None,
         kinship_spec: object | None = None,
         disease_mechanics: object | None = None,
+        ecological_resources: object | None = None,
     ) -> WorldEngine:
         """Restore an engine by consuming bounded, pre-verified replay batches.
 
@@ -2092,6 +2222,7 @@ class WorldEngine:
             new_agent_initialization=new_agent_initialization,
             kinship_spec=kinship_spec,
             disease_mechanics=disease_mechanics,
+            ecological_resources=ecological_resources,
         )
         builder = _BatchRestoreBuilder(
             engine,
@@ -2330,8 +2461,9 @@ class WorldEngine:
                 cultural_contact_active=self._cultural_contact_active,
                 infrastructure_networks_active=self._infrastructure_networks_active,
                 travel_network_active=self._travel_network_active,
-        measurement_active=self._measurement_active,
-            disease_active=self._disease_mechanics is not None,
+                measurement_active=self._measurement_active,
+                disease_active=self._disease_mechanics is not None,
+                ecological_feedback_active=self._ecological_resources is not None,
             )
             snap = self._snapshot
             sequence = snap.event_history.count_with_tick(tick)
@@ -2580,6 +2712,7 @@ class WorldEngine:
             travel_network_active=self._travel_network_active,
         measurement_active=self._measurement_active,
         disease_active=self._disease_mechanics is not None,
+        ecological_feedback_active=self._ecological_resources is not None,
         )
         next_registrations = (*self._registrations, registration)
         self._registrations = next_registrations
@@ -4531,6 +4664,15 @@ class WorldEngine:
             dep_extras = self._dependency_care_tick_extras(
                 state=completion_state, tick=snap.tick.value
             )
+            ecology_tick_starts = None
+            if self._ecological_parameters is not None:
+                start_resources = snap.world.state.resources
+                ecology_tick_starts = MappingProxyType(
+                    {
+                        resource_id: start_resources[resource_id].quantity
+                        for resource_id in self._ecological_parameters
+                    }
+                )
             physical = apply_autonomous_physical_step(
                 state=completion_state,
                 rules=physical_rules,
@@ -4548,6 +4690,8 @@ class WorldEngine:
                 dependency_health_damage_by_entity=dep_extras["health"],
                 possession_succession_active=self.possession_succession_active,
                 public_goods_active=self._public_goods_active,
+                ecological_parameters=self._ecological_parameters,
+                ecological_tick_start_quantities=ecology_tick_starts,
             )
         except ValueError as exc:
             message = str(exc)
@@ -4971,6 +5115,7 @@ class WorldEngine:
             travel_network_active=self._travel_network_active,
         measurement_active=self._measurement_active,
         disease_active=self._disease_mechanics is not None,
+        ecological_feedback_active=self._ecological_resources is not None,
         )
         prepared = finalize_pending_batch(
             merged,
@@ -7239,6 +7384,7 @@ def select_checkpoint_schema(
     travel_network_active: bool = False,
     measurement_active: bool = False,
     disease_active: bool = False,
+    ecological_feedback_active: bool = False,
 ) -> tuple[int, str]:
     """Return the legal event-schema and codec pair for this run."""
     from simulation.persistence import (
@@ -7290,8 +7436,29 @@ def select_checkpoint_schema(
         travel_network_active=travel_network_active,
         measurement_active=measurement_active,
         disease_active=disease_active,
+        ecological_feedback_active=ecological_feedback_active,
     )
 
+    if ecological_feedback_active:
+        from simulation.versioning import (
+            ECOLOGY_WRITE_PAIR_CODEC,
+            ECOLOGY_WRITE_PAIR_EVENT,
+        )
+
+        if (
+            schema_version != ECOLOGY_WRITE_PAIR_EVENT
+            or codec != ECOLOGY_WRITE_PAIR_CODEC
+        ):
+            _LOGGER.warning(
+                "checkpoint_schema_disagrees schema_version=%s codec=%s "
+                "expected_schema=%s expected_codec=%s "
+                "reason=ecological_feedback_active",
+                schema_version,
+                codec,
+                ECOLOGY_WRITE_PAIR_EVENT,
+                ECOLOGY_WRITE_PAIR_CODEC,
+            )
+        return schema_version, codec
     if disease_active:
         from simulation.versioning import (
             EPIDEMICS_WRITE_PAIR_CODEC,

@@ -15,7 +15,7 @@ from api.observer_service import ObserverReadService
 from api.security import ApiCapability, require_websocket_capability
 from api.streaming import SlowConsumerError
 from infrastructure.logging import get_logger
-from observer.adapt import HIDDEN_OBSERVER_EVENT_TYPE, adapt_event
+from observer.adapt import HIDDEN_OBSERVER_EVENT_TYPES, adapt_event
 from observer.version import DEFAULT_LAYOUT_ID
 from simulation.models import RunId
 from simulation.replay import ReplayService
@@ -345,7 +345,7 @@ async def observer_stream(websocket: WebSocket, run_id: str) -> None:
             after_tick=cursor_tick,
             after_sequence=cursor_sequence,
             limit=limit,
-            exclude_event_type=HIDDEN_OBSERVER_EVENT_TYPE,
+            exclude_event_types=HIDDEN_OBSERVER_EVENT_TYPES,
         )
         adapted = tuple(adapt_event(event) for event in page.events)
         if adapted:

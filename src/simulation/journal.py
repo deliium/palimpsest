@@ -881,6 +881,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -913,6 +914,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -938,6 +940,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -962,6 +965,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -984,6 +988,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -1005,6 +1010,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -1025,6 +1031,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -1052,6 +1059,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -1071,6 +1079,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -1095,6 +1104,7 @@ def _encode_world_snapshot(
             "v20",
             "v21",
             "v22",
+            "v23",
             "v25",
             "v26",
         }:
@@ -1118,7 +1128,13 @@ def _encode_world_snapshot(
             assert value.journeys is not None
             payload["regions_migration"] = value.regions_migration.canonical()
             payload["journeys"] = [_encode_journey(item) for item in value.journeys]
-        elif value.persistence_codec_version in {"v21", "v22", "v25", "v26"}:
+        elif value.persistence_codec_version in {
+            "v21",
+            "v22",
+            "v23",
+            "v25",
+            "v26",
+        }:
             if value.regions_migration is not None:
                 assert value.journeys is not None
                 payload["regions_migration"] = value.regions_migration.canonical()
@@ -1131,7 +1147,7 @@ def _encode_world_snapshot(
                 "infrastructure_snapshot_encode asset_count=%s",
                 len(value.infrastructure),
             )
-            if value.persistence_codec_version in {"v22", "v25", "v26"}:
+            if value.persistence_codec_version in {"v25", "v26"}:
                 assert value.travel_network is not None
                 payload["travel_network"] = [
                     _encode_route_condition(item) for item in value.travel_network
@@ -1140,6 +1156,16 @@ def _encode_world_snapshot(
                     "travel_network_snapshot_encode route_count=%s",
                     len(value.travel_network),
                 )
+            elif value.persistence_codec_version in {"v22", "v23"}:
+                if value.travel_network is not None:
+                    payload["travel_network"] = [
+                        _encode_route_condition(item)
+                        for item in value.travel_network
+                    ]
+                    _LOGGER.debug(
+                        "travel_network_snapshot_encode route_count=%s",
+                        len(value.travel_network),
+                    )
             if value.persistence_codec_version == "v26":
                 from simulation.measurement_serialization import (
                     encode_instrument_state,
@@ -1159,10 +1185,7 @@ def _encode_world_snapshot(
                     len(value.instrument_states),
                     len(value.measurement_references),
                 )
-            if value.persistence_codec_version == "v22":
-                from simulation.disease_checkpoint import (
-                    encode_disease_checkpoint_section,
-                )
+            if value.persistence_codec_version in {"v22", "v23"}:
                 from simulation.measurement_serialization import (
                     encode_instrument_state,
                     encode_measurement_reference,
@@ -1177,13 +1200,38 @@ def _encode_world_snapshot(
                         encode_measurement_reference(item)
                         for item in value.measurement_references
                     ]
-                assert value.disease_mechanics is not None
+                if value.disease_mechanics is not None:
+                    from simulation.disease_checkpoint import (
+                        encode_disease_checkpoint_section,
+                    )
+
+                    payload.update(
+                        encode_disease_checkpoint_section(value.disease_mechanics)
+                    )
+                    _LOGGER.debug(
+                        "disease_snapshot_encode row_count=%s",
+                        len(value.disease_mechanics.rows),
+                    )
+                elif value.persistence_codec_version == "v22":
+                    raise AssertionError("v22 requires disease_mechanics")
+            if value.persistence_codec_version == "v23":
+                from simulation.ecological_resources_checkpoint import (
+                    encode_ecological_resources_checkpoint_section,
+                )
+
+                assert value.ecological_resources is not None
+                assert value.environmental_dynamics is not None
                 payload.update(
-                    encode_disease_checkpoint_section(value.disease_mechanics)
+                    encode_ecological_resources_checkpoint_section(
+                        value.ecological_resources
+                    )
+                )
+                payload["environmental_dynamics"] = (
+                    value.environmental_dynamics.canonical_payload
                 )
                 _LOGGER.debug(
-                    "disease_snapshot_encode row_count=%s",
-                    len(value.disease_mechanics.rows),
+                    "ecology_snapshot_encode managed_count=%s",
+                    len(value.ecological_resources.rows),
                 )
     except DomainSerializationError as exc:
         raise _map_domain_error(exc) from exc
@@ -1322,7 +1370,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     wire_codec = data.get("persistence_codec_version")
     codec = (
         "v18"
-        if wire_codec in {"v19", "v20", "v21", "v22", "v25", "v26"}
+        if wire_codec in {"v19", "v20", "v21", "v22", "v23", "v25", "v26"}
         else wire_codec
     )
     keys = {
@@ -1489,6 +1537,18 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             keys |= {"regions_migration", "journeys"}
         if "instrument_states" in data or "measurement_references" in data:
             keys |= {"instrument_states", "measurement_references"}
+    elif wire_codec == "v23":
+        keys |= {"ecological_resources", "environmental_dynamics"}
+        if "disease_mechanics" in data:
+            keys.add("disease_mechanics")
+        if "infrastructure" in data:
+            keys.add("infrastructure")
+        if "travel_network" in data:
+            keys.add("travel_network")
+        if "regions_migration" in data or "journeys" in data:
+            keys |= {"regions_migration", "journeys"}
+        if "instrument_states" in data or "measurement_references" in data:
+            keys |= {"instrument_states", "measurement_references"}
     _require_keys(data, keys, path=path)
     config_raw = data["config"]
     if not isinstance(config_raw, dict):
@@ -1498,7 +1558,8 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     infrastructure = None
     travel_network = None
     if wire_codec in {"v19", "v20"} or (
-        wire_codec in {"v21", "v22", "v25", "v26"} and "regions_migration" in data
+        wire_codec in {"v21", "v22", "v23", "v25", "v26"}
+        and "regions_migration" in data
     ):
         from simulation.runner_serialization import (
             RunnerSerializationError,
@@ -1520,7 +1581,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             data["journeys"], _decode_journey, path=f"{path}.journeys"
         )
     if wire_codec in {"v21", "v25", "v26"} or (
-        wire_codec == "v22" and "infrastructure" in data
+        wire_codec in {"v22", "v23"} and "infrastructure" in data
     ):
         infrastructure = _decode_object_list(
             data["infrastructure"],
@@ -1528,7 +1589,7 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             path=f"{path}.infrastructure",
         )
     if wire_codec in {"v25", "v26"} or (
-        wire_codec == "v22" and "travel_network" in data
+        wire_codec in {"v22", "v23"} and "travel_network" in data
     ):
         travel_network = _decode_object_list(
             data["travel_network"],
@@ -1538,7 +1599,11 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
     instrument_states: tuple[Any, ...] = ()
     measurement_references: tuple[Any, ...] = ()
     disease_mechanics = None
-    if wire_codec == "v22":
+    ecological_resources = None
+    environmental_dynamics = None
+    if wire_codec == "v22" or (
+        wire_codec == "v23" and "disease_mechanics" in data
+    ):
         from simulation.disease_checkpoint import decode_disease_checkpoint_section
 
         disease_raw = data["disease_mechanics"]
@@ -1547,8 +1612,26 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             if isinstance(disease_raw, dict) and "rows" in disease_raw
             else disease_raw
         )
+    if wire_codec == "v23":
+        from simulation.ecological_resources_checkpoint import (
+            decode_ecological_resources_checkpoint_section,
+        )
+        from simulation.runner_serialization import (
+            RunnerSerializationError,
+            _decode_environmental_dynamics,
+        )
+
+        ecological_resources = decode_ecological_resources_checkpoint_section(
+            data["ecological_resources"]
+        )
+        try:
+            environmental_dynamics = _decode_environmental_dynamics(
+                data["environmental_dynamics"]
+            )
+        except RunnerSerializationError as exc:
+            raise PersistenceSerializationError(exc.code, exc.path) from exc
     if wire_codec == "v26" or (
-        wire_codec == "v22" and "instrument_states" in data
+        wire_codec in {"v22", "v23"} and "instrument_states" in data
     ):
         from simulation.measurement_serialization import (
             MeasurementSerializationError,
@@ -1833,6 +1916,8 @@ def _decode_world_snapshot(data: dict[str, Any], *, path: str) -> WorldSnapshot:
             instrument_states=instrument_states,
             measurement_references=measurement_references,
             disease_mechanics=disease_mechanics,
+            ecological_resources=ecological_resources,
+            environmental_dynamics=environmental_dynamics,
         )
     except PersistenceSerializationError:
         raise

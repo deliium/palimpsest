@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     from simulation.branching import BranchLineage
     from simulation.disease_checkpoint import DiseaseCheckpointSection
     from simulation.disease_config import DiseaseMechanicsSpec
+    from simulation.ecological_resources_checkpoint import (
+        EcologicalResourcesCheckpointSection,
+    )
 
 from simulation.bootstrap import AgentRegistration, WorldBootstrap
 from simulation.clock import Tick, require_exact_nonneg_int
@@ -43,7 +46,7 @@ from simulation.run_control import (
 )
 from world.artifacts import InformationArtifact
 from world.collective_projects import CollectiveProject
-from world.environment import ActiveHazard
+from world.environment import ActiveHazard, EnvironmentalDynamicsSpec
 from world.events import (
     EVENT_SCHEMA_REPLAY_V2,
     EVENT_SCHEMA_REPLAY_V3,
@@ -68,6 +71,7 @@ from world.events import (
     EVENT_SCHEMA_REPLAY_V22,
     EVENT_SCHEMA_REPLAY_V23,
     EVENT_SCHEMA_REPLAY_V24,
+    EVENT_SCHEMA_REPLAY_V25,
     EVENT_SCHEMA_REPLAY_V27,
     EVENT_SCHEMA_REPLAY_V28,
     WorldEvent,
@@ -114,6 +118,8 @@ class SnapshotExtensions(TypedDict, total=False):
     instrument_states: Sequence[InstrumentState]
     measurement_references: Sequence[MeasurementReference]
     disease_mechanics: DiseaseCheckpointSection
+    ecological_resources: EcologicalResourcesCheckpointSection
+    environmental_dynamics: EnvironmentalDynamicsSpec
 
 
 # New-write versions for physical replay-v5 runs (structured communication).
@@ -148,6 +154,7 @@ ACCEPTED_EVENT_SCHEMA_VERSIONS: Final[frozenset[int]] = frozenset(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }
@@ -177,6 +184,7 @@ ACCEPTED_PERSISTENCE_CODEC_VERSIONS: Final[frozenset[str]] = frozenset(
         "v20",
         "v21",
         "v22",
+        "v23",
         "v25",
         "v26",
     }
@@ -297,13 +305,29 @@ def checkpoint_schema_for_production(
     travel_network_active: bool = False,
     measurement_active: bool = False,
     disease_active: bool = False,
+    ecological_feedback_active: bool = False,
 ) -> tuple[int, str]:
     """Choose the checkpoint schema for this run.
 
-    Priority: disease → ``(24, v22)``; else measurement → ``(28, v26)``;
-    else travel → ``(27, v25)``; else infrastructure → ``(23, v21)``; …
+    Priority: ecology → ``(25, v23)``; else disease → ``(24, v22)``;
+    else measurement → ``(28, v26)``; else travel → ``(27, v25)``;
+    else infrastructure → ``(23, v21)``; …
     Schema numbers are not capability order.
     """
+    if ecological_feedback_active:
+        from simulation.versioning import (
+            ECOLOGY_WRITE_PAIR_CODEC,
+            ECOLOGY_WRITE_PAIR_EVENT,
+        )
+
+        pair = ECOLOGY_WRITE_PAIR_EVENT, ECOLOGY_WRITE_PAIR_CODEC
+        _LOG.info(
+            "checkpoint_schema_selected schema_version=%s codec=%s "
+            "reason=ecological_feedback_active",
+            pair[0],
+            pair[1],
+        )
+        return pair
     if disease_active:
         from simulation.versioning import (
             EPIDEMICS_WRITE_PAIR_CODEC,
@@ -538,6 +562,7 @@ def schema_projector_compatible(
         EVENT_SCHEMA_REPLAY_V22,
         EVENT_SCHEMA_REPLAY_V23,
         EVENT_SCHEMA_REPLAY_V24,
+        EVENT_SCHEMA_REPLAY_V25,
         EVENT_SCHEMA_REPLAY_V27,
         EVENT_SCHEMA_REPLAY_V28,
     }:
@@ -725,6 +750,8 @@ class WorldSnapshot:
     instrument_states: Sequence[InstrumentState] = ()
     measurement_references: Sequence[MeasurementReference] = ()
     disease_mechanics: DiseaseCheckpointSection | None = None
+    ecological_resources: EcologicalResourcesCheckpointSection | None = None
+    environmental_dynamics: EnvironmentalDynamicsSpec | None = None
 
     @staticmethod
     def _measurement_rows(
@@ -873,7 +900,7 @@ class WorldSnapshot:
                     f"codec {self.persistence_codec_version} requires "
                     "infrastructure channel rows"
                 )
-        elif self.persistence_codec_version == "v22":
+        elif self.persistence_codec_version in {"v22", "v23"}:
             pass
         elif infra_rows is not None:
             raise ValueError("infrastructure checkpoint fields require codec v21")
@@ -904,7 +931,7 @@ class WorldSnapshot:
                 and self.regions_migration is None
             ):
                 raise ValueError("travel_network_checkpoint_requires_regions")
-        elif self.persistence_codec_version == "v22":
+        elif self.persistence_codec_version in {"v22", "v23"}:
             pass
         elif route_rows is not None:
             raise ValueError("travel_network_checkpoint_fields_require_codec_v25")
@@ -936,7 +963,7 @@ class WorldSnapshot:
         if self.persistence_codec_version == "v26":
             if self.event_schema_version != EVENT_SCHEMA_REPLAY_V28:
                 raise ValueError("codec v26 requires event schema 28")
-        elif self.persistence_codec_version == "v22":
+        elif self.persistence_codec_version in {"v22", "v23"}:
             pass
         elif instrument_rows or reference_rows:
             raise ValueError(
@@ -956,16 +983,49 @@ class WorldSnapshot:
                 raise TypeError(
                     "codec v22 requires DiseaseCheckpointSection disease_mechanics"
                 )
+        elif self.persistence_codec_version == "v23":
+            from simulation.ecological_resources_checkpoint import (
+                EcologicalResourcesCheckpointSection,
+            )
+            from simulation.versioning import ECOLOGY_WRITE_PAIR_EVENT
+
+            if self.event_schema_version != ECOLOGY_WRITE_PAIR_EVENT:
+                raise ValueError("codec v23 requires event schema 25")
+            if (
+                type(self.ecological_resources)
+                is not EcologicalResourcesCheckpointSection
+            ):
+                raise TypeError(
+                    "codec v23 requires EcologicalResourcesCheckpointSection"
+                )
+            if type(self.environmental_dynamics) is not EnvironmentalDynamicsSpec:
+                raise TypeError("codec v23 requires EnvironmentalDynamicsSpec")
+            if self.disease_mechanics is not None:
+                from simulation.disease_checkpoint import DiseaseCheckpointSection
+
+                if type(self.disease_mechanics) is not DiseaseCheckpointSection:
+                    raise TypeError(
+                        "v23 disease_mechanics must be DiseaseCheckpointSection"
+                    )
         elif self.disease_mechanics is not None:
             raise ValueError("disease_mechanics checkpoint requires codec v22")
-        # v22 is the union of v26 feature channels plus disease_mechanics.
-        if self.persistence_codec_version == "v22":
-            # Reuse v26-style optional measurement/travel/infra validation:
-            # measurement rows may be empty; infrastructure/travel may be absent
-            # unless those channels are present on the snapshot.
-            pass
+        elif self.ecological_resources is not None:
+            raise ValueError("ecological_resources checkpoint requires codec v23")
+        elif self.environmental_dynamics is not None:
+            raise ValueError("environmental_dynamics checkpoint requires codec v23")
         # Reuse bootstrap graph validation and ordered copying (inventory order
         # is preserved inside AgentBody).
+        ecology_bootstrap = None
+        ecology_digest = None
+        if self.persistence_codec_version == "v23":
+            assert self.ecological_resources is not None
+            from simulation.bootstrap import (
+                _ecological_digest_from_snapshot,
+                _ecological_resources_from_snapshot,
+            )
+
+            ecology_bootstrap = _ecological_resources_from_snapshot(self)
+            ecology_digest = _ecological_digest_from_snapshot(self)
         bootstrap = WorldBootstrap(
             world_id=self.world_id,
             revision=self.revision,
@@ -981,6 +1041,8 @@ class WorldSnapshot:
             measurement_references=reference_rows,
             regions_migration=self.regions_migration,
             journeys=journey_rows,
+            ecological_resources=ecology_bootstrap,
+            ecological_policy_digest=ecology_digest,
         )
         bootstrap.validate_finalized_boundary(max(0, self.next_tick.value - 1))
         object.__setattr__(self, "locations", bootstrap.locations)
@@ -1163,7 +1225,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and self.active_hazards
         ):
@@ -1188,7 +1253,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and self.artifacts
         ):
@@ -1223,7 +1291,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and records
         ):
@@ -1256,7 +1327,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and kinship_rows
         ):
@@ -1290,7 +1364,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and need_rows
         ):
@@ -1319,7 +1396,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and repo_rows
         ):
@@ -1347,7 +1427,10 @@ class WorldSnapshot:
                 "v19",
                 "v20",
                 "v21",
+                "v22",
+                "v23",
                 "v25",
+                "v26",
             }
             and custody_ids
         ):
@@ -1365,7 +1448,19 @@ class WorldSnapshot:
         object.__setattr__(self, "exchange_offers", tuple(offer_rows))
         if (
             self.persistence_codec_version
-            not in {"v15", "v16", "v17", "v18", "v19", "v20", "v21", "v25"}
+            not in {
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+                "v20",
+                "v21",
+                "v22",
+                "v23",
+                "v25",
+                "v26",
+            }
             and offer_rows
         ):
             _LOG.error(
@@ -1383,7 +1478,7 @@ class WorldSnapshot:
         object.__setattr__(self, "collective_projects", tuple(project_rows))
         if (
             self.persistence_codec_version
-            not in {"v17", "v18", "v19", "v20", "v21", "v25"}
+            not in {"v17", "v18", "v19", "v20", "v21", "v22", "v23", "v25", "v26"}
             and project_rows
         ):
             _LOG.warning(
@@ -1399,7 +1494,10 @@ class WorldSnapshot:
             "v19",
             "v20",
             "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
         }:
             for structure in self.structures:
                 if structure.kind in {StructureKind.BRIDGE, StructureKind.RECORD_SITE}:
@@ -1409,7 +1507,16 @@ class WorldSnapshot:
                         structure.kind.value,
                     )
                     raise ValueError("bridge and record_site require codec v17")
-        if self.persistence_codec_version not in {"v18", "v19", "v20", "v21", "v25"}:
+        if self.persistence_codec_version not in {
+            "v18",
+            "v19",
+            "v20",
+            "v21",
+            "v22",
+            "v23",
+            "v25",
+            "v26",
+        }:
             for structure in self.structures:
                 if structure.kind in {StructureKind.WELL, StructureKind.WARNING_POST}:
                     _LOG.warning(
@@ -1419,7 +1526,7 @@ class WorldSnapshot:
                     )
                     raise ValueError("well and warning_post require codec v18")
 
-        if self.persistence_codec_version not in {"v21", "v25"}:
+        if self.persistence_codec_version not in {"v21", "v22", "v23", "v25", "v26"}:
             for structure in self.structures:
                 if structure.kind in {
                     StructureKind.ROAD,
@@ -1449,7 +1556,10 @@ class WorldSnapshot:
             "v19",
             "v20",
             "v21",
+            "v22",
+            "v23",
             "v25",
+            "v26",
         }:
             custody_count = sum(
                 1
@@ -1827,6 +1937,7 @@ class ReplayRequest:
     new_agent_initialization: object | None = None
     kinship_spec: object | None = None
     disease_mechanics: DiseaseMechanicsSpec | None = None
+    ecological_resources: object | None = None
 
     def __post_init__(self) -> None:
         if type(self.run_id) is not RunId:
@@ -1844,6 +1955,14 @@ class ReplayRequest:
                 raise TypeError(
                     "ReplayRequest.disease_mechanics must be DiseaseMechanicsSpec "
                     "or None"
+                )
+        if self.ecological_resources is not None:
+            from simulation.ecological_resources_config import EcologicalResourcesSpec
+
+            if type(self.ecological_resources) is not EcologicalResourcesSpec:
+                raise TypeError(
+                    "ReplayRequest.ecological_resources must be "
+                    "EcologicalResourcesSpec or None"
                 )
 
 

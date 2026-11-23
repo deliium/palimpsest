@@ -45,6 +45,7 @@ from world.events import (
     CorpseCustodyOpened,
     CraftStarted,
     DiseaseStateChanged,
+    EcologicalResourceChanged,
     ExchangeCompleted,
     ExchangeProposed,
     ExchangeWithdrawn,
@@ -1081,6 +1082,11 @@ def _project_event_window(
         if type(event.details) is DiseaseStateChanged:
             # Private net effect: drop before audience classification.
             _LOG.debug("disease_occurrence_suppressed reason_code=private_transition")
+            continue
+        if type(event.details) is EcologicalResourceChanged:
+            _LOG.debug(
+                "ecological_occurrence_suppressed reason_code=private_transition"
+            )
             continue
         if not subjective_valuation_active and type(event.details) in {
             ExchangeProposed,
