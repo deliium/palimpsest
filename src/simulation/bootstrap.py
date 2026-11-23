@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from agents.models import AgentId
 from simulation.registrations import AgentRegistration as AgentRegistration
 from world._disease import DiseaseConditionRow
+from world._ecological_resources import EcologicalStockRow
 from world.artifacts import InformationArtifact
 from world.identifiers import EntityId, WorldId, WorldRevision
 from world.measurement import InstrumentState, MeasurementReference
@@ -29,6 +30,7 @@ __all__ = [
     "AgentRegistration",
     "RegistrationTranslator",
     "WorldBootstrap",
+    "build_initial_ecological_resources",
     "disease_bootstrap_state",
     "registration_translator",
 ]
@@ -92,6 +94,8 @@ class WorldBootstrap:
     regions_migration: RegionsMigrationSpec | None = None
     journeys: Sequence[Journey] | None = None
     disease_state: Mapping[EntityId, DiseaseConditionRow] | None = None
+    ecological_resources: Mapping[EntityId, EcologicalStockRow] | None = None
+    ecological_policy_digest: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.world_id) is not WorldId:
@@ -178,6 +182,35 @@ class WorldBootstrap:
             if self.disease_state is None
             else MappingProxyType(self.disease_state),
         )
+        if self.ecological_resources is not None and not isinstance(
+            self.ecological_resources, Mapping
+        ):
+            raise TypeError(
+                "WorldBootstrap.ecological_resources must be a mapping or None"
+            )
+        if self.ecological_resources is None:
+            if self.ecological_policy_digest is not None:
+                raise ValueError(
+                    "ecological_policy_digest requires ecological_resources "
+                    "(code=ecological_digest_without_state)"
+                )
+            object.__setattr__(self, "ecological_resources", None)
+            object.__setattr__(self, "ecological_policy_digest", None)
+        else:
+            if type(self.ecological_policy_digest) is not str:
+                raise TypeError(
+                    "ecological_policy_digest must be str when ecology is active"
+                )
+            object.__setattr__(
+                self,
+                "ecological_resources",
+                MappingProxyType(self.ecological_resources),
+            )
+            object.__setattr__(
+                self,
+                "ecological_policy_digest",
+                self.ecological_policy_digest,
+            )
         _validate_registrations_against_models(
             locations=locations,
             items=items,
@@ -204,6 +237,8 @@ class WorldBootstrap:
                 regions_migration=self.regions_migration,
                 journeys=journeys,
                 disease_state=self.disease_state,
+                ecological_resources=self.ecological_resources,
+                ecological_policy_digest=self.ecological_policy_digest,
             )
         except ValueError as exc:
             message = str(exc)
@@ -293,6 +328,8 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
             regions_migration=bootstrap.regions_migration,
             journeys=bootstrap.journeys,
             disease_state=bootstrap.disease_state,
+            ecological_resources=bootstrap.ecological_resources,
+            ecological_policy_digest=bootstrap.ecological_policy_digest,
         )
     except ValueError as exc:
         message = str(exc)
@@ -312,7 +349,58 @@ def _materialize_world(bootstrap: WorldBootstrap) -> World:
         "on" if bootstrap.disease_state is not None else "off",
         0 if bootstrap.disease_state is None else len(bootstrap.disease_state),
     )
+    _LOGGER.debug(
+        "ecological_seeded channel=%s row_count=%s",
+        "on" if bootstrap.ecological_resources is not None else "off",
+        0
+        if bootstrap.ecological_resources is None
+        else len(bootstrap.ecological_resources),
+    )
     return World(bootstrap.world_id, state)
+
+
+def build_initial_ecological_resources(
+    config: object,
+) -> tuple[Mapping[EntityId, EcologicalStockRow], str] | None:
+    """Build zero-damage ecology rows and policy digest from runner config."""
+    spec = getattr(config, "ecological_resources", None)
+    if spec is None:
+        return None
+    from simulation.ecological_resources_config import (
+        EcologicalResourcesSpec,
+        policy_sha256_for_ecological_resources,
+    )
+    from world._ecological_resources import (
+        bootstrap_ecological_rows,
+        validate_ecological_resources_state,
+    )
+
+    if type(spec) is not EcologicalResourcesSpec:
+        raise TypeError("ecological_resources must be EcologicalResourcesSpec")
+    scenario = getattr(config, "scenario", None)
+    if scenario is None:
+        raise TypeError("build_initial_ecological_resources requires a scenario")
+    rows = bootstrap_ecological_rows(
+        nodes=tuple(
+            (node.resource_id, node.minimum_capacity_tenths) for node in spec.nodes
+        )
+    )
+    digest = policy_sha256_for_ecological_resources(spec)
+    resources = {resource.entity_id: resource for resource in scenario.resources}
+    validate_ecological_resources_state(
+        rows,
+        resources=resources,
+        policy_digest=digest,
+        expected_digest=digest,
+        expected_floors={
+            node.resource_id: node.minimum_capacity_tenths for node in spec.nodes
+        },
+    )
+    _LOGGER.debug(
+        "ecological_bootstrap_ready managed_count=%s",
+        len(rows),
+    )
+    return rows, digest
 
 
 def disease_bootstrap_state(
@@ -382,7 +470,35 @@ def _bootstrap_from_snapshot(snapshot: object) -> WorldBootstrap:
         regions_migration=getattr(snapshot, "regions_migration", None),
         journeys=getattr(snapshot, "journeys", None),
         disease_state=_disease_state_from_snapshot(snapshot),
+        ecological_resources=_ecological_resources_from_snapshot(snapshot),
+        ecological_policy_digest=_ecological_digest_from_snapshot(snapshot),
     )
+
+
+def _ecological_resources_from_snapshot(
+    snapshot: object,
+) -> dict[EntityId, EcologicalStockRow] | None:
+    section = getattr(snapshot, "ecological_resources", None)
+    if section is None:
+        return None
+    return {
+        row.resource_id: EcologicalStockRow(
+            resource_id=row.resource_id,
+            minimum_capacity_tenths=row.minimum_capacity_tenths,
+            damage_tenths=row.damage_tenths,
+        )
+        for row in section.rows
+    }
+
+
+def _ecological_digest_from_snapshot(snapshot: object) -> str | None:
+    section = getattr(snapshot, "ecological_resources", None)
+    if section is None:
+        return None
+    digest = section.policy_sha256
+    if type(digest) is not str:
+        raise TypeError("ecological checkpoint policy_sha256 must be str")
+    return digest
 
 
 def _materialize_projected_world(*, world_id: WorldId, state: object) -> World:

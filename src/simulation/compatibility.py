@@ -104,6 +104,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V57,
     RUNNER_SCHEMA_VERSION_V58,
     RUNNER_SCHEMA_VERSION_V59,
+    RUNNER_SCHEMA_VERSION_V60,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -167,6 +168,7 @@ V4_OWNED_CAPABILITY_FLAGS: Final[frozenset[str]] = frozenset(
         "markets_credit",
         "science",
         "epidemics",
+        "ecological_feedback",
     }
 )
 
@@ -563,8 +565,13 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "family: the exact v58 disease family plus mandatory "
             "medical_beliefs, preserving the optional measurement_instruments "
             "sibling; "
+            f"{RUNNER_SCHEMA_VERSION_V60} is the accepted V4-36 ecological "
+            "resources family: the exact v56 family root plus mandatory "
+            "ecological_resources and environmental_dynamics, with optional "
+            "measurement_instruments, disease_mechanics, and medical_beliefs "
+            "when those channels are selected; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
-            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V59})."
+            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V60})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -805,8 +812,9 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             f"is owned by V4-16 on "
             f"{RUNNER_SCHEMA_VERSION_V56}; V4-17 deepens infrastructure_networks "
             "without adding a V4 flag or v57; V4-20 owns markets_credit and V4-27 "
-            "owns science and V4-34 owns epidemics, so ten flags are owned and "
-            "two remain unowned; any enabled unowned flag fails closed at "
+            "owns science, V4-34 owns epidemics, and V4-36 owns "
+            "ecological_feedback, so eleven flags are owned and one remains "
+            "unowned; any enabled unowned flag fails closed at "
             "SimulationRunner.from_config with "
             "capability_unimplemented (stage v4_capability_flags)"
         ),
@@ -879,6 +887,7 @@ _LOG.debug(
         "runner_v57": RUNNER_SCHEMA_VERSION_V57,
         "runner_v58": RUNNER_SCHEMA_VERSION_V58,
         "runner_v59": RUNNER_SCHEMA_VERSION_V59,
+        "runner_v60": RUNNER_SCHEMA_VERSION_V60,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

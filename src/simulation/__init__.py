@@ -1048,6 +1048,7 @@ from simulation.market_institutions_ports import (
     market_institutions_query_fingerprint,
 )
 from simulation.measurement_config import MeasurementInstrumentsSpec
+from simulation.ecological_resources_config import EcologicalResourcesSpec
 from simulation.medical_beliefs_config import MedicalBeliefsSpec
 from simulation.migration_plan import (
     V4_MIGRATION_PLAN_SCHEMA,
@@ -1313,6 +1314,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V57,
     RUNNER_SCHEMA_VERSION_V58,
     RUNNER_SCHEMA_VERSION_V59,
+    RUNNER_SCHEMA_VERSION_V60,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
@@ -1890,6 +1892,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V57",
     "RUNNER_SCHEMA_VERSION_V58",
     "RUNNER_SCHEMA_VERSION_V59",
+    "RUNNER_SCHEMA_VERSION_V60",
     "SCALE_CONTRACT_VERSION",
     "SCALE_MAX_PARTITIONS",
     "SCALE_MAX_POPULATION",
@@ -2352,6 +2355,7 @@ __all__ = [
     "MarketRoleRecord",
     "MarketVenueRecord",
     "MeasurementInstrumentsSpec",
+    "EcologicalResourcesSpec",
     "MedicalBeliefsSpec",
     "MemoryDerivationLineage",
     "MemoryDerivationLineagePort",

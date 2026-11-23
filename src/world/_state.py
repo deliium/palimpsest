@@ -7,6 +7,10 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 
 from world._disease import DiseaseConditionRow, index_disease_state
+from world._ecological_resources import (
+    EcologicalStockRow,
+    index_ecological_resources,
+)
 from world._infrastructure import index_infrastructure
 from world.artifacts import (
     MAX_HELD_ARTIFACTS_PER_BODY,
@@ -72,6 +76,11 @@ def rebuild_world_state(
     | Sequence[tuple[EntityId, DiseaseConditionRow]]
     | None = None,
     replace_disease_state: bool = False,
+    ecological_resources: Mapping[EntityId, EcologicalStockRow]
+    | Sequence[EcologicalStockRow]
+    | None = None,
+    ecological_policy_digest: str | None = None,
+    replace_ecological_resources: bool = False,
 ) -> WorldState:
     """Build a new immutable snapshot with deterministic EntityId ordering."""
     if type(state) is not WorldState:
@@ -141,6 +150,22 @@ def rebuild_world_state(
     else:
         disease_src = (
             state.disease_state if disease_state is None else disease_state
+        )
+    if replace_ecological_resources:
+        ecological_src: Mapping[EntityId, EcologicalStockRow] | Sequence[
+            EcologicalStockRow
+        ] | None = ecological_resources
+        ecological_digest_src = ecological_policy_digest
+    else:
+        ecological_src = (
+            state.ecological_resources
+            if ecological_resources is None
+            else ecological_resources
+        )
+        ecological_digest_src = (
+            state.ecological_policy_digest
+            if ecological_policy_digest is None
+            else ecological_policy_digest
         )
     return WorldState(
         state.revision if revision is None else revision,
@@ -216,6 +241,8 @@ def rebuild_world_state(
         # Intermediate folds may briefly retain rows on newly dead bodies;
         # living-key checks run at bootstrap and validate_finalized_boundary.
         disease_require_living=False,
+        ecological_resources=ecological_src,
+        ecological_policy_digest=ecological_digest_src,
     )
 
 
@@ -437,6 +464,8 @@ class WorldState:
         "_collective_projects",
         "_corpse_custody_item_ids",
         "_disease_state",
+        "_ecological_policy_digest",
+        "_ecological_resources",
         "_exchange_offers",
         "_infrastructure",
         "_instrument_states",
@@ -487,6 +516,10 @@ class WorldState:
         | Sequence[tuple[EntityId, DiseaseConditionRow]]
         | None = None,
         disease_require_living: bool = True,
+        ecological_resources: Mapping[EntityId, EcologicalStockRow]
+        | Sequence[EcologicalStockRow]
+        | None = None,
+        ecological_policy_digest: str | None = None,
     ) -> None:
         if type(revision) is not WorldRevision:
             raise TypeError("WorldState.revision must be WorldRevision")
@@ -591,6 +624,29 @@ class WorldState:
             body_index=body_index,
             require_living=disease_require_living,
         )
+        self._ecological_resources = index_ecological_resources(
+            ecological_resources
+        )
+        if self._ecological_resources is None:
+            if ecological_policy_digest is not None:
+                raise ValueError(
+                    "ecological_policy_digest requires ecological_resources "
+                    "(code=ecological_digest_without_state)"
+                )
+            self._ecological_policy_digest = None
+        else:
+            if type(ecological_policy_digest) is not str:
+                raise TypeError(
+                    "ecological_policy_digest must be str when ecology is active"
+                )
+            if len(ecological_policy_digest) != 64 or any(
+                ch not in "0123456789abcdef" for ch in ecological_policy_digest
+            ):
+                raise ValueError(
+                    "ecological_policy_digest must be lowercase sha256 hex "
+                    "(code=ecological_digest_invalid)"
+                )
+            self._ecological_policy_digest = ecological_policy_digest
         if (
             regions_migration is not None
             and type(regions_migration) is not RegionsMigrationSpec
@@ -735,6 +791,18 @@ class WorldState:
     ) -> Mapping[EntityId, DiseaseConditionRow] | None:
         """Private condition rows; ``None`` means the disease channel is off."""
         return self._disease_state
+
+    @property
+    def ecological_resources(
+        self,
+    ) -> Mapping[EntityId, EcologicalStockRow] | None:
+        """Private stock-damage rows; ``None`` means the ecology channel is off."""
+        return self._ecological_resources
+
+    @property
+    def ecological_policy_digest(self) -> str | None:
+        """Canonical ecology policy digest while the channel is active."""
+        return self._ecological_policy_digest
 
     def route_condition(
         self, origin_id: EntityId, destination_id: EntityId
