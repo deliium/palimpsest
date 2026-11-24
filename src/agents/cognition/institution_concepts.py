@@ -1385,6 +1385,69 @@ def _freeze(
     )
 
 
+def _observe_commons_procedures(
+    owner_id: AgentId,
+    commons_candidates: object | None,
+    drafts: dict[str, _ConceptDraft],
+    notices: list[str],
+    policy: InstitutionConceptPolicy,
+) -> None:
+    """Record PROCEDURE_RECURRENCE only from matched turn-slot self-reports."""
+
+    if commons_candidates is None:
+        return
+    if isinstance(commons_candidates, (str, bytes)) or not isinstance(
+        commons_candidates, (tuple, list)
+    ):
+        return
+    seen: set[str] = set()
+    for item in commons_candidates:
+        stock_id = getattr(item, "stock_id", None)
+        proposal_id = getattr(item, "proposal_id", None)
+        earlier = getattr(item, "earlier_slot", None)
+        later = getattr(item, "later_slot", None)
+        lineage = getattr(item, "lineage_ref", None)
+        tick = getattr(item, "tick", None)
+        stock_token = getattr(stock_id, "value", stock_id)
+        if type(stock_token) is not str or not stock_token:
+            continue
+        if type(proposal_id) is not str or not proposal_id:
+            continue
+        if type(earlier) is not int or type(later) is not int:
+            continue
+        if type(lineage) is not str or not lineage:
+            continue
+        if type(tick) is not int or tick < 0:
+            continue
+        dedupe = f"{stock_token}|{proposal_id}|{earlier}|{later}"
+        if dedupe in seen:
+            continue
+        seen.add(dedupe)
+        anchor = _seq_digest(
+            f"commons-procedure|{stock_token}|{proposal_id}|{earlier}|{later}"
+        )
+        group_key = _group_digest(
+            f"commons-procedure|{stock_token}|{proposal_id}"
+        )
+        draft = _draft_for(drafts, group_key, tick, policy, notices)
+        if draft is None:
+            continue
+        if any(row.lineage_ref == lineage for row in draft.evidence):
+            continue
+        _record_evidence(
+            draft,
+            owner_id,
+            InstitutionPatternChannel.PROCEDURE_RECURRENCE,
+            InstitutionEvidenceChannel.COMMUNICATED,
+            lineage,
+            tick,
+            anchor,
+            policy.procedure_delta,
+            policy,
+            None,
+        )
+
+
 def apply_institution_concept_update(
     observation: object,
     identity: object,
@@ -1396,6 +1459,7 @@ def apply_institution_concept_update(
     memories: Sequence[object] = (),
     advice_delta: Sequence[object] = (),
     mentorship: object | None = None,
+    commons_candidates: object | None = None,
     policy: InstitutionConceptPolicy | None = None,
 ) -> InstitutionConceptLedger | None:
     """Apply one tick of owner-scoped institution-concept evidence.
@@ -1421,6 +1485,7 @@ def apply_institution_concept_update(
         memories,
         advice_delta,
         mentorship,
+        commons_candidates,
         policy,
     ):
         _reject_forbidden(value)
@@ -1448,6 +1513,9 @@ def apply_institution_concept_update(
     _observe_possession(owner_id, possession, drafts, notices, active_policy)
     _observe_transmission(observation, identity, drafts, notices, active_policy)
     _observe_memories(owner_id, memories, drafts, notices, active_policy)
+    _observe_commons_procedures(
+        owner_id, commons_candidates, drafts, notices, active_policy
+    )
     _decay(drafts, observation.tick, active_policy)
     concepts: list[InstitutionConcept] = []
     for draft in drafts.values():

@@ -775,6 +775,7 @@ class SubjectiveSnapshot:
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
     medical_belief_ledger: object | None = None
+    commons_governance_ledger: object | None = None
     scientific_model_ledger: object | None = None
     competing_theory_ledger: object | None = None
 
@@ -4067,6 +4068,7 @@ class CognitiveLoopProposal:
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
     medical_belief_ledger: object | None = None
+    commons_governance_ledger: object | None = None
     scientific_model_ledger: object | None = None
     competing_theory_ledger: object | None = None
 
@@ -4448,6 +4450,7 @@ class CognitiveLoopResult:
     replication_ledger: object | None = None
     measurement_ledger: object | None = None
     medical_belief_ledger: object | None = None
+    commons_governance_ledger: object | None = None
     scientific_model_ledger: object | None = None
     competing_theory_ledger: object | None = None
     organized_conflict_audits: tuple[object, ...] | None = None

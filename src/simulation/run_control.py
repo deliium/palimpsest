@@ -49,6 +49,7 @@ __all__ = [
     "FINALIZATION_COMMAND_CODEC_VERSION_V4",
     "FINALIZATION_COMMAND_CODEC_VERSION_V5",
     "FINALIZATION_COMMAND_CODEC_VERSION_V6",
+    "FINALIZATION_COMMAND_CODEC_VERSION_V7",
     "STREAM_RECORD_SCHEMA_VERSION",
     "AgentRuntimeCheckpoint",
     "CachedCriterionDecision",
@@ -87,6 +88,7 @@ FINALIZATION_COMMAND_CODEC_VERSION_V3: Final[str] = "finalization-command-v3"
 FINALIZATION_COMMAND_CODEC_VERSION_V4: Final[str] = "finalization-command-v4"
 FINALIZATION_COMMAND_CODEC_VERSION_V5: Final[str] = "finalization-command-v5"
 FINALIZATION_COMMAND_CODEC_VERSION_V6: Final[str] = "finalization-command-v6"
+FINALIZATION_COMMAND_CODEC_VERSION_V7: Final[str] = "finalization-command-v7"
 FINALIZATION_COMMAND_ACCEPTED_VERSIONS: Final[frozenset[str]] = frozenset(
     {
         FINALIZATION_COMMAND_CODEC_VERSION,
@@ -95,6 +97,7 @@ FINALIZATION_COMMAND_ACCEPTED_VERSIONS: Final[frozenset[str]] = frozenset(
         FINALIZATION_COMMAND_CODEC_VERSION_V4,
         FINALIZATION_COMMAND_CODEC_VERSION_V5,
         FINALIZATION_COMMAND_CODEC_VERSION_V6,
+        FINALIZATION_COMMAND_CODEC_VERSION_V7,
     }
 )
 STREAM_RECORD_SCHEMA_VERSION: Final[str] = "stream-record-v1"
@@ -530,10 +533,20 @@ class FinalizationCommand:
     scientific_model_ledger: object | None = None
     competing_theory_ledger: object | None = None
     medical_belief_ledger: object | None = None
+    commons_governance_ledger: object | None = None
 
     def __post_init__(self) -> None:
         if self.codec_version not in FINALIZATION_COMMAND_ACCEPTED_VERSIONS:
             raise ValueError("unsupported_finalization_codec_version")
+        if self.codec_version in {
+            FINALIZATION_COMMAND_CODEC_VERSION,
+            FINALIZATION_COMMAND_CODEC_VERSION_V2,
+            FINALIZATION_COMMAND_CODEC_VERSION_V3,
+            FINALIZATION_COMMAND_CODEC_VERSION_V4,
+            FINALIZATION_COMMAND_CODEC_VERSION_V5,
+            FINALIZATION_COMMAND_CODEC_VERSION_V6,
+        } and self.commons_governance_ledger is not None:
+            raise ValueError("legacy_forbids_commons_governance_payload")
         if self.codec_version in {
             FINALIZATION_COMMAND_CODEC_VERSION,
             FINALIZATION_COMMAND_CODEC_VERSION_V2,
@@ -603,6 +616,18 @@ class FinalizationCommand:
                 self.experiment_ledger is None
             ):
                 raise ValueError("v6_requires_correlated_science_payloads")
+        if self.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V7:
+            if self.commons_governance_ledger is None:
+                raise ValueError("v7_requires_commons_governance_payload")
+            if (
+                self.competing_theory_ledger is not None
+                and self.scientific_model_ledger is None
+            ):
+                raise ValueError("v7_requires_scientific_model_for_competing")
+            if (self.replication_ledger is None) != (
+                self.experiment_ledger is None
+            ):
+                raise ValueError("v7_requires_correlated_science_payloads")
         if type(self.run_id) is not RunId:
             raise TypeError("run_id must be RunId")
         if type(self.agent_id) is not AgentId:
@@ -721,6 +746,7 @@ class AgentRuntimeCheckpoint:
     scientific_model_ledger: object | None = None
     competing_theory_ledger: object | None = None
     medical_belief_ledger: object | None = None
+    commons_governance_ledger: object | None = None
     disputes: object | None = None
     evidence: object | None = None
     representation: object | None = None

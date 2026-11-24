@@ -299,6 +299,8 @@ class CognitiveLoop:
     _measurement_enabled: bool
     _medical_belief_ledger: object | None
     _medical_beliefs_enabled: bool
+    _commons_governance_ledger: object | None
+    _commons_governance_stock_ids: tuple[EntityId, ...] | None
     _overexploitation_inference_enabled: bool
 
     __slots__ = (
@@ -317,6 +319,8 @@ class CognitiveLoop:
         "_collective_decision_policy",
         "_collective_projects_active",
         "_commitment_horizon_ticks",
+        "_commons_governance_ledger",
+        "_commons_governance_stock_ids",
         "_communication_strategy_mode",
         "_communication_strategy_policy",
         "_competence_policy",
@@ -533,6 +537,7 @@ class CognitiveLoop:
         bounded_experimentation_spec: object | None = None,
         measurement_enabled: bool = False,
         medical_beliefs_enabled: bool = False,
+        commons_governance_stock_ids: object | None = None,
         overexploitation_inference_enabled: bool = False,
         territorial_claim_mode: object | None = None,
         territorial_claim_policy: object | None = None,
@@ -1251,6 +1256,29 @@ class CognitiveLoop:
         if type(medical_beliefs_enabled) is not bool:
             raise TypeError("medical_beliefs_enabled must be bool")
         self._medical_beliefs_enabled = medical_beliefs_enabled
+        self._commons_governance_ledger = None
+        self._commons_governance_stock_ids = None
+        if commons_governance_stock_ids is not None:
+            from world.identifiers import EntityId
+
+            if isinstance(commons_governance_stock_ids, (str, bytes)) or not isinstance(
+                commons_governance_stock_ids, (tuple, list)
+            ):
+                raise TypeError(
+                    "commons_governance_stock_ids must be a sequence of EntityId"
+                )
+            stocks: list[EntityId] = []
+            for index, stock_id in enumerate(commons_governance_stock_ids):
+                if type(stock_id) is not EntityId:
+                    raise TypeError(
+                        f"commons_governance_stock_ids[{index}] must be EntityId"
+                    )
+                stocks.append(stock_id)
+            self._commons_governance_stock_ids = tuple(stocks)
+            _LOG.debug(
+                "commons_governance_loop_bound reason_code=stock_selector count=%s",
+                len(stocks),
+            )
         if type(overexploitation_inference_enabled) is not bool:
             raise TypeError("overexploitation_inference_enabled must be bool")
         self._overexploitation_inference_enabled = (
@@ -2691,6 +2719,7 @@ class CognitiveLoop:
         possession_legitimacy: object | None,
         advice_delta: Sequence[object] = (),
         mentorship: object | None = None,
+        commons_candidates: object | None = None,
     ) -> object | None:
         """Refresh one owner's subjective institution concepts after ledgers."""
         from agents.cognition.configuration import (
@@ -2745,6 +2774,7 @@ class CognitiveLoop:
                 prior_institutional_memory=getattr(
                     snapshot, "institutional_memory", None
                 ),
+                commons_candidates=commons_candidates,
                 policy=self._institutional_decay_policy,
             )
             self._prepared_institutional_decay = paired.decay
@@ -2762,6 +2792,7 @@ class CognitiveLoop:
                 memories=snapshot.memories,
                 advice_delta=advice_delta,
                 mentorship=mentorship,
+                commons_candidates=commons_candidates,
                 policy=self._institution_concept_policy,
             )
         _LOG.debug(
@@ -3466,7 +3497,12 @@ class CognitiveLoop:
                 )
         return quotes
 
-    def _prepare_formal_rules(self, loop_input: CognitiveLoopInput) -> object | None:
+    def _prepare_formal_rules(
+        self,
+        loop_input: CognitiveLoopInput,
+        *,
+        commons_candidates: object | None = None,
+    ) -> object | None:
         """Refresh one owner's formal-rule ledger from owner-visible evidence."""
         from agents.cognition.configuration import CognitionFormalRuleMode
         from agents.cognition.formal_rules import (
@@ -3501,6 +3537,7 @@ class CognitiveLoop:
             organization_concepts=prepared("organization_concepts"),
             collective_decisions=prepared("collective_decisions"),
             artifact_interpretations=prepared("artifact_interpretations"),
+            commons_candidates=commons_candidates,
             policy=policy,
         )
         for rule in updated.rules:
@@ -4930,6 +4967,71 @@ class CognitiveLoop:
             raise ValueError("medical_belief_ledger: owner mismatch")
         self._medical_belief_ledger = ledger
         self._medical_beliefs_enabled = True
+
+    def _commons_governance_enabled(self) -> bool:
+        """True only when stock selector and qualifying owner modes are present."""
+        from agents.cognition.configuration import (
+            CognitionFormalRuleMode,
+            CognitionInstitutionConceptMode,
+            CognitionSocialNormMode,
+        )
+
+        return (
+            self._commons_governance_stock_ids is not None
+            and self._formal_rule_mode is CognitionFormalRuleMode.DETERMINISTIC
+            and self._social_norm_mode is CognitionSocialNormMode.DETERMINISTIC
+            and self._institution_concept_mode
+            is CognitionInstitutionConceptMode.DETERMINISTIC
+        )
+
+    def bind_commons_governance(
+        self, stock_ids: object | None
+    ) -> None:
+        """Bind or clear this owner's commons stock selector."""
+        if stock_ids is None:
+            self._commons_governance_stock_ids = None
+            self._commons_governance_ledger = None
+            _LOG.debug(
+                "commons_governance_loop_bound reason_code=disabled count=0"
+            )
+            return
+        from world.identifiers import EntityId
+
+        if isinstance(stock_ids, (str, bytes)) or not isinstance(
+            stock_ids, (tuple, list)
+        ):
+            raise TypeError("stock_ids must be a sequence of EntityId")
+        stocks: list[EntityId] = []
+        for index, stock_id in enumerate(stock_ids):
+            if type(stock_id) is not EntityId:
+                raise TypeError(f"stock_ids[{index}] must be EntityId")
+            stocks.append(stock_id)
+        self._commons_governance_stock_ids = tuple(stocks)
+        _LOG.debug(
+            "commons_governance_loop_bound reason_code=stock_selector count=%s",
+            len(stocks),
+        )
+
+    def commons_governance_ledger_if_present(self) -> object | None:
+        """Return the committed commons-governance sidecar without constructing one."""
+        return self._commons_governance_ledger
+
+    def restore_commons_governance_ledger(
+        self, ledger: object | None, owner_id: object | None = None
+    ) -> None:
+        """Install a validated committed commons-governance sidecar."""
+        if ledger is None:
+            self._commons_governance_ledger = None
+            return
+        from agents.cognition.commons_governance import CommonsLedger
+
+        if type(ledger) is not CommonsLedger:
+            raise ValueError("commons_governance_ledger: invalid_type")
+        if owner_id is not None and ledger.owner_id != owner_id:
+            raise ValueError("commons_governance_ledger: owner mismatch")
+        if self._commons_governance_stock_ids is None:
+            raise ValueError("commons_governance_ledger: channel_disabled")
+        self._commons_governance_ledger = ledger
 
     def scientific_model_ledger_if_present(self) -> object | None:
         """Return the committed predictive sidecar without constructing one."""
@@ -6751,6 +6853,51 @@ class CognitiveLoop:
             advice_delta=advice_delta,
             mentorship=mentorship,
         )
+        commons_candidate = None
+        commons_formal_candidates: object | None = None
+        commons_institution_candidates: object | None = None
+        if self._commons_governance_enabled():
+            from agents.cognition.commons_governance import (
+                CommonsLedger,
+                advance_commons_evidence,
+                empty_commons_ledger,
+            )
+            from agents.cognition.commons_governance_actions import (
+                select_commons_formal_rule_candidates,
+                select_commons_institution_candidates,
+            )
+
+            assert self._commons_governance_stock_ids is not None
+            commons_candidate = (
+                getattr(loop_input.snapshot, "commons_governance_ledger", None)
+                if loop_input.snapshot is not None
+                else None
+            )
+            if type(commons_candidate) is not CommonsLedger:
+                commons_candidate = self._commons_governance_ledger
+            if type(commons_candidate) is not CommonsLedger:
+                commons_candidate = empty_commons_ledger(
+                    loop_input.agent_id,
+                    loop_input.observation.observer_id,
+                )
+            commons_candidate = advance_commons_evidence(
+                loop_input.agent_id,
+                commons_candidate,
+                loop_input.observation,
+                self._commons_governance_stock_ids,
+            )
+            commons_formal_candidates = select_commons_formal_rule_candidates(
+                commons_candidate,
+                loop_input.observation.tick,
+            )
+            commons_institution_candidates = select_commons_institution_candidates(
+                commons_candidate,
+                loop_input.observation.tick,
+            )
+            _LOG.debug(
+                "commons_governance_prepare reason_code=advanced count=%s",
+                len(commons_candidate.transitions),
+            )
         institution_concepts = self._prepare_institution_concepts(
             loop_input,
             social_norms=social_norms,
@@ -6759,6 +6906,7 @@ class CognitiveLoop:
             possession_legitimacy=possession_legitimacy,
             advice_delta=advice_delta,
             mentorship=mentorship,
+            commons_candidates=commons_institution_candidates,
         )
         office_concepts = self._prepare_office_concepts(
             loop_input,
@@ -6794,7 +6942,10 @@ class CognitiveLoop:
             loop_input,
             organization_concepts,
         )
-        formal_rules = self._prepare_formal_rules(loop_input)
+        formal_rules = self._prepare_formal_rules(
+            loop_input,
+            commons_candidates=commons_formal_candidates,
+        )
         disputes = self._prepare_disputes(loop_input, memory)
         subjective_valuations, scarcity_beliefs, acceptance_memories = (
             self._prepare_subjective_valuations(
@@ -7340,6 +7491,7 @@ class CognitiveLoop:
             communication_intent=plan.communication_intent,
             communication_intent_audit=plan.communication_intent_audit,
             medical_belief_ledger=medical_candidate,
+            commons_governance_ledger=commons_candidate,
         )
         if type(budget_ledger) is TickBudgetLedger:
             self._last_cognitive_budget_audit = budget_ledger.snapshot()
@@ -8241,6 +8393,43 @@ class CognitiveLoop:
                         cause=intervention.cause,
                         practice=intervention.practice,
                     )
+        commons_candidate = None
+        if self._commons_governance_enabled():
+            from agents.cognition.commons_governance import CommonsLedger
+
+            raw_commons = proposal.commons_governance_ledger
+            if type(raw_commons) is CommonsLedger:
+                commons_candidate = raw_commons
+        if commons_candidate is not None and not command_override:
+            from agents.cognition.commons_governance_actions import (
+                decorate_commons_speech,
+                maybe_defer_commons_drink,
+                normalized_thirst,
+            )
+
+            thirst = normalized_thirst(loop_input.observation)
+            deferral = maybe_defer_commons_drink(
+                commons_candidate,
+                loop_input.observation,
+                command,
+            )
+            command = deferral.command
+            commons_candidate = deferral.ledger
+            command, commons_candidate = decorate_commons_speech(
+                commons_candidate,
+                loop_input.observation,
+                command,
+                deferred_draw=deferral.deferred,
+                thirst=thirst,
+            )
+            _LOG.debug(
+                "commons_governance_complete reason_code=%s count=1",
+                "deferred" if deferral.deferred else "adapted",
+            )
+        elif commons_candidate is not None and command_override:
+            _LOG.debug(
+                "commons_governance_complete reason_code=override_suppressed count=1"
+            )
         local_pressure_hypotheses = None
         if self._overexploitation_inference_enabled:
             from agents.cognition.overexploitation_inference import (
@@ -8326,6 +8515,7 @@ class CognitiveLoop:
             replication_ledger=replication_candidate,
             measurement_ledger=measurement_candidate,
             medical_belief_ledger=medical_candidate,
+            commons_governance_ledger=commons_candidate,
             scientific_model_ledger=scientific_model_candidate,
             competing_theory_ledger=competing_theory_candidate,
             local_pressure_hypotheses=local_pressure_hypotheses,

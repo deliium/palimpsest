@@ -305,7 +305,16 @@ class PendingRuntimeFinalization:
         medical_candidate = getattr(
             self.loop_result, "medical_belief_ledger", None
         )
-        if medical_candidate is not None:
+        commons_candidate = getattr(
+            self.loop_result, "commons_governance_ledger", None
+        )
+        if commons_candidate is not None:
+            from simulation.run_control import (
+                FINALIZATION_COMMAND_CODEC_VERSION_V7,
+            )
+
+            codec_version = FINALIZATION_COMMAND_CODEC_VERSION_V7
+        elif medical_candidate is not None:
             from simulation.run_control import (
                 FINALIZATION_COMMAND_CODEC_VERSION_V6,
             )
@@ -355,6 +364,7 @@ class PendingRuntimeFinalization:
             scientific_model_ledger=scientific_model_candidate,
             competing_theory_ledger=competing_theory_candidate,
             medical_belief_ledger=medical_candidate,
+            commons_governance_ledger=commons_candidate,
         )
 
 
@@ -392,6 +402,7 @@ def pending_from_finalization_command(command: object) -> PendingRuntimeFinaliza
         scientific_model_ledger=command.scientific_model_ledger,
         competing_theory_ledger=command.competing_theory_ledger,
         medical_belief_ledger=command.medical_belief_ledger,
+        commons_governance_ledger=command.commons_governance_ledger,
     )
     return PendingRuntimeFinalization(
         observation_key=command.observation_key,
@@ -3057,10 +3068,19 @@ class AgentRuntime:
                 loop_result = replace(
                     loop_result, scientific_model_ledger=adjusted
                 )
-        candidate_digest = _candidate_digest(
-            loop_result,
-            v6=getattr(loop_result, "medical_belief_ledger", None) is not None,
+        has_commons = (
+            getattr(loop_result, "commons_governance_ledger", None) is not None
         )
+        has_medical = (
+            getattr(loop_result, "medical_belief_ledger", None) is not None
+        )
+        if has_commons:
+            candidate_digest = _v7_candidate_digest(loop_result)
+        else:
+            candidate_digest = _candidate_digest(
+                loop_result,
+                v6=has_medical,
+            )
         integrity = _pending_integrity_hash(
             invocation_id=prepared.invocation_id,
             tick=prepared.tick,
@@ -3470,6 +3490,13 @@ class AgentRuntime:
             self._loop.restore_medical_belief_ledger(
                 medical_candidate, self._agent.agent_id
             )
+        commons_candidate = getattr(
+            pending.loop_result, "commons_governance_ledger", None
+        )
+        if commons_candidate is not None:
+            self._loop.restore_commons_governance_ledger(
+                commons_candidate, self._agent.agent_id
+            )
         self._internal_state = pending.next_internal_state
         self._last_observation_key = pending.observation_key
         self._processed_invocations.add(pending.invocation_id)
@@ -3794,9 +3821,74 @@ class AgentRuntime:
             )
         from simulation.run_control import (
             FINALIZATION_COMMAND_CODEC_VERSION_V6,
+            FINALIZATION_COMMAND_CODEC_VERSION_V7,
         )
 
-        if command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V6:
+        if command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V7:
+            from agents.cognition.commons_governance import CommonsLedger
+
+            commons = command.commons_governance_ledger
+            medical = command.medical_belief_ledger
+            if (
+                type(commons) is not CommonsLedger
+                or commons.owner_id != self._agent.agent_id
+                or commons.last_processed_tick != command.tick
+                or command.observation_key[0] != command.tick
+            ):
+                _LOG.warning(
+                    "runtime_restore_pending_rejected reason=%s",
+                    "commons_candidate_mismatch",
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.RECOVERY_CORRUPT,
+                    agent_id=self._agent.agent_id.value,
+                    invocation_id=command.invocation_id,
+                    tick=command.tick,
+                )
+            if medical is not None:
+                from agents.cognition.medical_beliefs import MedicalBeliefLedger
+
+                if (
+                    type(medical) is not MedicalBeliefLedger
+                    or medical.owner_id != self._agent.agent_id
+                    or medical.last_processed_tick != command.tick
+                ):
+                    _LOG.warning(
+                        "runtime_restore_pending_rejected reason=%s",
+                        "medical_candidate_mismatch",
+                    )
+                    raise AgentRuntimeError(
+                        AgentRuntimeErrorCode.RECOVERY_CORRUPT,
+                        agent_id=self._agent.agent_id.value,
+                        invocation_id=command.invocation_id,
+                        tick=command.tick,
+                    )
+            candidate_digest = _v7_candidate_digest(command)
+            revision_hint = (
+                0
+                if command.subjective_batch is None
+                else (command.subjective_batch.expected_revision or 0)
+            )
+            expected = _pending_integrity_hash(
+                invocation_id=command.invocation_id,
+                tick=command.tick,
+                command_kind=command.effective_command_kind,
+                next_status=command.prior_status.value,
+                revision_hint=revision_hint,
+                candidate_digest=candidate_digest,
+            )
+            if expected != command.integrity_hash:
+                _LOG.warning(
+                    "runtime_restore_pending_rejected reason=%s",
+                    "commons_candidate_digest",
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.RECOVERY_CORRUPT,
+                    agent_id=self._agent.agent_id.value,
+                    invocation_id=command.invocation_id,
+                    tick=command.tick,
+                )
+        elif command.codec_version == FINALIZATION_COMMAND_CODEC_VERSION_V6:
             from agents.cognition.medical_beliefs import MedicalBeliefLedger
 
             ledger = command.medical_belief_ledger
@@ -3906,6 +3998,41 @@ class AgentRuntime:
         ):
             _LOG.warning(
                 "medical_beliefs_restore_rejected reason=%s",
+                "incompatible_checkpoint",
+            )
+            raise AgentRuntimeError(
+                AgentRuntimeErrorCode.OWNERSHIP,
+                agent_id=self._agent.agent_id.value,
+            )
+
+    def _preflight_checkpoint_commons_governance(self, checkpoint: object) -> None:
+        """Validate the commons-governance sidecar before any runtime mutation."""
+        from agents.cognition.commons_governance import (
+            COMMONS_GOVERNANCE_POLICY_ID,
+            CommonsLedger,
+        )
+
+        value = getattr(checkpoint, "commons_governance_ledger", None)
+        enabled = self._loop._commons_governance_enabled()
+        if value is None:
+            if enabled and getattr(checkpoint, "processed_invocation_count", 0) > 0:
+                _LOG.warning(
+                    "commons_governance_restore_rejected reason=%s",
+                    "missing_required_checkpoint_ledger",
+                )
+                raise AgentRuntimeError(
+                    AgentRuntimeErrorCode.OWNERSHIP,
+                    agent_id=self._agent.agent_id.value,
+                )
+            return
+        if (
+            type(value) is not CommonsLedger
+            or not enabled
+            or value.owner_id != self._agent.agent_id
+            or value.policy_id != COMMONS_GOVERNANCE_POLICY_ID
+        ):
+            _LOG.warning(
+                "commons_governance_restore_rejected reason=%s",
                 "incompatible_checkpoint",
             )
             raise AgentRuntimeError(
@@ -4029,6 +4156,7 @@ class AgentRuntime:
         self._preflight_checkpoint_institutional_memory(checkpoint)
         self._preflight_checkpoint_institutional_decay(checkpoint)
         self._preflight_checkpoint_medical_beliefs(checkpoint)
+        self._preflight_checkpoint_commons_governance(checkpoint)
         goals = tuple(checkpoint.goals)
         for goal in goals:
             if type(goal) is not Goal:
@@ -4178,6 +4306,13 @@ class AgentRuntime:
         if medical_belief_ledger is not None:
             self._loop.restore_medical_belief_ledger(
                 medical_belief_ledger, self._agent.agent_id
+            )
+        commons_governance_ledger = getattr(
+            checkpoint, "commons_governance_ledger", None
+        )
+        if commons_governance_ledger is not None:
+            self._loop.restore_commons_governance_ledger(
+                commons_governance_ledger, self._agent.agent_id
             )
         self._disputes = getattr(checkpoint, "disputes", None)
         if (
@@ -4347,6 +4482,9 @@ class AgentRuntime:
             ),
             medical_belief_ledger=(
                 self._loop.medical_belief_ledger_if_present()
+            ),
+            commons_governance_ledger=(
+                self._loop.commons_governance_ledger_if_present()
             ),
             disputes=self._disputes,
             evidence=self._evidence,
@@ -5739,12 +5877,13 @@ def _is_dead_self(observation: Observation) -> bool:
     return self_body is not None and self_body.life_status is LifeStatus.DEAD
 
 
-def _candidate_digest(value: object, *, v6: bool) -> str:
+def _candidate_digest(value: object, *, v6: bool, v7: bool = False) -> str:
     """Fixed-order digest of present subjective candidates.
 
     ``v6`` includes the medical sidecar and treats measurement as an
-    independent candidate; legacy versions preserve their exact historical
-    nesting so existing pending bytes stay stable.
+    independent candidate; ``v7`` appends the commons sidecar after medical.
+    Legacy versions preserve their exact historical nesting so existing
+    pending bytes stay stable.
     """
     from typing import cast
 
@@ -5814,12 +5953,28 @@ def _candidate_digest(value: object, *, v6: bool) -> str:
             digest += ":" + medical_beliefs_state_digest(
                 cast(MedicalBeliefLedger, medical)
             )
+    if v7:
+        commons = getattr(value, "commons_governance_ledger", None)
+        if commons is not None:
+            from agents.cognition.commons_governance import CommonsLedger
+            from simulation.commons_governance_checkpoint import (
+                commons_governance_state_digest,
+            )
+
+            digest += ":" + commons_governance_state_digest(
+                cast(CommonsLedger, commons)
+            )
     return digest
 
 
 def _v6_candidate_digest(command: object) -> str:
     """Recompute the v6 candidate digest from a recovered finalization command."""
     return _candidate_digest(command, v6=True)
+
+
+def _v7_candidate_digest(command: object) -> str:
+    """Shared v7 candidate digest for bind/write and recover/read paths."""
+    return _candidate_digest(command, v6=True, v7=True)
 
 
 def _pending_integrity_hash(

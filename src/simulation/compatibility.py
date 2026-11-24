@@ -106,6 +106,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V59,
     RUNNER_SCHEMA_VERSION_V60,
     RUNNER_SCHEMA_VERSION_V61,
+    RUNNER_SCHEMA_VERSION_V62,
     SUPPORTED_RESULT_SCHEMA_VERSIONS,
     SUPPORTED_RUNNER_SCHEMA_VERSIONS,
 )
@@ -575,8 +576,12 @@ _MATRIX: dict[str, CompatibilityEntry] = {
             "overexploitation family: the exact v60 ecology family plus "
             "mandatory overexploitation, preserving optional inherited "
             "measurement, disease, and medical siblings; "
+            f"{RUNNER_SCHEMA_VERSION_V62} is the accepted V4-38 "
+            "commons-governance family: the exact v61 overexploitation family "
+            "plus mandatory commons_governance, preserving optional inherited "
+            "measurement, disease, and medical siblings; "
             f"default write remains {RUNNER_SCHEMA_VERSION_V4} and the latest "
-            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V61})."
+            f"opt-in cognition runner is {RUNNER_SCHEMA_VERSION_V62})."
         ),
         owner_package="simulation.runner_models / simulation.runner_serialization",
         v1_fixture_impact=(
@@ -894,6 +899,7 @@ _LOG.debug(
         "runner_v59": RUNNER_SCHEMA_VERSION_V59,
         "runner_v60": RUNNER_SCHEMA_VERSION_V60,
         "runner_v61": RUNNER_SCHEMA_VERSION_V61,
+        "runner_v62": RUNNER_SCHEMA_VERSION_V62,
         "observer_protocol": OBSERVER_PROTOCOL_VERSION,
         "research_ui_mount": RESEARCH_UI_MOUNT,
         "alembic_head": ALEMBIC_HEAD_REVISION,

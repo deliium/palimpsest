@@ -70,7 +70,7 @@ def test_v4_12_adds_no_runner_schema_or_war_state() -> None:
         str(path.relative_to(_SRC))
         for path in sorted(_SRC.rglob("*.py"))
         if "__pycache__" not in path.parts
-        and "runner-config-v62" in path.read_text(encoding="utf-8")
+        and "runner-config-v63" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
 

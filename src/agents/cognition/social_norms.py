@@ -2498,3 +2498,74 @@ def note_reciprocal_commitment_evidence(
     if not found:
         return ledger
     return replace(ledger, beliefs=tuple(beliefs))
+
+
+@dataclass(frozen=True, slots=True)
+class CommonsNormExpectation:
+    """Typed commons expectation/response candidate; not a NormBelief."""
+
+    kind: str
+    stock_id: EntityId
+    recipient_id: EntityId
+    sanction: NormSanction | None = None
+    response: NormResponse = NormResponse.IGNORE
+    proposal_id: str | None = None
+    reported_tick: int | None = None
+
+
+def evaluate_commons_norm_expectations(
+    ledger: object | None,
+    observation: object,
+    *,
+    mode: object | None = None,
+) -> tuple[CommonsNormExpectation, ...]:
+    """Commons expectation adapter gated by deterministic social-norm mode.
+
+    Returns only typed expectation/response candidates. It never creates a
+    ``SHARED_UPKEEP`` belief, mutates trust, or denies extraction.
+    """
+
+    from agents.cognition.commons_governance import CommonsLedger
+    from agents.cognition.commons_governance_actions import (
+        CommonsNormCandidateKind,
+        select_commons_norm_candidates,
+    )
+    from agents.cognition.configuration import CognitionSocialNormMode
+
+    if mode is not None and mode is not CognitionSocialNormMode.DETERMINISTIC:
+        return ()
+    if ledger is None or type(ledger) is not CommonsLedger:
+        return ()
+    if type(observation) is not Observation:
+        raise TypeError("observation must be Observation")
+    rows: list[CommonsNormExpectation] = []
+    for candidate in select_commons_norm_candidates(ledger, observation):
+        if candidate.kind is CommonsNormCandidateKind.CRITICISM:
+            rows.append(
+                CommonsNormExpectation(
+                    kind=candidate.kind.value,
+                    stock_id=candidate.stock_id,
+                    recipient_id=candidate.recipient_id,
+                    sanction=NormSanction.CRITICISM,
+                    response=NormResponse.ENFORCE,
+                    proposal_id=candidate.proposal_id,
+                    reported_tick=candidate.reported_tick,
+                )
+            )
+            continue
+        rows.append(
+            CommonsNormExpectation(
+                kind=candidate.kind.value,
+                stock_id=candidate.stock_id,
+                recipient_id=candidate.recipient_id,
+                sanction=None,
+                response=NormResponse.COMMUNICATE,
+                proposal_id=candidate.proposal_id,
+                reported_tick=candidate.reported_tick,
+            )
+        )
+    _LOG.debug(
+        "commons_norm_expectations reason_code=evaluated count=%s",
+        len(rows),
+    )
+    return tuple(rows)

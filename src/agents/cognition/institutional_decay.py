@@ -1557,6 +1557,7 @@ def apply_institution_decay_update(
     mentorship: object | None = None,
     prior_offices: object | None = None,
     prior_institutional_memory: object | None = None,
+    commons_candidates: object | None = None,
     policy: InstitutionDecayPolicy | None = None,
 ) -> InstitutionDecayUpdate:
     """Apply one enabled owner-local decay update.
@@ -1601,6 +1602,7 @@ def apply_institution_decay_update(
         mentorship,
         prior_offices,
         prior_institutional_memory,
+        commons_candidates,
     ):
         if type(value).__module__.startswith("analysis"):
             raise TypeError(f"{type(value).__name__}: forbidden_input")
@@ -1632,6 +1634,7 @@ def apply_institution_decay_update(
         memories=memories,
         advice_delta=advice_delta,
         mentorship=mentorship,
+        commons_candidates=commons_candidates,
         policy=default_institution_concept_policy(),
     )
     if updated is None:

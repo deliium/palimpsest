@@ -44,7 +44,7 @@ def test_closed_surface_pins() -> None:
 
 def test_no_new_runner_schema_or_migration() -> None:
     for path in (ROOT / "src").rglob("*.py"):
-        assert "runner-config-v62" not in path.read_text(encoding="utf-8"), path
+        assert "runner-config-v63" not in path.read_text(encoding="utf-8"), path
     assert not list((ROOT / "alembic" / "versions").glob("0018*"))
 
 

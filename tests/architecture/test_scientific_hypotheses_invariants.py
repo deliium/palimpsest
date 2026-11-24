@@ -74,7 +74,7 @@ def test_no_new_write_pair_is_claimed() -> None:
 def test_no_runner_schema_or_migration_is_added() -> None:
     assert "runner-config-v60" in SUPPORTED_RUNNER_SCHEMA_VERSIONS
     for path in (ROOT / "src").rglob("*.py"):
-        assert "runner-config-v62" not in path.read_text(encoding="utf-8"), path
+        assert "runner-config-v63" not in path.read_text(encoding="utf-8"), path
     assert sorted((ROOT / "alembic" / "versions").glob("0018_*.py")) == []
 
 

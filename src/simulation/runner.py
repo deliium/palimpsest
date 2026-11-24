@@ -771,6 +771,7 @@ class _ChannelLoopOptions(TypedDict, total=False):
     bounded_experimentation_spec: object | None
     measurement_enabled: bool
     medical_beliefs_enabled: bool
+    commons_governance_stock_ids: object
     overexploitation_inference_enabled: bool
 
 
@@ -794,6 +795,7 @@ def _channel_loop_kwargs(config: object) -> _ChannelLoopOptions:
         _bounded_experimentation_loop_kwargs,
         _measurement_loop_kwargs,
         _medical_beliefs_loop_kwargs,
+        _commons_governance_loop_kwargs,
         _overexploitation_inference_loop_kwargs,
     ):
         options.update(factory(config))
@@ -1020,6 +1022,23 @@ def _medical_beliefs_loop_kwargs(config: object) -> _ChannelLoopOptions:
         "medical_beliefs_enabled": getattr(config, "medical_beliefs", None)
         is not None
     }
+
+
+def _commons_governance_loop_kwargs(config: object) -> _ChannelLoopOptions:
+    """Pass the v62 stock selector only when commons governance is configured.
+
+    Owner-mode qualification remains inside ``CognitiveLoop`` so unqualified
+    admitted owners receive the selector without mutable commons state.
+    """
+    spec = getattr(config, "commons_governance", None)
+    if spec is None:
+        return {}
+    stock_ids = getattr(spec, "stock_ids", None)
+    _LOG.debug(
+        "commons_governance_loop_kwargs reason_code=stock_selector count=%s",
+        0 if stock_ids is None else len(stock_ids),
+    )
+    return {"commons_governance_stock_ids": stock_ids}
 
 
 def _overexploitation_inference_loop_kwargs(config: object) -> _ChannelLoopOptions:
@@ -6089,6 +6108,56 @@ class SimulationRunner:
             expected > len(selected),
         )
         return MedicalBeliefLedgerExport(
+            expected_count=expected,
+            unavailable_owner_ids=tuple(unavailable),
+            ledgers=tuple(ledgers),
+        )
+
+    def export_commons_governance_ledgers(self) -> object:
+        """Export detached commons ledgers for finalized owners only.
+
+        Research-only: not wired into API, observer, stop, or live decision paths.
+        """
+        from agents.cognition.commons_governance import CommonsLedger
+        from simulation.commons_governance_checkpoint import (
+            CommonsGovernanceLedgerExport,
+        )
+
+        registrations = sorted(
+            self._engine.ordered_registrations,
+            key=lambda item: item.agent_id.value,
+        )
+        expected = len(registrations)
+        selected = registrations[:128]
+        runtime_by_owner = {runtime.agent_id: runtime for runtime in self._runtimes}
+        ledgers: list[CommonsLedger] = []
+        unavailable: list[AgentId] = []
+        for registration in selected:
+            owner = registration.agent_id
+            runtime = runtime_by_owner.get(owner)
+            if runtime is None:
+                unavailable.append(owner)
+                continue
+            ledger = runtime._loop.commons_governance_ledger_if_present()
+            record = getattr(runtime, "retired_record", None)
+            if ledger is None and record is not None:
+                retired_checkpoint = getattr(record, "runtime_checkpoint", None)
+                ledger = getattr(
+                    retired_checkpoint, "commons_governance_ledger", None
+                )
+            if type(ledger) is CommonsLedger:
+                ledgers.append(ledger)
+            else:
+                unavailable.append(owner)
+        _LOG.info(
+            "runner_commons_governance_ledger_export expected=%s exported=%s "
+            "unavailable=%s truncated=%s",
+            expected,
+            len(ledgers),
+            len(unavailable),
+            expected > len(selected),
+        )
+        return CommonsGovernanceLedgerExport(
             expected_count=expected,
             unavailable_owner_ids=tuple(unavailable),
             ledgers=tuple(ledgers),

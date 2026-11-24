@@ -232,6 +232,7 @@ from simulation.cognition_trace_serialization import (
     decode_cognition_trace_invocation,
     encode_cognition_trace_invocation,
 )
+from simulation.commons_governance_config import CommonsGovernanceSpec
 from simulation.compatibility import (
     ALEMBIC_HEAD_REVISION,
     API_HTTP_PREFIX,
@@ -1317,6 +1318,7 @@ from simulation.runner_models import (
     RUNNER_SCHEMA_VERSION_V59,
     RUNNER_SCHEMA_VERSION_V60,
     RUNNER_SCHEMA_VERSION_V61,
+    RUNNER_SCHEMA_VERSION_V62,
     AgentCognitionSpec,
     AgentRunnerSpec,
     ArtifactInterpretationMode,
@@ -1896,6 +1898,7 @@ __all__ = [
     "RUNNER_SCHEMA_VERSION_V59",
     "RUNNER_SCHEMA_VERSION_V60",
     "RUNNER_SCHEMA_VERSION_V61",
+    "RUNNER_SCHEMA_VERSION_V62",
     "SCALE_CONTRACT_VERSION",
     "SCALE_MAX_PARTITIONS",
     "SCALE_MAX_POPULATION",
@@ -2066,6 +2069,7 @@ __all__ = [
     "CommandKindMapping",
     "CommandKindMappingStatus",
     "CommitHash",
+    "CommonsGovernanceSpec",
     "CommunicationLineage",
     "CommunicationLineagePort",
     "CommunicationRemoveTarget",

@@ -517,6 +517,8 @@ class MultiCriteriaIntentionSelector:
                 token = future_actions.get(direction)
                 if token not in FORMAL_RULE_ACTION_TOKENS:
                     continue
+                # formal_rule_direction_preference already skips commons:<id>
+                # lineage rules; those are owned by the stock Drink adapter only.
                 bias = formal_rule_direction_preference(
                     prepared_formal_rules, action_token=token
                 )

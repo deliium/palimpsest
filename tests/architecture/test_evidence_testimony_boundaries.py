@@ -325,7 +325,7 @@ def test_compatibility_pins_are_exact() -> None:
         "ecological_feedback",
         }
     )
-    assert "runner-config-v62" not in (
+    assert "runner-config-v63" not in (
         ROOT / "src" / "simulation" / "runner_models.py"
     ).read_text(encoding="utf-8")
     assert not list((ROOT / "alembic" / "versions").glob("0018_*.py"))

@@ -150,7 +150,7 @@ def test_no_new_flag_context_or_v57() -> None:
     assert len(V4_OWNED_CAPABILITY_FLAGS) == 11
     for path in ISR_PATHS:
         text = path.read_text(encoding="utf-8")
-        assert "runner-config-v62" not in text, path
+        assert "runner-config-v63" not in text, path
         assert "V4CapabilityFlags" not in text, path
         assert "v4_capability_flags" not in text, path
 

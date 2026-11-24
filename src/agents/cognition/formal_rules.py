@@ -1808,6 +1808,63 @@ def _revision_kind(
     return FormalRuleRevisionKind.AUTHORITY_CHANGE
 
 
+def _collect_commons(
+    commons_candidates: object | None, tick: int
+) -> tuple[_RuleCandidate, ...]:
+    if commons_candidates is None:
+        return ()
+    if isinstance(commons_candidates, (str, bytes)) or not isinstance(
+        commons_candidates, (tuple, list)
+    ):
+        return ()
+    rows: list[_RuleCandidate] = []
+    for item in commons_candidates:
+        stock_id = getattr(item, "stock_id", None)
+        proposal_id = getattr(item, "proposal_id", None)
+        lineage_ref = getattr(item, "lineage_ref", None)
+        actors = getattr(item, "actors", ()) or ()
+        stock_token = getattr(stock_id, "value", stock_id)
+        if type(stock_token) is not str or not stock_token:
+            continue
+        if type(proposal_id) is not str or not proposal_id:
+            continue
+        if type(lineage_ref) is not str or not lineage_ref.startswith("commons:"):
+            continue
+        actor_tokens = tuple(
+            getattr(actor, "value", actor)
+            for actor in actors
+            if type(getattr(actor, "value", actor)) is str
+        )
+        rows.append(
+            _RuleCandidate(
+                action_token="feed",
+                scope=FormalRuleScope(
+                    FormalRuleScopeKind.RESOURCE, (stock_token,)
+                ),
+                constraint=FormalRuleConstraintKind.PROHIBITION,
+                authority=FormalRuleAuthorityKind.CUSTOM,
+                stage=FormalRuleStage.NORM,
+                provenance=FormalRuleProvenance.DERIVED_FROM_NORM,
+                lineage_ref=lineage_ref,
+                tick=tick,
+                sanction_kinds=(FormalRuleSanctionKind.CRITICISM,),
+                actors=actor_tokens,
+            )
+        )
+    return tuple(rows)
+
+
+def is_commons_lineage_rule(rule: FormalRule) -> bool:
+    """Return whether a rule is tagged solely for commons stock adaptation."""
+
+    if type(rule) is not FormalRule:
+        raise TypeError("rule must be FormalRule")
+    return any(
+        item.lineage_ref is not None and item.lineage_ref.startswith("commons:")
+        for item in rule.evidence
+    )
+
+
 def apply_formal_rule_update(
     owner_id: AgentId,
     tick: int,
@@ -1821,6 +1878,7 @@ def apply_formal_rule_update(
     organization_concepts: object | None = None,
     collective_decisions: object | None = None,
     artifact_interpretations: object | None = None,
+    commons_candidates: object | None = None,
     policy: FormalRulePolicy | None = None,
 ) -> FormalRuleLedger:
     """Derive one owner's formal-rule ledger from owner-visible evidence.
@@ -1842,6 +1900,7 @@ def apply_formal_rule_update(
         organization_concepts,
         collective_decisions,
         artifact_interpretations,
+        commons_candidates,
     ):
         _reject_forbidden_input(value)
     if prior is not None:
@@ -1866,6 +1925,7 @@ def apply_formal_rule_update(
         for candidate in (
             *_collect_norms(social_norms, absolute_tick),
             *_collect_conventions(social_conventions, absolute_tick),
+            *_collect_commons(commons_candidates, absolute_tick),
         )
     )
 
@@ -3021,6 +3081,10 @@ def formal_rule_direction_preference(
     for rule in ledger.rules:
         if rule.action_token != action_token:
             continue
+        # Commons-tagged RESOURCE feed prohibitions are consumed only by the
+        # exact stock Drink→Wait adapter; generic action-token penalties skip them.
+        if is_commons_lineage_rule(rule):
+            continue
         if rule.recognition is FormalRuleRecognition.RECOGNIZED:
             score += 0.15
         elif rule.recognition is FormalRuleRecognition.CONTESTED:
@@ -3139,8 +3203,10 @@ __all__ = [
     "FormalRuleSystem",
     "FormalRuleVersion",
     "FormalRuleWrittenRepresentation",
+    "apply_formal_rule_update",
     "default_formal_rule_policy",
     "empty_formal_rule_ledger",
+    "formal_rule_direction_preference",
     "formal_rule_evidence_id",
     "formal_rule_exception_id",
     "formal_rule_id",
@@ -3150,6 +3216,7 @@ __all__ = [
     "formal_rule_scope_digest",
     "formal_rule_system_id",
     "formal_rule_version_id",
+    "is_commons_lineage_rule",
     "require_formal_rule_evidence_id",
     "require_formal_rule_exception_id",
     "require_formal_rule_id",
@@ -3159,4 +3226,5 @@ __all__ = [
     "require_formal_rule_system_id",
     "require_formal_rule_version_id",
     "require_owner_formal_rules",
+    "select_formal_rule_response",
 ]
